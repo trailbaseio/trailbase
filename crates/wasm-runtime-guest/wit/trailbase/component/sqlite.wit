@@ -23,4 +23,10 @@ interface sqlite-function-endpoint {
 
   @since(version = 0.1.0)
   dispatch-scalar-function: func(args: arguments) -> result<value, error>;
+
+  // FIXME: Should be 0.1.1.
+  @since(version = 0.1.0)
+  resource module {
+    constructor(id: string);
+  }
 }

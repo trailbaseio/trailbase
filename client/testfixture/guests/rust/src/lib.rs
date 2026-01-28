@@ -9,7 +9,9 @@ use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
-use trailbase_wasm::{Guest, SqliteFunction, export, sqlite::SqliteFunctionFlags};
+use trailbase_wasm::{
+  Guest, SqliteFunction, SqliteModule, SqliteModuleTrait, export, sqlite::SqliteFunctionFlags,
+};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -163,10 +165,7 @@ impl Guest for Endpoints {
         |args: [trailbase_wasm::sqlite::Value; _]| {
           return Ok(args[0].clone());
         },
-        &[
-          SqliteFunctionFlags::Deterministic,
-          SqliteFunctionFlags::Innocuous,
-        ],
+        SqliteFunctionFlags::DETERMINISTIC | SqliteFunctionFlags::INNOCUOUS,
       ),
       SqliteFunction::new::<0>(
         "custom_stateful".to_string(),
@@ -175,11 +174,19 @@ impl Guest for Endpoints {
           let curr = COUNT.fetch_add(1, Ordering::SeqCst);
           return Ok(trailbase_wasm::sqlite::Value::Integer(curr));
         },
-        &[],
+        SqliteFunctionFlags::empty(),
       ),
     ];
   }
+
+  fn sqlite_modules() -> Vec<SqliteModule<Self>> {
+    return vec![SqliteModule::new("my-module", || Box::new(MySqliteModule))];
+  }
 }
+
+struct MySqliteModule;
+
+impl SqliteModuleTrait<Endpoints> for MySqliteModule {}
 
 export!(Endpoints);
 

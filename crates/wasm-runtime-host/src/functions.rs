@@ -8,7 +8,7 @@ use crate::Error;
 pub struct SqliteScalarFunction {
   pub name: String,
   pub num_args: u32,
-  pub flags: Vec<rusqlite::functions::FunctionFlags>,
+  pub flags: rusqlite::functions::FunctionFlags,
 }
 
 #[derive(Clone)]
@@ -51,7 +51,7 @@ impl SqliteStore {
     let mut store = self.state.store.lock().await;
     let functions = store
       .run_concurrent(async |accessor| -> Result<_, Error> {
-        let (functions, task_exit) = api.call_init_sqlite_functions(accessor, args).await?;
+        let (functions, task_exit) = api.call_init_sqlite_extensions(accessor, args).await?;
         task_exit.block(accessor).await;
         return Ok(functions);
       })
@@ -65,13 +65,9 @@ impl SqliteStore {
           return SqliteScalarFunction {
             name: f.name,
             num_args: f.num_args,
-            flags: f
-              .function_flags
-              .into_iter()
-              .map(|f| -> rusqlite::functions::FunctionFlags {
-                return rusqlite::functions::FunctionFlags::from_bits_truncate(f as i32);
-              })
-              .collect(),
+            flags: rusqlite::functions::FunctionFlags::from_bits_truncate(
+              f.function_flags.as_array()[0] as i32,
+            ),
           };
         })
         .collect(),
@@ -122,23 +118,11 @@ pub fn setup_connection(
     let store = store.clone();
     let function_name = function.name.clone();
 
-    let flags = {
-      if function.flags.is_empty() {
-        rusqlite::functions::FunctionFlags::default()
-      } else {
-        let mut flags = rusqlite::functions::FunctionFlags::from_bits_truncate(0);
-        for flag in &function.flags {
-          flags |= *flag;
-        }
-        flags
-      }
-    };
-
     // Registers the WASM function with the SQLite connection.
     conn.create_scalar_function(
       function.name.as_str(),
       function.num_args as i32,
-      flags,
+      function.flags,
       move |context| -> Result<rusqlite::types::Value, rusqlite::Error> {
         let args = (0..context.len())
           .map(|idx| -> Result<Value, rusqlite::Error> {

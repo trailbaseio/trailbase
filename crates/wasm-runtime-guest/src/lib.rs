@@ -47,8 +47,10 @@ pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
 pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
+
 pub mod sqlite {
   pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
+  pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::GuestModule;
   pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
 }
 
@@ -76,7 +78,7 @@ type SqliteFunctionHandler =
 pub struct SqliteFunction {
   name: String,
   num_args: u32,
-  flags: Vec<sqlite::SqliteFunctionFlags>,
+  flags: sqlite::SqliteFunctionFlags,
   handler: SqliteFunctionHandler,
 }
 
@@ -84,15 +86,32 @@ impl SqliteFunction {
   pub fn new<const N: usize>(
     name: impl std::string::ToString,
     f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + 'static,
-    flags: &[sqlite::SqliteFunctionFlags],
+    flags: sqlite::SqliteFunctionFlags,
   ) -> Self {
     return Self {
       name: name.to_string(),
       num_args: N as u32,
-      flags: flags.into(),
+      flags,
       handler: Box::new(move |args| {
         return f(args.try_into().expect("wrong number of arguments"));
       }),
+    };
+  }
+}
+
+pub struct SqliteModule<T: Guest + ?Sized> {
+  name: String,
+  constructor: Box<dyn FnOnce() -> Box<dyn SqliteModuleTrait<T>>>,
+}
+
+impl<T: Guest + ?Sized> SqliteModule<T> {
+  pub fn new(
+    name: impl std::string::ToString,
+    f: impl FnOnce() -> Box<dyn SqliteModuleTrait<T>> + 'static,
+  ) -> Self {
+    return Self {
+      name: name.to_string(),
+      constructor: Box::new(f),
     };
   }
 }
@@ -109,6 +128,10 @@ pub trait Guest {
   }
 
   fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
+    return vec![];
+  }
+
+  fn sqlite_modules() -> Vec<SqliteModule<Self>> {
     return vec![];
   }
 }
@@ -145,11 +168,11 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
     };
   }
 
-  fn init_sqlite_functions(
+  fn init_sqlite_extensions(
     args: Arguments,
-  ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
+  ) -> wit::exports::trailbase::component::init_endpoint::SqliteExtensions {
     use wit::exports::trailbase::component::init_endpoint::{
-      SqliteFunctions, SqliteScalarFunction,
+      SqliteExtensions, SqliteModule as WitSqliteModule, SqliteScalarFunction,
     };
 
     // QUESTION: Should we ensure that init is called only once?
@@ -157,7 +180,7 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
       version: args.version,
     });
 
-    return SqliteFunctions {
+    return SqliteExtensions {
       scalar_functions: T::sqlite_scalar_functions()
         .into_iter()
         .map(|f| SqliteScalarFunction {
@@ -166,11 +189,33 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
           function_flags: f.flags,
         })
         .collect(),
+      modules: T::sqlite_modules()
+        .into_iter()
+        .map(|m| WitSqliteModule { name: m.name })
+        .collect(),
     };
   }
 }
 
-impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest for T {
+pub trait SqliteModuleTrait<T: Guest> {}
+
+impl<T: Guest + 'static> sqlite::GuestModule for Box<dyn SqliteModuleTrait<T>> {
+  fn new(id: String) -> Self {
+    let Some(SqliteModule {
+      name: _,
+      constructor,
+    }) = T::sqlite_modules().into_iter().find(|m| m.name == id)
+    else {
+      panic!("module with name '{id}' not found");
+    };
+
+    return constructor();
+  }
+}
+
+impl<T: Guest + 'static> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest
+  for T
+{
   fn dispatch_scalar_function(
     args: crate::wit::exports::trailbase::component::sqlite_function_endpoint::Arguments,
   ) -> Result<
@@ -187,6 +232,8 @@ impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoi
 
     return (f.handler)(args.arguments);
   }
+
+  type Module = Box<dyn SqliteModuleTrait<T>>;
 }
 
 pub struct HttpIncomingHandler<T: Guest> {

@@ -1,5 +1,12 @@
 package trailbase:component@0.1.0;
 
+/// A set of initialization functions for various functionality.
+///
+/// NOTE: We used a set of functions, rather than a single initialization for:
+///  * Forwards-compatibility when evolving the component model, e.g. adding
+///    new resources. Currently, even extending an enum is not forward-compatible.
+///  * And to a lesser extend to avoid unnecessary cost for initializing resources
+///    that won't be needed.
 @since(version = 0.1.0)
 interface init-endpoint {
   record arguments {
@@ -34,7 +41,7 @@ interface init-endpoint {
   @since(version = 0.1.0)
   init-job-handlers: func(args: arguments) -> job-handlers;
 
-  enum sqlite-function-flags {
+  flags sqlite-function-flags {
     /// Specifies UTF-8 as the text encoding this SQL function prefers for its parameters.
     utf8,
     /// Specifies UTF-16 using little-endian byte order as the text encoding this SQL function prefers for its parameters.
@@ -60,13 +67,20 @@ interface init-endpoint {
   record sqlite-scalar-function {
     name: string,
     num-args: u32,
-    function-flags: list<sqlite-function-flags>,
+    function-flags: sqlite-function-flags,
   }
 
-  record sqlite-functions {
+  record sqlite-module {
+    name: string,
+  }
+
+  record sqlite-extensions {
+    /// Functions returning a scalar as opposed to being "table-valued".
     scalar-functions: list<sqlite-scalar-function>,
+    /// Sqlite moules.
+    modules: list<sqlite-module>,
   }
 
   @since(version = 0.1.0)
-  init-sqlite-functions : func(args: arguments) -> sqlite-functions;
+  init-sqlite-extensions: func(args: arguments) -> sqlite-extensions;
 }
