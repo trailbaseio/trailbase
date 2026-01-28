@@ -75,7 +75,7 @@ interface init-endpoint {
   }
 
   record sqlite-extensions {
-    /// Functions returning a scalar as opposed to being "table-valued".
+    /// Functions returning a scalar as opposed to aggregate or "table-valued" functions.
     scalar-functions: list<sqlite-scalar-function>,
     /// Sqlite moules.
     modules: list<sqlite-module>,

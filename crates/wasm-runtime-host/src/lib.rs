@@ -503,12 +503,12 @@ mod tests {
 
     let store = functions::SqliteStore::new(&runtime).await.unwrap();
 
-    let functions = store
-      .initialize_sqlite_functions(InitArgs { version: None })
+    let extensions = store
+      .initialize_sqlite_extensions(InitArgs { version: None })
       .await
       .unwrap();
 
-    functions::setup_connection(conn, store, &functions).unwrap();
+    functions::setup_connection(conn, store, extensions).unwrap();
 
     return runtime;
   }
