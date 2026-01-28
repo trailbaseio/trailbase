@@ -1,3 +1,9 @@
+## v0.23.1
+
+- Dual license clients under permissive Apache-2.0 license. The server continues to be under OSL-3.0.
+- Add a WebSocket subscription feature to the Rust client. Requires the server to be compiled with the non-default "ws" feature as well.
+- Update dependencies.
+
 ## v0.23.0
 
 - WASM component model:
