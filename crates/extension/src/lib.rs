@@ -43,6 +43,10 @@ pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite
   // https://sqlite.org/appfunc.html
   conn.pragma_update(None, "trusted_schema", "OFF")?;
 
+  // Make like operator case-sensitive. It's the default for Postgres and users certainly would not
+  // expect that `filter[col][$like]=%foo%` finds "FoO".
+  conn.pragma_update(None, "case_sensitive_like", "ON")?;
+
   return Ok(());
 }
 
