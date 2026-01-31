@@ -114,7 +114,8 @@ class Tokens:
         }
 
     def valid(self) -> bool:
-        return jwt.decode(self.auth, algorithms=["EdDSA"], options={"verify_signature": False}) != None
+        claims = jwt.decode(self.auth, algorithms=["EdDSA"], options={"verify_signature": False})
+        return len(claims) > 0
 
 
 class JwtToken:
@@ -159,11 +160,11 @@ class TokenState:
     def build(tokens: Tokens | None) -> "TokenState":
         decoded = (
             jwt.decode(tokens.auth, algorithms=["EdDSA"], options={"verify_signature": False})
-            if tokens != None
+            if tokens is not None
             else None
         )
 
-        if decoded == None or tokens == None:
+        if decoded is None or tokens is None:
             return TokenState(None, TokenState.build_headers(tokens))
 
         return TokenState(
@@ -177,15 +178,15 @@ class TokenState:
             "Content-Type": "application/json",
         }
 
-        if tokens != None:
+        if tokens is not None:
             base["Authorization"] = f"Bearer {tokens.auth}"
 
             refresh = tokens.refresh
-            if refresh != None:
+            if refresh is not None:
                 base["Refresh-Token"] = refresh
 
             csrf = tokens.csrf
-            if csrf != None:
+            if csrf is not None:
                 base["CSRF-Token"] = csrf
 
         return base
@@ -275,7 +276,7 @@ class Client:
 
     def user(self) -> User | None:
         tokens = self.tokens()
-        if tokens != None:
+        if tokens is not None:
             return User.from_json(
                 jwt.decode(
                     tokens.auth,
@@ -310,8 +311,9 @@ class Client:
     def logout(self) -> None:
         state = self._tokenState.state
         refreshToken = state[0].refresh if state else None
+
         try:
-            if refreshToken != None:
+            if refreshToken is not None:
                 self.fetch(
                     f"{self._authApi}/logout",
                     method="POST",
@@ -321,10 +323,8 @@ class Client:
                 )
             else:
                 self.fetch(f"{self._authApi}/logout")
-        except:
-            pass
-
-        self._updateTokens(None)
+        finally:
+            self._updateTokens(None)
 
     def records(self, name: str) -> "RecordApi":
         return RecordApi(name, self)
@@ -335,7 +335,7 @@ class Client:
         self._tokenState = state
 
         state = state.state
-        if state != None:
+        if state is not None:
             claims = state[1]
             now = int(time())
             if claims.exp < now:
@@ -347,7 +347,7 @@ class Client:
     def _shouldRefresh(tokenState: TokenState) -> str | None:
         state = tokenState.state
         now = int(time())
-        if state != None and state[1].exp - 60 < now:
+        if state is not None and state[1].exp - 60 < now:
             return state[0].refresh
         return None
 
@@ -379,7 +379,7 @@ class Client:
     ) -> httpx.Response:
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
-        if refreshToken != None:
+        if refreshToken is not None:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
         return self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
@@ -393,7 +393,7 @@ class Client:
     ):
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
-        if refreshToken != None:
+        if refreshToken is not None:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
         return self._client.stream(
@@ -488,19 +488,19 @@ class RecordApi:
     ) -> ListResponse:
         params: dict[str, str] = {}
 
-        if cursor != None:
+        if cursor is not None:
             params["cursor"] = cursor
 
-        if limit != None:
+        if limit is not None:
             params["limit"] = str(limit)
 
-        if offset != None:
+        if offset is not None:
             params["offset"] = str(offset)
 
-        if order != None:
+        if order is not None:
             params["order"] = ",".join(order)
 
-        if expand != None:
+        if expand is not None:
             params["expand"] = ",".join(expand)
 
         if count:
@@ -509,7 +509,7 @@ class RecordApi:
         def traverseFilters(path: str, filter: FilterOrComposite):
             match filter:
                 case Filter() as f:
-                    if f.op != None:
+                    if f.op is not None:
                         params[f"{path}[{f.column}][{repr(f.op)}]"] = f.value
                     else:
                         params[f"{path}[{f.column}]"] = f.value
@@ -520,7 +520,7 @@ class RecordApi:
                     for i, filter in enumerate(f.filters):
                         traverseFilters(f"{path}[$or][{i}", filter)
 
-        if filters != None:
+        if filters is not None:
             for filter in filters:
                 traverseFilters("filter", filter)
 
@@ -533,7 +533,7 @@ class RecordApi:
         expand: "list[str] | None" = None,
     ) -> JSON_OBJECT:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
-        params = {"expand": ",".join(expand)} if expand != None else None
+        params = {"expand": ",".join(expand)} if expand is not None else None
 
         return self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",

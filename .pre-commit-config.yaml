@@ -131,7 +131,7 @@ repos:
 
     - id: python_check
       name: Python check
-      entry: poetry -C client/python run pyright --outputjson
+      entry: sh -c 'poetry -C client/python run pyright --outputjson && poetry -C client/python run flake8'
       language: system
       types: [python]
       pass_filenames: false

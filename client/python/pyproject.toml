@@ -19,11 +19,13 @@ cryptography = "^43.0.3"
 black = "^24.10.0"
 pyright = "^1.1.389"
 pytest = "^8.3.3"
+flake8 = "^7.3.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+# NOTE: flake8 linter has to be configured in .flake8
 [tool.black]
 line-length = 108
 

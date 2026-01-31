@@ -49,7 +49,7 @@ class TrailBaseFixture:
                 response = client.get(f"http://{address}/api/healthcheck")
                 if response.status_code == 200:
                     return
-            except:
+            except Exception:
                 pass
 
             sleep(0.5)
@@ -58,11 +58,11 @@ class TrailBaseFixture:
 
     def isUp(self) -> bool:
         p = self.process
-        return p != None and p.returncode == None
+        return p is not None and p.returncode is None
 
     def shutdown(self) -> None:
         p = self.process
-        if p != None:
+        if p is not None:
             p.send_signal(9)
             p.wait()
             assert isinstance(p.returncode, int)
@@ -88,14 +88,14 @@ def test_client_login(trailbase: TrailBaseFixture):
     assert client.site() == site
 
     tokens = client.tokens()
-    assert tokens != None and tokens.valid()
+    assert tokens is not None and tokens.valid()
 
     user = client.user()
-    assert user != None and user.id != ""
-    assert user != None and user.email == "admin@localhost"
+    assert user is not None and user.id != ""
+    assert user is not None and user.email == "admin@localhost"
 
     client.logout()
-    assert client.tokens() == None
+    assert client.tokens() is None
 
 
 def test_records(trailbase: TrailBaseFixture):
@@ -184,7 +184,7 @@ def test_expand_foreign_records(trailbase: TrailBaseFixture):
         assert comment.get("id") == 1
         assert comment.get("body") == "first comment"
         assert get_nested(comment, "author", "id") != ""
-        assert get_nested(comment, "author", "data") == None
+        assert get_nested(comment, "author", "data") is None
         assert get_nested(comment, "post", "id") != ""
 
     if True:
@@ -192,7 +192,7 @@ def test_expand_foreign_records(trailbase: TrailBaseFixture):
 
         assert comment.get("id") == 1
         assert comment.get("body") == "first comment"
-        assert get_nested(comment, "author", "data") == None
+        assert get_nested(comment, "author", "data") is None
 
         x = get_nested(comment, "post", "data")
         assert type(x) is dict
