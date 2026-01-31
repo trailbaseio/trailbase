@@ -6,7 +6,7 @@ import solid from "eslint-plugin-solid/configs/recommended";
 
 export default [
   {
-    ignores: ["dist/", "node_modules/", "vite.config.mts"],
+    ignores: ["dist/", "node_modules/", "vite.config.mts", "src/components/ui"],
   },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,

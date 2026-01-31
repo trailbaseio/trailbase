@@ -12,10 +12,17 @@ import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
 import type { DeleteRowsRequest } from "@bindings/DeleteRowsRequest";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { QualifiedName } from "@bindings/QualifiedName";
+import type { SqlValue } from "@bindings/SqlValue";
+
+function removeUndefined(row: Record): { [key: string]: SqlValue } {
+  return Object.fromEntries(
+    Object.entries(row).filter(([_, value]) => value !== undefined),
+  ) as { [key: string]: SqlValue };
+}
 
 export async function insertRow(table: Table, row: Record) {
   const request: InsertRowRequest = {
-    row: row,
+    row: removeUndefined(row),
   };
 
   const tableName: string = prettyFormatQualifiedName(table.name);
@@ -40,14 +47,14 @@ export async function updateRow(table: Table, row: Record) {
     throw Error("Row is missing primary key.");
   }
 
+  const filteredRow = removeUndefined(row);
   // Update cannot change the PK value.
-  // const processedRow = preProcessRow(table, row, true);
-  delete row[pkColName];
+  delete filteredRow[pkColName];
 
   const request: UpdateRowRequest = {
     primary_key_column: pkColName,
     primary_key_value: pkValue,
-    row: row,
+    row: filteredRow,
   };
 
   const response = await adminFetch(`/table/${tableName}`, {
