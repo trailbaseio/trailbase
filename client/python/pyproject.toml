@@ -17,7 +17,7 @@ cryptography = "^43.0.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.10.0"
-pyright = "^1.1.389"
+pyright = "^1.1.408"
 pytest = "^8.3.3"
 flake8 = "^7.3.0"
 

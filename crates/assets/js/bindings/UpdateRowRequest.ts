@@ -8,4 +8,4 @@ export type UpdateRowRequest = { primary_key_column: string, primary_key_value: 
  * Note that the row is represented as a map to allow selective cells as opposed to
  * Vec<SqlValue>. Absence is different from setting a column to NULL.
  */
-row: { [key in string]?: SqlValue }, };
+row: { [key in string]: SqlValue }, };

@@ -5,4 +5,4 @@ export type InsertRowRequest = {
 /**
  * Row data, which is expected to be a map from column name to value.
  */
-row: { [key in string]?: SqlValue }, };
+row: { [key in string]: SqlValue }, };

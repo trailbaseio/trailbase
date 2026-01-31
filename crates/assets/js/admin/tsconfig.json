@@ -22,5 +22,5 @@
       "@shared/*": ["../shared/*"]
     }
   },
-  "exclude": ["tailwind.config.ts", "dist/", "node_modules/", "public/"]
+  "exclude": ["dist/", "node_modules/", "public/"]
 }
