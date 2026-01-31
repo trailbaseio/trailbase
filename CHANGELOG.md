@@ -1,3 +1,11 @@
+## v0.23.2
+
+- Switch to case-sensitive `LIKE` expression, thus making list queries with `filter[col][$like]=val` case-sensitive as well.
+  - This is technically a breaking change, though sneaking it into a minor release assuming that nobody actually expected case-insensitive filtering.
+- Hoist external SQLite extension loading up to the CLI level and replace upstream sqlite-vec with maintained fork: https://github.com/vlasky/sqlite-vec.
+- Add a join-order benchmark for further performance tuning.
+- Update dependencies.
+
 ## v0.23.1
 
 - Dual license clients under permissive Apache-2.0 license. The server continues to be under OSL-3.0.
