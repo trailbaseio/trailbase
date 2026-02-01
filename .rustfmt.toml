@@ -6,3 +6,7 @@ max_width = 100
 comment_width = 100
 wrap_comments = true
 tab_spaces = 2
+# Only works with nightly:
+# ignore = [
+#   "vendor",
+# ]

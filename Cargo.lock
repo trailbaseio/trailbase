@@ -5242,12 +5242,13 @@ dependencies = [
 
 [[package]]
 name = "serde_rusqlite"
-version = "0.38.0"
+version = "0.41.1"
 dependencies = [
  "rusqlite",
  "serde",
  "serde_bytes",
- "serde_derive",
+ "serde_core",
+ "serde_json",
 ]
 
 [[package]]
@@ -5453,9 +5454,9 @@ dependencies = [
 [[package]]
 name = "sqlite-vec"
 version = "0.2.4-alpha"
-source = "git+https://github.com/vlasky/sqlite-vec.git#9facf1ab84f2a360c0f1e62db3a7f3eca5bc099a"
 dependencies = [
  "cc",
+ "rusqlite",
 ]
 
 [[package]]
