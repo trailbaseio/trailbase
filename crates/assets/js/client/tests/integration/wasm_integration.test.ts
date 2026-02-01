@@ -52,3 +52,17 @@ test("WASM runtime custom SQLite extension functions", async () => {
 
   expect(counts).toEqual(Array.from({ length: N }, (_v, i) => i));
 });
+
+test("WASM runtime calling sqlean", async () => {
+  const response = await fetch(`http://${ADDRESS}/test_sqlean`);
+  const value = parseInt((await response.text()).trim());
+
+  expect(value).toEqual(15);
+});
+
+test("WASM runtime calling sqlite-vec", async () => {
+  const response = await fetch(`http://${ADDRESS}/test_sqlite-vec`);
+  const b64Vec = (await response.text()).trim();
+
+  expect(b64Vec).toEqual("AAAAAAAAgD8AAABAAABAQA==");
+});

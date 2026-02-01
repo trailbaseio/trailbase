@@ -55,12 +55,8 @@ pub fn connect_sqlite(
   path: Option<PathBuf>,
   registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
 ) -> Result<rusqlite::Connection, Error> {
-  // First load C extensions like sqlean and vector search.
-  let status =
-    unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_sqlean_and_vector_search)) };
-  if status != 0 {
-    return Err(Error::Other("Failed to load extensions".into()));
-  }
+  // NOTE: We used to initialize C extensions here as well, such as sqlean and sqlite-vec, however
+  // this has now been moved to the top-level CLI.
 
   // Then open database and load trailbase_extensions.
   let conn = sqlite3_extension_init(
@@ -258,29 +254,6 @@ pub fn sqlite3_extension_init(
   return Ok(db);
 }
 
-#[allow(unsafe_code)]
-#[unsafe(no_mangle)]
-extern "C" fn init_sqlean_and_vector_search(
-  db: *mut rusqlite::ffi::sqlite3,
-  _pz_err_msg: *mut *mut std::os::raw::c_char,
-  _p_api: *const rusqlite::ffi::sqlite3_api_routines,
-) -> ::std::os::raw::c_int {
-  // Add sqlite-vec extension.
-  unsafe {
-    sqlite_vec::sqlite3_vec_init();
-  }
-
-  // Init sqlean's stored procedures: "define", see:
-  //   https://github.com/nalgeon/sqlean/blob/main/docs/define.md
-  let status = unsafe { trailbase_sqlean::define_init(db as *mut trailbase_sqlean::sqlite3) };
-  if status != 0 {
-    log::error!("Failed to load sqlean::define",);
-    return status;
-  }
-
-  return status;
-}
-
 #[cfg(test)]
 mod test {
   use ::uuid::Uuid;
@@ -300,27 +273,6 @@ mod test {
 
     let uuid = Uuid::from_bytes(row);
     assert_eq!(uuid.get_version_num(), 7);
-
-    // sqlean: Define a stored procedure, use it, and remove it.
-    conn
-      .query_row("SELECT define('sumn', ':n * (:n + 1) / 2')", (), |_row| {
-        Ok(())
-      })
-      .unwrap();
-
-    let value: i64 = conn
-      .query_row("SELECT sumn(5)", (), |row| row.get(0))
-      .unwrap();
-    assert_eq!(value, 15);
-
-    conn
-      .query_row("SELECT undefine('sumn')", (), |_row| Ok(()))
-      .unwrap();
-
-    // sqlite-vec
-    conn
-      .query_row("SELECT vec_f32('[0, 1, 2, 3]')", (), |_row| Ok(()))
-      .unwrap();
   }
 
   #[test]

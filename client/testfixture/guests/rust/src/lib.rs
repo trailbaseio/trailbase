@@ -2,6 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+use base64::prelude::*;
 use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_wasm::db::{Transaction, Value, execute, query};
 use trailbase_wasm::fetch::{Uri, get};
@@ -145,7 +146,30 @@ impl Guest for Endpoints {
         if true {
           panic!("/panic called");
         }
-        return Ok("/panic");
+        return Ok(());
+      }),
+      routing::get("/test_sqlean", async |_req| {
+        // sqlean: Define a stored procedure, use it, and remove it.
+        let _ = query("SELECT define('sumn', ':n * (:n + 1) / 2')", vec![])
+          .await
+          .unwrap();
+
+        let Value::Integer(value) = query("SELECT sumn(5)", vec![]).await.unwrap()[0][0] else {
+          return Err(internal("expected int"));
+        };
+
+        let _ = query("SELECT undefine('sumn')", vec![]).await.unwrap();
+
+        return Ok(format!("{value}"));
+      }),
+      routing::get("/test_sqlite-vec", async |_req| {
+        let Value::Blob(ref vec) = query("SELECT vec_f32('[0, 1, 2, 3]')", vec![])
+          .await
+          .unwrap()[0][0]
+        else {
+          return Err(internal("expected blob"));
+        };
+        return Ok(BASE64_STANDARD.encode(vec));
       }),
     ];
   }

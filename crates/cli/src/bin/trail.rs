@@ -57,6 +57,13 @@ async fn async_main(
 ) -> Result<(), BoxError> {
   match cmd {
     SubCommands::Run(cmd) => {
+      // First set up SQLite C extensions auto-loading for `sqlean` and `sqlite-vec`.
+      let status =
+        unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init_sqlean_and_vector_search)) };
+      if status != 0 {
+        return Err("Failed to load extensions".into());
+      }
+
       let app = Server::init(ServerOptions {
         data_dir,
         public_url,
@@ -414,4 +421,27 @@ fn main() -> Result<(), BoxError> {
   }
 
   return Ok(());
+}
+
+#[allow(unsafe_code)]
+#[unsafe(no_mangle)]
+extern "C" fn init_sqlean_and_vector_search(
+  db: *mut rusqlite::ffi::sqlite3,
+  _pz_err_msg: *mut *mut std::os::raw::c_char,
+  _p_api: *const rusqlite::ffi::sqlite3_api_routines,
+) -> ::std::os::raw::c_int {
+  // Add sqlite-vec extension.
+  unsafe {
+    sqlite_vec::sqlite3_vec_init();
+  }
+
+  // Init sqlean's stored procedures: "define", see:
+  //   https://github.com/nalgeon/sqlean/blob/main/docs/define.md
+  let status = unsafe { trailbase_sqlean::define_init(db as *mut trailbase_sqlean::sqlite3) };
+  if status != 0 {
+    log::error!("Failed to load sqlean::define",);
+    return status;
+  }
+
+  return status;
 }

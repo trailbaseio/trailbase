@@ -1,9 +1,6 @@
 [submodule "vendor/sqlean/bundled/sqlean"]
 	path = crates/sqlean/bundled/sqlean
 	url = https://github.com/trailbaseio/sqlean
-[submodule "vendor/sqlite-vec"]
-	path = vendor/sqlite-vec
-	url = https://github.com/ignatz/sqlite-vec.git
 [submodule "vendor/serde_rusqlite"]
 	path = vendor/serde_rusqlite
 	url = https://github.com/ignatz/serde_rusqlite.git

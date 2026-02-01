@@ -5452,10 +5452,10 @@ dependencies = [
 
 [[package]]
 name = "sqlite-vec"
-version = "0.1.7-alpha.2"
+version = "0.2.4-alpha"
+source = "git+https://github.com/vlasky/sqlite-vec.git#9facf1ab84f2a360c0f1e62db3a7f3eca5bc099a"
 dependencies = [
  "cc",
- "rusqlite",
 ]
 
 [[package]]
@@ -6238,10 +6238,12 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sqlite-vec",
  "tokio",
  "trailbase",
  "trailbase-build",
  "trailbase-extension",
+ "trailbase-sqlean",
  "trailbase-sqlite",
  "trailbase-wasm-runtime-host",
  "url",
@@ -6289,9 +6291,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "sqlite-vec",
  "thiserror 2.0.18",
- "trailbase-sqlean",
  "uuid",
  "validator",
 ]
@@ -6994,6 +6994,7 @@ dependencies = [
 name = "wasm-rust-guest-testfixture"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "serde",
  "serde_json",
  "trailbase-wasm 0.5.0",

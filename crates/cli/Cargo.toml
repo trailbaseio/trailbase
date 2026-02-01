@@ -32,10 +32,12 @@ reqwest = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sqlite-vec = { workspace = true }
 tokio = { workspace = true }
 trailbase = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
+trailbase-sqlean = { workspace = true }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
 url = "2.5.4"
