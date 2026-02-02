@@ -85,7 +85,7 @@ rust-embed = { version = "8.4.0", default-features = false, features = ["mime-gu
 serde = { version = "^1.0.203", features = ["derive"] }
 serde_json = { version = "^1.0.117" }
 serde_qs = { version = "0.15.0", default-features = false }
-serde_rusqlite = { path = "vendor/serde_rusqlite" }
+serde_rusqlite = { version = "0.41.1" }
 sqlite-vec = { path = "vendor/sqlite-vec/bindings/rust", default-features = false }
 tokio = { version = "^1.38.0", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = { version = "0.1.40", default-features = false }
