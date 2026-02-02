@@ -1,3 +1,10 @@
+## v0.23.3
+
+- Polish admin UI: use skeletons/shimmers during data loads for tables to reduce layout jank.
+- Minor: improve initial screen fill in ERD graph.
+- Update `serde_qs` resulting in stricter query string parsing. This is technically a breaking API change, however affects edge-cases only and users of the client libraries won't have any issues.
+- Update dependencies and switch back to upstream `serde_rusqlite`.
+
 ## v0.23.2
 
 - Switch to case-sensitive `LIKE` expression, thus making list queries with `filter[col][$like]=val` case-sensitive as well.
