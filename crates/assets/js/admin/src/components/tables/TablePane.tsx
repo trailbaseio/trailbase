@@ -3,7 +3,7 @@ import type { Signal } from "solid-js";
 import { createWritableMemo } from "@solid-primitives/memo";
 import { TbRefresh, TbTable, TbTrash, TbColumns } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
-import { useQuery, useQueryClient } from "@tanstack/solid-query";
+import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
 import type {
   CellContext,
@@ -64,7 +64,7 @@ import {
   UploadedFiles,
 } from "@/components/tables/Files";
 
-import { createConfigQuery, invalidateConfig } from "@/lib/api/config";
+import { createConfigQuery } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
 import { urlSafeBase64ToUuid, toHex, safeParseInt } from "@/lib/utils";
@@ -255,11 +255,10 @@ function TableHeaderRightHandButtons(props: {
   const satisfiesRecordApi = createMemo(() =>
     tableOrViewSatisfiesRecordApiRequirements(props.table, props.allTables),
   );
-
-  const queryClient = useQueryClient();
-  const config = createConfigQuery();
   const hasRecordApi = () =>
     hasRecordApis(config?.data?.config, selectedSchema().name);
+
+  const config = createConfigQuery();
 
   return (
     <div class="flex items-center justify-end gap-2">
@@ -275,7 +274,7 @@ function TableHeaderRightHandButtons(props: {
                   dry_run: null,
                 });
               } finally {
-                invalidateConfig(queryClient);
+                await config.refetch();
                 await props.schemaRefetch();
               }
             })();
@@ -380,10 +379,9 @@ function TableHeader(props: {
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
   const selectedSchema = () => props.table[0];
-  const type = () => tableType(selectedSchema());
 
   const headerTitle = () => {
-    switch (type()) {
+    switch (tableType(selectedSchema())) {
       case "view":
         return "View";
       case "virtualTable":
@@ -434,34 +432,6 @@ function TableHeader(props: {
   );
 }
 
-type TableState = {
-  selected: Table | View;
-  response: ListRowsResponse;
-};
-
-async function buildTableState(
-  selected: Table | View,
-  filter: string | null,
-  pageSize: number,
-  pageIndex: number,
-  cursor: string | null,
-  sorting: SortingState,
-): Promise<TableState> {
-  const response = await fetchRows(
-    selected.name,
-    filter,
-    pageSize,
-    pageIndex,
-    cursor,
-    formatSortingAsOrder(sorting),
-  );
-
-  return {
-    selected,
-    response,
-  };
-}
-
 type CellType = "UUID" | "JSON" | "File" | "File[]" | ColumnDataType;
 
 function deriveCellType(column: Column): CellType {
@@ -483,12 +453,29 @@ function deriveCellType(column: Column): CellType {
 }
 
 function buildColumnDefs(
-  tableName: QualifiedName,
+  selectedSchema: Table | View,
+  columns: Column[] | undefined,
   pkColumnIndex: number,
-  columns: Column[],
   blobEncoding: BlobEncoding,
 ): ColumnDef<ArrayRecord, SqlValue>[] {
-  return columns.map((col, idx) => {
+  if (columns === undefined) {
+    // Fallback to schema (rather than response) column defintions.
+    if (tableType(selectedSchema) === "table") {
+      return (selectedSchema as Table).columns.map((c) => ({
+        id: c.name,
+        header: c.name,
+      }));
+    }
+
+    // We don't have any schema column defs. Fallback to single col.
+    return [
+      {
+        header: "",
+      },
+    ];
+  }
+
+  return columns.map((col, idx): ColumnDef<ArrayRecord, SqlValue> => {
     const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
     const type = deriveCellType(col);
@@ -505,7 +492,7 @@ function buildColumnDefs(
       cell: (context) =>
         renderCell(
           context,
-          tableName,
+          selectedSchema.name,
           columns,
           pkColumnIndex,
           {
@@ -515,12 +502,13 @@ function buildColumnDefs(
           blobEncoding,
         ),
       accessorFn: (row: ArrayRecord) => row[idx],
-    } as ColumnDef<ArrayRecord, SqlValue>;
+    };
   });
 }
 
-function ArrayRecordTable(props: {
-  state: TableState;
+function RecordTable(props: {
+  selectedSchema: Table | View;
+  records: ListRowsResponse | undefined;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
   columnPinningState: Signal<ColumnPinningState>;
@@ -533,31 +521,31 @@ function ArrayRecordTable(props: {
     new Map<string, SqlValue>(),
   );
 
-  const selectedSchema = () => props.state.selected;
+  const selectedSchema = () => props.selectedSchema;
   const mutable = () =>
     tableType(selectedSchema()) === "table" && !hiddenTable(selectedSchema());
-  const data = () => props.state.response.rows;
-
   const rowsRefetch = () => props.rowsRefetch();
-  const columns = (): Column[] => props.state.response.columns;
-  const totalRowCount = () => props.state.response.total_row_count;
+
+  const data = () => props.records?.rows;
+  const columns = () => props.records?.columns;
+  const totalRowCount = () => props.records?.total_row_count ?? 0;
 
   const pkColumnIndex = createMemo(
-    () => findPrimaryKeyColumnIndex(columns()) ?? 0,
+    () => findPrimaryKeyColumnIndex(columns() ?? []) ?? 0,
   );
 
   const table = createMemo(() => {
-    const columns = buildColumnDefs(
-      selectedSchema().name,
+    const columnDefs = buildColumnDefs(
+      selectedSchema(),
+      columns(),
       pkColumnIndex(),
-      props.state.response.columns,
       blobEncoding(),
     );
 
     return buildTable(
       {
         // NOTE: The cell rendering is constrolled via the columnsDefs.
-        columns,
+        columns: columnDefs,
         data: data(),
         columnPinning: props.columnPinningState[0],
         onColumnPinningChange: props.columnPinningState[1],
@@ -633,10 +621,11 @@ function ArrayRecordTable(props: {
               <div class="overflow-x-auto pt-4">
                 <TableComponent
                   table={table()}
+                  loading={props.records === undefined}
                   onRowClick={
                     mutable()
                       ? (_idx: number, row: ArrayRecord) => {
-                          setEditRow(rowDataToRow(columns(), row));
+                          setEditRow(rowDataToRow(columns() ?? [], row));
                         }
                       : undefined
                   }
@@ -690,7 +679,8 @@ function ArrayRecordTable(props: {
                     await deleteRows(
                       prettyFormatQualifiedName(selectedSchema().name),
                       {
-                        primary_key_column: columns()[pkColumnIndex()].name,
+                        primary_key_column:
+                          columns()?.[pkColumnIndex()].name ?? "??",
                         values: ids,
                       },
                     );
@@ -739,7 +729,7 @@ function ArrayRecordTable(props: {
           </Select>
 
           <Show when={import.meta.env.DEV}>
-            <DebugDialogButton title="Schema" data={data()} />
+            <DebugDialogButton title="Schema" data={data() ?? []} />
           </Show>
         </div>
       </div>
@@ -751,8 +741,8 @@ function IndexTable(props: {
   table: Table;
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
-  hidden: boolean;
 }) {
+  const hidden = () => hiddenTable(props.table);
   const [editIndex, setEditIndex] = createSignal<TableIndex | undefined>();
   const [selectedIndexes, setSelectedIndexes] = createSignal(new Set<string>());
 
@@ -769,7 +759,7 @@ function IndexTable(props: {
     return buildTable({
       columns: indexColumns,
       data: indexes().map(([index, _]) => index),
-      onRowSelection: props.hidden
+      onRowSelection: hidden()
         ? undefined
         : // eslint-disable-next-line solid/reactivity
           (rows: Row<TableIndex>[], value: boolean) => {
@@ -824,8 +814,9 @@ function IndexTable(props: {
               <div class="space-y-2.5 overflow-x-auto">
                 <TableComponent
                   table={indexesTable()}
+                  loading={false}
                   onRowClick={
-                    props.hidden
+                    hidden()
                       ? undefined
                       : (_idx: number, index: TableIndex) => {
                           setEditIndex(index);
@@ -838,7 +829,7 @@ function IndexTable(props: {
         }}
       </SafeSheet>
 
-      <Show when={!props.hidden}>
+      <Show when={!hidden()}>
         <div class="mt-2 flex gap-2">
           <SafeSheet>
             {(sheet) => {
@@ -938,7 +929,7 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
       </p>
 
       <div class="mt-4">
-        <TableComponent table={triggersTable()} />
+        <TableComponent loading={false} table={triggersTable()} />
       </div>
     </div>
   );
@@ -950,8 +941,7 @@ export function TablePane(props: {
   schemaRefetch: () => Promise<void>;
 }) {
   const selectedSchema = () => props.selectedTable[0];
-  const type = () => tableType(selectedSchema());
-  const hidden = () => hiddenTable(selectedSchema());
+  const isTable = () => tableType(selectedSchema()) === "table";
 
   const [searchParams, setSearchParams] = useSearchParams<{
     filter?: string;
@@ -966,64 +956,62 @@ export function TablePane(props: {
     return [];
   });
 
-  const filter = () => searchParams.filter;
-  const setFilter = (filter: string | undefined) => {
-    setSearchParams({
-      ...searchParams,
-      filter,
-    });
-  };
+  const [filter, setFilter] = [
+    () => searchParams.filter,
+    (filter: string | undefined) => {
+      setSearchParams({
+        ...searchParams,
+        filter,
+      });
+    },
+  ];
 
-  const pagination = (): PaginationState => {
-    return {
-      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
-    };
-  };
-  const setPagination = (s: PaginationState) => {
-    setSearchParams({
-      ...searchParams,
-      pageSize: s.pageSize,
-      pageIndex: s.pageIndex,
-    });
-  };
+  const [pagination, setPagination] = [
+    (): PaginationState => {
+      return {
+        pageSize: safeParseInt(searchParams.pageSize) ?? 20,
+        pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
+      };
+    },
+    (s: PaginationState) => {
+      setSearchParams({
+        ...searchParams,
+        pageSize: s.pageSize,
+        pageIndex: s.pageIndex,
+      });
+    },
+  ];
 
   const [sorting, setSorting] = createSignal<SortingState>([]);
 
-  const state: QueryObserverResult<TableState> = useQuery(() => ({
+  const records: QueryObserverResult<ListRowsResponse> = useQuery(() => ({
     queryKey: [
-      "tableData",
-      prettyFormatQualifiedName(props.selectedTable[0].name),
+      selectedSchema().name,
       searchParams.filter,
-      pagination().pageIndex,
-      pagination().pageSize,
+      pagination(),
       sorting(),
-    ],
+    ] as ReadonlyArray<unknown>,
     queryFn: async ({ queryKey }) => {
-      const p = pagination();
-      const c = cursors();
-      const s = sorting();
-
-      console.debug(
-        `Fetching data with key: ${queryKey}, index: ${p.pageIndex}, cursors: ${c}, sorting: ${s}`,
-      );
+      console.debug(`Fetching data with key: ${queryKey}`);
 
       try {
-        const state = await buildTableState(
-          props.selectedTable[0],
+        const { pageSize, pageIndex } = pagination();
+
+        const response = await fetchRows(
+          selectedSchema().name,
           searchParams.filter ?? null,
-          p.pageSize,
-          p.pageIndex,
-          c[p.pageIndex - 1],
-          s,
+          pageSize,
+          pageIndex,
+          cursors()[pageIndex - 1],
+          formatSortingAsOrder(sorting()),
         );
 
-        const cursor = state.response.cursor;
-        if (cursor && p.pageIndex >= c.length) {
-          setCursors([...c, cursor]);
+        const newCursor = response.cursor;
+        if (newCursor && pageIndex >= cursors().length) {
+          setCursors([...cursors(), newCursor]);
         }
 
-        return state;
+        return response;
       } catch (err) {
         // Reset.
         setSearchParams({
@@ -1037,13 +1025,7 @@ export function TablePane(props: {
     },
   }));
 
-  const client = useQueryClient();
-  const rowsRefetch = () => {
-    // Refetches the actual table contents above.
-    client.invalidateQueries({
-      queryKey: ["tableData"],
-    });
-  };
+  const rowsRefetch = records.refetch;
   const schemaRefetch = async () => {
     // First re-fetch the schema then the data rows to trigger a re-render.
     await props.schemaRefetch();
@@ -1063,20 +1045,31 @@ export function TablePane(props: {
 
       <div class="flex flex-col gap-8 p-4">
         <Switch>
-          <Match when={state.isError}>
+          <Match when={records.isError}>
             <div class="my-2 flex flex-col gap-4">
-              Failed to fetch rows: {`${state.error}`}
+              Failed to fetch rows: {`${records.error}`}
               <div>
                 <Button onClick={() => window.location.reload()}>Reload</Button>
               </div>
             </div>
           </Match>
 
-          <Match when={state.isLoading}>Loading...</Match>
+          <Match when={records.isLoading}>
+            <RecordTable
+              selectedSchema={selectedSchema()}
+              records={undefined}
+              pagination={[pagination, setPagination]}
+              filter={[filter, setFilter]}
+              columnPinningState={[columnPinningState, setColumnPinningState]}
+              sorting={[sorting, setSorting]}
+              rowsRefetch={rowsRefetch}
+            />
+          </Match>
 
-          <Match when={state.data}>
-            <ArrayRecordTable
-              state={state.data!}
+          <Match when={records.isSuccess}>
+            <RecordTable
+              selectedSchema={selectedSchema()}
+              records={records.data}
               pagination={[pagination, setPagination]}
               filter={[filter, setFilter]}
               columnPinningState={[columnPinningState, setColumnPinningState]}
@@ -1086,16 +1079,15 @@ export function TablePane(props: {
           </Match>
         </Switch>
 
-        <Show when={type() === "table"}>
+        <Show when={isTable()}>
           <IndexTable
             table={selectedSchema() as Table}
             schemas={props.schemas}
             schemaRefetch={props.schemaRefetch}
-            hidden={hidden()}
           />
         </Show>
 
-        <Show when={type() === "table"}>
+        <Show when={isTable()}>
           <TriggerTable
             table={selectedSchema() as Table}
             schemas={props.schemas}

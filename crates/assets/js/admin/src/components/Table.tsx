@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch } from "solid-js";
+import { Index, For, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import {
   flexRender,
@@ -36,6 +36,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Skeleton } from "@/components/ui/skeleton";
 import { createIsMobile } from "@/lib/signals";
 
 type TableOptions<TData, TValue> = {
@@ -204,12 +205,13 @@ function omit<T, K extends keyof T>(object: T, key: K): Omit<T, K> {
 
 export function Table<TData>(props: {
   table: SolidTable<TData>;
+  loading: boolean;
   onRowClick?: (idx: number, row: TData) => void;
 }) {
   const paginationEnabled = () => props.table.options.manualPagination ?? false;
   const paginationState = () => props.table.getState().pagination;
   const columns = () => props.table.options.columns;
-  const numRows = () => props.table.getRowModel().rows?.length ?? 0;
+  const numRows = (): number => props.table.getRowModel().rows.length;
   const enableSorting = () =>
     props.table.options.manualSorting || props.table.options.enableSorting;
 
@@ -248,6 +250,34 @@ export function Table<TData>(props: {
 
           <TableBody>
             <Switch>
+              <Match when={props.loading}>
+                <Index each={Array(paginationState().pageSize)}>
+                  {() => (
+                    <TableRow>
+                      <For each={props.table.getVisibleLeafColumns()}>
+                        {(cell) => (
+                          <TableCell>
+                            <Switch>
+                              <Match when={cell.id === "__select__"}>
+                                <Checkbox />
+                              </Match>
+
+                              <Match when={true}>
+                                <Skeleton
+                                  height={16}
+                                  width={cell.getSize()}
+                                  radius={10}
+                                />
+                              </Match>
+                            </Switch>
+                          </TableCell>
+                        )}
+                      </For>
+                    </TableRow>
+                  )}
+                </Index>
+              </Match>
+
               <Match when={numRows() > 0}>
                 <For each={props.table.getRowModel().rows}>
                   {(row) => (
@@ -256,15 +286,7 @@ export function Table<TData>(props: {
                 </For>
               </Match>
 
-              <Match when={paginationState().pageIndex > 0}>
-                <TableRow>
-                  <TableCell colSpan={columns().length}>
-                    <span>Loading...</span>
-                  </TableCell>
-                </TableRow>
-              </Match>
-
-              <Match when={paginationState().pageIndex === 0}>
+              <Match when={true}>
                 <TableRow>
                   <TableCell colSpan={columns().length}>
                     <span>Empty</span>

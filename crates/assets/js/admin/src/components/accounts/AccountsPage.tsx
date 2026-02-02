@@ -404,65 +404,75 @@ export function AccountsPage() {
             </Match>
 
             <Match when={users.isLoading}>
-              <span>Loading</span>
+              <div class="w-full space-y-2.5">
+                <Table
+                  table={accountsTable()}
+                  loading={true}
+                  onRowClick={undefined}
+                />
+              </div>
             </Match>
 
-            <Match when={users.data}>
+            <Match when={users.isSuccess}>
               <div class="w-full space-y-2.5">
-                <Table table={accountsTable()} onRowClick={undefined} />
+                <Table
+                  table={accountsTable()}
+                  loading={false}
+                  onRowClick={undefined}
+                />
               </div>
-
-              <SafeSheet
-                children={(sheet) => {
-                  return (
-                    <>
-                      <SheetContent class={sheetMaxWidth}>
-                        <AddUser userRefetch={refetch} {...sheet} />
-                      </SheetContent>
-
-                      <SheetTrigger
-                        as={(props: DialogTriggerProps) => (
-                          <Button
-                            variant="outline"
-                            class="flex gap-2"
-                            onClick={() => {}}
-                            {...props}
-                          >
-                            Add User
-                          </Button>
-                        )}
-                      />
-                    </>
-                  );
-                }}
-              />
-
-              {/* WARN: This might open multiple sheets or at least scrims for each row */}
-              <SafeSheet
-                open={[
-                  () => editUser() !== undefined,
-                  (isOpen: boolean | ((value: boolean) => boolean)) => {
-                    if (!isOpen) {
-                      setEditUser(undefined);
-                    }
-                  },
-                ]}
-                children={(sheet) => {
-                  return (
-                    <SheetContent class={sheetMaxWidth}>
-                      <Show when={editUser()}>
-                        <EditSheetContent
-                          user={editUser()!}
-                          refetch={refetch}
-                          {...sheet}
-                        />
-                      </Show>
-                    </SheetContent>
-                  );
-                }}
-              />
             </Match>
           </Switch>
+
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <AddUser userRefetch={refetch} {...sheet} />
+                  </SheetContent>
+
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button
+                        variant="outline"
+                        class="flex gap-2"
+                        onClick={() => {}}
+                        {...props}
+                      >
+                        Add User
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+
+          {/* WARN: This might open multiple sheets or at least scrims for each row */}
+          <SafeSheet
+            open={[
+              () => editUser() !== undefined,
+              (isOpen: boolean | ((value: boolean) => boolean)) => {
+                if (!isOpen) {
+                  setEditUser(undefined);
+                }
+              },
+            ]}
+            children={(sheet) => {
+              return (
+                <SheetContent class={sheetMaxWidth}>
+                  <Show when={editUser()}>
+                    <EditSheetContent
+                      user={editUser()!}
+                      refetch={refetch}
+                      {...sheet}
+                    />
+                  </Show>
+                </SheetContent>
+              );
+            }}
+          />
         </Suspense>
       </div>
     </div>

@@ -184,7 +184,7 @@ function DatabaseSettingsForm(props: {
               </p>
 
               <div class="max-h-[500px] overflow-auto">
-                <Table table={dbTable()} />
+                <Table table={dbTable()} loading={false} />
               </div>
             </CardContent>
 

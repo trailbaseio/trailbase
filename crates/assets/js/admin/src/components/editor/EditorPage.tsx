@@ -195,7 +195,7 @@ function ResultViewImpl(props: {
           <ExecutionTime timestamp={props.timestamp} />
         </div>
 
-        <Table table={dataTable()} />
+        <Table table={dataTable()} loading={false} />
       </div>
     </ErrorBoundary>
   );

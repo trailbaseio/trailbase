@@ -315,29 +315,27 @@ export function LogsPage() {
       />
 
       <div class="flex flex-col gap-4 p-4">
-        <Switch fallback={<p>Loading...</p>}>
+        <Switch>
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
-          <Match when={logsFetch.isLoading}>
-            <span>Loading</span>
-          </Match>
-
-          <Match when={logsFetch.data}>
-            {pagination().pageIndex === 0 && logsFetch.data!.stats && (
+          <Match when={true}>
+            <Show when={pagination().pageIndex === 0}>
               <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
-                <Show when={showMap() && logsFetch.data!.stats!.country_codes}>
+                <Show when={showMap()}>
                   <div class="flex items-center md:w-1/2 md:max-w-[500px]">
                     <WorldMap
-                      country_codes={logsFetch.data!.stats!.country_codes!}
+                      country_codes={
+                        logsFetch.data?.stats?.country_codes ?? null
+                      }
                     />
                   </div>
                 </Show>
 
                 <div class={showMap() ? "md:w-1/2" : "w-full"}>
-                  <LogsChart stats={logsFetch.data!.stats!} />
+                  <LogsChart rates={logsFetch.data?.stats?.rate ?? []} />
                 </div>
               </div>
-            )}
+            </Show>
 
             <FilterBar
               initial={searchParams.filter}
@@ -351,7 +349,7 @@ export function LogsPage() {
               placeholder={`Filter Query, e.g. '(latency > 2 || status >= 400) && method = "GET"'`}
             />
 
-            <Table table={logsTable()} />
+            <Table table={logsTable()} loading={logsFetch.isLoading} />
           </Match>
         </Switch>
       </div>
@@ -445,8 +443,8 @@ const Legend = L.Control.extend({
   },
 });
 
-function WorldMap(props: { country_codes: { [key in string]?: number } }) {
-  const codes = () => props.country_codes;
+function WorldMap(props: { country_codes: Stats["country_codes"] }) {
+  const codes = () => props.country_codes ?? {};
 
   let ref: HTMLDivElement | undefined;
   let map: L.Map | undefined;
@@ -547,15 +545,10 @@ function WorldMap(props: { country_codes: { [key in string]?: number } }) {
   );
 }
 
-function LogsChart(props: { stats: Stats }) {
-  const stats = props.stats;
-
+function LogsChart(props: { rates: Stats["rate"] }) {
   const data = (): ChartData | undefined => {
-    const s = stats;
-    if (!s) return;
-
-    const labels = s.rate.map(([ts, _v]) => Number(ts) * 1000);
-    const data = s.rate.map(([_ts, v]) => v);
+    const labels = props.rates.map(([ts, _v]) => Number(ts) * 1000);
+    const data = props.rates.map(([_ts, v]) => v);
 
     return {
       labels,
