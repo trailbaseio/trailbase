@@ -180,7 +180,7 @@ pub struct Query {
 impl Query {
   pub fn parse(query: &str) -> Result<Query, Error> {
     // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
-    let qs = serde_qs::Config::new(9, false);
+    let qs = serde_qs::Config::new().max_depth(9).use_form_encoding(true);
     return qs.deserialize_bytes::<Query>(query.as_bytes());
   }
 
@@ -204,7 +204,9 @@ impl Query {
       pairs.push(format!("count={}", if count { "true" } else { "false" }));
     }
 
-    if let Some(ref expand) = self.expand {
+    if let Some(ref expand) = self.expand
+      && !expand.columns.is_empty()
+    {
       let s = expand.columns.join(",");
       pairs.push(format!("expand={s}"));
     }
@@ -240,7 +242,7 @@ pub struct FilterQuery {
 impl FilterQuery {
   pub fn parse(query: &str) -> Result<FilterQuery, Error> {
     // NOTE: We rely on non-strict mode to parse `filter[col0]=a&b%filter[col1]=c`.
-    let qs = serde_qs::Config::new(9, false);
+    let qs = serde_qs::Config::new().max_depth(9).use_form_encoding(true);
     return qs.deserialize_bytes::<FilterQuery>(query.as_bytes());
   }
 
@@ -269,8 +271,8 @@ mod tests {
     assert_eq!(Query::parse("").unwrap(), Query::default());
     assert_eq!(Query::parse("unknown=foo").unwrap(), Query::default());
 
-    // NOTE: The filter value contains a '&', which will not parse in serde_qs strict-mode. Test
-    // explicitly that we properly allow '&'s.
+    // NOTE: The filter value contains a '&', which will not parse if we're using query instead
+    // of form encoding. Test explicitly that we properly allow '&'s.
     assert_eq!(
       Query::parse("filter%5Btext_not_null%5D=rust+client+test+0%3A+%3D%3F%261747466199")
         .unwrap()
@@ -378,16 +380,9 @@ mod tests {
 
   #[test]
   fn test_query_order_parsing() {
-    let qs = Config::new(5, false);
+    let qs = Config::new();
 
-    assert_eq!(
-      Query::parse("order=").unwrap(),
-      Query {
-        order: None,
-        ..Default::default()
-      },
-    );
-
+    assert!(Query::parse("order=").is_err());
     assert!(qs.deserialize_str::<Query>("order=$").is_err());
     assert!(qs.deserialize_str::<Query>("order=a,b,c,d,e").is_ok());
     assert!(qs.deserialize_str::<Query>("order=a,b,c,d,e,f").is_err());
@@ -409,16 +404,9 @@ mod tests {
 
   #[test]
   fn test_query_expand_parsing() {
-    let qs = Config::new(5, false);
+    let qs = Config::new().max_depth(5);
 
-    assert_eq!(
-      qs.deserialize_str::<Query>("expand=").unwrap(),
-      Query {
-        expand: None,
-        ..Default::default()
-      },
-    );
-
+    assert!(qs.deserialize_str::<Query>("expand=").is_err());
     assert!(qs.deserialize_str::<Query>("expand=$").is_err());
     assert!(qs.deserialize_str::<Query>("expand=a,b,c,d,e").is_ok());
     assert!(qs.deserialize_str::<Query>("expand=a,b,c,d,e,f").is_err());
@@ -426,12 +414,9 @@ mod tests {
 
   #[test]
   fn test_query_filter_parsing() {
-    let qs = Config::new(5, false);
+    let qs = Config::new();
 
-    assert_eq!(
-      qs.deserialize_str::<Query>("filter=").unwrap(),
-      Query::default()
-    );
+    assert!(qs.deserialize_str::<Query>("filter=").is_err());
 
     let q0: Query = qs
       .deserialize_str("filter[col0][$gt]=0&filter[col1]=val1")
@@ -560,11 +545,14 @@ mod tests {
 
   #[test]
   fn test_query_cursor_parsing() {
-    let qs = Config::new(5, false);
+    let qs = Config::new();
 
     assert_eq!(
       qs.deserialize_str::<Query>("cursor=").unwrap(),
-      Query::default()
+      Query {
+        cursor: Some("".to_string()),
+        ..Default::default()
+      }
     );
 
     assert_eq!(

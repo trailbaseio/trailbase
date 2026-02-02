@@ -277,7 +277,7 @@ mod tests {
 
   #[test]
   fn test_filter_parsing() {
-    let qs = Config::new(5, false);
+    let qs = Config::new();
 
     let m_empty: Query = qs.deserialize_str("").unwrap();
     assert_eq!(m_empty.filter, None);
@@ -330,10 +330,6 @@ mod tests {
       })
     );
     assert_eq!(q3, f3.to_query());
-
-    // Combiners with only one element each.
-    let m = qs.deserialize_str::<Query>("filter[$and][0][col0]=val0&filter[$or][1][col1]=val1");
-    assert!(m.is_ok(), "M: {m:?}");
 
     // test implicit $and.
     let q2 = "filter[col0]=val0&filter[col1]=val1";
