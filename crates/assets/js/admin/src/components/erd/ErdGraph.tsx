@@ -161,24 +161,25 @@ export function ErdGraph(props: {
     // v0.3.25 results in "layout is not a function": https://github.com/antvis/X6/issues/4441
     // v1.2 has completely in-compatible APIs. They'll probably need to overhaul x6 first.
     const maxHeight = props.nodes.reduce((acc, node) => {
-      const ports = node.ports;
-      let numPorts = 0;
-      if (ports instanceof Array) {
-        numPorts = ports.length;
-      } else if (ports !== undefined) {
-        numPorts = 1;
-      }
+      const numPorts = node.ports instanceof Array ? node.ports.length : 1;
       return Math.max(acc, (numPorts + 1) * LINE_HEIGHT);
     }, 0);
 
     const width = NODE_WIDTH + 20;
     const height = maxHeight + 10;
 
-    const nodeAspect = width / height;
+    // The idea is to have the aspect of the total node area match the screen's
+    // as well as possible.
+    //
+    // screenAspect == nodeAreaAspect == (width * columns) / (rows * height)
+    // rows == ceil(nodex.length / columns)
+    //
+    // => columns = sqrt(screenAspect * length * height / width)
     const screenAspect = window.innerWidth / window.innerHeight;
-    const columns = Math.floor(
-      Math.sqrt(props.nodes.length) * (screenAspect / nodeAspect),
+    const columns = Math.ceil(
+      Math.sqrt((screenAspect * props.nodes.length * height) / width),
     );
+    const rows = Math.ceil(props.nodes.length / columns);
 
     const cells: Cell[] = [
       ...props.nodes.map((n, index) => {
@@ -199,7 +200,14 @@ export function ErdGraph(props: {
     ];
 
     graph.resetCells(cells);
-    graph.zoomToFit({ padding: 20, maxScale: 1, minScale: 0.1 });
+
+    // The zoomToFit seems a bit buggy. It will happily cut off boxes at the bottom.
+    graph.zoomToRect({
+      x: -20,
+      y: -20,
+      width: columns * width + 20,
+      height: rows * height + 20,
+    });
 
     props.onMount?.(graph);
   });
