@@ -1,3 +1,10 @@
+## v0.23.4
+
+- Include cursors in list responses only when properly supported.
+- Fix cursor state handling in Admin UI with respect to both reactivity and `pageIndex`-based indexing.
+- Add an explicit security/vulnerability policy with `SECURITY.md`.
+- Update dependencies.
+
 ## v0.23.3
 
 - Polish admin UI: use skeletons/shimmers during data loads for tables to reduce layout jank.
