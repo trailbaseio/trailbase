@@ -1,6 +1,5 @@
 import { Match, Show, Switch, createMemo, createSignal, JSX } from "solid-js";
 import type { Signal } from "solid-js";
-import { createWritableMemo } from "@solid-primitives/memo";
 import { TbRefresh, TbTable, TbTrash, TbColumns } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
@@ -43,6 +42,7 @@ import { DebugDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
 import { Table as TableComponent, buildTable } from "@/components/Table";
+import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
@@ -935,6 +935,12 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   );
 }
 
+type SearchParams = {
+  filter?: string;
+  pageSize?: string;
+  pageIndex?: string;
+};
+
 export function TablePane(props: {
   selectedTable: [Table, string] | [View, string];
   schemas: ListSchemasResponse;
@@ -943,52 +949,57 @@ export function TablePane(props: {
   const selectedSchema = () => props.selectedTable[0];
   const isTable = () => tableType(selectedSchema()) === "table";
 
-  const [searchParams, setSearchParams] = useSearchParams<{
-    filter?: string;
-    pageSize?: string;
-    pageIndex?: string;
-  }>();
+  // IMPORTANT: We need to memo the search params to treat absence and defaults
+  // consistently, otherwise `undefined`->`default` may invalidate the cursors.
+  const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
+  const filter = createMemo(() => searchParams.filter);
+  const pageSize = createMemo(() => safeParseInt(searchParams.pageSize) ?? 20);
+  const pageIndex = createMemo(() => safeParseInt(searchParams.pageIndex) ?? 0);
 
-  const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    // Reset cursor whenever table or search params change.
-    const _ = [props.selectedTable, searchParams.pageSize, searchParams.filter];
-    console.debug("resetting cursor");
-    return [];
+  const pagination = (): PaginationState => ({
+    pageIndex: pageIndex(),
+    pageSize: pageSize(),
   });
+  const setPagination = (s: PaginationState) => {
+    setSearchParams({
+      ...searchParams,
+      pageIndex: s.pageIndex,
+      pageSize: s.pageSize,
+    });
+  };
+  const setFilter = (filter: string | undefined) => {
+    // Reset pagination.
+    setSearchParams({
+      pageIndex: undefined,
+      pageSize: undefined,
+      filter,
+    });
+  };
 
-  const [filter, setFilter] = [
-    () => searchParams.filter,
-    (filter: string | undefined) => {
-      setSearchParams({
-        ...searchParams,
-        filter,
-      });
-    },
-  ];
+  const [sorting, setSortingImpl] = createSignal<SortingState>([]);
+  const setSorting = (s: Updater<SortingState>) => {
+    // Reset pagination.
+    setSearchParams({
+      ...searchParams,
+      pageIndex: undefined,
+      pageSize: undefined,
+    });
+    setSortingImpl(s);
+  };
 
-  const [pagination, setPagination] = [
-    (): PaginationState => {
-      return {
-        pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-        pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
-      };
-    },
-    (s: PaginationState) => {
-      setSearchParams({
-        ...searchParams,
-        pageSize: s.pageSize,
-        pageIndex: s.pageIndex,
-      });
-    },
-  ];
-
-  const [sorting, setSorting] = createSignal<SortingState>([]);
+  const cursors = createMemo<Map<number, string>>(() => {
+    // Reset cursor whenever table or search params change. This is basically
+    // the same as `queryKey` below minus `pageIndex`.
+    const _ = [selectedSchema(), pageSize(), filter(), sorting()];
+    console.debug("resetting cursor");
+    return new Map();
+  });
 
   const records: QueryObserverResult<ListRowsResponse> = useQuery(() => ({
     queryKey: [
-      selectedSchema().name,
-      searchParams.filter,
+      selectedSchema(),
       pagination(),
+      filter(),
       sorting(),
     ] as ReadonlyArray<unknown>,
     queryFn: async ({ queryKey }) => {
@@ -996,19 +1007,20 @@ export function TablePane(props: {
 
       try {
         const { pageSize, pageIndex } = pagination();
+        const cursor = cursors().get(pageIndex - 1);
 
         const response = await fetchRows(
           selectedSchema().name,
-          searchParams.filter ?? null,
+          filter() ?? null,
           pageSize,
           pageIndex,
-          cursors()[pageIndex - 1],
+          cursor ?? null,
           formatSortingAsOrder(sorting()),
         );
 
-        const newCursor = response.cursor;
-        if (newCursor && pageIndex >= cursors().length) {
-          setCursors([...cursors(), newCursor]);
+        // Update cursors.
+        if (sorting().length === 0 && response.cursor) {
+          cursors().set(pageIndex, response.cursor);
         }
 
         return response;
@@ -1054,22 +1066,10 @@ export function TablePane(props: {
             </div>
           </Match>
 
-          <Match when={records.isLoading}>
+          <Match when={true}>
             <RecordTable
               selectedSchema={selectedSchema()}
-              records={undefined}
-              pagination={[pagination, setPagination]}
-              filter={[filter, setFilter]}
-              columnPinningState={[columnPinningState, setColumnPinningState]}
-              sorting={[sorting, setSorting]}
-              rowsRefetch={rowsRefetch}
-            />
-          </Match>
-
-          <Match when={records.isSuccess}>
-            <RecordTable
-              selectedSchema={selectedSchema()}
-              records={records.data}
+              records={records.isSuccess ? records.data : undefined}
               pagination={[pagination, setPagination]}
               filter={[filter, setFilter]}
               columnPinningState={[columnPinningState, setColumnPinningState]}

@@ -53,10 +53,8 @@ export function buildListSearchParams({
 
   if (cursor) {
     params.set("cursor", cursor);
-  } else {
-    if (pageIndex) {
-      params.set("offset", `${pageIndex * pageSize}`);
-    }
+  } else if (pageIndex) {
+    params.set("offset", `${pageIndex * pageSize}`);
   }
 
   if (order) {

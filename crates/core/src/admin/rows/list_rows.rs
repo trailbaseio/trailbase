@@ -107,18 +107,22 @@ pub async fn list_rows_handler(
   )
   .await?;
 
-  let next_cursor = cursor_column.and_then(|(col_idx, _col)| {
-    let row = rows.last()?;
-    assert!(row.len() > col_idx);
-    match &row[col_idx] {
-      SqlValue::Integer(n) => Some(n.to_string()),
-      SqlValue::Blob(b) => {
-        // Should be a base64 encoded [u8; 16] id.
-        b.to_b64_url_safe().ok()
+  let next_cursor = if order.is_none() {
+    cursor_column.and_then(|(col_idx, _col)| {
+      let row = rows.last()?;
+      assert!(row.len() > col_idx);
+      match &row[col_idx] {
+        SqlValue::Integer(n) => Some(n.to_string()),
+        SqlValue::Blob(b) => {
+          // Should be a base64 encoded [u8; 16] id.
+          b.to_b64_url_safe().ok()
+        }
+        _ => None,
       }
-      _ => None,
-    }
-  });
+    })
+  } else {
+    None
+  };
 
   return Ok(Json(ListRowsResponse {
     total_row_count,

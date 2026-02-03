@@ -142,6 +142,7 @@ pub async fn list_logs_handler(
     cursor,
     order,
     filter: filter_params,
+    offset,
     ..
   } = raw_url_query
     .as_ref()
@@ -197,6 +198,7 @@ pub async fn list_logs_handler(
     geoip_db_type.clone(),
     filter_where_clause.clone(),
     cursor,
+    offset,
     order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
     limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
   )
@@ -208,7 +210,7 @@ pub async fn list_logs_handler(
     }
   }
 
-  let first_page = cursor.is_none();
+  let first_page = cursor.is_none() && offset.unwrap_or(0) == 0;
   let stats = if first_page {
     let now = Utc::now();
     let args = FetchAggregateArgs {
@@ -234,15 +236,22 @@ pub async fn list_logs_handler(
     None
   };
 
-  let response = ListLogsResponse {
-    total_row_count,
-    cursor: logs.last().map(|log| {
+  let next_cursor = if order.is_none() {
+    logs.last().map(|log| {
+      #[cfg(debug_assertions)]
       if let Some(old_cursor) = cursor {
         assert!(old_cursor > log.id);
       }
 
       return log.id.to_string();
-    }),
+    })
+  } else {
+    None
+  };
+
+  let response = ListLogsResponse {
+    total_row_count,
+    cursor: next_cursor,
     entries: logs
       .into_iter()
       .map(|log| log.into())
@@ -258,6 +267,7 @@ async fn fetch_logs(
   geoip_db_type: Option<DatabaseType>,
   filter_where_clause: WhereClause,
   cursor: Option<i64>,
+  offset: Option<usize>,
   order: &Order,
   limit: usize,
 ) -> Result<Vec<LogEntry>, Error> {
@@ -266,6 +276,11 @@ async fn fetch_logs(
   params.push((
     Cow::Borrowed(":limit"),
     trailbase_sqlite::Value::Integer(limit as i64),
+  ));
+
+  params.push((
+    Cow::Borrowed(":offset"),
+    trailbase_sqlite::Value::Integer(offset.map_or(0, |o| o.try_into().unwrap_or(0))),
   ));
 
   if let Some(cursor) = cursor {
@@ -301,6 +316,7 @@ async fn fetch_logs(
       ORDER BY
         {order_clause}
       LIMIT :limit
+      OFFSET :offset
     "#,
     geoip = match geoip_db_type {
       Some(DatabaseType::GeoLite2Country) => "geoip_country(log.client_ip) AS client_geoip_cc",

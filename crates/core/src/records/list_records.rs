@@ -11,7 +11,6 @@ use std::convert::TryInto;
 use std::sync::LazyLock;
 use trailbase_qs::{OrderPrecedent, Query};
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_schema::sqlite::ColumnDataType;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -127,13 +126,19 @@ pub async fn list_records_handler(
     ));
   }
 
+  // NOTE: We lost the ability to cursor VIEWs when we moved to `_rowid_`. They currently only
+  // support OFFSET. We could restore functionality where a cursor-able PK is included.
+  // NOTE: We cannot use cursors if there's a custom order/sorting defined.
+  // NOTE: Multiple order criteria only matter for non-unique columns, i.e. ordering on PK
+  // and then on another column makes no difference.
+  let supports_cursor = is_table
+    && order
+      .as_ref()
+      .is_none_or(|o| o.columns.is_empty() || (pk_column.name == o.columns[0].0));
   let cursor_clause = if let Some(encrypted_cursor) = cursor {
-    if !is_table {
-      // TODO: When we moved to _rowid_ for cursoring, we lost the ability to cursor VIEWs. They
-      // currently only support OFFSET. We could restore cursoring for cases where a cursorable
-      // PK column is included. We also need a test-case to cover this.
+    if !supports_cursor {
       return Err(RecordError::BadRequest(
-        "Only TABLEs support cursors. Use offset for VIEWs.",
+        "Only TABLEs with PK primary order support cursors. Use offset instead.",
       ));
     }
 
@@ -146,37 +151,29 @@ pub async fn list_records_handler(
       )?),
     ));
 
-    let mut pk_order = OrderPrecedent::Descending;
-    if let Some(ref order) = order
-      && let Some((col, ord)) = order.columns.first()
-      && *ord == OrderPrecedent::Ascending
-    {
-      if pk_column.data_type != ColumnDataType::Integer || *col != pk_column.name {
-        // NOTE: This relies on the fact that _rowid_ is an alias for integer primary key
-        // columns.
-        return Err(RecordError::BadRequest(
-          "Cannot cursor on queries where the primary order criterion is not an integer primary key",
-        ));
+    // We already check above that primary order criteria must be none or PK.
+    match order.as_ref() {
+      Some(ord)
+        if ord
+          .columns
+          .first()
+          .is_some_and(|(_c, o)| *o == OrderPrecedent::Ascending) =>
+      {
+        Some("_ROW_._rowid_ > :cursor".to_string())
       }
-
-      pk_order = OrderPrecedent::Ascending;
-    }
-
-    match pk_order {
-      OrderPrecedent::Descending => Some("_ROW_._rowid_ < :cursor".to_string()),
-      OrderPrecedent::Ascending => Some("_ROW_._rowid_ > :cursor".to_string()),
+      // Descending:
+      _ => Some("_ROW_._rowid_ < :cursor".to_string()),
     }
   } else {
     None
   };
 
-  let order_clause = order.map_or_else(
+  let order_clause = order.as_ref().map_or_else(
     || fmt_order(&pk_column.name, OrderPrecedent::Descending),
-    |order| {
-      order
-        .columns
-        .into_iter()
-        .map(|(col, ord)| fmt_order(&col, ord))
+    |o| {
+      o.columns
+        .iter()
+        .map(|(col, ord)| fmt_order(col, ord.clone()))
         .join(",")
     },
   );
@@ -265,7 +262,7 @@ pub async fn list_records_handler(
     }));
   }
 
-  let cursor: Option<String> = if is_table {
+  let cursor: Option<String> = if supports_cursor {
     // The SQL query template returns thw row id as the last column.
     let value = &last_row[last_row.len() - 1];
     let Value::Integer(rowid) = value else {

@@ -39,6 +39,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createIsMobile } from "@/lib/signals";
 
+export type { Updater } from "@tanstack/solid-table";
+
 type TableOptions<TData, TValue> = {
   data: TData[] | undefined;
   columns: ColumnDef<TData, TValue>[];
@@ -57,7 +59,9 @@ export function buildTable<TData, TValue>(
   opts: TableOptions<TData, TValue>,
   overrides?: Partial<SolidTableOptions<TData>>,
 ) {
-  console.debug("buildTable: ", opts);
+  console.debug(
+    `buildTable(): columns=${opts.columns.length}, rows=${opts.data?.length}`,
+  );
 
   function buildColumns() {
     const onRowSelection = opts.onRowSelection;

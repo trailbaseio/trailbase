@@ -10,13 +10,12 @@ import {
   createMemo,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import { createWritableMemo } from "@solid-primitives/memo";
 import type {
   ColumnDef,
   PaginationState,
   SortingState,
 } from "@tanstack/solid-table";
-import { useQuery, useQueryClient } from "@tanstack/solid-query";
+import { useQuery } from "@tanstack/solid-query";
 import { Chart } from "chart.js/auto";
 import type {
   ChartData,
@@ -44,6 +43,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Table, buildTable } from "@/components/Table";
+import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
 import { fetchLogs } from "@/lib/api/logs";
@@ -164,74 +164,98 @@ const columns: ColumnDef<LogJson>[] = [
   },
 ];
 
+type SearchParams = {
+  filter?: string;
+  pageSize?: string;
+  pageIndex?: string;
+};
+
 // Value is the previous value in case this isn't the first fetch.
 export function LogsPage() {
-  const [searchParams, setSearchParams] = useSearchParams<{
-    filter?: string;
-    pageSize?: string;
-    pageIndex?: string;
-  }>();
-  const [cursors, setCursors] = createWritableMemo<string[]>(() => {
-    // Reset when search params change
-    const _ = [searchParams.pageSize, searchParams.filter];
-    console.debug("cursor reset");
-    return [];
+  // IMPORTANT: We need to memo the search params to treat absence and defaults
+  // consistently, otherwise `undefined`->`default` may invalidate the cursors.
+  const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
+  const filter = createMemo(() => searchParams.filter);
+  const pageSize = createMemo(() => safeParseInt(searchParams.pageSize) ?? 20);
+  const pageIndex = createMemo(() => safeParseInt(searchParams.pageIndex) ?? 0);
+
+  const pagination = (): PaginationState => ({
+    pageIndex: pageIndex(),
+    pageSize: pageSize(),
   });
-
-  const pagination = (): PaginationState => {
-    return {
-      pageSize: safeParseInt(searchParams.pageSize) ?? 20,
-      pageIndex: safeParseInt(searchParams.pageIndex) ?? 0,
-    };
-  };
-
-  const setFilter = (filter: string | undefined) => {
+  const setPagination = (s: PaginationState) => {
     setSearchParams({
       ...searchParams,
+      pageIndex: s.pageIndex,
+      pageSize: s.pageSize,
+    });
+  };
+  const setFilter = (filter: string | undefined) => {
+    // Reset pagination.
+    setSearchParams({
+      pageIndex: undefined,
+      pageSize: undefined,
       filter,
-      // Reset
-      pageIndex: "0",
     });
   };
 
-  const [sorting, setSorting] = createSignal<SortingState>([]);
+  const [sorting, setSortingImpl] = createSignal<SortingState>([]);
+  const setSorting = (s: Updater<SortingState>) => {
+    // Reset pagination.
+    setSearchParams({
+      ...searchParams,
+      pageIndex: undefined,
+      pageSize: undefined,
+    });
+    setSortingImpl(s);
+  };
+
+  const cursors = createMemo<Map<number, string>>(() => {
+    // Reset cursor whenever table or search params change. This is basically
+    // the same as `queryKey` below minus `pageIndex`.
+    const _ = [pageSize(), filter(), sorting()];
+    console.debug("resetting cursor");
+    return new Map();
+  });
 
   // NOTE: admin user endpoint doesn't support offset, we have to cursor through
   // and cannot just jump to page N.
   const logsFetch = useQuery(() => ({
-    queryKey: [
-      "logs",
-      searchParams.filter,
-      pagination().pageSize,
-      pagination().pageIndex,
-      sorting(),
-    ],
-    queryFn: async () => {
-      const p = pagination();
-      const c = cursors();
-      const s = sorting();
+    queryKey: [pagination(), filter(), sorting()],
+    queryFn: async ({ queryKey }) => {
+      console.debug(`Fetching data with key: ${queryKey}`);
 
-      const response = await fetchLogs(
-        p.pageSize,
-        searchParams.filter,
-        c[p.pageIndex - 1],
-        formatSortingAsOrder(s),
-      );
+      try {
+        const { pageSize, pageIndex } = pagination();
+        const cursor = cursors().get(pageIndex - 1);
 
-      const cursor = response.cursor;
-      if (cursor && p.pageIndex >= c.length) {
-        setCursors([...c, cursor]);
+        const response = await fetchLogs(
+          pageSize,
+          pageIndex,
+          filter(),
+          cursor,
+          formatSortingAsOrder(sorting()),
+        );
+
+        // Update cursors.
+        if (sorting().length === 0 && response.cursor) {
+          cursors().set(pageIndex, response.cursor);
+        }
+
+        return response;
+      } catch (err) {
+        // Reset.
+        setSearchParams({
+          filter: undefined,
+          pageSize: undefined,
+          pageIndex: undefined,
+        });
+
+        throw err;
       }
-
-      return response;
     },
   }));
-  const client = useQueryClient();
-  const refetch = () => {
-    client.invalidateQueries({
-      queryKey: ["logs"],
-    });
-  };
+  const refetch = () => logsFetch.refetch();
 
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
@@ -246,13 +270,7 @@ export function LogsPage() {
         onColumnPinningChange: setColumnPinningState,
         rowCount: Number(logsFetch.data?.total_row_count ?? -1),
         pagination: pagination(),
-        onPaginationChange: (s: PaginationState) => {
-          setSearchParams({
-            ...searchParams,
-            pageIndex: s.pageIndex,
-            pageSize: s.pageSize,
-          });
-        },
+        onPaginationChange: setPagination,
       },
       {
         manualSorting: true,
@@ -338,9 +356,9 @@ export function LogsPage() {
             </Show>
 
             <FilterBar
-              initial={searchParams.filter}
+              initial={filter()}
               onSubmit={(value: string) => {
-                if (value === searchParams.filter) {
+                if (value === filter()) {
                   refetch();
                 } else {
                   setFilter(value);

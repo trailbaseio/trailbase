@@ -823,7 +823,8 @@ struct SubscriptionQuery {
 
 impl SubscriptionQuery {
   fn parse(query: &str) -> Result<SubscriptionQuery, RecordError> {
-    // NOTE: We rely on form-encoding to properly parse ampersands, e.g.: `filter[col0]=a&b%filter[col1]=c`.
+    // NOTE: We rely on form-encoding to properly parse ampersands, e.g.:
+    // `filter[col0]=a&b%filter[col1]=c`.
     let qs = serde_qs::Config::new().max_depth(9).use_form_encoding(true);
     return qs
       .deserialize_bytes::<SubscriptionQuery>(query.as_bytes())

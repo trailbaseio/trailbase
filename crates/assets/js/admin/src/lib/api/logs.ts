@@ -5,6 +5,7 @@ import type { ListLogsResponse } from "@bindings/ListLogsResponse";
 
 export async function fetchLogs(
   pageSize: number,
+  pageIndex: number,
   filter?: string,
   cursor?: string | null,
   order?: string,
@@ -12,6 +13,7 @@ export async function fetchLogs(
   const params = buildListSearchParams({
     filter,
     pageSize,
+    pageIndex,
     cursor,
     order,
   });
