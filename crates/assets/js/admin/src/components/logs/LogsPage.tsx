@@ -1,14 +1,13 @@
 import {
-  For,
   Match,
   Switch,
   Show,
-  createEffect,
   createSignal,
   onCleanup,
   onMount,
   createMemo,
 } from "solid-js";
+import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import type {
   ColumnDef,
@@ -23,10 +22,11 @@ import type {
   TooltipItem,
 } from "chart.js/auto";
 import { TbRefresh, TbWorld } from "solid-icons/tb";
-import { numericToAlpha2 } from "i18n-iso-countries";
-import type { FeatureCollection, Feature } from "geojson";
-import "leaflet/dist/leaflet.css";
-import * as L from "leaflet";
+import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
+import type { FeatureCollection } from "geojson";
+
+import "maplibre-gl/dist/maplibre-gl.css";
+import maplibregl from "maplibre-gl";
 
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
@@ -171,7 +171,7 @@ type SearchParams = {
 };
 
 // Value is the previous value in case this isn't the first fetch.
-export function LogsPage() {
+function LogsPage() {
   // IMPORTANT: We need to memo the search params to treat absence and defaults
   // consistently, otherwise `undefined`->`default` may invalidate the cursors.
   const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
@@ -339,19 +339,26 @@ export function LogsPage() {
           <Match when={true}>
             <Show when={pagination().pageIndex === 0}>
               <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
-                <Show when={showMap()}>
-                  <div class="flex items-center md:w-1/2 md:max-w-[500px]">
-                    <WorldMap
-                      country_codes={
-                        logsFetch.data?.stats?.country_codes ?? null
-                      }
-                    />
-                  </div>
-                </Show>
+                <Switch>
+                  <Match when={showMap()}>
+                    <div class="md:w-1/2">
+                      <WorldMap
+                        countryCodes={
+                          logsFetch.data?.stats?.country_codes ?? null
+                        }
+                      />
+                    </div>
+                    <div class="md:w-1/2">
+                      <LogsChart rates={logsFetch.data?.stats?.rate ?? []} />
+                    </div>
+                  </Match>
 
-                <div class={showMap() ? "md:w-1/2" : "w-full"}>
-                  <LogsChart rates={logsFetch.data?.stats?.rate ?? []} />
-                </div>
+                  <Match when={true}>
+                    <div class="w-full">
+                      <LogsChart rates={logsFetch.data?.stats?.rate ?? []} />
+                    </div>
+                  </Match>
+                </Switch>
               </div>
             </Show>
 
@@ -390,176 +397,245 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
-function getColor(d: number) {
-  if (d > 1000) {
-    return "#800026";
-  } else if (d > 500) {
-    return "#BD0026";
-  } else if (d > 200) {
-    return "#E31A1C";
-  } else if (d > 100) {
-    return "#FC4E2A";
-  } else if (d > 50) {
-    return "#FD8D3C";
-  } else if (d > 20) {
-    return "#FEB24C";
-  } else if (d > 10) {
-    return "#FED976";
-  } else if (d > 0) {
-    return "#FFEDA0";
-  } else {
-    return "#FFFFFF";
-  }
-}
+function buildMap(opts: {
+  countryCodes: Stats["country_codes"];
+  setMapDialog: Setter<string | undefined>;
+  maxScale: number;
+}): maplibregl.Map {
+  const map = new maplibregl.Map({
+    container: "map",
+    hash: "map",
+    zoom: 1.2,
+    maxZoom: 4,
+    center: [-50, 20],
+    style: "https://tiles.openfreemap.org/styles/positron",
+    attributionControl: {
+      compact: true,
+    },
+  });
 
-function mapStyle(
-  codes: { [key in string]?: number },
-  feature: Feature | undefined,
-) {
-  if (!feature) return {};
+  map.addControl(
+    new maplibregl.NavigationControl({
+      visualizePitch: true,
+    }),
+  );
 
-  return {
-    fillColor: getColor(
-      codes[numericToAlpha2(feature.id as string) ?? ""] ?? 0,
-    ),
-    weight: 2,
-    opacity: 1,
-    color: "white",
-    dashArray: "3",
-    fillOpacity: 0.6,
-  };
-}
+  map.addControl(new maplibregl.GlobeControl());
+  map.addControl(new maplibregl.FullscreenControl());
+  // map.addControl(new maplibregl.ScaleControl());
 
-const Legend = L.Control.extend({
-  options: {
-    position: "bottomright",
-  },
-  onAdd: (_map: L.Map) => {
-    const grades = [1, 20, 50, 100, 200, 500, 1000];
-    return (
-      <div class="flex flex-col rounded-sm bg-white/70 p-1">
-        <For each={grades}>
-          {(grade: number, index: () => number) => {
-            const label = () => {
-              const next = grades[index() + 1];
-              return next ? ` ${grade} - ${next}` : ` ${grade}+`;
-            };
+  map.on("style.load", () => {
+    map.setProjection({
+      type: "globe",
+    });
+  });
 
-            return (
-              <div class="flex">
-                <div
-                  class="mr-1 px-2 py-1"
-                  style={{ background: getColor(grade) }}
-                />
-                {label()}
-              </div>
-            );
-          }}
-        </For>
-      </div>
-    );
-  },
-});
+  map.on("load", () => {
+    map.addSource(sourceId, {
+      type: "geojson",
+      data: {
+        type: "FeatureCollection",
+        features: (countriesGeoJSON as FeatureCollection).features.map((f) => {
+          const code = numericToAlpha2(f.id as string | number) ?? "";
 
-function WorldMap(props: { country_codes: Stats["country_codes"] }) {
-  const codes = () => props.country_codes ?? {};
-
-  let ref: HTMLDivElement | undefined;
-  let map: L.Map | undefined;
-
-  const destroy = () => {
-    if (map) {
-      map.off();
-      map.remove();
-    }
-  };
-
-  onCleanup(destroy);
-  onMount(() => {
-    destroy();
-
-    const m = (map = L.map(ref!).setView([30, 0], 1.4));
-    m.attributionControl.setPrefix("");
-
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      noWrap: true,
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(m);
-
-    // control that shows state info on hover
-    const CustomControl = L.Control.extend({
-      onAdd: (_map: L.Map) => {
-        return (
-          <div class="rounded-sm bg-white/70 p-2">Hover over a country</div>
-        );
-      },
-      update: function (props?: Props) {
-        /* eslint-disable solid/reactivity */
-        const id = props?.id;
-        const requests = codes()[numericToAlpha2(id ?? "") ?? ""] ?? 0;
-        const contents = props
-          ? `<b>${props.name}</b><br />${requests} req`
-          : "Hover over a country";
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (this as any)._container.innerHTML = contents;
+          return {
+            ...f,
+            properties: {
+              ...f.properties,
+              requests: opts.countryCodes?.[code],
+            },
+          };
+        }),
       },
     });
 
-    const info = new CustomControl().addTo(m);
-    new Legend().addTo(m);
-
-    type Props = {
-      id: string;
-      name: string;
-    };
-
-    const highlightFeature = (e: L.LeafletMouseEvent) => {
-      const layer = e.target;
-
-      layer.setStyle({
-        weight: 2,
-        color: "#666",
-        dashArray: "",
-        fillOpacity: 0.7,
-      });
-
-      layer.bringToFront();
-
-      info.update({
-        id: layer.feature.id,
-        name: layer.feature.properties.name,
-      } as Props);
-    };
-
-    function onEachFeature(_feature: Feature, layer: L.Layer) {
-      layer.on({
-        mouseover: highlightFeature,
-        mouseout: (e: L.LeafletMouseEvent) => {
-          geojson.resetStyle(e.target);
-          info.update();
-        },
-        click: (e: L.LeafletMouseEvent) => m.fitBounds(e.target.getBounds()),
-      });
-    }
-
-    const geojson = L.geoJson(
-      (countriesGeoJSON as FeatureCollection).features,
-      {
-        style: (map) => mapStyle(codes(), map),
-        onEachFeature,
+    map.addLayer({
+      id: layerId,
+      type: "fill",
+      source: sourceId,
+      layout: {},
+      paint: {
+        // prettier-ignore
+        "fill-color": [
+          "interpolate",
+          ["linear"],
+          ["coalesce", ["get", "requests"], 0],
+          0, "transparent",
+          1, emerald100,
+          opts.maxScale, primary,
+        ],
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          0.6,
+          0.4,
+        ],
+        "fill-outline-color": [
+          "case",
+          ["boolean", ["feature-state", "hover"], false],
+          "#000000",
+          "transparent",
+        ],
       },
-    ).addTo(m);
+    });
+
+    let hoveredStateId: string | number | undefined;
+
+    map.on("mouseenter", layerId, (_e) => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+
+    map.on("mousemove", layerId, (e) => {
+      const first = e.features?.[0];
+      if (hoveredStateId) {
+        map.setFeatureState(
+          { source: sourceId, id: hoveredStateId },
+          { hover: false },
+        );
+      }
+
+      if (first !== undefined) {
+        hoveredStateId = first.id;
+        map.setFeatureState(
+          { source: sourceId, id: first.id },
+          { hover: true },
+        );
+
+        const requests = first.properties["requests"] ?? 0;
+        opts.setMapDialog(`${first.properties["name"]}: ${requests} req`);
+      }
+    });
+
+    map.on("mouseleave", layerId, () => {
+      map.getCanvas().style.cursor = "";
+
+      if (hoveredStateId) {
+        map.setFeatureState(
+          { source: sourceId, id: hoveredStateId },
+          { hover: false },
+        );
+      }
+
+      opts.setMapDialog(undefined);
+    });
+
+    // map.on("click", layerId, (e) => {
+    //   const first = e.features?.[0];
+    //   if (first === undefined) {
+    //     return;
+    //   }
+    //   const requests: number = first.properties["requests"] ?? 0;
+    //   if (requests > 0) {
+    //     const name =
+    //       first.properties.name ??
+    //       numericToAlpha2(first.id as string | number) ??
+    //       "";
+    //
+    //     new maplibregl.Popup()
+    //       .setLngLat(e.lngLat)
+    //       .setHTML(`${name}: ${requests} req`)
+    //       .addTo(map);
+    //   }
+    // });
+  });
+
+  return map;
+}
+
+function MapOverlay(props: {
+  mapDialog: string | undefined;
+  scaleMax: number;
+}) {
+  return (
+    <>
+      {/* request scale */}
+      <div class="absolute top-2 left-2 w-[100px] rounded-sm bg-white/70 p-1 text-sm">
+        <div class="flex h-[20px] w-full">
+          <div class="h-full w-px bg-gray-600" />
+          <div class="to-primary flex h-full grow justify-center bg-linear-to-r from-emerald-100" />
+          <div class="h-full w-px bg-gray-600" />
+        </div>
+
+        <div class="relative h-4">
+          <span class="absolute left-0">0</span>
+
+          <span class="absolute right-0">
+            {new Intl.NumberFormat("en-US", {
+              notation: "compact",
+              compactDisplay: "short",
+            }).format(props.scaleMax)}
+          </span>
+        </div>
+
+        <Show when={false}>
+          <div class="bg-white">
+            <div class="h-[20px] w-[20] bg-emerald-100" />
+            <div class="bg-primary h-[20px] w-[20]" />
+          </div>
+        </Show>
+      </div>
+
+      {/* hover label */}
+      <div class="absolute bottom-2 left-2 min-w-[120px] shrink rounded-sm bg-white/70 p-1 text-center text-sm">
+        <Switch>
+          <Match when={props.mapDialog !== undefined}>
+            <p class="min-h-4 text-wrap">{props.mapDialog}</p>
+          </Match>
+
+          <Match when={true}>
+            <p class="min-h-4 text-wrap text-gray-600">{"hover country"}</p>
+          </Match>
+        </Switch>
+      </div>
+    </>
+  );
+}
+
+function WorldMap(props: { countryCodes: Stats["country_codes"] }) {
+  const [mapDialog, setMapDialog] = createSignal<string | undefined>();
+  const countryCodes = createMemo(
+    () =>
+      (import.meta.env.DEV
+        ? appendDevData(props.countryCodes)
+        : props.countryCodes) ?? {},
+  );
+  const maxScale = createMemo(() => {
+    let maxRequests = 0;
+    for (const [code, requests] of Object.entries(countryCodes())) {
+      if (code !== "unattributed") {
+        maxRequests = Math.max(maxRequests, requests);
+      }
+    }
+    return Math.max(1000, maxRequests);
+  });
+
+  let map: maplibregl.Map | undefined;
+
+  onMount(() => {
+    map = buildMap({
+      countryCodes: countryCodes(),
+      setMapDialog,
+      maxScale: maxScale(),
+    });
+  });
+
+  onCleanup(() => {
+    map?.remove();
+    map = undefined;
   });
 
   return (
-    <div
-      class="z-0 h-[280px] w-full rounded-sm"
-      style={{ "background-color": "transparent" }}
-      ref={ref}
-    />
+    <div class="relative">
+      <div class="pointer-events-none absolute z-10 size-full overflow-hidden">
+        <MapOverlay mapDialog={mapDialog()} scaleMax={maxScale()} />
+      </div>
+
+      <div
+        id="map"
+        class="z-0 h-[300px] w-full rounded-sm"
+        style={{ "background-color": "transparent" }}
+      />
+    </div>
   );
 }
 
@@ -588,8 +664,7 @@ function LogsChart(props: { rates: Stats["rate"] }) {
   let ref: HTMLCanvasElement | undefined;
   let chart: Chart | undefined;
 
-  onCleanup(() => chart?.destroy());
-  createEffect(() => {
+  onMount(() => {
     if (chart) {
       chart.destroy();
     }
@@ -606,11 +681,14 @@ function LogsChart(props: { rates: Stats["rate"] }) {
             x: {
               ticks: {
                 callback: (value: number | string) => {
-                  return new Date(value).toLocaleTimeString();
+                  return new Date(value).toLocaleTimeString(undefined, {
+                    hourCycle: "h24",
+                  });
                 },
               },
             },
           },
+          borderColor: primary,
           plugins: {
             legend: {
               display: false, // This hides all text in the legend and also the labels.
@@ -636,6 +714,11 @@ function LogsChart(props: { rates: Stats["rate"] }) {
     }
   });
 
+  onCleanup(() => {
+    chart?.destroy();
+    chart = undefined;
+  });
+
   return (
     <div class="h-[300px]">
       <canvas ref={ref} />
@@ -643,4 +726,26 @@ function LogsChart(props: { rates: Stats["rate"] }) {
   );
 }
 
+function appendDevData(
+  countryCodes: Stats["country_codes"],
+): Stats["country_codes"] {
+  const copy = {
+    ...countryCodes,
+  };
+
+  const allCodes = getAlpha2Codes();
+  for (const code of Object.keys(allCodes)) {
+    copy[code] = (copy[code] ?? 0) + Math.round(Math.random() * 2000);
+  }
+
+  return copy;
+}
+
+const sourceId = "countriesSource" as const;
+const layerId = "countriesLayer" as const;
+
+const primary = "#0073a8" as const;
+const emerald100 = "#d0fae5" as const;
+
+// Needed for dynamic load.
 export default LogsPage;

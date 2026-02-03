@@ -19,7 +19,8 @@ export default defineConfig({
       policy: {
         "default-src": ["'self'"],
 
-        "img-src": ["'self'", "data:", "https://tile.openstreetmap.org"],
+        "connect-src": ["'self'", "https://tiles.openfreemap.org"],
+        "img-src": ["'self'", "data:"],
         "script-src": ["'self'", "blob:"],
         "style-src": ["'self'", "'unsafe-inline'"],
         // 'unsafe-inline' needed for ERD renderer.
@@ -30,6 +31,12 @@ export default defineConfig({
       },
     }),
   ],
+  optimizeDeps: {
+    include: ["maplibre-gl"],
+    esbuildOptions: {
+      target: "es2022",
+    },
+  },
   server: {
     port: 3000,
   },
