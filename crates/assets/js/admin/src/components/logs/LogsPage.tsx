@@ -21,7 +21,7 @@ import type {
   ScriptableLineSegmentContext,
   TooltipItem,
 } from "chart.js/auto";
-import { TbRefresh, TbWorld } from "solid-icons/tb";
+import { TbRefresh, TbWorld, TbCaretUp } from "solid-icons/tb";
 import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
 import type { FeatureCollection } from "geojson";
 
@@ -29,6 +29,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import maplibregl from "maplibre-gl";
 
 import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+} from "@/components/ui/accordion";
 import { Header } from "@/components/Header";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -49,6 +54,7 @@ import { FilterBar } from "@/components/FilterBar";
 import { fetchLogs } from "@/lib/api/logs";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
+import { cn } from "@/lib/utils";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
 
@@ -265,6 +271,7 @@ function LogsPage() {
   }));
   const refetch = () => logsFetch.refetch();
 
+  const [accordion, setAccordion] = createSignal(true);
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
   const [columnPinningState, setColumnPinningState] = createSignal({});
@@ -343,23 +350,47 @@ function LogsPage() {
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
           <Match when={true}>
-            <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
-              <Switch>
-                <Match when={showMap() && stats()?.country_codes}>
-                  <div class="md:w-1/2">
-                    <WorldMap countryCodes={stats()!.country_codes!} />
-                  </div>
-                  <div class="md:w-1/2">
-                    <LogsChart rates={stats()?.rate ?? []} />
-                  </div>
-                </Match>
+            <div>
+              <Accordion
+                value={accordion() ? ["item0"] : []}
+                collapsible={true}
+              >
+                <AccordionItem value="item0">
+                  <AccordionContent>
+                    <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
+                      <Switch>
+                        <Match when={showMap() && stats()?.country_codes}>
+                          <div class="md:w-1/2">
+                            <WorldMap countryCodes={stats()!.country_codes!} />
+                          </div>
+                          <div class="md:w-1/2">
+                            <LogsChart rates={stats()?.rate ?? []} />
+                          </div>
+                        </Match>
 
-                <Match when={true}>
-                  <div class="w-full">
-                    <LogsChart rates={stats()?.rate ?? []} />
+                        <Match when={true}>
+                          <div class="w-full">
+                            <LogsChart rates={stats()?.rate ?? []} />
+                          </div>
+                        </Match>
+                      </Switch>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+
+              <div class="flex justify-center">
+                <button
+                  class="bg-secondary rounded-b-lg px-2 py-1"
+                  onClick={() => setAccordion((old) => !old)}
+                >
+                  <div
+                    class={cn("transition-all", !accordion() && "rotate-180")}
+                  >
+                    <TbCaretUp />
                   </div>
-                </Match>
-              </Switch>
+                </button>
+              </div>
             </div>
 
             <FilterBar

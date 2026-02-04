@@ -271,6 +271,7 @@ export function Table<TData>(props: {
                                   height={16}
                                   width={cell.getSize()}
                                   radius={10}
+                                  animate={true}
                                 />
                               </Match>
                             </Switch>
