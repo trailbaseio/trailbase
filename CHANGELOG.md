@@ -1,3 +1,12 @@
+## v0.23.5
+
+- Switch map of the admin UI's logs page from leaflet to maplibre and vector tiles.
+- Switch rate graph to a bar chart.
+- No longer "auto-hide" stats on `pageIndex > 0`. Instead add an explicit collapse option.
+- Split "list logs" from stats endpoint.
+- Make break-down by country, e.g. the map, correctly reflect filter queries.
+- Update dependencies.
+
 ## v0.23.4
 
 - Include cursors in list responses only when properly supported.
