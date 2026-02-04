@@ -29,6 +29,7 @@ struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
   runtime_root_fs: Option<PathBuf>,
+  start_time: std::time::SystemTime,
 
   site_url: Reactive<Arc<Option<url::Url>>>,
   dev: bool,
@@ -153,6 +154,7 @@ impl AppState {
         data_dir: args.data_dir,
         public_dir: args.public_dir,
         runtime_root_fs: args.runtime_root_fs,
+        start_time: std::time::SystemTime::now(),
         site_url,
         dev: args.dev,
         demo: args.demo,
@@ -207,6 +209,10 @@ impl AppState {
   /// Optional user-prvoided public directory from where static assets are served.
   pub fn runtime_root_fs(&self) -> Option<&Path> {
     return self.state.runtime_root_fs.as_deref();
+  }
+
+  pub fn start_time(&self) -> std::time::SystemTime {
+    return self.state.start_time;
   }
 
   pub(crate) fn dev_mode(&self) -> bool {
@@ -550,6 +556,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       data_dir,
       public_dir: None,
       runtime_root_fs: None,
+      start_time: std::time::SystemTime::now(),
       site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
       dev: true,
       demo: false,

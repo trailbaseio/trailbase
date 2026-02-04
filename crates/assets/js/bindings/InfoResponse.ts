@@ -12,4 +12,8 @@ commit_hash: string | null, commit_date: string | null, git_version: [string, nu
 /**
  * Runtime metadata.
  */
-threads: number, command_line_arguments: Array<string> | null, };
+threads: number, command_line_arguments: Array<string> | null, 
+/**
+ * Start time in seconds since epoch,
+ */
+start_time: bigint, };

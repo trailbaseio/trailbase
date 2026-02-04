@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Version } from "@/components/Version";
 
-import { createVersionInfoQuery } from "@/lib/api/info";
+import { createSystemInfoQuery } from "@/lib/api/info";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -124,7 +124,7 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
 }
 
 function NavFooter(props: { horizontal: boolean }) {
-  const versionInfo = createVersionInfoQuery();
+  const systemInfo = createSystemInfoQuery();
 
   return (
     <div class="flex flex-col items-center">
@@ -132,7 +132,7 @@ function NavFooter(props: { horizontal: boolean }) {
 
       <Show when={!props.horizontal}>
         <div class="text-[9px]">
-          <Version info={versionInfo.data} />
+          <Version info={systemInfo.data} />
         </div>
       </Show>
     </div>

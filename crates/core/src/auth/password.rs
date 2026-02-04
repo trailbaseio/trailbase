@@ -80,7 +80,7 @@ impl Default for FailedAttempt {
 // Track login attempts for abuse prevention.
 static ATTEMPTS: LazyLock<Cache<String, FailedAttempt>> = LazyLock::new(|| {
   Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(1 * 60))
+    .time_to_live(std::time::Duration::from_secs(60))
     .max_capacity(1024)
     .build()
 });

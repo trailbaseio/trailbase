@@ -17,6 +17,8 @@ pub struct InfoResponse {
   /// Runtime metadata.
   threads: usize,
   command_line_arguments: Option<Vec<String>>,
+  /// Start time in seconds since epoch,
+  start_time: u64,
 }
 
 pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResponse>, Error> {
@@ -36,5 +38,10 @@ fn build_info_response(state: &AppState) -> InfoResponse {
     git_version,
     threads: std::thread::available_parallelism().map_or(0, |v| v.into()),
     command_line_arguments: Some(std::env::args().collect()),
+    start_time: state
+      .start_time()
+      .duration_since(std::time::UNIX_EPOCH)
+      .unwrap_or_default()
+      .as_secs(),
   };
 }
