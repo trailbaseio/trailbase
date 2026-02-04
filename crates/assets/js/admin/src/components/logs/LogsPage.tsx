@@ -172,6 +172,8 @@ type SearchParams = {
 
 // Value is the previous value in case this isn't the first fetch.
 function LogsPage() {
+  const [stats, setStats] = createSignal<Stats | undefined>();
+
   // IMPORTANT: We need to memo the search params to treat absence and defaults
   // consistently, otherwise `undefined`->`default` may invalidate the cursors.
   const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
@@ -242,6 +244,12 @@ function LogsPage() {
           cursors().set(pageIndex, response.cursor);
         }
 
+        // Stats are expensive to compute, they're only transmitted on `pageIndex===0`, thus remember them.
+        const stats = response.stats;
+        if (stats) {
+          setStats(stats);
+        }
+
         return response;
       } catch (err) {
         // Reset.
@@ -292,43 +300,41 @@ function LogsPage() {
           </IconButton>
         }
         right={
-          pagination()?.pageIndex === 0 && (
-            <Dialog
-              modal={true}
-              open={showGeoipDialog()}
-              onOpenChange={setShowGeoipDialog}
-            >
-              <DialogContent>
-                <DialogTitle>Geoip Database</DialogTitle>
-                <p>
-                  TrailBase did not report any geo information for your logs. To
-                  enable this feature, place a GeoIP database in MaxMind format
-                  under:
-                </p>
-                <span class="ml-4 font-mono">
-                  {"<traildepot>/GeoLite2-Country.mmdb"}
-                </span>
-                .
-                <DialogFooter>
-                  <Button>Got it</Button>
-                </DialogFooter>
-              </DialogContent>
+          <Dialog
+            modal={true}
+            open={showGeoipDialog()}
+            onOpenChange={setShowGeoipDialog}
+          >
+            <DialogContent>
+              <DialogTitle>Geoip Database</DialogTitle>
+              <p>
+                TrailBase did not report any geo information for your logs. To
+                enable this feature, place a GeoIP database in MaxMind format
+                under:
+              </p>
+              <span class="ml-4 font-mono">
+                {"<traildepot>/GeoLite2-Country.mmdb"}
+              </span>
+              .
+              <DialogFooter>
+                <Button>Got it</Button>
+              </DialogFooter>
+            </DialogContent>
 
-              <IconButton
-                disabled={!logsFetch.isSuccess}
-                onClick={() => {
-                  if (logsFetch.data?.stats?.country_codes) {
-                    setShowMap((v) => !v);
-                  } else {
-                    setShowGeoipDialog((v) => !v);
-                  }
-                }}
-                tooltip="Toggle World Map"
-              >
-                <TbWorld />
-              </IconButton>
-            </Dialog>
-          )
+            <IconButton
+              disabled={!logsFetch.isSuccess}
+              onClick={() => {
+                if (stats()?.country_codes) {
+                  setShowMap((v) => !v);
+                } else {
+                  setShowGeoipDialog((v) => !v);
+                }
+              }}
+              tooltip="Toggle World Map"
+            >
+              <TbWorld />
+            </IconButton>
+          </Dialog>
         }
       />
 
@@ -337,30 +343,24 @@ function LogsPage() {
           <Match when={logsFetch.error}>Error {`${logsFetch.error}`}</Match>
 
           <Match when={true}>
-            <Show when={pagination().pageIndex === 0}>
-              <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
-                <Switch>
-                  <Match when={showMap()}>
-                    <div class="md:w-1/2">
-                      <WorldMap
-                        countryCodes={
-                          logsFetch.data?.stats?.country_codes ?? null
-                        }
-                      />
-                    </div>
-                    <div class="md:w-1/2">
-                      <LogsChart rates={logsFetch.data?.stats?.rate ?? []} />
-                    </div>
-                  </Match>
+            <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
+              <Switch>
+                <Match when={showMap() && stats()?.country_codes}>
+                  <div class="md:w-1/2">
+                    <WorldMap countryCodes={stats()!.country_codes!} />
+                  </div>
+                  <div class="md:w-1/2">
+                    <LogsChart rates={stats()?.rate ?? []} />
+                  </div>
+                </Match>
 
-                  <Match when={true}>
-                    <div class="w-full">
-                      <LogsChart rates={logsFetch.data?.stats?.rate ?? []} />
-                    </div>
-                  </Match>
-                </Switch>
-              </div>
-            </Show>
+                <Match when={true}>
+                  <div class="w-full">
+                    <LogsChart rates={stats()?.rate ?? []} />
+                  </div>
+                </Match>
+              </Switch>
+            </div>
 
             <FilterBar
               initial={filter()}
@@ -397,8 +397,10 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
+type CountryCodes = Exclude<Stats["country_codes"], null>;
+
 function buildMap(opts: {
-  countryCodes: Stats["country_codes"];
+  countryCodes: CountryCodes;
   setMapDialog: Setter<string | undefined>;
   maxScale: number;
 }): maplibregl.Map {
@@ -591,7 +593,7 @@ function MapOverlay(props: {
   );
 }
 
-function WorldMap(props: { countryCodes: Stats["country_codes"] }) {
+function WorldMap(props: { countryCodes: CountryCodes }) {
   const [mapDialog, setMapDialog] = createSignal<string | undefined>();
   const countryCodes = createMemo(
     () =>
@@ -726,9 +728,7 @@ function LogsChart(props: { rates: Stats["rate"] }) {
   );
 }
 
-function appendDevData(
-  countryCodes: Stats["country_codes"],
-): Stats["country_codes"] {
+function appendDevData(countryCodes: CountryCodes): CountryCodes {
   const copy = {
     ...countryCodes,
   };
