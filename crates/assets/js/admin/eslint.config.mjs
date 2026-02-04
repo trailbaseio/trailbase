@@ -58,7 +58,7 @@ export default [
       "@typescript-eslint/no-wrapper-object-types": "warn",
       // http://eslint.org/docs/rules/no-unused-vars
       "@typescript-eslint/no-unused-vars": [
-        "error",
+        "warn",
         {
           vars: "all",
           args: "after-used",

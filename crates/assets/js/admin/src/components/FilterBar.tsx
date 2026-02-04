@@ -33,7 +33,7 @@ export function FilterBar(props: {
             ref={ref}
             value={props.initial}
             type="text"
-            placeholder={props.placeholder ?? "Filter Query"}
+            placeholder={props.placeholder ?? "Filter"}
           />
         </TextField>
 

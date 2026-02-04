@@ -417,7 +417,7 @@ function LogsPage() {
                   setFilter(value);
                 }
               }}
-              placeholder={`Filter Query, e.g. '(latency > 2 || status >= 400) && method = "GET"'`}
+              placeholder={`Filter, e.g.: '(latency > 2 || status >= 400) && method = "GET"'`}
             />
 
             <Table table={logsTable()} loading={logsFetch.isLoading} />
@@ -428,6 +428,7 @@ function LogsPage() {
   );
 }
 
+/// Function that hides lines for very disconnected scatter points.
 function changeDistantPointLineColorToTransparent(
   ctx: ScriptableLineSegmentContext,
 ) {
@@ -694,26 +695,29 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
 type Rates = StatsResponse["rates"];
 
 function LogsGraph(props: { rates: Rates }) {
-  const data = (): ChartData | undefined => {
-    const labels = props.rates.map(([ts, _v]) => Number(ts) * 1000);
-    const data = props.rates.map(([_ts, v]) => v);
-
-    return {
-      labels,
-      datasets: [
-        {
-          data,
-          label: "Rate",
-          showLine: true,
-          fill: false,
-          segment: {
-            borderColor: changeDistantPointLineColorToTransparent,
-          },
-          spanGaps: true,
-        },
-      ],
-    };
-  };
+  const data = createMemo<ChartData | undefined>(() => ({
+    // Turn into microseconds for use with Date.
+    labels: props.rates.map(([ts, _v]) => Number(ts) * 1000),
+    datasets: [
+      // NOTE: We used to show data as scatter point plot with lines between "more" points.
+      // {
+      //   data,
+      //   label: "Rate",
+      //   showLine: true,
+      //   fill: false,
+      //   segment: {
+      //     borderColor: changeDistantPointLineColorToTransparent,
+      //   },
+      //   spanGaps: true,
+      // },
+      {
+        type: "bar",
+        data: props.rates.map(([_ts, v]) => v),
+        label: "Rate",
+        backgroundColor: primary,
+      },
+    ],
+  }));
 
   let chart: Chart | undefined;
 
@@ -732,12 +736,18 @@ function LogsGraph(props: { rates: Rates }) {
           // animation: false,
           maintainAspectRatio: false,
           scales: {
+            y: {
+              beginAtZero: true,
+            },
             x: {
               ticks: {
                 callback: (value: number | string) => {
-                  return new Date(value).toLocaleTimeString(undefined, {
-                    hourCycle: "h24",
-                  });
+                  return new Date(value as number).toLocaleTimeString(
+                    undefined,
+                    {
+                      hourCycle: "h24",
+                    },
+                  );
                 },
               },
             },

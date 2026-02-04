@@ -394,7 +394,7 @@ export function AccountsPage() {
               setFilter(value);
             }
           }}
-          placeholder={`Filter Query, e.g. 'email ~ "admin@%" && verified = TRUE'`}
+          placeholder={`Filter, e.g.: 'email ~ "admin@%" && verified = TRUE'`}
         />
 
         <Suspense fallback={<div>Loading...</div>}>

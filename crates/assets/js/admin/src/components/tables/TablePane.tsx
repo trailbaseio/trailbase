@@ -615,7 +615,7 @@ function RecordTable(props: {
                     props.filter[1](value);
                   }
                 }}
-                placeholder={`Filter Query, e.g. '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
+                placeholder={`Filter, e.g.: '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
               />
 
               <div class="overflow-x-auto pt-4">
