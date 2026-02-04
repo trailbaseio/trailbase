@@ -77,10 +77,10 @@ impl Default for FailedAttempt {
   }
 }
 
-// Track login attempts for absuse prevention.
+// Track login attempts for abuse prevention.
 static ATTEMPTS: LazyLock<Cache<String, FailedAttempt>> = LazyLock::new(|| {
   Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(5 * 60))
+    .time_to_live(std::time::Duration::from_secs(1 * 60))
     .max_capacity(1024)
     .build()
 });
@@ -130,6 +130,7 @@ pub fn check_user_password(
   return Ok(());
 }
 
+// HACK: Increase limit in tests to avoid limits.
 #[cfg(test)]
 const LOGIN_RATE_LIMIT: usize = 10;
 

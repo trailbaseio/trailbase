@@ -1,5 +1,6 @@
 import { Match, Switch } from "solid-js";
 import { useStore } from "@nanostores/solid";
+import { FetchError } from "trailbase";
 
 import { client, $user } from "@/lib/client";
 
@@ -73,11 +74,26 @@ function LoginForm() {
         try {
           await client.login(email, pw);
         } catch (err) {
-          showToast({
-            title: "Uncaught Error",
-            description: `${err}`,
-            variant: "error",
-          });
+          if (err instanceof FetchError && err.status === 401) {
+            showToast({
+              title: "Invalid credentials",
+              variant: "warning",
+              duration: 5 * 1000,
+            });
+          } else if (err instanceof FetchError && err.status === 429) {
+            showToast({
+              title: `Too many login attempts for ${email}`,
+              description: "Try again later",
+              variant: "warning",
+              duration: 5 * 1000,
+            });
+          } else {
+            showToast({
+              title: "Uncaught Error",
+              description: `${err}`,
+              variant: "error",
+            });
+          }
         }
       }}
     >
