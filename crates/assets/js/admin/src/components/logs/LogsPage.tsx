@@ -64,7 +64,7 @@ import type { StatsResponse } from "@bindings/StatsResponse";
 const columns: ColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
   {
-    header: "Created",
+    header: "created",
     accessorKey: "created",
     size: 120,
     cell: (ctx) => {

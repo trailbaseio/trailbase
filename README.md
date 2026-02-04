@@ -40,7 +40,7 @@
     target="_blank"
   >
     <picture>
-      <img alt="Admin UI" width="600" src="docs/src/assets/shelve.webp" />
+      <img alt="Admin UI" width="600" src="docs/src/assets/screenshots.webp" />
     </picture>
   </a>
 </p>
