@@ -5,7 +5,7 @@ mod info;
 mod jobs;
 mod json_schema;
 mod jwt;
-mod list_logs;
+mod logs;
 mod oauth_providers;
 mod parse;
 mod query;
@@ -59,7 +59,9 @@ pub fn router() -> Router<AppState> {
       get(json_schema::get_api_json_schema_handler),
     )
     // Logs
-    .route("/logs", get(list_logs::list_logs_handler))
+    .route("/logs/list", get(logs::list_logs::list_logs_handler))
+    // Stats
+    .route("/logs/stats", get(logs::stats::fetch_stats_handler))
     // Query execution handler for the UI editor
     .route("/query", post(query::query_handler))
     // Parse handler for UI validation.

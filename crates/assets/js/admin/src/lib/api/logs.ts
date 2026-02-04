@@ -2,6 +2,7 @@ import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
 
 import type { ListLogsResponse } from "@bindings/ListLogsResponse";
+import type { StatsResponse } from "@bindings/StatsResponse";
 
 export async function fetchLogs(
   pageSize: number,
@@ -18,6 +19,15 @@ export async function fetchLogs(
     order,
   });
 
-  const response = await adminFetch(`/logs?${params}`);
+  const response = await adminFetch(`/logs/list?${params}`);
+  return await response.json();
+}
+
+export async function fetchStats(filter?: string): Promise<StatsResponse> {
+  const params = buildListSearchParams({
+    filter,
+  });
+
+  const response = await adminFetch(`/logs/stats?${params}`);
   return await response.json();
 }

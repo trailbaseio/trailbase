@@ -3,6 +3,7 @@ use chrono::Duration;
 pub const SQLITE_SCHEMA_TABLE: &str = "sqlite_schema";
 pub const USER_TABLE: &str = "_user";
 
+pub(crate) const LOGS_TABLE: &str = "_logs";
 pub(crate) const SESSION_TABLE: &str = "_session";
 pub(crate) const AVATAR_TABLE: &str = "_user_avatar";
 

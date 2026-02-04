@@ -3,25 +3,12 @@ import { parse, ExprGroup, Expr, JoinOp, SignOp } from "@/lib/fexpr";
 import { showToast } from "@/components/ui/toast";
 
 export type ListArgs = {
-  filter: string | undefined | null;
-  pageSize: number;
+  filter?: string | null;
+  pageSize?: number;
   pageIndex?: number;
-  cursor: string | undefined | null;
+  cursor?: string | null;
   order?: string;
 };
-
-export function formatSortingAsOrder(sorting: SortingState) {
-  switch (sorting.length) {
-    case 0:
-      return undefined;
-    case 1: {
-      const s = sorting[0];
-      return `${s.desc ? "-" : "+"}${s.id}`;
-    }
-    default:
-      throw new Error("multi-sort not supported");
-  }
-}
 
 export function buildListSearchParams({
   filter,
@@ -49,12 +36,14 @@ export function buildListSearchParams({
     }
   }
 
-  params.set("limit", pageSize.toString());
-
   if (cursor) {
     params.set("cursor", cursor);
   } else if (pageIndex) {
-    params.set("offset", `${pageIndex * pageSize}`);
+    params.set("offset", `${pageIndex * (pageSize ?? 50)}`);
+  }
+
+  if (pageSize !== undefined) {
+    params.set("limit", pageSize.toString());
   }
 
   if (order) {
@@ -62,6 +51,19 @@ export function buildListSearchParams({
   }
 
   return params;
+}
+
+export function formatSortingAsOrder(sorting: SortingState) {
+  switch (sorting.length) {
+    case 0:
+      return undefined;
+    case 1: {
+      const s = sorting[0];
+      return `${s.desc ? "-" : "+"}${s.id}`;
+    }
+    default:
+      throw new Error("multi-sort not supported");
+  }
 }
 
 export function parseFilter(expr: string): [string, string][] {

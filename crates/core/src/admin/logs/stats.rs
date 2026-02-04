@@ -1,0 +1,312 @@
+use axum::{
+  Json,
+  extract::{RawQuery, State},
+};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::collections::HashMap;
+use trailbase_extension::geoip::DatabaseType;
+use trailbase_qs::Query;
+use trailbase_sqlite::Value;
+use ts_rs::TS;
+
+use crate::admin::AdminError as Error;
+use crate::app_state::AppState;
+use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE};
+use crate::listing::{WhereClause, build_filter_where_clause};
+use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
+
+#[derive(Debug, Serialize, TS)]
+#[ts(export)]
+pub struct StatsResponse {
+  // List of (timestamp, number of queries).
+  rates: Vec<(i64, f64)>,
+  // Country codes. Only present if GeoIP DB is present.
+  country_codes: Option<HashMap<String, usize>>,
+}
+
+pub async fn fetch_stats_handler(
+  State(state): State<AppState>,
+  RawQuery(raw_url_query): RawQuery,
+) -> Result<Json<StatsResponse>, Error> {
+  let conn = state.logs_conn();
+
+  let Query {
+    filter: filter_params,
+    ..
+  } = raw_url_query
+    .as_ref()
+    .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
+    .map_err(|err| {
+      return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
+    })?;
+
+  let filter_where_clause = {
+    // NOTE: We cannot get `ConnectionMetadata` via the connection_manager() here because logs are
+    // in a different DB.
+    let table = lookup_and_parse_table_schema(conn, LOGS_TABLE, None).await?;
+    let table_metadata = TableMetadata::new(
+      &trailbase_extension::jsonschema::JsonSchemaRegistry::from_schemas(vec![]),
+      table.clone(),
+      &[table],
+    )?;
+
+    build_filter_where_clause(TABLE_ALIAS, &table_metadata.schema.columns, filter_params)?
+  };
+
+  let now = Utc::now();
+  return Ok(Json(
+    fetch_aggregate_stats(
+      conn,
+      FetchAggregateArgs {
+        geoip_db_type: trailbase_extension::geoip::database_type(),
+        filter_where_clause: Some(filter_where_clause),
+        from: now
+          - Duration::seconds(state.access_config(|c| {
+            c.server
+              .logs_retention_sec
+              .unwrap_or_else(|| LOGS_RETENTION_DEFAULT.num_seconds())
+          })),
+        to: now,
+        interval: Duration::seconds(600),
+      },
+    )
+    .await?,
+  ));
+}
+
+#[derive(Debug)]
+struct FetchAggregateArgs {
+  geoip_db_type: Option<DatabaseType>,
+  filter_where_clause: Option<WhereClause>,
+  from: DateTime<Utc>,
+  to: DateTime<Utc>,
+  interval: Duration,
+}
+
+async fn fetch_aggregate_stats(
+  conn: &trailbase_sqlite::Connection,
+  args: FetchAggregateArgs,
+) -> Result<StatsResponse, Error> {
+  let FetchAggregateArgs {
+    geoip_db_type,
+    filter_where_clause,
+    from,
+    to,
+    interval,
+  } = args;
+
+  let filter_clause = filter_where_clause
+    .as_ref()
+    .map(|c| c.clause.as_str())
+    .unwrap_or("TRUE");
+
+  let from_seconds = from.timestamp();
+  let interval_seconds = interval.num_seconds();
+
+  let mut params: Vec<(Cow<'_, str>, Value)> = Vec::from([
+    (
+      Cow::Borrowed(":interval_seconds"),
+      Value::Integer(interval_seconds),
+    ),
+    (Cow::Borrowed(":from_seconds"), Value::Integer(from_seconds)),
+    (Cow::Borrowed(":to_seconds"), Value::Integer(to.timestamp())),
+  ]);
+
+  if let Some(filter) = &filter_where_clause {
+    params.extend(filter.params.clone())
+  }
+
+  let country_codes = if matches!(
+    geoip_db_type,
+    Some(DatabaseType::GeoLite2Country) | Some(DatabaseType::GeoLite2City)
+  ) {
+    let query = format!(
+      "\
+        SELECT \
+          country_code, \
+          SUM(cnt) as count \
+        FROM \
+          (SELECT client_ip, COUNT(*) AS cnt, geoip_country(client_ip) as country_code FROM '{LOGS_TABLE}' AS {TABLE_ALIAS} WHERE {filter_clause} GROUP BY client_ip) \
+        GROUP BY \
+          country_code \
+      "
+    );
+
+    Some(HashMap::from_iter(
+      conn
+        .read_query_rows(query, params.clone())
+        .await?
+        .into_iter()
+        .map(|row| -> Result<(String, usize), Error> {
+          let cc: Option<String> = row.get(0)?;
+          let count: i64 = row.get(1)?;
+
+          return Ok((
+            cc.unwrap_or_else(|| "unattributed".to_string()),
+            count as usize,
+          ));
+        })
+        .collect::<Result<Vec<_>, Error>>()?,
+    ))
+  } else {
+    None
+  };
+
+  #[derive(Deserialize)]
+  struct AggRow {
+    interval_end_ts: i64,
+    count: i64,
+  }
+
+  // Aggregate rate of all logs in the same :interval_seconds.
+  //
+  // Note, we're aligning the interval wide grid with the latest `to` timestamp to minimize
+  // artifacts when (to - from) / interval is not an integer. This way we only get artifacts in the
+  // oldest interval.
+  let qps_query = format!(
+    "\
+      SELECT \
+        CAST(ROUND((created - :to_seconds) / :interval_seconds) AS INTEGER) * :interval_seconds + :to_seconds AS interval_end_ts, \
+        COUNT(*) as count \
+      FROM \
+        (SELECT * FROM '{LOGS_TABLE}' AS {TABLE_ALIAS} WHERE created > :from_seconds AND created < :to_seconds AND {filter_clause} ORDER BY id DESC) \
+      GROUP BY \
+        interval_end_ts \
+      ORDER BY \
+        interval_end_ts ASC \
+    ",
+  );
+
+  let rates = conn
+    .read_query_values::<AggRow>(qps_query, params)
+    .await?
+    .into_iter()
+    .map(|r| {
+      // The oldest interval may be clipped if "(to-from)/interval" isn't integer. In this case
+      // divided by a shorter interval length to reduce artifacting. Otherwise, the clipped
+      // interval would appear to have a lower rater.
+      let effective_interval_seconds = std::cmp::min(
+        interval_seconds,
+        r.interval_end_ts - (from_seconds - interval_seconds),
+      ) as f64;
+
+      return (
+        // Use interval midpoint as timestamp.
+        r.interval_end_ts - interval_seconds / 2,
+        // Compute rate from event count in interval.
+        (r.count as f64) / effective_interval_seconds,
+      );
+    })
+    .collect();
+
+  return Ok(StatsResponse {
+    rates,
+    country_codes,
+  });
+}
+
+const TABLE_ALIAS: &str = "log";
+
+#[cfg(test)]
+mod tests {
+  use chrono::{DateTime, Duration};
+
+  use super::*;
+  use crate::migrations::apply_logs_migrations;
+
+  #[tokio::test]
+  async fn test_aggregate_rate_computation() {
+    let conn = trailbase_sqlite::Connection::new(
+      move || -> anyhow::Result<_> {
+        let mut conn_sync =
+          crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None).unwrap();
+        apply_logs_migrations(&mut conn_sync).unwrap();
+        return Ok(conn_sync);
+      },
+      None,
+    )
+    .unwrap();
+
+    let interval_seconds = 600;
+    let to = DateTime::parse_from_rfc3339("1996-12-22T12:00:00Z").unwrap();
+    // An **almost** 24h interval. We make it slightly shorter, so we get some clipping.
+    let from = to - Duration::seconds(24 * 3600 - 20);
+
+    {
+      // Insert test data.
+      let before = (from - Duration::seconds(1)).timestamp();
+      let after = (to + Duration::seconds(1)).timestamp();
+
+      let just_inside0 = (from + Duration::seconds(10)).timestamp();
+      let just_inside1 = (to - Duration::seconds(10)).timestamp();
+
+      let smack_in_there0 = (from + Duration::seconds(12 * 3600)).timestamp();
+      let smack_in_there1 = (from + Duration::seconds(12 * 3600 + 1)).timestamp();
+
+      conn
+        .execute_batch(format!(
+          r#"
+            INSERT INTO {LOGS_TABLE} (created) VALUES({before});
+            INSERT INTO {LOGS_TABLE} (created) VALUES({after});
+
+            INSERT INTO {LOGS_TABLE} (created) VALUES({just_inside0});
+            INSERT INTO {LOGS_TABLE} (created) VALUES({just_inside1});
+
+            INSERT INTO {LOGS_TABLE} (created) VALUES({smack_in_there0});
+            INSERT INTO {LOGS_TABLE} (created) VALUES({smack_in_there1});
+          "#,
+        ))
+        .await
+        .unwrap();
+    }
+
+    let stats = fetch_aggregate_stats(
+      &conn,
+      FetchAggregateArgs {
+        geoip_db_type: Some(DatabaseType::Unknown),
+        filter_where_clause: None,
+        from: from.into(),
+        to: to.into(),
+        interval: Duration::seconds(interval_seconds),
+      },
+    )
+    .await
+    .unwrap();
+
+    // Assert that there are 3 data points in the given range and that all of them have a rate of
+    // one log in the 600s interval.
+    assert_eq!(stats.rates.len(), 3);
+
+    // Assert the oldest, clipped interval has a slightly elevated rate.
+    {
+      let rate = stats.rates[0];
+      assert_eq!(
+        DateTime::from_timestamp(rate.0, 0).unwrap(),
+        DateTime::parse_from_rfc3339("1996-12-21T11:55:00Z").unwrap()
+      );
+      assert!(rate.1 > 1.0 / interval_seconds as f64);
+    }
+
+    // Assert the middle rate, has two logs, i.e. double the base rate.
+    {
+      let rate = stats.rates[1];
+      assert_eq!(
+        DateTime::from_timestamp(rate.0, 0).unwrap(),
+        DateTime::parse_from_rfc3339("1996-12-21T23:55:00Z").unwrap()
+      );
+      assert_eq!(rate.1, 2.0 / interval_seconds as f64);
+    }
+
+    // Assert the youngest, most recent interval has the base rate.
+    {
+      let rate = stats.rates[2];
+      assert_eq!(
+        DateTime::from_timestamp(rate.0, 0).unwrap(),
+        DateTime::parse_from_rfc3339("1996-12-22T11:55:00Z").unwrap()
+      );
+      assert_eq!(rate.1, 1.0 / interval_seconds as f64);
+    }
+  }
+}

@@ -4,8 +4,8 @@ import {
   Show,
   createSignal,
   onCleanup,
-  onMount,
   createMemo,
+  createEffect,
 } from "solid-js";
 import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
@@ -51,7 +51,7 @@ import { Table, buildTable } from "@/components/Table";
 import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 
-import { fetchLogs } from "@/lib/api/logs";
+import { fetchLogs, fetchStats } from "@/lib/api/logs";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 import { cn } from "@/lib/utils";
@@ -59,7 +59,7 @@ import { cn } from "@/lib/utils";
 import countriesGeoJSON from "@/assets/countries-110m.json";
 
 import type { LogJson } from "@bindings/LogJson";
-import type { Stats } from "@bindings/Stats";
+import type { StatsResponse } from "@bindings/StatsResponse";
 
 const columns: ColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
@@ -178,8 +178,6 @@ type SearchParams = {
 
 // Value is the previous value in case this isn't the first fetch.
 function LogsPage() {
-  const [stats, setStats] = createSignal<Stats | undefined>();
-
   // IMPORTANT: We need to memo the search params to treat absence and defaults
   // consistently, otherwise `undefined`->`default` may invalidate the cursors.
   const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
@@ -187,6 +185,14 @@ function LogsPage() {
   const pageSize = createMemo(() => safeParseInt(searchParams.pageSize) ?? 20);
   const pageIndex = createMemo(() => safeParseInt(searchParams.pageIndex) ?? 0);
 
+  const reset = () => {
+    console.warn("resetting search params");
+    setSearchParams({
+      filter: undefined,
+      pageSize: undefined,
+      pageIndex: undefined,
+    });
+  };
   const pagination = (): PaginationState => ({
     pageIndex: pageIndex(),
     pageSize: pageSize(),
@@ -231,7 +237,7 @@ function LogsPage() {
   const logsFetch = useQuery(() => ({
     queryKey: [pagination(), filter(), sorting()],
     queryFn: async ({ queryKey }) => {
-      console.debug(`Fetching data with key: ${queryKey}`);
+      console.debug(`Fetching logs with key: ${queryKey}`);
 
       try {
         const { pageSize, pageIndex } = pagination();
@@ -250,26 +256,31 @@ function LogsPage() {
           cursors().set(pageIndex, response.cursor);
         }
 
-        // Stats are expensive to compute, they're only transmitted on `pageIndex===0`, thus remember them.
-        const stats = response.stats;
-        if (stats) {
-          setStats(stats);
-        }
-
         return response;
       } catch (err) {
-        // Reset.
-        setSearchParams({
-          filter: undefined,
-          pageSize: undefined,
-          pageIndex: undefined,
-        });
-
+        reset();
         throw err;
       }
     },
   }));
-  const refetch = () => logsFetch.refetch();
+
+  const statsFetch = useQuery(() => ({
+    queryKey: [filter()],
+    queryFn: async ({ queryKey }) => {
+      try {
+        console.debug(`Fetching stats with key: ${queryKey}`);
+        return await fetchStats(filter());
+      } catch (err) {
+        reset();
+        throw err;
+      }
+    },
+  }));
+
+  const refetch = () => {
+    logsFetch.refetch();
+    statsFetch.refetch();
+  };
 
   const [accordion, setAccordion] = createSignal(true);
   const [showMap, setShowMap] = createSignal(true);
@@ -331,7 +342,7 @@ function LogsPage() {
             <IconButton
               disabled={!logsFetch.isSuccess}
               onClick={() => {
-                if (stats()?.country_codes) {
+                if (statsFetch.data?.country_codes) {
                   setShowMap((v) => !v);
                 } else {
                   setShowGeoipDialog((v) => !v);
@@ -359,18 +370,22 @@ function LogsPage() {
                   <AccordionContent>
                     <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
                       <Switch>
-                        <Match when={showMap() && stats()?.country_codes}>
+                        <Match
+                          when={showMap() && statsFetch.data?.country_codes}
+                        >
                           <div class="md:w-1/2">
-                            <WorldMap countryCodes={stats()!.country_codes!} />
+                            <WorldMap
+                              countryCodes={statsFetch.data!.country_codes!}
+                            />
                           </div>
                           <div class="md:w-1/2">
-                            <LogsChart rates={stats()?.rate ?? []} />
+                            <LogsGraph rates={statsFetch.data?.rates ?? []} />
                           </div>
                         </Match>
 
                         <Match when={true}>
                           <div class="w-full">
-                            <LogsChart rates={stats()?.rate ?? []} />
+                            <LogsGraph rates={statsFetch.data?.rates ?? []} />
                           </div>
                         </Match>
                       </Switch>
@@ -428,7 +443,7 @@ function changeDistantPointLineColorToTransparent(
   return undefined;
 }
 
-type CountryCodes = Exclude<Stats["country_codes"], null>;
+type CountryCodes = Exclude<StatsResponse["country_codes"], null>;
 
 function buildMap(opts: {
   countryCodes: CountryCodes;
@@ -437,7 +452,7 @@ function buildMap(opts: {
 }): maplibregl.Map {
   const map = new maplibregl.Map({
     container: "map",
-    hash: "map",
+    hash: false, // Don't manipulate url to place coordinates.
     zoom: 1.2,
     maxZoom: 4,
     center: [-50, 20],
@@ -644,7 +659,11 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
 
   let map: maplibregl.Map | undefined;
 
-  onMount(() => {
+  // NOTE: We use createEffect here to rebuild when data changes.
+  createEffect(() => {
+    if (map) {
+      map.remove();
+    }
     map = buildMap({
       countryCodes: countryCodes(),
       setMapDialog,
@@ -672,7 +691,9 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
   );
 }
 
-function LogsChart(props: { rates: Stats["rate"] }) {
+type Rates = StatsResponse["rates"];
+
+function LogsGraph(props: { rates: Rates }) {
   const data = (): ChartData | undefined => {
     const labels = props.rates.map(([ts, _v]) => Number(ts) * 1000);
     const data = props.rates.map(([_ts, v]) => v);
@@ -694,17 +715,17 @@ function LogsChart(props: { rates: Stats["rate"] }) {
     };
   };
 
-  let ref: HTMLCanvasElement | undefined;
   let chart: Chart | undefined;
 
-  onMount(() => {
+  // NOTE: We use createEffect here to rebuild when data changes.
+  createEffect(() => {
     if (chart) {
       chart.destroy();
     }
 
     const d = data();
     if (d) {
-      chart = new Chart(ref!, {
+      chart = new Chart("graph", {
         type: "scatter",
         data: d,
         options: {
@@ -754,7 +775,7 @@ function LogsChart(props: { rates: Stats["rate"] }) {
 
   return (
     <div class="h-[300px]">
-      <canvas ref={ref} />
+      <canvas id="graph" />
     </div>
   );
 }
