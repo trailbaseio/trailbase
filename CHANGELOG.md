@@ -1,3 +1,9 @@
+## v0.23.6
+
+- Handle permission errors (401 & 403) and 429 more gracefully in admin UI.
+- Add uptime to dashboard.
+- Update Rust dependencies.
+
 ## v0.23.5
 
 - Switch map of the admin UI's logs page from leaflet to maplibre and vector tiles.
