@@ -1,4 +1,4 @@
-import { Suspense, Switch, Match, Index } from "solid-js";
+import { Suspense, Show, Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery } from "@tanstack/solid-query";
 import {
@@ -7,6 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 import { adminFetch } from "@/lib/fetch";
@@ -61,7 +62,13 @@ function SchemaSettingsForm(props: {
                   return (
                     <AccordionItem value={`item-${i}`}>
                       <AccordionTrigger>
-                        {schema.name} {schema.builtin ? "<builtin>" : null}
+                        <span class="flex gap-2">
+                          {schema.name}
+
+                          <Show when={schema.builtin}>
+                            <Badge variant="outline">built-in</Badge>
+                          </Show>
+                        </span>
                       </AccordionTrigger>
 
                       <AccordionContent>
