@@ -54,7 +54,7 @@ hyper-util = "0.1.7"
 indexmap = "2.11.4"
 init-tracing-opentelemetry = { version = "0.36.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = "0.14.0"
-jsonschema = { version = "0.40.0", default-features = false }
+jsonschema = { version = "0.41.0", default-features = false }
 jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 kanal = "0.1.1"
 lazy_static = "1.4.0"
