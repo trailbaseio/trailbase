@@ -56,7 +56,11 @@ function DatabaseSettingsForm(props: {
   const linkDb = async (name: string) => {
     const newConfig = Config.fromPartial(props.config);
     newConfig.databases = [...newConfig.databases, { name }];
-    await setConfig(queryClient, newConfig, { throw: false });
+    await setConfig({
+      client: queryClient,
+      config: newConfig,
+      throw: false,
+    });
   };
 
   const unlinkSelectedDbs = async () => {
@@ -67,7 +71,11 @@ function DatabaseSettingsForm(props: {
       (d) => !markedForUnlink.has(d.name ?? ""),
     );
 
-    await setConfig(queryClient, newConfig, { throw: false });
+    await setConfig({
+      client: queryClient,
+      config: newConfig,
+      throw: false,
+    });
   };
 
   const dbTable = createMemo(() => {

@@ -1,4 +1,4 @@
-import { splitProps, Show } from "solid-js";
+import { splitProps, Match, Switch } from "solid-js";
 import type { ValidComponent } from "solid-js";
 import {
   Tooltip,
@@ -23,14 +23,20 @@ export function IconButton<T extends ValidComponent = "button">(
   const B = () => <Button variant="ghost" size="icon" {...others} />;
 
   return (
-    <Show when={local.tooltip} fallback={<B />}>
-      <Tooltip>
-        <TooltipTrigger as="div">
-          <B />
-        </TooltipTrigger>
+    <Switch>
+      <Match when={local.tooltip}>
+        <Tooltip>
+          <TooltipTrigger as="div">
+            <B />
+          </TooltipTrigger>
 
-        <TooltipContent>{props.tooltip}</TooltipContent>
-      </Tooltip>
-    </Show>
+          <TooltipContent>{props.tooltip}</TooltipContent>
+        </Tooltip>
+      </Match>
+
+      <Match when={true}>
+        <B />
+      </Match>
+    </Switch>
   );
 }

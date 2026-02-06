@@ -726,8 +726,11 @@ function IndividualRecordApiSettingsForm(props: {
 
         const isCreate = props.mode === Mode.Create;
         try {
-          const newConfig = updateRecordApiConfig(c, value);
-          await setConfig(queryClient, newConfig);
+          await setConfig({
+            client: queryClient,
+            config: updateRecordApiConfig(c, value),
+            throw: true,
+          });
 
           showToast({
             title: "Success",
@@ -1294,9 +1297,12 @@ function DeleteUpdateButtons(props: {
 
     if (apiName !== undefined) {
       try {
-        const newConfig = removeRecordApiConfig(c, tableName.name, apiName);
+        await setConfig({
+          client: queryClient,
+          config: removeRecordApiConfig(c, tableName.name, apiName),
+          throw: true,
+        });
 
-        await setConfig(queryClient, newConfig);
         showToast({
           title: "Success",
           description: `API "${apiName}" deleted`,

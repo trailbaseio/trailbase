@@ -65,7 +65,7 @@ import { Version } from "@/components/Version";
 import {
   createConfigQuery,
   setConfig,
-  invalidateAllAdminQueries,
+  invalidateConfig,
 } from "@/lib/api/config";
 import { createSystemInfoQuery } from "@/lib/api/info";
 import { createIsMobile } from "@/lib/signals";
@@ -155,7 +155,11 @@ function ServerSettingsForm(
     onSubmit: async ({ value }: { value: ServerConfig }) => {
       const newConfig = Config.fromPartial(props.config);
       newConfig.server = value;
-      await setConfig(queryClient, newConfig);
+      await setConfig({
+        client: queryClient,
+        config: newConfig,
+        throw: true,
+      });
 
       props.postSubmit?.();
     },
@@ -512,7 +516,7 @@ export function SettingsPage() {
         titleSelect={activeSite().label}
         leading={<SidebarTrigger />}
         left={
-          <IconButton onClick={() => invalidateAllAdminQueries(queryClient)}>
+          <IconButton onClick={() => invalidateConfig(queryClient)}>
             <TbRefresh />
           </IconButton>
         }

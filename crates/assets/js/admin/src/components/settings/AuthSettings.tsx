@@ -295,7 +295,11 @@ function createAuthSettingsForm(opts: {
         newConfig.auth = proxyToConfig(value);
 
         console.debug("Submitting provider config:", value);
-        await setConfig(queryClient, newConfig);
+        await setConfig({
+          client: queryClient,
+          config: newConfig,
+          throw: true,
+        });
 
         opts.postSubmit();
       },

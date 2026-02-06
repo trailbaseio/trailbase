@@ -5,48 +5,15 @@ import { GetConfigResponse, UpdateConfigRequest } from "@proto/config_api";
 import { adminFetch } from "@/lib/fetch";
 import { showToast } from "@/components/ui/toast";
 
-type UpdateOptions = {
-  throw?: boolean;
-};
-
-export async function setConfig(
-  queryClient: QueryClient,
-  config: Config,
-  opts?: UpdateOptions,
-): Promise<void> {
-  const data = queryClient.getQueryData<GetConfigResponse>(key);
-  const hash = data?.hash;
-  if (!hash) {
-    console.error("Missing hash from:", data);
-    return;
+export function createConfigQuery() {
+  async function getConfig(): Promise<GetConfigResponse> {
+    const response = await adminFetch("/config");
+    const array = new Uint8Array(await (await response.blob()).arrayBuffer());
+    return GetConfigResponse.decode(array);
   }
 
-  const request: UpdateConfigRequest = {
-    config,
-    hash,
-  };
-  console.debug("Updating config:", request);
-  await updateConfig(request, opts);
-
-  // Trigger refetch after updating config.
-  invalidateConfig(queryClient);
-}
-
-export function invalidateAllAdminQueries(queryClient: QueryClient) {
-  queryClient.invalidateQueries({
-    queryKey: ["admin"],
-  });
-}
-
-export function invalidateConfig(queryClient: QueryClient) {
-  queryClient.invalidateQueries({
-    queryKey: key,
-  });
-}
-
-export function createConfigQuery() {
   return useQuery(() => ({
-    queryKey: key,
+    queryKey: _configKey,
     queryFn: async () => {
       const config = await getConfig();
       console.debug("Fetched config:", config);
@@ -57,17 +24,12 @@ export function createConfigQuery() {
   }));
 }
 
-async function getConfig(): Promise<GetConfigResponse> {
-  const response = await adminFetch("/config");
-  const array = new Uint8Array(await (await response.blob()).arrayBuffer());
-  return GetConfigResponse.decode(array);
-}
-
-async function updateConfig(
-  request: UpdateConfigRequest,
-  opts?: UpdateOptions,
-): Promise<void> {
-  try {
+export async function setConfig(opts: {
+  client: QueryClient;
+  config: Config;
+  throw: boolean;
+}): Promise<void> {
+  async function updateConfig(request: UpdateConfigRequest) {
     await adminFetch("/config", {
       method: "POST",
       headers: {
@@ -76,17 +38,45 @@ async function updateConfig(
       body: new Uint8Array(UpdateConfigRequest.encode(request).finish()),
       throwOnError: true,
     });
-  } catch (err) {
-    showToast({
-      title: "Config Error",
-      description: `${err}`,
-      variant: "error",
-    });
+  }
 
-    if (!(opts?.throw ?? true)) {
-      throw err;
+  // Get previous fetch.
+  const hash = opts.client.getQueryData<GetConfigResponse>(_configKey)?.hash;
+  if (!hash) {
+    console.error("Missing hash");
+    return;
+  }
+
+  const request: UpdateConfigRequest = {
+    config: opts.config,
+    hash,
+  };
+
+  console.debug("Updating config:", request);
+
+  if (opts.throw) {
+    await updateConfig(request);
+  } else {
+    try {
+      await updateConfig(request);
+    } catch (err) {
+      showToast({
+        title: "Config update failed",
+        description: `${err}`,
+        variant: "error",
+      });
+      return;
     }
   }
+
+  // Trigger re-fetch after updating config.
+  invalidateConfig(opts.client);
 }
 
-const key = ["admin", "proto_config"];
+export function invalidateConfig(queryClient: QueryClient) {
+  queryClient.invalidateQueries({
+    queryKey: _configKey,
+  });
+}
+
+const _configKey = ["admin", "proto_config"];

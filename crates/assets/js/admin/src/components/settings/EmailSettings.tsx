@@ -141,7 +141,11 @@ export function EmailSettings(props: {
 
         const newConfig = Config.fromPartial(c);
         newConfig.email = value;
-        await setConfig(queryClient, newConfig);
+        await setConfig({
+          client: queryClient,
+          config: newConfig,
+          throw: true,
+        });
 
         props.postSubmit();
       },

@@ -139,7 +139,12 @@ function JobSettingsImpl(props: {
         jobs,
       } satisfies Config;
 
-      await setConfig(queryClient, newConfig);
+      await setConfig({
+        client: queryClient,
+        config: newConfig,
+        throw: true,
+      });
+
       props.refetchJobs();
       props.postSubmit();
     },
