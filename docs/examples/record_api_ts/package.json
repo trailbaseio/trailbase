@@ -4,16 +4,17 @@
   "description": "Example uses of record APIs for documentation purposes.",
   "scripts": {
     "check": "tsc --noEmit --skipLibCheck && eslint",
-    "manual-test": "vitest run # Not hermetic, don't run @CI"
+    "manual-test": "vitest run # Not hermetic, don't run @CI",
+    "test:manual": "vitest run"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@types/node": "^25.0.9",
+    "@types/node": "^25.2.1",
     "eslint": "^9.39.2",
-    "prettier": "^3.8.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.53.1",
-    "vitest": "^3.2.4"
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
     "trailbase": "workspace:*"

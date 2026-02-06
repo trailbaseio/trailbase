@@ -11,13 +11,13 @@ import type { Component, JSX } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 import {
-  TbRefresh,
-  TbMail,
-  TbServer,
-  TbUser,
-  TbBriefcase,
-  TbTable,
-  TbDatabaseExport,
+  TbOutlineRefresh,
+  TbOutlineMail,
+  TbOutlineServer,
+  TbOutlineUser,
+  TbOutlineBriefcase,
+  TbOutlineTable,
+  TbOutlineDatabaseExport,
 } from "solid-icons/tb";
 import { IconProps } from "solid-icons";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -423,37 +423,37 @@ const sites = [
     route: "host",
     label: "Host",
     child: ServerSettings,
-    icon: TbServer,
+    icon: TbOutlineServer,
   },
   {
     route: "email",
     label: "Email",
     child: EmailSettings,
-    icon: TbMail,
+    icon: TbOutlineMail,
   },
   {
     route: "auth",
     label: "Auth",
     child: AuthSettings,
-    icon: TbUser,
+    icon: TbOutlineUser,
   },
   {
     route: "jobs",
     label: "Jobs",
     child: JobSettings,
-    icon: TbBriefcase,
+    icon: TbOutlineBriefcase,
   },
   {
     route: "data",
     label: "Databases",
     child: DatabaseSettings,
-    icon: TbDatabaseExport,
+    icon: TbOutlineDatabaseExport,
   },
   {
     route: "schema",
     label: "Schemas",
     child: SchemaSettings,
-    icon: TbTable,
+    icon: TbOutlineTable,
   },
 ] as const;
 
@@ -517,7 +517,7 @@ export function SettingsPage() {
         leading={<SidebarTrigger />}
         left={
           <IconButton onClick={() => invalidateConfig(queryClient)}>
-            <TbRefresh />
+            <TbOutlineRefresh />
           </IconButton>
         }
       />

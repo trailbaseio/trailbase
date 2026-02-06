@@ -17,7 +17,12 @@ import type {
   SortingState,
   Updater,
 } from "@tanstack/solid-table";
-import { TbPin, TbPinFilled, TbCaretDown, TbCaretUp } from "solid-icons/tb";
+import {
+  TbOutlinePin,
+  TbFillPin,
+  TbOutlineCaretDown,
+  TbOutlineCaretUp,
+} from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -377,13 +382,13 @@ function TableHeaderRow<TData>(props: {
           <Switch>
             <Match when={props.header.column.getIsSorted() === "asc"}>
               <div class="absolute right-0 bottom-0 z-1">
-                <TbCaretUp size={20} />
+                <TbOutlineCaretUp size={20} />
               </div>
             </Match>
 
             <Match when={props.header.column.getIsSorted() === "desc"}>
               <div class="absolute right-0 bottom-0 z-1">
-                <TbCaretDown size={20} />
+                <TbOutlineCaretDown size={20} />
               </div>
             </Match>
           </Switch>
@@ -406,9 +411,9 @@ function TableHeaderRow<TData>(props: {
                 }}
               >
                 {props.header.column.getIsPinned() ? (
-                  <TbPinFilled />
+                  <TbFillPin />
                 ) : (
-                  <TbPin />
+                  <TbOutlinePin />
                 )}
               </Button>
             </div>

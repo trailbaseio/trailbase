@@ -23,7 +23,7 @@ import {
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 
 import { Config, DatabaseConfig } from "@proto/config";
-import { TbLink, TbUnlink } from "solid-icons/tb";
+import { TbOutlineLink, TbOutlineUnlink } from "solid-icons/tb";
 
 export function DatabaseSettings(props: {
   markDirty: () => void;
@@ -200,7 +200,7 @@ function DatabaseSettingsForm(props: {
               <div class="flex w-full justify-between gap-2">
                 <DialogTrigger>
                   <Button variant="outline" type="button">
-                    <TbLink />
+                    <TbOutlineLink />
                     Link
                   </Button>
                 </DialogTrigger>
@@ -217,7 +217,7 @@ function DatabaseSettingsForm(props: {
                     })();
                   }}
                 >
-                  <TbUnlink />
+                  <TbOutlineUnlink />
                   Unlink
                 </Button>
               </div>

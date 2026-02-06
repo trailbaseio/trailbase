@@ -2,12 +2,12 @@ import { createMemo, For, Suspense, Switch, Show, Match, JSX } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
 import {
-  TbArrowBackUp,
-  TbCircle,
-  TbCircleCheck,
-  TbCirclePlus,
-  TbTrash,
-  TbInfoCircle,
+  TbOutlineArrowBackUp,
+  TbOutlineCircle,
+  TbOutlineCircleCheck,
+  TbOutlineCirclePlus,
+  TbOutlineTrash,
+  TbOutlineInfoCircle,
 } from "solid-icons/tb";
 
 import {
@@ -176,13 +176,13 @@ function ProviderSettingsSubForm(props: {
   };
 
   const Bullet = () => (
-    <Switch fallback={<TbCircle color="grey" />}>
+    <Switch fallback={<TbOutlineCircle color="grey" />}>
       <Match when={dirty()}>
-        <TbCirclePlus color="orange" />
+        <TbOutlineCirclePlus color="orange" />
       </Match>
 
       <Match when={current()?.clientId !== undefined}>
-        <TbCircleCheck color="green" />
+        <TbOutlineCircleCheck color="green" />
       </Match>
     </Switch>
   );
@@ -258,7 +258,7 @@ function ProviderSettingsSubForm(props: {
               );
             }}
           >
-            <TbArrowBackUp />
+            <TbOutlineArrowBackUp />
           </Button>
 
           <Button
@@ -271,7 +271,7 @@ function ProviderSettingsSubForm(props: {
               );
             }}
           >
-            <TbTrash />
+            <TbOutlineTrash />
           </Button>
         </div>
       </AccordionContent>
@@ -613,7 +613,7 @@ function OAuthCallbackAddressInfo(props: {
       <Tooltip>
         <TooltipTrigger as="span" onClick={() => copyToClipboard(address())}>
           <span class="underline">Redirect URI</span>{" "}
-          <TbInfoCircle class="inline-block" />
+          <TbOutlineInfoCircle class="inline-block" />
         </TooltipTrigger>
 
         <TooltipContent>
@@ -681,7 +681,7 @@ function InfoTooltip(props: {
         <div class="flex h-[40px] w-full items-center text-left">
           <L>{props.label}</L>
 
-          <TbInfoCircle class="mx-1" />
+          <TbOutlineInfoCircle class="mx-1" />
         </div>
       </TooltipTrigger>
 

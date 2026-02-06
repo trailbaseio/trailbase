@@ -1,6 +1,6 @@
 import { createSignal, Switch, Match, Show } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { TbDownload, TbBug } from "solid-icons/tb";
+import { TbOutlineDownload, TbOutlineBug } from "solid-icons/tb";
 
 import { adminFetch } from "@/lib/fetch";
 import { showSaveFileDialog, stringToReadableStream } from "@/lib/utils";
@@ -56,7 +56,7 @@ function SchemaDownloadButton(props: {
       }}
     >
       Download
-      <TbDownload />
+      <TbOutlineDownload />
     </Button>
   );
 }
@@ -131,7 +131,7 @@ export function DebugDialogButton(props: { title: string; data: object }) {
     <Dialog id="schema">
       <DialogTrigger>
         <IconButton tooltip="[DEV only]">
-          <TbBug />
+          <TbOutlineBug />
         </IconButton>
       </DialogTrigger>
 

@@ -8,7 +8,7 @@ import {
   createSignal,
 } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { TbInfoCircle } from "solid-icons/tb";
+import { TbOutlineInfoCircle } from "solid-icons/tb";
 import { useQueryClient } from "@tanstack/solid-query";
 import { urlSafeBase64Encode } from "trailbase";
 
@@ -322,7 +322,7 @@ function StyledHoverCard(props: { children: JSXElement }) {
         as={Button<"button">}
         variant="link"
       >
-        <TbInfoCircle />
+        <TbOutlineInfoCircle />
       </HoverCardTrigger>
 
       <HoverCardContent class="w-80 space-y-1 space-x-4 text-sm">

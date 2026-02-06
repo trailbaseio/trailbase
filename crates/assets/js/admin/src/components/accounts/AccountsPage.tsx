@@ -8,7 +8,12 @@ import {
   Suspense,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import { TbRefresh, TbCrown, TbCheck, TbClipboardCopy } from "solid-icons/tb";
+import {
+  TbOutlineRefresh,
+  TbOutlineCrown,
+  TbOutlineCheck,
+  TbOutlineClipboardCopy,
+} from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
@@ -73,7 +78,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
                 copyToClipboard(userId, true);
               }}
             >
-              <TbClipboardCopy />
+              <TbOutlineClipboardCopy />
             </Button>
 
             {userId}
@@ -91,7 +96,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
         return (
           <Show when={ctx.row.original.verified}>
             <div class="flex justify-center pr-6">
-              <TbCheck />
+              <TbOutlineCheck />
             </div>
           </Show>
         );
@@ -101,7 +106,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
       accessorKey: "admin",
       cell: (ctx) => (
         <div class="flex justify-center">
-          {ctx.row.original.admin ? <TbCrown size={18} /> : null}
+          {ctx.row.original.admin ? <TbOutlineCrown size={18} /> : null}
         </div>
       ),
     },
@@ -383,7 +388,7 @@ export function AccountsPage() {
         title="Accounts"
         left={
           <IconButton onClick={refetch}>
-            <TbRefresh />
+            <TbOutlineRefresh />
           </IconButton>
         }
       />

@@ -1,5 +1,5 @@
 import { createSignal, Switch, Match } from "solid-js";
-import { TbUser, TbLogout, TbTrash } from "solid-icons/tb";
+import { TbOutlineUser, TbOutlineLogout, TbOutlineTrash } from "solid-icons/tb";
 import { useStore } from "@nanostores/solid";
 import type { Client, User } from "trailbase";
 
@@ -31,7 +31,7 @@ function DeleteAccountButton(props: { client: Client }) {
     <Dialog open={open()} onOpenChange={setOpen}>
       <DialogTrigger>
         <div class={cn(DESTRUCTIVE_ICON_STYLE)}>
-          <TbTrash />
+          <TbOutlineTrash />
         </div>
       </DialogTrigger>
 
@@ -131,7 +131,7 @@ function Avatar(props: { client: Client; user: User }) {
             }}
           >
             {/* Fallback */}
-            <TbUser size={60} color="#0073aa" />
+            <TbOutlineUser size={60} color="#0073aa" />
           </object>
         </button>
 
@@ -148,7 +148,7 @@ function Avatar(props: { client: Client; user: User }) {
                 }
               }}
             >
-              <TbTrash />
+              <TbOutlineTrash />
             </button>
           </div>
         )}
@@ -167,7 +167,7 @@ function ProfileTable(props: { client: Client; user: User }) {
           <DeleteAccountButton client={props.client} />
 
           <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
-            <TbLogout />
+            <TbOutlineLogout />
           </a>
         </div>
       </div>

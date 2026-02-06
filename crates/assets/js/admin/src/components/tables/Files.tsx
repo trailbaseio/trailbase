@@ -1,6 +1,6 @@
 import { For, Match, Switch, splitProps } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { TbDownload } from "solid-icons/tb";
+import { TbOutlineDownload } from "solid-icons/tb";
 
 import { sqlValueToString } from "@/lib/value";
 import { adminFetch } from "@/lib/fetch";
@@ -102,7 +102,7 @@ export function UploadedFile(props: {
 
             <Match when={!isImage()}>
               <Button as="div" size="icon" variant="outline">
-                <TbDownload />
+                <TbOutlineDownload />
               </Button>
             </Match>
           </Switch>

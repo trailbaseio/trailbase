@@ -21,7 +21,11 @@ import type {
   ScriptableLineSegmentContext,
   TooltipItem,
 } from "chart.js/auto";
-import { TbRefresh, TbWorld, TbCaretUp } from "solid-icons/tb";
+import {
+  TbOutlineRefresh,
+  TbOutlineWorld,
+  TbOutlineCaretUp,
+} from "solid-icons/tb";
 import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
 import type { FeatureCollection } from "geojson";
 
@@ -314,7 +318,7 @@ function LogsPage() {
         title="Logs"
         left={
           <IconButton onClick={refetch} tooltip="Refresh Logs">
-            <TbRefresh />
+            <TbOutlineRefresh />
           </IconButton>
         }
         right={
@@ -350,7 +354,7 @@ function LogsPage() {
               }}
               tooltip="Toggle World Map"
             >
-              <TbWorld />
+              <TbOutlineWorld />
             </IconButton>
           </Dialog>
         }
@@ -402,7 +406,7 @@ function LogsPage() {
                   <div
                     class={cn("transition-all", !accordion() && "rotate-180")}
                   >
-                    <TbCaretUp />
+                    <TbOutlineCaretUp />
                   </div>
                 </button>
               </div>

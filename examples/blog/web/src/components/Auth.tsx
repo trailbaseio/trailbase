@@ -1,6 +1,6 @@
 import { Match, Suspense, Switch } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { TbUser } from "solid-icons/tb";
+import { TbOutlineUser } from "solid-icons/tb";
 import type { User } from "trailbase";
 
 import { $client, $user, removeTokens, HOST } from "@/lib/client";
@@ -18,7 +18,7 @@ function UserBadge(props: { user: User | undefined }) {
   };
 
   const Fallback = () => (
-    <TbUser class="inline-block size-6 rounded-full bg-pacamara-secondary p-1 dark:text-white" />
+    <TbOutlineUser class="inline-block size-6 rounded-full bg-pacamara-secondary p-1 dark:text-white" />
   );
 
   return (

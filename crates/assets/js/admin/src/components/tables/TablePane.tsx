@@ -1,6 +1,11 @@
 import { Match, Show, Switch, createMemo, createSignal, JSX } from "solid-js";
 import type { Signal } from "solid-js";
-import { TbRefresh, TbTable, TbTrash, TbColumns } from "solid-icons/tb";
+import {
+  TbOutlineRefresh,
+  TbOutlineTable,
+  TbOutlineTrash,
+  TbOutlineColumns,
+} from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
@@ -282,7 +287,7 @@ function TableHeaderRightHandButtons(props: {
           msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
         >
           <div class="flex items-center gap-2">
-            Delete <TbTrash />
+            Delete <TbOutlineTrash />
           </div>
         </DestructiveActionButton>
       )}
@@ -357,7 +362,7 @@ function TableHeaderRightHandButtons(props: {
                   as={(props: DialogTriggerProps) => (
                     <Button variant="default" size="sm" {...props}>
                       <div class="flex items-center gap-2">
-                        Alter <TbTable />
+                        Alter <TbOutlineTable />
                       </div>
                     </Button>
                   )}
@@ -399,13 +404,13 @@ function TableHeader(props: {
       left={
         <div class="flex items-center">
           <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
-            <TbRefresh />
+            <TbOutlineRefresh />
           </IconButton>
 
           <Dialog id="sql-schema">
             <DialogTrigger>
               <IconButton tooltip="SQL Schema">
-                <TbColumns />
+                <TbOutlineColumns />
               </IconButton>
             </DialogTrigger>
 

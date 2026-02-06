@@ -1,5 +1,5 @@
 import { Switch, Match, Show } from "solid-js";
-import { TbUser } from "solid-icons/tb";
+import { TbOutlineUser } from "solid-icons/tb";
 import type { User } from "trailbase";
 
 import { urlSafeBase64ToUuid } from "@/lib/utils";
@@ -14,7 +14,7 @@ export function Avatar(props: { user: User | undefined; size: number }) {
   return (
     <Switch>
       <Match when={props.user === undefined}>
-        <TbUser size={props.size} color="#0073aa" />
+        <TbOutlineUser size={props.size} color="#0073aa" />
       </Match>
 
       <Match when={props.user !== undefined}>
@@ -27,7 +27,7 @@ export function Avatar(props: { user: User | undefined; size: number }) {
           aria-label="Avatar image"
         >
           {/* Fallback */}
-          <TbUser size={props.size} color="#0073aa" />
+          <TbOutlineUser size={props.size} color="#0073aa" />
         </object>
       </Match>
     </Switch>

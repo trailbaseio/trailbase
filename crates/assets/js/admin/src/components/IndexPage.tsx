@@ -2,12 +2,12 @@ import { For } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import type { IconTypes } from "solid-icons";
 import {
-  TbDatabase,
-  TbEdit,
-  TbChartDots3,
-  TbUsers,
-  TbTimeline,
-  TbSettings,
+  TbOutlineDatabase,
+  TbOutlineEdit,
+  TbOutlineChartDots3,
+  TbOutlineUsers,
+  TbOutlineTimeline,
+  TbOutlineSettings,
 } from "solid-icons/tb";
 
 import { executeSql } from "@/lib/api/execute";
@@ -69,32 +69,32 @@ type Element = {
 const BASE = import.meta.env.BASE_URL;
 const elements = [
   {
-    icon: TbDatabase,
+    icon: TbOutlineDatabase,
     content: "Browse, create or alter your Tables, Indexes, and Views.",
     href: `${BASE}/table`,
   },
   {
-    icon: TbEdit,
+    icon: TbOutlineEdit,
     content: "Untethered script access letting you execute arbitrary SQL.",
     href: `${BASE}/editor`,
   },
   {
-    icon: TbChartDots3,
+    icon: TbOutlineChartDots3,
     content: "Visualize Database Schema as Entity-Relationship-Diagram",
     href: `${BASE}/erd`,
   },
   {
-    icon: TbUsers,
+    icon: TbOutlineUsers,
     content: "Browse and manage your application's user registry.",
     href: `${BASE}/auth`,
   },
   {
-    icon: TbTimeline,
+    icon: TbOutlineTimeline,
     content: "Access logs for your application",
     href: `${BASE}/logs`,
   },
   {
-    icon: TbSettings,
+    icon: TbOutlineSettings,
     content: "Server settings",
     href: `${BASE}/settings`,
   },

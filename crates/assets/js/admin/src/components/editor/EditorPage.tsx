@@ -15,7 +15,13 @@ import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-import { TbTrash, TbEdit, TbHelp, TbPencilPlus, TbX } from "solid-icons/tb";
+import {
+  TbOutlineTrash,
+  TbOutlineEdit,
+  TbOutlineHelp,
+  TbOutlinePencilPlus,
+  TbOutlineX,
+} from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
@@ -231,7 +237,7 @@ function EditorSidebar(props: {
               addNewScript();
             }}
           >
-            <TbPencilPlus /> New
+            <TbOutlinePencilPlus /> New
           </Button>
 
           <For each={scripts()}>
@@ -268,7 +274,7 @@ function EditorSidebar(props: {
                             e.stopPropagation();
                           }}
                         >
-                          <TbTrash />
+                          <TbOutlineTrash />
                         </IconButton>
                       </div>
                     </div>
@@ -288,7 +294,7 @@ function HelpDialog() {
     <Dialog id="edit-help">
       <DialogTrigger>
         <IconButton>
-          <TbHelp />
+          <TbOutlineHelp />
         </IconButton>
       </DialogTrigger>
 
@@ -333,7 +339,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
         }}
       >
         <IconButton tooltip="Rename script" class="hover:bg-border">
-          <TbEdit />
+          <TbOutlineEdit />
         </IconButton>
       </DialogTrigger>
 
@@ -616,7 +622,7 @@ function EditorPanel(props: {
             <p>{migrationWarning}</p>
 
             <div class="p-2">
-              <TbX size={20} />
+              <TbOutlineX size={20} />
             </div>
           </Callout>
         )}

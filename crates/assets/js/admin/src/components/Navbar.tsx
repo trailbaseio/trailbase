@@ -2,12 +2,12 @@ import { createContext, createSignal, useContext, For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 import { useNavigate, Location } from "@solidjs/router";
 import {
-  TbDatabase,
-  TbEdit,
-  TbUsers,
-  TbChartDots3,
-  TbTimeline,
-  TbSettings,
+  TbOutlineDatabase,
+  TbOutlineEdit,
+  TbOutlineUsers,
+  TbOutlineChartDots3,
+  TbOutlineTimeline,
+  TbOutlineSettings,
 } from "solid-icons/tb";
 
 import { AuthButton } from "@/components/auth/AuthButton";
@@ -32,12 +32,12 @@ import logo from "@/assets/logo_104.webp";
 
 const BASE = import.meta.env.BASE_URL;
 const options = [
-  [`${BASE}/table/`, TbDatabase, "Table & View Browser"],
-  [`${BASE}/editor`, TbEdit, "SQL Editor"],
-  [`${BASE}/erd`, TbChartDots3, "Entity Relationship Diagram"],
-  [`${BASE}/auth`, TbUsers, "User Accounts"],
-  [`${BASE}/logs`, TbTimeline, "Logs & Metrics"],
-  [`${BASE}/settings/`, TbSettings, "Settings"],
+  [`${BASE}/table/`, TbOutlineDatabase, "Table & View Browser"],
+  [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
+  [`${BASE}/erd`, TbOutlineChartDots3, "Entity Relationship Diagram"],
+  [`${BASE}/auth`, TbOutlineUsers, "User Accounts"],
+  [`${BASE}/logs`, TbOutlineTimeline, "Logs & Metrics"],
+  [`${BASE}/settings/`, TbOutlineSettings, "Settings"],
 ] as const;
 
 type NavbarContextT = {

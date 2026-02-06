@@ -7,12 +7,12 @@ import { TablePane } from "@/components/tables/TablePane";
 import { Button } from "@/components/ui/button";
 import { SheetContent } from "@/components/ui/sheet";
 import {
-  TbEye,
-  TbLock,
-  TbLockOpen,
-  TbTable,
-  TbTablePlus,
-  TbWand,
+  TbOutlineEye,
+  TbOutlineLock,
+  TbOutlineLockOpen,
+  TbOutlineTable,
+  TbOutlineTablePlus,
+  TbOutlineWand,
 } from "solid-icons/tb";
 
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
@@ -117,7 +117,7 @@ function TablePickerSidebar(props: {
                 props.openCreateTableDialog();
               }}
             >
-              <TbTablePlus />
+              <TbOutlineTablePlus />
               Add Table
             </Button>
 
@@ -146,8 +146,8 @@ function TablePickerSidebar(props: {
                     });
                   }}
                 >
-                  <Show when={showHidden()} fallback={<TbLock />}>
-                    <TbLockOpen />
+                  <Show when={showHidden()} fallback={<TbOutlineLock />}>
+                    <TbOutlineLockOpen />
                   </Show>
                 </Button>
               </TooltipTrigger>
@@ -186,20 +186,20 @@ function TablePickerSidebar(props: {
                   >
                     <Switch>
                       <Match when={type === "view"}>
-                        <TbEye />
+                        <TbOutlineEye />
                       </Match>
 
                       <Match when={type === "virtualTable"}>
-                        <TbWand />
+                        <TbOutlineWand />
                       </Match>
 
                       <Match when={type === "table"}>
-                        <TbTable />
+                        <TbOutlineTable />
                       </Match>
                     </Switch>
 
                     <span class="truncate">{name}</span>
-                    {hidden && <TbLock />}
+                    {hidden && <TbOutlineLock />}
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               );

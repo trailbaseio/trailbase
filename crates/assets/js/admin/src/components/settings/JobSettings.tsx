@@ -1,7 +1,7 @@
 import { Switch, Match, Index } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient, useQuery } from "@tanstack/solid-query";
-import { TbPlayerPlay, TbInfoCircle } from "solid-icons/tb";
+import { TbOutlinePlayerPlay, TbOutlineInfoCircle } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -180,7 +180,7 @@ function JobSettingsImpl(props: {
                 <Tooltip>
                   <TooltipTrigger as="div">
                     <div class="flex items-center gap-2">
-                      Schedule <TbInfoCircle />
+                      Schedule <TbOutlineInfoCircle />
                     </div>
                   </TooltipTrigger>
 
@@ -213,7 +213,7 @@ function JobSettingsImpl(props: {
                           <Tooltip>
                             <TooltipTrigger as="div">
                               <div class="flex items-center gap-2">
-                                <TbInfoCircle />
+                                <TbOutlineInfoCircle />
                                 <div class="w-[128px] text-sm">
                                   {t.toUTCString()}
                                 </div>
@@ -243,7 +243,7 @@ function JobSettingsImpl(props: {
                             <Tooltip>
                               <TooltipTrigger as="div">
                                 <div class="flex items-center gap-2">
-                                  <TbInfoCircle />
+                                  <TbOutlineInfoCircle />
                                   <div class="w-[128px] text-sm">
                                     {" "}
                                     {t.toUTCString()}{" "}
@@ -347,7 +347,7 @@ function JobSettingsImpl(props: {
                                   }
                                 }}
                               >
-                                <TbPlayerPlay />
+                                <TbOutlinePlayerPlay />
                               </IconButton>
                             </div>
                           </TableCell>

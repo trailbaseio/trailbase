@@ -2,11 +2,11 @@ import { createEffect, createMemo, For, Show } from "solid-js";
 import type { JSX, Signal } from "solid-js";
 import { Collapsible } from "@kobalte/core/collapsible";
 import {
-  TbChevronDown,
-  TbTrash,
-  TbInfoCircle,
-  TbArrowUp,
-  TbArrowDown,
+  TbOutlineChevronDown,
+  TbOutlineTrash,
+  TbOutlineInfoCircle,
+  TbOutlineArrowUp,
+  TbOutlineArrowDown,
 } from "solid-icons/tb";
 import { createWritableMemo } from "@solid-primitives/memo";
 
@@ -157,7 +157,7 @@ function ColumnOptionCheckField(props: {
         as={Button<"button">}
         variant="link"
       >
-        <TbInfoCircle />
+        <TbOutlineInfoCircle />
       </HoverCardTrigger>
 
       <HoverCardContent class="w-80">
@@ -230,7 +230,7 @@ function ColumnOptionDefaultField(props: {
         as={Button<"button">}
         variant="link"
       >
-        <TbInfoCircle />
+        <TbOutlineInfoCircle />
       </HoverCardTrigger>
 
       <HoverCardContent class="w-80">
@@ -560,7 +560,7 @@ export function ColumnSubForm(props: {
             onClick={stopPropagation(props.onMoveUp)}
             tooltip="Re-order column up"
           >
-            <TbArrowUp />
+            <TbOutlineArrowUp />
           </IconButton>
         </Show>
 
@@ -569,7 +569,7 @@ export function ColumnSubForm(props: {
             onClick={stopPropagation(props.onMoveDown)}
             tooltip="Re-order column down"
           >
-            <TbArrowDown />
+            <TbOutlineArrowDown />
           </IconButton>
         </Show>
 
@@ -579,11 +579,11 @@ export function ColumnSubForm(props: {
             onClick={stopPropagation(props.onDelete)}
             tooltip="Delete column"
           >
-            <TbTrash />
+            <TbOutlineTrash />
           </IconButton>
         </Show>
 
-        <TbChevronDown
+        <TbOutlineChevronDown
           size={20}
           class="ml-2"
           style={{
@@ -724,7 +724,7 @@ export function PrimaryKeyColumnSubForm(props: {
       <div class="flex items-center">
         <Badge class="p-1">Primary Key</Badge>
 
-        <TbChevronDown
+        <TbOutlineChevronDown
           size={20}
           class="ml-2"
           style={{

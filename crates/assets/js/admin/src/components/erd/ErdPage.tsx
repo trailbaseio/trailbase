@@ -3,7 +3,7 @@ import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { Graph, NodeMetadata, EdgeMetadata } from "@antv/x6";
 import { PortMetadata } from "@antv/x6/lib/model/port";
-import { TbPlus, TbMinus } from "solid-icons/tb";
+import { TbOutlinePlus, TbOutlineMinus } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
@@ -204,7 +204,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
               }
             }}
           >
-            <TbPlus />
+            <TbOutlinePlus />
           </Button>
 
           <Button
@@ -217,7 +217,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
               }
             }}
           >
-            <TbMinus />
+            <TbOutlineMinus />
           </Button>
         </div>
       </div>

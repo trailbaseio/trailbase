@@ -1,5 +1,5 @@
 import { JSX } from "solid-js";
-import { TbSearch } from "solid-icons/tb";
+import { TbOutlineSearch } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
@@ -38,7 +38,7 @@ export function FilterBar(props: {
         </TextField>
 
         <Button size="icon" variant="outline" type="submit">
-          <TbSearch />
+          <TbOutlineSearch />
         </Button>
       </form>
 

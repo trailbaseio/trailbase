@@ -3,7 +3,7 @@ import { createSignal, Match, Switch, Show } from "solid-js";
 import type { JSX } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import type { FieldApi } from "@tanstack/solid-form";
-import { TbEye } from "solid-icons/tb";
+import { TbOutlineEye } from "solid-icons/tb";
 
 import { cn, tryParseInt, tryParseFloat, tryParseBigInt } from "@/lib/utils";
 
@@ -157,7 +157,7 @@ export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
                 setType(type() === "password" ? "text" : "password");
               }}
             >
-              <TbEye />
+              <TbOutlineEye />
             </IconButton>
           </div>
 
@@ -207,7 +207,7 @@ export function buildOptionalSecretFormField(
                 setType(type() === "password" ? "text" : "password");
               }}
             >
-              <TbEye />
+              <TbOutlineEye />
             </IconButton>
           </div>
 
