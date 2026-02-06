@@ -472,10 +472,11 @@ function buildColumnDefs(
       }));
     }
 
-    // We don't have any schema column defs. Fallback to single col.
+    // We don't have any schema column defs. Fallback to single col. Avoid cell access.
     return [
       {
-        header: "",
+        id: "__missing__",
+        cell: () => "missing",
       },
     ];
   }
@@ -549,7 +550,7 @@ function RecordTable(props: {
 
     return buildTable(
       {
-        // NOTE: The cell rendering is constrolled via the columnsDefs.
+        // NOTE: The cell rendering is controlled via the columnsDefs.
         columns: columnDefs,
         data: data(),
         columnPinning: props.columnPinningState[0],

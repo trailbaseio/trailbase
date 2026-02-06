@@ -183,6 +183,7 @@ export function buildTable<TData, TValue>(
 
     // Just means, the input data is already filtered.
     manualFiltering: true,
+    enableColumnFilters: false,
 
     enableRowSelection: true,
     enableMultiRowSelection: opts.onRowSelection ? true : false,
