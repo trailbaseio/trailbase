@@ -1003,7 +1003,7 @@ export function TablePane(props: {
       sorting(),
     ] as ReadonlyArray<unknown>,
     queryFn: async ({ queryKey }) => {
-      console.debug(`Fetching data with key: ${queryKey}`);
+      console.debug("Fetching data with key:", queryKey);
 
       try {
         const { pageSize, pageIndex } = pagination();

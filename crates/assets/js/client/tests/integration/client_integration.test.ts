@@ -2,6 +2,7 @@
 import { expect, test } from "vitest";
 import {
   exportedForTesting,
+  FetchError,
   filePath,
   filesPath,
   initClient,
@@ -356,26 +357,48 @@ test("Expand foreign records", async () => {
 test("API Errors", async () => {
   const client = await connect();
 
-  const nonExistantId = urlSafeBase64Encode(uuidParse(uuidv7()));
-  const nonExistantApi = client.records("non-existant");
   await expect(
-    async () => await nonExistantApi.read(nonExistantId),
+    async () => await client.fetch("/nonexistent/api/path"),
   ).rejects.toThrowError(
-    expect.objectContaining({
-      status: status.METHOD_NOT_ALLOWED,
-    }),
+    new FetchError(
+      status.NOT_FOUND,
+      "Not Found",
+      new URL(`http://${ADDRESS}/nonexistent/api/path`),
+    ),
+  );
+
+  const nonExistentId = urlSafeBase64Encode(uuidParse(uuidv7()));
+  const nonExistentApi = client.records("non-existent");
+  await expect(
+    async () => await nonExistentApi.read(nonExistentId),
+  ).rejects.toThrowError(
+    new FetchError(
+      status.METHOD_NOT_ALLOWED,
+      "Method Not Allowed",
+      new URL(`http://${ADDRESS}/api/records/v1/non-existent/${nonExistentId}`),
+    ),
   );
 
   const api = client.records("simple_strict_table");
-  await expect(async () => await api.read("invalid id")).rejects.toThrowError(
-    expect.objectContaining({
-      status: status.BAD_REQUEST,
-    }),
+  const invalidId = "InvalidId0123";
+  await expect(async () => await api.read(invalidId)).rejects.toThrowError(
+    new FetchError(
+      status.BAD_REQUEST,
+      "Bad Request",
+      new URL(
+        `http://${ADDRESS}/api/records/v1/simple_strict_table/${invalidId}`,
+      ),
+    ),
   );
-  await expect(async () => await api.read(nonExistantId)).rejects.toThrowError(
-    expect.objectContaining({
-      status: status.NOT_FOUND,
-    }),
+
+  await expect(async () => await api.read(nonExistentId)).rejects.toThrowError(
+    new FetchError(
+      status.NOT_FOUND,
+      "Not Found",
+      new URL(
+        `http://${ADDRESS}/api/records/v1/simple_strict_table/${nonExistentId}`,
+      ),
+    ),
   );
 });
 

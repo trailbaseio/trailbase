@@ -110,8 +110,9 @@ export async function fetchRows(
     order,
   });
 
-  const path = `/table/${prettyFormatQualifiedName(tableName)}/rows?${params}`;
-
-  const response = await adminFetch(path);
+  const response = await adminFetch(
+    `/table/${prettyFormatQualifiedName(tableName)}/rows?${params}`,
+  );
+  // IMPORTANT: Use JSON parser that handles i64 correctly.
   return parseJSON(await response.text()) as ListRowsResponse;
 }

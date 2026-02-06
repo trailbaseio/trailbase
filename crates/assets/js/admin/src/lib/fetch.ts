@@ -26,10 +26,14 @@ export async function adminFetch(
       err instanceof FetchError &&
       (err.status === 401 || err.status === 403)
     ) {
-      console.info(
-        `Fetch failed (${err.status}), user is being logged out and should be redirected to login.`,
+      console.debug(
+        `Permission denied. Log user out to redirected to login: ${err}`,
       );
       client.logout();
+
+      // NOTE: Not very useful other than push the exception upstream when JSON deserialization fails.
+      // Return error response as opposed to uncaught err.
+      // return Response.error();
     }
     throw err;
   }

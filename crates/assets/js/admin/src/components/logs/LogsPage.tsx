@@ -237,7 +237,7 @@ function LogsPage() {
   const logsFetch = useQuery(() => ({
     queryKey: [pagination(), filter(), sorting()],
     queryFn: async ({ queryKey }) => {
-      console.debug(`Fetching logs with key: ${queryKey}`);
+      console.debug("Fetching logs with key:", queryKey);
 
       try {
         const { pageSize, pageIndex } = pagination();
@@ -268,7 +268,7 @@ function LogsPage() {
     queryKey: [filter()],
     queryFn: async ({ queryKey }) => {
       try {
-        console.debug(`Fetching stats with key: ${queryKey}`);
+        console.debug("Fetching stats with key:", queryKey);
         return await fetchStats(filter());
       } catch (err) {
         reset();

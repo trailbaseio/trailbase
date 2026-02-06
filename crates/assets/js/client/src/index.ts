@@ -104,24 +104,21 @@ export type FetchOptions = RequestInit & {
 
 export class FetchError extends Error {
   public status: number;
+  public url: string | URL | undefined;
 
-  constructor(status: number, msg: string) {
+  constructor(status: number, msg: string, url?: string | URL) {
     super(msg);
     this.status = status;
+    this.url = url;
   }
 
-  static async from(response: Response): Promise<FetchError> {
-    let body: string | undefined;
-    try {
-      body = await response.text();
-    } catch {}
-
-    return new FetchError(
-      response.status,
-      body
-        ? `FetchError(${response.status}, ${response.statusText},  ${body})`
-        : `FetchError(${response.status}, ${response.statusText})`,
-    );
+  static async from(
+    response: Response,
+    url?: string | URL,
+  ): Promise<FetchError> {
+    // NOTE: we could read the body but TB doesn't reply with meaningful messages there.
+    // const body = await response.text().then(null, (_err) => undefined);
+    return new FetchError(response.status, response.statusText, url);
   }
 
   public isClient(): boolean {
@@ -130,6 +127,10 @@ export class FetchError extends Error {
 
   public isServer(): boolean {
     return this.status >= 500;
+  }
+
+  public toString(): string {
+    return `FetchError(${[this.status, this.message, this.url].filter((e) => e !== undefined).join(", ")})`;
   }
 }
 
@@ -823,23 +824,23 @@ class ClientImpl implements Client {
   }
 
   private async refreshTokensImpl(refreshToken: string): Promise<TokenState> {
-    const response = await this._client.fetch(
-      `${authApiBasePath}/refresh`,
-      this._tokenState.headers,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          refresh_token: refreshToken,
-        } as RefreshRequest),
-        headers: jsonContentTypeHeader,
-      },
-    );
+    const path = `${authApiBasePath}/refresh`;
+    const response = await this._client.fetch(path, this._tokenState.headers, {
+      method: "POST",
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      } as RefreshRequest),
+      headers: jsonContentTypeHeader,
+    });
 
     if (!response.ok) {
       if (response.status === 401) {
         this.logout();
       }
-      throw await FetchError.from(response);
+      throw await FetchError.from(
+        response,
+        _isDev() ? new URL(path, this.base) : undefined,
+      );
     }
 
     return buildTokenState({
@@ -882,7 +883,10 @@ class ClientImpl implements Client {
     try {
       const response = await this._client.fetch(path, tokenState.headers, init);
       if (!response.ok && (init?.throwOnError ?? true)) {
-        throw await FetchError.from(response);
+        throw await FetchError.from(
+          response,
+          _isDev() ? new URL(path, this.base) : undefined,
+        );
       }
       return response;
     } catch (err) {
