@@ -1,4 +1,4 @@
-import { Suspense, Show, Switch, Match, Index } from "solid-js";
+import { Suspense, Show, Switch, Match, For } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery } from "@tanstack/solid-query";
 import {
@@ -22,6 +22,11 @@ async function listSchemas(): Promise<ListJsonSchemasResponse> {
   return await response.json();
 }
 
+function toSorted(schemas: JsonSchema[]): JsonSchema[] {
+  return schemas.toSorted((a, b) => a.name.localeCompare(b.name));
+}
+
+// TODO: Make this editable. Right now this doesn't even need to be a form.
 function SchemaSettingsForm(props: {
   markDirty: () => void;
   postSubmit: () => void;
@@ -33,8 +38,7 @@ function SchemaSettingsForm(props: {
     },
     onSubmit: async ({ value }) => {
       throw new Error(`NOT IMPLEMENTED: ${value}`);
-
-      props.postSubmit();
+      // props.postSubmit();
     },
   }));
 
@@ -56,11 +60,10 @@ function SchemaSettingsForm(props: {
         {(field) => {
           return (
             <Accordion multiple={false} collapsible class="w-full">
-              <Index each={field().state.value}>
-                {(_, i) => {
-                  const schema = field().state.value[i];
+              <For each={toSorted(field().state.value)}>
+                {(schema, i) => {
                   return (
-                    <AccordionItem value={`item-${i}`}>
+                    <AccordionItem value={`item-${i()}`}>
                       <AccordionTrigger>
                         <span class="flex gap-2">
                           {schema.name}
@@ -72,7 +75,7 @@ function SchemaSettingsForm(props: {
                       </AccordionTrigger>
 
                       <AccordionContent>
-                        <form.Field name={`entries[${i}].schema`}>
+                        <form.Field name={`entries[${i()}].schema`}>
                           {(subField) => (
                             <pre>
                               {JSON.stringify(
@@ -87,7 +90,7 @@ function SchemaSettingsForm(props: {
                     </AccordionItem>
                   );
                 }}
-              </Index>
+              </For>
             </Accordion>
           );
         }}
@@ -104,6 +107,7 @@ export function SchemaSettings(props: {
     queryKey: ["admin", "jsonSchemas"],
     queryFn: listSchemas,
   }));
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <Switch>
@@ -118,21 +122,24 @@ export function SchemaSettings(props: {
             </CardHeader>
 
             <CardContent>
-              <p class="text-sm">
-                Custom JSON schemas can be registered to enforce constraints on
-                columns of your database tables, e.g.:
-              </p>
+              <div class="pb-8">
+                <p class="text-sm">
+                  Custom JSON schemas can be registered to enforce constraints
+                  on columns of your database tables, e.g.:
+                </p>
 
-              <pre class="my-4 overflow-x-auto text-sm">{exampleTable}</pre>
+                <pre class="my-4 overflow-x-auto text-sm">{exampleTable}</pre>
 
-              <p class="text-sm">
-                Note, registration via the admin UI is not yet available. You
-                can register custom schemas in your instance's{" "}
-                <span class="font-mono text-nowrap">
-                  `{"<"}traildepot{">"}/config.textproto`
-                </span>{" "}
-                and they will show up here.
-              </p>
+                <p class="text-sm">
+                  Note, registration via the admin UI is not yet available. You
+                  can register custom schemas in your instance's{" "}
+                  <span class="font-mono text-nowrap">
+                    `{"<"}traildepot{">"}/config.textproto`
+                  </span>{" "}
+                  and they will show up here.
+                </p>
+              </div>
+
               <SchemaSettingsForm
                 markDirty={props.markDirty}
                 postSubmit={props.postSubmit}

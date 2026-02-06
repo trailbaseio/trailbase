@@ -47,13 +47,13 @@ type NavbarContextT = {
 
 export const NavbarContext = createContext<NavbarContextT | null>(null);
 
-export function useNavbar() {
+export function useNavbar(): NavbarContextT | undefined {
   const context = useContext(NavbarContext);
-  if (!context) {
-    throw new Error("useNavbar() must be called within a NavbarContext.");
+  if (context) {
+    return context;
   }
 
-  return context;
+  console.warn("useNavbar() called outside a NavbarContext");
 }
 
 type DirtyDialogState = {
@@ -68,7 +68,7 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
   const navigate = useNavigate();
 
   const onClick = (e: Event, next: string) => {
-    if (navbar.dirty()) {
+    if (navbar?.dirty() && true) {
       e.preventDefault();
       setDirtyDialog({ next });
     }
@@ -88,7 +88,7 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
         proceed={() => {
           const target = dirtyDialog()?.next ?? "";
           navigate(target, { resolve: false });
-          navbar.setDirty(false);
+          navbar?.setDirty(false);
           setDirtyDialog(null);
         }}
         back={() => setDirtyDialog(null)}
@@ -178,7 +178,12 @@ export function DirtyDialog(props: {
   message?: string;
 }) {
   return (
-    <DialogContent>
+    <DialogContent
+      onEscapeKeyDown={() => {
+        // FIXME: escape button handler doesn't seem to work in Firefox.
+        props.back();
+      }}
+    >
       <DialogHeader>
         <DialogTitle>Discard Changes</DialogTitle>
       </DialogHeader>

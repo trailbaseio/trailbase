@@ -36,19 +36,23 @@ export function Avatar(props: { user: User | undefined; size: number }) {
 
 export function Profile(props: { user: User; showId?: boolean }) {
   return (
-    <div class="flex items-center gap-4">
-      <div class="flex items-center">
-        <Avatar user={props.user} size={60} />
-      </div>
+    <div class="flex w-full shrink flex-col">
+      <div class="flex shrink items-center gap-4">
+        <div class="flex items-center">
+          <Avatar user={props.user} size={60} />
+        </div>
 
-      <div class="flex flex-col gap-2">
-        <div>Email: {props.user.email}</div>
+        <div class="flex w-full flex-col gap-2 break-all">
+          <div>Email: {props.user.email}</div>
 
-        <Show when={props.showId ?? true}>
-          <div>id: {urlSafeBase64ToUuid(props.user.id)}</div>
+          <Show when={props.showId ?? true}>
+            <div>id: {urlSafeBase64ToUuid(props.user.id)}</div>
+          </Show>
 
-          {import.meta.env.DEV && <div>id b64: {props.user.id}</div>}
-        </Show>
+          <Show when={import.meta.env.DEV}>
+            <span class="bg-red-200">{JSON.stringify(props.user)}</span>
+          </Show>
+        </div>
       </div>
     </div>
   );

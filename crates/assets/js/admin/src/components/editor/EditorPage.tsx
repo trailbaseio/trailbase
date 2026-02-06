@@ -675,7 +675,7 @@ export function EditorPage() {
 
   const navbar = useNavbar();
   createEffect(() => {
-    navbar.setDirty(dirty());
+    navbar?.setDirty(dirty());
   });
 
   const [dirtyDialog, setDirtyDialog] = createSignal<

@@ -23,9 +23,9 @@ export function AuthButton(props: { iconSize: number }) {
         <Avatar user={user()} size={props.iconSize} />
       </button>
 
-      <DialogContent class="sm:max-w-[425px]">
+      <DialogContent class="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Current User</DialogTitle>
+          <DialogTitle>Logged in</DialogTitle>
         </DialogHeader>
 
         <Show when={user()}>

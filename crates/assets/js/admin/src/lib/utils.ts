@@ -16,10 +16,11 @@ export function pathJoin(parts: string[], sep?: string): string {
   return parts.join(separator).replace(replace, separator);
 }
 
-export function copyToClipboard(contents: string) {
+export function copyToClipboard(contents: string, showContents?: boolean) {
   navigator.clipboard.writeText(contents);
+  const msg = "Copied to clipboard";
   showToast({
-    title: "Copied to clipboard",
+    title: (showContents ?? false) ? `${msg}: ${contents}` : msg,
   });
 }
 

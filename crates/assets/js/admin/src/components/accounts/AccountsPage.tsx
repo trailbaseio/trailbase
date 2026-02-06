@@ -1,18 +1,17 @@
 import {
   createMemo,
   createSignal,
+  JSX,
   Match,
   Show,
   Switch,
   Suspense,
 } from "solid-js";
-import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import { TbRefresh, TbCrown, TbEdit, TbTrash } from "solid-icons/tb";
+import { TbRefresh, TbCrown, TbCheck, TbClipboardCopy } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
-import { createColumnHelper } from "@tanstack/solid-table";
 import type {
   ColumnDef,
   PaginationState,
@@ -56,24 +55,27 @@ import { formatSortingAsOrder } from "@/lib/list";
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 
-const columnHelper = createColumnHelper<UserJson>();
-
-function buildColumns(
-  setEditUser: Setter<UserJson | undefined>,
-  userRefetch: () => void,
-): ColumnDef<UserJson>[] {
+function buildColumns(): ColumnDef<UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
       accessorKey: "id",
-      size: 300,
+      size: 340,
       cell: (ctx) => {
         const userId = ctx.row.original.id;
         return (
-          <div
-            class="hover:text-gray-600"
-            onClick={() => copyToClipboard(userId)}
-          >
+          <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                copyToClipboard(userId, true);
+              }}
+            >
+              <TbClipboardCopy />
+            </Button>
+
             {userId}
           </div>
         );
@@ -81,10 +83,27 @@ function buildColumns(
     },
     {
       accessorKey: "email",
-      size: 240,
+      size: 220,
     },
     {
       accessorKey: "verified",
+      cell: (ctx) => {
+        return (
+          <Show when={ctx.row.original.verified}>
+            <div class="flex justify-center pr-6">
+              <TbCheck />
+            </div>
+          </Show>
+        );
+      },
+    },
+    {
+      accessorKey: "admin",
+      cell: (ctx) => (
+        <div class="flex justify-center">
+          {ctx.row.original.admin ? <TbCrown size={18} /> : null}
+        </div>
+      ),
     },
     {
       header: "OAuth",
@@ -97,7 +116,7 @@ function buildColumns(
         return (
           <Switch>
             <Match when={oauthAsset !== undefined}>
-              <div class="flex justify-center">
+              <div class="flex justify-center pr-4">
                 <img class="size-[20px]" src={oauthAsset!} />
               </div>
             </Match>
@@ -107,45 +126,13 @@ function buildColumns(
         );
       },
     },
-    {
-      accessorKey: "admin",
-      cell: (ctx) => (
-        <div class="flex justify-center">
-          {ctx.row.original.admin ? <TbCrown size={18} /> : null}
-        </div>
-      ),
-    },
-    columnHelper.display({
-      header: "actions",
-      enableSorting: false,
-      cell: (ctx) => {
-        return (
-          <Show when={!ctx.row.original.admin}>
-            <div class="flex gap-2">
-              <IconButton
-                tooltip="Edit user"
-                onClick={() => setEditUser(ctx.row.original)}
-              >
-                <TbEdit />
-              </IconButton>
-
-              <DeleteUserButton
-                userId={ctx.row.original.id}
-                email={ctx.row.original.email}
-                userRefetch={userRefetch}
-              />
-            </div>
-          </Show>
-        );
-      },
-    }),
   ];
 }
 
 function DeleteUserButton(props: {
   userId: string;
   email: string;
-  userRefetch: () => void;
+  onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
 
@@ -177,7 +164,7 @@ function DeleteUserButton(props: {
                   try {
                     await deleteUser({ id: props.userId });
                   } finally {
-                    props.userRefetch();
+                    props.onDelete();
                   }
                 })();
 
@@ -190,13 +177,12 @@ function DeleteUserButton(props: {
         </DialogFooter>
       </DialogContent>
 
-      <IconButton
+      <Button
         class="bg-destructive text-white"
-        tooltip="Delete user"
         onClick={() => setDialogOpen(true)}
       >
-        <TbTrash />
-      </IconButton>
+        Delete
+      </Button>
     </Dialog>
   );
 }
@@ -228,10 +214,12 @@ function EditSheetContent(props: {
     <SheetContainer>
       <SheetHeader>
         <SheetTitle>Edit User</SheetTitle>
+
         <SheetDescription>
           Change a user's properties. Be careful
         </SheetDescription>
       </SheetHeader>
+
       <form
         method="dialog"
         onSubmit={(e: SubmitEvent) => {
@@ -241,23 +229,28 @@ function EditSheetContent(props: {
         }}
       >
         <div class="flex flex-col items-center gap-4 py-4">
+          <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>id</FixedWidthLabel>
+            <span class="text-sm text-gray-600">{props.user.id}</span>
+          </div>
+
           <form.Field name={"email"}>
             {buildTextFormField({
-              label: textLabel("Email"),
+              label: () => <FixedWidthLabel children="Email" />,
               type: "email",
             })}
           </form.Field>
 
           <form.Field name="password">
             {buildSecretFormField({
-              label: textLabel("Password"),
+              label: () => <FixedWidthLabel children="Password" />,
             })}
           </form.Field>
 
           <form.Field name="verified">
             {(field) => (
-              <div class="flex w-full items-center justify-end gap-2">
-                <Label>Verified</Label>
+              <div class="flex w-full items-center justify-start gap-2">
+                <FixedWidthLabel>Verified</FixedWidthLabel>
                 <Checkbox
                   checked={field().state.value ?? false}
                   onChange={field().handleChange}
@@ -275,13 +268,24 @@ function EditSheetContent(props: {
             })}
             children={(state) => {
               return (
-                <Button
-                  type="submit"
-                  disabled={!state().canSubmit}
-                  variant="default"
-                >
-                  {state().isSubmitting ? "..." : "Submit"}
-                </Button>
+                <div class="flex w-full justify-between gap-2 py-4">
+                  <DeleteUserButton
+                    userId={props.user.id}
+                    email={props.user.email}
+                    onDelete={() => {
+                      props.close();
+                      props.refetch();
+                    }}
+                  />
+
+                  <Button
+                    type="submit"
+                    disabled={!state().canSubmit}
+                    variant="default"
+                  >
+                    {state().isSubmitting ? "..." : "Submit"}
+                  </Button>
+                </div>
               );
             }}
           />
@@ -351,7 +355,7 @@ export function AccountsPage() {
   const accountsTable = createMemo(() => {
     return buildTable(
       {
-        columns: buildColumns(setEditUser, refetch),
+        columns: buildColumns(),
         data: users.data?.users ?? [],
         rowCount: Number(users.data?.total_row_count ?? -1),
         pagination: pagination(),
@@ -403,22 +407,14 @@ export function AccountsPage() {
               <span>Error: {users.error?.toString()}</span>
             </Match>
 
-            <Match when={users.isLoading}>
+            <Match when={true}>
               <div class="w-full space-y-2.5">
                 <Table
                   table={accountsTable()}
-                  loading={true}
-                  onRowClick={undefined}
-                />
-              </div>
-            </Match>
-
-            <Match when={users.isSuccess}>
-              <div class="w-full space-y-2.5">
-                <Table
-                  table={accountsTable()}
-                  loading={false}
-                  onRowClick={undefined}
+                  loading={users.isLoading}
+                  onRowClick={(_idx: number, row: UserJson) => {
+                    setEditUser(row);
+                  }}
                 />
               </div>
             </Match>
@@ -479,10 +475,10 @@ export function AccountsPage() {
   );
 }
 
-function textLabel(label: string) {
-  return () => (
+function FixedWidthLabel(props: { children: JSX.Element }) {
+  return (
     <div class="w-32">
-      <Label>{label}</Label>
+      <Label class="w-32">{props.children}</Label>
     </div>
   );
 }
