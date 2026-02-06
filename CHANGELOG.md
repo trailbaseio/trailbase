@@ -1,3 +1,10 @@
+## v0.23.7
+
+- Clean up the accounts UI.
+- Fix ephemeral invalid cell access in admin UI on `VIEW`s for first access due to column schema fallback.
+- Further improve error handling in TS client and admin UI.
+- Update JavaScript and Rust dependencies.
+
 ## v0.23.6
 
 - Handle permission errors (401 & 403) and 429 more gracefully in admin UI.
