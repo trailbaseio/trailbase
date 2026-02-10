@@ -1,3 +1,11 @@
+## v0.23.8
+
+- Show validation errors for `TABLE`/`VIEW`s that do not qualify for Record APIs.
+- Improve config validation errors.
+- Allow `GROUP BY` expressions on `VIEW`'s non-PK column for `MIN`/`MAX` PK aggregations.
+- Add body extraction back to `FetchError`.
+- Update dependencies.
+
 ## v0.23.7
 
 - Clean up the accounts UI.
