@@ -3,7 +3,7 @@ import type { ViewColumn } from "./ViewColumn";
 
 export type ColumnMapping = { columns: Array<ViewColumn>, 
 /**
- * Group by that can be used as a key for record APIs.
+ * Group-by column index, e.g. `1` for `CREATE VIEW v AS SELECT y, x FROM t GROUP BY x`.
  */
 group_by: number | null, 
 /**

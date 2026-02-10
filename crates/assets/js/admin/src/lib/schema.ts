@@ -311,8 +311,12 @@ export function validateViewRecordApiRequirements(
   }
 
   const groupBy = mapping.group_by;
-  if (groupBy != null) {
-    if (isSuitableRecordPkColumn(mapping.columns[groupBy].column, all)) {
+  const groupedByColumn =
+    groupBy !== null ? mapping.columns[groupBy] : undefined;
+  if (groupedByColumn !== undefined) {
+    // Grouping on a unique PK is basically a no-op, i.e. you get groups of
+    // size 1. At least it's not a problem.
+    if (isSuitableRecordPkColumn(groupedByColumn.column, all)) {
       return [];
     }
   }
@@ -329,7 +333,14 @@ export function validateViewRecordApiRequirements(
 
   for (const viewColumn of mapping.columns) {
     if (isSuitableRecordPkColumn(viewColumn.column, all)) {
-      return [];
+      if (groupedByColumn === undefined) {
+        return [];
+      }
+
+      const aggregation = viewColumn.aggregation?.toUpperCase();
+      if (aggregation === "MAX" || aggregation === "MIN") {
+        return [];
+      }
     }
   }
 

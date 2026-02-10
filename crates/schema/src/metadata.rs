@@ -177,7 +177,7 @@ pub struct ViewMetadata {
 impl ViewMetadata {
   /// Build a new ViewMetadata instance containing TrailBase/RecordApi specific information.
   ///
-  /// NOTE: The list of all tables is needed only to extract interger/UUIDv7 pk columns for foreign
+  /// NOTE: The list of all tables is needed only to extract integer/UUID pk columns for foreign
   /// key relationships.
   pub fn new(
     registry: &JsonSchemaRegistry,
@@ -570,17 +570,28 @@ fn find_record_pk_column_index_for_table<T: Borrow<Table>>(
   return None;
 }
 
-fn find_record_pk_column_index_for_view<T: Borrow<Table>>(
+pub(crate) fn find_record_pk_column_index_for_view<T: Borrow<Table>>(
   column_mapping: &ColumnMapping,
   tables: &[T],
 ) -> Option<usize> {
-  if let Some(group_by_index) = column_mapping.group_by {
+  let grouped_on_non_pk = if let Some(group_by_index) = column_mapping.group_by {
+    // If we're grouping on a PK things are trivial, this will yield groups of size one :).
     let column = &column_mapping.columns[group_by_index];
     if is_suitable_record_pk_column(&column.column, tables) {
+      info!(
+        "Using GROUP BY on the unique column '{}' is a no-op.",
+        column.column.name
+      );
       return Some(group_by_index);
+    } else {
+      // Now things are difficult. Because PK may be aggregated, e.g.:
+      //   `SELECT AVG(a.pk) FOR a GROUP BY a.other`
+      // destroys PK properties.
+      true
     }
-    return None;
-  }
+  } else {
+    false
+  };
 
   // NOTE: We could be smarter here. It's quite tricky to say with a set of arbitrary joins, which
   // (integer, UUID) columns end up being unique afterwards. Rely on explicit GROUP BY instead.
@@ -594,10 +605,38 @@ fn find_record_pk_column_index_for_view<T: Borrow<Table>>(
 
   for (index, mapped_column) in column_mapping.columns.iter().enumerate() {
     if is_suitable_record_pk_column(&mapped_column.column, tables) {
-      return Some(index);
+      // No grouping. Just return the suitable PK.
+      if !grouped_on_non_pk {
+        return Some(index);
+      }
+
+      // Otherwise we have to make sure that the candidate is aggregated in a way that
+      // preserves its uniqueness.
+      // To be clear, using aggregated PKs is a BAD idea. For example,
+      //   SELECT MAX(a.pk) AS id, COUNT(*) AS size FROM a GROUP BY a.other
+      // yields a unique but unstable `id`. Adding a new record to `a` may invalidate
+      // externally kept `id`s.
+      //
+      // QUESTION: Should we even support this? Folks wanted this in the context of
+      // `listing` VIEWs, i.e. you don't want to access individual records but merely
+      // get a list of counts.
+      if let Some(agg) = &mapped_column.aggregation
+        && builtin_pk_preserving_type(agg)
+      {
+        warn!(
+          "Found aggregate PK '{agg}({}). Support is experimental. This yields unstable record IDs unsuitable for individual record access.",
+          mapped_column.column.name
+        );
+        return Some(index);
+      }
     }
   }
   return None;
+}
+
+fn builtin_pk_preserving_type(name: &str) -> bool {
+  let name = name.to_uppercase();
+  return matches!(name.as_str(), "MAX" | "MIN");
 }
 
 #[cfg(test)]

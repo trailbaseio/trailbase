@@ -953,7 +953,7 @@ impl View {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
-pub(crate) struct ViewColumn {
+pub struct ViewColumn {
   // e.g. "foo" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
   // #[allow(unused)]
   // pub(crate) qualifier: Option<String>,
@@ -965,21 +965,24 @@ pub(crate) struct ViewColumn {
   // column if inferable.
   // NOTE: It would be cleaner to separate (Table)`Column` from `ViewColumn`, just pulling the in
   // the contents here. However, the UI currently depends on `Column`.
-  pub(crate) column: Column,
+  pub column: Column,
 
-  // Would be "foo" for CREATE VIEW v AS SELECT foo.bar FROM foo;
-  pub(crate) parent_name: Option<String>,
+  // Would be "foo" for `CREATE VIEW v AS SELECT foo.bar FROM foo`.
+  pub parent_name: Option<String>,
+
+  // Would be "MIN" for `CREATE VIEW v AS SELECT MIN(foo.bar) FROM foo GROUB BY foo.baz`.
+  pub aggregation: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, TS)]
-pub(crate) struct ColumnMapping {
-  pub(crate) columns: Vec<ViewColumn>,
+pub struct ColumnMapping {
+  pub columns: Vec<ViewColumn>,
 
-  /// Group by that can be used as a key for record APIs.
-  pub(crate) group_by: Option<usize>,
+  /// Group-by column index, e.g. `1` for `CREATE VIEW v AS SELECT y, x FROM t GROUP BY x`.
+  pub group_by: Option<usize>,
 
   /// A list of joins.
-  pub(crate) joins: Vec<u8>,
+  pub joins: Vec<u8>,
 }
 
 fn extract_column_mapping(
@@ -1023,6 +1026,7 @@ fn extract_column_mapping(
             mapping.push(ViewColumn {
               column: c.clone(),
               parent_name: get_parent_name(referred_table),
+              aggregation: None,
             });
           }
         }
@@ -1035,6 +1039,7 @@ fn extract_column_mapping(
           mapping.push(ViewColumn {
             column: c.clone(),
             parent_name: get_parent_name(referred_table),
+            aggregation: None,
           });
         }
       }
@@ -1048,6 +1053,7 @@ fn extract_column_mapping(
               to_alias(alias).unwrap_or_else(|| column.name.clone()),
             ),
             parent_name: get_parent_name(referred_table),
+            aggregation: None,
           });
         }
         Expr::Qualified(qualifier, name) => {
@@ -1068,6 +1074,7 @@ fn extract_column_mapping(
               to_alias(alias).unwrap_or_else(|| column.name.clone()),
             ),
             parent_name: get_parent_name(referred_table),
+            aggregation: None,
           });
         }
         Expr::Cast { expr, type_name } => {
@@ -1092,98 +1099,102 @@ fn extract_column_mapping(
               options: vec![],
             },
             parent_name: None,
+            aggregation: None,
           });
         }
         Expr::Literal(literal) => {
           mapping.push(ViewColumn {
             column: literal_to_column(literal, to_alias(alias)),
             parent_name: None,
+            aggregation: None,
           });
         }
-        expr => {
+        Expr::FunctionCall {
+          name: fname, args, ..
+        } if builtin_function_preserving_type(&fname) => {
           // Handle type-inference of some built-in functions for convenience to reduce the need
           // for explicit CAST(expr AS type), e.g. `MAX(column)`.
           //
           // TODO: We could add support for `COALESCE(CAST(5 AS INT), 0)` because CAST always
           // infers to a nullable T?, we could parse our coalesce with a terminal non-null literal
           // to infer to non-nullable T :shrug:.
-          if let Expr::FunctionCall { name, args, .. } = expr
-            && builtin_function_preserving_type(name)
-          {
-            match extract_single_arg(args) {
-              Some((Some(qualifier), name)) => {
-                let referred_table = find_table_by_alias(&qualifier)?;
-                let column = referred_table
-                  .table
-                  .columns
-                  .iter()
-                  .find(|c| c.name == name)
-                  .ok_or_else(|| precondition(&format!("Column '{name}' not found")))?;
+          match extract_single_arg(args) {
+            Some((Some(qualifier), name)) => {
+              let referred_table = find_table_by_alias(&qualifier)?;
+              let column = referred_table
+                .table
+                .columns
+                .iter()
+                .find(|c| c.name == name)
+                .ok_or_else(|| precondition(&format!("Column '{name}' not found")))?;
 
-                mapping.push(ViewColumn {
-                  column: column_with_alias(
-                    column,
-                    to_alias(alias).unwrap_or_else(|| column.name.to_string()),
-                  ),
-                  parent_name: get_parent_name(referred_table),
-                });
+              mapping.push(ViewColumn {
+                column: column_with_alias(
+                  column,
+                  to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                ),
+                parent_name: get_parent_name(referred_table),
+                aggregation: Some(unquote_id(fname)),
+              });
 
-                continue;
-              }
-              Some((None, name)) => {
-                let (referred_table, column) = find_column_by_unqualified_name(&name)?;
-
-                mapping.push(ViewColumn {
-                  column: column_with_alias(
-                    column,
-                    to_alias(alias).unwrap_or_else(|| column.name.to_string()),
-                  ),
-                  parent_name: get_parent_name(referred_table),
-                });
-
-                continue;
-              }
-              _ => {}
+              continue;
             }
-          }
+            Some((None, name)) => {
+              let (referred_table, column) = find_column_by_unqualified_name(&name)?;
 
+              mapping.push(ViewColumn {
+                column: column_with_alias(
+                  column,
+                  to_alias(alias).unwrap_or_else(|| column.name.to_string()),
+                ),
+                parent_name: get_parent_name(referred_table),
+                aggregation: Some(unquote_id(fname)),
+              });
+
+              continue;
+            }
+            _ => {}
+          }
+        }
+        expr => {
           // We cannot map arbitrary expressions.
-          return Err(precondition("Unsupported expr, cannot derive type"));
+          return Err(precondition(&format!(
+            "Unsupported expr, cannot derive type: {expr:?}"
+          )));
         }
       },
     };
   }
 
-  return match group_by_key_candidate {
-    None => Ok(ColumnMapping {
-      columns: mapping,
-      group_by: None,
-      joins,
-    }),
-    Some(group_by) => {
-      // NOTE: GROUP BY can technically reference any column, but only columns also exposed by the
-      // VIEW are useful to us as keys. In other words, there's no point of us to search for this
-      // column through all referenced tables.
-      let group_by = match group_by.qualifier {
-        Some(ref qualifier) => {
-          // If the "GROUP BY" uses a qualifier, it must reference a table or subselect, e.g.:
-          //   CREATE VIEW v AS SELECT a.id FROM a RIGHT JOIN b ON a.id = b.id GROUP BY a.id;
-          mapping.iter().position(|v: &ViewColumn| {
-            v.parent_name.as_ref() == Some(qualifier) && v.column.name == group_by.name
-          })
-        }
-        None => mapping
-          .iter()
-          .position(|v: &ViewColumn| v.column.name == group_by.name),
-      };
+  if let Some(group_by_candidate) = group_by_key_candidate {
+    // NOTE: GROUP BY can technically reference any column, but only columns also exposed by the
+    // VIEW are useful to us as keys. In other words, there's no point of us to search for this
+    // column through all referenced tables.
+    let group_by = match group_by_candidate.qualifier {
+      Some(ref qualifier) => {
+        // If the "GROUP BY" uses a qualifier, it must reference a table or subselect, e.g.:
+        //   CREATE VIEW v AS SELECT a.id FROM a RIGHT JOIN b ON a.id = b.id GROUP BY a.id;
+        mapping.iter().position(|v: &ViewColumn| {
+          v.parent_name.as_ref() == Some(qualifier) && v.column.name == group_by_candidate.name
+        })
+      }
+      None => mapping
+        .iter()
+        .position(|v: &ViewColumn| v.column.name == group_by_candidate.name),
+    };
 
-      Ok(ColumnMapping {
-        columns: mapping,
-        group_by: Some(group_by.ok_or_else(|| precondition("GROUP BY column not exposed"))?),
-        joins,
-      })
-    }
-  };
+    return Ok(ColumnMapping {
+      columns: mapping,
+      group_by: Some(group_by.ok_or_else(|| precondition("GROUP BY column not exposed"))?),
+      joins,
+    });
+  }
+
+  return Ok(ColumnMapping {
+    columns: mapping,
+    group_by: None,
+    joins,
+  });
 }
 
 fn literal_to_column(literal: Literal, alias: Option<String>) -> Column {
@@ -1462,26 +1473,26 @@ fn extract_group_by_key_candidate(
     return Ok(None);
   };
 
-  return match group_by.len() {
-    1 => match group_by[0].clone() {
-      Expr::Id(id) => Ok(Some(GroupBy {
-        qualifier: None,
-        name: unquote_id(id),
-      })),
-      Expr::Name(name) => Ok(Some(GroupBy {
-        qualifier: None,
-        name: unquote_name(name),
-      })),
-      Expr::Qualified(qualifier, name) => Ok(Some(GroupBy {
-        qualifier: Some(unquote_name(qualifier)),
-        name: unquote_name(name),
-      })),
-      expr => Err(precondition(&format!(
-        "For RecordAPIs GROUP BY expressions must reference an exposed VIEW column, got {expr:?}"
-      ))),
-    },
-    n => Err(precondition(&format!(
-      "For RecordAPIs GROUP BY expressions must reference a single VIEW column, got {n}"
+  if group_by.len() != 1 {
+    return Err(precondition(&format!(
+      "Expected GROUP BY expressions for API key to reference a single VIEW column, got {group_by:?}",
+    )));
+  }
+  return match &group_by[0] {
+    Expr::Id(id) => Ok(Some(GroupBy {
+      qualifier: None,
+      name: unquote_id(id.clone()),
+    })),
+    Expr::Name(name) => Ok(Some(GroupBy {
+      qualifier: None,
+      name: unquote_name(name.clone()),
+    })),
+    Expr::Qualified(qualifier, name) => Ok(Some(GroupBy {
+      qualifier: Some(unquote_name(qualifier.clone())),
+      name: unquote_name(name.clone()),
+    })),
+    expr => Err(precondition(&format!(
+      "For RecordAPIs GROUP BY expressions must reference an exposed VIEW column, got {expr:?}"
     ))),
   };
 }
@@ -1633,8 +1644,8 @@ pub fn lookup_and_parse_table_schema(
   return Ok(stmt.try_into()?);
 }
 
-fn builtin_function_preserving_type(name: sqlite3_parser::ast::Id) -> bool {
-  let name = unquote_id(name).to_uppercase();
+fn builtin_function_preserving_type(name: &sqlite3_parser::ast::Id) -> bool {
+  let name = unquote_id(name.clone()).to_uppercase();
   return matches!(name.as_str(), "MAX" | "MIN" | "SUM");
 }
 
@@ -1651,7 +1662,7 @@ fn column_with_alias(column: &Column, alias: String) -> Column {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::parse::parse_into_statement;
+  use crate::{metadata::find_record_pk_column_index_for_view, parse::parse_into_statement};
 
   #[test]
   fn test_quote() {
@@ -1965,11 +1976,20 @@ mod tests {
     );
 
     let select =
-      parse_create_view_select("CREATE VIEW view0 AS SELECT x.id FROM a AS x GROUP BY id");
+      parse_create_view_select("CREATE VIEW view1 AS SELECT x.id FROM a AS x GROUP BY id");
     assert_eq!(
       Some(0),
       extract_column_mapping(select, &tables).unwrap().group_by
-    )
+    );
+
+    // With function
+    let select = parse_create_view_select(
+      "CREATE VIEW view2 AS SELECT min(id) AS id, data FROM a GROUP BY data",
+    );
+    let column_mapping = extract_column_mapping(select, &tables).unwrap();
+    let pk = find_record_pk_column_index_for_view(&column_mapping, &tables);
+    assert_eq!(Some(0), pk);
+    assert_eq!(Some(1), column_mapping.group_by);
   }
 
   #[test]
