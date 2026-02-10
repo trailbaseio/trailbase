@@ -433,7 +433,7 @@ function LogsPage() {
 }
 
 /// Function that hides lines for very disconnected scatter points.
-function changeDistantPointLineColorToTransparent(
+function _changeDistantPointLineColorToTransparent(
   ctx: ScriptableLineSegmentContext,
 ) {
   const t0 = ctx.p0.parsed.x;
@@ -710,7 +710,7 @@ function LogsGraph(props: { rates: Rates }) {
       //   showLine: true,
       //   fill: false,
       //   segment: {
-      //     borderColor: changeDistantPointLineColorToTransparent,
+      //     borderColor: _changeDistantPointLineColorToTransparent,
       //   },
       //   spanGaps: true,
       // },

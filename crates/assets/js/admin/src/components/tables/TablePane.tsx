@@ -1,4 +1,12 @@
-import { Match, Show, Switch, createMemo, createSignal, JSX } from "solid-js";
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createMemo,
+  createSignal,
+  JSX,
+} from "solid-js";
 import type { Signal } from "solid-js";
 import {
   TbOutlineRefresh,
@@ -73,7 +81,7 @@ import { createConfigQuery } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
 import { urlSafeBase64ToUuid, toHex, safeParseInt } from "@/lib/utils";
-import { equalQualifiedNames } from "@/lib/schema";
+import { equalQualifiedNames, TableType } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
 import { formatSortingAsOrder } from "@/lib/list";
@@ -87,8 +95,8 @@ import {
   isUUIDColumn,
   hiddenTable,
   tableType,
-  tableSatisfiesRecordApiRequirements,
-  viewSatisfiesRecordApiRequirements,
+  validateViewRecordApiRequirements,
+  validateTableRecordApiRequirements,
   prettyFormatQualifiedName,
 } from "@/lib/schema";
 
@@ -234,19 +242,18 @@ function Uuid(props: {
   );
 }
 
-function tableOrViewSatisfiesRecordApiRequirements(
+function validateTableOrViewRecordApiRequirements(
   table: Table | View,
   allTables: Table[],
-): boolean {
-  const type = tableType(table);
-
-  if (type === "table") {
-    return tableSatisfiesRecordApiRequirements(table as Table, allTables);
-  } else if (type === "view") {
-    return viewSatisfiesRecordApiRequirements(table as View, allTables);
+): string[] {
+  switch (tableType(table)) {
+    case "table":
+      return validateTableRecordApiRequirements(table as Table, allTables);
+    case "virtualTable":
+      return ["Virtual tables are not supported"];
+    case "view":
+      return validateViewRecordApiRequirements(table as View, allTables);
   }
-
-  return false;
 }
 
 function TableHeaderRightHandButtons(props: {
@@ -257,9 +264,10 @@ function TableHeaderRightHandButtons(props: {
   const selectedSchema = () => props.table;
   const hidden = () => hiddenTable(selectedSchema());
   const type = () => tableType(selectedSchema());
-  const satisfiesRecordApi = createMemo(() =>
-    tableOrViewSatisfiesRecordApiRequirements(props.table, props.allTables),
+  const validateRecordApi = createMemo(() =>
+    validateTableOrViewRecordApiRequirements(props.table, props.allTables),
   );
+  const satisfiesRecordApi = () => validateRecordApi().length === 0;
   const hasRecordApi = () =>
     hasRecordApis(config?.data?.config, selectedSchema().name);
 
@@ -322,15 +330,21 @@ function TableHeaderRightHandButtons(props: {
                       </TooltipTrigger>
 
                       <TooltipContent>
-                        {satisfiesRecordApi() ? (
-                          <p>Create a Record API endpoint for this table.</p>
-                        ) : (
-                          <p>
-                            This table does not satisfy the requirements for
-                            exposing a Record API: strictly typed {"&"} integer
-                            or UUID primary key column.
-                          </p>
-                        )}
+                        <Switch>
+                          <Match when={!satisfiesRecordApi()}>
+                            <UnsatisfiedApiRequirementsTooltip
+                              type={type()}
+                              errors={validateRecordApi()}
+                            />
+                          </Match>
+
+                          <Match when={true}>
+                            <p>
+                              Expose an API for this{" "}
+                              {type().toLocaleUpperCase()}.
+                            </p>
+                          </Match>
+                        </Switch>
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -1101,6 +1115,26 @@ export function TablePane(props: {
         </Show>
       </div>
     </>
+  );
+}
+
+function UnsatisfiedApiRequirementsTooltip(props: {
+  type: TableType;
+  errors: string[];
+}) {
+  return (
+    <div class="flex flex-col">
+      <p>
+        This ${props.type.toLocaleUpperCase()} does not satisfy Record API
+        requirements, due to:
+      </p>
+
+      <div class="px-4 py-2 break-all">
+        <ul class="list-disc">
+          <For each={props.errors}>{(err) => <li>{err}</li>}</For>
+        </ul>
+      </div>
+    </div>
   );
 }
 

@@ -270,35 +270,50 @@ function isSuitableRecordPkColumn(column: Column, all: Table[]): boolean {
   return false;
 }
 
-export function tableSatisfiesRecordApiRequirements(
+export function validateTableRecordApiRequirements(
   table: Table,
   all: Table[],
-): boolean {
+): string[] {
+  const errors = [];
   if (!table.strict) {
-    return false;
+    errors.push(
+      "TABLE required to be STRICT for strong end-to-end type-safety.",
+    );
   }
 
+  let hasSuitablePkColumn = false;
   for (const column of table.columns) {
     if (isSuitableRecordPkColumn(column, all)) {
-      return true;
+      hasSuitablePkColumn = true;
     }
   }
-  return false;
+
+  if (!hasSuitablePkColumn) {
+    errors.push(
+      "Missing suitable PRIMARY KEY column. Only INTEGER or UUID (i.e. BLOB \
+        column with `is_uuid.*` CHECK constraint supported at this point.",
+    );
+  }
+
+  return errors;
 }
 
-export function viewSatisfiesRecordApiRequirements(
+export function validateViewRecordApiRequirements(
   view: View,
   all: Table[],
-): boolean {
+): string[] {
   const mapping = view.column_mapping;
   if (!mapping) {
-    return false;
+    return [
+      "Failed to infer VIEW schema. Reach out if you think it should be easily \
+      inferable.",
+    ];
   }
 
   const groupBy = mapping.group_by;
   if (groupBy != null) {
     if (isSuitableRecordPkColumn(mapping.columns[groupBy].column, all)) {
-      return true;
+      return [];
     }
   }
 
@@ -308,17 +323,17 @@ export function viewSatisfiesRecordApiRequirements(
   const MASK = RIGHT | CROSS | NATURAL;
   for (const joinType of mapping.joins) {
     if (joinType & MASK) {
-      return false;
+      return [`Unsupported JOIN: ${joinType}`];
     }
   }
 
-  for (const column of mapping.columns.map((c) => c.column)) {
-    if (isSuitableRecordPkColumn(column, all)) {
-      return true;
+  for (const viewColumn of mapping.columns) {
+    if (isSuitableRecordPkColumn(viewColumn.column, all)) {
+      return [];
     }
   }
 
-  return false;
+  return ["No suitable PK column found"];
 }
 
 export type TableType = "table" | "virtualTable" | "view";
