@@ -32,5 +32,5 @@ url = "2.5.4"
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 lazy_static = "1.4.0"
 reqwest = { version = "0.13.1", features = ["stream", "multipart", "json"] }
-temp-dir = "0.1.13"
+temp-dir = "0.2.0"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }

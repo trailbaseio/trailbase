@@ -2,7 +2,6 @@ use aes_gcm_siv::{
   Aes256GcmSiv, Key, KeyInit,
   aead::{Aead, AeadInPlace, OsRng, Payload, generic_array::GenericArray},
 };
-use rand::RngCore;
 
 type Cipher = Aes256GcmSiv;
 pub type KeyType = Key<Cipher>;
@@ -14,6 +13,7 @@ pub fn encrypt(
   associated_data: &[u8],
   data: &[u8],
 ) -> Result<Vec<u8>, &'static str> {
+  use rand::Rng;
   // Create a buffer to hold the [nonce | enc(payload) | tag].
   let mut buffer = vec![0; NONCE_LEN + data.len() + TAG_LEN];
 

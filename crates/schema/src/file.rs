@@ -135,7 +135,7 @@ impl FileUpload {
 pub struct FileUploads(pub Vec<FileUpload>);
 
 fn generate_random_lower_case_alphanumeric(length: usize) -> String {
-  use rand::RngCore;
+  use rand::Rng;
 
   const GEN_ASCII_STR_CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
   const RANGE: u32 = GEN_ASCII_STR_CHARSET.len() as u32;

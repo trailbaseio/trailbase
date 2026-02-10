@@ -123,6 +123,6 @@ indoc = "2.0.5"
 quoted_printable = "0.5.1"
 rcgen = "0.14.1"
 schemars = "1.0.0"
-temp-dir = "0.1.13"
+temp-dir = "0.2.0"
 tower = { version = "0.5.0", features = ["util"] }
 trailbase-extension = { workspace = true }
