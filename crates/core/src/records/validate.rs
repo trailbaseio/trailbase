@@ -27,20 +27,28 @@ pub(crate) fn validate_record_api_config(
   databases: &[proto::DatabaseConfig],
 ) -> Result<String, ConfigError> {
   let Some(ref api_name) = api_config.name else {
-    return Err(invalid("RecordApi config misses name."));
+    return Err(invalid("Found RecordApi config entry w/o API name."));
   };
   validate_record_api_name(api_name)?;
 
-  let Some(ref table_name) = api_config.table_name else {
-    return Err(invalid("RecordApi config misses table name."));
+  let table_name = {
+    let Some(ref table_name) = api_config.table_name else {
+      return Err(invalid(format!(
+        "Missing TABLE/VIEW reference for API '{api_name}'"
+      )));
+    };
+    QualifiedName::parse(table_name)?
   };
 
-  for db in &api_config.attached_databases {
-    if !databases.iter().any(|d| db == d.name()) {
-      return Err(invalid(format!(
-        "RecordApi {api_name} references unknown db: {db}"
-      )));
-    }
+  let dangling_database_references: Vec<_> = api_config
+    .attached_databases
+    .iter()
+    .filter(|adb| !databases.iter().any(|db| db.name() == adb.as_str()))
+    .collect();
+  if !dangling_database_references.is_empty() {
+    return Err(invalid(format!(
+      "API '{api_name}' references unknown databases: {dangling_database_references:?}."
+    )));
   }
 
   for (kind, rule) in [
@@ -55,44 +63,59 @@ pub(crate) fn validate_record_api_config(
     }
   }
 
-  // FIXME: should respect databases.
-  let table_name = QualifiedName::parse(table_name)?;
+  let mut prefix = Prefix {
+    api_name,
+    table_or_view: &table_name,
+    entity: Entity::Unknown,
+  };
+
   let ConnectionEntry { metadata, .. } =
     connection_manager
       .get_entry_for_qn(&table_name)
       .map_err(|err| {
-        return invalid(format!("Missing table or view for API: {err}"));
+        return invalid_prefixed(&prefix, err);
       })?;
 
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
-    return Err(invalid(format!(
-      "Missing table or view for API: {api_name}"
-    )));
+    return Err(invalid_prefixed(&prefix, "not found."));
   };
 
-  match table_or_view {
+  let columns = match table_or_view {
     TableOrViewMetadata::Table(table) => {
+      prefix.entity = Entity::Table;
+
       if table.schema.temporary {
-        return Err(invalid("Record APIs must not reference TEMPORARY tables"));
+        return Err(invalid_prefixed(&prefix, "Cannot be TEMPORARY."));
       }
+      if !table.schema.strict {
+        return Err(invalid_prefixed(
+          &prefix,
+          "Must be STRICT for strong end-to-end type-safety.",
+        ));
+      }
+      table.schema.columns.as_slice()
     }
     TableOrViewMetadata::View(view) => {
-      if view.schema.temporary {
-        return Err(invalid("Record APIs must not reference TEMPORARY views"));
-      }
-    }
-  }
+      prefix.entity = Entity::View;
 
-  let Some((pk_index, _)) = table_or_view.record_pk_column() else {
-    return Err(invalid(format!(
-      "Table for api '{api_name}' is missing valid integer/UUID primary key column."
-    )));
+      if view.schema.temporary {
+        return Err(invalid_prefixed(&prefix, "Cannot be TEMPORARY."));
+      }
+      let Some(columns) = table_or_view.columns() else {
+        return Err(invalid_prefixed(
+          &prefix,
+          "Unable to infer schema, which is needed for strong type-safety. If you feel that your VIEW's schema should be easily inferable, please reach out.",
+        ));
+      };
+      columns
+    }
   };
 
-  let Some(columns) = table_or_view.columns() else {
-    return Err(invalid(format!(
-      "View for api '{api_name}' is not a \"simple\" view, i.e unable to infer types for strong type-safety"
-    )));
+  let Some((pk_index, _)) = table_or_view.record_pk_column() else {
+    return Err(invalid_prefixed(
+      &prefix,
+      "Does not have a suitable PRIMARY KEY column. At this point TrailBase requires PRIMARY KEYS to be of type INTEGER or UUID (i.e. BLOB with `is_uuid.*` CHECK constraint).",
+    ));
   };
 
   for excluded_column_name in &api_config.excluded_columns {
@@ -100,36 +123,43 @@ pub(crate) fn validate_record_api_config(
       .iter()
       .position(|col| col.name == *excluded_column_name)
     else {
-      return Err(invalid(format!(
-        "Excluded column '{excluded_column_name}' in API '{api_name}' not found.",
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Excluded column '{excluded_column_name}' not found.",),
+      ));
     };
 
     if excluded_index == pk_index {
-      return Err(invalid(format!(
-        "PK column '{excluded_column_name}' cannot be excluded from API '{api_name}'.",
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("PK column '{excluded_column_name}' must not be excluded.",),
+      ));
     }
 
     let excluded_column = &columns[excluded_index];
     if excluded_column.is_not_null() && !excluded_column.has_default() {
-      return Err(invalid(format!(
-        "Cannot exclude column '{excluded_column_name}' from API '{api_name}', which is NOT NULL and w/o DEFAULT",
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!(
+          "Cannot exclude column '{excluded_column_name}' that is neither NULLABLE nor has a DEFAULT.",
+        ),
+      ));
     }
   }
 
   for expand in &api_config.expand {
     if expand.starts_with("_") {
-      return Err(invalid(format!(
-        "{api_name} expands hidden column: {expand}"
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Cannot expand hidden column '{expand}'."),
+      ));
     }
 
     let Some(column) = columns.iter().find(|c| c.name == *expand) else {
-      return Err(invalid(format!(
-        "{api_name} expands missing column: {expand}"
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Expands unknown column '{expand}'."),
+      ));
     };
 
     let Some(ColumnOption::ForeignKey {
@@ -141,43 +171,51 @@ pub(crate) fn validate_record_api_config(
       .iter()
       .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
     else {
-      return Err(invalid(format!(
-        "{api_name} expands non-foreign-key column: {expand}"
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Expanded column '{expand}' is not a FOREIGN KEY column."),
+      ));
     };
 
     if foreign_table_name.starts_with("_") {
-      return Err(invalid(format!(
-        "{api_name} expands reference '{expand}' to hidden table: {foreign_table_name}"
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Column '{expand}' cannot expand hidden table '{foreign_table_name}'."),
+      ));
     }
 
     let fq_foreign_table_name = QualifiedName::parse(foreign_table_name)?;
     let Some(foreign_table) = metadata.get_table(&fq_foreign_table_name) else {
-      return Err(invalid(format!(
-        "{api_name} reference missing table: {foreign_table_name}"
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Reference table '{foreign_table_name}' is unknown."),
+      ));
     };
 
     let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
-      return Err(invalid(format!(
-        "{api_name} references pk-less table: {foreign_table_name}"
-      )));
+      return Err(invalid_prefixed(
+        &prefix,
+        format!("Expanded foreign table '{foreign_table_name}' lacks suitable PRIMARY KEY."),
+      ));
     };
 
     match referred_columns.len() {
       0 => {}
       1 => {
         if referred_columns[0] != foreign_pk_column.name {
-          return Err(invalid(format!(
-            "{api_name}.{expand} expands non-primary-key reference"
-          )));
+          return Err(invalid_prefixed(
+            &prefix,
+            format!("Expanded column '{expand}' references non-PK."),
+          ));
         }
       }
       _ => {
-        return Err(invalid(format!(
-          "Composite keys cannot be expanded for {api_name}.{expand}"
-        )));
+        return Err(invalid_prefixed(
+          &prefix,
+          format!(
+            "Expanded column '{expand}' references composite key, which is not yet supported."
+          ),
+        ));
       }
     };
   }
@@ -298,6 +336,37 @@ fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), Con
 
 fn invalid(err: impl std::string::ToString) -> ConfigError {
   return ConfigError::Invalid(err.to_string());
+}
+
+enum Entity {
+  Unknown,
+  Table,
+  View,
+}
+
+struct Prefix<'a> {
+  api_name: &'a str,
+  table_or_view: &'a QualifiedName,
+  entity: Entity,
+}
+
+fn invalid_prefixed(prefix: &Prefix, err: impl std::string::ToString) -> ConfigError {
+  fn err_prefix(api_name: &str, table_or_view: &QualifiedName, e: &Entity) -> String {
+    return format!(
+      "{entity} {table_or_view} referenced by API '{api_name}'",
+      entity = match e {
+        Entity::Unknown => "TABLE or VIEW",
+        Entity::Table => "TABLE",
+        Entity::View => "VIEW",
+      }
+    );
+  }
+
+  return ConfigError::Invalid(format!(
+    "{}: {}",
+    err_prefix(prefix.api_name, prefix.table_or_view, &prefix.entity),
+    err.to_string()
+  ));
 }
 
 #[cfg(test)]

@@ -274,11 +274,13 @@ export function tableSatisfiesRecordApiRequirements(
   table: Table,
   all: Table[],
 ): boolean {
-  if (table.strict) {
-    for (const column of table.columns) {
-      if (isSuitableRecordPkColumn(column, all)) {
-        return true;
-      }
+  if (!table.strict) {
+    return false;
+  }
+
+  for (const column of table.columns) {
+    if (isSuitableRecordPkColumn(column, all)) {
+      return true;
     }
   }
   return false;

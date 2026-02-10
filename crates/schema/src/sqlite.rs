@@ -502,6 +502,12 @@ pub struct QualifiedName {
   pub database_schema: Option<String>,
 }
 
+impl std::fmt::Display for QualifiedName {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    return f.write_str(&self.escaped_string());
+  }
+}
+
 impl QualifiedName {
   pub fn parse(name: &str) -> Result<Self, SchemaError> {
     if name.contains(';') {
