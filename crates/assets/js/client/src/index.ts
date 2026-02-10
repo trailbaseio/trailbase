@@ -116,9 +116,12 @@ export class FetchError extends Error {
     response: Response,
     url?: string | URL,
   ): Promise<FetchError> {
-    // NOTE: we could read the body but TB doesn't reply with meaningful messages there.
-    // const body = await response.text().then(null, (_err) => undefined);
-    return new FetchError(response.status, response.statusText, url);
+    // Some IntoResponse implementations return a body, e.g. RecordError::BadRequest.
+    const msg: string = await response.text().then(
+      (b) => (b !== "" ? b : response.statusText),
+      (_err) => response.statusText,
+    );
+    return new FetchError(response.status, msg, url);
   }
 
   public isClient(): boolean {

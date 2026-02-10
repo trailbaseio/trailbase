@@ -384,7 +384,8 @@ test("API Errors", async () => {
   await expect(async () => await api.read(invalidId)).rejects.toThrowError(
     new FetchError(
       status.BAD_REQUEST,
-      "Bad Request",
+      // Custom error reply by RecordError's IntoResponse impl.
+      "Invalid id",
       new URL(
         `http://${ADDRESS}/api/records/v1/simple_strict_table/${invalidId}`,
       ),
