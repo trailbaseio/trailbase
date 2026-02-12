@@ -19,6 +19,7 @@ ws = ["trailbase/ws"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
+bcrypt = "0.18.0"
 bytes = "1.11.0"
 chrono = "^0.4.38"
 clap = { version = "^4.4.11", features=["derive", "env"] }

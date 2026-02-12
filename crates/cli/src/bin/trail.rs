@@ -7,7 +7,7 @@ use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use serde::Deserialize;
-use tokio::{fs, io::AsyncWriteExt};
+use std::io::Write;
 use trailbase::api::{self, Email, InitArgs, JsonSchemaMode, init_app_state};
 use trailbase::{DataDir, Server, ServerOptions, constants::USER_TABLE};
 use trailbase_cli::wasm::{
@@ -133,10 +133,8 @@ async fn async_main(
         std::fs::create_dir_all(dir)?;
       }
 
-      let mut migration_file = fs::File::create_new(&path).await?;
-      migration_file
-        .write_all(b"-- new database migration\n")
-        .await?;
+      let mut migration_file = std::fs::File::create_new(&path)?;
+      migration_file.write_all(b"-- new database migration\n")?;
 
       println!("Created empty migration file: {path:?}");
     }
@@ -208,6 +206,23 @@ async fn async_main(
           let auth_token =
             api::cli::mint_auth_token(&data_dir, &conn, to_user_reference(user.clone())).await?;
           println!("Bearer {auth_token}");
+        }
+        Some(UserSubCommands::Import {
+          dry_run,
+          auth0_json,
+        }) => {
+          if let Some(auth0_json) = auth0_json {
+            let contents = std::fs::read_to_string(&auth0_json)?;
+            let users = trailbase_cli::import::read_auth0_nd_json(&contents)?;
+
+            println!("Importing {} users.", users.len());
+
+            if !dry_run {
+              api::cli::import_users(&conn, users).await?;
+            }
+          } else {
+            return Err("Missing '--auth0_json' path".into());
+          }
         }
         None => {
           CommandLineArgs::command()

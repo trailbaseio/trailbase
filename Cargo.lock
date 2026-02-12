@@ -654,6 +654,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcrypt"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a0f5948f30df5f43ac29d310b7476793be97c50787e6ef4a63d960a0d0be827"
+dependencies = [
+ "base64",
+ "blowfish",
+ "getrandom 0.3.4",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "beef"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -738,6 +751,16 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
+]
+
+[[package]]
+name = "blowfish"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e412e2cd0f2b2d93e02543ceae7917b3c70331573df19ee046bcbc35e45e87d7"
+dependencies = [
+ "byteorder",
+ "cipher",
 ]
 
 [[package]]
@@ -6275,6 +6298,7 @@ name = "trailbase-cli"
 version = "0.2.0"
 dependencies = [
  "axum",
+ "bcrypt",
  "bytes",
  "chrono",
  "clap",
@@ -6332,6 +6356,7 @@ dependencies = [
  "arc-swap",
  "argon2",
  "base64",
+ "bcrypt",
  "jsonschema",
  "log",
  "maxminddb",

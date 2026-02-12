@@ -1,6 +1,5 @@
 use crate::rand::generate_random_string;
 use crate::util::uuid_to_b64;
-use argon2::password_hash::rand_core::OsRng;
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
@@ -140,7 +139,7 @@ impl JwtHelper {
 }
 
 fn generate_new_key_pair() -> (SigningKey, VerifyingKey) {
-  let mut csprng = OsRng {};
+  let mut csprng = argon2::password_hash::rand_core::OsRng;
   let signing_key = SigningKey::generate(&mut csprng);
   let verifying_key = signing_key.verifying_key();
 

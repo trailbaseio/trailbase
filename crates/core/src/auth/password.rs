@@ -1,4 +1,3 @@
-use argon2::PasswordHash;
 use mini_moka::sync::Cache;
 use std::sync::LazyLock;
 
@@ -108,11 +107,8 @@ pub fn check_user_password(
     return Err(AuthError::TooManyRequests);
   }
 
-  let parsed_hash = PasswordHash::new(&db_user.password_hash)
-    .map_err(|err| AuthError::Internal(err.to_string().into()))?;
-
-  trailbase_extension::password::verify_password(password.as_bytes(), &parsed_hash).map_err(
-    |err| {
+  trailbase_extension::password::verify_password(password.as_bytes(), &db_user.password_hash)
+    .map_err(|err| {
       ATTEMPTS.insert(
         db_user.email.to_string(),
         attempts
@@ -121,11 +117,10 @@ pub fn check_user_password(
       );
 
       return match err {
-        argon2::password_hash::Error::Password => AuthError::Unauthorized,
+        trailbase_extension::password::PasswordError::InvalidPassword => AuthError::Unauthorized,
         err => AuthError::Internal(err.to_string().into()),
       };
-    },
-  )?;
+    })?;
 
   return Ok(());
 }

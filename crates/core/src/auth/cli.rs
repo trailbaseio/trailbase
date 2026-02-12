@@ -187,3 +187,48 @@ pub async fn demote_admin_to_user(
     .await?
     .ok_or(AuthError::NotFound);
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImportUser {
+  pub email: String,
+  pub password_hash: String,
+  pub verified: bool,
+}
+
+pub async fn import_users(
+  user_conn: &trailbase_sqlite::Connection,
+  users: Vec<ImportUser>,
+) -> Result<(), AuthError> {
+  // First validate the users.
+  for user in &users {
+    if !trailbase_extension::password::valid_hash(&user.password_hash) {
+      return Err(AuthError::BadRequest("Invalid Hash"));
+    }
+
+    let _ = validate_and_normalize_email_address(&user.email)?;
+  }
+
+  const IMPORT_USER_QUERY: &str =
+    formatcp!("INSERT INTO '{USER_TABLE}' (email, password_hash, verified) VALUES (?1, ?2, ?3)");
+
+  let mut conn = user_conn.write_lock();
+  let tx = conn
+    .transaction()
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  for user in users {
+    let email = user.email;
+    tx.execute(
+      IMPORT_USER_QUERY,
+      params!(email.clone(), user.password_hash, user.verified),
+    )
+    .map_err(|err| {
+      AuthError::FailedDependency(format!("Failed to insert '{email}':{err}").into())
+    })?;
+  }
+
+  tx.commit()
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  return Ok(());
+}
