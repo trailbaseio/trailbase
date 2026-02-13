@@ -1,3 +1,10 @@
+## v0.23.9
+
+- Support `bcrypt` password hashes in addition to `argon2`.
+- Add a user import function to CLI. Currently supports Auth0 user exports.
+  - Will be straight forward to support other providers that use `bcrypt` or `argon2`, please reach out 🙏.
+- Update dependencies.
+
 ## v0.23.8
 
 - Show validation errors for `TABLE`/`VIEW`s that do not qualify for Record APIs.
