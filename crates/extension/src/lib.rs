@@ -2,6 +2,7 @@
 #![allow(clippy::needless_return)]
 
 use parking_lot::RwLock;
+use rusqlite::Connection;
 use rusqlite::functions::FunctionFlags;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -25,7 +26,7 @@ pub enum Error {
   Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+pub fn apply_default_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
   conn.pragma_update(None, "busy_timeout", 10000)?;
   conn.pragma_update(None, "journal_mode", "WAL")?;
   conn.pragma_update(None, "journal_size_limit", 200000000)?;
@@ -50,11 +51,10 @@ pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite
   return Ok(());
 }
 
-#[allow(unsafe_code)]
 pub fn connect_sqlite(
   path: Option<PathBuf>,
   registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
-) -> Result<rusqlite::Connection, Error> {
+) -> Result<Connection, Error> {
   // NOTE: We used to initialize C extensions here as well, such as sqlean and sqlite-vec, however
   // this has now been moved to the top-level CLI.
 
@@ -66,9 +66,9 @@ pub fn connect_sqlite(
         | OpenFlags::SQLITE_OPEN_CREATE
         | OpenFlags::SQLITE_OPEN_NO_MUTEX;
 
-      rusqlite::Connection::open_with_flags(p, flags)?
+      Connection::open_with_flags(p, flags)?
     } else {
-      rusqlite::Connection::open_in_memory()?
+      Connection::open_in_memory()?
     },
     registry,
   )?;
@@ -82,9 +82,9 @@ pub fn connect_sqlite(
 }
 
 pub fn sqlite3_extension_init(
-  db: rusqlite::Connection,
+  db: Connection,
   registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
-) -> Result<rusqlite::Connection, rusqlite::Error> {
+) -> Result<Connection, rusqlite::Error> {
   // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
   // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
   // GENERATED cols, ... as opposed to just top-level SELECTs.

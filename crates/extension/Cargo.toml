@@ -9,7 +9,7 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
 [lib]
-crate-type=["cdylib", "rlib"]
+crate-type=["rlib"]
 
 [dependencies]
 arc-swap = "1.7.1"
@@ -23,6 +23,7 @@ parking_lot = { workspace = true }
 quick_cache = "0.6.18"
 regex = "1.11.0"
 rusqlite = { workspace = true }
+# rusqlite = { version = "0.38.0", default-features = false, features = ["bundled", "cache", "functions", "loadable_extension"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.12"
