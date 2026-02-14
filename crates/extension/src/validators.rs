@@ -1,9 +1,8 @@
 use rusqlite::Error;
-use rusqlite::functions::Context;
+use rusqlite::functions::{Context, FunctionFlags};
 use validator::ValidateEmail;
 
-pub(super) fn is_email(context: &Context) -> Result<bool, Error> {
-  #[cfg(debug_assertions)]
+fn is_email(context: &Context) -> Result<bool, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -14,8 +13,7 @@ pub(super) fn is_email(context: &Context) -> Result<bool, Error> {
   return Ok(true);
 }
 
-pub(super) fn is_json(context: &Context) -> Result<bool, Error> {
-  #[cfg(debug_assertions)]
+fn is_json(context: &Context) -> Result<bool, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -24,6 +22,32 @@ pub(super) fn is_json(context: &Context) -> Result<bool, Error> {
     return Ok(serde_json::from_str::<serde_json::Value>(str).is_ok());
   }
   return Ok(true);
+}
+
+pub(crate) fn register_extension_functions(db: &rusqlite::Connection) -> Result<(), Error> {
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // GENERATED cols, ... as opposed to just top-level SELECTs.
+
+  db.create_scalar_function(
+    "is_email",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    is_email,
+  )?;
+  // NOTE: there's also https://sqlite.org/json1.html#jvalid
+  db.create_scalar_function(
+    "is_json",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    is_json,
+  )?;
+
+  return Ok(());
 }
 
 #[cfg(test)]

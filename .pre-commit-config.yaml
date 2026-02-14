@@ -37,7 +37,7 @@ repos:
       name: Cargo Clippy
       # Be verbose to at least still see warnings scroll by.
       verbose: true
-      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo clippy --workspace --no-deps'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo clippy --workspace --exclude=trailbase-extension-so --no-deps'
       language: system
       types: [rust]
       exclude: '^vendor/'
@@ -45,7 +45,7 @@ repos:
 
     - id: cargotest
       name: Cargo Test
-      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo test --workspace -- --show-output'
+      entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo test --workspace --exclude=trailbase-extension-so -- --show-output'
       language: system
       types: [rust]
       exclude: '^(vendor|bindings)/'

@@ -397,10 +397,9 @@ pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
   return trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
       // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
-      let mut conn = trailbase_extension::sqlite3_extension_init(
-        connect_rusqlite_without_default_extensions_and_schemas(path.clone())?,
-        None,
-      )?;
+      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+
+      trailbase_extension::register_all_extension_functions(&conn, None)?;
 
       // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
       conn.pragma_update(None, "secure_delete", "FALSE")?;

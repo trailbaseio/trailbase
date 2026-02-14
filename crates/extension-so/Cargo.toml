@@ -1,0 +1,18 @@
+[package]
+name = "trailbase-extension-so"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "SQLite extension used by TrailBase"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../../README.md"
+
+[lib]
+crate-type=["cdylib"]
+name = "trailbase"
+
+[dependencies]
+# NOTE: rusqlite must not enable "bundled" for the .so built to work.
+rusqlite = { version = "0.38.0", default-features = false, features = ["functions", "loadable_extension"] }
+trailbase-extension = { workspace = true }

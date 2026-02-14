@@ -9,7 +9,7 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
 [lib]
-crate-type=["cdylib", "rlib"]
+crate-type=["rlib"]
 
 [dependencies]
 arc-swap = "1.7.1"
@@ -17,12 +17,12 @@ argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "p
 base64 = { workspace = true }
 bcrypt = "0.18.0"
 jsonschema = { version = "0.41.0", default-features = false }
-log = "0.4.27"
 maxminddb = "0.27.0"
 parking_lot = { workspace = true }
-quick_cache = "0.6.18"
+quick_cache = { version = "0.6.18", default-features = false }
 regex = "1.11.0"
-rusqlite = { workspace = true }
+# NOTE: rusqlite must not enable "bundled" for the .so built to work.
+rusqlite = { version = "0.38.0", default-features = false, features = ["functions"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.12"

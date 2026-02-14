@@ -1,7 +1,8 @@
 use jsonschema::Validator;
+use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use rusqlite::Error;
-use rusqlite::functions::Context;
+use rusqlite::functions::{Context, FunctionFlags};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
@@ -69,7 +70,7 @@ impl JsonSchemaRegistry {
   }
 }
 
-pub(super) fn jsonschema_by_name_impl(
+fn jsonschema_by_name_impl(
   context: &Context,
   registry: &JsonSchemaRegistry,
 ) -> Result<bool, Error> {
@@ -104,7 +105,7 @@ pub(super) fn jsonschema_by_name_impl(
   return Ok(true);
 }
 
-pub(super) fn jsonschema_by_name_with_extra_args_impl(
+fn jsonschema_by_name_with_extra_args_impl(
   context: &Context,
   registry: &JsonSchemaRegistry,
 ) -> Result<bool, Error> {
@@ -142,7 +143,7 @@ pub(super) fn jsonschema_by_name_with_extra_args_impl(
 /// Cache for json schemas specified in CHECK(jsonschema_matches(...)).
 static SCHEMA_CACHE: LazyLock<Cache<String, Arc<Validator>>> = LazyLock::new(|| Cache::new(256));
 
-pub(crate) fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
+fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
   // First, get and parse the JSON contents. If it's invalid JSON to start with, there's not much
   // we can validate.
   let Some(contents) = context.get_raw(1).as_str_or_null()? else {
@@ -171,6 +172,60 @@ pub(crate) fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
   };
 
   return Ok(valid);
+}
+
+pub(crate) fn register_extension_functions(
+  db: &rusqlite::Connection,
+  registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
+) -> Result<(), rusqlite::Error> {
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // GENERATED cols, ... as opposed to just top-level SELECTs.
+
+  // Match column against given JSON schema, e.g. jsonschema_matches(col, '<schema>').
+  // TODO: Should we remove this? Who uses this?
+  db.create_scalar_function(
+    "jsonschema_matches",
+    2,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    jsonschema_matches,
+  )?;
+
+  if let Some(registry) = registry {
+    // Match column against registered JSON schema by name, e.g. jsonschema(col, 'schema-name').
+    {
+      let registry = registry.clone();
+      db.create_scalar_function(
+        "jsonschema",
+        2,
+        FunctionFlags::SQLITE_UTF8
+          | FunctionFlags::SQLITE_DETERMINISTIC
+          | FunctionFlags::SQLITE_INNOCUOUS,
+        move |context| {
+          let lock = registry.read();
+          return jsonschema_by_name_impl(context, &lock);
+        },
+      )?;
+    }
+    {
+      let registry = registry.clone();
+      db.create_scalar_function(
+        "jsonschema",
+        3,
+        FunctionFlags::SQLITE_UTF8
+          | FunctionFlags::SQLITE_DETERMINISTIC
+          | FunctionFlags::SQLITE_INNOCUOUS,
+        move |context| {
+          let lock = registry.read();
+          return jsonschema_by_name_with_extra_args_impl(context, &lock);
+        },
+      )?;
+    }
+  }
+
+  return Ok(());
 }
 
 #[cfg(test)]

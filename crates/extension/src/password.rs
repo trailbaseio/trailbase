@@ -1,12 +1,11 @@
 use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use rusqlite::Error;
-use rusqlite::functions::Context;
+use rusqlite::functions::{Context, FunctionFlags};
 use std::str::FromStr;
 use std::sync::LazyLock;
-use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 #[non_exhaustive]
 pub enum PasswordError {
   #[error("InvalidPassword")]
@@ -76,8 +75,7 @@ pub fn valid_hash(hash: &str) -> bool {
 }
 
 /// An SQLite extension function we can use, e.g. to prefill users from migrations.
-pub(super) fn hash_password_sqlite(context: &Context) -> Result<String, Error> {
-  #[cfg(debug_assertions)]
+fn hash_password_sqlite(context: &Context) -> Result<String, Error> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -86,6 +84,24 @@ pub(super) fn hash_password_sqlite(context: &Context) -> Result<String, Error> {
     .map_err(|err| Error::UserFunctionError(format!("Argon2: {err}").into()))?;
 
   return Ok(hash);
+}
+
+pub(crate) fn register_extension_functions(db: &rusqlite::Connection) -> Result<(), Error> {
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // GENERATED cols, ... as opposed to just top-level SELECTs.
+
+  // Used to create initial user credentials in migrations.
+  db.create_scalar_function(
+    "hash_password",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    hash_password_sqlite,
+  )?;
+
+  return Ok(());
 }
 
 #[cfg(test)]

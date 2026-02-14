@@ -9,6 +9,7 @@ members = [
   "crates/client",
   "crates/core",
   "crates/extension",
+  "crates/extension-so",
   "crates/qs",
   "crates/refinery",
   "crates/schema",

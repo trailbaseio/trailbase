@@ -2,7 +2,7 @@
 #![allow(clippy::needless_return)]
 
 use parking_lot::RwLock;
-use rusqlite::functions::FunctionFlags;
+use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -10,7 +10,7 @@ pub mod geoip;
 pub mod jsonschema;
 pub mod password;
 
-mod b64;
+mod base64;
 mod regex;
 mod uuid;
 mod validators;
@@ -25,7 +25,7 @@ pub enum Error {
   Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 }
 
-pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+pub fn apply_default_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
   conn.pragma_update(None, "busy_timeout", 10000)?;
   conn.pragma_update(None, "journal_mode", "WAL")?;
   conn.pragma_update(None, "journal_size_limit", 200000000)?;
@@ -50,28 +50,26 @@ pub fn apply_default_pragmas(conn: &rusqlite::Connection) -> Result<(), rusqlite
   return Ok(());
 }
 
-#[allow(unsafe_code)]
 pub fn connect_sqlite(
   path: Option<PathBuf>,
   registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
-) -> Result<rusqlite::Connection, Error> {
+) -> Result<Connection, Error> {
   // NOTE: We used to initialize C extensions here as well, such as sqlean and sqlite-vec, however
   // this has now been moved to the top-level CLI.
 
   // Then open database and load trailbase_extensions.
-  let conn = sqlite3_extension_init(
-    if let Some(p) = path {
-      use rusqlite::OpenFlags;
-      let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
-        | OpenFlags::SQLITE_OPEN_CREATE
-        | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+  let conn = if let Some(p) = path {
+    use rusqlite::OpenFlags;
+    let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
+      | OpenFlags::SQLITE_OPEN_CREATE
+      | OpenFlags::SQLITE_OPEN_NO_MUTEX;
 
-      rusqlite::Connection::open_with_flags(p, flags)?
-    } else {
-      rusqlite::Connection::open_in_memory()?
-    },
-    registry,
-  )?;
+    Connection::open_with_flags(p, flags)?
+  } else {
+    Connection::open_in_memory()?
+  };
+
+  register_all_extension_functions(&conn, registry)?;
 
   apply_default_pragmas(&conn)?;
 
@@ -81,177 +79,23 @@ pub fn connect_sqlite(
   return Ok(conn);
 }
 
-pub fn sqlite3_extension_init(
-  db: rusqlite::Connection,
+pub fn register_all_extension_functions(
+  db: &Connection,
   registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
-) -> Result<rusqlite::Connection, rusqlite::Error> {
+) -> Result<(), rusqlite::Error> {
   // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
   // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
   // GENERATED cols, ... as opposed to just top-level SELECTs.
 
-  db.create_scalar_function(
-    "is_uuid",
-    1,
-    FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid::is_uuid,
-  )?;
-  db.create_scalar_function(
-    "is_uuid_v4",
-    1,
-    FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid::is_uuid_v4,
-  )?;
-  db.create_scalar_function("uuid_v4", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid::uuid_v4)?;
-  db.create_scalar_function(
-    "is_uuid_v7",
-    1,
-    FunctionFlags::SQLITE_DETERMINISTIC | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid::is_uuid_v7,
-  )?;
-  db.create_scalar_function("uuid_v7", 0, FunctionFlags::SQLITE_INNOCUOUS, uuid::uuid_v7)?;
-  db.create_scalar_function(
-    "uuid_text",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid::uuid_text,
-  )?;
+  uuid::register_extension_functions(db)?;
+  password::register_extension_functions(db)?;
+  jsonschema::register_extension_functions(db, registry)?;
+  geoip::register_extension_functions(db)?;
+  base64::register_extension_functions(db)?;
+  regex::register_extension_functions(db)?;
+  validators::register_extension_functions(db)?;
 
-  db.create_scalar_function(
-    "uuid_parse",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    uuid::uuid_parse,
-  )?;
-
-  // Used to create initial user credentials in migrations.
-  db.create_scalar_function(
-    "hash_password",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    password::hash_password_sqlite,
-  )?;
-
-  // Match column against given JSON schema, e.g. jsonschema_matches(col, '<schema>').
-  // TODO: Should we remove this? Who uses this?
-  db.create_scalar_function(
-    "jsonschema_matches",
-    2,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    jsonschema::jsonschema_matches,
-  )?;
-
-  if let Some(registry) = registry {
-    // Match column against registered JSON schema by name, e.g. jsonschema(col, 'schema-name').
-    {
-      let registry = registry.clone();
-      db.create_scalar_function(
-        "jsonschema",
-        2,
-        FunctionFlags::SQLITE_UTF8
-          | FunctionFlags::SQLITE_DETERMINISTIC
-          | FunctionFlags::SQLITE_INNOCUOUS,
-        move |context| {
-          let lock = registry.read();
-          return jsonschema::jsonschema_by_name_impl(context, &lock);
-        },
-      )?;
-    }
-    {
-      let registry = registry.clone();
-      db.create_scalar_function(
-        "jsonschema",
-        3,
-        FunctionFlags::SQLITE_UTF8
-          | FunctionFlags::SQLITE_DETERMINISTIC
-          | FunctionFlags::SQLITE_INNOCUOUS,
-        move |context| {
-          let lock = registry.read();
-          return jsonschema::jsonschema_by_name_with_extra_args_impl(context, &lock);
-        },
-      )?;
-    }
-  }
-
-  // Validators for CHECK constraints.
-  db.create_scalar_function(
-    // NOTE: the name needs to be "regexp" to be picked up by sqlites REGEXP matcher:
-    // https://www.sqlite.org/lang_expr.html
-    "regexp",
-    2,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    regex::regexp,
-  )?;
-  db.create_scalar_function(
-    "is_email",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    validators::is_email,
-  )?;
-  // NOTE: there's also https://sqlite.org/json1.html#jvalid
-  db.create_scalar_function(
-    "is_json",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    validators::is_json,
-  )?;
-
-  db.create_scalar_function(
-    "geoip_country",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    geoip::geoip_country,
-  )?;
-  db.create_scalar_function(
-    "geoip_city_name",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    geoip::geoip_city_name,
-  )?;
-  db.create_scalar_function(
-    "geoip_city_json",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    geoip::geoip_city_json,
-  )?;
-
-  db.create_scalar_function(
-    "base64",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    b64::base64,
-  )?;
-  db.create_scalar_function(
-    "base64_url_safe",
-    1,
-    FunctionFlags::SQLITE_UTF8
-      | FunctionFlags::SQLITE_DETERMINISTIC
-      | FunctionFlags::SQLITE_INNOCUOUS,
-    b64::base64_url_safe,
-  )?;
-
-  return Ok(db);
+  return Ok(());
 }
 
 #[cfg(test)]

@@ -3134,6 +3134,9 @@ dependencies = [
  "bindgen",
  "cc",
  "pkg-config",
+ "prettyplease",
+ "quote",
+ "syn",
  "vcpkg",
 ]
 
@@ -6358,7 +6361,6 @@ dependencies = [
  "base64",
  "bcrypt",
  "jsonschema",
- "log",
  "maxminddb",
  "parking_lot",
  "quick_cache",
@@ -6369,6 +6371,14 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "trailbase-extension-so"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "trailbase-extension",
 ]
 
 [[package]]

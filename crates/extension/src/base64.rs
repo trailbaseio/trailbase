@@ -1,7 +1,7 @@
 use base64::prelude::*;
 use rusqlite::Error;
 use rusqlite::Result;
-use rusqlite::functions::Context;
+use rusqlite::functions::{Context, FunctionFlags};
 use rusqlite::types::{Value, ValueRef};
 
 /// A base64 conversion utility similar to the SQLite's `base64()` extension.
@@ -14,8 +14,7 @@ use rusqlite::types::{Value, ValueRef};
 ///
 /// Note, however, that this implementation is more strict with respect to b64
 /// text inputs, e.g. it checks the padding.
-pub(super) fn base64(context: &Context) -> Result<Value> {
-  #[cfg(debug_assertions)]
+fn base64(context: &Context) -> Result<Value> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -47,8 +46,7 @@ pub(super) fn base64(context: &Context) -> Result<Value> {
 ///
 /// Note, however, that this implementation is more strict with respect to b64
 /// text inputs, e.g. it checks the padding.
-pub(super) fn base64_url_safe(context: &Context) -> Result<Value> {
-  #[cfg(debug_assertions)]
+fn base64_url_safe(context: &Context) -> Result<Value> {
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -68,6 +66,31 @@ pub(super) fn base64_url_safe(context: &Context) -> Result<Value> {
     }
     v => Err(Error::InvalidFunctionParameterType(0, v.data_type())),
   };
+}
+
+pub(crate) fn register_extension_functions(db: &rusqlite::Connection) -> Result<(), Error> {
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // GENERATED cols, ... as opposed to just top-level SELECTs.
+
+  db.create_scalar_function(
+    "base64",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    base64,
+  )?;
+  db.create_scalar_function(
+    "base64_url_safe",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    base64_url_safe,
+  )?;
+
+  return Ok(());
 }
 
 #[cfg(test)]

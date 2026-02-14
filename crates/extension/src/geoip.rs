@@ -1,7 +1,7 @@
 use arc_swap::ArcSwap;
 use maxminddb::{MaxMindDbError, Reader, geoip2};
 use rusqlite::Error;
-use rusqlite::functions::Context;
+use rusqlite::functions::{Context, FunctionFlags};
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use std::path::Path;
@@ -31,7 +31,6 @@ impl City {
 
 pub fn load_geoip_db(path: impl AsRef<Path>) -> Result<(), MaxMindDbError> {
   let reader = Reader::open_readfile(path)?;
-  log::debug!("Loaded geoip DB: {:?}", reader.metadata);
   READER.swap(Some(reader).into());
   return Ok(());
 }
@@ -111,7 +110,6 @@ fn geoip_extract<T>(
   context: &Context,
   f: impl Fn(&MaxMindReader, IpAddr) -> Option<T>,
 ) -> Result<Option<T>, Error> {
-  #[cfg(debug_assertions)]
   if context.len() != 1 {
     return Err(Error::InvalidParameterCount(context.len(), 1));
   }
@@ -150,6 +148,39 @@ fn extract_subdivision_names(city: &geoip2::City) -> Option<Vec<String>> {
       })
       .collect(),
   );
+}
+
+pub(crate) fn register_extension_functions(db: &rusqlite::Connection) -> Result<(), Error> {
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // GENERATED cols, ... as opposed to just top-level SELECTs.
+
+  db.create_scalar_function(
+    "geoip_country",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    geoip_country,
+  )?;
+  db.create_scalar_function(
+    "geoip_city_name",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    geoip_city_name,
+  )?;
+  db.create_scalar_function(
+    "geoip_city_json",
+    1,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    geoip_city_json,
+  )?;
+
+  return Ok(());
 }
 
 #[cfg(test)]

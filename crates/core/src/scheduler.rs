@@ -90,10 +90,7 @@ impl Job {
 
     self.state.lock().handle = Some(
       tokio::spawn(async move {
-        loop {
-          let Some(next) = schedule.upcoming(Utc).next() else {
-            break;
-          };
+        while let Some(next) = schedule.upcoming(Utc).next() {
           let Ok(duration) = (next - Utc::now()).to_std() else {
             warn!("Invalid duration for '{name}': {next:?}");
             continue;

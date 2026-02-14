@@ -1,7 +1,7 @@
 use quick_cache::sync::Cache;
 use regex::Regex;
 use rusqlite::Error;
-use rusqlite::functions::Context;
+use rusqlite::functions::{Context, FunctionFlags};
 use std::sync::LazyLock;
 
 // NOTE: Regexps are using Arcs internally and are cheap to clone.
@@ -11,8 +11,7 @@ static CACHE: LazyLock<Cache<String, Regex>> = LazyLock::new(|| Cache::new(256))
 ///
 /// NOTE: Sqlite supports `col REGEXP pattern` in expression, which requires a custom
 /// `regexp(pattern, col)` scalar function to be registered.
-pub(super) fn regexp(context: &Context) -> Result<bool, Error> {
-  #[cfg(debug_assertions)]
+fn regexp(context: &Context) -> Result<bool, Error> {
   if context.len() != 2 {
     return Err(Error::InvalidParameterCount(context.len(), 2));
   }
@@ -43,6 +42,25 @@ fn regexp_impl(re: &str, contents: Option<&str>) -> Result<bool, Error> {
       Ok(valid)
     }
   };
+}
+
+pub(crate) fn register_extension_functions(db: &rusqlite::Connection) -> Result<(), Error> {
+  // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
+  // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
+  // GENERATED cols, ... as opposed to just top-level SELECTs.
+
+  db.create_scalar_function(
+    // NOTE: the name needs to be "regexp" to be picked up by sqlites REGEXP matcher:
+    // https://www.sqlite.org/lang_expr.html
+    "regexp",
+    2,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
+    regexp,
+  )?;
+
+  return Ok(());
 }
 
 #[cfg(test)]
