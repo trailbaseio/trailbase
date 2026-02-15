@@ -13,5 +13,6 @@ crate-type=["cdylib"]
 name = "trailbase"
 
 [dependencies]
-rusqlite = { version = "0.38.0", default-features = false, features = ["bundled", "cache", "functions", "loadable_extension"] }
+# NOTE: rusqlite must not enable "bundled" for the .so built to work.
+rusqlite = { version = "0.38.0", default-features = false, features = ["functions", "loadable_extension"] }
 trailbase-extension = { workspace = true }

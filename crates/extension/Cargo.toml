@@ -22,8 +22,8 @@ maxminddb = "0.27.0"
 parking_lot = { workspace = true }
 quick_cache = "0.6.18"
 regex = "1.11.0"
-rusqlite = { workspace = true }
-# rusqlite = { version = "0.38.0", default-features = false, features = ["bundled", "cache", "functions", "loadable_extension"] }
+# NOTE: rusqlite must not enable "bundled" for the .so built to work.
+rusqlite = { version = "0.38.0", default-features = false, features = ["functions"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.12"
