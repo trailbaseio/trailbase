@@ -3,6 +3,12 @@ import * as JSON from "@ungap/raw-json";
 import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
+import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
+import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
+import type { GenerateTOTPResponse } from "@bindings/GenerateTOTPResponse";
+import type { ConfirmTOTPRequest } from "@bindings/ConfirmTOTPRequest";
+import type { DisableTOTPRequest } from "@bindings/DisableTOTPRequest";
+import type { VerifyTOTPRequest } from "@bindings/VerifyTOTPRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
 import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
@@ -672,6 +678,19 @@ export interface Client {
   login(email: string, password: string): Promise<void>;
   logout(): Promise<boolean>;
 
+  requestOTP(email: string): Promise<void>;
+  verifyOTP(email: string, code: string): Promise<void>;
+
+  generateTOTP(): Promise<GenerateTOTPResponse>;
+  confirmTOTP(secret: string, code: string): Promise<void>;
+  disableTOTP(totp: string): Promise<void>;
+  verifyTOTP(
+    email: string,
+    totp: string,
+    password?: string,
+    otp?: string,
+  ): Promise<void>;
+
   deleteUser(): Promise<void>;
   checkCookies(): Promise<Tokens | undefined>;
   refreshAuthToken(): Promise<void>;
@@ -816,6 +835,82 @@ class ClientImpl implements Client {
       } as ChangeEmailRequest),
       headers: jsonContentTypeHeader,
     });
+  }
+
+  public async requestOTP(email: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/otp/request`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email,
+      } as RequestOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+  }
+
+  public async verifyOTP(email: string, code: string): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/otp/verify`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email,
+        code: code,
+      } as VerifyOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
+  }
+
+  public async generateTOTP(): Promise<GenerateTOTPResponse> {
+    const response = await this.fetch(`${authApiBasePath}/totp/generate`, {
+      method: "POST",
+      headers: jsonContentTypeHeader,
+    });
+    return parseJSON(await response.text());
+  }
+
+  public async confirmTOTP(secret: string, totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/confirm`, {
+      method: "POST",
+      body: JSON.stringify({
+        secret,
+        totp,
+      } as ConfirmTOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+  }
+
+  public async disableTOTP(totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/disable`, {
+      method: "POST",
+      body: JSON.stringify({
+        totp,
+      } as DisableTOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+  }
+
+  public async verifyTOTP(
+    email: string,
+    totp: string,
+    password?: string,
+    otp?: string,
+  ): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/totp/verify`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        totp,
+        password,
+        otp,
+      } as VerifyTOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
   }
 
   /// This will call the status endpoint, which validates any provided tokens

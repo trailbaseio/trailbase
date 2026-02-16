@@ -1,4 +1,5 @@
 pub mod login;
+pub mod otp;
 
 pub(crate) mod register;
 

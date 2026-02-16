@@ -304,6 +304,10 @@ pub(crate) async fn login_with_password(
   // Validates password and rate limits attempts.
   check_user_password(&db_user, password, state.demo_mode())?;
 
+  if db_user.totp_secret.is_some() {
+    return Err(AuthError::BadRequest("TOTP_REQUIRED"));
+  }
+
   let user_id = db_user.uuid();
 
   let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;

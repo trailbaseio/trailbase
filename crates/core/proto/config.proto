@@ -33,6 +33,7 @@ message EmailConfig {
   optional EmailTemplate user_verification_template = 21;
   optional EmailTemplate password_reset_template = 22;
   optional EmailTemplate change_email_template = 23;
+  optional EmailTemplate otp_template = 24;
 }
 
 enum OAuthProviderId {
