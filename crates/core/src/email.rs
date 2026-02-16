@@ -223,6 +223,43 @@ impl Email {
 
     return Email::new_internal(state, to, subject, body);
   }
+
+  pub(crate) fn otp_email(
+    state: &AppState,
+    email_address: &str,
+    otp_code: &str,
+  ) -> Result<Self, EmailError> {
+    let to: Mailbox = email_address.parse()?;
+    let (server_config, template) =
+      state.access_config(|c| (c.server.clone(), c.email.otp_template.clone()));
+
+    let subject_template = template
+      .as_ref()
+      .and_then(|t| t.subject.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_OTP_SUBJECT);
+    let body_template = template
+      .as_ref()
+      .and_then(|t| t.body.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_OTP_BODY);
+    let site_url = get_site_url(state);
+
+    let env = Environment::empty();
+    let subject = env
+      .template_from_named_str("subject", subject_template)?
+      .render(context! {
+        APP_NAME => server_config.application_name,
+        EMAIL => email_address,
+      })?;
+    let body = env
+      .template_from_named_str("body", body_template)?
+      .render(context! {
+        APP_NAME => server_config.application_name,
+        CODE => otp_code,
+        SITE_URL => site_url,
+        EMAIL => email_address,
+      })?;
+    return Email::new_internal(state, to, subject, body);
+  }
 }
 
 fn get_sender(state: &AppState) -> Result<Mailbox, EmailError> {
@@ -420,6 +457,12 @@ pub mod testing {
       assert!(email.body.contains(&format!(
         "https://test.org/_/auth/reset_password/update/{code}"
       )));
+    }
+
+    {
+      let email = Email::otp_email(&state, "foo@bar.org", "12345678").unwrap();
+      assert_eq!(email.subject, "TrailBase OTP");
+      assert!(email.body.contains(&format!("12345678")));
     }
   }
 

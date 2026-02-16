@@ -352,6 +352,7 @@ export interface EmailConfig {
   userVerificationTemplate?: EmailTemplate | undefined;
   passwordResetTemplate?: EmailTemplate | undefined;
   changeEmailTemplate?: EmailTemplate | undefined;
+  otpTemplate?: EmailTemplate | undefined;
 }
 
 export interface OAuthProviderConfig {
@@ -708,6 +709,9 @@ export const EmailConfig: MessageFns<EmailConfig> = {
     if (message.changeEmailTemplate !== undefined) {
       EmailTemplate.encode(message.changeEmailTemplate, writer.uint32(186).fork()).join();
     }
+    if (message.otpTemplate !== undefined) {
+      EmailTemplate.encode(message.otpTemplate, writer.uint32(194).fork()).join();
+    }
     return writer;
   },
 
@@ -798,6 +802,14 @@ export const EmailConfig: MessageFns<EmailConfig> = {
           message.changeEmailTemplate = EmailTemplate.decode(reader, reader.uint32());
           continue;
         }
+        case 24: {
+          if (tag !== 194) {
+            break;
+          }
+
+          message.otpTemplate = EmailTemplate.decode(reader, reader.uint32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -859,6 +871,9 @@ export const EmailConfig: MessageFns<EmailConfig> = {
         : isSet(object.change_email_template)
         ? EmailTemplate.fromJSON(object.change_email_template)
         : undefined,
+      otpTemplate: isSet(object.otpTemplate)
+        ? EmailTemplate.fromJSON(object.otpTemplate)
+        : undefined,
     };
   },
 
@@ -894,6 +909,9 @@ export const EmailConfig: MessageFns<EmailConfig> = {
     if (message.changeEmailTemplate !== undefined) {
       obj.changeEmailTemplate = EmailTemplate.toJSON(message.changeEmailTemplate);
     }
+    if (message.otpTemplate !== undefined) {
+      obj.otpTemplate = EmailTemplate.toJSON(message.otpTemplate);
+    }
     return obj;
   },
 
@@ -919,6 +937,9 @@ export const EmailConfig: MessageFns<EmailConfig> = {
         : undefined;
     message.changeEmailTemplate = (object.changeEmailTemplate !== undefined && object.changeEmailTemplate !== null)
       ? EmailTemplate.fromPartial(object.changeEmailTemplate)
+      : undefined;
+    message.otpTemplate = (object.otpTemplate !== undefined && object.otpTemplate !== null)
+      ? EmailTemplate.fromPartial(object.otpTemplate)
       : undefined;
     return message;
   },
