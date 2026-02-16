@@ -25,6 +25,9 @@ CREATE TABLE _user (
   authorization_code               TEXT,
   authorization_code_sent_at       INTEGER,
   pkce_code_challenge              TEXT,
+  -- OTP flow.
+  otp_code                         TEXT,
+  otp_sent_at                      INTEGER,
 
   -- OAuth metadata
   --

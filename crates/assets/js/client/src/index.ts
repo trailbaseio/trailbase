@@ -2,6 +2,8 @@ import { jwtDecode } from "jwt-decode";
 import * as JSON from "@ungap/raw-json";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
+import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
+import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
 import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
@@ -643,6 +645,9 @@ export interface Client {
   login(email: string, password: string): Promise<void>;
   logout(): Promise<boolean>;
 
+  requestOTP(email: string): Promise<void>;
+  verifyOTP(email: string, code: string): Promise<void>;
+
   deleteUser(): Promise<void>;
   checkCookies(): Promise<Tokens | undefined>;
   refreshAuthToken(): Promise<void>;
@@ -787,6 +792,31 @@ class ClientImpl implements Client {
       } as ChangeEmailRequest),
       headers: jsonContentTypeHeader,
     });
+  }
+
+  public async requestOTP(email: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/otp/request`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email,
+      } as RequestOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+  }
+
+  public async verifyOTP(email: string, code: string): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/otp/verify`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email,
+        code: code,
+      } as VerifyOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
   }
 
   /// This will call the status endpoint, which validates any provided tokens

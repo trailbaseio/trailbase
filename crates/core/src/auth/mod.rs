@@ -48,6 +48,8 @@ use api::*;
     change_password::change_password_handler,
     refresh::refresh_handler,
     login::login_handler,
+    otp::request_otp_handler,
+    otp::verify_otp_handler,
     token::auth_code_to_token_handler,
     status::login_status_handler,
     logout::logout_handler,
@@ -129,6 +131,15 @@ pub(super) fn router() -> Router<crate::AppState> {
     .route(
       &format!("/{AUTH_API_PATH}/login"),
       post(api::login::login_handler),
+    )
+    // OTP flow
+    .route(
+      &format!("/{AUTH_API_PATH}/otp/request"),
+      post(api::otp::request_otp_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/otp/verify"),
+      post(api::otp::verify_otp_handler),
     )
     // Converts auth code (+pkce code verifier) to auth tokens
     .route(

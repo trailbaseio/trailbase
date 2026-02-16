@@ -12,3 +12,8 @@ pub const DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT: &str =
   include_str!("../templates/default_email_change_address_subject.txt");
 pub const DEFAULT_EMAIL_CHANGE_ADDRESS_BODY: &str =
   include_str!("../templates/default_email_change_address_body.html");
+
+pub const DEFAULT_EMAIL_OTP_SUBJECT: &str =
+  include_str!("../templates/default_email_otp_subject.txt");
+pub const DEFAULT_EMAIL_OTP_BODY: &str =
+  include_str!("../templates/default_email_otp_body.html");

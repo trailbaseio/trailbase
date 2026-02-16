@@ -33,6 +33,9 @@ pub(crate) struct DbUser {
   pub authorization_code_sent_at: Option<i64>,
   pub pkce_code_challenge: Option<String>,
 
+  pub otp_code: Option<String>,
+  pub otp_sent_at: Option<i64>,
+
   // For external OAuth providers.
   //
   // NOTE: provider_id corresponds to proto::config::OAuthProviderId.
@@ -72,6 +75,8 @@ impl DbUser {
       password_reset_code_sent_at: None,
       authorization_code: None,
       authorization_code_sent_at: None,
+      otp_code: None,
+      otp_sent_at: None,
       pkce_code_challenge: None,
       provider_id: 0,
       provider_user_id: None,
