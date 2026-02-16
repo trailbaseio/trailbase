@@ -199,7 +199,11 @@ pub async fn get_user_by_email(
   let db_user = user_conn
     .read_query_value::<DbUser>(QUERY, params!(email.to_string()))
     .await
-    .map_err(|_err| AuthError::NotFound)?;
+    .map_err(|err| {
+      debug_assert!(false, "GET USER BY EMAIL query failed: {err}");
+
+      return AuthError::NotFound;
+    })?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
@@ -216,34 +220,53 @@ pub async fn get_user_by_id(
   let db_user = user_conn
     .read_query_value::<DbUser>(QUERY, params!(id.into_bytes()))
     .await
-    .map_err(|_err| AuthError::NotFound)?;
+    .map_err(|err| {
+      debug_assert!(false, "GET USER BY ID query failed: {err}");
+
+      return AuthError::NotFound;
+    })?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
 
-pub async fn user_exists(state: &AppState, email: &str) -> Result<bool, AuthError> {
+pub async fn user_exists(state: &AppState, email: &str) -> bool {
   const QUERY: &str = formatcp!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
-  return state
+
+  return match state
     .user_conn()
-    .read_query_row_f(QUERY, params!(email.to_string()), |row| row.get(0))
-    .await?
-    .ok_or_else(|| AuthError::Internal("query should return".into()));
+    .read_query_row_f(QUERY, params!(email.to_string()), |row| {
+      row.get::<_, bool>(0)
+    })
+    .await
+  {
+    Ok(Some(row)) => row,
+    Ok(None) => false,
+    Err(err) => {
+      debug_assert!(false, "USER EXISTS query failed: {err}");
+
+      false
+    }
+  };
 }
 
 pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
   const QUERY: &str = formatcp!(r#"SELECT admin FROM "{USER_TABLE}" WHERE id = $1"#);
 
-  let Ok(Some(row)) = state
+  return match state
     .user_conn()
     .read_query_row_f(QUERY, params!(user_id.as_bytes().to_vec()), |row| {
-      row.get(0)
+      row.get::<_, i64>(0)
     })
     .await
-  else {
-    return false;
-  };
+  {
+    Ok(Some(row)) => row > 0,
+    Ok(None) => false,
+    Err(err) => {
+      debug_assert!(false, "IS ADMIN query failed: {err}");
 
-  return row;
+      false
+    }
+  };
 }
 
 pub(crate) async fn delete_all_sessions_for_user(
@@ -268,12 +291,15 @@ pub(crate) async fn delete_session(
 ) -> Result<usize, AuthError> {
   const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE refresh_token = $1"#);
 
-  return Ok(
-    state
-      .user_conn()
-      .execute(QUERY, params!(refresh_token))
-      .await?,
-  );
+  return state
+    .user_conn()
+    .execute(QUERY, params!(refresh_token))
+    .await
+    .map_err(|err| {
+      debug_assert!(false, "DELETE SESSIONS query failed: {err}");
+
+      return AuthError::Internal(err.into());
+    });
 }
 
 /// Derives the code challenge given the verifier as base64UrlNoPad(sha256([codeVerifier])).

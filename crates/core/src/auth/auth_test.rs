@@ -69,7 +69,7 @@ async fn register_test_user(
     ..Default::default()
   };
 
-  register_user_handler(State(state.clone()), Either::Form(request))
+  let _ = register_user_handler(State(state.clone()), Either::Form(request))
     .await
     .unwrap();
 
@@ -418,7 +418,7 @@ async fn test_auth_reset_password_flow() {
   let (state, mailer, user) = setup_state_and_test_user(&email, &password).await;
 
   // Reset (forgotten) password flow.
-  reset_password_request_handler(
+  let _ = reset_password_request_handler(
     State(state.clone()),
     Either::Form(ResetPasswordRequest {
       email: email.clone(),
@@ -470,7 +470,7 @@ async fn test_auth_reset_password_flow() {
   );
 
   let new_password = reset_password.to_string();
-  reset_password_update_handler(
+  let _ = reset_password_update_handler(
     State(state.clone()),
     Either::Form(ResetPasswordUpdateRequest {
       password: new_password.clone(),

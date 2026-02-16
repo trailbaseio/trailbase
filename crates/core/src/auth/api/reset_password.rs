@@ -1,7 +1,4 @@
-use axum::{
-  extract::State,
-  response::{IntoResponse, Redirect, Response},
-};
+use axum::{extract::State, response::Redirect};
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::params;
@@ -34,13 +31,14 @@ pub struct ResetPasswordRequest {
   tag = "auth",
   request_body = ResetPasswordRequest,
   responses(
-    (status = 200, description = "Success.")
+    (status = 303, description = "Success or user not found."),
+    (status = 400, description = "Malformed email address."),
   )
 )]
 pub async fn reset_password_request_handler(
   State(state): State<AppState>,
   either_request: Either<ResetPasswordRequest>,
-) -> Result<Response, AuthError> {
+) -> Result<Redirect, AuthError> {
   let request = match either_request {
     Either::Json(req) => req,
     Either::Multipart(req, _) => req,
@@ -49,14 +47,19 @@ pub async fn reset_password_request_handler(
 
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
-  let user = user_by_email(&state, &normalized_email).await?;
+  let success = Redirect::to(&format!("{LOGIN_UI}?alert=Password reset email sent"));
+  let Ok(user) = user_by_email(&state, &normalized_email).await else {
+    // In case we don't find a user we still reply with a success to avoid leaking
+    // users' email addresses.
+    return Ok(success);
+  };
 
   if let Some(last_reset) = user.password_reset_code_sent_at {
     let Some(timestamp) = chrono::DateTime::from_timestamp(last_reset, 0) else {
       return Err(AuthError::Internal("Invalid timestamp".into()));
     };
 
-    let age: chrono::Duration = chrono::Utc::now() - timestamp;
+    let age = chrono::Utc::now() - timestamp;
     if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
       return Err(AuthError::TooManyRequests);
     }
@@ -83,6 +86,7 @@ pub async fn reset_password_request_handler(
     .await?;
 
   return match rows_affected {
+    // Race: can only happen if user is removed while password is being reset.
     0 => Err(AuthError::Conflict),
     1 => {
       let email = Email::password_reset_email(&state, &user.email, &password_reset_code)
@@ -92,7 +96,7 @@ pub async fn reset_password_request_handler(
         .await
         .map_err(|err| AuthError::Internal(err.into()))?;
 
-      Ok(Redirect::to(&format!("{LOGIN_UI}?alert=Password reset email sent")).into_response())
+      Ok(success)
     }
     _ => {
       panic!("non-unique email");
@@ -114,17 +118,19 @@ pub struct ResetPasswordUpdateRequest {
 /// replacement password.
 #[utoipa::path(
   post,
-  path = "/reset_password/update/:password_reset_code",
+  path = "/reset_password/update",
   tag = "auth",
   request_body = ResetPasswordUpdateRequest,
   responses(
-    (status = 200, description = "Success.")
+    (status = 303, description = "Success. Redirect to provided `redirect_uri` or login page."),
+    (status = 400, description = "Bad request: invalid redirect_uri."),
+    (status = 401, description = "Unauthorized: invalid reset code."),
   )
 )]
 pub async fn reset_password_update_handler(
   State(state): State<AppState>,
   either_request: Either<ResetPasswordUpdateRequest>,
-) -> Result<Response, AuthError> {
+) -> Result<Redirect, AuthError> {
   let request = match either_request {
     Either::Json(req) => req,
     Either::Multipart(req, _) => req,
@@ -162,8 +168,10 @@ pub async fn reset_password_update_handler(
     .await?;
 
   return match rows_affected {
-    0 => Err(AuthError::BadRequest("Invalid reset code.")),
-    1 => Ok(Redirect::to(request.redirect_uri.as_deref().unwrap_or(LOGIN_UI)).into_response()),
+    0 => Err(AuthError::Unauthorized),
+    1 => Ok(Redirect::to(
+      request.redirect_uri.as_deref().unwrap_or(LOGIN_UI),
+    )),
     _ => {
       panic!("multiple users with same verification code.");
     }

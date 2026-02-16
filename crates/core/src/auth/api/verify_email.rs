@@ -1,7 +1,6 @@
 use axum::{
   extract::{Path, Query, State},
-  http::StatusCode,
-  response::{IntoResponse, Redirect, Response},
+  response::Redirect,
 };
 use const_format::formatcp;
 use serde::Deserialize;
@@ -9,9 +8,8 @@ use trailbase_sqlite::params;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::AuthError;
-use crate::auth::PROFILE_UI;
-use crate::auth::util::{user_by_email, validate_redirect};
+use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
+use crate::auth::{AuthError, LOGIN_UI, PROFILE_UI};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::rand::generate_random_string;
@@ -31,23 +29,31 @@ pub struct EmailVerificationRequest {
   tag = "auth",
   request_body = EmailVerificationRequest,
   responses(
-    (status = 200, description = "Email verification sent.")
+    (status = 303, description = "Email verification sent or user not found."),
+    (status = 400, description = "Malformed email address."),
   )
 )]
 pub async fn request_email_verification_handler(
   State(state): State<AppState>,
   Query(request): Query<EmailVerificationRequest>,
-) -> Result<Response, AuthError> {
-  let user = user_by_email(&state, &request.email).await?;
+) -> Result<Redirect, AuthError> {
+  let normalized_email = validate_and_normalize_email_address(&request.email)?;
+
+  let success = Redirect::to(&format!("{LOGIN_UI}?alert=Verification email sent"));
+  let Ok(user) = user_by_email(&state, &normalized_email).await else {
+    // In case we don't find a user we still reply with a success to avoid leaking
+    // users' email addresses.
+    return Ok(success);
+  };
 
   if let Some(last_verification) = user.email_verification_code_sent_at {
     let Some(timestamp) = chrono::DateTime::from_timestamp(last_verification, 0) else {
       return Err(AuthError::Internal("Invalid timestamp".into()));
     };
 
-    let age: chrono::Duration = chrono::Utc::now() - timestamp;
+    let age = chrono::Utc::now() - timestamp;
     if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
-      return Err(AuthError::BadRequest("verification already sent"));
+      return Err(AuthError::TooManyRequests);
     }
   }
 
@@ -72,6 +78,7 @@ pub async fn request_email_verification_handler(
     .await?;
 
   return match rows_affected {
+    // Race: can only happen if user is removed while email is verified.
     0 => Err(AuthError::Conflict),
     1 => {
       let email = Email::verification_email(&state, &user.email, &email_verification_code)
@@ -81,7 +88,9 @@ pub async fn request_email_verification_handler(
         .await
         .map_err(|err| AuthError::Internal(err.into()))?;
 
-      Ok((StatusCode::OK, "Verification code sent").into_response())
+      Ok(Redirect::to(&format!(
+        "{LOGIN_UI}?alert=Verification email sent"
+      )))
     }
     _ => {
       panic!("Password reset affected multiple users: {rows_affected}");
@@ -100,7 +109,9 @@ pub(crate) struct VerifyEmailQuery {
   path = "/verify_email/confirm/:email_verification_code",
   tag = "auth",
   responses(
-    (status = 200, description = "Email verified.")
+    (status = 303, description = "Email verified."),
+    (status = 400, description = "Bad request: invalid redirect_uri."),
+    (status = 401, description = "Unauthorized: invalid reset code."),
   )
 )]
 pub async fn verify_email_handler(
@@ -128,7 +139,7 @@ pub async fn verify_email_handler(
     .await?;
 
   return match rows_affected {
-    0 => Err(AuthError::BadRequest("Invalid verification code")),
+    0 => Err(AuthError::Unauthorized),
     1 => Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI))),
     _ => panic!("email verification affected multiple users: {rows_affected}"),
   };

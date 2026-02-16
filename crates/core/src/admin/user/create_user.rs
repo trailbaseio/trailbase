@@ -42,8 +42,7 @@ pub async fn create_user_handler(
     auth_options.password_options(),
   )?;
 
-  let exists = user_exists(&state, &normalized_email).await?;
-  if exists {
+  if user_exists(&state, &normalized_email).await {
     return Err(Error::AlreadyExists("user"));
   }
 

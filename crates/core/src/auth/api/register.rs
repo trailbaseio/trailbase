@@ -1,5 +1,5 @@
 use axum::extract::State;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::Redirect;
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
@@ -30,13 +30,15 @@ pub struct RegisterUserRequest {
   tag = "auth",
   request_body = RegisterUserRequest,
   responses(
-    (status = 200, description = "Successful registration.")
+    (status = 303, description = "Success, new user registered, or user already exists."),
+    (status = 307, description = "Temporary redirect: invalid password."),
+    (status = 424, description = "Failed to send verification Email."),
   )
 )]
 pub async fn register_user_handler(
   State(state): State<AppState>,
   either_request: Either<RegisterUserRequest>,
-) -> Result<Response, AuthError> {
+) -> Result<Redirect, AuthError> {
   let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
   if disabled {
     return Err(AuthError::Forbidden);
@@ -56,14 +58,21 @@ pub async fn register_user_handler(
     &request.password_repeat,
     auth_options.password_options(),
   ) {
-    let msg = crate::util::urlencode("Invalid password");
-    return Ok(Redirect::to(&format!("{REGISTER_USER_UI}?alert={msg}")).into_response());
+    return Ok(Redirect::temporary(&format!(
+      "{REGISTER_USER_UI}?alert=Invalid password"
+    )));
   }
 
-  let exists = user_exists(&state, &normalized_email).await?;
-  if exists {
-    let msg = crate::util::urlencode("E-mail already registered.");
-    return Ok(Redirect::to(&format!("{REGISTER_USER_UI}?alert={msg}")).into_response());
+  let success = {
+    let msg = format!(
+      "Registered {normalized_email}. Email verification is needed before signing in. Check your inbox."
+    );
+    Redirect::to(&format!("{LOGIN_UI}?alert={msg}"))
+  };
+
+  if user_exists(&state, &normalized_email).await {
+    // In case the user already exists, we claim success to avoid leaking users' email addresses.
+    return Ok(success);
   }
 
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
@@ -92,7 +101,7 @@ pub async fn register_user_handler(
     .await
     .map_err(|_err| {
       #[cfg(debug_assertions)]
-      log::debug!("Failed to create user {normalized_email}: {_err}");
+      log::debug!("Failed to register new user {normalized_email}: {_err}");
       // The insert will fail if the user is already registered
       AuthError::Conflict
     })?
@@ -105,11 +114,7 @@ pub async fn register_user_handler(
   email
     .send()
     .await
-    .map_err(|err| AuthError::Internal(err.into()))?;
+    .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
 
-  // Success: new user registered. User still needs to verify.
-  let msg = format!(
-    "Registered {normalized_email}. Email verification is needed before sign in. Check your inbox."
-  );
-  return Ok(Redirect::to(&format!("{LOGIN_UI}?alert={msg}")).into_response());
+  return Ok(success);
 }

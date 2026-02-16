@@ -367,8 +367,14 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Successful registration."
+          "303": {
+            "description": "Success, new user registered, or user already exists."
+          },
+          "307": {
+            "description": "Temporary redirect: invalid password."
+          },
+          "424": {
+            "description": "Failed to send verification Email."
           }
         }
       }
@@ -389,13 +395,16 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Success."
+          "303": {
+            "description": "Success or user not found."
+          },
+          "400": {
+            "description": "Malformed email address."
           }
         }
       }
     },
-    "/api/auth/v1/reset_password/update/:password_reset_code": {
+    "/api/auth/v1/reset_password/update": {
       "post": {
         "tags": ["auth"],
         "summary": "Endpoint for setting a new password after the user has requested a reset and provided a\nreplacement password.",
@@ -411,8 +420,14 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Success."
+          "303": {
+            "description": "Success. Redirect to provided `redirect_uri` or login page."
+          },
+          "400": {
+            "description": "Bad request: invalid redirect_uri."
+          },
+          "401": {
+            "description": "Unauthorized: invalid reset code."
           }
         }
       }
@@ -472,8 +487,14 @@
         "summary": "Request a new email to verify email address.",
         "operationId": "verify_email_handler",
         "responses": {
-          "200": {
+          "303": {
             "description": "Email verified."
+          },
+          "400": {
+            "description": "Bad request: invalid redirect_uri."
+          },
+          "401": {
+            "description": "Unauthorized: invalid reset code."
           }
         }
       }
@@ -494,8 +515,11 @@
           "required": true
         },
         "responses": {
-          "200": {
-            "description": "Email verification sent."
+          "303": {
+            "description": "Email verification sent or user not found."
+          },
+          "400": {
+            "description": "Malformed email address."
           }
         }
       }
@@ -613,7 +637,7 @@
         ],
         "responses": {
           "200": {
-            "description": "SSE stream of record changes."
+            "description": "Starts streaming changes to matching records via SSE/WebSocket"
           }
         }
       }
