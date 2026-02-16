@@ -1,6 +1,9 @@
 use regex::Regex;
 use trailbase_qs::{Combiner, CompareOp};
-use trailbase_schema::sqlite::{Column, ColumnDataType};
+use trailbase_schema::{
+  metadata::ColumnMetadata,
+  sqlite::{Column, ColumnDataType},
+};
 
 use crate::records::RecordError;
 
@@ -76,20 +79,20 @@ pub(crate) fn qs_value_to_sql_with_constraints(
 }
 
 pub(crate) fn qs_filter_to_record_filter(
-  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
   filter: trailbase_qs::ValueOrComposite,
 ) -> Result<ValueOrComposite, RecordError> {
   return match filter {
     trailbase_qs::ValueOrComposite::Value(col_op_value) => {
-      let column = columns
+      let meta = column_metadata
         .iter()
-        .find(|c| c.name == col_op_value.column)
+        .find(|meta| meta.column.name == col_op_value.column)
         .ok_or_else(|| RecordError::BadRequest("Invalid query"))?;
 
       Ok(ValueOrComposite::Value(ColumnOpValue {
         column: col_op_value.column,
         op: col_op_value.op,
-        value: qs_value_to_sql_with_constraints(column, col_op_value.value)?,
+        value: qs_value_to_sql_with_constraints(&meta.column, col_op_value.value)?,
       }))
     }
     trailbase_qs::ValueOrComposite::Composite(combiner, expressions) => {
@@ -97,7 +100,7 @@ pub(crate) fn qs_filter_to_record_filter(
         combiner,
         expressions
           .into_iter()
-          .map(|value_or_composite| qs_filter_to_record_filter(columns, value_or_composite))
+          .map(|value_or_composite| qs_filter_to_record_filter(column_metadata, value_or_composite))
           .collect::<Result<Vec<_>, _>>()?,
       ))
     }

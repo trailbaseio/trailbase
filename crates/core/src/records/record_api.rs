@@ -5,10 +5,9 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::metadata::{
-  ConnectionMetadata, JsonColumnMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
+  ColumnMetadata, ConnectionMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
-use trailbase_schema::sqlite::Column;
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 
@@ -30,15 +29,20 @@ struct RecordApiSchema {
   attached_databases: Vec<String>,
 
   is_table: bool,
-  record_pk_column: (usize, Column),
-  columns: Vec<Column>,
-  json_column_metadata: Vec<Option<JsonColumnMetadata>>,
+  record_pk_column: ColumnMetadata,
+  column_metadata: Vec<ColumnMetadata>,
+
   has_file_columns: bool,
   user_id_columns: Vec<usize>,
 
-  // Helpers
-  column_name_to_index: HashMap<String, usize>,
+  // Helpers:
+
+  // SQLite parameter emplate
   named_params_template: NamedParams,
+  // Mapping form column name to *API column index*.
+  // NOTE: The index may be different from the column's index in the underlying TABLE or VIEW
+  // due to excluded columns.
+  column_name_to_index: HashMap<String, usize>,
 }
 
 type DeferredAclCheck = dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send;
@@ -47,32 +51,26 @@ impl RecordApiSchema {
   fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
     assert_name(config, table_metadata.name());
 
-    let Some((pk_index, pk_column)) = table_metadata.record_pk_column() else {
+    let Some(record_pk_column) = table_metadata.record_pk_column() else {
       return Err("RecordApi requires integer/UUIDv7 primary key column".into());
     };
-    let record_pk_column = (pk_index, pk_column.clone());
 
-    let (columns, json_column_metadata) = filter_columns(
-      config,
-      &table_metadata.schema.columns,
-      &table_metadata.json_metadata.columns,
-    );
-
-    let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
-    let user_id_columns = find_user_id_foreign_key_columns(&columns, USER_TABLE);
+    let column_metadata = filter_excluded_columns(config, &table_metadata.column_metadata);
+    let has_file_columns = !find_file_column_indexes(&column_metadata).is_empty();
+    let user_id_columns = find_user_id_foreign_key_columns(&column_metadata, USER_TABLE);
 
     let column_name_to_index = HashMap::<String, usize>::from_iter(
-      columns
+      column_metadata
         .iter()
         .enumerate()
-        .map(|(index, col)| (col.name.clone(), index)),
+        .map(|(index, meta)| (meta.column.name.clone(), index)),
     );
 
-    let named_params_template: NamedParams = columns
+    let named_params_template: NamedParams = column_metadata
       .iter()
-      .map(|column| {
+      .map(|meta| {
         (
-          Cow::Owned(prefix_colon(&column.name)),
+          Cow::Owned(prefix_colon(&meta.column.name)),
           trailbase_sqlite::Value::Null,
         )
       })
@@ -83,9 +81,8 @@ impl RecordApiSchema {
       table_name: QualifiedNameEscaped::new(&table_metadata.schema.name),
       attached_databases: config.attached_databases.clone(),
       is_table: true,
-      record_pk_column,
-      columns,
-      json_column_metadata,
+      record_pk_column: record_pk_column.clone(),
+      column_metadata,
       has_file_columns,
       user_id_columns,
       column_name_to_index,
@@ -96,30 +93,25 @@ impl RecordApiSchema {
   fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
     assert_name(config, view_metadata.name());
 
-    let Some((pk_index, pk_column)) = view_metadata.record_pk_column() else {
+    let Some(record_pk_column) = view_metadata.record_pk_column() else {
       return Err(format!(
         "RecordApi requires integer/UUIDv7 primary key column: {config:?}"
       ));
     };
-    let record_pk_column = (pk_index, pk_column.clone());
 
-    let Some(columns) = view_metadata.columns() else {
+    let Some(ref column_metadata) = view_metadata.column_metadata else {
       return Err("RecordApi requires schema".to_string());
     };
-    let Some(ref json_metadata) = view_metadata.json_metadata else {
-      return Err("RecordApi requires json metadata".to_string());
-    };
 
-    let (columns, json_column_metadata) = filter_columns(config, columns, &json_metadata.columns);
-
-    let has_file_columns = !find_file_column_indexes(&json_column_metadata).is_empty();
-    let user_id_columns = find_user_id_foreign_key_columns(&columns, USER_TABLE);
+    let column_metadata = filter_excluded_columns(config, column_metadata);
+    let has_file_columns = !find_file_column_indexes(&column_metadata).is_empty();
+    let user_id_columns = find_user_id_foreign_key_columns(&column_metadata, USER_TABLE);
 
     let column_name_to_index = HashMap::<String, usize>::from_iter(
-      columns
+      column_metadata
         .iter()
         .enumerate()
-        .map(|(index, col)| (col.name.clone(), index)),
+        .map(|(index, meta)| (meta.column.name.clone(), index)),
     );
 
     return Ok(Self {
@@ -127,9 +119,8 @@ impl RecordApiSchema {
       table_name: QualifiedNameEscaped::new(&view_metadata.schema.name),
       attached_databases: config.attached_databases.clone(),
       is_table: false,
-      record_pk_column,
-      columns,
-      json_column_metadata,
+      record_pk_column: record_pk_column.clone(),
+      column_metadata: column_metadata.clone(),
       has_file_columns,
       user_id_columns,
       column_name_to_index,
@@ -224,22 +215,27 @@ impl RecordApi {
     schema: RecordApiSchema,
     config: RecordApiConfig,
   ) -> Result<Self, String> {
-    assert_eq!(schema.columns.len(), schema.json_column_metadata.len());
-
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
     };
 
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
       Some(rule) => {
-        let read_access_query =
-          build_read_delete_schema_query(&schema.table_name, &schema.record_pk_column.1.name, rule);
+        let read_access_query = build_read_delete_schema_query(
+          &schema.table_name,
+          &schema.record_pk_column.column.name,
+          rule,
+        );
 
         let subscription_read_access_query = if schema.is_table {
           Some(
             SubscriptionRecordReadTemplate {
               read_access_rule: rule,
-              column_names: schema.columns.iter().map(|c| c.name.as_str()).collect(),
+              column_names: schema
+                .column_metadata
+                .iter()
+                .map(|m| m.column.name.as_str())
+                .collect(),
             }
             .render()
             .map_err(|err| err.to_string())?,
@@ -254,17 +250,25 @@ impl RecordApi {
     };
 
     let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(&schema.table_name, &schema.record_pk_column.1.name, rule)
+      build_read_delete_schema_query(
+        &schema.table_name,
+        &schema.record_pk_column.column.name,
+        rule,
+      )
     });
 
     let schema_access_query = config.schema_access_rule.as_ref().map(|rule| {
-      build_read_delete_schema_query(&schema.table_name, &schema.record_pk_column.1.name, rule)
+      build_read_delete_schema_query(
+        &schema.table_name,
+        &schema.record_pk_column.column.name,
+        rule,
+      )
     });
 
     let create_access_query = match &config.create_access_rule {
       Some(rule) => {
         if schema.is_table {
-          Some(build_create_access_query(&schema.columns, rule)?)
+          Some(build_create_access_query(&schema.column_metadata, rule)?)
         } else {
           None
         }
@@ -277,8 +281,8 @@ impl RecordApi {
         if schema.is_table {
           Some(build_update_access_query(
             &schema.table_name,
-            &schema.columns,
-            &schema.record_pk_column.1.name,
+            &schema.column_metadata,
+            &schema.record_pk_column.column.name,
             rule,
           )?)
         } else {
@@ -397,18 +401,13 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn record_pk_column(&self) -> &(usize, Column) {
+  pub fn record_pk_column(&self) -> &ColumnMetadata {
     return &self.state.schema.record_pk_column;
   }
 
   #[inline]
-  pub fn columns(&self) -> &[Column] {
-    return &self.state.schema.columns;
-  }
-
-  #[inline]
-  pub fn json_column_metadata(&self) -> &[Option<JsonColumnMetadata>] {
-    return &self.state.schema.json_column_metadata;
+  pub fn columns(&self) -> &[ColumnMetadata] {
+    return &self.state.schema.column_metadata;
   }
 
   #[inline]
@@ -417,14 +416,19 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn column_index_by_name(&self, key: &str) -> Option<usize> {
-    return self.state.schema.column_name_to_index.get(key).copied();
+  pub fn column_index_by_name(&self, name: &str) -> Option<usize> {
+    return self.state.schema.column_name_to_index.get(name).copied();
+  }
+
+  #[inline]
+  pub fn column_metadata_by_name(&self, name: &str) -> Option<&ColumnMetadata> {
+    return Some(&self.state.schema.column_metadata[self.column_index_by_name(name)?]);
   }
 
   pub fn primary_key_to_value(&self, pk: String) -> Result<Value, RecordError> {
     // NOTE: loosly parse - will convert STRING to INT/REAL.
     return trailbase_schema::json::parse_string_to_sqlite_value(
-      self.state.schema.record_pk_column.1.data_type,
+      self.state.schema.record_pk_column.column.data_type,
       pk,
     )
     .map_err(|_| RecordError::BadRequest("Invalid id"));
@@ -769,10 +773,13 @@ struct CreateRecordAccessQueryTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_create_access_query(
-  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
   create_access_rule: &str,
 ) -> Result<Arc<str>, String> {
-  let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+  let column_names: Vec<&str> = column_metadata
+    .iter()
+    .map(|m| m.column.name.as_str())
+    .collect();
 
   return Ok(
     CreateRecordAccessQueryTemplate {
@@ -803,11 +810,14 @@ struct UpdateRecordAccessQueryTemplate<'a> {
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_update_access_query(
   table_name: &QualifiedNameEscaped,
-  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
   pk_column_name: &str,
   update_access_rule: &str,
 ) -> Result<Arc<str>, String> {
-  let column_names: Vec<&str> = columns.iter().map(|c| c.name.as_str()).collect();
+  let column_names: Vec<&str> = column_metadata
+    .iter()
+    .map(|m| m.column.name.as_str())
+    .collect();
 
   return Ok(
     UpdateRecordAccessQueryTemplate {
@@ -839,33 +849,23 @@ enum Entity {
   Authenticated = 1,
 }
 
-fn filter_columns(
+fn filter_excluded_columns(
   config: &RecordApiConfig,
-  columns: &[Column],
-  json_column_metadata: &[Option<JsonColumnMetadata>],
-) -> (Vec<Column>, Vec<Option<JsonColumnMetadata>>) {
-  assert_eq!(columns.len(), json_column_metadata.len());
+  column_metadata: &[ColumnMetadata],
+) -> Vec<ColumnMetadata> {
   if config.excluded_columns.is_empty() {
-    return (columns.to_vec(), json_column_metadata.to_vec());
+    return column_metadata.to_vec();
   }
 
-  let excluded_indexes = config
-    .excluded_columns
+  return column_metadata
     .iter()
-    .filter_map(|name| columns.iter().position(|col| col.name == *name));
-  assert_eq!(
-    excluded_indexes.clone().count(),
-    config.excluded_columns.len()
-  );
-
-  let mut columns_vec = columns.to_vec();
-  let mut json_column_metadata_vec = json_column_metadata.to_vec();
-  for idx in excluded_indexes.rev() {
-    columns_vec.remove(idx);
-    json_column_metadata_vec.remove(idx);
-  }
-
-  return (columns_vec, json_column_metadata_vec);
+    .filter_map(|meta| {
+      if config.excluded_columns.contains(&meta.column.name) {
+        return None;
+      }
+      return Some(meta.clone());
+    })
+    .collect();
 }
 
 #[inline]

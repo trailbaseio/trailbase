@@ -90,7 +90,7 @@ pub async fn list_rows_handler(
 
   let cursor_column = table_or_view.record_pk_column();
   let cursor = match (cursor, cursor_column) {
-    (Some(cursor), Some((_idx, c))) => Some(parse_cursor(&cursor, c)?),
+    (Some(cursor), Some(meta)) => Some(parse_cursor(&cursor, &meta.column)?),
     _ => None,
   };
   let (rows, columns) = fetch_rows(
@@ -99,7 +99,7 @@ pub async fn list_rows_handler(
     filter_where_clause,
     &order,
     Pagination {
-      cursor_column: cursor_column.map(|(_idx, c)| c),
+      cursor_column: cursor_column.map(|meta| &meta.column),
       cursor,
       offset,
       limit: limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
@@ -108,10 +108,10 @@ pub async fn list_rows_handler(
   .await?;
 
   let next_cursor = if order.is_none() {
-    cursor_column.and_then(|(col_idx, _col)| {
+    cursor_column.and_then(|meta| {
       let row = rows.last()?;
-      assert!(row.len() > col_idx);
-      match &row[col_idx] {
+      assert!(row.len() > meta.index);
+      match &row[meta.index] {
         SqlValue::Integer(n) => Some(n.to_string()),
         SqlValue::Blob(b) => {
           // Should be a base64 encoded [u8; 16] id.
@@ -130,7 +130,10 @@ pub async fn list_rows_handler(
     // NOTE: in the view case we don't have a good way of extracting the columns from the "CREATE
     // VIEW" query so we fall back to columns constructed from the returned data.
     columns: match table_or_view.columns() {
-      Some(schema_columns) if !schema_columns.is_empty() => schema_columns.to_vec(),
+      Some(schema_columns) if !schema_columns.is_empty() => schema_columns
+        .iter()
+        .map(|meta| meta.column.clone())
+        .collect(),
       _ => {
         // VIRTUAL TABLE or VIEW case.
         debug!("Falling back to inferred cols for view: {table_name:?}");

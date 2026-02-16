@@ -105,7 +105,7 @@ pub async fn create_record_handler(
       && let Some(ref user) = user
     {
       for column_index in api.user_id_columns() {
-        let col_name = &api.columns()[*column_index].name;
+        let col_name = &api.columns()[*column_index].column.name;
         if !record.contains_key(col_name) {
           record.insert(
             col_name.to_owned(),
@@ -136,7 +136,7 @@ pub async fn create_record_handler(
     );
   }
 
-  let (_index, pk_column) = api.record_pk_column();
+  let pk_meta = api.record_pk_column();
   let record_ids: Vec<String> = match params_list.len() {
     0 => {
       return Err(RecordError::BadRequest("no values provided"));
@@ -147,7 +147,7 @@ pub async fn create_record_handler(
         state.objectstore(),
         api.table_name(),
         api.insert_conflict_resolution_strategy(),
-        &pk_column.name,
+        &pk_meta.column.name,
         params_list.swap_remove(0),
       )
       .await?;
@@ -161,7 +161,7 @@ pub async fn create_record_handler(
           let table_name: QualifiedNameEscaped = api.table_name().clone();
           let (query, files) = WriteQuery::new_insert(
             &table_name,
-            &pk_column.name,
+            &pk_meta.column.name,
             api.insert_conflict_resolution_strategy(),
             params,
           )

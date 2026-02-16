@@ -1,5 +1,5 @@
 use askama::Template;
-use trailbase_schema::sqlite::Column;
+use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
 use trailbase_sqlite::Value;
 
@@ -70,14 +70,13 @@ pub(crate) async fn run_expanded_select_query<'a>(
 pub(crate) async fn run_get_file_query(
   conn: &trailbase_sqlite::Connection,
   table_name: &QualifiedNameEscaped,
-  file_column: &Column,
-  json_metadata: &JsonColumnMetadata,
+  file_column_meta: &ColumnMetadata,
   pk_column: &str,
   pk_value: Value,
 ) -> Result<FileUpload, RecordError> {
-  return match &json_metadata {
-    JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-      let column_name = &file_column.name;
+  return match &file_column_meta.json {
+    Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
+      let column_name = &file_column_meta.column.name;
 
       let Some(row) = conn
         .read_query_row(
@@ -104,14 +103,13 @@ pub(crate) async fn run_get_file_query(
 pub(crate) async fn run_get_files_query(
   conn: &trailbase_sqlite::Connection,
   table_name: &QualifiedNameEscaped,
-  file_column: &Column,
-  json_metadata: &JsonColumnMetadata,
+  file_column_meta: &ColumnMetadata,
   pk_column: &str,
   pk_value: Value,
 ) -> Result<FileUploads, RecordError> {
-  return match &json_metadata {
-    JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-      let column_name = &file_column.name;
+  return match &file_column_meta.json {
+    Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUploads" => {
+      let column_name = &file_column_meta.column.name;
 
       let Some(row) = conn
         .read_query_row(
@@ -131,17 +129,9 @@ pub(crate) async fn run_get_files_query(
         serde_json::from_str(&contents).map_err(|err| RecordError::Internal(err.into()))?;
       Ok(file_uploads)
     }
-    JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
+    Some(JsonColumnMetadata::SchemaName(name)) if name == "std.FileUpload" => {
       return Ok(FileUploads(vec![
-        run_get_file_query(
-          conn,
-          table_name,
-          file_column,
-          json_metadata,
-          pk_column,
-          pk_value,
-        )
-        .await?,
+        run_get_file_query(conn, table_name, file_column_meta, pk_column, pk_value).await?,
       ]));
     }
     _ => Err(RecordError::BadRequest("Not a files list")),

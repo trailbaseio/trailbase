@@ -52,7 +52,7 @@ pub async fn fetch_stats_handler(
       &[table],
     )?;
 
-    build_filter_where_clause(TABLE_ALIAS, &table_metadata.schema.columns, filter_params)?
+    build_filter_where_clause(TABLE_ALIAS, &table_metadata.column_metadata, filter_params)?
   };
 
   let now = Utc::now();

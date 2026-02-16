@@ -93,7 +93,7 @@ pub(crate) fn validate_record_api_config(
           "Must be STRICT for strong end-to-end type-safety.",
         ));
       }
-      table.schema.columns.as_slice()
+      table.column_metadata.as_slice()
     }
     TableOrViewMetadata::View(view) => {
       prefix.entity = Entity::View;
@@ -111,7 +111,7 @@ pub(crate) fn validate_record_api_config(
     }
   };
 
-  let Some((pk_index, _)) = table_or_view.record_pk_column() else {
+  let Some(pk_meta) = table_or_view.record_pk_column() else {
     return Err(invalid_prefixed(
       &prefix,
       "Does not have a suitable PRIMARY KEY column. At this point TrailBase requires PRIMARY KEYS to be of type INTEGER or UUID (i.e. BLOB with `is_uuid.*` CHECK constraint).",
@@ -121,7 +121,7 @@ pub(crate) fn validate_record_api_config(
   for excluded_column_name in &api_config.excluded_columns {
     let Some(excluded_index) = columns
       .iter()
-      .position(|col| col.name == *excluded_column_name)
+      .position(|meta| meta.column.name == *excluded_column_name)
     else {
       return Err(invalid_prefixed(
         &prefix,
@@ -129,14 +129,14 @@ pub(crate) fn validate_record_api_config(
       ));
     };
 
-    if excluded_index == pk_index {
+    if excluded_index == pk_meta.index {
       return Err(invalid_prefixed(
         &prefix,
         format!("PK column '{excluded_column_name}' must not be excluded.",),
       ));
     }
 
-    let excluded_column = &columns[excluded_index];
+    let excluded_column = &columns[excluded_index].column;
     if excluded_column.is_not_null() && !excluded_column.has_default() {
       return Err(invalid_prefixed(
         &prefix,
@@ -155,7 +155,7 @@ pub(crate) fn validate_record_api_config(
       ));
     }
 
-    let Some(column) = columns.iter().find(|c| c.name == *expand) else {
+    let Some(meta) = columns.iter().find(|meta| meta.column.name == *expand) else {
       return Err(invalid_prefixed(
         &prefix,
         format!("Expands unknown column '{expand}'."),
@@ -166,7 +166,8 @@ pub(crate) fn validate_record_api_config(
       foreign_table: foreign_table_name,
       referred_columns,
       ..
-    }) = column
+    }) = meta
+      .column
       .options
       .iter()
       .find_or_first(|o| matches!(o, ColumnOption::ForeignKey { .. }))
@@ -192,7 +193,7 @@ pub(crate) fn validate_record_api_config(
       ));
     };
 
-    let Some((_idx, foreign_pk_column)) = foreign_table.record_pk_column() else {
+    let Some(foreign_pk_meta) = foreign_table.record_pk_column() else {
       return Err(invalid_prefixed(
         &prefix,
         format!("Expanded foreign table '{foreign_table_name}' lacks suitable PRIMARY KEY."),
@@ -202,7 +203,7 @@ pub(crate) fn validate_record_api_config(
     match referred_columns.len() {
       0 => {}
       1 => {
-        if referred_columns[0] != foreign_pk_column.name {
+        if referred_columns[0] != foreign_pk_meta.column.name {
           return Err(invalid_prefixed(
             &prefix,
             format!("Expanded column '{expand}' references non-PK."),

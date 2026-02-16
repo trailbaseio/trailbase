@@ -36,13 +36,13 @@ pub async fn delete_record_handler(
     .check_record_level_access(Permission::Delete, Some(&record_id), None, user.as_ref())
     .await?;
 
-  let (_index, pk_column) = api.record_pk_column();
+  let pk_meta = api.record_pk_column();
 
   run_delete_query(
     api.conn(),
     state.objectstore(),
     api.table_name(),
-    &pk_column.name,
+    &pk_meta.column.name,
     record_id,
     api.has_file_columns(),
   )

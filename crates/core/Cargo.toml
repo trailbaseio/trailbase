@@ -48,6 +48,7 @@ ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+# geos = { version = "10.0.0", default-features = false, features = ["geo", "json"] }
 http-body-util = "0.1.3"
 hyper = "1.6.0"
 hyper-util = "0.1.7"

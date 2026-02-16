@@ -55,7 +55,7 @@ pub async fn list_logs_handler(
       &[table],
     )?;
 
-    build_filter_where_clause(TABLE_ALIAS, &table_metadata.schema.columns, filter_params)?
+    build_filter_where_clause(TABLE_ALIAS, &table_metadata.column_metadata, filter_params)?
   };
 
   let total_row_count: i64 = conn

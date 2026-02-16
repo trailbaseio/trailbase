@@ -11,7 +11,6 @@ use crate::auth::user::User;
 use crate::records::expand::expand_tables;
 use crate::records::expand::row_to_json_expand;
 use crate::records::files::read_file_into_response;
-use crate::records::params::SchemaAccessor;
 use crate::records::read_queries::{
   ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
   run_select_query,
@@ -51,89 +50,80 @@ pub async fn read_record_handler(
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
     .await?;
 
-  let (_index, pk_column) = api.record_pk_column();
-  let column_names: Vec<_> = api.columns().iter().map(|c| c.name.as_str()).collect();
+  let pk_meta = api.record_pk_column();
+  let column_names = || {
+    api
+      .columns()
+      .iter()
+      .map(|meta| meta.column.name.as_str())
+      .collect::<Vec<_>>()
+  };
 
-  return Ok(Json(match query.expand {
-    Some(query_expand) if !query_expand.is_empty() => {
-      let Some(expand) = api.expand() else {
+  if let Some(query_expand) = query.expand
+    && !query_expand.is_empty()
+  {
+    let Some(expand) = api.expand() else {
+      return Err(RecordError::BadRequest("Invalid expansion"));
+    };
+
+    // Input validation, i.e. only accept columns that are also configured.
+    let query_expand: Vec<_> = query_expand.split(",").collect();
+    for col_name in &query_expand {
+      if !query_expand.contains(col_name) {
         return Err(RecordError::BadRequest("Invalid expansion"));
-      };
-
-      // Input validation, i.e. only accept columns that are also configured.
-      let query_expand: Vec<_> = query_expand.split(",").collect();
-      for col_name in &query_expand {
-        if !query_expand.contains(col_name) {
-          return Err(RecordError::BadRequest("Invalid expansion"));
-        }
       }
+    }
 
-      let metadata = api.connection_metadata();
-      let expanded_tables = expand_tables(&api, &metadata, &query_expand)?;
+    let metadata = api.connection_metadata();
+    let expanded_tables = expand_tables(&api, &metadata, &query_expand)?;
 
-      let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
-        api.conn(),
-        api.table_name(),
-        &column_names,
-        &pk_column.name,
-        record_id,
-        &expanded_tables,
-      )
-      .await?
-      else {
-        return Err(RecordError::RecordNotFound);
-      };
+    let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
+      api.conn(),
+      api.table_name(),
+      &column_names(),
+      &pk_meta.column.name,
+      record_id,
+      &expanded_tables,
+    )
+    .await?
+    else {
+      return Err(RecordError::RecordNotFound);
+    };
 
-      // Alloc a map from column name to value that's pre-filled with with Value::Null for all
-      // expandable columns.
-      let mut expand = expand.clone();
+    // Alloc a map from column name to value that's pre-filled with with Value::Null for all
+    // expandable columns.
+    let mut expand = expand.clone();
 
-      for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-        let foreign_value = row_to_json_expand(
-          &metadata.schema.columns,
-          &metadata.json_metadata.columns,
-          &row,
-          prefix_filter,
-          None,
-        )
+    for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
+      let foreign_value = row_to_json_expand(&metadata.column_metadata, &row, prefix_filter, None)
         .map_err(|err| RecordError::Internal(err.into()))?;
 
-        let result = expand.insert(col_name.to_string(), foreign_value);
-        assert!(result.is_some());
-      }
-
-      row_to_json_expand(
-        api.columns(),
-        api.json_column_metadata(),
-        &root,
-        prefix_filter,
-        Some(&expand),
-      )
-      .map_err(|err| RecordError::Internal(err.into()))?
+      let result = expand.insert(col_name.to_string(), foreign_value);
+      assert!(result.is_some());
     }
-    Some(_) | None => {
-      let Some(row) = run_select_query(
-        api.conn(),
-        api.table_name(),
-        &column_names,
-        &pk_column.name,
-        record_id,
-      )
-      .await?
-      else {
-        return Err(RecordError::RecordNotFound);
-      };
 
-      row_to_json_expand(
-        api.columns(),
-        api.json_column_metadata(),
-        &row,
-        prefix_filter,
-        api.expand(),
-      )
-      .map_err(|err| RecordError::Internal(err.into()))?
-    }
-  }));
+    return Ok(Json(
+      row_to_json_expand(api.columns(), &root, prefix_filter, Some(&expand))
+        .map_err(|err| RecordError::Internal(err.into()))?,
+    ));
+  }
+
+  let Some(row) = run_select_query(
+    api.conn(),
+    api.table_name(),
+    &column_names(),
+    &pk_meta.column.name,
+    record_id,
+  )
+  .await?
+  else {
+    return Err(RecordError::RecordNotFound);
+  };
+
+  return Ok(Json(
+    row_to_json_expand(api.columns(), &row, prefix_filter, api.expand())
+      .map_err(|err| RecordError::Internal(err.into()))?,
+  ));
 }
 
 type GetUploadedFileFromRecordPath = Path<(
@@ -172,22 +162,17 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::Forbidden);
   };
 
-  let (_index, pk_column) = api.record_pk_column();
-  let Some(index) = api.column_index_by_name(&column_name) else {
-    return Err(RecordError::BadRequest("Invalid field/column name"));
-  };
+  let pk_meta = api.record_pk_column();
 
-  let column = &api.columns()[index];
-  let Some(ref column_json_metadata) = api.json_column_metadata()[index] else {
-    return Err(RecordError::BadRequest("Invalid column"));
+  let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {
+    return Err(RecordError::BadRequest("Invalid field/column name"));
   };
 
   let file_upload = run_get_file_query(
     api.conn(),
     api.table_name(),
-    column,
-    column_json_metadata,
-    &pk_column.name,
+    column_metadata,
+    &pk_meta.column.name,
     record_id,
   )
   .await?;
@@ -229,16 +214,14 @@ pub async fn get_uploaded_files_from_record_handler(
     .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
     .await?;
 
-  let Some((_index, column, Some(column_json_metadata))) = api.column_by_name(&column_name) else {
+  let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {
     return Err(RecordError::BadRequest("Invalid field/column name"));
   };
-
   let FileUploads(file_uploads) = run_get_files_query(
     api.conn(),
     api.table_name(),
-    column,
-    column_json_metadata,
-    &api.record_pk_column().1.name,
+    column_metadata,
+    &api.record_pk_column().column.name,
     record_id,
   )
   .await?;

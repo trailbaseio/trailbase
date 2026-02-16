@@ -38,14 +38,14 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-  let (_index, pk_column) = api.record_pk_column();
+  let pk_meta = api.record_pk_column();
 
   let mut lazy_params = LazyParams::for_update(
     &api,
     state.json_schema_registry().clone(),
     request,
     multipart_files,
-    pk_column.name.clone(),
+    pk_meta.column.name.clone(),
     record_id.clone(),
   );
 

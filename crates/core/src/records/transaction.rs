@@ -105,7 +105,7 @@ pub async fn record_transactions_handler(
             && let Some(ref user) = user
           {
             for column_index in api.user_id_columns() {
-              let col_name = &api.columns()[*column_index].name;
+              let col_name = &api.columns()[*column_index].column.name;
               if !record.contains_key(col_name) {
                 record.insert(
                   col_name.to_owned(),
@@ -126,7 +126,7 @@ pub async fn record_transactions_handler(
 
           let (query, _files) = WriteQuery::new_insert(
             api.table_name(),
-            &api.record_pk_column().1.name,
+            &api.record_pk_column().column.name,
             api.insert_conflict_resolution_strategy(),
             lazy_params
               .consume()
@@ -154,14 +154,14 @@ pub async fn record_transactions_handler(
           let api = get_api(&state, &api_name, idx)?;
           let record = extract_record(value)?;
           let record_id = api.primary_key_to_value(record_id)?;
-          let (_index, pk_column) = api.record_pk_column();
+          let pk_meta = api.record_pk_column();
 
           let mut lazy_params = LazyParams::for_update(
             &api,
             state.json_schema_registry().clone(),
             record,
             None,
-            pk_column.name.clone(),
+            pk_meta.column.name.clone(),
             record_id.clone(),
           );
 
@@ -203,9 +203,12 @@ pub async fn record_transactions_handler(
             user.as_ref(),
           )?;
 
-          let query =
-            WriteQuery::new_delete(api.table_name(), &api.record_pk_column().1.name, record_id)
-              .map_err(|err| RecordError::Internal(err.into()))?;
+          let query = WriteQuery::new_delete(
+            api.table_name(),
+            &api.record_pk_column().column.name,
+            record_id,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(Box::new(move |conn| {
             acl_check(conn)?;

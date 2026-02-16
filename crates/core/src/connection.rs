@@ -462,7 +462,11 @@ fn setup_file_deletion_triggers_sync(
   metadata: &ConnectionMetadata,
 ) -> Result<(), trailbase_sqlite::Error> {
   for metadata in metadata.tables.values() {
-    for idx in metadata.json_metadata.file_column_indexes() {
+    for column_meta in &metadata.column_metadata {
+      if !column_meta.is_file {
+        continue;
+      }
+
       let table_name = &metadata.schema.name;
       let unqualified_name = &metadata.schema.name.name;
       let db = metadata
@@ -472,8 +476,7 @@ fn setup_file_deletion_triggers_sync(
         .as_deref()
         .unwrap_or("main");
 
-      let col = &metadata.schema.columns[*idx];
-      let column_name = &col.name;
+      let column_name = &column_meta.column.name;
 
       conn.execute_batch(&format!(
           "\

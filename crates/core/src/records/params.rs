@@ -2,6 +2,7 @@ use parking_lot::RwLock;
 use std::collections::HashSet;
 use std::sync::Arc;
 use trailbase_schema::json::flat_json_to_value;
+use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_schema::registry::JsonSchemaRegistry;
 use trailbase_schema::sqlite::{Column, ColumnDataType};
 use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
@@ -41,6 +42,8 @@ pub enum ParamsError {
   Storage(Arc<object_store::Error>),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
+  // #[error("Geos: {0}")]
+  // Geos(#[from] geos::Error),
 }
 
 impl From<serde_json::Error> for ParamsError {
@@ -76,40 +79,23 @@ pub(crate) type FileMetadataContents = Vec<(FileUpload, Vec<u8>)>;
 
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
-pub trait SchemaAccessor {
-  fn column_by_name(
-    &self,
-    field_name: &str,
-  ) -> Option<(usize, &Column, Option<&JsonColumnMetadata>)>;
+pub trait ColumnAccessor {
+  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata>;
 }
 
 /// Implementation to build insert/update Params for admin APIs.
-impl SchemaAccessor for TableMetadata {
+impl ColumnAccessor for TableMetadata {
   #[inline]
-  fn column_by_name(
-    &self,
-    field_name: &str,
-  ) -> Option<(usize, &Column, Option<&JsonColumnMetadata>)> {
-    return self
-      .column_by_name(field_name)
-      .map(|(index, col)| (index, col, self.json_metadata.columns[index].as_ref()));
+  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata> {
+    return self.column_by_name(field_name);
   }
 }
 
 /// Implementation to build insert/update Params for record APIs.
-impl SchemaAccessor for RecordApi {
+impl ColumnAccessor for RecordApi {
   #[inline]
-  fn column_by_name(
-    &self,
-    field_name: &str,
-  ) -> Option<(usize, &Column, Option<&JsonColumnMetadata>)> {
-    return self.column_index_by_name(field_name).map(|index| {
-      return (
-        index,
-        &self.columns()[index],
-        self.json_column_metadata()[index].as_ref(),
-      );
-    });
+  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata> {
+    return self.column_metadata_by_name(field_name);
   }
 }
 
@@ -149,7 +135,7 @@ pub enum Params {
 impl Params {
   /// Converts a Json object + optional MultiPart files into trailbase_sqlite::Values and extracted
   /// files.
-  pub fn for_insert<S: SchemaAccessor>(
+  pub fn for_insert<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
@@ -165,12 +151,24 @@ impl Params {
     for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
+      let Some(ColumnMetadata {
+        index,
+        column,
+        json,
+        is_file: _,
+        is_geometry,
+      }) = accessor.column_by_name(&key)
+      else {
         continue;
       };
 
-      let (param, json_files) =
-        extract_params_and_files_from_json(json_schema_registry, col, json_meta, value)?;
+      let (param, json_files) = extract_params_and_files_from_json(
+        json_schema_registry,
+        column,
+        json.as_ref(),
+        *is_geometry,
+        value,
+      )?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -179,7 +177,7 @@ impl Params {
 
       named_params.push((prefix_colon(&key).into(), param));
       column_names.push(key);
-      column_indexes.push(index);
+      column_indexes.push(*index);
     }
 
     // Note: files provided as part of a JSON request are handled above.
@@ -201,7 +199,7 @@ impl Params {
     });
   }
 
-  pub fn for_admin_insert<S: SchemaAccessor>(
+  pub fn for_admin_insert<S: ColumnAccessor>(
     accessor: &S,
     row: indexmap::IndexMap<String, SqlValue>,
   ) -> Result<Self, ParamsError> {
@@ -213,13 +211,20 @@ impl Params {
     for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((index, _col, _json_meta)) = accessor.column_by_name(&key) else {
+      let Some(ColumnMetadata {
+        index,
+        column: _,
+        json: _,
+        is_file: _,
+        is_geometry: _,
+      }) = accessor.column_by_name(&key)
+      else {
         continue;
       };
 
       named_params.push((prefix_colon(&key).into(), value.try_into()?));
       column_names.push(key);
-      column_indexes.push(index);
+      column_indexes.push(*index);
     }
 
     return Ok(Params::Insert {
@@ -230,7 +235,7 @@ impl Params {
     });
   }
 
-  pub fn for_update<S: SchemaAccessor>(
+  pub fn for_update<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
@@ -248,12 +253,24 @@ impl Params {
     for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((index, col, json_meta)) = accessor.column_by_name(&key) else {
+      let Some(ColumnMetadata {
+        index,
+        column,
+        json,
+        is_file: _,
+        is_geometry,
+      }) = accessor.column_by_name(&key)
+      else {
         continue;
       };
 
-      let (param, json_files) =
-        extract_params_and_files_from_json(json_schema_registry, col, json_meta, value)?;
+      let (param, json_files) = extract_params_and_files_from_json(
+        json_schema_registry,
+        column,
+        json.as_ref(),
+        *is_geometry,
+        value,
+      )?;
       if let Some(json_files) = json_files {
         // Note: files provided as a multipart form upload are handled below. They need more
         // special handling to establish the field.name to column mapping.
@@ -268,7 +285,7 @@ impl Params {
 
       named_params.push((prefix_colon(&key).into(), param));
       column_names.push(key);
-      column_indexes.push(index);
+      column_indexes.push(*index);
     }
 
     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
@@ -295,7 +312,7 @@ impl Params {
     });
   }
 
-  pub fn for_admin_update<S: SchemaAccessor>(
+  pub fn for_admin_update<S: ColumnAccessor>(
     accessor: &S,
     row: indexmap::IndexMap<String, SqlValue>,
     pk_column_name: String,
@@ -311,7 +328,14 @@ impl Params {
     for (key, value) in row {
       // We simply skip unknown columns, this could simply be malformed input or version skew. This
       // is similar in spirit to protobuf's unknown fields behavior.
-      let Some((index, _col, _json_meta)) = accessor.column_by_name(&key) else {
+      let Some(ColumnMetadata {
+        index,
+        column: _,
+        json: _,
+        is_file: _,
+        is_geometry: _,
+      }) = accessor.column_by_name(&key)
+      else {
         continue;
       };
 
@@ -325,7 +349,7 @@ impl Params {
 
       named_params.push((prefix_colon(&key).into(), param));
       column_names.push(key);
-      column_indexes.push(index);
+      column_indexes.push(*index);
     }
 
     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
@@ -354,7 +378,7 @@ pub enum LazyParams<'a> {
 }
 
 impl<'a> LazyParams<'a> {
-  pub fn for_insert<S: SchemaAccessor + Sync>(
+  pub fn for_insert<S: ColumnAccessor + Sync>(
     accessor: &'a S,
     json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
     json_row: JsonRow,
@@ -370,7 +394,7 @@ impl<'a> LazyParams<'a> {
     })));
   }
 
-  pub fn for_update<S: SchemaAccessor + Sync>(
+  pub fn for_update<S: ColumnAccessor + Sync>(
     accessor: &'a S,
     json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
     json_row: JsonRow,
@@ -418,7 +442,7 @@ impl<'a> LazyParams<'a> {
   }
 }
 
-fn extract_files_from_multipart<S: SchemaAccessor>(
+fn extract_files_from_multipart<S: ColumnAccessor>(
   accessor: &S,
   multipart_files: Vec<FileUploadInput>,
   named_params: &mut NamedParams,
@@ -443,36 +467,43 @@ fn extract_files_from_multipart<S: SchemaAccessor>(
   for (field_name, file_metadata, _content) in &files {
     // We simply skip unknown columns, this could simply be malformed input or version skew. This
     // is similar in spirit to protobuf's unknown fields behavior.
-    let Some((index, col, json_meta)) = accessor.column_by_name(field_name) else {
+    let Some(ColumnMetadata {
+      index,
+      column,
+      json,
+      is_file: _,
+      is_geometry: _,
+    }) = accessor.column_by_name(field_name)
+    else {
       continue;
     };
 
-    let Some(JsonColumnMetadata::SchemaName(schema_name)) = &json_meta else {
+    let Some(JsonColumnMetadata::SchemaName(schema_name)) = &json else {
       return Err(ParamsError::Column("Expected json file column"));
     };
 
     match schema_name.as_str() {
       "std.FileUpload" => {
-        if !uploaded_files.insert(&col.name) {
+        if !uploaded_files.insert(&column.name) {
           return Err(ParamsError::Column(
             "Collision: too many files for std.FileUpload",
           ));
         }
 
         named_params.push((
-          prefix_colon(&col.name).into(),
+          prefix_colon(&column.name).into(),
           Value::Text(serde_json::to_string(&file_metadata)?),
         ));
-        column_names.push(col.name.to_string());
-        column_indexes.push(index);
+        column_names.push(column.name.to_string());
+        column_indexes.push(*index);
       }
       "std.FileUploads" => {
         named_params.push((
-          prefix_colon(&col.name).into(),
+          prefix_colon(&column.name).into(),
           Value::Text(serde_json::to_string(&file_metadata)?),
         ));
-        column_names.push(col.name.to_string());
-        column_indexes.push(index);
+        column_names.push(column.name.to_string());
+        column_indexes.push(*index);
       }
       _ => {
         return Err(ParamsError::Column("Mismatching JSON schema"));
@@ -492,10 +523,28 @@ fn extract_params_and_files_from_json(
   json_schema_registry: &JsonSchemaRegistry,
   col: &Column,
   json_metadata: Option<&JsonColumnMetadata>,
+  is_geometry: bool,
   value: serde_json::Value,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   // If this is *not* a JSON column convert the value trivially.
   let Some(json_metadata) = json_metadata else {
+    // if is_geometry && col.data_type == ColumnDataType::Blob {
+    //   use geos::Geom;
+    //
+    //   let json_geometry = geos::geojson::Geometry::from_json_value(value)
+    //     .map_err(|err| ParamsError::UnexpectedType("", format!("GeoJSON: {err}")))?;
+    //   let geometry: geos::Geometry = json_geometry.try_into()?;
+    //
+    //   let mut writer = geos::WKBWriter::new()?;
+    //   if let Some(_) = geometry.get_srid().ok() {
+    //     writer.set_include_SRID(true);
+    //   }
+    //
+    //   return Ok((Value::Blob(writer.write_wkb(&geometry)?.into()), None));
+    // }
+
+    debug_assert!(!is_geometry);
+
     return Ok((flat_json_to_value(col.data_type, value)?, None));
   };
 

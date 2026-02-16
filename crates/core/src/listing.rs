@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use thiserror::Error;
 use trailbase_qs::ValueOrComposite;
-use trailbase_schema::sqlite::Column;
+use trailbase_schema::metadata::ColumnMetadata;
 
 #[derive(Debug, Error)]
 pub enum WhereClauseError {
@@ -23,7 +23,7 @@ pub struct WhereClause {
 
 pub(crate) fn build_filter_where_clause(
   table_name: &str,
-  columns: &[Column],
+  column_metadata: &[ColumnMetadata],
   filter_params: Option<ValueOrComposite>,
 ) -> Result<WhereClause, WhereClauseError> {
   let Some(filter_params) = filter_params else {
@@ -42,14 +42,17 @@ pub(crate) fn build_filter_where_clause(
       )));
     }
 
-    let Some(column) = columns.iter().find(|c| c.name == column_name) else {
+    let Some(meta) = column_metadata
+      .iter()
+      .find(|meta| meta.column.name == column_name)
+    else {
       return Err(WhereClauseError::UnrecognizedParam(format!(
         "Unrecognized parameter: {column_name}"
       )));
     };
 
     // TODO: Improve hacky error handling.
-    return crate::records::filter::qs_value_to_sql_with_constraints(column, value)
+    return crate::records::filter::qs_value_to_sql_with_constraints(&meta.column, value)
       .map_err(|err| WhereClauseError::UnrecognizedParam(err.to_string()));
   };
 

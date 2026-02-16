@@ -81,7 +81,7 @@ pub async fn list_users_handler(
   // Where clause contains column filters and offset depending on what's present in the url query
   // string.
   let filter_where_clause =
-    build_filter_where_clause("_ROW_", &table_metadata.schema.columns, filter_params)?;
+    build_filter_where_clause("_ROW_", &table_metadata.column_metadata, filter_params)?;
 
   let total_row_count: i64 = conn
     .read_query_row_f(

@@ -323,7 +323,7 @@ impl PerConnectionState {
     let table_name = api.table_name();
     let qualified_table_name = api.qualified_name().clone();
 
-    let pk_column = &api.record_pk_column().1.name;
+    let pk_column = &api.record_pk_column().column.name;
 
     let Some(row_id): Option<i64> = api
       .conn()

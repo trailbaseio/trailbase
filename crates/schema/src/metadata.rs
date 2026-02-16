@@ -65,38 +65,19 @@ impl JsonColumnMetadata {
   }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct JsonMetadata {
-  pub columns: Vec<Option<JsonColumnMetadata>>,
-
-  // Contains both, 'std.FileUpload' and 'std.FileUpload'.
-  file_column_indexes: Vec<usize>,
-}
-
-impl JsonMetadata {
-  fn from_columns(
-    registry: &JsonSchemaRegistry,
-    columns: &[Column],
-  ) -> Result<Self, JsonSchemaError> {
-    let columns = columns
-      .iter()
-      .map(|c| build_json_metadata(registry, c))
-      .collect::<Result<Vec<_>, _>>()?;
-
-    return Ok(Self {
-      file_column_indexes: find_file_column_indexes(&columns),
-      columns,
-    });
-  }
-
-  pub fn has_file_columns(&self) -> bool {
-    return !self.file_column_indexes.is_empty();
-  }
-
-  /// Contains both, 'std.FileUpload' and 'std.FileUpload'.
-  pub fn file_column_indexes(&self) -> &[usize] {
-    return &self.file_column_indexes;
-  }
+#[derive(Debug, Clone)]
+pub struct ColumnMetadata {
+  /// The original table or view index. May be different from column index in a RecordApi after
+  /// filtering out excluded columns.
+  pub index: usize,
+  /// Column schema.
+  pub column: Column,
+  /// JSON metadata if the column has a schema defined, i.e. `CHECK(jsonschema(_))`.
+  pub json: Option<JsonColumnMetadata>,
+  /// Whether the JSON schema happens to be `std.FileUpload[s]`.
+  pub is_file: bool,
+  /// Whether the column has an ST_Valid geometry check constaint.
+  pub is_geometry: bool,
 }
 
 /// A data class describing a sqlite Table and additional meta data useful for TrailBase.
@@ -108,8 +89,7 @@ pub struct TableMetadata {
 
   /// If and which column on this table qualifies as a record PK column, i.e. integer or UUIDv7.
   pub record_pk_column: Option<usize>,
-  /// Metadata for CHECK(jsonschema()) columns.
-  pub json_metadata: JsonMetadata,
+  pub column_metadata: Vec<ColumnMetadata>,
 
   name_to_index: HashMap<String, usize>,
   // TODO: Add triggers once sqlparser supports a sqlite "CREATE TRIGGER" statements.
@@ -125,16 +105,31 @@ impl TableMetadata {
     table: Table,
     tables: &[Table],
   ) -> Result<Self, JsonSchemaError> {
+    let column_metadata: Vec<_> = table
+      .columns
+      .iter()
+      .enumerate()
+      .map(|(i, c)| {
+        let json_metadata = build_json_metadata(registry, c)?;
+
+        return Ok(ColumnMetadata {
+          index: i,
+          is_file: is_file_column(&json_metadata),
+          json: json_metadata,
+          is_geometry: is_geometry_column(c),
+          column: c.clone(),
+        });
+      })
+      .collect::<Result<_, _>>()?;
+
     return Ok(TableMetadata {
       record_pk_column: find_record_pk_column_index_for_table(&table, tables),
-      json_metadata: JsonMetadata::from_columns(registry, &table.columns)?,
       name_to_index: HashMap::<String, usize>::from_iter(
-        table
-          .columns
+        column_metadata
           .iter()
-          .enumerate()
-          .map(|(index, col)| (col.name.clone(), index)),
+          .map(|meta| (meta.column.name.clone(), meta.index)),
       ),
+      column_metadata,
       schema: table,
     });
   }
@@ -149,14 +144,14 @@ impl TableMetadata {
     return self.name_to_index.get(key).copied();
   }
 
-  pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
+  pub fn column_by_name(&self, key: &str) -> Option<&ColumnMetadata> {
     let index = self.column_index_by_name(key)?;
-    return Some((index, &self.schema.columns[index]));
+    return Some(&self.column_metadata[index]);
   }
 
-  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+  pub fn record_pk_column(&self) -> Option<&ColumnMetadata> {
     let index = self.record_pk_column?;
-    return self.schema.columns.get(index).map(|c| (index, c));
+    return Some(&self.column_metadata[index]);
   }
 }
 
@@ -165,13 +160,11 @@ impl TableMetadata {
 pub struct ViewMetadata {
   pub schema: View,
 
-  // QUESTION: Why do we have copy of the columns here? Right now it's duplicate from `.schema`.
-  // This probably only exists because we have a trait impl that returns Option<&[Column]>.
-  columns: Option<Vec<Column>>,
+  /// If and which column on this table qualifies as a record PK column, i.e. integer or UUIDv7.
+  pub record_pk_column: Option<usize>,
+  pub column_metadata: Option<Vec<ColumnMetadata>>,
 
   name_to_index: HashMap<String, usize>,
-  record_pk_column: Option<usize>,
-  pub json_metadata: Option<JsonMetadata>,
 }
 
 impl ViewMetadata {
@@ -187,9 +180,8 @@ impl ViewMetadata {
     let Some(column_mapping) = &view.column_mapping else {
       return Ok(ViewMetadata {
         name_to_index: HashMap::<String, usize>::default(),
-        columns: None,
         record_pk_column: None,
-        json_metadata: None,
+        column_metadata: None,
         schema: view,
       });
     };
@@ -200,17 +192,31 @@ impl ViewMetadata {
       .map(|m| m.column.clone())
       .collect();
 
+    let column_metadata: Vec<_> = columns
+      .into_iter()
+      .enumerate()
+      .map(|(i, c)| {
+        let json_metadata = build_json_metadata(registry, &c)?;
+
+        return Ok(ColumnMetadata {
+          index: i,
+          is_file: is_file_column(&json_metadata),
+          json: json_metadata,
+          is_geometry: is_geometry_column(&c),
+          column: c,
+        });
+      })
+      .collect::<Result<_, _>>()?;
+
     let name_to_index = HashMap::<String, usize>::from_iter(
-      columns
+      column_metadata
         .iter()
-        .enumerate()
-        .map(|(index, col)| (col.name.clone(), index)),
+        .map(|meta| (meta.column.name.clone(), meta.index)),
     );
 
     return Ok(ViewMetadata {
       name_to_index,
-      json_metadata: Some(JsonMetadata::from_columns(registry, &columns)?),
-      columns: Some(columns),
+      column_metadata: Some(column_metadata),
       record_pk_column: find_record_pk_column_index_for_view(column_mapping, tables),
       schema: view,
     });
@@ -222,8 +228,8 @@ impl ViewMetadata {
   }
 
   #[inline]
-  pub fn columns(&self) -> Option<&[Column]> {
-    return self.columns.as_deref();
+  pub fn columns(&self) -> Option<&[ColumnMetadata]> {
+    return self.column_metadata.as_deref();
   }
 
   #[inline]
@@ -231,15 +237,16 @@ impl ViewMetadata {
     self.name_to_index.get(key).copied()
   }
 
-  pub fn column_by_name(&self, key: &str) -> Option<(usize, &Column)> {
+  pub fn column_by_name(&self, key: &str) -> Option<&ColumnMetadata> {
     let index = self.column_index_by_name(key)?;
-    let mapping = self.schema.column_mapping.as_ref()?;
-    return Some((index, &mapping.columns[index].column));
+    let meta = self.column_metadata.as_ref()?;
+    return Some(&meta[index]);
   }
 
-  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+  pub fn record_pk_column(&self) -> Option<&ColumnMetadata> {
     let index = self.record_pk_column?;
-    return self.columns.as_ref()?.get(index).map(|c| (index, c));
+    let meta = self.column_metadata.as_ref()?;
+    return Some(&meta[index]);
   }
 }
 
@@ -296,21 +303,21 @@ impl<'a> TableOrViewMetadata<'a> {
     };
   }
 
-  pub fn columns(&self) -> Option<&'a [Column]> {
+  pub fn columns(&self) -> Option<&'a [ColumnMetadata]> {
     return match self {
-      Self::Table(t) => Some(&t.schema.columns),
-      Self::View(v) => v.columns(),
+      Self::Table(t) => Some(&t.column_metadata),
+      Self::View(v) => v.column_metadata.as_deref(),
     };
   }
 
-  pub fn record_pk_column(&self) -> Option<(usize, &Column)> {
+  pub fn record_pk_column(&self) -> Option<&ColumnMetadata> {
     return match self {
       Self::Table(t) => t.record_pk_column(),
       Self::View(v) => v.record_pk_column(),
     };
   }
 
-  pub fn column_by_name(&self, name: &str) -> Option<(usize, &Column)> {
+  pub fn column_by_name(&self, name: &str) -> Option<&ColumnMetadata> {
     return match self {
       Self::Table(t) => t.column_by_name(name),
       Self::View(v) => v.column_by_name(name),
@@ -434,44 +441,81 @@ pub(crate) fn extract_json_metadata(
   return Ok(None);
 }
 
-pub fn find_file_column_indexes(json_column_metadata: &[Option<JsonColumnMetadata>]) -> Vec<usize> {
-  let mut indexes: Vec<usize> = vec![];
-
-  for (index, column) in json_column_metadata.iter().enumerate() {
-    if let Some(metadata) = column {
-      match metadata {
-        JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-          indexes.push(index);
-        }
-        JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-          indexes.push(index);
-        }
-        _ => {}
-      };
-    }
+fn is_file_column(json: &Option<JsonColumnMetadata>) -> bool {
+  if let Some(metadata) = json
+    && let JsonColumnMetadata::SchemaName(name) = metadata
+    && (name == "std.FileUpload" || name == "std.FileUploads")
+  {
+    return true;
   }
-
-  return indexes;
+  return false;
 }
 
-pub fn find_user_id_foreign_key_columns(columns: &[Column], user_table_name: &str) -> Vec<usize> {
-  let mut indexes: Vec<usize> = vec![];
-  for (index, col) in columns.iter().enumerate() {
-    for opt in &col.options {
-      if let ColumnOption::ForeignKey {
-        foreign_table,
-        referred_columns,
-        ..
-      } = opt
-        && foreign_table == user_table_name
-        && referred_columns.len() == 1
-        && referred_columns[0] == "id"
+pub fn find_file_column_indexes(column_metadata: &[ColumnMetadata]) -> Vec<usize> {
+  return column_metadata
+    .iter()
+    .flat_map(|meta| {
+      if is_file_column(&meta.json) {
+        return Some(meta.index);
+      }
+      return None;
+    })
+    .collect();
+}
+
+fn is_geometry_column(column: &Column) -> bool {
+  lazy_static! {
+    static ref GEOMETRY_CHECK_RE: Regex = Regex::new(r"^ST_IsValid\s*\(").expect("infallible");
+  }
+
+  if column.data_type == ColumnDataType::Blob {
+    for opt in &column.options {
+      if let ColumnOption::Check(expr) = opt
+        && GEOMETRY_CHECK_RE.is_match(expr)
       {
-        indexes.push(index);
+        return true;
       }
     }
   }
-  return indexes;
+  return false;
+}
+
+pub fn find_geometry_column_indexes(columns: &[Column]) -> Vec<usize> {
+  return columns
+    .iter()
+    .enumerate()
+    .flat_map(|(index, column)| {
+      if is_geometry_column(column) {
+        return Some(index);
+      }
+      return None;
+    })
+    .collect();
+}
+
+pub fn find_user_id_foreign_key_columns(
+  column_metadata: &[ColumnMetadata],
+  user_table_name: &str,
+) -> Vec<usize> {
+  return column_metadata
+    .iter()
+    .flat_map(|meta| {
+      for opt in &meta.column.options {
+        if let ColumnOption::ForeignKey {
+          foreign_table,
+          referred_columns,
+          ..
+        } = opt
+          && foreign_table == user_table_name
+          && referred_columns.len() == 1
+          && referred_columns[0] == "id"
+        {
+          return Some(meta.index);
+        }
+      }
+      return None;
+    })
+    .collect();
 }
 
 pub(crate) fn is_pk_column(column: &Column) -> bool {
@@ -695,6 +739,21 @@ mod tests {
   }
 
   #[test]
+  fn test_find_geometry_columns() {
+    let table = parse_create_table(
+      "CREATE TABLE t (
+            id        INT PRIMARY KEY,
+            not_geom  TEXT,
+            geom0     BLOB CHECK(ST_IsValid(geom0)),
+            geom1     BLOB CHECK(ST_IsValid(geom1)) NOT NULL
+       ) STRICT;",
+    );
+
+    let geometry_columns = find_geometry_column_indexes(&table.columns);
+    assert_eq!(vec![2, 3], geometry_columns);
+  }
+
+  #[test]
   fn test_parse_create_view() {
     let table = parse_create_table(
       r#"
@@ -754,7 +813,7 @@ mod tests {
       let uuidv7_col = view_metadata.record_pk_column().unwrap();
       let columns = view_metadata.columns().unwrap();
       assert_eq!(columns.len(), 3);
-      assert_eq!(columns[uuidv7_col.0].name, "id");
+      assert_eq!(columns[uuidv7_col.index].column.name, "id");
     }
   }
 
@@ -784,9 +843,9 @@ mod tests {
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Text);
 
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
-      assert_eq!(pk_index, 0);
-      assert_eq!(pk_col.name, "id");
+      let meta = metadata.record_pk_column().unwrap();
+      assert_eq!(meta.index, 0);
+      assert_eq!(meta.column.name, "id");
     }
 
     {
@@ -801,9 +860,9 @@ mod tests {
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
-      assert_eq!(pk_index, 0);
-      assert_eq!(pk_col.name, "id");
+      let meta = metadata.record_pk_column().unwrap();
+      assert_eq!(meta.index, 0);
+      assert_eq!(meta.column.name, "id");
     }
 
     {
@@ -818,9 +877,9 @@ mod tests {
       assert_eq!(view_columns[0].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
-      assert_eq!(pk_index, 0);
-      assert_eq!(pk_col.name, "id");
+      let meta = metadata.record_pk_column().unwrap();
+      assert_eq!(meta.index, 0);
+      assert_eq!(meta.column.name, "id");
     }
 
     {
@@ -869,9 +928,9 @@ mod tests {
       assert_eq!(view_columns[1].column.data_type, ColumnDataType::Integer);
 
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-      let (pk_index, pk_col) = metadata.record_pk_column().unwrap();
-      assert_eq!(pk_index, 2);
-      assert_eq!(pk_col.name, "id");
+      let meta = metadata.record_pk_column().unwrap();
+      assert_eq!(meta.index, 2);
+      assert_eq!(meta.column.name, "id");
     }
 
     {
@@ -893,7 +952,7 @@ mod tests {
         let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
         assert_eq!(
           expected,
-          metadata.record_pk_column().map(|c| c.0),
+          metadata.record_pk_column().map(|c| c.index),
           "{join_type}"
         );
       }
@@ -929,7 +988,7 @@ mod tests {
           assert!(view.column_mapping.is_some(), "{i}: {sql}");
 
           let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-          assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
+          assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.index));
         }
       }
 
@@ -941,7 +1000,7 @@ mod tests {
         .unwrap();
 
         let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-        assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.0));
+        assert_eq!(Some(1), metadata.record_pk_column().map(|c| c.index));
       }
     }
   }
@@ -984,7 +1043,7 @@ mod tests {
       .unwrap();
 
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
+      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.index));
     }
 
     {
@@ -1001,7 +1060,7 @@ mod tests {
       .unwrap();
 
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
-      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.0));
+      assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.index));
     }
   }
 }

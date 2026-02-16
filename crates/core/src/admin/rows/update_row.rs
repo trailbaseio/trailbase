@@ -46,16 +46,17 @@ pub async fn update_row_handler(
   };
 
   let pk_col = &request.primary_key_column;
-  let Some((index, column)) = table_metadata.column_by_name(pk_col) else {
+  let Some(meta) = table_metadata.column_by_name(pk_col) else {
     return Err(Error::Precondition(format!("Missing column: {pk_col}")));
   };
 
   if let Some(pk_index) = table_metadata.record_pk_column
-    && index != pk_index
+    && meta.index != pk_index
   {
     return Err(Error::Precondition(format!("Pk column mismatch: {pk_col}")));
   }
 
+  let column = &meta.column;
   if !column.is_primary() {
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }

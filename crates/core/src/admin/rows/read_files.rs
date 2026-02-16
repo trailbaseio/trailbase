@@ -3,7 +3,6 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
-use trailbase_schema::metadata::TableOrViewMetadata;
 use trailbase_schema::{FileUploads, QualifiedName};
 use ts_rs::TS;
 
@@ -39,36 +38,23 @@ pub async fn read_files_handler(
       "Table {table_name:?} not found"
     )));
   };
-  let Some((_index, pk_col)) = table_or_view.column_by_name(&query.pk_column) else {
+  let Some(pk_meta) = table_or_view.column_by_name(&query.pk_column) else {
     return Err(Error::Precondition(format!(
       "Missing PK column: {}",
       query.pk_column
     )));
   };
 
+  let pk_col = &pk_meta.column;
   if !pk_col.is_primary() {
     return Err(Error::Precondition(format!(
       "Not a primary key: {pk_col:?}"
     )));
   }
 
-  let Some((index, file_col_metadata)) = table_or_view.column_by_name(&query.file_column_name)
-  else {
+  let Some(file_column_meta) = table_or_view.column_by_name(&query.file_column_name) else {
     return Err(Error::Precondition(format!(
       "Missing file column: {}",
-      query.file_column_name
-    )));
-  };
-
-  let Some(file_col_json_metadata) = (match table_or_view {
-    TableOrViewMetadata::Table(t) => t.json_metadata.columns[index].as_ref(),
-    TableOrViewMetadata::View(v) => v
-      .json_metadata
-      .as_ref()
-      .and_then(|j| j.columns[index].as_ref()),
-  }) else {
-    return Err(Error::Precondition(format!(
-      "Not a JSON column: {}",
       query.file_column_name
     )));
   };
@@ -76,8 +62,7 @@ pub async fn read_files_handler(
   let FileUploads(mut file_uploads) = run_get_files_query(
     &conn,
     &table_name.into(),
-    file_col_metadata,
-    file_col_json_metadata,
+    file_column_meta,
     &query.pk_column,
     trailbase_schema::json::parse_string_to_sqlite_value(pk_col.data_type, query.pk_value)?,
   )

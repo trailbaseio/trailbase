@@ -39,19 +39,14 @@ pub async fn get_avatar_handler(
     return Err(AuthError::Internal("missing table".into()));
   };
 
-  let Some((index, file_column)) = table_metadata.column_by_name("file") else {
+  let Some(file_column_meta) = table_metadata.column_by_name("file") else {
     return Err(AuthError::Internal("missing column".into()));
-  };
-
-  let Some(ref column_json_metadata) = table_metadata.json_metadata.columns[index] else {
-    return Err(AuthError::Internal("missing metadata".into()));
   };
 
   let file_upload = run_get_file_query(
     &conn,
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
-    file_column,
-    column_json_metadata,
+    file_column_meta,
     "user",
     rusqlite::types::Value::Blob(user_id.into()),
   )

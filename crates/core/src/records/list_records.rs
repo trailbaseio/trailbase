@@ -72,7 +72,8 @@ pub async fn list_records_handler(
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
   let table_name = api.table_name();
-  let (_pk_index, pk_column) = api.record_pk_column();
+  let pk_meta = api.record_pk_column();
+  let pk_column = &pk_meta.column;
   let is_table = api.is_table();
 
   let Query {
@@ -208,7 +209,7 @@ pub async fn list_records_handler(
         column_names: &api
           .columns()
           .iter()
-          .map(|c| c.name.as_str())
+          .map(|meta| meta.column.name.as_str())
           .collect::<Vec<_>>(),
         // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
         // access early as we do for READs.
@@ -278,15 +279,7 @@ pub async fn list_records_handler(
   let records = if expanded_tables.is_empty() {
     rows
       .into_iter()
-      .map(|row| {
-        row_to_json_expand(
-          api.columns(),
-          api.json_column_metadata(),
-          &row,
-          column_filter,
-          api.expand(),
-        )
-      })
+      .map(|row| row_to_json_expand(api.columns(), &row, column_filter, api.expand()))
       .collect::<Result<Vec<_>, JsonError>>()
       .map_err(|err| RecordError::Internal(err.into()))?
   } else {
@@ -306,8 +299,7 @@ pub async fn list_records_handler(
           let next = curr.split_off(expanded.num_columns);
 
           let foreign_value = row_to_json_expand(
-            &expanded.metadata.schema.columns,
-            &expanded.metadata.json_metadata.columns,
+            &expanded.metadata.column_metadata,
             &curr,
             column_filter,
             None,
@@ -320,14 +312,8 @@ pub async fn list_records_handler(
           curr = next;
         }
 
-        return row_to_json_expand(
-          api.columns(),
-          api.json_column_metadata(),
-          &row,
-          column_filter,
-          Some(&expand),
-        )
-        .map_err(|err| RecordError::Internal(err.into()));
+        return row_to_json_expand(api.columns(), &row, column_filter, Some(&expand))
+          .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
   };

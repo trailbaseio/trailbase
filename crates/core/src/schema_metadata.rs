@@ -275,7 +275,7 @@ mod tests {
     let (validator, schema) = build_json_schema_expanded(
       &state.json_schema_registry().read(),
       &table_name.name,
-      &table_metadata.schema.columns,
+      &table_metadata.column_metadata,
       JsonSchemaMode::Select,
       Some(Expand {
         tables: &metadata.tables.values().collect::<Vec<_>>(),

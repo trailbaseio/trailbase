@@ -5,9 +5,10 @@ use serde_json::Value;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::metadata::{
-  JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata, is_pk_column,
+  ColumnMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata,
+  is_pk_column,
 };
-use crate::sqlite::{Column, ColumnDataType, ColumnOption};
+use crate::sqlite::{ColumnDataType, ColumnOption};
 
 /// Influeces the generated JSON schema. In `Insert` mode columns with default values will be
 /// optional.
@@ -32,7 +33,7 @@ pub enum JsonSchemaMode {
 pub fn build_json_schema(
   registry: &JsonSchemaRegistry,
   title: &str,
-  columns: &[Column],
+  columns: &[ColumnMetadata],
   mode: JsonSchemaMode,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
   return build_json_schema_expanded(registry, title, columns, mode, None);
@@ -49,7 +50,7 @@ pub struct Expand<'a> {
 pub fn build_json_schema_expanded(
   registry: &JsonSchemaRegistry,
   title: &str,
-  columns: &[Column],
+  columns_metadata: &[ColumnMetadata],
   mode: JsonSchemaMode,
   expand: Option<Expand<'_>>,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
@@ -57,7 +58,8 @@ pub fn build_json_schema_expanded(
   let mut defs = serde_json::Map::new();
   let mut required_cols: Vec<String> = vec![];
 
-  for col in columns {
+  for meta in columns_metadata {
+    let col = &meta.column;
     let mut def_name: Option<String> = None;
     let mut not_null = false;
     let mut default = false;
@@ -158,7 +160,7 @@ pub fn build_json_schema_expanded(
             };
 
             let (_validator, schema) =
-              build_json_schema(registry, foreign_table, &table.schema.columns, mode)?;
+              build_json_schema(registry, foreign_table, &table.column_metadata, mode)?;
 
             let new_def_name = foreign_table.clone();
             defs.insert(
@@ -434,7 +436,7 @@ mod tests {
     let (schema, _) = build_json_schema(
       &registry,
       &table_metadata.name().name,
-      &table_metadata.schema.columns,
+      &table_metadata.column_metadata,
       JsonSchemaMode::Insert,
     )
     .unwrap();
