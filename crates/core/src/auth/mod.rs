@@ -141,6 +141,15 @@ pub(super) fn router() -> Router<crate::AppState> {
       &format!("/{AUTH_API_PATH}/otp/verify"),
       post(api::otp::verify_otp_handler),
     )
+    // TOTP flow
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/generate"),
+      post(api::otp::generate_totp_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/verify"),
+      post(api::otp::verify_totp_handler),
+    )
     // Converts auth code (+pkce code verifier) to auth tokens
     .route(
       &format!("/{AUTH_API_PATH}/token"),

@@ -4,6 +4,8 @@ import * as JSON from "@ungap/raw-json";
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
 import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
+import type { GenerateTOTPResponse } from "@bindings/GenerateTOTPResponse";
+import type { VerifyTOTPRequest } from "@bindings/VerifyTOTPRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
 import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
@@ -811,6 +813,29 @@ class ClientImpl implements Client {
         email: email,
         code: code,
       } as VerifyOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
+  }
+
+  public async generateTOTP(): Promise<GenerateTOTPResponse> {
+    const response = await this.fetch(`${authApiBasePath}/totp/generate`, {
+      method: "POST",
+      headers: jsonContentTypeHeader,
+    });
+    return parseJSON(await response.text());
+  }
+
+  public async verifyTOTP(email: string, code: string): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/totp/verify`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email,
+        code: code,
+      } as VerifyTOTPRequest),
       headers: jsonContentTypeHeader,
     });
 

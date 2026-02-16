@@ -28,6 +28,8 @@ CREATE TABLE _user (
   -- OTP flow.
   otp_code                         TEXT,
   otp_sent_at                      INTEGER,
+  -- TOTP secret for authenticator.
+  totp_secret                      TEXT,
 
   -- OAuth metadata
   --

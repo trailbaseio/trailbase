@@ -68,6 +68,7 @@ type LoginFormProps = {
 function LoginForm(props: LoginFormProps) {
   let passwordInput: HTMLInputElement | undefined;
   let userInput: HTMLInputElement | undefined;
+  let totpInput: HTMLInputElement | undefined;
 
   const urlParams = new URLSearchParams(window.location.search);
   const message = urlParams.get("loginMessage");
@@ -81,10 +82,12 @@ function LoginForm(props: LoginFormProps) {
 
         const email = userInput?.value;
         const pw = passwordInput?.value;
-        if (!email || !pw) return;
+        const totp = totpInput?.value;
+        if (!email || (!pw && !totp)) return;
 
         try {
-          await client.login(email, pw);
+          if (pw) await client.login(email, pw);
+          else if (totp) await client.verifyTOTP(email, totp);
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
@@ -130,6 +133,17 @@ function LoginForm(props: LoginFormProps) {
           placeholder="password"
           autocomplete="current-password"
           ref={passwordInput}
+        />
+      </TextField>
+
+      <TextField class="flex items-center gap-2">
+        <TextFieldLabel class="w-[108px]">TOTP</TextFieldLabel>
+
+        <TextFieldInput
+          type="password"
+          placeholder="TOTP"
+          autocomplete="one-time-code"
+          ref={totpInput}
         />
       </TextField>
 
