@@ -13,6 +13,7 @@ import {
 import { navbarIconStyle } from "@/components/Navbar";
 import { Avatar, Profile } from "@/components/auth/Profile";
 import { QRCodeSVG } from "solid-qr-code";
+import { showToast } from "../ui/toast";
 
 export function AuthButton(props: { iconSize: number }) {
   const [open, setOpen] = createSignal(false);
@@ -25,8 +26,31 @@ export function AuthButton(props: { iconSize: number }) {
       const res = await client.generateTOTP();
       setTotpSecret(res.secret);
       setTotpUri(res.qr_code_uri);
-    } catch (e) {
-      alert("Failed to generate TOTP secret");
+    } catch (err) {
+      showToast({
+        title: "Error generating OTP",
+        description: `${err}`,
+        variant: "error",
+      });
+    }
+  };
+
+  const disableTotp = async () => {
+    try {
+      const totp = prompt("Enter current TOTP code to disable 2FA");
+      if (!totp) return;
+      await client.disableTOTP(totp);
+      showToast({
+        title: "TOTP disabled",
+        description: "Two-factor authentication has been disabled.",
+        variant: "success",
+      });
+    } catch (err) {
+      showToast({
+        title: "Error disabling TOTP",
+        description: `${err}`,
+        variant: "error",
+      });
     }
   };
 
@@ -74,6 +98,9 @@ export function AuthButton(props: { iconSize: number }) {
           <Show when={!totpSecret()}>
             <Button type="button" onClick={enableTotp}>
               Generate TOTP
+            </Button>
+            <Button type="button" variant="outline" onClick={disableTotp}>
+              Disable TOTP
             </Button>
           </Show>
           <Button type="button" variant="outline" onClick={() => client.logout()}>

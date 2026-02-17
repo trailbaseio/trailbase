@@ -114,9 +114,7 @@ pub async fn verify_otp_handler(
   let email = validate_and_normalize_email_address(&params.email)?;
   let db_user = user_by_email(&state, &email).await?;
 
-  if verify_otp_code(&db_user, &params.code).is_err() {
-    return Err(AuthError::BadRequest("invalid user"));
-  }
+  verify_otp_code(&db_user, &params.code)?;
 
   if db_user.totp_secret.is_some() {
     return Err(AuthError::BadRequest("TOTP_REQUIRED"));
@@ -238,6 +236,41 @@ pub async fn generate_totp_handler(
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
+pub struct DisableTOTPRequest {
+  pub totp: String,
+}
+
+#[utoipa::path(
+  post,
+  path = "/totp/disable",
+  tag = "auth",
+  responses(
+    (status = 200, description = "TOTP disabled successfully.", body = DisableTOTPRequest)
+  )
+)]
+pub async fn disable_totp_handler(
+  State(state): State<AppState>,
+  user: User,
+  Json(params): Json<DisableTOTPRequest>,
+) -> Result<Response, AuthError> {
+  let db_user = user_by_email(&state, &user.email).await?;
+  verify_totp_code_for_user(&db_user, &params.totp)?;
+  
+  const UPDATE_QUERY: &str = formatcp!(
+    "UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2"
+  );
+  
+  let user_id_bytes = user.uuid.into_bytes().to_vec();
+  state
+    .user_conn()
+    .execute(UPDATE_QUERY, params!(Option::<String>::None, user_id_bytes))
+    .await?;
+  
+  Ok((StatusCode::OK, "TOTP disabled").into_response())
+}
+
+#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[ts(export)]
 pub struct VerifyTOTPRequest {
   pub email: String,
   pub totp: String,
@@ -261,48 +294,15 @@ pub async fn verify_totp_handler(
   let email = validate_and_normalize_email_address(&params.email)?;
   let db_user = user_by_email(&state, &email).await?;
 
-  let Some(totp_secret) = &db_user.totp_secret else {
-    return Err(AuthError::BadRequest("TOTP not enabled for this user"));
-  };
-
   if let Some(password) = params.password {
-    if check_user_password(&db_user, &password, state.demo_mode()).is_err() {
-      return Err(AuthError::BadRequest("invalid user"));
-    }
+    check_user_password(&db_user, &password, state.demo_mode())?;
   } else if let Some(otp) = params.otp {
-    if verify_otp_code(&db_user, &otp).is_err() {
-      return Err(AuthError::BadRequest("invalid user"));
-    }
+    verify_otp_code(&db_user, &otp)?;
   } else {
-    return Err(AuthError::BadRequest("invalid user"));
+    return Err(AuthError::BadRequest("missing params"));
   }
 
-  // Verify the TOTP code
-  // The secret should be base32 decoded
-  let secret_bytes = match base32::decode(base32::Alphabet::Rfc4648 { padding: false }, totp_secret) {
-    Some(bytes) => bytes,
-    None => return Err(AuthError::Internal("Invalid TOTP secret format".into())),
-  };
-
-  // Get current timestamp (30-second window)
-  let timestamp = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .unwrap()
-    .as_secs();
-
-  // Generate expected TOTP code (6 digits, 30-second step)
-  let expected_code = generate_totp_code(&secret_bytes, timestamp)?;
-
-  // Compare with provided code
-  if expected_code != params.totp {
-    // Also check previous and next time windows for clock skew tolerance
-    let prev_code = generate_totp_code(&secret_bytes, timestamp.saturating_sub(30))?;
-    let next_code = generate_totp_code(&secret_bytes, timestamp.saturating_add(30))?;
-    
-    if params.totp != prev_code && params.totp != next_code {
-      return Err(AuthError::BadRequest("Invalid TOTP code"));
-    }
-  }
+  verify_totp_code_for_user(&db_user, &params.totp)?;
 
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
@@ -315,4 +315,36 @@ pub async fn verify_totp_handler(
   };
   
   Ok(Json(response).into_response())
+}
+
+fn verify_totp_code_for_user(user: &DbUser, code: &str) -> Result<(), AuthError> {
+  let Some(totp_secret) = &user.totp_secret else {
+    return Err(AuthError::BadRequest("TOTP not enabled for this user"));
+  };
+
+  let secret_bytes = match base32::decode(base32::Alphabet::Rfc4648 { padding: false }, totp_secret) {
+    Some(bytes) => bytes,
+    None => return Err(AuthError::Internal("Invalid TOTP secret format".into())),
+  };
+
+  let timestamp = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_secs();
+
+  let expected_code = generate_totp_code(&secret_bytes, timestamp)?;
+  
+  if expected_code == code {
+    Ok(())
+  } else {
+    // Check previous and next time windows for clock skew tolerance
+    let prev_code = generate_totp_code(&secret_bytes, timestamp.saturating_sub(30))?;
+    let next_code = generate_totp_code(&secret_bytes, timestamp.saturating_add(30))?;
+    
+    if code == prev_code || code == next_code {
+      Ok(())
+    } else {
+      return Err(AuthError::BadRequest("Invalid TOTP code"));
+    }
+  }
 }
