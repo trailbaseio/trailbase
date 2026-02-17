@@ -18,6 +18,7 @@ use crate::auth::api::login::LoginResponse;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::util::{user_by_email, validate_and_normalize_email_address};
 use crate::auth::{AuthError, User};
+use crate::auth::user::DbUser;
 use crate::constants::{OTP_LENGTH, USER_TABLE};
 use crate::email::Email;
 use crate::rand::generate_random_string;
@@ -59,6 +60,7 @@ pub async fn request_otp_handler(
   }
 
   let otp_code = generate_random_string(OTP_LENGTH);
+  println!("[DEBUG] Generated OTP: {} (len={})", otp_code, otp_code.len());
   const UPDATE_OTP_QUERY: &str = formatcp!(
     "\
       UPDATE '{USER_TABLE}' \
@@ -96,6 +98,14 @@ pub struct VerifyOTPRequest {
   pub code: String,
 }
 
+// Return a special response indicating TOTP is required
+#[derive(Serialize, TS, ToSchema)]
+#[ts(export)]
+struct TOTPRequiredResponse {
+  pub totp_required: bool,
+  pub message: String,
+}
+
 #[utoipa::path(
   post,
   path = "/otp/verify",
@@ -112,11 +122,43 @@ pub async fn verify_otp_handler(
   let email = validate_and_normalize_email_address(&params.email)?;
   let user = user_by_email(&state, &email).await?;
 
-  if let (Some(code), Some(sent_at)) = (&user.otp_code, user.otp_sent_at) {
-    if code != &params.code {
+  if verify_otp_code(&user, &params.code).is_err() {
+    return Err(AuthError::BadRequest("invalid user"));
+  }
+
+  if user.totp_secret.is_some() {
+    let resp = TOTPRequiredResponse {
+      totp_required: true,
+      message: "TOTP code required".to_string(),
+    };
+    return Ok((StatusCode::OK, Json(resp)).into_response());
+  }
+
+  let mut updated_user = user.clone();
+  updated_user.verified = true;
+
+  let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+  
+  let tokens = mint_new_tokens(state.user_conn(), &updated_user, auth_token_ttl).await?;
+  
+  let response = LoginResponse {
+    auth_token: state
+      .jwt()
+      .encode(&tokens.auth_token_claims)
+      .map_err(|err| AuthError::Internal(err.into()))?,
+    refresh_token: tokens.refresh_token,
+    csrf_token: tokens.auth_token_claims.csrf_token,
+  };
+  
+  return Ok(Json(response).into_response());
+}
+
+pub fn verify_otp_code(user: &DbUser, code: &str) -> Result<(), AuthError> {
+  if let (Some(expected_code), Some(sent_at)) = (&user.otp_code, user.otp_sent_at) {
+    if expected_code != code {
       return Err(AuthError::BadRequest("invalid user"));
     }
-    
+
     let Some(timestamp) = chrono::DateTime::from_timestamp(sent_at, 0) else {
       return Err(AuthError::Internal("Invalid timestamp".into()));
     };
@@ -124,35 +166,10 @@ pub async fn verify_otp_handler(
     if age > Duration::seconds(OTP_TTL_SEC) {
       return Err(AuthError::BadRequest("OTP expired"));
     }
-    
-    const CLEAR_OTP_QUERY: &str = formatcp!(
-      "UPDATE '{USER_TABLE}' SET otp_code = NULL, otp_sent_at = NULL, verified = TRUE WHERE id = $1"
-    );
-     state
-      .user_conn()
-      .execute(CLEAR_OTP_QUERY, params!(user.id))
-      .await?;
 
-    let mut updated_user = user.clone();
-    updated_user.verified = true;
-
-    let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-    
-    let tokens = mint_new_tokens(state.user_conn(), &updated_user, auth_token_ttl).await?;
-    
-    let response = LoginResponse {
-      auth_token: state
-        .jwt()
-        .encode(&tokens.auth_token_claims)
-        .map_err(|err| AuthError::Internal(err.into()))?,
-      refresh_token: tokens.refresh_token,
-      csrf_token: tokens.auth_token_claims.csrf_token,
-    };
-    
-    return Ok(Json(response).into_response());
-
+    Ok(())
   } else {
-     return Err(AuthError::BadRequest("invalid user"));
+    Err(AuthError::BadRequest("invalid user"))
   }
 }
 
@@ -175,9 +192,9 @@ fn generate_totp_code(secret: &[u8], time: u64) -> Result<String, AuthError> {
 
   let offset = (result.last().unwrap() & 0xf) as usize;
   let binary = ((result[offset] & 0x7f) as u32) << 24
-      | ((result[offset + 1]) as u32) << 16
-      | ((result[offset + 2]) as u32) << 8
-      | ((result[offset + 3]) as u32);
+    | ((result[offset + 1]) as u32) << 16
+    | ((result[offset + 2]) as u32) << 8
+    | ((result[offset + 3]) as u32);
 
   let otp = binary % 1_000_000;
   Ok(format!("{:06}", otp))
@@ -235,7 +252,8 @@ pub async fn generate_totp_handler(
 #[ts(export)]
 pub struct VerifyTOTPRequest {
   pub email: String,
-  pub code: String,
+  pub totp: String,
+  pub otp: String,
 }
 
 #[utoipa::path(
@@ -257,6 +275,10 @@ pub async fn verify_totp_handler(
   let Some(totp_secret) = &user.totp_secret else {
     return Err(AuthError::BadRequest("TOTP not enabled for this user"));
   };
+  
+  if verify_otp_code(&user, &params.otp).is_err() {
+    return Err(AuthError::BadRequest("invalid user"));
+  }
 
   // Verify the TOTP code
   // The secret should be base32 decoded
@@ -275,12 +297,12 @@ pub async fn verify_totp_handler(
   let expected_code = generate_totp_code(&secret_bytes, timestamp)?;
 
   // Compare with provided code
-  if expected_code != params.code {
+  if expected_code != params.totp {
     // Also check previous and next time windows for clock skew tolerance
     let prev_code = generate_totp_code(&secret_bytes, timestamp.saturating_sub(30))?;
     let next_code = generate_totp_code(&secret_bytes, timestamp.saturating_add(30))?;
     
-    if params.code != prev_code && params.code != next_code {
+    if params.totp != prev_code && params.totp != next_code {
       return Err(AuthError::BadRequest("Invalid TOTP code"));
     }
   }

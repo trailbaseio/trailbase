@@ -25,8 +25,9 @@ import { createSignal } from "solid-js";
 
 export function LoginPage() {
   const user = useStore($user);
-  const [otpRequested, setOtpRequested] = createSignal(false);
+  const [loginType, setLoginType] = createSignal("pw");
   const [email, setEmail] = createSignal("");
+  const [otp, setOtp] = createSignal("");
 
   return (
     <div class="flex h-dvh flex-col items-center justify-center">
@@ -48,11 +49,25 @@ export function LoginPage() {
             </CardFooter>
           </Match>
 
-          <Match when={user() === undefined && !otpRequested()}>
-            <LoginForm onRequestOtp={() => setOtpRequested(true)} setEmail={setEmail}/>
+          <Match when={user() === undefined && loginType() === "pw"}>
+            <LoginForm
+              setLoginType={setLoginType}
+              setEmail={setEmail}
+            />
           </Match>
-          <Match when={user() === undefined && otpRequested()}>
-            <OTPVerification onBack={() => setOtpRequested(false)} email={email()}/>
+          <Match when={user() === undefined && loginType() === "otp"}>
+            <OTPVerification
+              setLoginType={setLoginType}
+              email={email()}
+              setOtp={setOtp}
+            />
+          </Match>
+          <Match when={user() === undefined && loginType() === "totp"}>
+            <TOTPVerification
+              setLoginType={setLoginType}
+              email={email()}
+              otp={otp()}
+            />
           </Match>
         </Switch>
       </Card>
@@ -62,13 +77,12 @@ export function LoginPage() {
 
 type LoginFormProps = {
   setEmail: (email: string) => void;
-  onRequestOtp: () => void;
+  setLoginType: (type: "pw" | "otp" | "totp") => void;
 };
 
 function LoginForm(props: LoginFormProps) {
   let passwordInput: HTMLInputElement | undefined;
   let userInput: HTMLInputElement | undefined;
-  let totpInput: HTMLInputElement | undefined;
 
   const urlParams = new URLSearchParams(window.location.search);
   const message = urlParams.get("loginMessage");
@@ -82,12 +96,10 @@ function LoginForm(props: LoginFormProps) {
 
         const email = userInput?.value;
         const pw = passwordInput?.value;
-        const totp = totpInput?.value;
-        if (!email || (!pw && !totp)) return;
+        if (!email || !pw) return;
 
         try {
           if (pw) await client.login(email, pw);
-          else if (totp) await client.verifyTOTP(email, totp);
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
@@ -136,17 +148,6 @@ function LoginForm(props: LoginFormProps) {
         />
       </TextField>
 
-      <TextField class="flex items-center gap-2">
-        <TextFieldLabel class="w-[108px]">TOTP</TextFieldLabel>
-
-        <TextFieldInput
-          type="password"
-          placeholder="TOTP"
-          autocomplete="one-time-code"
-          ref={totpInput}
-        />
-      </TextField>
-
       <div class="flex justify-end gap-2">
         <Button
           type="button"
@@ -160,7 +161,7 @@ function LoginForm(props: LoginFormProps) {
                 variant: "success",
               });
               props.setEmail(email);
-              props.onRequestOtp();
+              props.setLoginType("otp");
             }).catch((err: any) => {
               showToast({
                 title: "Error requesting OTP",
@@ -185,8 +186,9 @@ function LoginForm(props: LoginFormProps) {
 }
 
 type OTPVerificationProps = {
-  onBack: () => void;
   email: string;
+  setOtp: (otp: string) => void;
+  setLoginType: (type: "pw" | "otp" | "totp") => void;
 };
 
 function OTPVerification(props: OTPVerificationProps) {
@@ -204,12 +206,17 @@ function OTPVerification(props: OTPVerificationProps) {
 
         try {
           await client.verifyOTP(props.email, otp);
-        } catch (err) {
-          showToast({
-            title: "Error verifying OTP",
-            description: `${err}`,
-            variant: "error",
-          });
+        } catch (err: any) {
+          if (err.message === "TOTP required") {
+            props.setOtp(otp);
+            props.setLoginType("totp");
+          } else {
+            showToast({
+              title: "Error verifying OTP",
+              description: `${err}`,
+              variant: "error",
+            });
+          }
         }
       }}
     >
@@ -226,8 +233,58 @@ function OTPVerification(props: OTPVerificationProps) {
       </TextField>
 
       <div class="flex justify-end gap-2">
-        <Button type="button" onClick={props.onBack}>Back</Button>
+        <Button type="button" onClick={() => props.setLoginType("pw")}>Back</Button>
         <Button type="submit">Verify OTP</Button>
+      </div>
+    </form>
+  );
+}
+
+type TOTPVerificationProps = {
+  email: string;
+  otp: string;
+  setLoginType: (type: "pw" | "otp" | "totp") => void;
+};
+
+function TOTPVerification(props: TOTPVerificationProps) {
+  let totpInput: HTMLInputElement | undefined;
+
+  return (
+    <form
+      class="flex flex-col gap-4 px-8 py-12"
+      method="dialog"
+      onSubmit={async (ev: SubmitEvent) => {
+        ev.preventDefault();
+
+        const totp = totpInput?.value;
+        if (!props.email || !totp) return;
+
+        try {
+          await client.verifyTOTP(props.email, totp, props.otp);
+        } catch (err: any) {
+          showToast({
+            title: "Error verifying TOTP",
+            description: `${err}`,
+            variant: "error",
+          });
+        }
+      }}
+    >
+      <h1>TOTP Verification</h1>
+      <p>Please enter the TOTP code from your authenticator app.</p>
+
+      <TextField class="flex items-center gap-2">
+        <TextFieldLabel class="w-[108px]">Code</TextFieldLabel>
+
+        <TextFieldInput
+          type="text"
+          ref={totpInput}
+        />
+      </TextField>
+
+      <div class="flex justify-end gap-2">
+        <Button type="button" onClick={() => props.setLoginType("otp")}>Back</Button>
+        <Button type="submit">Verify TOTP</Button>
       </div>
     </form>
   );
