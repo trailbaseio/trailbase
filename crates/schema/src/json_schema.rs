@@ -2,6 +2,7 @@ use jsonschema::Validator;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::LazyLock;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
 use crate::metadata::{
@@ -54,12 +55,34 @@ pub fn build_json_schema_expanded(
   mode: JsonSchemaMode,
   expand: Option<Expand<'_>>,
 ) -> Result<(Validator, serde_json::Value), JsonSchemaError> {
+  let mut schema =
+    build_json_schema_expanded_impl(registry, title, columns_metadata, mode, expand)?;
+
+  if let Some(obj) = schema.as_object_mut() {
+    const SCHEMA_STD: &str = "https://json-schema.org/draft/2020-12/schema";
+    obj.insert("$schema".to_string(), SCHEMA_STD.into());
+  }
+
+  return Ok((
+    Validator::new(&schema).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?,
+    schema,
+  ));
+}
+
+fn build_json_schema_expanded_impl(
+  registry: &JsonSchemaRegistry,
+  title: &str,
+  columns_metadata: &[ColumnMetadata],
+  mode: JsonSchemaMode,
+  expand: Option<Expand<'_>>,
+) -> Result<serde_json::Value, JsonSchemaError> {
   let mut properties = serde_json::Map::new();
   let mut defs = serde_json::Map::new();
   let mut required_cols: Vec<String> = vec![];
 
   for meta in columns_metadata {
     let col = &meta.column;
+
     let mut def_name: Option<String> = None;
     let mut not_null = false;
     let mut default = false;
@@ -72,6 +95,7 @@ pub fn build_json_schema_expanded(
           let Some(json_metadata) = extract_json_metadata(registry, opt)? else {
             continue;
           };
+          debug_assert_eq!(Some(&json_metadata), meta.json.as_ref());
 
           match json_metadata {
             JsonColumnMetadata::SchemaName(name) => {
@@ -159,8 +183,13 @@ pub fn build_json_schema_expanded(
               continue;
             };
 
-            let (_validator, schema) =
-              build_json_schema(registry, foreign_table, &table.column_metadata, mode)?;
+            let nested_schema = build_json_schema_expanded_impl(
+              registry,
+              foreign_table,
+              &table.column_metadata,
+              mode,
+              None,
+            )?;
 
             let new_def_name = foreign_table.clone();
             defs.insert(
@@ -171,7 +200,7 @@ pub fn build_json_schema_expanded(
                   "id": {
                     "type": column_data_type_to_json_type(pk_column.data_type),
                   },
-                  "data": schema,
+                  "data": nested_schema,
                 },
                 "required": ["id"],
               }),
@@ -181,6 +210,12 @@ pub fn build_json_schema_expanded(
         }
         _ => {}
       }
+    }
+
+    if meta.is_geometry {
+      const KEY: &str = "_geojson_geometry";
+      defs.insert(KEY.to_string(), GEOJSON_GEOMETRY.clone());
+      def_name = Some(KEY.to_string());
     }
 
     match mode {
@@ -211,27 +246,22 @@ pub fn build_json_schema_expanded(
     );
   }
 
-  let schema = if defs.is_empty() {
-    serde_json::json!({
+  if defs.is_empty() {
+    return Ok(serde_json::json!({
       "title": title,
       "type": "object",
       "properties": serde_json::Value::Object(properties),
       "required": serde_json::json!(required_cols),
-    })
-  } else {
-    serde_json::json!({
-      "title": title,
-      "type": "object",
-      "properties": serde_json::Value::Object(properties),
-      "required": serde_json::json!(required_cols),
-      "$defs": serde_json::Value::Object(defs),
-    })
-  };
+    }));
+  }
 
-  return Ok((
-    Validator::new(&schema).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?,
-    schema,
-  ));
+  return Ok(serde_json::json!({
+    "title": title,
+    "type": "object",
+    "properties": serde_json::Value::Object(properties),
+    "required": serde_json::json!(required_cols),
+    "$defs": serde_json::Value::Object(defs),
+  }));
 }
 
 fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
@@ -251,6 +281,11 @@ fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
     ColumnDataType::Real => Value::String("number".into()),
   };
 }
+
+static GEOJSON_GEOMETRY: LazyLock<Value> = LazyLock::new(|| {
+  const GEOJSON_GEOMETRY: &[u8] = include_bytes!("../schemas/Geometry.json");
+  return serde_json::from_slice(GEOJSON_GEOMETRY).expect("valid");
+});
 
 #[cfg(test)]
 mod tests {
@@ -299,7 +334,12 @@ mod tests {
       )
       .unwrap();
 
-    let (table, schema) = get_and_build_table_schema(&conn, &registry.read(), "test_table");
+    let (table, schema, _value) = get_and_build_table_schema(
+      &conn,
+      &registry.read(),
+      "test_table",
+      JsonSchemaMode::Insert,
+    );
 
     let col = table.columns.first().unwrap();
     let check_expr = col
@@ -420,27 +460,91 @@ mod tests {
       )
       .unwrap();
 
-    let (_table, schema) = get_and_build_table_schema(&conn, &registry.read(), "test_table");
+    let (_table, schema, _value) = get_and_build_table_schema(
+      &conn,
+      &registry.read(),
+      "test_table",
+      JsonSchemaMode::Insert,
+    );
 
     assert!(schema.is_valid(&json!({})));
+  }
+
+  #[test]
+  fn test_geojson_schema() {
+    let registry = Arc::new(RwLock::new(
+      crate::registry::build_json_schema_registry(vec![]).unwrap(),
+    ));
+
+    let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
+    litegis::register(&conn).unwrap();
+
+    conn
+      .execute_batch("CREATE TABLE test_table (geom BLOB NOT NULL CHECK(ST_IsValid(geom))) STRICT;")
+      .unwrap();
+
+    {
+      // Insert
+      let (_table, schema, _value) = get_and_build_table_schema(
+        &conn,
+        &registry.read(),
+        "test_table",
+        JsonSchemaMode::Insert,
+      );
+
+      let valid_point = json!({
+        "type": "Point",
+        "coordinates": [125.6, 10.1]
+      });
+      assert!(schema.is_valid(&json!({
+        "geom": valid_point,
+      })));
+
+      assert!(!schema.is_valid(&json!({})));
+
+      let invalid_point = json!({
+        "type": "Point",
+        "coordinates": [125.6]
+      });
+      assert!(
+        !schema.is_valid(&json!({
+        "geom": invalid_point,
+          })),
+        "{schema:?},\n{}",
+        serde_json::to_string_pretty(&_value).unwrap()
+      );
+    }
+
+    {
+      // Update
+      let (_table, schema, _value) = get_and_build_table_schema(
+        &conn,
+        &registry.read(),
+        "test_table",
+        JsonSchemaMode::Update,
+      );
+
+      assert!(schema.is_valid(&json!({})));
+    }
   }
 
   fn get_and_build_table_schema(
     conn: &rusqlite::Connection,
     registry: &JsonSchemaRegistry,
     table_name: &str,
-  ) -> (Table, Validator) {
+    mode: JsonSchemaMode,
+  ) -> (Table, Validator, Value) {
     let table = lookup_and_parse_table_schema(conn, table_name).unwrap();
 
     let table_metadata = TableMetadata::new(&registry, table.clone(), &[table.clone()]).unwrap();
-    let (schema, _) = build_json_schema(
+    let (schema, value) = build_json_schema(
       &registry,
       &table_metadata.name().name,
       &table_metadata.column_metadata,
-      JsonSchemaMode::Insert,
+      mode,
     )
     .unwrap();
 
-    return (table, schema);
+    return (table, schema, value);
   }
 }

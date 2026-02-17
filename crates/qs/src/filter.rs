@@ -26,91 +26,83 @@ pub enum ValueOrComposite {
 }
 
 impl ValueOrComposite {
+  pub fn visit_values<E>(&self, f: impl Fn(&ColumnOpValue) -> Result<(), E>) -> Result<(), E> {
+    fn recurse<E>(
+      f: &dyn Fn(&ColumnOpValue) -> Result<(), E>,
+      v: &ValueOrComposite,
+    ) -> Result<(), E> {
+      match v {
+        ValueOrComposite::Value(v) => f(v)?,
+        ValueOrComposite::Composite(_combiner, vec) => {
+          for value_or_composite in vec {
+            recurse(f, value_or_composite)?;
+          }
+        }
+      }
+      return Ok(());
+    }
+
+    return recurse(&f, self);
+  }
+
   /// Returns SQL query, and a list of (param_name, param_value).
+  ///
+  /// The column_prefix can be used to refer to non-main schemas, e.g. `foo."param" IS NULL`.
+  ///
+  /// Returns the resulting SQL query string and a mapping from param name to param value.
+  ///
+  /// NOTE: The value type is generic to avoid a dependency on rusqlite
+  /// and not hard-code "Value -> Sql::Value" conversion. For example,
+  /// TB does some "String -> Blob" decoding depending on the column type.
+  /// NOTE: Do **not** use this for parameter validation, `map` is **not** applied
+  /// to all leafs. Use `visit_values` instead for validation.
   pub fn into_sql<V, E>(
     self,
     column_prefix: Option<&str>,
-    convert: &dyn Fn(&str, Value) -> Result<V, E>,
+    map: impl Fn(ColumnOpValue) -> Result<V, E>,
   ) -> Result<(String, Vec<(String, V)>), E> {
-    fn render_value<V, E>(
-      column_op_value: ColumnOpValue,
-      column_prefix: Option<&str>,
-      convert: &dyn Fn(&str, Value) -> Result<V, E>,
-      index: &mut usize,
-    ) -> Result<(String, Option<(String, V)>), E> {
-      let v = column_op_value.value;
-      let c = column_op_value.column;
-
-      return match column_op_value.op {
-        CompareOp::Is => {
-          debug_assert!(matches!(v, Value::String(_)), "{v:?}");
-
-          Ok(match column_prefix {
-            Some(p) => (format!(r#"{p}."{c}" IS {v}"#), None),
-            None => (format!(r#""{c}" IS {v}"#), None),
-          })
-        }
-        op => {
-          let param = param_name(*index);
-          *index += 1;
-
-          Ok(match column_prefix {
-            Some(p) => (
-              format!(r#"{p}."{c}" {o} {param}"#, o = op.as_sql()),
-              Some((param, convert(&c, v)?)),
-            ),
-            None => (
-              format!(r#""{c}" {o} {param}"#, o = op.as_sql()),
-              Some((param, convert(&c, v)?)),
-            ),
-          })
-        }
-      };
-    }
-
     fn recurse<V, E>(
       v: ValueOrComposite,
       column_prefix: Option<&str>,
-      convert: &dyn Fn(&str, Value) -> Result<V, E>,
+      map: &dyn Fn(ColumnOpValue) -> Result<V, E>,
       index: &mut usize,
     ) -> Result<(String, Vec<(String, V)>), E> {
       match v {
         ValueOrComposite::Value(v) => {
-          return Ok(match render_value(v, column_prefix, convert, index)? {
+          return Ok(match render_sql_fragment(v, column_prefix, map, index)? {
             (sql, Some(param)) => (sql, vec![param]),
             (sql, None) => (sql, vec![]),
           });
         }
         ValueOrComposite::Composite(combiner, vec) => {
-          let mut fragments = Vec::<String>::with_capacity(vec.len());
-          let mut params = Vec::<(String, V)>::with_capacity(vec.len());
+          let mut params: Vec<(String, V)> = vec![];
+          let fragments: Vec<String> = vec
+            .into_iter()
+            .map(|value_or_composite| {
+              let (f, p) = recurse(value_or_composite, column_prefix, map, index)?;
+              params.extend(p);
+              return Ok(f);
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-          for value_or_composite in vec {
-            let (f, p) = recurse(value_or_composite, column_prefix, convert, index)?;
-            fragments.push(f);
-            params.extend(p);
-          }
+          let sub_clause = fragments.join(match combiner {
+            Combiner::And => " AND ",
+            Combiner::Or => " OR ",
+          });
 
-          let fragment = format!(
-            "({})",
-            fragments.join(match combiner {
-              Combiner::And => " AND ",
-              Combiner::Or => " OR ",
-            }),
-          );
-          return Ok((fragment, params));
+          return Ok((format!("({sub_clause})"), params));
         }
       };
     }
 
     let mut index: usize = 0;
-    return recurse(self, column_prefix, convert, &mut index);
+    return recurse(self, column_prefix, &map, &mut index);
   }
 
   /// Return a query-string fragment for this filter (no leading '&').
   pub fn to_query(&self) -> String {
     /// Return a (key, value) pair suitable for query-string serialization (not percent-encoded).
-    fn render_value(prefix: &str, v: &ColumnOpValue) -> String {
+    fn render_param(prefix: &str, v: &ColumnOpValue) -> String {
       let value: std::borrow::Cow<str> = match (&v.op, &v.value) {
         (CompareOp::Is, Value::String(s)) if s == "NOT NULL" => "!NULL".into(),
         (CompareOp::Is, Value::String(s)) if s == "NULL" => "NULL".into(),
@@ -129,7 +121,7 @@ impl ValueOrComposite {
 
     fn recurse(v: &ValueOrComposite, prefix: &str) -> Vec<String> {
       return match v {
-        ValueOrComposite::Value(v) => vec![render_value(prefix, v)],
+        ValueOrComposite::Value(v) => vec![render_param(prefix, v)],
         ValueOrComposite::Composite(combiner, vec) => {
           let comb = match combiner {
             Combiner::And => "$and",
@@ -264,6 +256,48 @@ fn param_name(index: usize) -> String {
   return s;
 }
 
+fn render_sql_fragment<V, E>(
+  column_op_value: ColumnOpValue,
+  column_prefix: Option<&str>,
+  map: &dyn Fn(ColumnOpValue) -> Result<V, E>,
+  index: &mut usize,
+) -> Result<(String, Option<(String, V)>), E> {
+  let c = &column_op_value.column;
+  let column_name = match column_prefix {
+    Some(p) => format!(r#"{p}."{c}""#),
+    None => format!(r#""{c}""#),
+  };
+
+  return match (column_op_value.op, &column_op_value.value) {
+    (CompareOp::Is, Value::String(s)) if s == "NULL" || s == "NOT NULL" => {
+      // We need to inline NULL/NOT NULL, since `IS [NOT ]NULL` is an operator and not a `TEXT`
+      // literal.
+      Ok((column_op_value.op.as_sql(&column_name, s), None))
+    }
+    (CompareOp::StWithin | CompareOp::StIntersects | CompareOp::StContains, Value::String(s)) => {
+      // QUESTION: should we pass the string as a parameter instead? Right now we can't because
+      // the value `map` function tries to decode strings as Base64 for Blob columns.
+      // NOTE: this should already not allow SQL injections, since we validated the string
+      // during Filter parsing as WKT.
+      Ok((
+        column_op_value
+          .op
+          .as_sql(&column_name, &format!("ST_GeomFromText('{s}')")),
+        None,
+      ))
+    }
+    (op, _) => {
+      let param = param_name(*index);
+      *index += 1;
+
+      Ok((
+        op.as_sql(&column_name, &param),
+        Some((param, map(column_op_value)?)),
+      ))
+    }
+  };
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -373,22 +407,17 @@ mod tests {
       value: Value::String("val0".to_string()),
     });
 
-    let convert = |_: &str, value: Value| -> Result<SqlValue, String> {
-      return Ok(match value {
+    fn map(cov: ColumnOpValue) -> Result<SqlValue, String> {
+      return Ok(match cov.value {
         Value::String(s) => SqlValue::Text(s),
         Value::Integer(i) => SqlValue::Integer(i),
         Value::Double(d) => SqlValue::Real(d),
       });
-    };
+    }
 
-    let sql0 = v0
-      .clone()
-      .into_sql(/* column_prefix= */ None, &convert)
-      .unwrap();
+    let sql0 = v0.clone().into_sql(/* column_prefix= */ None, map).unwrap();
     assert_eq!(sql0.0, r#""col0" = :__p0"#);
-    let sql0 = v0
-      .into_sql(/* column_prefix= */ Some("p"), &convert)
-      .unwrap();
+    let sql0 = v0.into_sql(/* column_prefix= */ Some("p"), map).unwrap();
     assert_eq!(sql0.0, r#"p."col0" = :__p0"#);
 
     let v1 = ValueOrComposite::Value(ColumnOpValue {
@@ -396,7 +425,7 @@ mod tests {
       op: CompareOp::Is,
       value: Value::String("NULL".to_string()),
     });
-    let sql1 = v1.into_sql(None, &convert).unwrap();
+    let sql1 = v1.into_sql(None, map).unwrap();
     assert_eq!(sql1.0, r#""col0" IS NULL"#, "{sql1:?}",);
   }
 }

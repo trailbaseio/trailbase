@@ -107,12 +107,15 @@ pub(crate) fn qs_filter_to_record_filter(
   };
 }
 
+/// Mimics the `WHERE` filter behavior we use in list-queries but for subscriptions, where can't
+/// query directly.
 #[inline]
 fn compare_values(
   op: &CompareOp,
   record_value: &rusqlite::types::Value,
   filter_value: &rusqlite::types::Value,
 ) -> bool {
+  use geos::Geom;
   use rusqlite::types::Value;
 
   return match op {
@@ -171,7 +174,46 @@ fn compare_values(
       }
       _ => false,
     },
+    CompareOp::StWithin => match (record_value, filter_value) {
+      (Value::Blob(record), Value::Text(filter)) => {
+        let Some((record_geometry, filter_geometry)) = parse_geometries(record, filter) else {
+          return false;
+        };
+        return record_geometry.within(&filter_geometry).unwrap_or(false);
+      }
+      _ => false,
+    },
+    CompareOp::StIntersects => match (record_value, filter_value) {
+      (Value::Blob(record), Value::Text(filter)) => {
+        let Some((record_geometry, filter_geometry)) = parse_geometries(record, filter) else {
+          return false;
+        };
+        return record_geometry
+          .intersects(&filter_geometry)
+          .unwrap_or(false);
+      }
+      _ => false,
+    },
+    CompareOp::StContains => match (record_value, filter_value) {
+      (Value::Blob(record), Value::Text(filter)) => {
+        let Some((record_geometry, filter_geometry)) = parse_geometries(record, filter) else {
+          return false;
+        };
+        return record_geometry.contains(&filter_geometry).unwrap_or(false);
+      }
+      _ => false,
+    },
   };
+}
+
+#[inline]
+fn parse_geometries(record: &[u8], filter: &str) -> Option<(geos::Geometry, geos::Geometry)> {
+  let record_geometry = geos::Geometry::new_from_wkb(record).ok()?;
+  // TODO: We should memoize the filter geometry with the subscription to not reparse it over and
+  // over again.
+  let filter_geometry = geos::Geometry::new_from_wkt(filter).ok()?;
+
+  return Some((record_geometry, filter_geometry));
 }
 
 pub(crate) fn apply_filter_recursively_to_record(

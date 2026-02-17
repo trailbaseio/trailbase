@@ -99,7 +99,7 @@ pub async fn read_record_handler(
         .map_err(|err| RecordError::Internal(err.into()))?;
 
       let result = expand.insert(col_name.to_string(), foreign_value);
-      assert!(result.is_some());
+      debug_assert!(result.is_some(), "{col_name} duplicate");
     }
 
     return Ok(Json(
@@ -1239,6 +1239,93 @@ mod test {
       "id": 1,
       "list": StringArray(vec!["item0".to_string(), "item1".to_string()]),
     });
+
+    let create_response: CreateRecordResponse = unpack_json_response(
+      create_record_handler(
+        State(state.clone()),
+        Path(name.clone()),
+        Query(CreateRecordQuery::default()),
+        None,
+        Either::Json(record.clone()),
+      )
+      .await
+      .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    let Json(read_response) = read_record_handler(
+      State(state),
+      Path((name.clone(), create_response.ids[0].clone())),
+      Query(ReadRecordQuery::default()),
+      None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(read_response, record);
+  }
+
+  #[tokio::test]
+  async fn test_geometry_columns_and_geojson() {
+    let state = test_state(None).await.unwrap();
+
+    let name = "with_geo".to_string();
+    state
+      .conn()
+      .execute(
+        format!(
+          r#"CREATE TABLE '{name}' (
+            id           INTEGER PRIMARY KEY,
+            geo          BLOB CHECK(ST_IsValid(geo))
+          ) STRICT"#
+        ),
+        (),
+      )
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some(name.clone()),
+        table_name: Some(name.clone()),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Read as i32,
+          PermissionFlag::Delete as i32,
+          PermissionFlag::Update as i32,
+        ]
+        .into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let coords = geos::CoordSeq::new_from_vec(&[&[12.4924, 41.8902]]).unwrap();
+    let geometry = geos::Geometry::create_point(coords).unwrap();
+    let json_geometry: geos::geojson::Geometry = geometry.try_into().unwrap();
+
+    let record = json!({
+      "id": 1,
+      "geo": json_geometry,
+    });
+
+    let geojson = record
+      .as_object()
+      .unwrap()
+      .get("geo")
+      .unwrap()
+      .as_object()
+      .unwrap();
+    assert_eq!(
+      geojson.get("type").unwrap().as_str().unwrap(),
+      "Point",
+      "{geojson:?}"
+    );
 
     let create_response: CreateRecordResponse = unpack_json_response(
       create_record_handler(

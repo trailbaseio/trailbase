@@ -473,15 +473,15 @@ mod tests {
       )
     );
 
-    fn convert(_: &str, value: Value) -> Result<SqlValue, String> {
-      return Ok(match value {
+    fn map(cov: ColumnOpValue) -> Result<SqlValue, String> {
+      return Ok(match cov.value {
         Value::String(s) => SqlValue::Text(s),
         Value::Integer(i) => SqlValue::Integer(i),
         Value::Double(d) => SqlValue::Real(d),
       });
     }
 
-    let (sql, params) = q1.filter.clone().unwrap().into_sql(None, &convert).unwrap();
+    let (sql, params) = q1.filter.clone().unwrap().into_sql(None, map).unwrap();
     assert_eq!(
       sql,
       r#"(("col2" = :__p0 OR "col0" <> :__p1) AND "col1" = :__p2)"#
@@ -494,7 +494,7 @@ mod tests {
         (":__p2".to_string(), SqlValue::Integer(1)),
       ]
     );
-    let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), &convert).unwrap();
+    let (sql, _) = q1.filter.unwrap().into_sql(Some("p"), map).unwrap();
     assert_eq!(
       sql,
       r#"((p."col2" = :__p0 OR p."col0" <> :__p1) AND p."col1" = :__p2)"#
@@ -587,6 +587,50 @@ mod tests {
         cursor: Some(blob),
         ..Default::default()
       }
+    );
+  }
+
+  #[test]
+  fn test_geometry_filter() {
+    let polygon = "POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10))";
+
+    // Make sure ";" cannot be used for SQL injection.
+    assert!(Query::parse(&format!("filter[col][@within]={polygon};")).is_err());
+
+    assert_eq!(
+      Query::parse(&format!("filter[col][@within]={polygon}"))
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::StWithin,
+        value: Value::String(polygon.to_string()),
+      })
+    );
+
+    assert_eq!(
+      Query::parse(&format!("filter[col][@intersects]={polygon}"))
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::StIntersects,
+        value: Value::String(polygon.to_string()),
+      })
+    );
+
+    assert_eq!(
+      Query::parse(&format!("filter[col][@contains]={polygon}"))
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::StContains,
+        value: Value::String(polygon.to_string()),
+      })
     );
   }
 }

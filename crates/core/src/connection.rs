@@ -342,6 +342,8 @@ fn init_main_db_impl(
         let mut conn =
           trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
+        litegis::register(&conn)?;
+
         if main_migrations {
           new_db.fetch_or(
             apply_main_migrations(&mut conn, migrations_path.as_ref())?,
@@ -376,6 +378,8 @@ fn init_main_db_impl(
       // FIXME: Right now this will fail if user migrations depend on custom WASM SQLite functions.
       let mut secondary =
         trailbase_extension::connect_sqlite(Some(path.clone()), json_registry.clone())?;
+
+      litegis::register(&secondary)?;
 
       apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;
     }

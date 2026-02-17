@@ -33,30 +33,37 @@ pub(crate) fn build_filter_where_clause(
     });
   };
 
-  let convert = |column_name: &str,
-                 value: trailbase_qs::Value|
-   -> Result<trailbase_sqlite::Value, WhereClauseError> {
+  // Param validation first.
+  // NOTE: This is separate step is important, because the value mapping below
+  // is **not** applied to all parameters unlike the visitor here.
+  filter_params.visit_values(|column_op_value| -> Result<(), WhereClauseError> {
+    let column_name = &column_op_value.column;
     if column_name.starts_with("_") {
       return Err(WhereClauseError::UnrecognizedParam(format!(
         "Invalid parameter: {column_name}"
       )));
     }
 
+    return Ok(());
+  })?;
+
+  let (sql, params) = filter_params.into_sql(Some(table_name), |column_op_value| {
     let Some(meta) = column_metadata
       .iter()
-      .find(|meta| meta.column.name == column_name)
+      .find(|meta| meta.column.name == column_op_value.column)
     else {
       return Err(WhereClauseError::UnrecognizedParam(format!(
-        "Unrecognized parameter: {column_name}"
+        "Filter on unknown column: {}",
+        column_op_value.column
       )));
     };
 
-    // TODO: Improve hacky error handling.
-    return crate::records::filter::qs_value_to_sql_with_constraints(&meta.column, value)
-      .map_err(|err| WhereClauseError::UnrecognizedParam(err.to_string()));
-  };
-
-  let (sql, params) = filter_params.into_sql(Some(table_name), &convert)?;
+    return crate::records::filter::qs_value_to_sql_with_constraints(
+      &meta.column,
+      column_op_value.value,
+    )
+    .map_err(|err| WhereClauseError::UnrecognizedParam(err.to_string()));
+  })?;
 
   return Ok(WhereClause {
     clause: sql,

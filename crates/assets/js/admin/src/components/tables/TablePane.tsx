@@ -27,6 +27,7 @@ import type {
 } from "@tanstack/solid-table";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
+import { geojsonToWKT } from "@terraformer/wkt";
 import { urlSafeBase64Decode } from "trailbase";
 
 import { Header } from "@/components/Header";
@@ -77,6 +78,7 @@ import {
   UploadedFiles,
 } from "@/components/tables/Files";
 
+import { parseWkb } from "@/lib/wkb";
 import { createConfigQuery } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
@@ -89,6 +91,7 @@ import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
   isFileUploadColumn,
+  isGeometryColumn,
   isFileUploadsColumn,
   isJSONColumn,
   isNotNull,
@@ -151,13 +154,19 @@ function renderCell(
   if ("Blob" in value) {
     const blob = value.Blob;
     if ("Base64UrlSafe" in blob) {
-      if (cell.type === "UUID") {
-        return (
-          <Uuid
-            base64UrlSafeBlob={blob.Base64UrlSafe}
-            blobEncoding={blobEncoding}
-          />
-        );
+      switch (cell.type) {
+        case "UUID": {
+          return (
+            <Uuid
+              base64UrlSafeBlob={blob.Base64UrlSafe}
+              blobEncoding={blobEncoding}
+            />
+          );
+        }
+        case "Geometry": {
+          const geometry = parseWkb(urlSafeBase64Decode(blob.Base64UrlSafe));
+          return geojsonToWKT(geometry);
+        }
       }
 
       if (blobEncoding === "hex") {
@@ -451,11 +460,20 @@ function TableHeader(props: {
   );
 }
 
-type CellType = "UUID" | "JSON" | "File" | "File[]" | ColumnDataType;
+type CellType =
+  | "UUID"
+  | "JSON"
+  | "File"
+  | "File[]"
+  | "Geometry"
+  | ColumnDataType;
 
 function deriveCellType(column: Column): CellType {
   if (isUUIDColumn(column)) {
     return "UUID";
+  }
+  if (isGeometryColumn(column)) {
+    return "Geometry";
   }
   if (isFileUploadColumn(column)) {
     return "File";

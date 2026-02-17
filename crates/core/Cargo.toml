@@ -48,7 +48,7 @@ ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
-# geos = { version = "10.0.0", default-features = false, features = ["geo", "json"] }
+geos = { version = "10.0.0", default-features = false, features = ["geo", "json"] }
 http-body-util = "0.1.3"
 hyper = "1.6.0"
 hyper-util = "0.1.7"
@@ -60,6 +60,7 @@ jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use
 kanal = "0.1.1"
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
+litegis = { workspace = true }
 log = { version = "^0.4.21", default-features = false }
 mini-moka = "0.10.3"
 minijinja = { workspace = true }

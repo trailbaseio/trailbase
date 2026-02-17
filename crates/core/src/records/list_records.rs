@@ -1,16 +1,17 @@
 use askama::Template;
 use axum::{
   Json,
-  extract::{Path, RawQuery, State},
+  extract::{Path, Query, RawQuery, State},
 };
 use base64::prelude::*;
 use itertools::Itertools;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::sync::LazyLock;
-use trailbase_qs::{OrderPrecedent, Query};
+use trailbase_qs::OrderPrecedent;
 use trailbase_schema::QualifiedNameEscaped;
+use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -33,19 +34,28 @@ pub struct ListResponse {
   pub records: Vec<serde_json::Value>,
 }
 
-#[derive(Template)]
-#[template(escape = "none", path = "list_record_query.sql")]
-struct ListRecordQueryTemplate<'a> {
-  table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
-  read_access_clause: &'a str,
-  filter_clause: &'a str,
-  cursor_clause: Option<&'a str>,
-  order_clause: &'a str,
-  expanded_tables: &'a [ExpandedTable<'a>],
-  count: bool,
-  offset: bool,
-  is_table: bool,
+#[derive(Debug)]
+pub enum ListOrGeoJSONResponse {
+  List(ListResponse),
+  GeoJSON(geos::geojson::FeatureCollection),
+}
+
+// Transparent serializer. We could probably have an Either instead.
+impl Serialize for ListOrGeoJSONResponse {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    return match self {
+      Self::List(v) => v.serialize(serializer),
+      Self::GeoJSON(v) => v.serialize(serializer),
+    };
+  }
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct ListRecordsQuery {
+  pub geojson: Option<String>,
 }
 
 /// Lists records matching the given filters
@@ -60,9 +70,10 @@ struct ListRecordQueryTemplate<'a> {
 pub async fn list_records_handler(
   State(state): State<AppState>,
   Path(api_name): Path<String>,
+  Query(query): Query<ListRecordsQuery>,
   RawQuery(raw_url_query): RawQuery,
   user: Option<User>,
-) -> Result<Json<ListResponse>, RecordError> {
+) -> Result<Json<ListOrGeoJSONResponse>, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -76,7 +87,20 @@ pub async fn list_records_handler(
   let pk_column = &pk_meta.column;
   let is_table = api.is_table();
 
-  let Query {
+  let geojson_geometry_column = if let Some(column) = query.geojson {
+    let meta = api.column_metadata_by_name(&column).ok_or_else(|| {
+      return RecordError::BadRequest("Invalid geometry column");
+    })?;
+    if !meta.is_geometry {
+      return Err(RecordError::BadRequest("Invalid geometry column"));
+    }
+
+    Some(meta)
+  } else {
+    None
+  };
+
+  let trailbase_qs::Query {
     limit,
     cursor,
     count,
@@ -86,7 +110,10 @@ pub async fn list_records_handler(
     offset,
   } = raw_url_query
     .as_ref()
-    .map_or_else(|| Ok(Query::default()), |query| Query::parse(query))
+    .map_or_else(
+      || Ok(Default::default()),
+      |query| trailbase_qs::Query::parse(query),
+    )
     .map_err(|_err| {
       return RecordError::BadRequest("Invalid query");
     })?;
@@ -230,11 +257,11 @@ pub async fn list_records_handler(
 
   let Some(last_row) = rows.last() else {
     // Query result is empty:
-    return Ok(Json(ListResponse {
+    return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
       cursor: None,
       total_count: Some(0),
       records: vec![],
-    }));
+    })));
   };
 
   let total_count = if count == Some(true) {
@@ -256,11 +283,11 @@ pub async fn list_records_handler(
 
   // For ?limit=0 we still query one record to get the total count.
   if limit == 0 {
-    return Ok(Json(ListResponse {
+    return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
       cursor: None,
       total_count,
       records: vec![],
-    }));
+    })));
   }
 
   let cursor: Option<String> = if supports_cursor {
@@ -318,11 +345,68 @@ pub async fn list_records_handler(
       .collect::<Result<Vec<_>, RecordError>>()?
   };
 
-  return Ok(Json(ListResponse {
+  if let Some(meta) = geojson_geometry_column {
+    return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
+      build_feature_collection(meta, &pk_column.name, cursor, total_count, records)?,
+    )));
+  }
+
+  return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
     cursor,
     total_count,
     records,
-  }));
+  })));
+}
+
+fn build_feature_collection(
+  meta: &ColumnMetadata,
+  pk_column_name: &str,
+  cursor: Option<String>,
+  total_count: Option<usize>,
+  records: Vec<serde_json::Value>,
+) -> Result<geos::geojson::FeatureCollection, RecordError> {
+  let mut foreign_members = serde_json::Map::<String, serde_json::Value>::new();
+  if let Some(cursor) = cursor {
+    foreign_members.insert("cursor".to_string(), serde_json::Value::String(cursor));
+  }
+  if let Some(total_count) = total_count {
+    foreign_members.insert("total_count".to_string(), serde_json::json!(total_count));
+  }
+
+  let features = records
+    .into_iter()
+    .map(|record| -> Result<geos::geojson::Feature, RecordError> {
+      let serde_json::Value::Object(mut obj) = record else {
+        return Err(RecordError::Internal("Not an object".into()));
+      };
+
+      let id = obj.get(pk_column_name).and_then(|id| match id {
+        serde_json::Value::Number(n) => Some(geos::geojson::feature::Id::Number(n.clone())),
+        serde_json::Value::String(s) => Some(geos::geojson::feature::Id::String(s.clone())),
+        _ => None,
+      });
+      debug_assert!(id.is_some());
+
+      // NOTE: Geometry may be NULL for nullable columns.
+      let geometry = obj.remove(&meta.column.name).and_then(|g| {
+        return geos::geojson::Geometry::from_json_value(g).ok();
+      });
+
+      return Ok(geos::geojson::Feature {
+        id,
+        geometry,
+        properties: Some(obj),
+        bbox: None,
+        foreign_members: None,
+      });
+    })
+    .collect::<Result<_, _>>()?;
+
+  return Ok(geos::geojson::FeatureCollection {
+    bbox: None,
+    features,
+    foreign_members: Some(foreign_members),
+  });
 }
 
 fn fmt_order(col: &str, order: OrderPrecedent) -> String {
@@ -363,6 +447,21 @@ fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, R
   return String::from_utf8_lossy(&value)
     .parse()
     .map_err(|_| RecordError::BadRequest("Bad cursor"));
+}
+
+#[derive(Template)]
+#[template(escape = "none", path = "list_record_query.sql")]
+struct ListRecordQueryTemplate<'a> {
+  table_name: &'a QualifiedNameEscaped,
+  column_names: &'a [&'a str],
+  read_access_clause: &'a str,
+  filter_clause: &'a str,
+  cursor_clause: Option<&'a str>,
+  order_clause: &'a str,
+  expanded_tables: &'a [ExpandedTable<'a>],
+  count: bool,
+  offset: bool,
+  is_table: bool,
 }
 
 // Ephemeral key for encrypting cursors, i.e. cursors cannot be re-used across TB restarts.
@@ -588,29 +687,37 @@ mod tests {
     .await
     .unwrap();
 
-    let response = list_records_handler(
+    let ListOrGeoJSONResponse::List(response) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(None),
       None,
     )
     .await
     .unwrap()
-    .0;
+    .0
+    else {
+      panic!("not a list");
+    };
 
     assert_eq!(3, response.records.len());
 
     let first: Entry = serde_json::from_value(response.records[0].clone()).unwrap();
 
-    let response = list_records_handler(
+    let ListOrGeoJSONResponse::List(response) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(Some(format!("filter[id]={}", first.id))),
       None,
     )
     .await
     .unwrap()
-    .0;
+    .0
+    else {
+      panic!("not a list");
+    };
 
     assert_eq!(1, response.records.len());
     assert_eq!(
@@ -618,26 +725,35 @@ mod tests {
       serde_json::from_value(response.records[0].clone()).unwrap()
     );
 
-    let null_response = list_records_handler(
+    let ListOrGeoJSONResponse::List(null_response) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(Some("filter[nullable][$is]=NULL".to_string())),
       None,
     )
     .await
     .unwrap()
-    .0;
+    .0
+    else {
+      panic!("not a list");
+    };
+
     assert_eq!(2, null_response.records.len());
 
-    let not_null_response = list_records_handler(
+    let ListOrGeoJSONResponse::List(not_null_response) = list_records_handler(
       State(state.clone()),
       Path("api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(Some("filter[nullable][$is]=!NULL".to_string())),
       None,
     )
     .await
     .unwrap()
-    .0;
+    .0
+    else {
+      panic!("not a list");
+    };
     assert_eq!(1, not_null_response.records.len());
   }
 
@@ -1028,13 +1144,16 @@ mod tests {
     let json_response = list_records_handler(
       State(state.clone()),
       Path("messages_api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(query),
       auth_token.and_then(|token| User::from_auth_token(&state, token)),
     )
     .await?;
 
-    let response: ListResponse = json_response.0;
-    return Ok(response);
+    if let ListOrGeoJSONResponse::List(response) = json_response.0 {
+      return Ok(response);
+    };
+    panic!("not a list response: {json_response:?}");
   }
 
   #[tokio::test]
@@ -1079,14 +1198,19 @@ mod tests {
     .await
     .unwrap();
 
-    let resp = list_records_handler(
+    let ListOrGeoJSONResponse::List(resp) = list_records_handler(
       State(state.clone()),
       Path("data_view_api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(Some("count=TRUE".to_string())),
       None,
     )
     .await
-    .unwrap();
+    .unwrap()
+    .0
+    else {
+      panic!("not a list");
+    };
 
     assert_eq!(3, resp.records.len());
     assert_eq!(3, resp.total_count.unwrap());
@@ -1103,28 +1227,155 @@ mod tests {
     .await
     .unwrap();
 
-    let resp_filtered0 = list_records_handler(
+    let ListOrGeoJSONResponse::List(resp_filtered0) = list_records_handler(
       State(state.clone()),
       Path("data_view_filtered_api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(Some("count=TRUE&offset=0".to_string())),
       None,
     )
     .await
-    .unwrap();
+    .unwrap()
+    .0
+    else {
+      panic!("not a list");
+    };
 
     assert_eq!(2, resp_filtered0.records.len());
     assert_eq!(2, resp_filtered0.total_count.unwrap());
 
-    let resp_filtered1 = list_records_handler(
+    let ListOrGeoJSONResponse::List(resp_filtered1) = list_records_handler(
       State(state.clone()),
       Path("data_view_filtered_api".to_string()),
+      Query(ListRecordsQuery::default()),
       RawQuery(Some("count=TRUE&filter[prefixed]=prefix_msg0".to_string())),
       None,
     )
     .await
-    .unwrap();
+    .unwrap()
+    .0
+    else {
+      panic!("not a list");
+    };
 
     assert_eq!(1, resp_filtered1.records.len());
     assert_eq!(1, resp_filtered1.total_count.unwrap());
+  }
+
+  #[tokio::test]
+  async fn test_record_api_geojson_list() {
+    let state = test_state(None).await.unwrap();
+    let name = "geometry";
+
+    state
+      .conn()
+      .execute_batch(format!(
+        r#"
+        CREATE TABLE {name} (
+          id            INTEGER PRIMARY KEY,
+          description   TEXT,
+          geom          BLOB CHECK(ST_IsValid(geom))
+        ) STRICT;
+
+        INSERT INTO {name} (id, description, geom) VALUES
+          ( 3, 'Colloseo',     ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
+          ( 7, 'A Line',       ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326)),
+          ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
+          (21, 'null',         NULL);
+      "#
+      ))
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some(name.to_string()),
+        table_name: Some(name.to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    {
+      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+        State(state.clone()),
+        Path(name.to_string()),
+        Query(ListRecordsQuery {
+          geojson: Some("geom".to_string()),
+        }),
+        RawQuery(None),
+        None,
+      )
+      .await
+      .unwrap()
+      .0
+      else {
+        panic!("not GeoJSON");
+      };
+
+      assert_eq!(4, response.features.len());
+    }
+
+    {
+      // Test that stored point is `within` a filter bounding box.
+      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+        State(state.clone()),
+        Path(name.to_string()),
+        Query(ListRecordsQuery {
+          geojson: Some("geom".to_string()),
+        }),
+        RawQuery(Some(format!(
+          "filter[geom][@within]={polygon}",
+          // Colloseo @ 12.4924 41.8902
+          polygon = urlencode("POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))")
+        ))),
+        None,
+      )
+      .await
+      .unwrap()
+      .0
+      else {
+        panic!("not GeoJSON");
+      };
+
+      assert_eq!(1, response.features.len());
+      assert_eq!(
+        Some(geos::geojson::feature::Id::Number(3.into())),
+        response.features[0].id
+      );
+    }
+
+    {
+      // Test that stored polygon `contains` a filter point.
+      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+        State(state.clone()),
+        Path(name.to_string()),
+        Query(ListRecordsQuery {
+          geojson: Some("geom".to_string()),
+        }),
+        RawQuery(Some(format!(
+          "filter[geom][@contains]={point}",
+          point = urlencode("POINT (12 -40)")
+        ))),
+        None,
+      )
+      .await
+      .unwrap()
+      .0
+      else {
+        panic!("not GeoJSON");
+      };
+
+      assert_eq!(1, response.features.len());
+      assert_eq!(
+        Some(geos::geojson::feature::Id::Number(8.into())),
+        response.features[0].id
+      );
+    }
   }
 }

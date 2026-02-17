@@ -17,8 +17,10 @@ pub enum JsonError {
   Finite,
   #[error("Value not found")]
   ValueNotFound,
-  #[error("Unsupported type")]
+  #[error("UnsupportedType")]
   NotSupported,
+  #[error("ColumnMismatch")]
+  ColumnMismatch,
   #[error("Decoding")]
   Decode(#[from] base64::DecodeError),
   #[error("Unexpected type: {0}, expected {1:?}")]
@@ -30,6 +32,8 @@ pub enum JsonError {
   // NOTE: This is the only extra error to schema::JsonError. Can we collapse?
   #[error("SerdeJson error: {0}")]
   SerdeJson(#[from] serde_json::Error),
+  #[error("Geos: {0}")]
+  Geos(#[from] geos::Error),
 }
 
 impl From<trailbase_schema::json::JsonError> for JsonError {
@@ -64,7 +68,7 @@ pub(crate) fn row_to_json_expand(
 ) -> Result<serde_json::Value, JsonError> {
   // Row may contain extra columns like trailing "_rowid_" or excluded columns.
   if column_metadata.len() > row.column_count() {
-    return Err(JsonError::NotSupported);
+    return Err(JsonError::ColumnMismatch);
   }
 
   return Ok(serde_json::Value::Object(
@@ -76,7 +80,7 @@ pub(crate) fn row_to_json_expand(
         |(i, meta)| -> Result<(String, serde_json::Value), JsonError> {
           let column = &meta.column;
           if column.name.as_str() != row.column_name(i).unwrap_or_default() {
-            return Err(JsonError::NotSupported);
+            return Err(JsonError::ColumnMismatch);
           }
 
           let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
@@ -106,37 +110,56 @@ pub(crate) fn row_to_json_expand(
             });
           }
 
-          // Deserialize JSON.
-          if let types::Value::Text(str) = value {
-            match meta.json.as_ref() {
-              Some(JsonColumnMetadata::SchemaName(x)) if x == "std.FileUpload" => {
+          // De-serialize JSON.
+          if let types::Value::Text(str) = value
+            && let Some(ref json) = meta.json
+          {
+            return match json {
+              JsonColumnMetadata::SchemaName(x) if x == "std.FileUpload" => {
                 #[allow(unused_mut)]
-                let mut value: serde_json::Value = serde_json::from_str(str)?;
-                #[cfg(not(test))]
-                value.as_object_mut().map(|o| o.remove("id"));
-                return Ok((column.name.clone(), value));
+                let mut file_metadata: serde_json::Value = serde_json::from_str(str)?;
+                strip_file_metadata_id(&mut file_metadata);
+                Ok((column.name.clone(), file_metadata))
               }
-              Some(JsonColumnMetadata::SchemaName(x)) if x == "std.FileUploads" => {
+              JsonColumnMetadata::SchemaName(x) if x == "std.FileUploads" => {
                 #[allow(unused_mut)]
-                let mut values: Vec<serde_json::Value> = serde_json::from_str(str)?;
-                #[cfg(not(test))]
-                for value in &mut values {
-                  value.as_object_mut().map(|o| o.remove("id"));
+                let mut file_metadata_list: Vec<serde_json::Value> = serde_json::from_str(str)?;
+                for file_metadata in &mut file_metadata_list {
+                  strip_file_metadata_id(file_metadata);
                 }
-                return Ok((column.name.clone(), serde_json::Value::Array(values)));
+                Ok((
+                  column.name.clone(),
+                  serde_json::Value::Array(file_metadata_list),
+                ))
               }
-              Some(JsonColumnMetadata::SchemaName(_)) | Some(JsonColumnMetadata::Pattern(_)) => {
-                return Ok((column.name.clone(), serde_json::from_str(str)?));
+              JsonColumnMetadata::SchemaName(_) | JsonColumnMetadata::Pattern(_) => {
+                Ok((column.name.clone(), serde_json::from_str(str)?))
               }
-              None => {}
             };
           }
+
+          // De-serialize WKB Geometry.
+          if let types::Value::Blob(wkb) = value
+            && meta.is_geometry
+          {
+            let geometry = geos::Geometry::new_from_wkb(wkb)?;
+            let json_geometry: geos::geojson::Geometry = geometry.try_into()?;
+            return Ok((column.name.clone(), serde_json::to_value(json_geometry)?));
+          }
+
+          debug_assert!(!meta.is_geometry);
 
           return Ok((column.name.clone(), value_to_flat_json(value)?));
         },
       )
       .collect::<Result<_, JsonError>>()?,
   ));
+}
+
+fn strip_file_metadata_id(file_metadata: &mut serde_json::Value) {
+  if !cfg!(test) {
+    file_metadata.as_object_mut().map(|o| o.remove("id"));
+  }
 }
 
 pub(crate) struct ExpandedTable<'a> {
