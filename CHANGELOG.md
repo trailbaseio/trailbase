@@ -1,3 +1,11 @@
+## v0.23.10
+
+- Add a standalone SQLite extension with all of TrailBase's custom functions to minimize lock-in and make it easier on folks who'd like to move off.
+- Overhaul schema metadata handling. More consistency and simplicity across `(Table|View)Metadata` and `RecordApi`. Fewer allocations.
+- Make status codes more consistent across auth: user registration, email verification and reset password.
+  - Also fix and update the corresponding OpenAPI documentation.
+- Update dependencies.
+
 ## v0.23.9
 
 - Support `bcrypt` password hashes in addition to `argon2`.
