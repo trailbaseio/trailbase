@@ -30,7 +30,7 @@ pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;
 pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;
 
 // OTP
-pub(crate) const OTP_LENGTH: usize = 8;
+pub(crate) const OTP_LENGTH: usize = 12;
 
 // Public APIs
 pub const RECORD_API_PATH: &str = "api/records/v1";

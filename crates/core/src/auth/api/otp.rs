@@ -22,7 +22,7 @@ use crate::constants::{OTP_LENGTH, USER_TABLE};
 use crate::email::Email;
 use crate::rand::generate_random_string;
 
-const OTP_TTL_SEC: i64 = 600; // 10 minutes
+const OTP_TTL_SEC: i64 = 300; // 5 minutes
 const OTP_RATE_LIMIT_SEC: i64 = 60; // 1 minute
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
