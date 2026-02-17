@@ -16,7 +16,7 @@ arc-swap = "1.7.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand", "std"] }
 base64 = { workspace = true }
 bcrypt = "0.18.0"
-jsonschema = { version = "0.41.0", default-features = false }
+jsonschema = { version = "0.42.1", default-features = false }
 maxminddb = "0.27.0"
 parking_lot = { workspace = true }
 quick_cache = { version = "0.6.18", default-features = false }
