@@ -99,7 +99,7 @@ pub async fn read_record_handler(
         .map_err(|err| RecordError::Internal(err.into()))?;
 
       let result = expand.insert(col_name.to_string(), foreign_value);
-      assert!(result.is_some());
+      debug_assert!(result.is_some(), "{col_name} duplicate");
     }
 
     return Ok(Json(

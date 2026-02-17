@@ -42,8 +42,8 @@ pub enum ParamsError {
   Storage(Arc<object_store::Error>),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
-  // #[error("Geos: {0}")]
-  // Geos(#[from] geos::Error),
+  #[error("Geos: {0}")]
+  Geos(#[from] geos::Error),
 }
 
 impl From<serde_json::Error> for ParamsError {
@@ -528,20 +528,20 @@ fn extract_params_and_files_from_json(
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   // If this is *not* a JSON column convert the value trivially.
   let Some(json_metadata) = json_metadata else {
-    // if is_geometry && col.data_type == ColumnDataType::Blob {
-    //   use geos::Geom;
-    //
-    //   let json_geometry = geos::geojson::Geometry::from_json_value(value)
-    //     .map_err(|err| ParamsError::UnexpectedType("", format!("GeoJSON: {err}")))?;
-    //   let geometry: geos::Geometry = json_geometry.try_into()?;
-    //
-    //   let mut writer = geos::WKBWriter::new()?;
-    //   if let Some(_) = geometry.get_srid().ok() {
-    //     writer.set_include_SRID(true);
-    //   }
-    //
-    //   return Ok((Value::Blob(writer.write_wkb(&geometry)?.into()), None));
-    // }
+    if is_geometry && col.data_type == ColumnDataType::Blob {
+      use geos::Geom;
+
+      let json_geometry = geos::geojson::Geometry::from_json_value(value)
+        .map_err(|err| ParamsError::UnexpectedType("", format!("GeoJSON: {err}")))?;
+      let geometry: geos::Geometry = json_geometry.try_into()?;
+
+      let mut writer = geos::WKBWriter::new()?;
+      if geometry.get_srid().is_ok() {
+        writer.set_include_SRID(true);
+      }
+
+      return Ok((Value::Blob(writer.write_wkb(&geometry)?.into()), None));
+    }
 
     debug_assert!(!is_geometry);
 
