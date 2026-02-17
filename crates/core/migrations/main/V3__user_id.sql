@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS _new_user (
   authorization_code               TEXT,
   authorization_code_sent_at       INTEGER,
   pkce_code_challenge              TEXT,
+  -- OTP flow.
+  otp_code                         TEXT,
+  otp_sent_at                      INTEGER,
+  -- TOTP secret for authenticator.
+  totp_secret                      TEXT,
 
   -- OAuth metadata
   --
@@ -54,6 +59,9 @@ INSERT INTO _new_user(
     authorization_code,
     authorization_code_sent_at,
     pkce_code_challenge,
+    otp_code,
+    otp_sent_at,
+    totp_secret,
     provider_id,
     provider_user_id,
     provider_avatar_url
@@ -74,6 +82,9 @@ INSERT INTO _new_user(
     authorization_code,
     authorization_code_sent_at,
     pkce_code_challenge,
+    otp_code,
+    otp_sent_at,
+    totp_secret,
     provider_id,
     provider_user_id,
     provider_avatar_url
