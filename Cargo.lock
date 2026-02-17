@@ -2325,6 +2325,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "geo-traits"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e7c353d12a704ccfab1ba8bfb1a7fe6cb18b665bf89d37f4f7890edcd260206"
+dependencies = [
+ "geo-types",
+]
+
+[[package]]
 name = "geo-types"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2365,7 +2374,7 @@ dependencies = [
  "geos-sys",
  "libc",
  "num",
- "wkt",
+ "wkt 0.10.3",
 ]
 
 [[package]]
@@ -6633,12 +6642,14 @@ name = "trailbase-qs"
 version = "0.1.1"
 dependencies = [
  "base64",
+ "geo-types",
  "itertools 0.14.0",
  "rusqlite",
  "serde",
  "serde-value",
  "serde_qs",
  "uuid",
+ "wkt 0.14.0",
 ]
 
 [[package]]
@@ -8542,6 +8553,19 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3c2252781f8927974e8ba6a67c965a759a2b88ea2b1825f6862426bbb1c8f41"
 dependencies = [
+ "geo-types",
+ "log",
+ "num-traits",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "wkt"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efb2b923ccc882312e559ffaa832a055ba9d1ac0cc8e86b3e25453247e4b81d7"
+dependencies = [
+ "geo-traits",
  "geo-types",
  "log",
  "num-traits",

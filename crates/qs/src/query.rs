@@ -589,4 +589,19 @@ mod tests {
       }
     );
   }
+
+  #[test]
+  fn test_geometry_filter() {
+    let polygon = "POLYGON ((30 10, 40 40, 20 40, 10 20, 30 10))";
+    let result = Query::parse(&format!("filter[col][@within]={polygon}")).unwrap();
+
+    assert_eq!(
+      result.filter.unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::StWithin,
+        value: Value::String(polygon.to_string()),
+      })
+    );
+  }
 }

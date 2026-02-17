@@ -30,6 +30,7 @@ impl ValueOrComposite {
   pub fn into_sql<V, E>(
     self,
     column_prefix: Option<&str>,
+    // TODO: Could this just be a filter, e.g. Fn(&str) -> bool?
     convert: &dyn Fn(&str, Value) -> Result<V, E>,
   ) -> Result<(String, Vec<(String, V)>), E> {
     fn render_value<V, E>(
@@ -38,32 +39,32 @@ impl ValueOrComposite {
       convert: &dyn Fn(&str, Value) -> Result<V, E>,
       index: &mut usize,
     ) -> Result<(String, Option<(String, V)>), E> {
-      let v = column_op_value.value;
       let c = column_op_value.column;
+      let column_name = match column_prefix {
+        Some(p) => format!(r#"{p}."{c}""#),
+        None => format!(r#""{c}""#),
+      };
 
-      return match column_op_value.op {
-        CompareOp::Is => {
-          debug_assert!(matches!(v, Value::String(_)), "{v:?}");
-
-          Ok(match column_prefix {
-            Some(p) => (format!(r#"{p}."{c}" IS {v}"#), None),
-            None => (format!(r#""{c}" IS {v}"#), None),
-          })
+      return match (column_op_value.op, column_op_value.value) {
+        (CompareOp::Is, Value::String(s)) if s == "NULL" || s == "NOT NULL" => {
+          // We're in-lining NULL/NOT NULL for `col IS NULL` or `col IS NOT NULL`.
+          // FIXME: We're not using convert, thus the filtering isn't working.
+          Ok((column_op_value.op.as_sql(&column_name, &s), None))
         }
-        op => {
+        (CompareOp::StWithin, Value::String(s)) => Ok((
+          column_op_value
+            .op
+            .as_sql(&column_name, &format!("ST_GeomFromText({s})")),
+          None,
+        )),
+        (op, v) => {
           let param = param_name(*index);
           *index += 1;
 
-          Ok(match column_prefix {
-            Some(p) => (
-              format!(r#"{p}."{c}" {o} {param}"#, o = op.as_sql()),
-              Some((param, convert(&c, v)?)),
-            ),
-            None => (
-              format!(r#""{c}" {o} {param}"#, o = op.as_sql()),
-              Some((param, convert(&c, v)?)),
-            ),
-          })
+          Ok((
+            op.as_sql(&column_name, &param),
+            Some((param, convert(&c, v)?)),
+          ))
         }
       };
     }
