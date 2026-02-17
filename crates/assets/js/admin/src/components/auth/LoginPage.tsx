@@ -27,6 +27,7 @@ export function LoginPage() {
   const user = useStore($user);
   const [loginType, setLoginType] = createSignal("pw");
   const [email, setEmail] = createSignal("");
+  const [pw, setPassword] = createSignal("");
   const [otp, setOtp] = createSignal("");
 
   return (
@@ -53,6 +54,7 @@ export function LoginPage() {
             <LoginForm
               setLoginType={setLoginType}
               setEmail={setEmail}
+              setPassword={setPassword}
             />
           </Match>
           <Match when={user() === undefined && loginType() === "otp"}>
@@ -66,6 +68,7 @@ export function LoginPage() {
             <TOTPVerification
               setLoginType={setLoginType}
               email={email()}
+              pw={pw()}
               otp={otp()}
             />
           </Match>
@@ -78,6 +81,7 @@ export function LoginPage() {
 type LoginFormProps = {
   setEmail: (email: string) => void;
   setLoginType: (type: "pw" | "otp" | "totp") => void;
+  setPassword: (password: string) => void;
 };
 
 function LoginForm(props: LoginFormProps) {
@@ -100,8 +104,12 @@ function LoginForm(props: LoginFormProps) {
 
         try {
           if (pw) await client.login(email, pw);
-        } catch (err) {
-          if (err instanceof FetchError && err.status === 401) {
+        } catch (err: any) {
+          if (err.message === "TOTP_REQUIRED") {
+            props.setEmail(email);
+            props.setPassword(pw);
+            props.setLoginType("totp");
+          } else if (err instanceof FetchError && err.status === 401) {
             showToast({
               title: "Invalid credentials",
               variant: "warning",
@@ -207,7 +215,7 @@ function OTPVerification(props: OTPVerificationProps) {
         try {
           await client.verifyOTP(props.email, otp);
         } catch (err: any) {
-          if (err.message === "TOTP required") {
+          if (err.message === "TOTP_REQUIRED") {
             props.setOtp(otp);
             props.setLoginType("totp");
           } else {
@@ -243,6 +251,7 @@ function OTPVerification(props: OTPVerificationProps) {
 type TOTPVerificationProps = {
   email: string;
   otp: string;
+  pw: string;
   setLoginType: (type: "pw" | "otp" | "totp") => void;
 };
 
@@ -260,7 +269,7 @@ function TOTPVerification(props: TOTPVerificationProps) {
         if (!props.email || !totp) return;
 
         try {
-          await client.verifyTOTP(props.email, totp, props.otp);
+          await client.verifyTOTP(props.email, totp, props.pw, props.otp);
         } catch (err: any) {
           showToast({
             title: "Error verifying TOTP",
@@ -279,6 +288,7 @@ function TOTPVerification(props: TOTPVerificationProps) {
         <TextFieldInput
           type="text"
           ref={totpInput}
+          autocomplete="one-time-code" 
         />
       </TextField>
 

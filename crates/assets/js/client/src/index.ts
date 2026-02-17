@@ -650,7 +650,7 @@ export interface Client {
   requestOTP(email: string): Promise<void>;
   verifyOTP(email: string, code: string): Promise<void>;
 
-  verifyTOTP(email: string, totp: string, otp: string): Promise<void>;
+  verifyTOTP(email: string, totp: string, password?: string, otp?: string): Promise<void>;
 
   deleteUser(): Promise<void>;
   checkCookies(): Promise<Tokens | undefined>;
@@ -818,10 +818,8 @@ class ClientImpl implements Client {
       headers: jsonContentTypeHeader,
     });
 
-    const data = await response.json();
-    if (data.totp_required) throw new Error("TOTP required");
     this.setTokenState(
-      buildTokenState(data as LoginResponse),
+      buildTokenState((await response.json()) as LoginResponse),
     );
   }
 
@@ -833,13 +831,14 @@ class ClientImpl implements Client {
     return parseJSON(await response.text());
   }
 
-  public async verifyTOTP(email: string, totp: string, otp: string): Promise<void> {
+  public async verifyTOTP(email: string, totp: string, password?: string, otp?: string): Promise<void> {
     const response = await this.fetch(`${authApiBasePath}/totp/verify`, {
       method: "POST",
       body: JSON.stringify({
-        email: email,
-        totp: totp,
-        otp: otp,
+        email,
+        totp,
+        password,
+        otp,
       } as VerifyTOTPRequest),
       headers: jsonContentTypeHeader,
     });
