@@ -14,12 +14,14 @@ import { navbarIconStyle } from "@/components/Navbar";
 import { Avatar, Profile } from "@/components/auth/Profile";
 import { QRCodeSVG } from "solid-qr-code";
 import { showToast } from "../ui/toast";
+import { TextField, TextFieldInput, TextFieldLabel } from "../ui/text-field";
 
 export function AuthButton(props: { iconSize: number }) {
   const [open, setOpen] = createSignal(false);
   const [totpSecret, setTotpSecret] = createSignal<string | null>(null);
   const [totpUri, setTotpUri] = createSignal<string | null>(null);
   const user = useStore($user);
+  let totpInput: HTMLInputElement | undefined;
 
   const enableTotp = async () => {
     try {
@@ -48,6 +50,28 @@ export function AuthButton(props: { iconSize: number }) {
     } catch (err) {
       showToast({
         title: "Error disabling TOTP",
+        description: `${err}`,
+        variant: "error",
+      });
+    }
+  };
+
+  const confirmTotp = async () => {
+    try {
+      const totp = totpInput?.value;
+      if (!totpSecret() || !totp) return;
+
+      await client.confirmTOTP(totpSecret()!, totp);
+      showToast({
+        title: "TOTP confirmed",
+        description: "Two-factor authentication has been enabled.",
+        variant: "success",
+      });
+      setTotpSecret(null);
+      setTotpUri(null);
+    } catch (err) {
+      showToast({
+        title: "Error confirming TOTP",
         description: `${err}`,
         variant: "error",
       });
@@ -91,6 +115,17 @@ export function AuthButton(props: { iconSize: number }) {
             <p class="text-center text-xs text-muted-foreground w-full">
               Scan this code with your authenticator app (Google Authenticator, Authy, etc.) to enable 2FA.
             </p>
+            <TextField class="flex items-center gap-2">
+              <TextFieldLabel>TOTP</TextFieldLabel>
+              <TextFieldInput
+                type="text"
+                autocomplete="one-time-code" 
+                ref={totpInput}
+              />
+            </TextField>
+            <Button type="button" onClick={confirmTotp}>
+              Confirm TOTP
+            </Button>
           </div>
         </Show>
 

@@ -232,7 +232,7 @@ function OTPVerification(props: OTPVerificationProps) {
       <p>Please enter the OTP code sent to your email <b>{props.email}</b>.</p>
 
       <TextField class="flex items-center gap-2">
-        <TextFieldLabel class="w-[108px]">Code</TextFieldLabel>
+        <TextFieldLabel>Code</TextFieldLabel>
 
         <TextFieldInput
           type="text"

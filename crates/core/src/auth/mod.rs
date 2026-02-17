@@ -51,6 +51,7 @@ use api::*;
     otp::request_otp_handler,
     otp::verify_otp_handler,
     otp::generate_totp_handler,
+    otp::confirm_totp_handler,
     otp::disable_totp_handler,
     otp::verify_totp_handler,
     token::auth_code_to_token_handler,
@@ -148,6 +149,10 @@ pub(super) fn router() -> Router<crate::AppState> {
     .route(
       &format!("/{AUTH_API_PATH}/totp/generate"),
       post(api::otp::generate_totp_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/confirm"),
+      post(api::otp::confirm_totp_handler),
     )
     .route(
       &format!("/{AUTH_API_PATH}/totp/disable"),

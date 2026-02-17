@@ -5,6 +5,7 @@ import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
 import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
 import type { GenerateTOTPResponse } from "@bindings/GenerateTOTPResponse";
+import type { ConfirmTOTPRequest } from "@bindings/ConfirmTOTPRequest";
 import type { DisableTOTPRequest } from "@bindings/DisableTOTPRequest";
 import type { VerifyTOTPRequest } from "@bindings/VerifyTOTPRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
@@ -652,6 +653,7 @@ export interface Client {
   verifyOTP(email: string, code: string): Promise<void>;
 
   generateTOTP(): Promise<GenerateTOTPResponse>;
+  confirmTOTP(secret: string, code: string): Promise<void>;
   disableTOTP(totp: string): Promise<void>;
   verifyTOTP(email: string, totp: string, password?: string, otp?: string): Promise<void>;
 
@@ -832,6 +834,17 @@ class ClientImpl implements Client {
       headers: jsonContentTypeHeader,
     });
     return parseJSON(await response.text());
+  }
+
+  public async confirmTOTP(secret: string, totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/confirm`, {
+      method: "POST",
+      body: JSON.stringify({
+        secret,
+        totp,
+      } as ConfirmTOTPRequest),
+      headers: jsonContentTypeHeader,
+    });
   }
 
   public async disableTOTP(totp: string): Promise<void> {

@@ -207,16 +207,6 @@ pub async fn generate_totp_handler(
 ) -> Result<Response, AuthError> {
   let secret = generate_totp_secret();
   
-  const UPDATE_QUERY: &str = formatcp!(
-    "UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2"
-  );
-  
-  let user_id_bytes = user.uuid.into_bytes().to_vec();
-  state
-    .user_conn()
-    .execute(UPDATE_QUERY, params!(secret.clone(), user_id_bytes))
-    .await?;
-  
   // Generate QR code URI for authenticator apps
   let app_name = state
     .access_config(|c| c.server.application_name.clone())
@@ -232,6 +222,43 @@ pub async fn generate_totp_handler(
   };
   
   Ok(Json(response).into_response())
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
+#[ts(export)]
+pub struct ConfirmTOTPRequest {
+  pub secret: String,
+  pub totp: String,
+}
+
+#[utoipa::path(
+  post,
+  path = "/totp/confirm",
+  tag = "auth",
+  responses(
+    (status = 200, description = "TOTP confirmed", body = ConfirmTOTPRequest)
+  )
+)]
+pub async fn confirm_totp_handler(
+  State(state): State<AppState>,
+  user: User,
+  Json(params): Json<ConfirmTOTPRequest>,
+) -> Result<Response, AuthError> {
+  let mut db_user = user_by_email(&state, &user.email).await?;
+  db_user.totp_secret = Some(params.secret.clone());
+  verify_totp_code_for_user(&db_user, &params.totp)?;
+  
+  const UPDATE_QUERY: &str = formatcp!(
+    "UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2"
+  );
+  
+  let user_id_bytes = user.uuid.into_bytes().to_vec();
+  state
+    .user_conn()
+    .execute(UPDATE_QUERY, params!(params.secret.clone(), user_id_bytes))
+    .await?;
+  
+  Ok((StatusCode::OK, "TOTP enabled").into_response())
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
