@@ -152,7 +152,10 @@ export type CompareOp =
   | "greaterThan"
   | "greaterThanEqual"
   | "like"
-  | "regexp";
+  | "regexp"
+  | "@within"
+  | "@intersects"
+  | "@contains";
 
 function formatCompareOp(op: CompareOp): string {
   switch (op) {
@@ -172,6 +175,11 @@ function formatCompareOp(op: CompareOp): string {
       return "$like";
     case "regexp":
       return "$re";
+    // Geospatials:
+    case "@within":
+    case "@intersects":
+    case "@contains":
+      return op;
   }
 }
 
@@ -223,7 +231,7 @@ export interface DeferredOperation<ResponseType> {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DeferredMutation<
   ResponseType,
-> extends DeferredOperation<ResponseType> {}
+> extends DeferredOperation<ResponseType> { }
 
 export class CreateOperation<
   T = Record<string, unknown>,
@@ -232,7 +240,7 @@ export class CreateOperation<
     private readonly client: Client,
     private readonly apiName: string,
     private readonly record: Partial<T>,
-  ) {}
+  ) { }
 
   async query(): Promise<RecordId> {
     const response = await this.client.fetch(
@@ -265,7 +273,7 @@ export class UpdateOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly record: Partial<T>,
-  ) {}
+  ) { }
 
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
@@ -291,7 +299,7 @@ export class DeleteOperation implements DeferredMutation<void> {
     private readonly client: Client,
     private readonly apiName: string,
     private readonly id: RecordId,
-  ) {}
+  ) { }
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
       method: "DELETE",
@@ -320,7 +328,7 @@ export class ReadOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly opt?: ReadOpts,
-  ) {}
+  ) { }
 
   async query(): Promise<T> {
     const expand = this.opt?.expand;
@@ -348,7 +356,7 @@ export class ListOperation<
     private readonly client: Client,
     private readonly apiName: string,
     private readonly opts?: ListOpts,
-  ) {}
+  ) { }
 
   async query(): Promise<ListResponse<T>> {
     const params = new URLSearchParams();
@@ -418,7 +426,7 @@ export class RecordApiImpl<
   constructor(
     private readonly client: Client,
     private readonly name: string,
-  ) {}
+  ) { }
 
   public async list(opts?: ListOpts): Promise<ListResponse<T>> {
     return new ListOperation<T>(this.client, this.name, opts).query();
@@ -593,7 +601,7 @@ export class RecordApiImpl<
 }
 
 class ThinClient {
-  constructor(public readonly base: URL | undefined) {}
+  constructor(public readonly base: URL | undefined) { }
 
   async fetch(
     path: string,
@@ -608,9 +616,9 @@ class ThinClient {
       ...init,
       headers: init
         ? {
-            ...headers,
-            ...init?.headers,
-          }
+          ...headers,
+          ...init?.headers,
+        }
         : headers,
     });
 
@@ -1029,10 +1037,10 @@ function addFiltersToParams(
 
 export const exportedForTesting = isDev
   ? {
-      base64Decode,
-      base64Encode,
-      subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
-    }
+    base64Decode,
+    base64Encode,
+    subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+  }
   : undefined;
 
 // BigInt JSON stringify/parse shenanigans.
@@ -1042,7 +1050,7 @@ declare global {
   }
 }
 
-BigInt.prototype.toJSON = function () {
+BigInt.prototype.toJSON = function() {
   return JSON.rawJSON(this.toString());
 };
 
