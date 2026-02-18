@@ -1,3 +1,41 @@
+## v0.24.0
+
+- TrailBase received first-class support for geometric/geospatial data and querying 🎉
+  - We published [`LiteGIS`](https://github.com/trailbaseio/LiteGIS), an in-house GEOS SQLite extension.
+    It's early days but we hope for this to become useful to folks beyond TrailBase.
+    Alternatively check out the amazing `SpatiaLite`.
+  - TrailBase recognizes columns tagged as `CHECK(ST_IsValid(_))`, e.g.:
+    ```sql
+    CREATE TABLE table_with_geometry (
+        id         INTEGER PRIMARY KEY,
+        geometry   BLOB CHECK(ST_IsValid(geometry))
+    ) STRICT;
+
+    INSERT INTO table_with_geometry (geometry) VALUES (ST_MakeEnvelope(-180, -90, 180, 90));
+    ```
+    and updates its API/JSON schemas to expect and produce GeoJSON `Geometry` objects.
+  - Internally geometries are represented in the "Well Known Binary" format (WKB). This enables `INDEX`es to accelerate filtering based on certain geometric relationships, see next.
+  - The spatial filter operators `@within`, `@intersects` and `@contains` were added to the list API to allow filtering on spatial relations like:
+    - List records with bounding boxes that contain my point.
+    - List records with points, lines or polygons intersecting my bounding box.
+
+    Reference geometries are specified in the "Well Known Text" (WKT) format, e.g. `?filter[geometry][@contains]=POINT (11.393  47.268)`.
+    All clients were updated to support these new filter relations.
+  - Using the new list query parameter `?geojson=<geo_column_name>` will return a GeoJSON `FeatureCollection` directly instead of a `ListResponse`.
+    The geometry of the collection's features is derived from the column specified by `<geo_column_name>`.
+  - The admin UI parses a geometry column's WKB and displays readable WKT but doesn't yet support convenient WKT insertion.
+    Similarly clients don't aid in the construction of WKT parameters, this is left to the user, however WKT libraries exist in most languages.
+  - Thanks for making it to here 🙏 - would love to hear your input.
+- For visibility, other notable changes since the prior major release:
+  - Much improved admin UI: better maps and stats on the logs page, improved accounts page, tables handle the loading state to reduce layout jank,  ...
+  - Allow change subscriptions via WebSockets in addition to SSE.
+  - Support `bcrypt` password hashes for auth. Support importing auth data from Auth0: `trail user import --auth0-json=<file>`.
+    - The goal is to provide more horizontal mobility, i.e. reduce lock-in, by allowing auth in and export.
+  - Make TrailBase's SQLite extensions available standalone to reduce lock-in, see `/crates/extensions-so`.
+  - Dual-licensed clients under permissive Apache-2.0.
+- More idiomatic HTTP handling in WASM JS/TS: trailbase-wasm@0.5.0.
+- Update dependencies.
+
 ## v0.23.10
 
 - Add a standalone SQLite extension with all of TrailBase's custom functions to minimize lock-in and make it easier on folks who'd like to move off.
@@ -11,6 +49,7 @@
 - Support `bcrypt` password hashes in addition to `argon2`.
 - Add a user import function to CLI. Currently supports Auth0 user exports.
   - Will be straight forward to support other providers that use `bcrypt` or `argon2`, please reach out 🙏.
+  - Dual-licensed clients under permissive Apache-2.0.
 - Update dependencies.
 
 ## v0.23.8
