@@ -213,6 +213,14 @@ export function isFileUploadColumn(column: Column): boolean {
   return false;
 }
 
+export function isGeometryColumn(column: Column): boolean {
+  if (column.data_type === "Blob") {
+    const check = getCheckValue(column.options);
+    return (check?.search(/^ST_IsValid\s*\(/g) ?? -1) === 0;
+  }
+  return false;
+}
+
 export function isFileUploadsColumn(column: Column): boolean {
   if (column.data_type === "Text") {
     const check = getCheckValue(column.options);
