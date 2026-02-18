@@ -3340,6 +3340,8 @@ checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 [[package]]
 name = "litegis"
 version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb50ef30bd5007fc37c4c68b1a5934ae33f6d129348ee6c0bef86304457cf2df"
 dependencies = [
  "geos",
  "rusqlite",

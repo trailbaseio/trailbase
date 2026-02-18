@@ -472,8 +472,6 @@ mod tests {
 
   #[test]
   fn test_geojson_schema() {
-    use rusqlite::functions::FunctionFlags;
-
     let registry = Arc::new(RwLock::new(
       crate::registry::build_json_schema_registry(vec![]).unwrap(),
     ));
