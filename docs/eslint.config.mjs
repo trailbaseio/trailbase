@@ -23,7 +23,13 @@ const ignoredStarlightCustomTailwindClasses = [
 
 export default [
   {
-    ignores: ["**/dist/", "**/node_modules/", ".astro/", "src/env.d.ts"],
+    ignores: [
+      "**/dist/",
+      "**/node_modules/",
+      ".astro/",
+      "src/env.d.ts",
+      "examples/",
+    ],
   },
   jsPlugin.configs.recommended,
   ...tsPlugin.configs.recommended,
@@ -78,6 +84,8 @@ export default [
       // Needed for astro.config.ts @ts-ignore in because @ts-expect-error doesn't work reliably across envs.
       "@typescript-eslint/ban-ts-comment": "warn",
     },
-    languageOptions: { globals: globals.browser },
+    languageOptions: {
+      globals: globals.browser,
+    },
   },
 ];

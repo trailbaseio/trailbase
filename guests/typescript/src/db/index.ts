@@ -67,8 +67,10 @@ export async function query(
   try {
     const response = json as { Query: { rows: Array<Array<SqlValue>> } };
     return response.Query.rows.map((row) => row.map(fromJsonSqlValue));
-  } catch (e) {
-    throw new Error(`Unexpected response '${JSON.stringify(json)}': ${e}`);
+  } catch (err) {
+    throw new Error(`Unexpected response '${JSON.stringify(json)}'`, {
+      cause: err,
+    });
   }
 }
 
@@ -92,8 +94,10 @@ export async function execute(query: string, params: Value[]): Promise<number> {
   try {
     const response = json as { Execute: { rows_affected: number } };
     return response.Execute.rows_affected;
-  } catch (e) {
-    throw new Error(`Unexpected response '${JSON.stringify(json)}': ${e}`);
+  } catch (err) {
+    throw new Error(`Unexpected response '${JSON.stringify(json)}'`, {
+      cause: err,
+    });
   }
 }
 

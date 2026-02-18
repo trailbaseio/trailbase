@@ -7,7 +7,13 @@ import astro from "eslint-plugin-astro";
 
 export default [
   {
-    ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts"],
+    ignores: [
+      "dist/",
+      "node_modules/",
+      ".astro/",
+      "src/env.d.ts",
+      "src/components/ui",
+    ],
   },
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,

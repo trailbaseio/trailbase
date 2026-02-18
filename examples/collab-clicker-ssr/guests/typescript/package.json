@@ -15,8 +15,8 @@
     "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.16.1",
-    "@types/node": "^25.2.1",
+    "@bytecodealliance/jco": "^1.17.0",
+    "@types/node": "^25.2.3",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"

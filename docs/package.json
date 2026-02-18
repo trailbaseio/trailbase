@@ -17,8 +17,8 @@
     "@astrojs/starlight": "^0.37.6",
     "@astrojs/starlight-tailwind": "^4.0.2",
     "@iconify-json/tabler": "^1.2.26",
-    "@tailwindcss/vite": "^4.1.18",
-    "astro": "^5.17.1",
+    "@tailwindcss/vite": "^4.2.0",
+    "astro": "^5.17.3",
     "astro-icon": "^1.1.5",
     "chart.js": "^4.5.1",
     "chartjs-chart-error-bars": "^4.4.5",
@@ -28,8 +28,8 @@
     "solid-js": "^1.9.11",
     "starlight-links-validator": "^0.19.2",
     "starlight-openapi": "^0.22.0",
-    "tailwind-merge": "^3.4.0",
-    "tailwindcss": "^4.1.18",
+    "tailwind-merge": "^3.4.1",
+    "tailwindcss": "^4.2.0",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
@@ -38,13 +38,13 @@
     "@eslint/js": "^9.39.2",
     "astro-robots-txt": "^1.0.0",
     "eslint": "^9.39.2",
-    "eslint-plugin-astro": "^1.5.0",
-    "eslint-plugin-better-tailwindcss": "^4.1.1",
+    "eslint-plugin-astro": "^1.6.0",
+    "eslint-plugin-better-tailwindcss": "^4.3.0",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.3.0",
     "prettier": "^3.8.1",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "typescript-eslint": "^8.54.0"
+    "typescript-eslint": "^8.56.0"
   }
 }
