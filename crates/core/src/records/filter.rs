@@ -173,10 +173,10 @@ fn compare_values(
     },
     CompareOp::StWithin => match (record_value, filter_value) {
       (Value::Blob(record), Value::Text(filter)) => {
-        let Ok(column_geometry) = geos::Geometry::new_from_wkb(&record) else {
+        let Ok(column_geometry) = geos::Geometry::new_from_wkb(record) else {
           return false;
         };
-        let Ok(filter_geometry) = geos::Geometry::new_from_wkt(&filter) else {
+        let Ok(filter_geometry) = geos::Geometry::new_from_wkt(filter) else {
           return false;
         };
 

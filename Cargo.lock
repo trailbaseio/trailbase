@@ -6642,7 +6642,6 @@ name = "trailbase-qs"
 version = "0.1.1"
 dependencies = [
  "base64",
- "geo-types",
  "itertools 0.14.0",
  "rusqlite",
  "serde",
@@ -8566,7 +8565,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efb2b923ccc882312e559ffaa832a055ba9d1ac0cc8e86b3e25453247e4b81d7"
 dependencies = [
  "geo-traits",
- "geo-types",
  "log",
  "num-traits",
  "thiserror 1.0.69",

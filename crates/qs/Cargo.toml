@@ -10,13 +10,12 @@ readme = "../../README.md"
 
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
-geo-types = "0.7.18"
 itertools = "0.14.0"
 serde = { workspace = true }
 serde-value = "0.7.0"
 serde_qs = { workspace = true }
 uuid = { workspace = true }
-wkt = "0.14.0"
+wkt = { version = "0.14.0", default-features = false }
 
 [dev-dependencies]
 rusqlite = { workspace = true }

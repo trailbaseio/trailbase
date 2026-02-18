@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use serde::de::{Deserializer, Error};
+use std::str::FromStr;
 
 use crate::value::Value;
 
@@ -92,13 +93,9 @@ where
       _ => Err(Error::invalid_type(unexpected(&value), &"NULL or !NULL")),
     },
     CompareOp::StWithin => {
-      use wkt::TryFromWkt;
+      // WARN: The assumption here is that valid WKTs cannot be used for SQL injection.
       match value {
-        serde_value::Value::String(v)
-          if geo_types::Geometry::<f64>::try_from_wkt_str(&v).is_ok() =>
-        {
-          Ok(Value::String(v))
-        }
+        serde_value::Value::String(v) if validate_wkt(&v) => Ok(Value::String(v)),
         _ => Err(Error::invalid_type(unexpected(&value), &"WKT Geometry")),
       }
     }
@@ -120,6 +117,14 @@ where
       )),
     },
   };
+}
+
+#[inline]
+fn validate_wkt(s: &str) -> bool {
+  if s.contains(';') {
+    return false;
+  }
+  return wkt::Wkt::<f64>::from_str(s).is_ok();
 }
 
 pub fn serde_value_to_single_column_rel_value<'de, D>(
