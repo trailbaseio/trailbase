@@ -172,6 +172,9 @@ enum CompareOp {
   greaterThanEqual,
   like,
   regexp,
+  stWithin,
+  stIntersects,
+  stContains,
 }
 
 String _opToString(CompareOp op) {
@@ -184,6 +187,9 @@ String _opToString(CompareOp op) {
     CompareOp.greaterThanEqual => '\$gte',
     CompareOp.like => '\$like',
     CompareOp.regexp => '\$re',
+    CompareOp.stWithin => '@within',
+    CompareOp.stIntersects => '@intersects',
+    CompareOp.stContains => '@contains',
   };
 }
 

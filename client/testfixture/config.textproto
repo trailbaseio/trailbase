@@ -69,6 +69,11 @@ record_apis: [{
   table_name: "simple_schema_table"
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
   create_access_rule: "EXISTS(SELECT 1 FROM _user WHERE email = \'admin@localhost\' AND id = _USER_.id)"
+}, {
+  name: "geometry"
+  table_name: "geometry"
+  acl_world: [READ]
+  acl_authenticated: [CREATE, READ, UPDATE, DELETE]
 }]
 schemas: [{
   name: "simple_schema"

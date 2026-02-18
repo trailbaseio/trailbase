@@ -414,6 +414,9 @@ class CompareOp(Enum):
     GREATER_THAN_EQUAL = 6
     LIKE = 7
     REGEXP = 8
+    ST_WITHIN = 9
+    ST_INTERSECTS = 10
+    ST_CONTAINS = 11
 
     def __repr__(self) -> str:
         match self:
@@ -433,6 +436,12 @@ class CompareOp(Enum):
                 return "$like"
             case CompareOp.REGEXP:
                 return "$re"
+            case CompareOp.ST_WITHIN:
+                return "@within"
+            case CompareOp.ST_INTERSECTS:
+                return "@intersects"
+            case CompareOp.ST_CONTAINS:
+                return "@contains"
 
 
 @final

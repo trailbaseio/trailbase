@@ -121,6 +121,9 @@ const (
 	GreaterThanEqual
 	Like
 	Regex
+	StWithin
+	StIntersects
+	StContains
 )
 
 func (op CompareOp) toString() string {
@@ -141,6 +144,12 @@ func (op CompareOp) toString() string {
 		return "$like"
 	case Regex:
 		return "$re"
+	case StWithin:
+		return "@within"
+	case StIntersects:
+		return "@intersects"
+	case StContains:
+		return "@contains"
 	default:
 		panic(fmt.Sprint("Unknown operation:", op))
 	}

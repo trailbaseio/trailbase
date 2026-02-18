@@ -85,6 +85,9 @@ public enum CompareOp {
     case GreaterThanEqual
     case Like
     case Regexp
+    case StWithin
+    case StIntersects
+    case StContains
 }
 
 extension CompareOp {
@@ -98,6 +101,9 @@ extension CompareOp {
         case .GreaterThanEqual: "$gte"
         case .Like: "$like"
         case .Regexp: "$re"
+        case .StWithin: "@within"
+        case .StIntersects: "@intersects"
+        case .StContains: "@contains"
         }
     }
 }

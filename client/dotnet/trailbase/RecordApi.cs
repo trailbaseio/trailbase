@@ -224,6 +224,12 @@ public enum CompareOp {
   Like,
   /// <summary>Regular expression operator: 'REGEXP'.</summary>
   Regexp,
+  /// <summary>Geometry within operator: 'ST_Within'.</summary>
+  StWithin,
+  /// <summary>Geometry intersects operator: 'ST_Intersects'.</summary>
+  StIntersects,
+  /// <summary>Geometry contains operator: 'ST_Contains'.</summary>
+  StContains,
 }
 
 /// <summary>Abstract base class for filters.</summary>
@@ -240,6 +246,9 @@ public abstract class FilterBase {
         CompareOp.GreaterThanEqual => "$gte",
         CompareOp.Like => "$like",
         CompareOp.Regexp => "$re",
+        CompareOp.StWithin => "@within",
+        CompareOp.StIntersects => "@intersects",
+        CompareOp.StContains => "@contains",
         _ => "??",
       };
     }

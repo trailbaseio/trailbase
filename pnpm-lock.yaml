@@ -235,9 +235,15 @@ importers:
 
   crates/assets/js/client:
     dependencies:
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       '@ungap/raw-json':
         specifier: 0.4.4
         version: 0.4.4
+      geojson:
+        specifier: ^0.5.0
+        version: 0.5.0
       jwt-decode:
         specifier: ^4.0.0
         version: 4.0.0

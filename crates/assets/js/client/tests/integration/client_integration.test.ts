@@ -1,5 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
 import { expect, test } from "vitest";
+import { status } from "http-status";
+import { v7 as uuidv7, parse as uuidParse } from "uuid";
+import { FeatureCollection } from "geojson";
+
 import {
   exportedForTesting,
   FetchError,
@@ -9,8 +13,6 @@ import {
   urlSafeBase64Encode,
 } from "../../src/index";
 import type { Client, Event, RecordApiImpl } from "../../src/index";
-import { status } from "http-status";
-import { v7 as uuidv7, parse as uuidParse } from "uuid";
 import { ADDRESS, USE_WS } from "../constants";
 
 const { base64Encode, subscribeWs } = exportedForTesting!;
@@ -699,4 +701,33 @@ test("File upload base64: main DB", async () => {
 test("File upload base64: other DB", async () => {
   const client = await connect();
   await testBase64FileUploads(client, "other_file_upload_table");
+});
+
+test("GeoJson access", async ({ expect }) => {
+  const client = await connect();
+  const apiName = "geometry";
+  const api = client.records(apiName);
+
+  {
+    const json: FeatureCollection = await api.listGeoOp("geom").query();
+    console.log("HERE", json);
+    expect(json.features).toHaveLength(4);
+  }
+
+  {
+    // Query a bounding box around he Colloseum.
+    const json: FeatureCollection = await api
+      .listGeoOp("geom", {
+        filters: [
+          {
+            column: "geom",
+            op: "@within",
+            value: "POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))",
+          },
+        ],
+      })
+      .query();
+
+    expect(json.features).toHaveLength(1);
+  }
 });

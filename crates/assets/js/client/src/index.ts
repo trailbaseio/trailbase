@@ -1,5 +1,6 @@
 import { jwtDecode } from "jwt-decode";
 import * as JSON from "@ungap/raw-json";
+import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
@@ -152,7 +153,10 @@ export type CompareOp =
   | "greaterThan"
   | "greaterThanEqual"
   | "like"
-  | "regexp";
+  | "regexp"
+  | "@within"
+  | "@intersects"
+  | "@contains";
 
 function formatCompareOp(op: CompareOp): string {
   switch (op) {
@@ -172,6 +176,11 @@ function formatCompareOp(op: CompareOp): string {
       return "$like";
     case "regexp":
       return "$re";
+    // Geospatials:
+    case "@within":
+    case "@intersects":
+    case "@contains":
+      return op;
   }
 }
 
@@ -223,7 +232,7 @@ export interface DeferredOperation<ResponseType> {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DeferredMutation<
   ResponseType,
-> extends DeferredOperation<ResponseType> {}
+> extends DeferredOperation<ResponseType> { }
 
 export class CreateOperation<
   T = Record<string, unknown>,
@@ -232,7 +241,7 @@ export class CreateOperation<
     private readonly client: Client,
     private readonly apiName: string,
     private readonly record: Partial<T>,
-  ) {}
+  ) { }
 
   async query(): Promise<RecordId> {
     const response = await this.client.fetch(
@@ -265,7 +274,7 @@ export class UpdateOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly record: Partial<T>,
-  ) {}
+  ) { }
 
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
@@ -291,7 +300,7 @@ export class DeleteOperation implements DeferredMutation<void> {
     private readonly client: Client,
     private readonly apiName: string,
     private readonly id: RecordId,
-  ) {}
+  ) { }
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
       method: "DELETE",
@@ -320,7 +329,7 @@ export class ReadOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly opt?: ReadOpts,
-  ) {}
+  ) { }
 
   async query(): Promise<T> {
     const expand = this.opt?.expand;
@@ -343,14 +352,15 @@ export interface ListOpts {
 
 export class ListOperation<
   T = Record<string, unknown>,
-> implements DeferredOperation<ListResponse<T>> {
+  R = ListResponse<T>,
+> implements DeferredOperation<R> {
   constructor(
     private readonly client: Client,
     private readonly apiName: string,
     private readonly opts?: ListOpts,
-  ) {}
-
-  async query(): Promise<ListResponse<T>> {
+    private readonly geojson?: string,
+  ) { }
+  async query(): Promise<R> {
     const params = new URLSearchParams();
     const pagination = this.opts?.pagination;
     if (pagination) {
@@ -378,10 +388,12 @@ export class ListOperation<
       }
     }
 
+    if (this.geojson) params.append("geojson", this.geojson);
+
     const response = await this.client.fetch(
       `${recordApiBasePath}/${this.apiName}?${params}`,
     );
-    return parseJSON(await response.text()) as ListResponse<T>;
+    return parseJSON(await response.text()) as R;
   }
 }
 
@@ -392,6 +404,11 @@ export interface SubscribeOpts {
 export interface RecordApi<T = Record<string, unknown>> {
   list(opts?: ListOpts): Promise<ListResponse<T>>;
   listOp(opts?: ListOpts): ListOperation<T>;
+  // For queries on TABLE/VIEWs with geometry columns wantin to return GeoJSON.
+  listGeoOp(
+    geometryColumn: string,
+    opts?: ListOpts,
+  ): ListOperation<T, FeatureCollection>;
 
   read(id: RecordId, opt?: ReadOpts): Promise<T>;
   readOp(id: RecordId, opt?: ReadOpts): ReadOperation<T>;
@@ -418,7 +435,7 @@ export class RecordApiImpl<
   constructor(
     private readonly client: Client,
     private readonly name: string,
-  ) {}
+  ) { }
 
   public async list(opts?: ListOpts): Promise<ListResponse<T>> {
     return new ListOperation<T>(this.client, this.name, opts).query();
@@ -426,6 +443,18 @@ export class RecordApiImpl<
 
   public listOp(opts?: ListOpts): ListOperation<T> {
     return new ListOperation<T>(this.client, this.name, opts);
+  }
+
+  public listGeoOp(
+    geometryColumn: string,
+    opts?: ListOpts,
+  ): ListOperation<T, FeatureCollection> {
+    return new ListOperation<T, FeatureCollection>(
+      this.client,
+      this.name,
+      opts,
+      geometryColumn,
+    );
   }
 
   public async read<T = Record<string, unknown>>(
@@ -515,7 +544,7 @@ export class RecordApiImpl<
         const messages = decoder.decode(chunk).trimEnd().split("\n\n");
         for (const msg of messages) {
           if (msg.startsWith("data: ")) {
-            controller.enqueue(JSON.parse(msg.substring(6)));
+            controller.enqueue(parseJSON(msg.substring(6)));
           }
         }
       },
@@ -581,7 +610,7 @@ export class RecordApiImpl<
             if (typeof event.data !== "string") {
               new Error("expected JSON string");
             }
-            controller.enqueue(JSON.parse(event.data));
+            controller.enqueue(parseJSON(event.data));
           });
         },
         cancel: () => {
@@ -593,7 +622,7 @@ export class RecordApiImpl<
 }
 
 class ThinClient {
-  constructor(public readonly base: URL | undefined) {}
+  constructor(public readonly base: URL | undefined) { }
 
   async fetch(
     path: string,
@@ -608,9 +637,9 @@ class ThinClient {
       ...init,
       headers: init
         ? {
-            ...headers,
-            ...init?.headers,
-          }
+          ...headers,
+          ...init?.headers,
+        }
         : headers,
     });
 
@@ -1027,14 +1056,6 @@ function addFiltersToParams(
   }
 }
 
-export const exportedForTesting = isDev
-  ? {
-      base64Decode,
-      base64Encode,
-      subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
-    }
-  : undefined;
-
 // BigInt JSON stringify/parse shenanigans.
 declare global {
   interface BigInt {
@@ -1042,7 +1063,7 @@ declare global {
   }
 }
 
-BigInt.prototype.toJSON = function () {
+BigInt.prototype.toJSON = function() {
   return JSON.rawJSON(this.toString());
 };
 
@@ -1062,3 +1083,12 @@ function parseJSON(text: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return JSON.parse(text, reviver as any);
 }
+
+export const exportedForTesting = isDev
+  ? {
+    base64Decode,
+    base64Encode,
+    parseJSON,
+    subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+  }
+  : undefined;
