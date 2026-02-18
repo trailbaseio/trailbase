@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+  "crates/litegis",
+  "crates/litegis-so",
+]
+default-members = [
+  "crates/litegis"
+]
+
+[workspace.dependencies]
+litegis = { path = "crates/litegis" }

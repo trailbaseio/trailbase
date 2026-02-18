@@ -1,0 +1,12 @@
+# Docs: https://rust-lang.github.io/rustfmt/
+edition = "2024"
+brace_style = "SameLineWhere"
+empty_item_single_line = true
+max_width = 112
+comment_width = 112
+wrap_comments = true
+tab_spaces = 2
+# Only works with nightly:
+# ignore = [
+#   "vendor",
+# ]

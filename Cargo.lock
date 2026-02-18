@@ -3338,6 +3338,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 
 [[package]]
+name = "litegis"
+version = "0.0.1"
+dependencies = [
+ "geos",
+ "rusqlite",
+]
+
+[[package]]
 name = "litemap"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6472,6 +6480,7 @@ dependencies = [
  "kanal",
  "lazy_static",
  "lettre",
+ "litegis",
  "log",
  "mini-moka",
  "minijinja",
@@ -6680,6 +6689,7 @@ dependencies = [
  "itertools 0.14.0",
  "jsonschema",
  "lazy_static",
+ "litegis",
  "log",
  "parking_lot",
  "rand 0.10.0",

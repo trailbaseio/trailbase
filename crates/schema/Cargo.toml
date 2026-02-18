@@ -32,5 +32,6 @@ uuid = { workspace = true }
 [dev-dependencies]
 anyhow = "1.0.97"
 indoc = "2.0.6"
+litegis = { workspace = true }
 tokio = { workspace = true }
 trailbase-sqlite = { workspace = true }

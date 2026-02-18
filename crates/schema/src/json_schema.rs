@@ -477,17 +477,9 @@ mod tests {
     let registry = Arc::new(RwLock::new(
       crate::registry::build_json_schema_registry(vec![]).unwrap(),
     ));
+
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
-    conn
-      .create_scalar_function(
-        "ST_IsValid",
-        1,
-        FunctionFlags::SQLITE_INNOCUOUS
-          | FunctionFlags::SQLITE_UTF8
-          | FunctionFlags::SQLITE_DETERMINISTIC,
-        |_ctx| return Ok(true),
-      )
-      .unwrap();
+    litegis::register(&conn).unwrap();
 
     conn
       .execute_batch("CREATE TABLE test_table (geom BLOB NOT NULL CHECK(ST_IsValid(geom))) STRICT;")

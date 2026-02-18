@@ -60,6 +60,7 @@ jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use
 kanal = "0.1.1"
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
+litegis = { workspace = true }
 log = { version = "^0.4.21", default-features = false }
 mini-moka = "0.10.3"
 minijinja = { workspace = true }

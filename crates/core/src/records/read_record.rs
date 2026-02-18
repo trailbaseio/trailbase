@@ -1270,25 +1270,6 @@ mod test {
   async fn test_geometry_columns_and_geojson() {
     let state = test_state(None).await.unwrap();
 
-    state
-      .conn()
-      .call(|conn| {
-        use rusqlite::functions::FunctionFlags;
-        conn
-          .create_scalar_function(
-            "ST_IsValid",
-            1,
-            FunctionFlags::SQLITE_INNOCUOUS
-              | FunctionFlags::SQLITE_UTF8
-              | FunctionFlags::SQLITE_DETERMINISTIC,
-            |_ctx| return Ok(true),
-          )
-          .unwrap();
-        return Ok(());
-      })
-      .await
-      .unwrap();
-
     let name = "with_geo".to_string();
     state
       .conn()

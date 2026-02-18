@@ -1,0 +1,12 @@
+[package]
+name = "litegis"
+version = "0.0.1"
+edition = "2024"
+license = "Apache-2.0"
+
+[lib]
+crate-type=["rlib"]
+
+[dependencies]
+geos = { version = "10.0.0", default-features = false, features = ["geo", "json"] }
+rusqlite = { version = "0.38.0", features = ["functions"] }
