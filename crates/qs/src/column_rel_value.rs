@@ -121,10 +121,10 @@ where
 
 #[inline]
 fn validate_wkt(s: &str) -> bool {
-  if s.contains(';') {
-    return false;
+  if s.chars().all(|c| c != ';' && c != '\'') {
+    return wkt::Wkt::<f64>::from_str(s).is_ok();
   }
-  return wkt::Wkt::<f64>::from_str(s).is_ok();
+  return false;
 }
 
 pub fn serde_value_to_single_column_rel_value<'de, D>(

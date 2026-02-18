@@ -282,7 +282,7 @@ fn render_sql_fragment<V, E>(
       Ok((
         column_op_value
           .op
-          .as_sql(&column_name, &format!("ST_GeomFromText({s})")),
+          .as_sql(&column_name, &format!("ST_GeomFromText('{s}')")),
         None,
       ))
     }

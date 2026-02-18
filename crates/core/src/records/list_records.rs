@@ -1261,4 +1261,86 @@ mod tests {
     assert_eq!(1, resp_filtered1.records.len());
     assert_eq!(1, resp_filtered1.total_count.unwrap());
   }
+
+  #[tokio::test]
+  async fn test_record_api_geojson_list() {
+    let state = test_state(None).await.unwrap();
+    let name = "geometry";
+
+    state
+      .conn()
+      .execute_batch(format!(
+        r#"
+        CREATE TABLE {name} (
+          id            INTEGER PRIMARY KEY,
+          description   TEXT,
+          geom          BLOB NOT NULL CHECK(ST_IsValid(geom))
+        ) STRICT;
+
+        INSERT INTO {name} (id, description, geom) VALUES
+          (3, 'Colloseo', ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
+          (7, 'A Line', ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326));
+      "#
+      ))
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some(name.to_string()),
+        table_name: Some(name.to_string()),
+        acl_world: [PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+      State(state.clone()),
+      Path(name.to_string()),
+      Query(ListRecordsQuery {
+        geojson: Some("geom".to_string()),
+      }),
+      RawQuery(None),
+      None,
+    )
+    .await
+    .unwrap()
+    .0
+    else {
+      panic!("not GeoJSON");
+    };
+
+    assert_eq!(2, response.features.len());
+
+    let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+      State(state.clone()),
+      Path(name.to_string()),
+      Query(ListRecordsQuery {
+        geojson: Some("geom".to_string()),
+      }),
+      RawQuery(Some(format!(
+        "filter[geom][@within]={polygon}",
+        // Colloseo @ 12.4924 41.8902
+        polygon = urlencode("POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))")
+      ))),
+      None,
+    )
+    .await
+    .unwrap()
+    .0
+    else {
+      panic!("not GeoJSON");
+    };
+
+    assert_eq!(1, response.features.len());
+    assert_eq!(
+      Some(geos::geojson::feature::Id::Number(3.into())),
+      response.features[0].id
+    );
+  }
 }
