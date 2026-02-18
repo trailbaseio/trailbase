@@ -317,7 +317,7 @@ test("Expand foreign records", async () => {
       },
     });
 
-    expect(response.records.length).toBe(1);
+    expect(response.records).toHaveLength(1);
     const comment = response.records[0];
 
     expect(comment.id).toBe(2);

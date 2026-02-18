@@ -144,7 +144,7 @@ mod tests {
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::connection::ConnectionEntry;
-  use crate::records::list_records::list_records_handler;
+  use crate::records::list_records::{ListOrGeoJSONResponse, list_records_handler};
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::add_record_api_config;
 
@@ -348,6 +348,7 @@ mod tests {
       let list_response = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(Some("expand=UNKNOWN".to_string())),
         None,
       )
@@ -376,14 +377,19 @@ mod tests {
 
       assert_eq!(expected, value);
 
-      let Json(list_response) = list_records_handler(
+      let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(None),
         None,
       )
       .await
-      .unwrap();
+      .unwrap()
+      .0
+      else {
+        panic!("not a list");
+      };
 
       assert_eq!(vec![expected.clone()], list_response.records);
       validator.validate(&list_response.records[0]).unwrap();
@@ -417,28 +423,38 @@ mod tests {
     }
 
     {
-      let Json(list_response) = list_records_handler(
+      let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(Some("expand=fk".to_string())),
         None,
       )
       .await
-      .unwrap();
+      .unwrap()
+      .0
+      else {
+        panic!("not a list");
+      };
 
       assert_eq!(vec![expected.clone()], list_response.records);
       validator.validate(&list_response.records[0]).unwrap();
     }
 
     {
-      let Json(list_response) = list_records_handler(
+      let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(Some("count=TRUE&expand=fk".to_string())),
         None,
       )
       .await
-      .unwrap();
+      .unwrap()
+      .0
+      else {
+        panic!("not a list");
+      };
 
       assert_eq!(Some(1), list_response.total_count);
       assert_eq!(vec![expected], list_response.records);
@@ -512,14 +528,19 @@ mod tests {
 
       assert_eq!(expected, value);
 
-      let Json(list_response) = list_records_handler(
+      let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(None),
         None,
       )
       .await
-      .unwrap();
+      .unwrap()
+      .0
+      else {
+        panic!("not a list");
+      };
 
       assert_eq!(vec![expected], list_response.records);
     }
@@ -551,14 +572,19 @@ mod tests {
 
       assert_eq!(expected, value);
 
-      let Json(list_response) = list_records_handler(
+      let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(Some("expand=fk1".to_string())),
         None,
       )
       .await
-      .unwrap();
+      .unwrap()
+      .0
+      else {
+        panic!("not a list");
+      };
 
       assert_eq!(vec![expected], list_response.records);
     }
@@ -601,14 +627,19 @@ mod tests {
         .await
         .unwrap();
 
-      let Json(list_response) = list_records_handler(
+      let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
         Path("test_table_api".to_string()),
+        Query(Default::default()),
         RawQuery(Some("expand=fk0,fk1".to_string())),
         None,
       )
       .await
-      .unwrap();
+      .unwrap()
+      .0
+      else {
+        panic!("not a list");
+      };
 
       assert_eq!(
         vec![
