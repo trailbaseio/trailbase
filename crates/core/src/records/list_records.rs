@@ -1279,7 +1279,8 @@ mod tests {
 
         INSERT INTO {name} (id, description, geom) VALUES
           (3, 'Colloseo', ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
-          (7, 'A Line', ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326));
+          (7, 'A Line', ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326)),
+          (8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90));
       "#
       ))
       .await
@@ -1299,48 +1300,81 @@ mod tests {
     .await
     .unwrap();
 
-    let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
-      State(state.clone()),
-      Path(name.to_string()),
-      Query(ListRecordsQuery {
-        geojson: Some("geom".to_string()),
-      }),
-      RawQuery(None),
-      None,
-    )
-    .await
-    .unwrap()
-    .0
-    else {
-      panic!("not GeoJSON");
-    };
+    {
+      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+        State(state.clone()),
+        Path(name.to_string()),
+        Query(ListRecordsQuery {
+          geojson: Some("geom".to_string()),
+        }),
+        RawQuery(None),
+        None,
+      )
+      .await
+      .unwrap()
+      .0
+      else {
+        panic!("not GeoJSON");
+      };
 
-    assert_eq!(2, response.features.len());
+      assert_eq!(3, response.features.len());
+    }
 
-    let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
-      State(state.clone()),
-      Path(name.to_string()),
-      Query(ListRecordsQuery {
-        geojson: Some("geom".to_string()),
-      }),
-      RawQuery(Some(format!(
-        "filter[geom][@within]={polygon}",
-        // Colloseo @ 12.4924 41.8902
-        polygon = urlencode("POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))")
-      ))),
-      None,
-    )
-    .await
-    .unwrap()
-    .0
-    else {
-      panic!("not GeoJSON");
-    };
+    {
+      // Test that stored point is `within` a filter bounding box.
+      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+        State(state.clone()),
+        Path(name.to_string()),
+        Query(ListRecordsQuery {
+          geojson: Some("geom".to_string()),
+        }),
+        RawQuery(Some(format!(
+          "filter[geom][@within]={polygon}",
+          // Colloseo @ 12.4924 41.8902
+          polygon = urlencode("POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))")
+        ))),
+        None,
+      )
+      .await
+      .unwrap()
+      .0
+      else {
+        panic!("not GeoJSON");
+      };
 
-    assert_eq!(1, response.features.len());
-    assert_eq!(
-      Some(geos::geojson::feature::Id::Number(3.into())),
-      response.features[0].id
-    );
+      assert_eq!(1, response.features.len());
+      assert_eq!(
+        Some(geos::geojson::feature::Id::Number(3.into())),
+        response.features[0].id
+      );
+    }
+
+    {
+      // Test that stored polygon `contains` a filter point.
+      let ListOrGeoJSONResponse::GeoJSON(response) = list_records_handler(
+        State(state.clone()),
+        Path(name.to_string()),
+        Query(ListRecordsQuery {
+          geojson: Some("geom".to_string()),
+        }),
+        RawQuery(Some(format!(
+          "filter[geom][@contains]={point}",
+          point = urlencode("POINT (12 -40)")
+        ))),
+        None,
+      )
+      .await
+      .unwrap()
+      .0
+      else {
+        panic!("not GeoJSON");
+      };
+
+      assert_eq!(1, response.features.len());
+      assert_eq!(
+        Some(geos::geojson::feature::Id::Number(8.into())),
+        response.features[0].id
+      );
+    }
   }
 }

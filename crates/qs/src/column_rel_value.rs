@@ -18,6 +18,8 @@ pub enum CompareOp {
 
   // Spatial Types:
   StWithin,
+  StIntersects,
+  StContains,
 }
 
 impl CompareOp {
@@ -32,7 +34,10 @@ impl CompareOp {
       "$is" => Some(Self::Is),
       "$like" => Some(Self::Like),
       "$re" => Some(Self::Regexp),
+      // Spatial Types:
       "@within" => Some(Self::StWithin),
+      "@intersects" => Some(Self::StIntersects),
+      "@contains" => Some(Self::StContains),
       _ => None,
     };
   }
@@ -49,7 +54,10 @@ impl CompareOp {
       Self::Like => format!("{column} LIKE {param}"),
       Self::Regexp => format!("{column} REGEXP {param}"),
       Self::Equal => format!("{column} = {param}"),
+      // Spatial Types:
       Self::StWithin => format!("ST_Within({column}, {param})"),
+      Self::StIntersects => format!("ST_Intersects({column}, {param})"),
+      Self::StContains => format!("ST_Contains({column}, {param})"),
     };
   }
 
@@ -65,7 +73,10 @@ impl CompareOp {
       Self::Is => "$is",
       Self::Like => "$like",
       Self::Regexp => "$re",
+      // Spatial Types:
       Self::StWithin => "@within",
+      Self::StIntersects => "@intersects",
+      Self::StContains => "@contains",
     };
   }
 }
@@ -92,7 +103,7 @@ where
       }
       _ => Err(Error::invalid_type(unexpected(&value), &"NULL or !NULL")),
     },
-    CompareOp::StWithin => {
+    CompareOp::StWithin | CompareOp::StIntersects | CompareOp::StContains => {
       // WARN: The assumption here is that valid WKTs cannot be used for SQL injection.
       match value {
         serde_value::Value::String(v) if validate_wkt(&v) => Ok(Value::String(v)),

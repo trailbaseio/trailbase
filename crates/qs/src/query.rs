@@ -608,5 +608,29 @@ mod tests {
         value: Value::String(polygon.to_string()),
       })
     );
+
+    assert_eq!(
+      Query::parse(&format!("filter[col][@intersects]={polygon}"))
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::StIntersects,
+        value: Value::String(polygon.to_string()),
+      })
+    );
+
+    assert_eq!(
+      Query::parse(&format!("filter[col][@contains]={polygon}"))
+        .unwrap()
+        .filter
+        .unwrap(),
+      ValueOrComposite::Value(ColumnOpValue {
+        column: "col".to_string(),
+        op: CompareOp::StContains,
+        value: Value::String(polygon.to_string()),
+      })
+    );
   }
 }

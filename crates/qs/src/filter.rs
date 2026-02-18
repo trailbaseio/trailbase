@@ -274,7 +274,7 @@ fn render_sql_fragment<V, E>(
       // literal.
       Ok((column_op_value.op.as_sql(&column_name, s), None))
     }
-    (CompareOp::StWithin, Value::String(s)) => {
+    (CompareOp::StWithin | CompareOp::StIntersects | CompareOp::StContains, Value::String(s)) => {
       // QUESTION: should we pass the string as a parameter instead? Right now we can't because
       // the value `map` function tries to decode strings as Base64 for Blob columns.
       // NOTE: this should already not allow SQL injections, since we validated the string
