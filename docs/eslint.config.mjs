@@ -23,7 +23,7 @@ const ignoredStarlightCustomTailwindClasses = [
 
 export default [
   {
-    ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts"],
+    ignores: ["**/dist/", "**/node_modules/", ".astro/", "src/env.d.ts"],
   },
   jsPlugin.configs.recommended,
   ...tsPlugin.configs.recommended,

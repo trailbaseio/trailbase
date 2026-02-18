@@ -5,6 +5,7 @@ packages:
   - 'crates/auth-ui/ui'
   - 'docs'
   - 'docs/examples/record_api_ts'
+  - 'docs/examples/wasm-guest-ts'
   - 'examples/blog/web'
   - 'examples/coffee-vector-search'
   - 'examples/coffee-vector-search/guests/typescript'

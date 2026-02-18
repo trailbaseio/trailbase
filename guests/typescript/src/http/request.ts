@@ -15,7 +15,7 @@ export type User = {
   csrf: string;
 };
 
-export interface Request {
+export interface HttpRequest {
   path(): string;
   method(): Method;
   scheme(): Scheme | undefined;
@@ -36,7 +36,7 @@ export interface Request {
   json(): object | undefined;
 }
 
-export class RequestImpl implements Request {
+export class HttpRequestImpl implements HttpRequest {
   constructor(
     private readonly _method: Method,
     private readonly _path: string,

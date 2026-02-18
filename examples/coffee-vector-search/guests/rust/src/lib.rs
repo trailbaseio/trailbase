@@ -8,18 +8,8 @@ use trailbase_wasm::{Guest, export};
 
 type SearchResponse = (String, f64, f64, f64, f64);
 
-fn as_real(v: &Value) -> Result<f64, String> {
-  if let Value::Real(f) = v {
-    return Ok(*f);
-  }
-  return Err(format!("Not a real: {v:?}"));
-}
-
 async fn search_handler(req: Request) -> Result<Json<Vec<SearchResponse>>, HttpError> {
-  let mut aroma: i64 = 8;
-  let mut flavor: i64 = 8;
-  let mut acidity: i64 = 8;
-  let mut sweetness: i64 = 8;
+  let (mut aroma, mut flavor, mut acidity, mut sweetness) = (8, 8, 8, 8);
 
   for (param, value) in req.url().query_pairs() {
     match param.as_ref() {
@@ -31,7 +21,7 @@ async fn search_handler(req: Request) -> Result<Json<Vec<SearchResponse>>, HttpE
     }
   }
 
-  // Query with vector-search for the closest match.
+  // Query the closest match using vector-search.
   let results: Vec<SearchResponse> = query(
     r#"
       SELECT Owner, Aroma, Flavor, Acidity, Sweetness
@@ -39,9 +29,8 @@ async fn search_handler(req: Request) -> Result<Json<Vec<SearchResponse>>, HttpE
         ORDER BY vec_distance_L2(
           embedding, FORMAT("[%f, %f, %f, %f]", $1, $2, $3, $4))
         LIMIT 100
-    "#
-    .to_string(),
-    vec![
+    "#,
+    [
       Value::Integer(aroma),
       Value::Integer(flavor),
       Value::Integer(acidity),
@@ -54,7 +43,7 @@ async fn search_handler(req: Request) -> Result<Json<Vec<SearchResponse>>, HttpE
   .map(|row| {
     // Convert to json response.
     let Value::Text(owner) = row[0].clone() else {
-      panic!("unreachable");
+      panic!("invariant");
     };
 
     return (
@@ -70,13 +59,20 @@ async fn search_handler(req: Request) -> Result<Json<Vec<SearchResponse>>, HttpE
   return Ok(Json(results));
 }
 
-// Implement the function exported in this world (see above).
-struct Endpoints;
+fn as_real(v: &Value) -> Result<f64, String> {
+  return match v {
+    Value::Real(f) => Ok(*f),
+    _ => Err(format!("Not a real: {v:?}")),
+  };
+}
 
-impl Guest for Endpoints {
+// Lastly, implement and export a TrailBase component.
+struct GuestImpl;
+
+impl Guest for GuestImpl {
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![routing::get("/search", search_handler)];
   }
 }
 
-export!(Endpoints);
+export!(GuestImpl);

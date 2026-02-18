@@ -1,5 +1,5 @@
 import { defineConfig, addPeriodicCallback } from "trailbase-wasm";
-import { HttpHandler, buildJsonResponse } from "trailbase-wasm/http";
+import { HttpHandler, JsonResponse } from "trailbase-wasm/http";
 import { JobHandler } from "trailbase-wasm/job";
 import { query } from "trailbase-wasm/db";
 
@@ -43,7 +43,7 @@ export default defineConfig({
 });
 
 function jsonHandler(req) {
-  return buildJsonResponse(
+  return JsonResponse.from(
     req.json() ?? {
       int: 5,
       real: 4.2,

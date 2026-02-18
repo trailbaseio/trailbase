@@ -1,8 +1,8 @@
 import { defineConfig } from "trailbase-wasm";
-import { Request, HttpHandler } from "trailbase-wasm/http";
+import { HttpHandler, HttpRequest, HttpResponse } from "trailbase-wasm/http";
 import { query } from "trailbase-wasm/db";
 
-async function searchHandler(req: Request): Promise<string> {
+async function searchHandler(req: HttpRequest): Promise<HttpResponse> {
   // Get the query params from the url, e.g. '/search?aroma=4&acidity=7'.
   const aroma = req.getQueryParam("aroma") ?? 8;
   const flavor = req.getQueryParam("flavor") ?? 8;
@@ -19,7 +19,7 @@ async function searchHandler(req: Request): Promise<string> {
     [+aroma, +flavor, +acid, +sweet],
   );
 
-  return JSON.stringify(rows);
+  return HttpResponse.json(rows);
 }
 
 export default defineConfig({

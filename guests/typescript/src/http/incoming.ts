@@ -7,8 +7,13 @@ import {
 
 import type { HttpContext } from "@common/HttpContext";
 import type { HttpHandlerInterface, ResponseType } from "./index";
-import { HttpError, StatusCode, buildResponse } from "./index";
-import { type Method, RequestImpl } from "./request";
+import { StatusCode } from "./index";
+import {
+  HttpError,
+  responseToOutgoingResponse,
+  errorToOutgoingResponse,
+} from "./response";
+import { type Method, HttpRequestImpl } from "./request";
 import { JobHandlerInterface } from "../job";
 import { awaitPendingTimers } from "../timer";
 
@@ -53,7 +58,7 @@ export function buildIncomingHttpHandler(args: {
       }
 
       return await handler(
-        new RequestImpl(
+        new HttpRequestImpl(
           wasiMethodToMethod(req.method()),
           req.pathWithQuery() ?? "",
           context.path_params,
@@ -70,30 +75,10 @@ export function buildIncomingHttpHandler(args: {
   return async function (req: IncomingRequest, respOutparam: ResponseOutparam) {
     try {
       const resp: ResponseType = await handle(req);
-      writeResponse(
-        respOutparam,
-        resp instanceof OutgoingResponse
-          ? resp
-          : buildResponse(
-              resp instanceof Uint8Array ? resp : encodeBytes(resp ?? ""),
-            ),
-      );
+      const outgoingResp = responseToOutgoingResponse(resp);
+      writeResponse(respOutparam, outgoingResp);
     } catch (err) {
-      if (err instanceof HttpError) {
-        writeResponse(
-          respOutparam,
-          buildResponse(encodeBytes(`${err.message}\n`), {
-            status: err.statusCode,
-          }),
-        );
-      } else {
-        writeResponse(
-          respOutparam,
-          buildResponse(encodeBytes(`Other: ${err}\n`), {
-            status: StatusCode.INTERNAL_SERVER_ERROR,
-          }),
-        );
-      }
+      writeResponse(respOutparam, errorToOutgoingResponse(err));
     } finally {
       await awaitPendingTimers();
     }

@@ -2,22 +2,21 @@ import { defineConfig } from "trailbase-wasm";
 import {
   HttpError,
   HttpHandler,
-  OutgoingResponse,
-  Request,
+  HttpRequest,
+  HttpResponse,
   StatusCode,
-  buildJsonResponse,
 } from "trailbase-wasm/http";
 import { execute, query, Transaction } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
-    HttpHandler.get("/fibonacci", (req: Request): string => {
+    HttpHandler.get("/fibonacci", (req: HttpRequest): string => {
       const n = req.getQueryParam("n");
       return `${fibonacci(n ? parseInt(n) : 40)}\n`;
     }),
     HttpHandler.get("/json", jsonHandler),
     HttpHandler.post("/json", jsonHandler),
-    HttpHandler.get("/fetch", async (req: Request): Promise<string> => {
+    HttpHandler.get("/fetch", async (req: HttpRequest): Promise<string> => {
       const url = req.getQueryParam("url");
       if (url) {
         return await (await fetch(url)).text();
@@ -94,9 +93,9 @@ export default defineConfig({
   ],
 });
 
-function jsonHandler(req: Request): OutgoingResponse {
+function jsonHandler(req: HttpRequest): HttpResponse {
   const json = req.json();
-  return buildJsonResponse(
+  return HttpResponse.json(
     json ?? {
       int: 5,
       real: 4.2,
