@@ -82,27 +82,65 @@ For example, columns with `JSON` or `JSONB` type affinities are stored as
 `TEXT` or `BLOB`, respectively[^2].
 
 When defining `STRICT` tables there's no affinity, limiting you to SQLite's
-fundamental types.
-However, TrailBase provides you with some extensions to enforce strict schema
-compatibility on a sub-column-level, e.g.
+fundamental types: `INTEGER`, `BLOB`, `TEXT`, `REAL` in addition to explicit
+`ANY`s.
 
-```sql {3-4}
+### Column Constraints and JSON Schemas
+
+Beyond SQLite's fundamental strict types, you can further narrow what cells may
+contain using column constraints such as `NOT NULL`, `REFERENCES` or
+`CHECK(...)`.
+
+TrailBase will look for certain constraint and reflect it in the schemas of
+APIs, i.e. what is being produced during `read` operations, as well as what
+data is accepted during `create`s and `update`s.
+For example, in the following we use some TrailBase's extensions to enforce
+JSON Schemas on JSON `TEXT` columns:
+
+```sql {3-7}
 CREATE TABLE my_table (
-    id        INTEGER PRIMARY KEY,
-    any_json  TEXT CHECK(is_json(any_json)),
-    my_json   TEXT CHECK(jsonschema('MyRegisteredJsonSchema', my_json))
+    id          INTEGER PRIMARY KEY,
+    any_json    TEXT CHECK(is_json(any_json)),
+    my_json     TEXT CHECK(jsonschema('MyRegisteredJsonSchema', my_json)),
+    -- or using some standard JSON schemas:
+    file        TEXT CHECK(jsonschema('std.FileUpload', file)),
+    files       TEXT CHECK(jsonschema('std.FileUploads', files))
 ) STRICT;
 ```
 
-### Constraints
+These checks will enforce the schema invariants during each insertions or
+update, thus ensuring that all records conform.
 
-Using TrailBase you can make use of any of SQLite's column and table
-constraints.
-We've already encountered some of the former, e.g. `NOT NULL`, `REFERENCES` or
-`CHECK`, which all *constrain* the values a column may contain.
+### Geometry Columns
 
-Similarly, one can define more complex table constraints constraining tuples of
-values, e.g.
+Similar to JSON data types above, TrailBase supports binary "geometry" columns
+by flagging `BLOB` columns using an `ST_IsValid` constraint as follows:
+
+```sql {3}
+CREATE TABLE table_with_geometry (
+    id         INTEGER PRIMARY KEY,
+    geometry   BLOB CHECK(ST_IsValid(geometry))
+) STRICT;
+
+INSERT INTO table_with_geometry (geometry) VALUES (ST_MakeEnvelope(-180, -90, 180, 90));
+```
+
+This will update your APIs schemas to expect and produce a GeoJSON `Geometry`
+whenever interacting with said column during reads and writes.
+
+Storing geometries in the "Well Known Binary" (WKB) format rather than a JSON
+column as described above, enables the use of `INDEX`es to accelerate certain
+spatial lookup and filter operations.
+For example, the `list` API allows specifying filters such as
+`?filter[geometry][@contains]=POINT (11.393  47.268)` to list records with
+geometries containing the given point specified in the "Well Known Text" (WKT)
+format.
+
+### Table Constraints
+
+In addition to the column constraints above, TrailBase is fairly transparent
+and let you use any of SQLite's table constraints. For example,
+we can enforce a uniqueness requirements on tuples:
 
 ```sql {5}
 CREATE TABLE fully_qualifed_ids (
