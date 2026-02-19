@@ -2370,12 +2370,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "geos-src"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8f5247861370ecfcd91a239376c572021cf355cddf52a6602ebbf403d9bb99e"
+dependencies = [
+ "cmake",
+]
+
+[[package]]
 name = "geos-sys"
 version = "2.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "582778505a1ec6d017d0382e947eb592b5f623479b6f1b1f2adf506934e84f89"
 dependencies = [
+ "geos-src",
  "libc",
+ "link-cplusplus",
  "pkg-config",
  "semver",
 ]
@@ -3318,6 +3329,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "link-cplusplus"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f78c730aaa7d0b9336a299029ea49f9ee53b0ed06e9202e8cb7db9bae7b8c82"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3331,9 +3351,9 @@ checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 
 [[package]]
 name = "litegis"
-version = "0.0.3"
+version = "0.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3520629ad478d60df993901f3e42d415bf45340ed6d9b425b2e78abcdc9ede17"
+checksum = "0c7ba3fd763196e9bf296476dcd050d364922a6f94270fb459b3cd1768cdf425"
 dependencies = [
  "geos",
  "rusqlite",
