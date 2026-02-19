@@ -1,5 +1,6 @@
 import { jwtDecode } from "jwt-decode";
 import * as JSON from "@ungap/raw-json";
+import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
@@ -351,14 +352,15 @@ export interface ListOpts {
 
 export class ListOperation<
   T = Record<string, unknown>,
-> implements DeferredOperation<ListResponse<T>> {
+  R = ListResponse<T>,
+> implements DeferredOperation<R> {
   constructor(
     private readonly client: Client,
     private readonly apiName: string,
     private readonly opts?: ListOpts,
+    private readonly geojson?: string,
   ) { }
-
-  async query(): Promise<ListResponse<T>> {
+  async query(): Promise<R> {
     const params = new URLSearchParams();
     const pagination = this.opts?.pagination;
     if (pagination) {
@@ -386,10 +388,12 @@ export class ListOperation<
       }
     }
 
+    if (this.geojson) params.append("geojson", this.geojson);
+
     const response = await this.client.fetch(
       `${recordApiBasePath}/${this.apiName}?${params}`,
     );
-    return parseJSON(await response.text()) as ListResponse<T>;
+    return parseJSON(await response.text()) as R;
   }
 }
 
@@ -400,6 +404,11 @@ export interface SubscribeOpts {
 export interface RecordApi<T = Record<string, unknown>> {
   list(opts?: ListOpts): Promise<ListResponse<T>>;
   listOp(opts?: ListOpts): ListOperation<T>;
+  // For queries on TABLE/VIEWs with geometry columns wantin to return GeoJSON.
+  listGeoOp(
+    geometryColumn: string,
+    opts?: ListOpts,
+  ): ListOperation<T, FeatureCollection>;
 
   read(id: RecordId, opt?: ReadOpts): Promise<T>;
   readOp(id: RecordId, opt?: ReadOpts): ReadOperation<T>;
@@ -434,6 +443,18 @@ export class RecordApiImpl<
 
   public listOp(opts?: ListOpts): ListOperation<T> {
     return new ListOperation<T>(this.client, this.name, opts);
+  }
+
+  public listGeoOp(
+    geometryColumn: string,
+    opts?: ListOpts,
+  ): ListOperation<T, FeatureCollection> {
+    return new ListOperation<T, FeatureCollection>(
+      this.client,
+      this.name,
+      opts,
+      geometryColumn,
+    );
   }
 
   public async read<T = Record<string, unknown>>(
@@ -523,7 +544,7 @@ export class RecordApiImpl<
         const messages = decoder.decode(chunk).trimEnd().split("\n\n");
         for (const msg of messages) {
           if (msg.startsWith("data: ")) {
-            controller.enqueue(JSON.parse(msg.substring(6)));
+            controller.enqueue(parseJSON(msg.substring(6)));
           }
         }
       },
@@ -589,7 +610,7 @@ export class RecordApiImpl<
             if (typeof event.data !== "string") {
               new Error("expected JSON string");
             }
-            controller.enqueue(JSON.parse(event.data));
+            controller.enqueue(parseJSON(event.data));
           });
         },
         cancel: () => {
@@ -1035,14 +1056,6 @@ function addFiltersToParams(
   }
 }
 
-export const exportedForTesting = isDev
-  ? {
-    base64Decode,
-    base64Encode,
-    subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
-  }
-  : undefined;
-
 // BigInt JSON stringify/parse shenanigans.
 declare global {
   interface BigInt {
@@ -1070,3 +1083,12 @@ function parseJSON(text: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return JSON.parse(text, reviver as any);
 }
+
+export const exportedForTesting = isDev
+  ? {
+    base64Decode,
+    base64Encode,
+    parseJSON,
+    subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+  }
+  : undefined;
