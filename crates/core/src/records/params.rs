@@ -540,7 +540,7 @@ fn extract_params_and_files_from_json(
         writer.set_include_SRID(true);
       }
 
-      return Ok((Value::Blob(writer.write_wkb(&geometry)?.into()), None));
+      return Ok((Value::Blob(writer.write_wkb(&geometry)?), None));
     }
 
     debug_assert!(!is_geometry);
