@@ -77,7 +77,7 @@ axum = { version = "^0.8.1", features = ["multipart"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 libsqlite3-sys = { version = "0.36.0", default-features = false, features = ["bundled", "preupdate_hook"] }
-litegis = { version = "0.0.2" }
+litegis = { version = "0.0.3" }
 minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.0"
