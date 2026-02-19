@@ -112,6 +112,9 @@ enum class CompareOp {
     greaterThanEqual,
     like,
     regexp,
+    stWithin,
+    stIntersects,
+    stContains,
 }
 
 private fun opToString(op: CompareOp): String {
@@ -124,6 +127,9 @@ private fun opToString(op: CompareOp): String {
         CompareOp.greaterThanEqual -> "\$gte"
         CompareOp.like -> "\$like"
         CompareOp.regexp -> "\$re"
+        CompareOp.stWithin -> "@within"
+        CompareOp.stIntersects -> "@intersects"
+        CompareOp.stContains -> "@contains"
     }
 }
 

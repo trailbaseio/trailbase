@@ -301,6 +301,9 @@ pub enum CompareOp {
   LessThan,
   Like,
   Regexp,
+  StWithin,
+  StIntersects,
+  StContains,
 }
 
 impl CompareOp {
@@ -314,6 +317,9 @@ impl CompareOp {
       Self::LessThan => "$lt",
       Self::Like => "$like",
       Self::Regexp => "$re",
+      Self::StWithin => "@within",
+      Self::StIntersects => "@intersects",
+      Self::StContains => "@contains",
     };
   }
 }
