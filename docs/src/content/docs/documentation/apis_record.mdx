@@ -422,9 +422,37 @@ Parameters:
   * **$is**: is null or not null, i.e. `?col[$is]=NULL` or `?col[$is]=!NULL`, respectively
   * **$like**: SQL `LIKE` operator, e.g. `?col[$like]=%something%`
   * **$re**: SQL `REGEXP` operator, e.g. `?col[$re]=^something$`
+  * **@within**: geospatial `ST_Within` relation, see below.
+  * **@intersects**: geospatial `ST_Intersects` relation, see below.
+  * **@contains**: geospatial `ST_Contains` relation, see below.
 * Parent records, i.e. records pointed to by foreign key columns, can be
   expanded using the `?expand=<col0>,<col`>` parameter, if the respective columns
   were allow-listed in the API configuration.
+* Specifying the `?geojson=<geo_column_name>` parameter will produce a GeoJSON
+  `FeatureCollection` response instead of the default `ListResponse`.
+  The geometry of the collection's features is derived from the column
+  specified by `<geo_column_name>`.
+
+#### Geospatial/Geometry Columns
+
+The geospatial filer operators: `@within`, `@intersects` and `@contains` can be
+used on columns tagged as `BLOB` geometry columns, e.g.:
+
+```sql
+CREATE TABLE table_with_geometry (
+    id         INTEGER PRIMARY KEY,
+    geometry   BLOB CHECK(ST_IsValid(geometry))
+) STRICT;
+```
+
+This allows for efficient filtering based on a geospatial relationship to a given
+reference geometry provided in "Well Known Text" format, e.g.
+`?filter[geometry][@contains]=POINT (11.393  47.268)`.
+
+This can be independently combined with the`?geojson=<geo_column_name>`
+parameter to produce a GeoJSON `FeatureCollection`response instead of the
+default `ListResponse`, if desired.
+
 
 #### Examples
 
