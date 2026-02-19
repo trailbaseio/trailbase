@@ -8,27 +8,27 @@
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/src/index.d.ts"
     },
     "./db": {
       "import": "./dist/db.js",
-      "types": "./dist/db.d.ts"
+      "types": "./dist/src/db/index.d.ts"
     },
     "./fs": {
       "import": "./dist/fs.js",
-      "types": "./dist/fs.d.ts"
+      "types": "./dist/src/fs/index.d.ts"
     },
     "./http": {
       "import": "./dist/http.js",
-      "types": "./dist/http.d.ts"
+      "types": "./dist/src/http/index.d.ts"
     },
     "./job": {
       "import": "./dist/job.js",
-      "types": "./dist/job.d.ts"
+      "types": "./dist/src/job/index.d.ts"
     },
     "./kv": {
       "import": "./dist/kv.js",
-      "types": "./dist/kv.d.ts"
+      "types": "./dist/src/kv/index.d.ts"
     }
   },
   "publishConfig": {
@@ -36,27 +36,27 @@
     "exports": {
       ".": {
         "import": "./dist/index.js",
-        "types": "./dist/index.d.ts"
+        "types": "./dist/src/index.d.ts"
       },
       "./db": {
         "import": "./dist/db.js",
-        "types": "./dist/db.d.ts"
+        "types": "./dist/src/db/index.d.ts"
       },
       "./fs": {
         "import": "./dist/fs.js",
-        "types": "./dist/fs.d.ts"
+        "types": "./dist/src/fs/index.d.ts"
       },
       "./http": {
         "import": "./dist/http.js",
-        "types": "./dist/http.d.ts"
+        "types": "./dist/src/http/index.d.ts"
       },
       "./job": {
         "import": "./dist/job.js",
-        "types": "./dist/job.d.ts"
+        "types": "./dist/src/job/index.d.ts"
       },
       "./kv": {
         "import": "./dist/kv.js",
-        "types": "./dist/kv.d.ts"
+        "types": "./dist/src/kv/index.d.ts"
       }
     }
   },

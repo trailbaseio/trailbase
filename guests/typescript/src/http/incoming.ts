@@ -8,11 +8,7 @@ import {
 import type { HttpContext } from "@common/HttpContext";
 import type { HttpHandlerInterface, ResponseType } from "./index";
 import { StatusCode } from "./index";
-import {
-  HttpError,
-  responseToOutgoingResponse,
-  errorToOutgoingResponse,
-} from "./response";
+import { HttpError, HttpResponse, buildResponse } from "./response";
 import { type Method, HttpRequestImpl } from "./request";
 import { JobHandlerInterface } from "../job";
 import { awaitPendingTimers } from "../timer";
@@ -83,6 +79,54 @@ export function buildIncomingHttpHandler(args: {
       await awaitPendingTimers();
     }
   };
+}
+
+export function responseToOutgoingResponse(
+  resp: ResponseType,
+): OutgoingResponse {
+  if (resp instanceof OutgoingResponse) {
+    return resp;
+  } else if (resp instanceof HttpResponse) {
+    return buildResponse({
+      status: resp.status,
+      headers: resp.headers,
+      body: resp.body ?? new Uint8Array(),
+    });
+  } else if (resp instanceof Uint8Array) {
+    return buildResponse({
+      status: StatusCode.OK,
+      headers: [],
+      body: resp,
+    });
+  } else if (typeof resp === "string") {
+    return buildResponse({
+      status: StatusCode.OK,
+      headers: [],
+      body: encodeBytes(resp),
+    });
+  } else {
+    // void case.
+    return buildResponse({
+      status: StatusCode.OK,
+      headers: [],
+      body: new Uint8Array(),
+    });
+  }
+}
+
+export function errorToOutgoingResponse(err: unknown): OutgoingResponse {
+  if (err instanceof HttpError) {
+    return buildResponse({
+      status: err.status,
+      headers: [["Content-Type", encodeBytes("text/plain; charset=utf-8")]],
+      body: err.message ? encodeBytes(err.message) : new Uint8Array(),
+    });
+  }
+  return buildResponse({
+    body: encodeBytes(`uncaught: ${err}`),
+    status: StatusCode.INTERNAL_SERVER_ERROR,
+    headers: [],
+  });
 }
 
 function writeResponse(

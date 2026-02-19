@@ -2,13 +2,6 @@ import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.3";
 import { StatusCode } from "./status";
 import { encodeBytes } from "./incoming";
 
-export type ResponseType =
-  | string
-  | Uint8Array
-  | HttpResponse
-  | OutgoingResponse
-  | void;
-
 export class HttpResponse {
   protected constructor(
     public readonly status: StatusCode,
@@ -78,61 +71,13 @@ export class HttpError extends Error {
   }
 }
 
-export function responseToOutgoingResponse(
-  resp: ResponseType,
-): OutgoingResponse {
-  if (resp instanceof OutgoingResponse) {
-    return resp;
-  } else if (resp instanceof HttpResponse) {
-    return buildResponse({
-      status: resp.status,
-      headers: resp.headers,
-      body: resp.body ?? new Uint8Array(),
-    });
-  } else if (resp instanceof Uint8Array) {
-    return buildResponse({
-      status: StatusCode.OK,
-      headers: [],
-      body: resp,
-    });
-  } else if (typeof resp === "string") {
-    return buildResponse({
-      status: StatusCode.OK,
-      headers: [],
-      body: encodeBytes(resp),
-    });
-  } else {
-    // void case.
-    return buildResponse({
-      status: StatusCode.OK,
-      headers: [],
-      body: new Uint8Array(),
-    });
-  }
-}
-
-export function errorToOutgoingResponse(err: unknown): OutgoingResponse {
-  if (err instanceof HttpError) {
-    return buildResponse({
-      status: err.status,
-      headers: [["Content-Type", encodeBytes("text/plain; charset=utf-8")]],
-      body: err.message ? encodeBytes(err.message) : new Uint8Array(),
-    });
-  }
-  return buildResponse({
-    body: encodeBytes(`uncaught: ${err}`),
-    status: StatusCode.INTERNAL_SERVER_ERROR,
-    headers: [],
-  });
-}
-
 type ResponseOptions = {
   status: StatusCode;
   headers: [string, Uint8Array][];
   body: Uint8Array;
 };
 
-function buildResponse(opts: ResponseOptions): OutgoingResponse {
+export function buildResponse(opts: ResponseOptions): OutgoingResponse {
   // NOTE: `outputStream.blockingWriteAndFlush` only writes up to 4kB, see documentation.
   if (opts.body.length <= 4096) {
     return buildSmallResponse(opts);
