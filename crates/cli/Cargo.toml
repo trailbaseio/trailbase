@@ -16,6 +16,7 @@ default = []
 swagger = ["dep:utoipa-swagger-ui"]
 vendor-ssl = ["dep:openssl"]
 ws = ["trailbase/ws"]
+static-geos = ["trailbase/static-geos"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }

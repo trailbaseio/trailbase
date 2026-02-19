@@ -35,7 +35,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update && \
-            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libgeos-dev
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
