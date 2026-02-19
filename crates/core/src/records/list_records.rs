@@ -387,10 +387,10 @@ fn build_feature_collection(
       });
       debug_assert!(id.is_some());
 
+      // NOTE: Geometry may be NULL for nullable columns.
       let geometry = obj.remove(&meta.column.name).and_then(|g| {
         return geos::geojson::Geometry::from_json_value(g).ok();
       });
-      debug_assert!(geometry.is_some());
 
       return Ok(geos::geojson::Feature {
         id,
@@ -1274,13 +1274,14 @@ mod tests {
         CREATE TABLE {name} (
           id            INTEGER PRIMARY KEY,
           description   TEXT,
-          geom          BLOB NOT NULL CHECK(ST_IsValid(geom))
+          geom          BLOB CHECK(ST_IsValid(geom))
         ) STRICT;
 
         INSERT INTO {name} (id, description, geom) VALUES
-          (3, 'Colloseo', ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
-          (7, 'A Line', ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326)),
-          (8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90));
+          ( 3, 'Colloseo',     ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
+          ( 7, 'A Line',       ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326)),
+          ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
+          (21, 'null',         NULL);
       "#
       ))
       .await
@@ -1317,7 +1318,7 @@ mod tests {
         panic!("not GeoJSON");
       };
 
-      assert_eq!(3, response.features.len());
+      assert_eq!(4, response.features.len());
     }
 
     {
