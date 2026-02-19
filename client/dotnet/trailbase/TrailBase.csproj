@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <PackageId>TrailBase</PackageId>
-    <Version>0.5.0</Version>
+    <Version>0.5.1</Version>
     <Authors>TrailBase authors</Authors>
     <PackageReadmeFile>./README.md</PackageReadmeFile>
     <PackageLicenseExpression>Apache-2.0 OR OSL-3.0</PackageLicenseExpression>

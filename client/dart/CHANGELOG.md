@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2
+
+- Geospatial filtering.
+- Client now dual-licensed under permissive Apache-2.0.
+
 ## 0.7.1
 
 - Minor: fix changelog.
