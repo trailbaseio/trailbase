@@ -11,7 +11,6 @@ use std::convert::TryInto;
 use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
@@ -37,6 +36,7 @@ pub struct ListResponse {
 #[derive(Debug)]
 pub enum ListOrGeoJSONResponse {
   List(ListResponse),
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   GeoJSON(geos::geojson::FeatureCollection),
 }
 
@@ -48,6 +48,7 @@ impl Serialize for ListOrGeoJSONResponse {
   {
     return match self {
       Self::List(v) => v.serialize(serializer),
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
       Self::GeoJSON(v) => v.serialize(serializer),
     };
   }
@@ -345,6 +346,7 @@ pub async fn list_records_handler(
       .collect::<Result<Vec<_>, RecordError>>()?
   };
 
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   if let Some(meta) = geojson_geometry_column {
     return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
       build_feature_collection(meta, &pk_column.name, cursor, total_count, records)?,
@@ -358,8 +360,9 @@ pub async fn list_records_handler(
   })));
 }
 
+#[cfg(any(feature = "geos", feature = "geos-static"))]
 fn build_feature_collection(
-  meta: &ColumnMetadata,
+  meta: &trailbase_schema::metadata::ColumnMetadata,
   pk_column_name: &str,
   cursor: Option<String>,
   total_count: Option<usize>,
@@ -1262,6 +1265,7 @@ mod tests {
     assert_eq!(1, resp_filtered1.total_count.unwrap());
   }
 
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[tokio::test]
   async fn test_record_api_geojson_list() {
     let state = test_state(None).await.unwrap();

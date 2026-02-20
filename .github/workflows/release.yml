@@ -67,7 +67,7 @@ jobs:
             -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
             -e PNPM_OFFLINE=FALSE \
             builder:latest \
-            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
 
       - name: Package Artifacts
         run: |
@@ -113,7 +113,7 @@ jobs:
             -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
             -e PNPM_OFFLINE=FALSE \
             builder:latest \
-            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
 
       - name: Package Artifacts
         run: |
@@ -148,7 +148,7 @@ jobs:
       - name: Rust Build
         run: |
           env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
       - name: Package Artifacts
         run: |
           zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
@@ -182,7 +182,7 @@ jobs:
       - name: Rust Build
         run: |
           env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
       - name: Package Artifacts
         run: |
           zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
@@ -217,7 +217,7 @@ jobs:
         shell: bash
         run: |
           env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
       - name: Package Artifacts
         run: |
           zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/${{ env.RUST_TARGET }}/release/trail.exe CHANGELOG.md LICENSE

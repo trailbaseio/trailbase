@@ -42,6 +42,7 @@ pub enum ParamsError {
   Storage(Arc<object_store::Error>),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[error("Geos: {0}")]
   Geos(#[from] geos::Error),
 }
@@ -528,6 +529,7 @@ fn extract_params_and_files_from_json(
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   // If this is *not* a JSON column convert the value trivially.
   let Some(json_metadata) = json_metadata else {
+    #[cfg(any(feature = "geos", feature = "geos-static"))]
     if is_geometry && col.data_type == ColumnDataType::Blob {
       use geos::Geom;
 
@@ -541,9 +543,9 @@ fn extract_params_and_files_from_json(
       }
 
       return Ok((Value::Blob(writer.write_wkb(&geometry)?), None));
+    } else {
+      debug_assert!(!is_geometry);
     }
-
-    debug_assert!(!is_geometry);
 
     return Ok((flat_json_to_value(col.data_type, value)?, None));
   };

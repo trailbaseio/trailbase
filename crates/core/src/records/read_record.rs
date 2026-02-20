@@ -1266,6 +1266,7 @@ mod test {
     assert_eq!(read_response, record);
   }
 
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[tokio::test]
   async fn test_geometry_columns_and_geojson() {
     let state = test_state(None).await.unwrap();

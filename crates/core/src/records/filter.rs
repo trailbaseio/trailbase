@@ -115,7 +115,6 @@ fn compare_values(
   record_value: &rusqlite::types::Value,
   filter_value: &rusqlite::types::Value,
 ) -> bool {
-  use geos::Geom;
   use rusqlite::types::Value;
 
   return match op {
@@ -175,7 +174,9 @@ fn compare_values(
       _ => false,
     },
     CompareOp::StWithin => match (record_value, filter_value) {
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
       (Value::Blob(record), Value::Text(filter)) => {
+        use geos::Geom;
         let Some((record_geometry, filter_geometry)) = parse_geometries(record, filter) else {
           return false;
         };
@@ -184,7 +185,9 @@ fn compare_values(
       _ => false,
     },
     CompareOp::StIntersects => match (record_value, filter_value) {
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
       (Value::Blob(record), Value::Text(filter)) => {
+        use geos::Geom;
         let Some((record_geometry, filter_geometry)) = parse_geometries(record, filter) else {
           return false;
         };
@@ -195,7 +198,9 @@ fn compare_values(
       _ => false,
     },
     CompareOp::StContains => match (record_value, filter_value) {
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
       (Value::Blob(record), Value::Text(filter)) => {
+        use geos::Geom;
         let Some((record_geometry, filter_geometry)) = parse_geometries(record, filter) else {
           return false;
         };
@@ -206,6 +211,7 @@ fn compare_values(
   };
 }
 
+#[cfg(any(feature = "geos", feature = "geos-static"))]
 #[inline]
 fn parse_geometries(record: &[u8], filter: &str) -> Option<(geos::Geometry, geos::Geometry)> {
   let record_geometry = geos::Geometry::new_from_wkb(record).ok()?;

@@ -342,6 +342,7 @@ fn init_main_db_impl(
         let mut conn =
           trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
 
+        #[cfg(any(feature = "geos", feature = "geos-static"))]
         litegis::register(&conn)?;
 
         if main_migrations {
@@ -379,6 +380,7 @@ fn init_main_db_impl(
       let mut secondary =
         trailbase_extension::connect_sqlite(Some(path.clone()), json_registry.clone())?;
 
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
       litegis::register(&secondary)?;
 
       apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;

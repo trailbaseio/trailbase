@@ -47,7 +47,7 @@ RUN case ${TARGETPLATFORM} in \
          "linux/arm64")  RUST_TARGET="aarch64-unknown-linux-musl"  ;; \
          *)              RUST_TARGET="x86_64-unknown-linux-musl"   ;; \
     esac && \
-    RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target ${RUST_TARGET} --features=static-geos --release --bin trail && \
+    RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target ${RUST_TARGET} --features=geos-static --release --bin trail && \
     mv target/${RUST_TARGET}/release/trail /app/trail.exe
 
 

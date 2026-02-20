@@ -32,6 +32,7 @@ pub enum JsonError {
   // NOTE: This is the only extra error to schema::JsonError. Can we collapse?
   #[error("SerdeJson error: {0}")]
   SerdeJson(#[from] serde_json::Error),
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[error("Geos: {0}")]
   Geos(#[from] geos::Error),
 }
@@ -139,6 +140,7 @@ pub(crate) fn row_to_json_expand(
           }
 
           // De-serialize WKB Geometry.
+          #[cfg(any(feature = "geos", feature = "geos-static"))]
           if let types::Value::Blob(wkb) = value
             && meta.is_geometry
           {

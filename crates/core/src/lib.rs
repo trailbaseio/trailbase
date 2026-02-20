@@ -83,7 +83,7 @@ mod wasm {
     _components_path: PathBuf,
     _fs_root_path: Option<&std::path::Path>,
     _dev: bool,
-  ) -> Result<Vec<(Arc<parking_lot::Mutex<SqliteStore>>, SqliteFunctions)>, AnyError> {
+  ) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
     return Ok(vec![]);
   }
 
