@@ -1,6 +1,7 @@
-# Using the following docker base images, because the `ring` crate is a bit
-# iffy to compile. Tore my hair out with debian:
-#    https://github.com/briansmith/ring/issues/1414
+# NOTE: We cannot use alpine here because rusqlite's `libsqlite3-sys` with
+# `preupdate-hook` has a **build-time** dependency on the `bindgen` crate with
+# the `runtime` feature enabled. This in turn requires a dynamically linked
+# libclang.so, alpine's `clang-dev` package won't work :/.
 FROM messense/rust-musl-cross:x86_64-musl AS builder-amd64
 FROM messense/rust-musl-cross:aarch64-musl AS builder-arm64
 
@@ -14,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install node
 ENV PATH=/usr/local/node/bin:$PATH
-ARG NODE_VERSION=22.13.1
+ENV NODE_VERSION=22.13.1
 
 RUN curl -sL https://github.com/nodenv/node-build/archive/master.tar.gz | tar xz -C /tmp/ && \
     /tmp/node-build-master/bin/node-build "${NODE_VERSION}" /usr/local/node && \
@@ -46,7 +47,7 @@ RUN case ${TARGETPLATFORM} in \
          "linux/arm64")  RUST_TARGET="aarch64-unknown-linux-musl"  ;; \
          *)              RUST_TARGET="x86_64-unknown-linux-musl"   ;; \
     esac && \
-    RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target ${RUST_TARGET} --features=vendor-ssl,static-geos --release --bin trail && \
+    RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target ${RUST_TARGET} --features=static-geos --release --bin trail && \
     mv target/${RUST_TARGET}/release/trail /app/trail.exe
 
 

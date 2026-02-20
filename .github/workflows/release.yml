@@ -5,6 +5,12 @@ on:
     tags:
       - "v*.*.*"
 
+env:
+  TOOLCHAIN_VERSION: 1.93.1
+  CARGO_PROFILE_RELEASE_LTO: "fat"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+  PNPM_OFFLINE: "TRUE"
+
 jobs:
   changelog:
     runs-on: ubuntu-latest
@@ -18,184 +24,134 @@ jobs:
           awk "/## v${VERSION}.*/{include=1; next} /## v.*/{include=0} include && NF" CHANGELOG.md > ./CHANGELOG-release.md
           cat ./CHANGELOG-release.md
 
-      - name: Release Change log
+      - name: Release Changelog
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           body_path: ./CHANGELOG-release.md
 
-  # release-x86_64-linux-glibc:
-  #   needs: changelog
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v3
-  #       with:
-  #         submodules: 'true'
-  #     - name: Install Dependencies
-  #       run: |
-  #         sudo apt-get update && \
-  #           sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
-  #     - uses: pnpm/action-setup@v4
-  #       with:
-  #         version: 9
-  #     - name: PNPM install
-  #       run: |
-  #         pnpm install
-  #     - uses: actions-rs/toolchain@v1
-  #       with:
-  #         toolchain: 1.93.0
-  #         target: x86_64-unknown-linux-gnu
-  #         default: true
-  #     - name: Rust Build
-  #       # NOTE: cargo links different binaries whether in the crate or workspace root :/.
-  #       run: |
-  #         cd crates/cli &&  \
-  #         CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
-  #           cargo build --target x86_64-unknown-linux-gnu --release --bin trail && \
-  #         cd ../.. && \
-  #         zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux_glibc.zip target/x86_64-unknown-linux-gnu/release/trail CHANGELOG.md LICENSE
-
-  #     - name: Release binaries
-  #       uses: softprops/action-gh-release@v2
-  #       with:
-  #         fail_on_unmatched_files: true
-  #         files: trailbase_${{  github.ref_name }}_x86_64_linux_glibc.zip
-
-  release-x86_64-linux-static:
+  # NOTE: We use Docker. Otherwise getting compatible versions for
+  # musl-gcc, g++ (GEOS is C++) and rustc is borderline impossible.
+  release-x86_64-linux-musl:
     needs: changelog
     runs-on: ubuntu-latest
+    env:
+      RUST_TARGET: x86_64-unknown-linux-musl
+      DOCKER_WORKSPACE: /workspace
+
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'true'
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update && \
-            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip musl-tools
+          submodules: 'recursive'
       - uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: PNPM install
-        run: |
-          pnpm install
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.93.0
-          target: x86_64-unknown-linux-musl
-          default: true
-      - name: Rust Build
-        run: |
-          cd crates/cli &&  \
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
-            cargo build --target x86_64-unknown-linux-musl --release --features=vendor-ssl,static-geos --bin trail && \
-          cd ../.. && \
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/x86_64-unknown-linux-musl/release/trail CHANGELOG.md LICENSE
+        run: pnpm install
 
+      - name: Build a Builder Image
+        run: |
+          docker build -f Dockerfile.ci \
+            --build-arg BASE_IMAGE_TAG=x86_64-musl \
+            --build-arg RUST_TARGET=${{ env.RUST_TARGET }} \
+            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
+            --build-arg WORKSPACE=${{ env.DOCKER_WORKSPACE }} \
+            -t builder:latest .
+
+      - name: Rust Build using the Builder
+        run: |
+          env && \
+          docker run --rm \
+            -v ${{ github.workspace }}:${{ env.DOCKER_WORKSPACE }} \
+            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
+            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
+            -e PNPM_OFFLINE=FALSE \
+            builder:latest \
+            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+
+      - name: Package Artifacts
+        run: |
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_linux.zip
 
-  release-aarch64-linux-static:
+  release-aarch64-linux-musl:
     needs: changelog
     runs-on: ubuntu-24.04-arm
+    env:
+      RUST_TARGET: aarch64-unknown-linux-musl
+      DOCKER_WORKSPACE: /workspace
+
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'true'
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update && \
-            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip musl-tools
+          submodules: 'recursive'
       - uses: pnpm/action-setup@v4
         with:
           version: 9
       - name: PNPM install
-        run: |
-          pnpm install
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.93.0
-          target: aarch64-unknown-linux-musl
-          default: true
-      - name: Rust Build
-        run: |
-          cd crates/cli &&  \
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
-            cargo build --target aarch64-unknown-linux-musl --release --features=vendor-ssl,static-geos --bin trail && \
-          cd ../.. && \
-          zip -r -j trailbase_${{  github.ref_name }}_arm64_linux.zip target/aarch64-unknown-linux-musl/release/trail CHANGELOG.md LICENSE
+        run: pnpm install
 
+      - name: Build a Builder Image
+        run: |
+          docker build -f Dockerfile.ci \
+            --build-arg BASE_IMAGE_TAG=aarch64-musl \
+            --build-arg RUST_TARGET=${{ env.RUST_TARGET }} \
+            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
+            --build-arg WORKSPACE=${{ env.DOCKER_WORKSPACE }} \
+            -t builder:latest .
+
+      - name: Rust Build using the Builder
+        run: |
+          env && \
+          docker run --rm \
+            -v ${{ github.workspace }}:${{ env.DOCKER_WORKSPACE }} \
+            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
+            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
+            -e PNPM_OFFLINE=FALSE \
+            builder:latest \
+            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+
+      - name: Package Artifacts
+        run: |
+          zip -r -j trailbase_${{  github.ref_name }}_arm64_linux.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_arm64_linux.zip
 
-  release-wasm-auth-ui:
-    needs: changelog
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: 'true'
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update && \
-            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - name: PNPM install
-        run: |
-          pnpm install
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: 1.93.0
-          target: wasm32-wasip2
-          default: true
-      - name: Rust Build
-        run: |
-          cd crates/auth-ui && \
-          make && \
-          cd ../.. && \
-          zip -r -j trailbase_${{  github.ref_name }}_wasm_auth_ui.zip target/wasm32-wasip2/release/auth_ui_component.wasm CHANGELOG.md LICENSE
-
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
-
   release-aarch64-apple-darwin:
     needs: changelog
-    runs-on: macos-14
+    runs-on: macos-15
+    env:
+      RUST_TARGET: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - name: Install Dependencies
-        run: |
-            brew update && brew install protobuf sqlite
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        run: brew update && brew install protobuf pnpm
       - name: PNPM install
-        run: |
-          pnpm install
+        run: pnpm install
+      # CMake v4 is too new: https://github.com/georust/geos/issues/194
+      - name: Downgrade CMake
+        run: pipx install --force cmake==3.31
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.93.0
-          target: aarch64-apple-darwin
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
           default: true
       - name: Rust Build
         run: |
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
-            cargo build --target aarch64-apple-darwin --release --features=static-geos --bin trail && \
-          zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/aarch64-apple-darwin/release/trail CHANGELOG.md LICENSE
-
+          env && \
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+      - name: Package Artifacts
+        run: |
+          zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
@@ -204,32 +160,32 @@ jobs:
 
   release-x86_64-apple-darwin:
     needs: changelog
-    runs-on: macos-14
+    runs-on: macos-15
+    env:
+      RUST_TARGET: x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - name: Install Dependencies
-        run: |
-            brew update && brew install protobuf sqlite
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        run: brew update && brew install protobuf pnpm
       - name: PNPM install
-        run: |
-          pnpm install
+        run: pnpm install
+      # CMake v4 is too new: https://github.com/georust/geos/issues/194
+      - name: Downgrade CMake
+        run: pipx install --force cmake==3.31
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.93.0
-          target: x86_64-apple-darwin
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
           default: true
       - name: Rust Build
         run: |
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
-            cargo build --target x86_64-apple-darwin --release --features=static-geos --bin trail && \
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/x86_64-apple-darwin/release/trail CHANGELOG.md LICENSE
-
+          env && \
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+      - name: Package Artifacts
+        run: |
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
@@ -239,29 +195,70 @@ jobs:
   release-x86_64-windows:
     needs: changelog
     runs-on: windows-latest
+    env:
+      RUST_TARGET: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'true'
+          submodules: 'recursive'
       - uses: MinoruSekine/setup-scoop@v4.0.1
         with:
           buckets: extras
           apps: nodejs pnpm protobuf zip
+      - name: PNPM install
+        shell: bash
+        run: pnpm install
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: 1.93.0
-          target: x86_64-pc-windows-msvc
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
           default: true
       - name: Rust Build
         shell: bash
         run: |
-          pnpm install && \
-          CARGO_PROFILE_RELEASE_LTO=fat CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 PNPM_OFFLINE=TRUE \
-            cargo build --target x86_64-pc-windows-msvc --release --features=static-geos --bin trail && \
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/x86_64-pc-windows-msvc/release/trail.exe CHANGELOG.md LICENSE
-
+          env && \
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=static-geos --bin trail
+      - name: Package Artifacts
+        run: |
+          zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/${{ env.RUST_TARGET }}/release/trail.exe CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
           files: trailbase_${{  github.ref_name }}_x86_64_windows.zip
+
+  release-wasm-auth-ui:
+    needs: changelog
+    runs-on: ubuntu-latest
+    env:
+      RUST_TARGET: wasm32-wasip2
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update && \
+            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - name: PNPM install
+        run: pnpm install
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
+          default: true
+      - name: Rust Build
+        run: |
+          env && cd crates/auth-ui && \
+            cargo build --target ${{ env.RUST_TARGET }} --release
+      - name: Package Artifacts
+        run: |
+          zip -r -j trailbase_${{  github.ref_name }}_wasm_auth_ui.zip target/${{ env.RUST_TARGET }}/release/auth_ui_component.wasm CHANGELOG.md LICENSE
+      - name: Release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          fail_on_unmatched_files: true
+          files: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip

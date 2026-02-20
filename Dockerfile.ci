@@ -1,0 +1,37 @@
+# Valid values are: x86_64-musl, aarch64-musl.
+ARG BASE_IMAGE_TAG
+
+# NOTE: We cannot use alpine here because rusqlite's `libsqlite3-sys` with
+# `preupdate-hook` has a **build-time** dependency on the `bindgen` crate with
+# the `runtime` feature enabled. This in turn requires a dynamically linked
+# libclang.so, alpine's `clang-dev` package won't work :/.
+FROM messense/rust-musl-cross:${BASE_IMAGE_TAG} AS builder-x86_64-unknown-linux-musl
+
+# ARGs need to be after FROM.
+ARG RUST_TARGET
+ARG RUST_TOOLCHAIN_VERSION
+ARG WORKSPACE=/workspace
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libsqlite3-dev
+
+# Install node
+ENV PATH=/usr/local/node/bin:$PATH
+ENV NODE_VERSION=22.13.1
+
+RUN curl -sL https://github.com/nodenv/node-build/archive/master.tar.gz | tar xz -C /tmp/ && \
+    /tmp/node-build-master/bin/node-build "${NODE_VERSION}" /usr/local/node && \
+    rm -rf /tmp/node-build-master
+
+RUN npm install -g pnpm
+RUN pnpm --version
+
+# Needed by `pnpm install`
+ENV CI=TRUE
+
+RUN rustup default ${RUST_TOOLCHAIN_VERSION}
+RUN rustup target add ${RUST_TARGET}
+
+WORKDIR ${WORKSPACE}
+
+# vim: ft=dockerfile

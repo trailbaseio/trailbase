@@ -5,6 +5,11 @@ test:
 build:
 	gradle assemble
 
+# Version number is in `lib/build.gradle.kts`.
+# Tokens are in `~/.gradle/gradle.properties`
+#
+# Maven Central: https://central.sonatype.com/publishing/deployments
+#
 # Setting up publishing requires extracting your private key into a binary
 # key-ring file with:
 #
