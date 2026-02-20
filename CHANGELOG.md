@@ -34,6 +34,8 @@
   - Make TrailBase's SQLite extensions available standalone to reduce lock-in, see `/crates/extensions-so`.
   - Dual-licensed clients under permissive Apache-2.0.
 - More idiomatic HTTP handling in WASM JS/TS: trailbase-wasm@0.5.0.
+- Redo cross-platform builds to deal with new C++ & CMake dependencies introduced by `geos`. MUSL releases are now built with Docker.
+- Remove default features from core crate, to get better build coverage of feature permutations and fix latent no-WASM issue.
 - Update dependencies.
 
 ## v0.23.10

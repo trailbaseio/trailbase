@@ -143,8 +143,8 @@ endpoints, e.g.
 
 ## Building
 
-If you have all the necessary build dependencies (Rust, protobuf, node.js,
-pnpm) installed, you can build TrailBase by running:
+If you have all the necessary build dependencies (Rust, node.js, geos,
+protobuf, pnpm) installed, you can build TrailBase by running:
 
 ```sh
 # Windows only: make sure to enable symlinks (w/o `mklink` permissions for your
