@@ -6,7 +6,7 @@ pub mod error;
 use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 use log::*;
 use parking_lot::Mutex;
-use rand::Rng;
+use rand::RngExt;
 use rusqlite::types::Value;
 use std::path::PathBuf;
 use std::sync::Arc;

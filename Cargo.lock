@@ -512,19 +512,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "auth-ui-component"
-version = "0.0.0"
-dependencies = [
- "askama",
- "itertools 0.14.0",
- "rust-embed",
- "serde",
- "serde_json",
- "trailbase-build",
- "trailbase-wasm 0.5.0",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3307,9 +3294,6 @@ dependencies = [
  "bindgen",
  "cc",
  "pkg-config",
- "prettyplease",
- "quote",
- "syn",
  "vcpkg",
 ]
 
@@ -6593,14 +6577,6 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "validator",
-]
-
-[[package]]
-name = "trailbase-extension-so"
-version = "0.1.0"
-dependencies = [
- "rusqlite",
- "trailbase-extension",
 ]
 
 [[package]]
