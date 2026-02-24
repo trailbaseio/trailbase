@@ -176,7 +176,11 @@ fn generate_totp_code(secret: &[u8], time: u64) -> Result<String, AuthError> {
   mac.update(&counter_bytes);
   let result = mac.finalize().into_bytes();
 
-  let offset = (result.last().unwrap() & 0xf) as usize;
+  let Some(last) = result.last() else {
+    return Err(AuthError::Internal("Empty bytes".into()));
+  };
+
+  let offset = (last & 0xf) as usize;
   let binary = ((result[offset] & 0x7f) as u32) << 24
     | ((result[offset + 1]) as u32) << 16
     | ((result[offset + 2]) as u32) << 8
@@ -190,6 +194,7 @@ fn generate_totp_code(secret: &[u8], time: u64) -> Result<String, AuthError> {
 #[ts(export)]
 pub struct GenerateTOTPResponse {
   pub secret: String,
+  // FIXME: This won't work for auth-ui. We'll need a redirect and SSG QR.
   pub qr_code_uri: String,
 }
 
@@ -355,7 +360,7 @@ fn verify_totp_code_for_user(user: &DbUser, code: &str) -> Result<(), AuthError>
 
   let timestamp = std::time::SystemTime::now()
     .duration_since(std::time::UNIX_EPOCH)
-    .unwrap()
+    .map_err(|err| AuthError::Internal(format!("Failed ot get time: {err}").into()))?
     .as_secs();
 
   let expected_code = generate_totp_code(&secret_bytes, timestamp)?;

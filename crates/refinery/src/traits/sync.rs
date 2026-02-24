@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 use crate::error::WrapMigrationError;
 use crate::traits::{
   ASSERT_MIGRATIONS_TABLE_QUERY, GET_APPLIED_MIGRATIONS_QUERY, GET_LAST_APPLIED_MIGRATION_QUERY,
@@ -24,7 +22,7 @@ pub fn migrate<T: Transaction>(
   migration_table_name: &str,
   grouped: bool,
 ) -> Result<Report, Error> {
-  let mut migration_batch = Vec::new();
+  let mut migration_batch: Vec<(String, String)> = vec![];
   let mut applied_migrations = Vec::new();
 
   for mut migration in migrations.into_iter() {
@@ -42,10 +40,10 @@ pub fn migrate<T: Transaction>(
 
     // If Target is Fake, we only update schema migrations table
     if !matches!(target, Target::Fake | Target::FakeVersion(_)) {
-      applied_migrations.push(migration);
-      migration_batch.push(migration_sql);
+      applied_migrations.push(migration.clone());
+      migration_batch.push((migration.name().to_string(), migration_sql));
     }
-    migration_batch.push(insert_migration);
+    migration_batch.push((migration.name().to_string(), insert_migration));
   }
 
   match (target, grouped) {
@@ -69,13 +67,16 @@ pub fn migrate<T: Transaction>(
 
   if grouped {
     transaction
-      .execute(migration_batch.iter().map(Deref::deref))
+      .execute(migration_batch.iter().map(|(_name, sql)| sql.as_str()))
       .migration_err("error applying migrations", None)?;
   } else {
-    for (i, update) in migration_batch.into_iter().enumerate() {
+    for (i, (_name, update)) in migration_batch.into_iter().enumerate() {
       transaction
         .execute([update.as_str()].into_iter())
-        .migration_err("error applying update", Some(&applied_migrations[0..i / 2]))?;
+        .migration_err(
+          &format!("error applying update {_name}: {}", update),
+          Some(&applied_migrations[0..i / 2]),
+        )?;
     }
   }
 

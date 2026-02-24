@@ -34,7 +34,9 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   // said, `set_abort_divergent` is not a viable way for us to handle collisions (e.g. in tests),
   // since setting it to false, will prevent the migration from failing but divergent migrations
   // are quietly dropped on the floor and not applied. That's not ok.
-  let mut runner = trailbase_refinery::Runner::new(migrations).set_abort_divergent(false);
+  let mut runner = trailbase_refinery::Runner::new(migrations)
+    .set_abort_divergent(false)
+    .set_grouped(false);
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
   return runner;
 }
