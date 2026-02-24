@@ -5,6 +5,7 @@ mod gitlab;
 mod google;
 mod microsoft;
 mod oidc;
+mod twitch;
 
 #[cfg(test)]
 pub(crate) mod test;
@@ -34,7 +35,7 @@ pub(crate) struct OAuthProviderFactory {
 }
 
 pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactory] {
-  const N: usize = if cfg!(test) { 8 } else { 7 };
+  const N: usize = if cfg!(test) { 9 } else { 8 };
   static REGISTRY: LazyLock<[OAuthProviderFactory; N]> = LazyLock::new(|| {
     [
       #[cfg(test)]
@@ -48,6 +49,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
       google::GoogleOAuthProvider::factory(),
       facebook::FacebookOAuthProvider::factory(),
       microsoft::MicrosoftOAuthProvider::factory(),
+      twitch::TwitchOAuthProvider::factory(),
     ]
   });
 

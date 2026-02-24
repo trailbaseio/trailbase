@@ -54,6 +54,7 @@ import facebook from "@shared/assets/oauth2/facebook.svg";
 import gitlab from "@shared/assets/oauth2/gitlab.svg";
 import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
+import twitch from "@shared/assets/oauth2/twitch.svg";
 import { useQueryClient } from "@tanstack/solid-query";
 
 export const assets = new Map<OAuthProviderId, string>([
@@ -64,6 +65,7 @@ export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.GITLAB, gitlab],
   [OAuthProviderId.GOOGLE, google],
   [OAuthProviderId.MICROSOFT, microsoft],
+  [OAuthProviderId.TWITCH, twitch],
 ]);
 
 // Using a proxy struct for oauth providers, since tanstack only deals with arrays and not maps.

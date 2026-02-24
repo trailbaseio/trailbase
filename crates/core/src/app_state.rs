@@ -794,6 +794,7 @@ fn build_auth_config(config: &Config) -> AuthConfig {
           "gitlab" => "gitlab.svg",
           "google" => "google.svg",
           "microsoft" => "microsoft.svg",
+          "twitch" => "twitch.svg",
           _ => "oidc.svg",
         };
       }
