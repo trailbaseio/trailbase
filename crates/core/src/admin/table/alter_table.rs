@@ -97,7 +97,10 @@ pub async fn alter_table_handler(
           let mut tx = TransactionRecorder::new(conn)
             .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-          tx.execute("PRAGMA foreign_keys = OFF", ())?;
+          // Defer any foreign key checks until transaction is being committed.
+          // NOTE: This is *not* enough for other references, e.g. VIEWs and INDEXes.
+          // In which case `PRAGMA legacy_alter_table=ON;` (and OFF afterwards) would be needed.
+          tx.execute("PRAGMA defer_foreign_keys = ON", ())?;
 
           // Create new table
           let sql = ephemeral_table_schema.create_table_statement();
@@ -141,8 +144,6 @@ pub async fn alter_table_handler(
             )?;
             tx.execute("PRAGMA legacy_alter_table = OFF", ())?;
           }
-
-          tx.execute("PRAGMA foreign_keys = ON", ())?;
 
           return tx
             .rollback()
