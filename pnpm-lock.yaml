@@ -142,7 +142,7 @@ importers:
         specifier: ^0.1.11
         version: 0.1.11(solid-js@1.9.11)
       tailwind-merge:
-        specifier: ^3.4.0
+        specifier: ^3.4.1
         version: 3.4.1
       trailbase:
         specifier: file:../client

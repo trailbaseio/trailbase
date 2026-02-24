@@ -47,7 +47,7 @@
     "solid-icons": "^1.2.0",
     "solid-js": "^1.9.11",
     "solid-qr-code": "^0.1.11",
-    "tailwind-merge": "^3.4.0",
+    "tailwind-merge": "^3.4.1",
     "trailbase": "file:../client",
     "uuid": "^13.0.0"
   },
@@ -81,6 +81,5 @@
     "vite-plugin-solid": "^2.11.10",
     "vite-tsconfig-paths": "6.1.1",
     "vitest": "^3.2.4"
-  },
-  "packageManager": "pnpm@9.0.6+sha512.f6d863130973207cb7a336d6b439a242a26ac8068077df530d6a86069419853dc1ffe64029ec594a9c505a3a410d19643c870aba6776330f5cfddcf10a9c1617"
+  }
 }
