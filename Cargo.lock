@@ -6657,7 +6657,6 @@ dependencies = [
  "chrono",
  "criterion",
  "csv",
- "env_logger",
  "futures-util",
  "glob",
  "itertools 0.14.0",
@@ -6671,7 +6670,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "trailbase-extension",
  "uuid",
 ]
 

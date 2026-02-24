@@ -1,16 +1,34 @@
-/// This is a very simple binary demonstrating how TrailBase's SQLite extensions (e.g. uuid_v7)
-/// can be used outside of TrailBase, thus avoiding lock-in.
-use trailbase_extension::connect_sqlite;
+use serde::Deserialize;
 use trailbase_sqlite::Connection;
+
+#[derive(Debug, Deserialize)]
+pub struct Article {
+  pub title: String,
+  pub body: String,
+}
 
 #[tokio::main]
 async fn main() {
-  let conn = Connection::new(|| connect_sqlite(None, None), None).expect("in memory connection");
+  let conn = Connection::open_in_memory().unwrap();
 
-  let uuid: Option<String> = conn
-    .read_query_value("SELECT (uuid_text(uuid_v7()))", ())
+  conn
+    .execute_batch(
+      "CREATE TABLE articles (
+            id     INTEGER PRIMARY KEY,
+            title  TEXT NOT NULL,
+            body   TEXT NOT NULL
+       ) STRICT;
+
+       INSERT INTO articles (title, body) VALUES ('first', 'body');
+      ",
+    )
     .await
     .unwrap();
 
-  println!("Done! {uuid:?}");
+  let article: Option<Article> = conn
+    .read_query_value("SELECT * FROM articles LIMIT 1", ())
+    .await
+    .unwrap();
+
+  println!("Done! {article:?}");
 }
