@@ -28,10 +28,10 @@ mod generated {
 
 use self::generated::wasi::keyvalue;
 
-use anyhow::Result;
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use wasmtime::Result;
 use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
 
 #[doc(hidden)]
