@@ -1,3 +1,9 @@
+## v0.24.1
+
+- Add experimental Twitch OAuth provider.
+- Use `defer_foreign_keys` for schema alterations.
+- Update dependencies.
+
 ## v0.24.0
 
 - TrailBase received first-class support for geometric/geospatial data and querying 🎉
