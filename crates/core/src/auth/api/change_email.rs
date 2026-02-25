@@ -151,6 +151,10 @@ pub async fn change_email_confirm_handler(
   Query(ChangeEmailConfigQuery { redirect_uri }): Query<ChangeEmailConfigQuery>,
   user: Option<User>,
 ) -> Result<Redirect, AuthError> {
+  if state.demo_mode() {
+    return Err(AuthError::BadRequest("Disallowed in demo"));
+  }
+
   validate_redirect(&state, redirect_uri.as_deref())?;
 
   if email_verification_code.len() != VERIFICATION_CODE_LENGTH {

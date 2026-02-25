@@ -116,18 +116,32 @@ pub(crate) fn validate_redirect(
   return Ok(());
 }
 
+pub async fn login_with_password_for_test(
+  state: &AppState,
+  normalized_email: &str,
+  password: &str,
+) -> Result<Option<crate::auth::api::login::NewTokens>, AuthError> {
+  return crate::auth::api::login::login_with_password(
+    state,
+    normalized_email,
+    password,
+    None,
+    state.access_config(|c| c.auth.token_ttls()).0,
+  )
+  .await;
+}
+
+#[cfg(test)]
 pub async fn login_with_password(
   state: &AppState,
   normalized_email: &str,
   password: &str,
 ) -> Result<crate::auth::api::login::NewTokens, AuthError> {
-  return crate::auth::api::login::login_with_password(
-    state,
-    normalized_email,
-    password,
-    state.access_config(|c| c.auth.token_ttls()).0,
-  )
-  .await;
+  return Ok(
+    login_with_password_for_test(state, normalized_email, password)
+      .await?
+      .unwrap(),
+  );
 }
 
 pub(crate) fn new_cookie(

@@ -134,7 +134,6 @@ pub mod openapi {
 
 pub mod api {
   pub use crate::admin::user::{CreateUserRequest, create_user_handler};
-  pub use crate::auth::util::login_with_password;
   pub use crate::auth::{JwtHelper, TokenClaims, cli};
   pub use crate::connection::{Connection, init_main_db};
   pub use crate::email::{Email, EmailError};
@@ -144,6 +143,8 @@ pub mod api {
   pub use crate::server::{InitArgs, init_app_state, serve};
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
+
+  pub use crate::auth::util::login_with_password_for_test;
 }
 
 pub(crate) mod rand {
