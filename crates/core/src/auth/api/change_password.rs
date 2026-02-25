@@ -46,6 +46,10 @@ pub async fn change_password_handler(
   user: User,
   either_request: Either<ChangePasswordRequest>,
 ) -> Result<Redirect, AuthError> {
+  if state.demo_mode() {
+    return Err(AuthError::BadRequest("Disallowed in demo"));
+  }
+
   validate_redirect(&state, redirect_uri.as_deref())?;
 
   let request = match either_request {

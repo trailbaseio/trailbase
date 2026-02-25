@@ -39,6 +39,10 @@ pub async fn register_totp_request_handler(
   State(state): State<AppState>,
   user: User,
 ) -> Result<Response, AuthError> {
+  if state.demo_mode() {
+    return Err(AuthError::BadRequest("Disallowed in demo"));
+  }
+
   let secret = Secret::generate_secret();
 
   // Generate QR code URI for authenticator apps
@@ -219,7 +223,7 @@ pub async fn login_totp_handler(
   return Err(AuthError::BadRequest("Invalid TOTP code"));
 }
 
-fn new_totp(
+pub(crate) fn new_totp(
   secret: &Secret,
   app_name: Option<&str>,
   account: Option<&str>,
