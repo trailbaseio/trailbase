@@ -15,7 +15,7 @@ use crate::app_state::{AppState, TestStateOptions, test_state};
 use crate::auth::api::token::{
   AuthCodeToTokenRequest, TokenResponse as TokenHandlerResponse, auth_code_to_token_handler,
 };
-use crate::auth::login_params::LoginInputParams;
+use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthState;
 use crate::auth::oauth::{callback, list_providers, login};
@@ -159,6 +159,7 @@ async fn test_oauth_login_flow_without_pkce() {
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
       redirect_uri: Some(redirect_uri.to_string()),
+      totp_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
     }),
@@ -263,7 +264,8 @@ async fn test_oauth_login_flow_with_pkce() {
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
       redirect_uri: Some(redirect_uri.to_string()),
-      response_type: Some("code".to_string()),
+      totp_redirect_uri: None,
+      response_type: Some(ResponseType::Code),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     }),
     cookies.clone(),

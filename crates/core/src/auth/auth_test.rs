@@ -28,7 +28,7 @@ use crate::auth::api::reset_password::{
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
 use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
-use crate::auth::login_params::LoginInputParams;
+use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::login_with_password;
 use crate::constants::*;
@@ -186,7 +186,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: password.clone(),
-      response_type: Some("code".to_string()),
+      response_type: Some(ResponseType::Code),
       redirect_uri: Some(redirect_uri.clone()),
       pkce_code_challenge: None,
       ..Default::default()
@@ -200,7 +200,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: password.clone(),
-      response_type: Some("code".to_string()),
+      response_type: Some(ResponseType::Code),
       redirect_uri: None,
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
@@ -214,7 +214,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     &login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
-      response_type: Some("code".to_string()),
+      response_type: Some(ResponseType::Code),
       redirect_uri: Some(redirect_uri.clone()),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
@@ -227,7 +227,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   let login_response = login_helper(Either::Json(LoginRequest {
     email: email.clone(),
     password: password.clone(),
-    response_type: Some("code".to_string()),
+    response_type: Some(ResponseType::Code),
     redirect_uri: Some(redirect_uri.clone()),
     pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     ..Default::default()

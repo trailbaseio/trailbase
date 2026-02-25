@@ -147,6 +147,7 @@ async fn ui_login_handler(
     enable_registration: !config.disable_password_auth,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
+    // TODO: Add TOTP redirect?
   }
   .render();
 
