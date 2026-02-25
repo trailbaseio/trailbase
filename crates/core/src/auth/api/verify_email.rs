@@ -100,7 +100,7 @@ pub async fn request_email_verification_handler(
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct VerifyEmailQuery {
-  pub redirect_uri: Option<String>,
+  redirect_uri: Option<String>,
 }
 
 /// Request a new email to verify email address.
@@ -114,7 +114,7 @@ pub(crate) struct VerifyEmailQuery {
     (status = 401, description = "Unauthorized: invalid reset code."),
   )
 )]
-pub async fn verify_email_handler(
+pub(crate) async fn verify_email_handler(
   State(state): State<AppState>,
   Path(email_verification_code): Path<String>,
   Query(VerifyEmailQuery { redirect_uri }): Query<VerifyEmailQuery>,
