@@ -12,7 +12,9 @@ use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
+use crate::auth::login_params::{
+  LoginInputParams, LoginParams, ResponseType, build_and_validate_input_params,
+};
 use crate::auth::password::check_user_password;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
@@ -34,7 +36,8 @@ pub struct LoginRequest {
   pub password: String,
 
   pub redirect_uri: Option<String>,
-  pub response_type: Option<String>,
+  pub totp_redirect_uri: Option<String>,
+  pub response_type: Option<ResponseType>,
   pub pkce_code_challenge: Option<String>,
 }
 
@@ -68,6 +71,7 @@ pub(crate) async fn login_handler(
       email,
       password,
       redirect_uri,
+      totp_redirect_uri,
       response_type,
       pkce_code_challenge,
     },
@@ -80,17 +84,21 @@ pub(crate) async fn login_handler(
 
   return match build_and_validate_input_params(
     &state,
+    // NOTE: prefer explicit query parameters over hidden form inputs etc.
     query_login_input.merge(LoginInputParams {
       redirect_uri,
+      totp_redirect_uri,
       response_type,
       pkce_code_challenge,
     }),
   )? {
-    LoginParams::Password { redirect_uri } => {
-      immediate_login(&state, &cookies, email, password, redirect_uri, is_json).await
-    }
+    LoginParams::Password {
+      redirect_uri,
+      totp_redirect_uri: _,
+    } => immediate_login(&state, &cookies, email, password, redirect_uri, is_json).await,
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
+      totp_redirect_uri: _,
       pkce_code_challenge,
     } => {
       login_with_authorization_code_flow_and_pkce(

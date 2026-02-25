@@ -25,6 +25,8 @@ pub use user::User;
 
 use crate::constants::AUTH_API_PATH;
 
+// FIXME: With the auth UI now being decoupled from the server, these hard-coded UI paths should go
+// away. Any redirect_uri target should be driven by the UI.
 pub(crate) const LOGIN_UI: &str = "/_/auth/login";
 pub(crate) const REGISTER_USER_UI: &str = "/_/auth/register";
 pub(crate) const PROFILE_UI: &str = "/_/auth/profile";
