@@ -90,27 +90,27 @@ impl OAuthProvider for TwitchOAuthProvider {
 
     let response = reqwest::Client::new()
       .get(Self::USER_API_URL)
+      .header("Client-Id", &self.client_id)
       .bearer_auth(token_response.access_token().secret())
       .send()
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
     // Reference: https://dev.twitch.tv/docs/api/reference#get-users
-    #[allow(unused)]
     #[derive(Default, Deserialize, Debug)]
     struct TwitchUser {
       id: String,
-      login: String,
-      display_name: String,
       // According to reference above, email is implicitly verified.
       email: String,
+      // login: String,
+      // display_name: String,
       profile_image_url: Option<String>,
     }
 
     let user = response
       .json::<TwitchUser>()
       .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
+      .map_err(|err| AuthError::Internal(err.into()))?;
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
