@@ -48,12 +48,12 @@ use api::*;
     change_password::change_password_handler,
     refresh::refresh_handler,
     login::login_handler,
-    otp::request_otp_handler,
-    otp::verify_otp_handler,
-    otp::generate_totp_handler,
-    otp::confirm_totp_handler,
-    otp::disable_totp_handler,
-    otp::verify_totp_handler,
+    // otp::request_otp_handler,
+    // otp::verify_otp_handler,
+    totp::generate_totp_handler,
+    totp::confirm_totp_handler,
+    totp::disable_totp_handler,
+    totp::verify_totp_handler,
     token::auth_code_to_token_handler,
     status::login_status_handler,
     logout::logout_handler,
@@ -137,30 +137,30 @@ pub(super) fn router() -> Router<crate::AppState> {
       post(api::login::login_handler),
     )
     // OTP flow
-    .route(
-      &format!("/{AUTH_API_PATH}/otp/request"),
-      post(api::otp::request_otp_handler),
-    )
-    .route(
-      &format!("/{AUTH_API_PATH}/otp/verify"),
-      post(api::otp::verify_otp_handler),
-    )
+    // .route(
+    //   &format!("/{AUTH_API_PATH}/otp/request"),
+    //   post(api::otp::request_otp_handler),
+    // )
+    // .route(
+    //   &format!("/{AUTH_API_PATH}/otp/verify"),
+    //   post(api::otp::verify_otp_handler),
+    // )
     // TOTP flow
     .route(
       &format!("/{AUTH_API_PATH}/totp/generate"),
-      post(api::otp::generate_totp_handler),
+      post(api::totp::generate_totp_handler),
     )
     .route(
       &format!("/{AUTH_API_PATH}/totp/confirm"),
-      post(api::otp::confirm_totp_handler),
+      post(api::totp::confirm_totp_handler),
     )
     .route(
       &format!("/{AUTH_API_PATH}/totp/disable"),
-      post(api::otp::disable_totp_handler),
+      post(api::totp::disable_totp_handler),
     )
     .route(
       &format!("/{AUTH_API_PATH}/totp/verify"),
-      post(api::otp::verify_totp_handler),
+      post(api::totp::verify_totp_handler),
     )
     // Converts auth code (+pkce code verifier) to auth tokens
     .route(
