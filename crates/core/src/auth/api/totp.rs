@@ -17,23 +17,25 @@ use crate::auth::tokens::mint_new_tokens;
 use crate::auth::util::{user_by_email, validate_and_normalize_email_address};
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
+use crate::extract::Either;
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
-pub struct GenerateTOTPResponse {
+pub struct RegisterTotpResponse {
   // FIXME: This won't work for auth-ui. We'll need a redirect and SSG QR.
   pub totp_url: String,
 }
 
+/// Sign-up user for TOTP second factor.
 #[utoipa::path(
-  post,
-  path = "/totp/generate",
+  get,
+  path = "/totp/register",
   tag = "auth",
   responses(
-    (status = 200, description = "TOTP secret and QR code URI.", body = GenerateTOTPResponse)
+    (status = 200, description = "TOTP secret and QR code URI.", body = RegisterTotpResponse)
   )
 )]
-pub async fn generate_totp_handler(
+pub async fn register_totp_request_handler(
   State(state): State<AppState>,
   user: User,
 ) -> Result<Response, AuthError> {
@@ -52,7 +54,7 @@ pub async fn generate_totp_handler(
   }
 
   return Ok(
-    Json(GenerateTOTPResponse {
+    Json(RegisterTotpResponse {
       totp_url: totp.get_url(),
     })
     .into_response(),
@@ -61,25 +63,32 @@ pub async fn generate_totp_handler(
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
-pub struct ConfirmTOTPRequest {
+pub struct VerifyRegisterTotpRequest {
   pub totp_url: String,
   pub totp: String,
 }
 
-// TODO: This needs to accept HTML form inputs.
+/// Verify the current user's TOTP
 #[utoipa::path(
   post,
   path = "/totp/confirm",
   tag = "auth",
+  request_body = VerifyRegisterTotpRequest,
   responses(
-    (status = 200, description = "TOTP confirmed", body = ConfirmTOTPRequest)
+    (status = 200, description = "TOTP verified")
   )
 )]
-pub async fn confirm_totp_handler(
+pub async fn register_totp_confirm_handler(
   State(state): State<AppState>,
   user: User,
-  Json(request): Json<ConfirmTOTPRequest>,
+  either_request: Either<VerifyRegisterTotpRequest>,
 ) -> Result<Response, AuthError> {
+  let (request, _json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
+  };
+
   let totp =
     TOTP::from_url(&request.totp_url).map_err(|_err| AuthError::BadRequest("invalid totp url"))?;
   if !totp.check_current(&request.totp).unwrap_or(false) {
@@ -101,7 +110,7 @@ pub async fn confirm_totp_handler(
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
-pub struct DisableTOTPRequest {
+pub struct DisableTotpRequest {
   pub totp: String,
 }
 
@@ -109,15 +118,22 @@ pub struct DisableTOTPRequest {
   post,
   path = "/totp/disable",
   tag = "auth",
+  request_body = DisableTotpRequest,
   responses(
-    (status = 200, description = "TOTP disabled successfully.", body = DisableTOTPRequest)
+    (status = 200, description = "TOTP disabled successfully.")
   )
 )]
 pub async fn disable_totp_handler(
   State(state): State<AppState>,
   user: User,
-  Json(request): Json<DisableTOTPRequest>,
+  either_request: Either<DisableTotpRequest>,
 ) -> Result<Response, AuthError> {
+  let (request, _json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
+  };
+
   let db_user = user_by_email(&state, &user.email).await?;
   let Some(secret) = db_user.totp_secret.map(Secret::Encoded) else {
     return Err(AuthError::BadRequest("TOTP not enabled for this user"));
@@ -143,7 +159,7 @@ pub async fn disable_totp_handler(
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
-pub struct VerifyTOTPRequest {
+pub struct LoginTotpRequest {
   pub email: String,
   pub totp: String,
   pub password: Option<String>,
@@ -152,17 +168,23 @@ pub struct VerifyTOTPRequest {
 
 #[utoipa::path(
   post,
-  path = "/totp/verify",
+  path = "/totp/login",
   tag = "auth",
-  request_body = VerifyTOTPRequest,
+  request_body = LoginTotpRequest,
   responses(
     (status = 200, description = "Auth tokens.", body = LoginResponse)
   )
 )]
-pub async fn verify_totp_handler(
+pub async fn login_totp_handler(
   State(state): State<AppState>,
-  Json(request): Json<VerifyTOTPRequest>,
+  either_request: Either<LoginTotpRequest>,
 ) -> Result<Response, AuthError> {
+  let (request, _json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
+  };
+
   let email = validate_and_normalize_email_address(&request.email)?;
   let db_user = user_by_email(&state, &email).await?;
   let Some(secret) = db_user.totp_secret.to_owned().map(Secret::Encoded) else {
