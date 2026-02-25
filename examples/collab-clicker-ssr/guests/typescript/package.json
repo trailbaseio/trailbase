@@ -9,6 +9,7 @@
     "build:wasm": "jco componentize dist/index.mjs -w ../../../../guests/typescript/wit -o dist/component.wasm",
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/component.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
+    "check": "tsc --noEmit --skipLibCheck && eslint",
     "format": "prettier -w src"
   },
   "dependencies": {
@@ -16,9 +17,12 @@
   },
   "devDependencies": {
     "@bytecodealliance/jco": "^1.17.0",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.2.3",
+    "eslint": "^10.0.0",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.56.0",
     "vite": "^7.3.1"
   }
 }

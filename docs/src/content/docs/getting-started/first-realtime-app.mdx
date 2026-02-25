@@ -23,7 +23,7 @@ participants.
 
 <div class="h-[24px]" />
 
-The conclusion of this tutorial is part of the main code repository and can be found
+The conclusion of this tutorial is checked into the repository and can be found
 <a href={githubPath("examples/collab-clicker-ssr")}>here</a>
 or downloaded by running:
 
@@ -75,14 +75,16 @@ The final command, will start an [express.js](https://expressjs.com/)
 development server run by Node.js as defined by `<project-name>/server.js`.
 Opening the
 <a href={`${createViteBase}/template-ssr-solid-ts/server.js#L41-L63`}>`server.js` implementation</a>,
-marginally simplified it looks something like:
+slightly simplified it looks something like:
 
 ```ts
 async function handler(req, res) {
     const render = (await import('./dist/server/entry-server.js')).render;
 
+    // 1. Call render function.
     const rendered = await render(req.url);
 
+    // 2. Build HTML template.
     const html = templateHtml
       .replace(`<!--app-head-->`, generateHydrationScript())
       .replace(`<!--app-html-->`, rendered.html);
@@ -94,25 +96,25 @@ async function handler(req, res) {
 The details are not super important and framework-dependent but in simple terms:
 
 1. The server first loads and executes a render function defined in `dist/server/entry-server.js`.
-2. Then cuts up an
-   <a href={`${createViteBase}/template-ssr-solid-ts/index.html`}>HTML template</a>
-   and string-replaces two parts:
-   * places a serialized "hydration" script into the header,
-   * and puts the output of the render function as the body of the HTML document.
+2. Then slices up the
+   <a href={`${createViteBase}/template-ssr-solid-ts/index.html`}>`<project-name>/server.js`</a>
+   HTML template and inserts two parts:
+   * a serialized "hydration" script in the header,
+   * and the output of the above render function as the document body.
 
-With the actual rendering delegated to the respective JS framework, this is
-really all that's needed for SSR.
-In other words, the above steps is all our TrailBase JS/TS handler will have to
-do.
+With this express.js server setup and the actual rendering delegated to the
+respective JS framework, this is really all there is to SSR.
+In other words, our TrailBase JS/TS setup will simply need to execute the
+render function, then build and serve the HTML template.
 
-Before we start plumbing it might be worth pointing out that everything under
-`dist/` are artifacts vite produces from their respective counterparts under
-`src/`.
-For example, we can take a look at the above render function peeking into
-`src/entry-server.tsx`. Besides the `dist/server` artifacts, there are
-`dist/client` artifacts. These are simply static content (HTML, CSS, JS)
-intended for the user's browser, which we can serve using
-`trail run --public-dir=<client-artifacts-path>` without further intervention.
+Before we start plumbing, it might be worth taking a quick look at the
+directory structure: `src/` is where our application code lives, which will be built
+into the final artifacts under `dist/` by `pnpm build`.
+For example, the render function is defined in `src/entry-server.tsx` and will
+be compiled into `/dist/server/entry-server.js`.
+Besides the `dist/server` artifacts, there are `dist/client` artifacts
+containing the HTML, CSS and JS intended for the user's browser.
+We can serve these simply using `trail run --public-dir=<client-artifacts-path>`.
 
 
 ## Implementing the SSR Handler
@@ -126,6 +128,8 @@ const htmlBody : string = render(/*...*/);
 
 to put the body along some hydration script into our
 `<project-name>/index.html` template.
+
+### Prep
 
 Let first address a minor obstacle. Running `pnpm build` and looking at the
 `dist/server/entry-server.js` artifact we can see that the code is non-hermetic
@@ -145,50 +149,67 @@ export default defineConfig({
 Running `pnpm build` again, we have a standalone renderer without external
 dependencies 👍.
 
-We can now implement the handler in an existing TrailBase setup (or simply run
-`trail run` once before to generate a `traildepot` directory) by creating a
-`traildepot/scripts/main.ts`
+
+### Building a minimal SSR App
+
+We can now start implementing the actual HTTP handler as a WASM component,
+which can be run by TrailBase.
+It's probably easiest to copy an existing WASM component, e.g.
+`/examples/wasm-guest-ts`.[^1]
+
+
+Stripping out all the example code, and reproducing the above behavior we end
+up with something like:
 
 ```ts
-import { addRoute, htmlHandler, fs } from "../trailbase.js";
-import { render } from "./entry-server.js";
+import { defineConfig } from "trailbase-wasm";
+import { HttpHandler, HttpRequest } from "trailbase-wasm/http";
+import { readFileSync } from "trailbase-wasm/fs";
 
-/// Register a root handler.
-addRoute(
-  "GET",
-  "/",
-  htmlHandler(async (req) => {
-    const template = await fs.readTextFile('dist/client/index.html');
+// IMPORTANT: update to point to your `<project-name>/dist`
+// This assumes that the WASM guest lives in:
+//   <project-name>/guests/typescript/
+import { render } from "../../../dist/server/entry-server.js";
 
-    const rendered = render(req.uri, count);
+async function ssr(req: HttpRequest): Promise<string> {
+  // 1. Call render function.
+  const rendered = render(req.url());
 
-    const html = template
-      .replace(`<!--app-head-->`, rendered.head ?? '')
-      .replace(`<!--app-html-->`, rendered.html ?? '');
+  // 2. Build HTML template.
+  const template = new TextDecoder().decode(
+    readFileSync("/dist/client/index.html"));
 
-    return html;
-  }),
-);
+  const html = template
+    .replace(`<!--app-head-->`, rendered.head ?? "")
+    .replace(`<!--app-html-->`, rendered.html ?? "");
+
+  return html;
+}
+
+export default defineConfig({
+  httpHandlers: [HttpHandler.get("/", ssr)],
+});
 ```
 
-Voila! Last things to do, satisfy the implicit dependencies:
+Voila! Last thing, if you copied the WASM guest template to it's own location,
+make sure that the `trailbase-wasm` dependency isn't a workspace dependency but
+references the latest upstream
+[package](https://www.npmjs.com/package/trailbase-wasm).
+Afterwards, you should be able to run `pnpm build` to build a
+`dist/component.wasm`.
 
-1. Satisfy the import by copying `dist/server/entry-server.js` to `traildepot/scripts/`.
-2. Satisfy the template loading by ensuring `dist/client/index.html` is a valid
-   path relative to the `trail` process' current working directory or update the
-   path.
+After placing this component into your `<project-name>/traildepot/wasm` and
+starting with:
 
-Lastly we need to pass the correct path to the client HTML, CSS and JS
-artifacts as `--public-path`:
-
-```bash
+```sh
+cd <project_name>
 trail --data-dir=traildepot run --public-dir=dist/client
 ```
 
-With that, we have our SSR app running with TrailBase 🎉.
+, we have a simple SSR app running with TrailBase 🎉.
 
 
-## Building the Actual App
+## Building the Clicker App
 
 If SSR is what you're after, the tutorial could end here. If you have a few
 more minutes, let's build something a little more fun: a clicker app to
@@ -198,7 +219,7 @@ For this we need a few foundational pieces:
 
 1. Create a table with a single record holding the current global counter value.
 2. A way to forward the counter state from the initial server-side render to
-   the client in a structured manner so we can continue to increment it[^1].
+   the client in a structured manner so we can continue to increment it[^2].
 3. An API to increment the counter.
 4. Add the actual button and a subscription to get notified whenever someone
    else increments the counter.
@@ -282,21 +303,23 @@ hydrate(
 We also need to update the handler code to query the current count and wire it
 into the server-side render function above:
 
-```ts {5-11}
-addRoute(
-  "GET",
-  "/",
-  htmlHandler(async (req) => {
-    const rows = await query(
-      "SELECT value FROM counter WHERE id = 1",
-      [],
-    )
+```ts {4-8, 13}
+import { query } from "trailbase-wasm/db";
 
-    const count = rows.length > 0 ? rows[0][0] as number : 0;
-    const rendered = render(req.uri, count);
+async function ssr(req: HttpRequest): Promise<string> {
+  const rows = await query(
+      "SELECT value FROM counter WHERE id = 1", []);
 
-    // ... template stitching code
-  }));
+  const count = rows.length > 0 ? (rows[0][0] as number) : 0;
+  const rendered = render(req.url(), count);
+
+  const html = readTemplate()
+    .replace(`<!--app-head-->`, rendered.head ?? "")
+    .replace(`<!--app-html-->`, rendered.html ?? "")
+    .replace(`<!--app-data-->`, rendered.data ?? "");
+
+  return html;
+}
 ```
 
 ### 3. Counter Increment API
@@ -308,19 +331,24 @@ Instead we want an atomic database update. For this we create a new TS endpoint
 in `traildepot/scripts/main.ts`:
 
 ```ts
-addRoute(
-  "GET",
-  "/clicked",
-  jsonHandler(async (_req) => {
-    const rows = await query(
-      "UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value",
-      [],
-    )
+import { query } from "trailbase-wasm/db";
 
-    const count = rows.length > 0 ? rows[0][0] as number : -1;
-    return { count };
-  }),
-);
+async function clicked(_req: HttpRequest): Promise<string> {
+  const rows = await query(
+    "UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value",
+    [],
+  );
+
+  const count = rows.length > 0 ? (rows[0][0] as number) : -1;
+  return JSON.stringify({ count });
+}
+
+export default defineConfig({
+  httpHandlers: [
+    HttpHandler.get("/clicked", clicked),
+    HttpHandler.get("/", ssr),
+  ],
+});
 ```
 
 We'll see in the following paragraph how this endpoint can be called from
@@ -429,5 +457,11 @@ Thanks!
 ----
 
 [^1]:
+    For this tutorial we're going to use the TypeScript template, however the checked-in
+    example does also contain an implementation using <a
+    href={githubPath("examples/collab-clicker-ssr/guests/rust")}>Rust</a> embedding
+    QuickJS to execute the render function.
+
+[^2]:
     We could technically parse the value out of the rendered DOM, though we'd
     like to be a bit more robust against future changes to the DOM.

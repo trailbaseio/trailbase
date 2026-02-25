@@ -1,10 +1,10 @@
 import { defineConfig } from "trailbase-wasm";
-import { HttpHandler, Request } from "trailbase-wasm/http";
+import { HttpHandler, HttpRequest } from "trailbase-wasm/http";
 import { query } from "trailbase-wasm/db";
 import { readFileSync } from "trailbase-wasm/fs";
 import { Store } from "trailbase-wasm/kv";
 
-// @ts-ignore
+// @ts-expect-error: just trying to avoid aliases.
 import { render } from "../../../dist/server/entry-server.js";
 
 function readTemplate(): string {
@@ -30,7 +30,7 @@ function readCachedFileSync(path: string): Uint8Array {
   return contents;
 }
 
-async function clicked(_: Request): Promise<string> {
+async function clicked(_req: HttpRequest): Promise<string> {
   const rows = await query(
     "UPDATE counter SET value = value + 1 WHERE id = 1 RETURNING value",
     [],
@@ -40,11 +40,11 @@ async function clicked(_: Request): Promise<string> {
   return JSON.stringify({ count });
 }
 
-async function ssr(_: Request): Promise<string> {
+async function ssr(req: HttpRequest): Promise<string> {
   const rows = await query("SELECT value FROM counter WHERE id = 1", []);
 
   const count = rows.length > 0 ? (rows[0][0] as number) : 0;
-  const rendered = render("ignored", count);
+  const rendered = render(req.url(), count);
 
   const html = readTemplate()
     .replace(`<!--app-head-->`, rendered.head ?? "")
