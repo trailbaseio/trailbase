@@ -4,10 +4,8 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use const_format::formatcp;
-use hmac::{Hmac, Mac};
-use rand::{Rng, rng};
 use serde::{Deserialize, Serialize};
-use sha1::Sha1;
+use totp_rs::{Algorithm, Secret, TOTP};
 use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
@@ -16,48 +14,15 @@ use crate::app_state::AppState;
 use crate::auth::api::login::LoginResponse;
 use crate::auth::password::check_user_password;
 use crate::auth::tokens::mint_new_tokens;
-use crate::auth::user::DbUser;
 use crate::auth::util::{user_by_email, validate_and_normalize_email_address};
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
 
-pub fn generate_totp_secret() -> String {
-  let mut key = [0u8; 20]; // 160 bits
-  rng().fill_bytes(&mut key);
-  base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &key)
-}
-
-fn generate_totp_code(secret: &[u8], time: u64) -> Result<String, AuthError> {
-  let step = 30;
-  let counter = time / step;
-  let counter_bytes = counter.to_be_bytes();
-
-  type HmacSha1 = Hmac<Sha1>;
-  let mut mac = HmacSha1::new_from_slice(secret)
-    .map_err(|_| AuthError::Internal("Invalid HMAC key length".into()))?;
-  mac.update(&counter_bytes);
-  let result = mac.finalize().into_bytes();
-
-  let Some(last) = result.last() else {
-    return Err(AuthError::Internal("Empty bytes".into()));
-  };
-
-  let offset = (last & 0xf) as usize;
-  let binary = ((result[offset] & 0x7f) as u32) << 24
-    | ((result[offset + 1]) as u32) << 16
-    | ((result[offset + 2]) as u32) << 8
-    | ((result[offset + 3]) as u32);
-
-  let otp = binary % 1_000_000;
-  Ok(format!("{:06}", otp))
-}
-
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct GenerateTOTPResponse {
-  pub secret: String,
   // FIXME: This won't work for auth-ui. We'll need a redirect and SSG QR.
-  pub qr_code_uri: String,
+  pub totp_url: String,
 }
 
 #[utoipa::path(
@@ -72,32 +37,36 @@ pub async fn generate_totp_handler(
   State(state): State<AppState>,
   user: User,
 ) -> Result<Response, AuthError> {
-  let secret = generate_totp_secret();
+  let secret = Secret::generate_secret();
 
   // Generate QR code URI for authenticator apps
   let app_name = state
     .access_config(|c| c.server.application_name.clone())
     .unwrap_or_else(|| "TrailBase".to_string());
-  let qr_uri = format!(
-    "otpauth://totp/{}:{}?secret={}&issuer={}",
-    app_name, user.email, secret, app_name
+
+  let totp = new_totp(&secret, Some(&app_name), Some(&user.email))?;
+
+  let json = true;
+  if !json {
+    // let qr_code = totp.get_qr_png().unwrap();
+  }
+
+  return Ok(
+    Json(GenerateTOTPResponse {
+      totp_url: totp.get_url(),
+    })
+    .into_response(),
   );
-
-  let response = GenerateTOTPResponse {
-    secret: secret.clone(),
-    qr_code_uri: qr_uri,
-  };
-
-  Ok(Json(response).into_response())
 }
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct ConfirmTOTPRequest {
-  pub secret: String,
+  pub totp_url: String,
   pub totp: String,
 }
 
+// TODO: This needs to accept HTML form inputs.
 #[utoipa::path(
   post,
   path = "/totp/confirm",
@@ -109,21 +78,25 @@ pub struct ConfirmTOTPRequest {
 pub async fn confirm_totp_handler(
   State(state): State<AppState>,
   user: User,
-  Json(params): Json<ConfirmTOTPRequest>,
+  Json(request): Json<ConfirmTOTPRequest>,
 ) -> Result<Response, AuthError> {
-  let mut db_user = user_by_email(&state, &user.email).await?;
-  db_user.totp_secret = Some(params.secret.clone());
-  verify_totp_code_for_user(&db_user, &params.totp)?;
+  let totp =
+    TOTP::from_url(&request.totp_url).map_err(|_err| AuthError::BadRequest("invalid totp url"))?;
+  if !totp.check_current(&request.totp).unwrap_or(false) {
+    return Err(AuthError::BadRequest("invalid totp code"));
+  }
 
   const UPDATE_QUERY: &str = formatcp!("UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2");
 
   let user_id_bytes = user.uuid.into_bytes().to_vec();
+  let secret = totp.get_secret_base32();
+
   state
     .user_conn()
-    .execute(UPDATE_QUERY, params!(params.secret.clone(), user_id_bytes))
+    .execute(UPDATE_QUERY, params!(secret, user_id_bytes))
     .await?;
 
-  Ok((StatusCode::OK, "TOTP enabled").into_response())
+  return Ok((StatusCode::OK, "TOTP enabled").into_response());
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
@@ -143,20 +116,29 @@ pub struct DisableTOTPRequest {
 pub async fn disable_totp_handler(
   State(state): State<AppState>,
   user: User,
-  Json(params): Json<DisableTOTPRequest>,
+  Json(request): Json<DisableTOTPRequest>,
 ) -> Result<Response, AuthError> {
   let db_user = user_by_email(&state, &user.email).await?;
-  verify_totp_code_for_user(&db_user, &params.totp)?;
+  let Some(secret) = db_user.totp_secret.map(Secret::Encoded) else {
+    return Err(AuthError::BadRequest("TOTP not enabled for this user"));
+  };
 
-  const UPDATE_QUERY: &str = formatcp!("UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2");
+  let totp = new_totp(&secret, None, None)?;
 
-  let user_id_bytes = user.uuid.into_bytes().to_vec();
-  state
-    .user_conn()
-    .execute(UPDATE_QUERY, params!(Option::<String>::None, user_id_bytes))
-    .await?;
+  if totp.check_current(&request.totp).unwrap_or(false) {
+    const UPDATE_QUERY: &str =
+      formatcp!("UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2");
 
-  Ok((StatusCode::OK, "TOTP disabled").into_response())
+    let user_id_bytes = user.uuid.into_bytes().to_vec();
+    state
+      .user_conn()
+      .execute(UPDATE_QUERY, params!(Option::<String>::None, user_id_bytes))
+      .await?;
+
+    return Ok((StatusCode::OK, "TOTP disabled").into_response());
+  }
+
+  return Err(AuthError::BadRequest("Invalid TOTP code"));
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
@@ -179,65 +161,57 @@ pub struct VerifyTOTPRequest {
 )]
 pub async fn verify_totp_handler(
   State(state): State<AppState>,
-  Json(params): Json<VerifyTOTPRequest>,
+  Json(request): Json<VerifyTOTPRequest>,
 ) -> Result<Response, AuthError> {
-  let email = validate_and_normalize_email_address(&params.email)?;
+  let email = validate_and_normalize_email_address(&request.email)?;
   let db_user = user_by_email(&state, &email).await?;
+  let Some(secret) = db_user.totp_secret.to_owned().map(Secret::Encoded) else {
+    return Err(AuthError::BadRequest("TOTP not enabled for this user"));
+  };
 
-  if let Some(password) = params.password {
+  if let Some(password) = request.password {
     check_user_password(&db_user, &password, state.demo_mode())?;
-  } else if let Some(otp) = params.otp {
+  } else if let Some(otp) = request.otp {
     super::otp::verify_otp_code(&db_user, &otp)?;
   } else {
     return Err(AuthError::BadRequest("missing params"));
   }
 
-  verify_totp_code_for_user(&db_user, &params.totp)?;
+  let totp = new_totp(&secret, None, None)?;
 
-  let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+  if totp.check_current(&request.totp).unwrap_or(false) {
+    let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+    let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
 
-  let response = LoginResponse {
-    auth_token: state
-      .jwt()
-      .encode(&tokens.auth_token_claims)
-      .map_err(|err| AuthError::Internal(err.into()))?,
-    refresh_token: tokens.refresh_token,
-    csrf_token: tokens.auth_token_claims.csrf_token,
-  };
+    let response = LoginResponse {
+      auth_token: state
+        .jwt()
+        .encode(&tokens.auth_token_claims)
+        .map_err(|err| AuthError::Internal(err.into()))?,
+      refresh_token: tokens.refresh_token,
+      csrf_token: tokens.auth_token_claims.csrf_token,
+    };
 
-  Ok(Json(response).into_response())
+    return Ok(Json(response).into_response());
+  }
+  return Err(AuthError::BadRequest("Invalid TOTP code"));
 }
 
-fn verify_totp_code_for_user(user: &DbUser, code: &str) -> Result<(), AuthError> {
-  let Some(totp_secret) = &user.totp_secret else {
-    return Err(AuthError::BadRequest("TOTP not enabled for this user"));
-  };
-
-  let secret_bytes = match base32::decode(base32::Alphabet::Rfc4648 { padding: false }, totp_secret)
-  {
-    Some(bytes) => bytes,
-    None => return Err(AuthError::Internal("Invalid TOTP secret format".into())),
-  };
-
-  let timestamp = std::time::SystemTime::now()
-    .duration_since(std::time::UNIX_EPOCH)
-    .map_err(|err| AuthError::Internal(format!("Failed ot get time: {err}").into()))?
-    .as_secs();
-
-  let expected_code = generate_totp_code(&secret_bytes, timestamp)?;
-
-  if expected_code == code {
-    Ok(())
-  } else {
-    // Check previous and next time windows for clock skew tolerance
-    let prev_code = generate_totp_code(&secret_bytes, timestamp.saturating_sub(30))?;
-    let next_code = generate_totp_code(&secret_bytes, timestamp.saturating_add(30))?;
-
-    if code == prev_code || code == next_code {
-      Ok(())
-    } else {
-      return Err(AuthError::BadRequest("Invalid TOTP code"));
-    }
-  }
+fn new_totp(
+  secret: &Secret,
+  app_name: Option<&str>,
+  account: Option<&str>,
+) -> Result<TOTP, AuthError> {
+  return TOTP::new(
+    Algorithm::SHA1,
+    6,
+    1,
+    30,
+    secret
+      .to_bytes()
+      .map_err(|err| AuthError::Internal(err.into()))?,
+    app_name.map(|name| name.to_string()),
+    account.unwrap_or_default().to_string(),
+  )
+  .map_err(|err| AuthError::Internal(err.into()));
 }
