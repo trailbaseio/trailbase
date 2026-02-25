@@ -52,7 +52,6 @@ fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 geos = { version = "11.0.0", default-features = false, features = ["geo", "json"], optional = true }
-hmac = "0.12.1"
 http-body-util = "0.1.3"
 hyper = "1.6.0"
 hyper-util = "0.1.7"
@@ -86,13 +85,13 @@ serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 serde_qs = { workspace = true }
 serde_urlencoded = "0.7.1"
-sha1 = "0.10.6"
 sha2 = "0.10.8"
 sqlformat = "0.5.0"
 sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
 tokio = { workspace = true }
 tokio-rustls = { version = "0.26.1", default-features = false }
+totp-rs = { version = "5.7.0", features = ["gen_secret", "qr", "otpauth"] }
 tower = "0.5.0"
 tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
