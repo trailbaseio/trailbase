@@ -24,6 +24,7 @@ pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(2);
 #[cfg(not(debug_assertions))]
 pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(60);
 
+pub const DEFAULT_MFA_TOKEN_TTL: Duration = Duration::minutes(2);
 pub const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
 
 pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;

@@ -2,7 +2,6 @@ use axum::{
   extract::{Json, Query, State},
   response::{IntoResponse, Redirect, Response},
 };
-use chrono::Duration;
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
@@ -10,37 +9,36 @@ use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
-use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::login_params::{
   LoginInputParams, LoginParams, ResponseType, build_and_validate_input_params,
 };
 use crate::auth::password::check_user_password;
-use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
 };
 use crate::auth::{LOGIN_UI, PROFILE_UI};
 use crate::constants::{
-  COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
+  COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, DEFAULT_MFA_TOKEN_TTL, USER_TABLE,
+  VERIFICATION_CODE_LENGTH,
 };
 use crate::extract::Either;
 use crate::rand::generate_random_string;
 use crate::util::urlencode;
+use crate::{app_state::AppState, auth::jwt::PendingAuthTokenClaims};
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct LoginRequest {
   pub email: String,
   pub password: String,
-  pub totp: Option<String>,
 
+  // Mirror of LoginInputParams.
+  pub redirect_uri: Option<String>,
+  pub mfa_redirect_uri: Option<String>,
   pub response_type: Option<ResponseType>,
   pub pkce_code_challenge: Option<String>,
-
-  pub redirect_uri: Option<String>,
-  pub totp_redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
@@ -72,11 +70,10 @@ pub(crate) async fn login_handler(
     LoginRequest {
       email,
       password,
-      totp,
       response_type,
       pkce_code_challenge,
       redirect_uri,
-      totp_redirect_uri,
+      mfa_redirect_uri,
     },
     is_json,
   ) = match either_request {
@@ -85,47 +82,72 @@ pub(crate) async fn login_handler(
     Either::Multipart(req, _) => (req, false),
   };
 
-  return match build_and_validate_input_params(
+  // Validate input params.
+  let params = build_and_validate_input_params(
     &state,
-    // NOTE: prefer explicit query parameters over hidden form inputs etc.
+    // NOTE: Merge form and query input but prioritize explicit query parameters over hidden form
+    // inputs etc.
     query_login_input.merge(LoginInputParams {
-      redirect_uri,
-      totp_redirect_uri,
+      redirect_uri: redirect_uri.clone(),
+      mfa_redirect_uri: mfa_redirect_uri.clone(),
       response_type,
       pkce_code_challenge,
     }),
-  )? {
+  )?;
+
+  // Check credentials.
+  let normalized_email = validate_and_normalize_email_address(&email)?;
+  let db_user: DbUser = user_by_email(&state, &normalized_email)
+    .await
+    .map_err(|_| {
+      // Don't leak if user wasn't found or password was wrong.
+      return AuthError::Unauthorized;
+    })?;
+
+  // Check password and rate limits attempts.
+  if let Err(err) = check_user_password(&db_user, &password, state.demo_mode()) {
+    if is_json {
+      return Err(err);
+    }
+    return Ok(auth_error_to_response(
+      err,
+      &cookies,
+      redirect_uri.as_deref(),
+    ));
+  }
+
+  // Does the user require multi-factor auth (MFA)?
+  if db_user.totp_secret.is_some() {
+    let Some(mfa_redirect) = mfa_redirect_uri else {
+      return Err(AuthError::BadRequest("TOTP redirect required"));
+    };
+
+    let token = state
+      .jwt()
+      .encode(&PendingAuthTokenClaims::new(
+        db_user.uuid(),
+        DEFAULT_MFA_TOKEN_TTL,
+      ))
+      .map_err(|err| AuthError::Internal(err.into()))?;
+
+    return Ok(Redirect::to(&format!("{mfa_redirect}?mfa_token={token}")).into_response());
+  }
+
+  // Otherwise build auth token or authorization code responses.
+  return match params {
     // Auth-token flow.
-    LoginParams::Password {
-      redirect_uri,
-      totp_redirect_uri,
-    } => {
-      login_using_auth_token_flow(
-        &state,
-        &cookies,
-        email,
-        password,
-        totp,
-        redirect_uri,
-        totp_redirect_uri,
-        is_json,
-      )
-      .await
+    LoginParams::Password { redirect_uri } => {
+      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, is_json).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
-      totp_redirect_uri,
       pkce_code_challenge,
     } => {
-      login_using_authorization_code_flow_and_pkce(
+      build_authorization_code_flow_and_pkce_response(
         &state,
-        &cookies,
-        email,
-        password,
-        totp,
+        &db_user,
         redirect_uri,
-        totp_redirect_uri,
         pkce_code_challenge,
       )
       .await
@@ -143,31 +165,31 @@ pub(crate) async fn login_handler(
 /// cookie-based approach only works for web-apps hosted with the same origin like the admin UI.
 /// Otherwise, the cookies will be inaccessible and the "authentication code" flow below is needed
 /// to get the tokens to your app.
-async fn login_using_auth_token_flow(
+async fn build_auth_token_flow_response(
   state: &AppState,
+  db_user: &DbUser,
   cookies: &Cookies,
-  email: String,
-  password: String,
-  totp: Option<String>,
   redirect: Option<String>,
-  totp_redirect: Option<String>,
   is_json: bool,
 ) -> Result<Response, AuthError> {
-  // Check credentials.
-  let normalized_email = validate_and_normalize_email_address(&email)?;
-
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  return match login_with_password(
-    state,
-    &normalized_email,
-    &password,
-    totp.as_deref(),
-    auth_token_ttl,
-  )
-  .await
-  {
-    Ok(Some(response)) if is_json => Ok(Json(response.into_login_response()).into_response()),
-    Ok(Some(response)) => {
+  let build_new_tokens = async || {
+    let tokens =
+      crate::auth::tokens::mint_new_tokens(state.user_conn(), db_user, auth_token_ttl).await?;
+
+    return Ok(LoginResponse {
+      auth_token: state
+        .jwt()
+        .encode(&tokens.auth_token_claims)
+        .map_err(|err| AuthError::Internal(err.into()))?,
+      refresh_token: tokens.refresh_token,
+      csrf_token: tokens.auth_token_claims.csrf_token,
+    });
+  };
+
+  return match build_new_tokens().await {
+    Ok(response) if is_json => Ok(Json(response).into_response()),
+    Ok(response) => {
       cookies.add(new_cookie(
         COOKIE_AUTH_TOKEN,
         response.auth_token,
@@ -190,14 +212,8 @@ async fn login_using_auth_token_flow(
         .into_response(),
       )
     }
-    Ok(None) => {
-      if let Some(totp_redirect) = totp_redirect {
-        return Ok(Redirect::to(&totp_redirect).into_response());
-      };
-      return Err(AuthError::Internal("Missing TOTP redirect".into()));
-    }
     Err(err) if is_json => Err(err),
-    Err(err) => Ok(auth_error_to_response(err, cookies, redirect)),
+    Err(err) => Ok(auth_error_to_response(err, cookies, redirect.as_deref())),
   };
 }
 
@@ -224,45 +240,12 @@ async fn login_using_auth_token_flow(
 ///
 /// An example using the two-step "authentication code flow" with PKCE can be found in
 /// `/examples/blog/flutter`.
-async fn login_using_authorization_code_flow_and_pkce(
+async fn build_authorization_code_flow_and_pkce_response(
   state: &AppState,
-  cookies: &Cookies,
-  email: String,
-  password: String,
-  totp: Option<String>,
+  db_user: &DbUser,
   redirect: String,
-  totp_redirect: Option<String>,
   pkce_code_challenge: String,
 ) -> Result<Response, AuthError> {
-  // Check credentials.
-  let normalized_email = validate_and_normalize_email_address(&email)?;
-
-  let db_user: DbUser = user_by_email(state, &normalized_email).await.map_err(|_| {
-    // Don't leak if user wasn't found or password was wrong.
-    return AuthError::Unauthorized;
-  })?;
-
-  // Validates password and rate limits attempts.
-  if let Err(err) = check_user_password(&db_user, &password, state.demo_mode()) {
-    return Ok(auth_error_to_response(err, cookies, Some(redirect)));
-  }
-
-  if let Some(totp_secret) = &db_user.totp_secret {
-    let Some(user_totp) = &totp else {
-      if let Some(totp_redirect) = totp_redirect {
-        return Ok(Redirect::to(&totp_redirect).into_response());
-      }
-      return Err(AuthError::BadRequest("TOTP required"));
-    };
-
-    let totp =
-      crate::auth::api::totp::new_totp(&totp_rs::Secret::Encoded(totp_secret.clone()), None, None)?;
-
-    if !totp.check_current(user_totp).unwrap_or(false) {
-      return Err(AuthError::BadRequest("Invalid TOTP"));
-    }
-  }
-
   // We generate a random code for the auth_code flow.
   let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
 
@@ -286,7 +269,7 @@ async fn login_using_authorization_code_flow_and_pkce(
       named_params! {
         ":authorization_code": authorization_code.clone(),
         ":pkce_code_challenge": pkce_code_challenge,
-        ":email": normalized_email,
+        ":email": db_user.email.clone(),
       },
     )
     .await?;
@@ -300,7 +283,7 @@ async fn login_using_authorization_code_flow_and_pkce(
   };
 }
 
-fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<String>) -> Response {
+fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<&str>) -> Response {
   let err_response: Response = err.into_response();
   let status = err_response.status();
   if !status.is_client_error() {
@@ -311,7 +294,7 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<St
   remove_cookie(cookies, COOKIE_AUTH_TOKEN);
   remove_cookie(cookies, COOKIE_REFRESH_TOKEN);
 
-  // QUESTION: Should we return a different redirect type (e.g. temporary or permenant) in the
+  // QUESTION: Should we return a different redirect type (e.g. temporary or permanent) in the
   // error case?
   let msg = urlencode(&format!("Login Failed: {status}"));
   return if let Some(redirect) = redirect {
@@ -319,66 +302,4 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<St
   } else {
     Redirect::to(&format!("{LOGIN_UI}?alert={msg}")).into_response()
   };
-}
-
-#[derive(Debug)]
-pub struct NewTokens {
-  pub id: uuid::Uuid,
-  pub auth_token: String,
-  pub refresh_token: String,
-  pub csrf_token: String,
-}
-
-impl NewTokens {
-  fn into_login_response(self) -> LoginResponse {
-    return LoginResponse {
-      auth_token: self.auth_token,
-      refresh_token: self.refresh_token,
-      csrf_token: self.csrf_token,
-    };
-  }
-}
-
-/// Given valid credentials, logs in the user by minting new tokens and therefore also creating a
-/// new sessions.
-pub(crate) async fn login_with_password(
-  state: &AppState,
-  normalized_email: &str,
-  password: &str,
-  totp: Option<&str>,
-  auth_token_ttl: Duration,
-) -> Result<Option<NewTokens>, AuthError> {
-  let db_user: DbUser = user_by_email(state, normalized_email).await.map_err(|_| {
-    // Don't leak if user wasn't found or password was wrong.
-    return AuthError::Unauthorized;
-  })?;
-  let user_id = db_user.uuid();
-
-  // Validates password and rate limits attempts.
-  check_user_password(&db_user, password, state.demo_mode())?;
-
-  if let Some(totp_secret) = &db_user.totp_secret {
-    let Some(user_totp) = totp else {
-      return Err(AuthError::BadRequest("TOTP required"));
-    };
-
-    let totp =
-      crate::auth::api::totp::new_totp(&totp_rs::Secret::Encoded(totp_secret.clone()), None, None)?;
-
-    if !totp.check_current(user_totp).unwrap_or(false) {
-      return Err(AuthError::BadRequest("Invalid TOTP"));
-    }
-  }
-
-  let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
-
-  return Ok(Some(NewTokens {
-    id: user_id,
-    auth_token: state
-      .jwt()
-      .encode(&tokens.auth_token_claims)
-      .map_err(|err| AuthError::Internal(err.into()))?,
-    refresh_token: tokens.refresh_token,
-    csrf_token: tokens.auth_token_claims.csrf_token,
-  }));
 }
