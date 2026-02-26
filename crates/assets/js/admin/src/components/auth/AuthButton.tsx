@@ -18,16 +18,19 @@ import { TextField, TextFieldInput, TextFieldLabel } from "../ui/text-field";
 
 export function AuthButton(props: { iconSize: number }) {
   const [open, setOpen] = createSignal(false);
-  const [totpSecret, setTotpSecret] = createSignal<string | null>(null);
-  const [totpUri, setTotpUri] = createSignal<string | null>(null);
   const user = useStore($user);
+
   let totpInput: HTMLInputElement | undefined;
+  const [totpUri, setTotpUri] = createSignal<string | null>(null);
+  const secret = () => {
+    const uri = totpUri();
+    return uri !== null ? URL.parse(uri)?.searchParams.get("secret") : null;
+  };
 
   const enableTotp = async () => {
     try {
-      const res = await client.generateTOTP();
-      setTotpSecret(res.secret);
-      setTotpUri(res.qr_code_uri);
+      const res = await client.registerTOTP();
+      setTotpUri(res.totp_url);
     } catch (err) {
       showToast({
         title: "Error generating OTP",
@@ -41,7 +44,7 @@ export function AuthButton(props: { iconSize: number }) {
     try {
       const totp = prompt("Enter current TOTP code to disable 2FA");
       if (!totp) return;
-      await client.disableTOTP(totp);
+      await client.unregisterTOTP(totp);
       showToast({
         title: "TOTP disabled",
         description: "Two-factor authentication has been disabled.",
@@ -59,15 +62,16 @@ export function AuthButton(props: { iconSize: number }) {
   const confirmTotp = async () => {
     try {
       const totp = totpInput?.value;
-      if (!totpSecret() || !totp) return;
+      if (!totp) {
+        return;
+      }
 
-      await client.confirmTOTP(totpSecret()!, totp);
+      await client.confirmTOTP(totpUri()!, totp);
       showToast({
         title: "TOTP confirmed",
         description: "Two-factor authentication has been enabled.",
         variant: "success",
       });
-      setTotpSecret(null);
       setTotpUri(null);
     } catch (err) {
       showToast({
@@ -93,21 +97,25 @@ export function AuthButton(props: { iconSize: number }) {
           <Profile user={user()!} />
         </Show>
 
-        <Show when={totpSecret()}>
+        <Show when={totpUri() !== null}>
           <div class="bg-muted/50 flex flex-col items-center gap-4 rounded-md border p-4">
             <h3 class="text-lg font-semibold">Scan QR Code</h3>
+
             <div class="rounded bg-white p-2">
               <QRCodeSVG value={totpUri()!} />
             </div>
+
             <div class="flex flex-col items-center gap-1 text-sm">
               <span class="text-muted-foreground">
                 Or enter secret manually:
               </span>
+
               <div class="bg-background flex items-center gap-2 rounded border px-3 py-1 font-mono">
-                {totpSecret()}
+                {secret()}
+
                 <button
                   class="hover:text-primary transition-colors"
-                  onClick={() => navigator.clipboard.writeText(totpSecret()!)}
+                  onClick={() => navigator.clipboard.writeText(totpUri()!)}
                   title="Copy secret"
                 >
                   <Copy class="h-4 w-4" />
@@ -119,21 +127,24 @@ export function AuthButton(props: { iconSize: number }) {
               Authy, etc.) to enable 2FA.
             </p>
             <TextField class="flex items-center gap-2">
-              <TextFieldLabel>TOTP</TextFieldLabel>
+              <TextFieldLabel>Code</TextFieldLabel>
+
               <TextFieldInput
+                class="bg-white"
                 type="text"
-                autocomplete="one-time-code"
+                autocomplete="new-password"
                 ref={totpInput}
               />
             </TextField>
+
             <Button type="button" onClick={confirmTotp}>
-              Confirm TOTP
+              Confirm
             </Button>
           </div>
         </Show>
 
         <DialogFooter>
-          <Show when={!totpSecret()}>
+          <Show when={totpUri() === null}>
             <Button type="button" onClick={enableTotp}>
               Generate TOTP
             </Button>

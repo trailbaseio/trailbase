@@ -1,8 +1,9 @@
 use axum::{
-  extract::{Json, State},
+  extract::{Json, Query, State},
   http::StatusCode,
   response::{IntoResponse, Response},
 };
+use base64::prelude::*;
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use totp_rs::{Algorithm, Secret, TOTP};
@@ -20,10 +21,16 @@ use crate::constants::USER_TABLE;
 use crate::extract::Either;
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
+pub struct RegisterTotpQuery {
+  pub png: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct RegisterTotpResponse {
   // FIXME: This won't work for auth-ui. We'll need a redirect and SSG QR.
   pub totp_url: String,
+  pub png: Option<String>,
 }
 
 /// Sign-up user for TOTP second factor.
@@ -37,6 +44,7 @@ pub struct RegisterTotpResponse {
 )]
 pub async fn register_totp_request_handler(
   State(state): State<AppState>,
+  Query(query): Query<RegisterTotpQuery>,
   user: User,
 ) -> Result<Response, AuthError> {
   if state.demo_mode() {
@@ -52,14 +60,20 @@ pub async fn register_totp_request_handler(
 
   let totp = new_totp(&secret, Some(&app_name), Some(&user.email))?;
 
-  let json = true;
-  if !json {
-    // let qr_code = totp.get_qr_png().unwrap();
-  }
-
   return Ok(
     Json(RegisterTotpResponse {
       totp_url: totp.get_url(),
+      png: if query.png.unwrap_or(false) {
+        Some(
+          BASE64_STANDARD.encode(
+            totp
+              .get_qr_png()
+              .map_err(|err| AuthError::Internal(err.into()))?,
+          ),
+        )
+      } else {
+        None
+      },
     })
     .into_response(),
   );
@@ -67,7 +81,7 @@ pub async fn register_totp_request_handler(
 
 #[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
-pub struct VerifyRegisterTotpRequest {
+pub struct ConfirmRegisterTotpRequest {
   pub totp_url: String,
   pub totp: String,
 }
@@ -77,7 +91,7 @@ pub struct VerifyRegisterTotpRequest {
   post,
   path = "/totp/confirm",
   tag = "auth",
-  request_body = VerifyRegisterTotpRequest,
+  request_body = ConfirmRegisterTotpRequest,
   responses(
     (status = 200, description = "TOTP verified")
   )
@@ -85,7 +99,7 @@ pub struct VerifyRegisterTotpRequest {
 pub async fn register_totp_confirm_handler(
   State(state): State<AppState>,
   user: User,
-  either_request: Either<VerifyRegisterTotpRequest>,
+  either_request: Either<ConfirmRegisterTotpRequest>,
 ) -> Result<Response, AuthError> {
   let (request, _json) = match either_request {
     Either::Json(req) => (req, true),
@@ -120,14 +134,14 @@ pub struct DisableTotpRequest {
 
 #[utoipa::path(
   post,
-  path = "/totp/disable",
+  path = "/totp/unregister",
   tag = "auth",
   request_body = DisableTotpRequest,
   responses(
     (status = 200, description = "TOTP disabled successfully.")
   )
 )]
-pub async fn disable_totp_handler(
+pub async fn unregister_totp_handler(
   State(state): State<AppState>,
   user: User,
   either_request: Either<DisableTotpRequest>,
