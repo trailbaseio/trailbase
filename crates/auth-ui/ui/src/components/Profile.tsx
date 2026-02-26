@@ -209,7 +209,7 @@ function ProfileTable(props: { client: Client; user: User }) {
           Change Password
         </a>
 
-        <TotpButton {...props} />
+        <TotpToggleButton {...props} />
       </div>
 
       {import.meta.env.DEV && (
@@ -228,73 +228,117 @@ function ProfileTable(props: { client: Client; user: User }) {
   );
 }
 
-function TotpButton(props: { client: Client; user: User }) {
+function TotpToggleButton(props: { client: Client; user: User }) {
+  return (
+    <Switch>
+      <Match when={props.user.mfa}>
+        <TotpUnregisterButton {...props} />
+      </Match>
+
+      <Match when={true}>
+        <TotpRegisterButton {...props} />
+      </Match>
+    </Switch>
+  );
+}
+
+function TotpUnregisterButton(props: { client: Client }) {
+  let input: HTMLInputElement | undefined;
+  const [open, setOpen] = createSignal(false);
+
+  return (
+    <Dialog open={open()} onOpenChange={setOpen}>
+      <Button onClick={() => setOpen(true)}>Unregister TOTP</Button>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Unregister TOTP</DialogTitle>
+        </DialogHeader>
+
+        <form
+          class="flex flex-col gap-2"
+          method="dialog"
+          onSubmit={async (_ev: SubmitEvent) => {
+            await props.client.unregisterTOTP(input?.value ?? "");
+            setOpen(false);
+          }}
+        >
+          <TextField class="flex w-full items-center">
+            <TextFieldLabel>Code</TextFieldLabel>
+
+            <TextFieldInput ref={input} required={true} pattern="[0-9]+" />
+          </TextField>
+
+          <div class="flex justify-center">
+            <Button type="submit">Submit</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TotpRegisterButton(props: { client: Client; user: User }) {
   let input: HTMLInputElement | undefined;
   const [totpPng, setTotpPng] = createSignal<Totp | null>(null);
 
   return (
-    <Switch>
-      <Match when={props.user.mfa}>
-        <Button>Disable TOTP</Button>
-      </Match>
+    <Dialog
+      open={totpPng() !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setTotpPng(null);
+        }
+      }}
+    >
+      <Button
+        onClick={async () => {
+          const resp = await props.client.registerTOTP({ png: true });
 
-      <Match when={true}>
-        <Dialog
-          open={totpPng() !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setTotpPng(null);
+          setTotpPng({
+            url: resp.totp_url,
+            png: resp.png ?? "",
+          });
+        }}
+      >
+        Register TOTP
+      </Button>
+
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>TOTP Registration</DialogTitle>
+        </DialogHeader>
+
+        <div class="flex justify-center">
+          <img src={`data:image/png;base64,${totpPng()?.png ?? ""}`} />
+        </div>
+
+        <form
+          class="flex flex-col gap-2"
+          method="dialog"
+          onSubmit={async (_ev: SubmitEvent) => {
+            const totp = totpPng();
+            if (totp === null) {
+              return;
             }
+
+            await props.client.confirmTOTP(totp.url, input?.value ?? "");
+
+            setTotpPng(null);
           }}
         >
-          <Button
-            onClick={async () => {
-              const resp = await props.client.registerTOTP({ png: true });
+          <TextField class="flex w-full items-center">
+            <TextFieldLabel>Code</TextFieldLabel>
 
-              setTotpPng({
-                url: resp.totp_url,
-                png: resp.png ?? "",
-              });
-            }}
-          >
-            Register TOTP
-          </Button>
+            <TextFieldInput ref={input} required={true} pattern="[0-9]+" />
+          </TextField>
 
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>TOTP Registration</DialogTitle>
-            </DialogHeader>
-
-            <div class="flex justify-center">
-              <img src={`data:image/png;base64,${totpPng()?.png ?? ""}`} />
-            </div>
-
-            <form
-              class="flex flex-col gap-2"
-              method="dialog"
-              onSubmit={async (ev: SubmitEvent) => {
-                const totp = totpPng();
-                if (totp === null) {
-                  return;
-                }
-
-                await props.client.confirmTOTP(totp.url, input?.value ?? "");
-              }}
-            >
-              <TextField class="flex w-full items-center">
-                <TextFieldLabel>Code</TextFieldLabel>
-
-                <TextFieldInput ref={input} pattern="[0-9]+" />
-              </TextField>
-
-              <div class="flex justify-center">
-                <Button type="submit">Submit</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </Match>
-    </Switch>
+          <div class="flex justify-center">
+            <Button type="submit">Submit</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

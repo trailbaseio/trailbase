@@ -46,6 +46,13 @@ pub struct LoginTemplate<'a> {
 }
 
 #[derive(Template)]
+#[template(path = "login_mfa/index.html")]
+pub struct LoginMfaTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
+}
+
+#[derive(Template)]
 #[template(path = "register/index.html")]
 pub struct RegisterTemplate<'a> {
   pub state: String,
@@ -143,6 +150,26 @@ mod tests {
     assert!(oauth_template.contains(&state), "{template}"); // Not escaped.
     assert!(oauth_template.contains(&redirect_uri), "{template}"); // Not escaped.
     assert!(oauth_template.contains("foo=bar"), "{template}"); // Not escaped.
+  }
+
+  #[test]
+  fn test_login_mfa_template_escaping() {
+    let state = hidden_input("TEST", Some("FOO"));
+    let alert = "<><>";
+    let redirect_uri = "http://localhost:42";
+
+    let template = LoginMfaTemplate {
+      state: state.clone(),
+      alert,
+    }
+    .render()
+    .unwrap();
+
+    assert!(template.contains(&state), "{template}"); // Not escaped.
+    assert!(!template.contains(&redirect_uri), "{template}"); // Not escaped.
+    // Missing because no oauth provider given.
+    assert!(!template.contains("foo=bar"), "{template}"); // Not escaped.
+    assert!(!template.contains(alert), "{template}"); // Is escaped.
   }
 
   #[test]
