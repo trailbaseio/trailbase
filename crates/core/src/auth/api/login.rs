@@ -9,16 +9,13 @@ use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
-use crate::auth::AuthError;
-use crate::auth::login_params::{
-  LoginInputParams, LoginParams, ResponseType, build_and_validate_input_params,
-};
-use crate::auth::password::check_user_password;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
 };
+use crate::auth::{AuthError, util::user_by_id};
 use crate::auth::{LOGIN_UI, PROFILE_UI};
+use crate::auth::{password::check_user_password, totp::new_totp};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, DEFAULT_MFA_TOKEN_TTL, USER_TABLE,
   VERIFICATION_CODE_LENGTH,
@@ -27,6 +24,12 @@ use crate::extract::Either;
 use crate::rand::generate_random_string;
 use crate::util::urlencode;
 use crate::{app_state::AppState, auth::jwt::PendingAuthTokenClaims};
+use crate::{
+  auth::login_params::{
+    LoginInputParams, LoginParams, ResponseType, build_and_validate_input_params,
+  },
+  util,
+};
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -279,6 +282,116 @@ async fn build_authorization_code_flow_and_pkce_response(
     1 => Ok(Redirect::to(&format!("{redirect}?code={authorization_code}")).into_response()),
     _ => {
       panic!("code challenge update affected multiple users: {rows_affected}");
+    }
+  };
+}
+
+#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct LoginMfaRequest {
+  pub mfa_token: String,
+  pub totp: Option<String>,
+
+  // Mirror of LoginInputParams.
+  pub redirect_uri: Option<String>,
+  pub mfa_redirect_uri: Option<String>,
+  pub response_type: Option<ResponseType>,
+  pub pkce_code_challenge: Option<String>,
+}
+
+/// Log in users by email and password.
+#[utoipa::path(
+  post,
+  path = "/login_mfa",
+  tag= "auth",
+  params(LoginInputParams),
+  request_body = LoginMfaRequest,
+  responses(
+    (status = 200, description = "Auth & refresh tokens.", body = LoginResponse)
+  )
+)]
+pub(crate) async fn login_mfa_handler(
+  State(state): State<AppState>,
+  Query(query_login_input): Query<LoginInputParams>,
+  cookies: Cookies,
+  either_request: Either<LoginMfaRequest>,
+) -> Result<Response, AuthError> {
+  let (
+    LoginMfaRequest {
+      mfa_token,
+      totp,
+      response_type,
+      pkce_code_challenge,
+      redirect_uri,
+      mfa_redirect_uri,
+    },
+    is_json,
+  ) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Form(req) => (req, false),
+    Either::Multipart(req, _) => (req, false),
+  };
+
+  let Some(user_totp) = totp else {
+    return Err(AuthError::BadRequest("TOTP missing"));
+  };
+
+  // Validate input params.
+  let params = build_and_validate_input_params(
+    &state,
+    // NOTE: Merge form and query input but prioritize explicit query parameters over hidden form
+    // inputs etc.
+    query_login_input.merge(LoginInputParams {
+      redirect_uri: redirect_uri.clone(),
+      mfa_redirect_uri: mfa_redirect_uri.clone(),
+      response_type,
+      pkce_code_challenge,
+    }),
+  )?;
+
+  let PendingAuthTokenClaims { sub, .. } = state
+    .jwt()
+    .decode(&mfa_token)
+    .map_err(|_err| AuthError::Unauthorized)?;
+
+  // Check credentials.
+  let db_user: DbUser = user_by_id(
+    &state,
+    &util::b64_to_uuid(&sub).map_err(|_err| AuthError::Unauthorized)?,
+  )
+  .await
+  .map_err(|_| {
+    // Don't leak if user wasn't found or password was wrong.
+    return AuthError::Unauthorized;
+  })?;
+
+  let Some(totp_secret) = &db_user.totp_secret else {
+    return Err(AuthError::FailedDependency("TOTP not enabled".into()));
+  };
+
+  let totp = new_totp(&totp_rs::Secret::Encoded(totp_secret.clone()), None, None)?;
+  if !totp.check_current(&user_totp).unwrap_or(false) {
+    return Err(AuthError::Unauthorized);
+  }
+
+  // Otherwise build auth token or authorization code responses.
+  return match params {
+    // Auth-token flow.
+    LoginParams::Password { redirect_uri } => {
+      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, is_json).await
+    }
+    // Authorization-code flow.
+    LoginParams::AuthorizationCodeFlowWithPkce {
+      redirect_uri,
+      pkce_code_challenge,
+    } => {
+      build_authorization_code_flow_and_pkce_response(
+        &state,
+        &db_user,
+        redirect_uri,
+        pkce_code_challenge,
+      )
+      .await
     }
   };
 }
