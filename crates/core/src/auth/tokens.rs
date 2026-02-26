@@ -182,14 +182,7 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let user_id = db_user.uuid();
-  let claims = TokenClaims::new(
-    verified,
-    user_id,
-    db_user.email.clone(),
-    db_user.admin,
-    expires_in,
-  );
+  let claims = TokenClaims::new(&db_user, expires_in);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
@@ -197,10 +190,7 @@ pub(crate) async fn mint_new_tokens(
     formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
 
   user_conn
-    .execute(
-      QUERY,
-      params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
-    )
+    .execute(QUERY, params!(db_user.id, refresh_token.clone(),))
     .await?;
 
   return Ok(FreshTokens {
@@ -250,14 +240,5 @@ pub(crate) async fn reauth_with_refresh_token(
     "unverified user, should have been caught by above query"
   );
 
-  return Ok((
-    TokenClaims::new(
-      db_user.verified,
-      db_user.uuid(),
-      db_user.email,
-      db_user.admin,
-      auth_token_ttl,
-    ),
-    auth_token_ttl,
-  ));
+  return Ok((TokenClaims::new(&db_user, auth_token_ttl), auth_token_ttl));
 }
