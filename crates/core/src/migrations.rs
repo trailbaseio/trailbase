@@ -63,6 +63,7 @@ pub(crate) fn apply_main_migrations(
   return apply_migrations("main", conn, migrations);
 }
 
+// Base migrations contains things like file deletions table shared across main and user DBs.
 pub(crate) fn apply_base_migrations(
   conn: &mut rusqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
@@ -84,6 +85,17 @@ pub(crate) fn apply_logs_migrations(
     "logs",
     logs_conn,
     vec![load_embedded_migrations::<LogsMigrations>()],
+  )?;
+  return Ok(());
+}
+
+pub(crate) fn apply_auth_migrations(
+  logs_conn: &mut rusqlite::Connection,
+) -> Result<(), RefineryError> {
+  apply_migrations(
+    "auth",
+    logs_conn,
+    vec![load_embedded_migrations::<AuthMigrations>()],
   )?;
   return Ok(());
 }
@@ -255,6 +267,7 @@ fn load_embedded_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
     .collect();
 }
 
+// Base migrations contains things like file deletions table shared across main and user DBs.
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/base"]
 struct BaseMigrations;
@@ -266,6 +279,10 @@ struct MainMigrations;
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/logs"]
 struct LogsMigrations;
+
+#[derive(Clone, rust_embed::RustEmbed)]
+#[folder = "migrations/auth"]
+struct AuthMigrations;
 
 #[cfg(test)]
 mod tests {

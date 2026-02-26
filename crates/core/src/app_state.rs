@@ -41,9 +41,10 @@ struct InternalState {
   config: Reactive<Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
-  // TODO: Maybe remove in favor of connection manager. Note that this is currently also used for
-  // the state.user_conn().
+  // TODO: Maybe remove main `conn` in favor of connection manager. Note that this is currently
+  // also used for the state.user_conn().
   conn: trailbase_sqlite::Connection,
+  auth_conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
   connection_manager: ConnectionManager,
 
@@ -72,6 +73,7 @@ pub(crate) struct AppStateArgs {
   pub demo: bool,
   pub config: Config,
   pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
+  pub auth_conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
   pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
@@ -178,6 +180,7 @@ impl AppState {
         config,
         json_schema_registry: args.json_schema_registry,
         conn: (*main_conn).clone(),
+        auth_conn: args.auth_conn,
         logs_conn: args.logs_conn,
         connection_manager: args.connection_manager,
         jwt: args.jwt,
@@ -521,6 +524,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
 
   let logs_conn = crate::connection::init_logs_db(None)?;
+  let auth_conn = crate::connection::init_auth_db(None)?;
 
   let connection_manager =
     ConnectionManager::new_for_test(data_dir.clone(), json_schema_registry.clone(), vec![]);
@@ -571,6 +575,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       config,
       json_schema_registry,
       conn: (*connection_manager.main_entry().connection).clone(),
+      auth_conn,
       logs_conn,
       connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),

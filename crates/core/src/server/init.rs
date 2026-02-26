@@ -61,6 +61,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
   // Then open or init new databases.
   let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
+  let auth_conn = crate::connection::init_auth_db(Some(&args.data_dir))?;
 
   let json_schema_registry = Arc::new(RwLock::new(
     trailbase_schema::registry::build_json_schema_registry(vec![])?,
@@ -111,6 +112,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     demo: args.demo,
     config,
     json_schema_registry,
+    auth_conn,
     logs_conn,
     connection_manager,
     jwt,

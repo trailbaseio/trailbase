@@ -161,67 +161,67 @@ pub async fn disable_totp_handler(
   return Err(AuthError::BadRequest("Invalid TOTP code"));
 }
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
-#[ts(export)]
-pub struct LoginTotpRequest {
-  pub email: String,
-  pub totp: String,
-  pub password: Option<String>,
-  pub otp: Option<String>,
-}
-
-#[utoipa::path(
-  post,
-  path = "/totp/login",
-  tag = "auth",
-  request_body = LoginTotpRequest,
-  responses(
-    (status = 200, description = "Auth tokens.", body = LoginResponse)
-  )
-)]
-pub async fn login_totp_handler(
-  State(state): State<AppState>,
-  either_request: Either<LoginTotpRequest>,
-) -> Result<Response, AuthError> {
-  let (request, _json) = match either_request {
-    Either::Json(req) => (req, true),
-    Either::Multipart(req, _) => (req, false),
-    Either::Form(req) => (req, false),
-  };
-
-  let email = validate_and_normalize_email_address(&request.email)?;
-  let db_user = user_by_email(&state, &email).await?;
-  let Some(secret) = db_user.totp_secret.to_owned().map(Secret::Encoded) else {
-    return Err(AuthError::BadRequest("TOTP not enabled for this user"));
-  };
-
-  if let Some(password) = request.password {
-    check_user_password(&db_user, &password, state.demo_mode())?;
-  } else if let Some(otp) = request.otp {
-    super::otp::verify_otp_code(&db_user, &otp)?;
-  } else {
-    return Err(AuthError::BadRequest("missing params"));
-  }
-
-  let totp = new_totp(&secret, None, None)?;
-
-  if totp.check_current(&request.totp).unwrap_or(false) {
-    let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-    let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
-
-    let response = LoginResponse {
-      auth_token: state
-        .jwt()
-        .encode(&tokens.auth_token_claims)
-        .map_err(|err| AuthError::Internal(err.into()))?,
-      refresh_token: tokens.refresh_token,
-      csrf_token: tokens.auth_token_claims.csrf_token,
-    };
-
-    return Ok(Json(response).into_response());
-  }
-  return Err(AuthError::BadRequest("Invalid TOTP code"));
-}
+// #[derive(Debug, Default, Deserialize, TS, ToSchema)]
+// #[ts(export)]
+// pub struct LoginTotpRequest {
+//   pub email: String,
+//   pub totp: String,
+//   pub password: Option<String>,
+//   pub otp: Option<String>,
+// }
+//
+// #[utoipa::path(
+//   post,
+//   path = "/totp/login",
+//   tag = "auth",
+//   request_body = LoginTotpRequest,
+//   responses(
+//     (status = 200, description = "Auth tokens.", body = LoginResponse)
+//   )
+// )]
+// pub async fn login_totp_handler(
+//   State(state): State<AppState>,
+//   either_request: Either<LoginTotpRequest>,
+// ) -> Result<Response, AuthError> {
+//   let (request, _json) = match either_request {
+//     Either::Json(req) => (req, true),
+//     Either::Multipart(req, _) => (req, false),
+//     Either::Form(req) => (req, false),
+//   };
+//
+//   let email = validate_and_normalize_email_address(&request.email)?;
+//   let db_user = user_by_email(&state, &email).await?;
+//   let Some(secret) = db_user.totp_secret.to_owned().map(Secret::Encoded) else {
+//     return Err(AuthError::BadRequest("TOTP not enabled for this user"));
+//   };
+//
+//   if let Some(password) = request.password {
+//     check_user_password(&db_user, &password, state.demo_mode())?;
+//   } else if let Some(otp) = request.otp {
+//     super::otp::verify_otp_code(&db_user, &otp)?;
+//   } else {
+//     return Err(AuthError::BadRequest("missing params"));
+//   }
+//
+//   let totp = new_totp(&secret, None, None)?;
+//
+//   if totp.check_current(&request.totp).unwrap_or(false) {
+//     let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+//     let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+//
+//     let response = LoginResponse {
+//       auth_token: state
+//         .jwt()
+//         .encode(&tokens.auth_token_claims)
+//         .map_err(|err| AuthError::Internal(err.into()))?,
+//       refresh_token: tokens.refresh_token,
+//       csrf_token: tokens.auth_token_claims.csrf_token,
+//     };
+//
+//     return Ok(Json(response).into_response());
+//   }
+//   return Err(AuthError::BadRequest("Invalid TOTP code"));
+// }
 
 pub(crate) fn new_totp(
   secret: &Secret,
