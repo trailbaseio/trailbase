@@ -19,6 +19,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  TextField,
+  TextFieldInput,
+  TextFieldLabel,
+} from "@/components/ui/text-field";
 
 function avatarUrl(user: User): string {
   return `${AVATAR_API}/${user.id}`;
@@ -157,9 +162,16 @@ function Avatar(props: { client: Client; user: User }) {
   );
 }
 
+interface Totp {
+  url: string;
+  png: string;
+}
+
 function ProfileTable(props: { client: Client; user: User }) {
+  const [totpPng, setTotpPng] = createSignal<Totp | null>(null);
+
   return (
-    <Card class="w-[80dvw] max-w-[460px] p-8">
+    <Card class="w-[80dvw] max-w-[540px] p-8">
       <div class="flex items-center justify-between">
         <h1>User Profile</h1>
 
@@ -182,7 +194,7 @@ function ProfileTable(props: { client: Client; user: User }) {
         </div>
       </div>
 
-      <div class="my-4 flex items-end gap-2">
+      <div class="my-4 flex flex-wrap items-center gap-2">
         <a
           class={buttonVariants({ variant: "outline" })}
           href="/_/auth/change_email"
@@ -196,6 +208,68 @@ function ProfileTable(props: { client: Client; user: User }) {
         >
           Change Password
         </a>
+
+        <Button
+          onClick={async () => {
+            const resp = await props.client.registerTOTP({ png: true });
+            setTotpPng({
+              url: resp.totp_url,
+              png: resp.png ?? "",
+            });
+          }}
+        >
+          Register TOTP
+        </Button>
+
+        <Dialog
+          open={totpPng() !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setTotpPng(null);
+            }
+          }}
+        >
+          <DialogTrigger>
+            <div class={cn(DESTRUCTIVE_ICON_STYLE)}>
+              <TbOutlineTrash />
+            </div>
+          </DialogTrigger>
+
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>TOTP Registration</DialogTitle>
+            </DialogHeader>
+
+            <div class="flex justify-center">
+              <img src={`data:image/png;base64,${totpPng()}`} />
+            </div>
+
+            <form
+              class="flex flex-col gap-2"
+              method="dialog"
+              onSubmit={() => {
+                const totp = totpPng();
+                if (totp === null) {
+                  return;
+                }
+
+                (async () => {
+                  await props.client.confirmTOTP(totp.url, "TODO totp input");
+                })();
+              }}
+            >
+              <TextField class="flex w-full items-center">
+                <TextFieldLabel>Code</TextFieldLabel>
+
+                <TextFieldInput />
+              </TextField>
+
+              <div class="flex justify-center">
+                <Button>Submit</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {import.meta.env.DEV && (
