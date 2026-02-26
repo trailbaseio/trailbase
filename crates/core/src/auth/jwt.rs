@@ -1,5 +1,6 @@
+use crate::auth::user::DbUser;
 use crate::rand::generate_random_string;
-use crate::util::uuid_to_b64;
+use crate::util::{id_to_b64, uuid_to_b64};
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
@@ -51,6 +52,11 @@ pub struct TokenClaims {
   #[serde(skip_serializing_if = "std::ops::Not::not")]
   pub admin: bool,
 
+  // Requires multi-factor auth (MFA).
+  #[serde(default)]
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub mfa: bool,
+
   /// E-mail address of the [sub].
   pub email: String,
 
@@ -60,23 +66,18 @@ pub struct TokenClaims {
 }
 
 impl TokenClaims {
-  pub fn new(
-    verified: bool,
-    user_id: uuid::Uuid,
-    email: String,
-    admin: bool,
-    expires_in: chrono::Duration,
-  ) -> Self {
-    assert!(verified);
+  pub(crate) fn new(db_user: &DbUser, expires_in: chrono::Duration) -> Self {
+    assert!(db_user.verified);
 
     let now = chrono::Utc::now();
     return TokenClaims {
-      sub: uuid_to_b64(&user_id),
+      sub: id_to_b64(&db_user.id),
       exp: (now + expires_in).timestamp(),
       iat: now.timestamp(),
       r#type: TokenType::Auth as u8,
-      admin,
-      email,
+      admin: db_user.admin.clone(),
+      mfa: db_user.totp_secret.is_some(),
+      email: db_user.email.clone(),
       csrf_token: generate_random_string(20),
     };
   }
@@ -259,13 +260,15 @@ mod tests {
   fn test_decode_encode() {
     let jwt = test_jwt_helper();
 
-    let claims = TokenClaims::new(
-      true,
-      uuid::Uuid::now_v7(),
-      "foo@bar.com".to_string(),
-      false,
-      crate::constants::DEFAULT_AUTH_TOKEN_TTL,
-    );
+    let db_user = DbUser {
+      id: uuid::Uuid::new_v4().into_bytes(),
+      email: "foo@bar.com".to_string(),
+      verified: true,
+      admin: false,
+      ..Default::default()
+    };
+
+    let claims = TokenClaims::new(&db_user, crate::constants::DEFAULT_AUTH_TOKEN_TTL);
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());

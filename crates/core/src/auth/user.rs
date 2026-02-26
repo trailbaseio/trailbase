@@ -10,7 +10,7 @@ use crate::auth::jwt::TokenClaims;
 use crate::auth::tokens::extract_tokens_from_request_parts;
 use crate::{app_state::AppState, util::b64_to_uuid};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub(crate) struct DbUser {
   pub id: [u8; 16],
   pub email: String,

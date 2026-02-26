@@ -20,6 +20,7 @@ export type User = {
   id: string;
   email: string;
   admin?: boolean;
+  mfa?: boolean;
 };
 
 export type Pagination = {
@@ -47,6 +48,7 @@ type TokenClaims = {
   email: string;
   csrf_token: string;
   admin?: boolean;
+  mfa?: boolean;
 };
 
 type TokenState = {
@@ -80,6 +82,7 @@ function buildUser(state: TokenState): User | undefined {
       id: claims.sub,
       email: claims.email,
       admin: claims.admin,
+      mfa: claims.mfa,
     };
   }
 }
