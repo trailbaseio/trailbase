@@ -41,6 +41,12 @@ impl Guest for Endpoints {
         },
       ),
       routing::get(
+        LOGIN_MFA_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          return ui_login_mfa_handler(req.user(), req.query_parse()?).await;
+        },
+      ),
+      routing::get(
         "/_/auth/logout",
         async |req: Request| -> Result<Response, HttpError> {
           return Ok(ui_logout_handler(req.query_parse()?).await.into_response());
@@ -99,6 +105,7 @@ export!(Endpoints);
 #[derive(Debug, Default, Deserialize)]
 pub struct LoginQuery {
   redirect_uri: Option<String>,
+  mfa_redirect_uri: Option<String>,
   response_type: Option<String>,
   pkce_code_challenge: Option<String>,
   alert: Option<String>,
@@ -118,7 +125,14 @@ async fn ui_login_handler(
     return Ok(Redirect::to(PROFILE_UI).into_response());
   }
 
-  let redirect_uri = auth::hidden_input("redirect_uri", query.redirect_uri.as_ref());
+  let redirect_uri = auth::hidden_input(
+    "redirect_uri",
+    Some(query.redirect_uri.as_deref().unwrap_or(PROFILE_UI)),
+  );
+  let mfa_redirect_uri = auth::hidden_input(
+    "mfa_redirect_uri",
+    Some(query.mfa_redirect_uri.as_deref().unwrap_or(LOGIN_MFA_UI)),
+  );
   let response_type = auth::hidden_input("response_type", query.response_type.as_ref());
   let pkce_code_challenge =
     auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref());
@@ -142,12 +156,57 @@ async fn ui_login_handler(
   .collect();
 
   let html = auth::LoginTemplate {
-    state: format!("{redirect_uri}\n{response_type}\n{pkce_code_challenge}"),
+    state: [
+      redirect_uri,
+      mfa_redirect_uri,
+      response_type,
+      pkce_code_challenge,
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !config.disable_password_auth,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
-    // TODO: Add TOTP redirect?
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct LoginMfaQuery {
+  mfa_token: String,
+  redirect_uri: Option<String>,
+  response_type: Option<String>,
+  pkce_code_challenge: Option<String>,
+  alert: Option<String>,
+}
+
+async fn ui_login_mfa_handler(
+  user: Option<&User>,
+  query: LoginMfaQuery,
+) -> Result<Response, HttpError> {
+  if query.redirect_uri.is_none() && user.is_some() {
+    // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
+    // For example, if we're already logged in the browser but want to sign-in with the browser
+    // from an app, we still have to go through the motions of signing in.
+    //
+    // QUESTION: Too much magic, just remove?
+    return Ok(Redirect::to(PROFILE_UI).into_response());
+  }
+
+  let mfa_token = auth::hidden_input("mfa_token", Some(query.mfa_token));
+  let redirect_uri = auth::hidden_input(
+    "redirect_uri",
+    Some(query.redirect_uri.as_deref().unwrap_or(PROFILE_UI)),
+  );
+  let response_type = auth::hidden_input("response_type", query.response_type.as_ref());
+  let pkce_code_challenge =
+    auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref());
+
+  let html = auth::LoginMfaTemplate {
+    state: [mfa_token, redirect_uri, response_type, pkce_code_challenge].join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
 
@@ -287,5 +346,6 @@ fn internal(err: impl std::string::ToString) -> HttpError {
 }
 
 const LOGIN_UI: &str = "/_/auth/login";
+const LOGIN_MFA_UI: &str = "/_/auth/login_mfa";
 const PROFILE_UI: &str = "/_/auth/profile";
 const REGISTER_USER_UI: &str = "/_/auth/register";

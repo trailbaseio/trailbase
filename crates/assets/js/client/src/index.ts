@@ -3,8 +3,8 @@ import * as JSON from "@ungap/raw-json";
 import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
-import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
-import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
+// import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
+// import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
 import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
 import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
 import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
@@ -880,6 +880,7 @@ class ClientImpl implements Client {
       } as ConfirmRegisterTotpRequest),
       headers: jsonContentTypeHeader,
     });
+    await this.refreshAuthToken();
   }
 
   public async unregisterTOTP(totp: string): Promise<void> {
@@ -890,6 +891,7 @@ class ClientImpl implements Client {
       } as DisableTotpRequest),
       headers: jsonContentTypeHeader,
     });
+    await this.refreshAuthToken();
   }
 
   // public async verifyTOTP(
