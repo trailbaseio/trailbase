@@ -50,6 +50,7 @@ use api::*;
     change_password::change_password_handler,
     refresh::refresh_handler,
     login::login_handler,
+    login::login_mfa_handler,
     // otp::request_otp_handler,
     // otp::verify_otp_handler,
     totp::register_totp_request_handler,
@@ -137,6 +138,10 @@ pub(super) fn router() -> Router<crate::AppState> {
     .route(
       &format!("/{AUTH_API_PATH}/login"),
       post(api::login::login_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/login_mfa"),
+      post(api::login::login_mfa_handler),
     )
     // OTP flow
     // .route(
