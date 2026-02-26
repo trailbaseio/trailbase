@@ -210,7 +210,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   ));
 
   // Bad password.
-  assert!(is_failed_login_redirect_response(
+  assert!(matches!(
     &login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
@@ -219,8 +219,8 @@ async fn test_auth_password_login_flow_with_pkce() {
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
     }))
-    .await
-    .unwrap()
+    .await,
+    Err(AuthError::Unauthorized),
   ));
 
   // Finally let's log in successfully.

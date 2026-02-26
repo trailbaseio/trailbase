@@ -159,7 +159,7 @@ async fn test_oauth_login_flow_without_pkce() {
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
       redirect_uri: Some(redirect_uri.to_string()),
-      totp_redirect_uri: None,
+      mfa_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
     }),
@@ -264,7 +264,7 @@ async fn test_oauth_login_flow_with_pkce() {
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
       redirect_uri: Some(redirect_uri.to_string()),
-      totp_redirect_uri: None,
+      mfa_redirect_uri: None,
       response_type: Some(ResponseType::Code),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     }),

@@ -26,6 +26,15 @@ pub enum JwtHelperError {
   PKCS8Spki(#[from] ed25519_dalek::pkcs8::spki::Error),
 }
 
+#[repr(u8)]
+#[allow(unused)]
+pub enum TokenType {
+  Unknown,
+  Auth,
+  PendingAuth,
+}
+
+/// The actual "AuthToken" used for signed-in users.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TokenClaims {
   /// Url-safe Base64 encoded id of the current user.
@@ -35,17 +44,19 @@ pub struct TokenClaims {
   /// Expiration timestamp
   pub exp: i64,
 
+  pub r#type: u8,
+
+  /// Is admin user.
+  #[serde(default)]
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub admin: bool,
+
   /// E-mail address of the [sub].
   pub email: String,
 
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
   pub csrf_token: String,
-
-  /// Is admin user.
-  #[serde(default)]
-  #[serde(skip_serializing_if = "std::ops::Not::not")]
-  pub admin: bool,
 }
 
 impl TokenClaims {
@@ -63,14 +74,65 @@ impl TokenClaims {
       sub: uuid_to_b64(&user_id),
       exp: (now + expires_in).timestamp(),
       iat: now.timestamp(),
+      r#type: TokenType::Auth as u8,
+      admin,
       email,
       csrf_token: generate_random_string(20),
-      admin,
     };
   }
 
   pub fn from_auth_token(jwt: &JwtHelper, auth_token: &str) -> Result<Self, JwtError> {
-    return jwt.decode(auth_token);
+    let claims = jwt.decode::<Self>(auth_token)?;
+    assert_eq!(claims.r#type, TokenType::Auth as u8);
+    return Ok(claims);
+  }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum AuthMethod {
+  #[serde(rename = "pw")]
+  Password,
+  // #[serde(rename = "totp")]
+  // Totp,
+  // #[serde(rename = "otp")]
+  // Otp,
+}
+
+// A "Pending" token used for multi-factor auth.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PendingAuthTokenClaims {
+  /// Url-safe Base64 encoded id of the current user.
+  pub sub: String,
+  /// Unix timestamp in seconds when the token was minted.
+  pub iat: i64,
+  /// Expiration timestamp
+  pub exp: i64,
+
+  // Token type.
+  pub r#type: u8,
+
+  /// Auth method used for initiating the MFA.
+  pub method: AuthMethod,
+}
+
+impl PendingAuthTokenClaims {
+  pub fn new(user_id: uuid::Uuid, expires_in: chrono::Duration) -> Self {
+    let now = chrono::Utc::now();
+
+    return Self {
+      sub: uuid_to_b64(&user_id),
+      iat: now.timestamp(),
+      exp: (now + expires_in).timestamp(),
+      r#type: TokenType::PendingAuth as u8,
+      method: AuthMethod::Password,
+    };
+  }
+
+  pub fn from_pending_auth_token(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
+    let claims = jwt.decode::<Self>(token)?;
+    assert_eq!(claims.r#type, TokenType::PendingAuth as u8);
+    return Ok(claims);
   }
 }
 
@@ -207,6 +269,19 @@ mod tests {
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());
+    assert_eq!(claims, TokenClaims::from_auth_token(&jwt, &token).unwrap());
+
+    let pending_auth_claims = PendingAuthTokenClaims::new(
+      uuid::Uuid::now_v7(),
+      crate::constants::DEFAULT_MFA_TOKEN_TTL,
+    );
+    let pending_auth_token = jwt.encode(&pending_auth_claims).unwrap();
+
+    assert_eq!(
+      pending_auth_claims,
+      PendingAuthTokenClaims::from_pending_auth_token(&jwt, &pending_auth_token).unwrap()
+    );
+    assert!(TokenClaims::from_auth_token(&jwt, &pending_auth_token).is_err())
   }
 }
 

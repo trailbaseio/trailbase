@@ -21,7 +21,7 @@ pub enum ResponseType {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, IntoParams, PartialEq)]
 pub(crate) struct LoginInputParams {
   pub redirect_uri: Option<String>,
-  pub totp_redirect_uri: Option<String>,
+  pub mfa_redirect_uri: Option<String>,
   pub response_type: Option<ResponseType>,
   pub pkce_code_challenge: Option<String>,
 }
@@ -31,8 +31,8 @@ impl LoginInputParams {
     if let Some(redirect_uri) = other.redirect_uri {
       self.redirect_uri.get_or_insert(redirect_uri);
     }
-    if let Some(totp_redirect_uri) = other.totp_redirect_uri {
-      self.totp_redirect_uri.get_or_insert(totp_redirect_uri);
+    if let Some(mfa_redirect_uri) = other.mfa_redirect_uri {
+      self.mfa_redirect_uri.get_or_insert(mfa_redirect_uri);
     }
     if let Some(response_type) = other.response_type {
       self.response_type.get_or_insert(response_type);
@@ -47,14 +47,10 @@ impl LoginInputParams {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum LoginParams {
   /// Access token flow.
-  Password {
-    redirect_uri: Option<String>,
-    totp_redirect_uri: Option<String>,
-  },
+  Password { redirect_uri: Option<String> },
   /// Authorization code flow.
   AuthorizationCodeFlowWithPkce {
     redirect_uri: String,
-    totp_redirect_uri: Option<String>,
     pkce_code_challenge: String,
   },
 }
@@ -64,7 +60,7 @@ pub(crate) fn build_and_validate_input_params(
   params: LoginInputParams,
 ) -> Result<LoginParams, AuthError> {
   validate_redirect(state, params.redirect_uri.as_deref())?;
-  validate_redirect(state, params.totp_redirect_uri.as_deref())?;
+  validate_redirect(state, params.mfa_redirect_uri.as_deref())?;
 
   return match params.response_type.as_ref() {
     Some(ResponseType::Code) => {
@@ -83,7 +79,6 @@ pub(crate) fn build_and_validate_input_params(
 
       Ok(LoginParams::AuthorizationCodeFlowWithPkce {
         redirect_uri,
-        totp_redirect_uri: params.totp_redirect_uri,
         pkce_code_challenge,
       })
     }
@@ -96,7 +91,6 @@ pub(crate) fn build_and_validate_input_params(
 
       Ok(LoginParams::Password {
         redirect_uri: params.redirect_uri,
-        totp_redirect_uri: params.totp_redirect_uri,
       })
     }
   };
@@ -114,14 +108,13 @@ mod tests {
     assert_eq!(
       LoginParams::AuthorizationCodeFlowWithPkce {
         redirect_uri: "/redirect".to_string(),
-        totp_redirect_uri: Some("/totp".to_string()),
         pkce_code_challenge: BASE64_URL_SAFE.encode("challenge"),
       },
       build_and_validate_input_params(
         &state,
         LoginInputParams {
           redirect_uri: Some("/redirect".to_string()),
-          totp_redirect_uri: Some("/totp".to_string()),
+          mfa_redirect_uri: Some("/totp".to_string()),
           response_type: Some(ResponseType::Code),
           pkce_code_challenge: Some(BASE64_URL_SAFE.encode("challenge")),
         },
@@ -132,13 +125,12 @@ mod tests {
     assert_eq!(
       LoginParams::Password {
         redirect_uri: Some("/redirect".to_string()),
-        totp_redirect_uri: None,
       },
       build_and_validate_input_params(
         &state,
         LoginInputParams {
           redirect_uri: Some("/redirect".to_string()),
-          totp_redirect_uri: None,
+          mfa_redirect_uri: None,
           response_type: None,
           pkce_code_challenge: None,
         },
@@ -152,7 +144,7 @@ mod tests {
         LoginInputParams {
           redirect_uri: Some("invalid".to_string()),
 
-          totp_redirect_uri: None,
+          mfa_redirect_uri: None,
           response_type: None,
           pkce_code_challenge: None,
         },

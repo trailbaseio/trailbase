@@ -116,19 +116,41 @@ pub(crate) fn validate_redirect(
   return Ok(());
 }
 
+#[derive(Debug)]
+pub struct NewTokens {
+  pub id: uuid::Uuid,
+  pub auth_token: String,
+  pub refresh_token: String,
+  pub csrf_token: String,
+}
+
 pub async fn login_with_password_for_test(
   state: &AppState,
   normalized_email: &str,
   password: &str,
-) -> Result<Option<crate::auth::api::login::NewTokens>, AuthError> {
-  return crate::auth::api::login::login_with_password(
-    state,
-    normalized_email,
-    password,
-    None,
-    state.access_config(|c| c.auth.token_ttls()).0,
-  )
-  .await;
+) -> Result<Option<NewTokens>, AuthError> {
+  let db_user: DbUser = user_by_email(state, normalized_email).await.map_err(|_| {
+    // Don't leak if user wasn't found or password was wrong.
+    return AuthError::Unauthorized;
+  })?;
+  let user_id = db_user.uuid();
+
+  // Validates password and rate limits attempts.
+  crate::auth::password::check_user_password(&db_user, password, state.demo_mode())?;
+
+  let auth_token_ttl = state.access_config(|c| c.auth.token_ttls()).0;
+  let tokens =
+    crate::auth::tokens::mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+
+  return Ok(Some(NewTokens {
+    id: user_id,
+    auth_token: state
+      .jwt()
+      .encode(&tokens.auth_token_claims)
+      .map_err(|err| AuthError::Internal(err.into()))?,
+    refresh_token: tokens.refresh_token,
+    csrf_token: tokens.auth_token_claims.csrf_token,
+  }));
 }
 
 #[cfg(test)]
@@ -136,7 +158,7 @@ pub async fn login_with_password(
   state: &AppState,
   normalized_email: &str,
   password: &str,
-) -> Result<crate::auth::api::login::NewTokens, AuthError> {
+) -> Result<NewTokens, AuthError> {
   return Ok(
     login_with_password_for_test(state, normalized_email, password)
       .await?
