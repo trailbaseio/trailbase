@@ -521,7 +521,7 @@ pub fn validate_config(
     }
 
     match name.as_str() {
-      "main" | "logs" | "" => {
+      "main" | "logs" | "auth" | "" => {
         return ierr(format!("Invalid database name: {name}"));
       }
       name

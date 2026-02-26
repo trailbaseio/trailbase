@@ -11,7 +11,9 @@ use trailbase_schema::metadata::ConnectionMetadata;
 use trailbase_schema::sqlite::{Table, View};
 
 use crate::data_dir::DataDir;
-use crate::migrations::{apply_base_migrations, apply_logs_migrations, apply_main_migrations};
+use crate::migrations::{
+  apply_auth_migrations, apply_base_migrations, apply_logs_migrations, apply_main_migrations,
+};
 use crate::wasm::{SqliteFunctions, SqliteStore};
 
 pub use trailbase_sqlite::Connection;
@@ -146,21 +148,9 @@ impl ConnectionManager {
     };
   }
 
-  // pub(crate) fn main(&self) -> Arc<Connection> {
-  //   return self.state.main.read().connection.clone();
-  // }
-
   pub fn main_entry(&self) -> ConnectionEntry {
     return self.state.main.read().clone();
   }
-
-  // pub(crate) fn get(
-  //   &self,
-  //   main: bool,
-  //   attached_databases: Option<BTreeSet<String>>,
-  // ) -> Result<Arc<Connection>, ConnectionError> {
-  //   return Ok(self.get_entry(main, attached_databases)?.connection);
-  // }
 
   pub fn get_entry(
     &self,
@@ -206,6 +196,8 @@ impl ConnectionManager {
     if let Some(ref db) = name.database_schema
       && db != "main"
     {
+      // QUESTION: Should we disallow access to "logs", "auth", etc? Currently, this is not
+      // exposed to WASM, i.e. there's no sanctioned way to interact with this.
       return self.get_entry(false, Some([db.to_string()].into()));
     }
 
@@ -411,6 +403,23 @@ pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
       conn.pragma_update(None, "secure_delete", "FALSE")?;
 
       apply_logs_migrations(&mut conn)?;
+      return Ok(conn);
+    },
+    None,
+  );
+}
+
+pub(super) fn init_auth_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+  let path = data_dir.map(|d| d.auth_db_path());
+
+  return trailbase_sqlite::Connection::new(
+    || -> Result<_, ConnectionError> {
+      // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
+      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+
+      trailbase_extension::register_all_extension_functions(&conn, None)?;
+
+      apply_auth_migrations(&mut conn)?;
       return Ok(conn);
     },
     None,
