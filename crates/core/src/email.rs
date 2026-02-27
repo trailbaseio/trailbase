@@ -85,7 +85,7 @@ impl Email {
   pub(crate) fn verification_email(
     state: &AppState,
     email_address: &str,
-    email_verification_code: &str,
+    email_verification_token: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
 
@@ -104,7 +104,7 @@ impl Email {
     let site_url = get_site_url(state);
     let verification_url = site_url
       .join(&format!(
-        "/{AUTH_API_PATH}/verify_email/confirm/{email_verification_code}"
+        "/{AUTH_API_PATH}/verify_email/confirm/{email_verification_token}"
       ))
       .map_err(|_err| EmailError::Missing("email verification URL"))?
       .to_string();
@@ -122,7 +122,8 @@ impl Email {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
-        CODE => email_verification_code,
+        CODE => email_verification_token,
+        TOKEN => email_verification_token,
         EMAIL => email_address,
       })?;
 
@@ -132,7 +133,7 @@ impl Email {
   pub(crate) fn change_email_address_email(
     state: &AppState,
     email_address: &str,
-    email_verification_code: &str,
+    email_verification_token: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
     let (server_config, template) =
@@ -150,7 +151,7 @@ impl Email {
     let site_url = get_site_url(state);
     let verification_url = site_url
       .join(&format!(
-        "/{AUTH_API_PATH}/change_email/confirm/{email_verification_code}"
+        "/{AUTH_API_PATH}/change_email/confirm/{email_verification_token}"
       ))
       .map_err(|_err| EmailError::Missing("change email confirmation URL"))?
       .to_string();
@@ -167,8 +168,9 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
-        CODE => email_verification_code,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        CODE => email_verification_token,
+        TOKEN => email_verification_token,
         EMAIL => email_address,
       })?;
 
