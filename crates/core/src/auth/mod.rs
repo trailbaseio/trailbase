@@ -19,7 +19,7 @@ pub(crate) mod util;
 mod error;
 
 pub use error::AuthError;
-pub use jwt::{JwtHelper, TokenClaims};
+pub use jwt::{AuthTokenClaims, JwtHelper};
 // pub(crate) use ui::auth_ui_router;
 pub use user::User;
 

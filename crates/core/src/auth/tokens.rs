@@ -9,7 +9,7 @@ use trailbase_sqlite::{Connection, params};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::jwt::TokenClaims;
+use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::user::DbUser;
 use crate::auth::util::new_cookie;
 use crate::constants::{
@@ -21,7 +21,7 @@ use crate::util::get_header;
 
 #[derive(Clone)]
 pub(crate) struct Tokens {
-  pub auth_token_claims: TokenClaims,
+  pub auth_token_claims: AuthTokenClaims,
   pub refresh_token: Option<String>,
 }
 
@@ -65,7 +65,7 @@ pub(crate) async fn extract_tokens_from_request_parts(
   // means to propagate the new token back (unlike for cookies). The responsibility sits with the
   // client to refresh tokens in time.
   if let Some(tokens) = extract_tokens_from_headers(&parts.headers) {
-    let claims = TokenClaims::from_auth_token(state.jwt(), tokens.auth_token)
+    let claims = AuthTokenClaims::from_auth_token(state.jwt(), tokens.auth_token)
       .map_err(|_| AuthError::Unauthorized)?;
 
     return Ok(Tokens {
@@ -84,8 +84,8 @@ pub(crate) async fn extract_tokens_from_request_parts(
   if let Some(tokens) = extract_tokens_from_cookies(cookies) {
     // If an auth-token is present, first try that before falling back to "auto-refresh".
     if let Some(auth_token) = &tokens.auth_token
-      && let Ok(claims) =
-        TokenClaims::from_auth_token(state.jwt(), auth_token).map_err(|_| AuthError::Unauthorized)
+      && let Ok(claims) = AuthTokenClaims::from_auth_token(state.jwt(), auth_token)
+        .map_err(|_| AuthError::Unauthorized)
     {
       return Ok(Tokens {
         auth_token_claims: claims,
@@ -166,7 +166,7 @@ fn extract_tokens_from_cookies(cookies: &Cookies) -> Option<CookieTokens> {
 
 /// Only difference to Tokens above, refresh token presence is guaranteed.
 pub struct FreshTokens {
-  pub auth_token_claims: TokenClaims,
+  pub auth_token_claims: AuthTokenClaims,
   pub refresh_token: String,
 }
 
@@ -182,7 +182,7 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let claims = TokenClaims::new(db_user, expires_in);
+  let claims = AuthTokenClaims::new(db_user, expires_in);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
@@ -202,7 +202,7 @@ pub(crate) async fn mint_new_tokens(
 pub(crate) async fn reauth_with_refresh_token(
   state: &AppState,
   refresh_token: String,
-) -> Result<(TokenClaims, chrono::Duration), AuthError> {
+) -> Result<(AuthTokenClaims, chrono::Duration), AuthError> {
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
 
   const QUERY: &str = formatcp!(
@@ -240,5 +240,8 @@ pub(crate) async fn reauth_with_refresh_token(
     "unverified user, should have been caught by above query"
   );
 
-  return Ok((TokenClaims::new(&db_user, auth_token_ttl), auth_token_ttl));
+  return Ok((
+    AuthTokenClaims::new(&db_user, auth_token_ttl),
+    auth_token_ttl,
+  ));
 }

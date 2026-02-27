@@ -9,7 +9,7 @@ use trailbase_sqlite::params;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::api::TokenClaims;
+use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::AuthError;
 use crate::auth::api::change_email;
@@ -269,7 +269,7 @@ async fn test_auth_password_login_flow_with_pkce() {
 
   let decoded_claims = state
     .jwt()
-    .decode::<TokenClaims>(&token_response.auth_token)
+    .decode::<AuthTokenClaims>(&token_response.auth_token)
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
@@ -352,7 +352,7 @@ async fn test_auth_password_login_flow_without_pkce() {
 
   let decoded_claims = state
     .jwt()
-    .decode::<TokenClaims>(&login_response.auth_token)
+    .decode::<AuthTokenClaims>(&login_response.auth_token)
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
@@ -405,8 +405,8 @@ async fn test_auth_token_refresh_flow() {
   .await
   .unwrap();
 
-  let original_claims: TokenClaims = state.jwt().decode(&tokens.auth_token).unwrap();
-  let refreshed_claims: TokenClaims = state.jwt().decode(&refreshed_tokens.auth_token).unwrap();
+  let original_claims: AuthTokenClaims = state.jwt().decode(&tokens.auth_token).unwrap();
+  let refreshed_claims: AuthTokenClaims = state.jwt().decode(&refreshed_tokens.auth_token).unwrap();
 
   assert_eq!(original_claims.sub, refreshed_claims.sub);
   // Make sure, they were actually re-minted.
@@ -508,7 +508,7 @@ async fn test_auth_reset_password_flow() {
     assert_eq!(tokens.id, user.uuid);
     state
       .jwt()
-      .decode::<TokenClaims>(&tokens.auth_token)
+      .decode::<AuthTokenClaims>(&tokens.auth_token)
       .unwrap();
   }
 
@@ -529,7 +529,7 @@ async fn test_auth_reset_password_flow() {
   assert_eq!(tokens.id, user.uuid);
   state
     .jwt()
-    .decode::<TokenClaims>(&tokens.auth_token)
+    .decode::<AuthTokenClaims>(&tokens.auth_token)
     .unwrap();
 }
 
