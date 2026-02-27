@@ -120,9 +120,6 @@ importers:
       long:
         specifier: ^5.3.2
         version: 5.3.2
-      lucide-solid:
-        specifier: ^0.564.0
-        version: 0.564.0(solid-js@1.9.11)
       maplibre-gl:
         specifier: ^5.18.0
         version: 5.18.0
@@ -138,9 +135,6 @@ importers:
       solid-js:
         specifier: ^1.9.11
         version: 1.9.11
-      solid-qr-code:
-        specifier: ^0.1.11
-        version: 0.1.11(solid-js@1.9.11)
       tailwind-merge:
         specifier: ^3.4.1
         version: 3.4.1
@@ -4811,11 +4805,6 @@ packages:
     resolution: {integrity: sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==}
     engines: {node: '>=10'}
 
-  lucide-solid@0.564.0:
-    resolution: {integrity: sha512-gZdibdRlnooRdKek2zhNGnep/N5TSlOSMWgUXiVtglys728zLLRupyaI7IfZ3USS/p6MG5eu2RKM2CARRYiXVg==}
-    peerDependencies:
-      solid-js: ^1.4.7
-
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
@@ -5832,12 +5821,6 @@ packages:
     resolution: {integrity: sha512-KplGPX2GHiWJLZ6AXYRql4M127PdYzfwvLJJXMkO+CMb8Np4VxqDAg5S8jLdwlEuBis/ia9DKw2M8dFx5u8Mhw==}
     peerDependencies:
       solid-js: ^1.8
-
-  solid-qr-code@0.1.11:
-    resolution: {integrity: sha512-8TpELeuK6OoPz5TfJaycsna63IivaSr6Y34qU79eYDF+SRTowO9os8gpElNvNe2FFROZuMZpf28jgmn9gV20Eg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      solid-js: ^1.8.0
 
   solid-refresh@0.6.3:
     resolution: {integrity: sha512-F3aPsX6hVw9ttm5LYlth8Q15x6MlI/J3Dn+o3EQyRTtTxidepSTwAYdozt01/YA+7ObcciagGEyXIopGZzQtbA==}
@@ -11281,10 +11264,6 @@ snapshots:
     dependencies:
       yallist: 4.0.0
 
-  lucide-solid@0.564.0(solid-js@1.9.11):
-    dependencies:
-      solid-js: 1.9.11
-
   lz-string@1.5.0: {}
 
   magic-string@0.30.21:
@@ -12770,10 +12749,6 @@ snapshots:
   solid-prevent-scroll@0.1.10(solid-js@1.9.11):
     dependencies:
       '@corvu/utils': 0.4.2(solid-js@1.9.11)
-      solid-js: 1.9.11
-
-  solid-qr-code@0.1.11(solid-js@1.9.11):
-    dependencies:
       solid-js: 1.9.11
 
   solid-refresh@0.6.3(solid-js@1.9.11):
