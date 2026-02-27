@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use tower_cookies::Cookies;
 use uuid::Uuid;
 
-use crate::api::TokenClaims;
+use crate::api::AuthTokenClaims;
 use crate::app_state::{AppState, TestStateOptions, test_state};
 use crate::auth::api::token::{
   AuthCodeToTokenRequest, TokenResponse as TokenHandlerResponse, auth_code_to_token_handler,
@@ -239,7 +239,7 @@ async fn test_oauth_login_flow_without_pkce() {
 
   // And we have tokens.
   let auth_token = cookies.get(COOKIE_AUTH_TOKEN).unwrap().value().to_string();
-  let decoded_claims = state.jwt().decode::<TokenClaims>(&auth_token).unwrap();
+  let decoded_claims = state.jwt().decode::<AuthTokenClaims>(&auth_token).unwrap();
   assert_eq!(db_user.email, decoded_claims.email);
   let refresh_token = cookies
     .get(COOKIE_REFRESH_TOKEN)
@@ -367,7 +367,7 @@ async fn test_oauth_login_flow_with_pkce() {
 
   let decoded_claims = state
     .jwt()
-    .decode::<TokenClaims>(&token_response.auth_token)
+    .decode::<AuthTokenClaims>(&token_response.auth_token)
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),

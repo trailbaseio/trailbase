@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::auth::AuthError;
-use crate::auth::jwt::TokenClaims;
+use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::tokens::extract_tokens_from_request_parts;
 use crate::{app_state::AppState, util::b64_to_uuid};
 
@@ -110,9 +110,9 @@ impl PartialEq for User {
 }
 
 impl User {
-  /// Construct new verified [User] from [TokenClaims]. This is used when picking
+  /// Construct new verified [User] from [AuthTokenClaims]. This is used when picking
   /// credentials/tokens from headers/cookies.
-  pub(crate) fn from_token_claims(claims: TokenClaims) -> Result<Self, AuthError> {
+  pub(crate) fn from_token_claims(claims: AuthTokenClaims) -> Result<Self, AuthError> {
     let uuid = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
 
     return Ok(Self {
@@ -126,7 +126,7 @@ impl User {
   #[cfg(test)]
   pub(crate) fn from_auth_token(state: &AppState, auth_token: &str) -> Option<Self> {
     Some(
-      Self::from_token_claims(TokenClaims::from_auth_token(state.jwt(), auth_token).unwrap())
+      Self::from_token_claims(AuthTokenClaims::from_auth_token(state.jwt(), auth_token).unwrap())
         .unwrap(),
     )
   }
@@ -210,7 +210,7 @@ mod tests {
       .await
       .unwrap();
     assert_eq!(tokens.id, user_id);
-    TokenClaims::from_auth_token(state.jwt(), &tokens.auth_token).unwrap();
+    AuthTokenClaims::from_auth_token(state.jwt(), &tokens.auth_token).unwrap();
 
     // Extract user from a request that only has a refresh token cookie but no auth token.
     // NOTE: non-cookie creds are not auto-refreshed.

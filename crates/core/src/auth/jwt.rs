@@ -37,7 +37,7 @@ pub enum TokenType {
 
 /// The actual "AuthToken" used for signed-in users.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TokenClaims {
+pub struct AuthTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: String,
   /// Unix timestamp in seconds when the token was minted.
@@ -65,12 +65,12 @@ pub struct TokenClaims {
   pub csrf_token: String,
 }
 
-impl TokenClaims {
+impl AuthTokenClaims {
   pub(crate) fn new(db_user: &DbUser, expires_in: chrono::Duration) -> Self {
     assert!(db_user.verified);
 
     let now = chrono::Utc::now();
-    return TokenClaims {
+    return AuthTokenClaims {
       sub: id_to_b64(&db_user.id),
       exp: (now + expires_in).timestamp(),
       iat: now.timestamp(),
@@ -268,11 +268,14 @@ mod tests {
       ..Default::default()
     };
 
-    let claims = TokenClaims::new(&db_user, crate::constants::DEFAULT_AUTH_TOKEN_TTL);
+    let claims = AuthTokenClaims::new(&db_user, crate::constants::DEFAULT_AUTH_TOKEN_TTL);
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());
-    assert_eq!(claims, TokenClaims::from_auth_token(&jwt, &token).unwrap());
+    assert_eq!(
+      claims,
+      AuthTokenClaims::from_auth_token(&jwt, &token).unwrap()
+    );
 
     let pending_auth_claims = PendingAuthTokenClaims::new(
       uuid::Uuid::now_v7(),
@@ -284,7 +287,7 @@ mod tests {
       pending_auth_claims,
       PendingAuthTokenClaims::from_pending_auth_token(&jwt, &pending_auth_token).unwrap()
     );
-    assert!(TokenClaims::from_auth_token(&jwt, &pending_auth_token).is_err())
+    assert!(AuthTokenClaims::from_auth_token(&jwt, &pending_auth_token).is_err())
   }
 }
 
