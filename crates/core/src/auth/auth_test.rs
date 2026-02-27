@@ -46,12 +46,23 @@ async fn setup_state_and_test_user(
   );
 
   let mailer = TestAsyncSmtpTransport::new();
-  let mut config = test_config();
 
-  config.email.password_reset_template = Some(EmailTemplate {
-    subject: None,
-    body: Some("{{ TOKEN }}".to_string()),
-  });
+  let config = {
+    let mut config = test_config();
+    config.email.password_reset_template = Some(EmailTemplate {
+      subject: None,
+      body: Some("{{ TOKEN }}".to_string()),
+    });
+    config.email.change_email_template = Some(EmailTemplate {
+      subject: None,
+      body: Some("{{ TOKEN }}".to_string()),
+    });
+    config.email.user_verification_template = Some(EmailTemplate {
+      subject: None,
+      body: Some("{{ TOKEN }}".to_string()),
+    });
+    config
+  };
 
   let state = test_state(Some(TestStateOptions {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
@@ -92,20 +103,6 @@ async fn register_test_user(
   assert_eq!(mailer.get_logs().len(), 1);
 
   // Then steal the verification code from the DB and verify.
-  let email_verification_code = {
-    let db_user = state
-      .user_conn()
-      .read_query_value::<DbUser>(
-        format!("SELECT * FROM {USER_TABLE} WHERE email = $1"),
-        params!(email.to_string()),
-      )
-      .await
-      .unwrap()
-      .unwrap();
-
-    db_user.email_verification_code.unwrap()
-  };
-
   let verification_email_body: String = String::from_utf8_lossy(
     &quoted_printable::decode(
       mailer.get_logs()[0].1.as_bytes(),
@@ -114,10 +111,15 @@ async fn register_test_user(
     .unwrap(),
   )
   .to_string();
-  assert!(
-    verification_email_body.contains(&email_verification_code),
-    "code: {email_verification_code}\nbody: {verification_email_body}"
-  );
+
+  let verification_email_re = Regex::new(r"\n(ey.*)$").unwrap();
+  let verification_email_token: String = verification_email_re
+    .captures(&verification_email_body)
+    .unwrap()
+    .get(1)
+    .unwrap()
+    .as_str()
+    .to_string();
 
   // Check that login before email verification fails.
   assert!(matches!(
@@ -138,7 +140,7 @@ async fn register_test_user(
 
   let _ = verify_email_handler(
     State(state.clone()),
-    Path(email_verification_code.clone()),
+    Path(verification_email_token.clone()),
     Query(VerifyEmailQuery::default()),
   )
   .await
@@ -163,15 +165,6 @@ async fn register_test_user(
 
   // User should now be verified.
   assert!(verified);
-
-  // Verifying again should fail.
-  let response = verify_email_handler(
-    State(state.clone()),
-    Path(email_verification_code),
-    Query(VerifyEmailQuery::default()),
-  )
-  .await;
-  assert!(response.is_err());
 
   return user;
 }
@@ -586,20 +579,8 @@ async fn test_auth_change_email_flow() {
   // Assert that a change-email email was sent.
   assert_eq!(mailer.get_logs().len(), 2);
 
-  // Steal the verification code.
-  let email_verification_code: String = state
-    .user_conn()
-    .read_query_row_f(
-      format!(r#"SELECT email_verification_code FROM "{USER_TABLE}" WHERE id = $1"#),
-      params!(user.uuid.into_bytes()),
-      |row| row.get(0),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-  assert!(!email_verification_code.is_empty());
-
-  let verification_email_body: String = String::from_utf8_lossy(
+  // Steal the change email verification code.
+  let change_email_body: String = String::from_utf8_lossy(
     &quoted_printable::decode(
       mailer.get_logs().get(1).unwrap().1.as_bytes(),
       quoted_printable::ParseMode::Robust,
@@ -607,18 +588,23 @@ async fn test_auth_change_email_flow() {
     .unwrap(),
   )
   .to_string();
-  assert!(
-    verification_email_body.contains(&email_verification_code),
-    "code: {email_verification_code}\nbody: {verification_email_body}"
-  );
+
+  let change_email_re = Regex::new(r"\n(ey.*)$").unwrap();
+  let change_email_token: String = change_email_re
+    .captures(&change_email_body)
+    .unwrap()
+    .get(1)
+    .unwrap()
+    .as_str()
+    .to_string();
 
   let _ = change_email::change_email_confirm_handler(
     State(state.clone()),
-    Path(email_verification_code.clone()),
+    Path(change_email_token.clone()),
     Query(ChangeEmailConfigQuery { redirect_uri: None }),
   )
   .await
-  .expect(&format!("CODE: '{email_verification_code}'"));
+  .expect(&format!("CODE: '{change_email_token}'"));
 
   let db_email: String = state
     .user_conn()

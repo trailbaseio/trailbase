@@ -7,12 +7,12 @@ use uuid::Uuid;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::{user_exists, validate_and_normalize_email_address};
-use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
-use crate::rand::generate_random_string;
 
 #[derive(Debug, Serialize, Deserialize, Default, TS)]
 #[ts(export)]
@@ -47,18 +47,13 @@ pub async fn create_user_handler(
   }
 
   let hashed_password = hash_password(&request.password)?;
-  let email_verification_code = if request.verified {
-    None
-  } else {
-    Some(generate_random_string(VERIFICATION_CODE_LENGTH))
-  };
 
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
       INSERT INTO '{USER_TABLE}' \
-        (email, password_hash, verified, admin, email_verification_code) \
+        (email, password_hash, verified, admin) \
       VALUES \
-        (:email, :password_hash, :verified, :admin ,:email_verification_code) \
+        (:email, :password_hash, :verified, :admin) \
       RETURNING * \
     ",
   );
@@ -72,7 +67,6 @@ pub async fn create_user_handler(
         ":password_hash": hashed_password,
         ":verified": request.verified,
         ":admin": request.admin,
-        ":email_verification_code": email_verification_code.clone(),
       },
     )
     .await?
@@ -80,8 +74,20 @@ pub async fn create_user_handler(
     return Err(Error::Precondition("Internal".into()));
   };
 
-  if let Some(email_verification_code) = email_verification_code {
-    Email::verification_email(&state, &user.email, &email_verification_code)?
+  // Send an email
+  if !request.verified {
+    let claims = EmailVerificationTokenClaims::new(
+      &user.uuid(),
+      user.email.clone(),
+      chrono::Duration::hours(4),
+    );
+
+    let token = state
+      .jwt()
+      .encode(&claims)
+      .map_err(|err| Error::Internal(err.into()))?;
+
+    Email::verification_email(&state, &user.email, &token)?
       .send()
       .await?;
   }

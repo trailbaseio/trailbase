@@ -98,7 +98,7 @@ pub(super) fn router() -> Router<crate::AppState> {
       get(api::verify_email::request_email_verification_handler),
     )
     .route(
-      &format!("/{AUTH_API_PATH}/verify_email/confirm/{{email_verification_code}}"),
+      &format!("/{AUTH_API_PATH}/verify_email/confirm/{{email_verification_token}}"),
       get(api::verify_email::verify_email_handler),
     )
     .route(
@@ -106,7 +106,7 @@ pub(super) fn router() -> Router<crate::AppState> {
       post(api::change_email::change_email_request_handler),
     )
     .route(
-      &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_code}}"),
+      &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_token}}"),
       get(api::change_email::change_email_confirm_handler),
     )
     // Password-reset flow.

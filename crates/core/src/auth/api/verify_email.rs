@@ -2,16 +2,18 @@ use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
+use mini_moka::sync::Cache;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use trailbase_sqlite::params;
 use utoipa::IntoParams;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
-use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
-use crate::rand::generate_random_string;
 use crate::util::urlencode;
 
 const TTL_SEC: i64 = 3600;
@@ -42,6 +44,14 @@ pub async fn request_email_verification_handler(
   let normalized_email = validate_and_normalize_email_address(&query.email)?;
   let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
 
+  {
+    // Rate limit.
+    if ATTEMPTS.get(&normalized_email).is_some() {
+      return Err(AuthError::TooManyRequests);
+    }
+    ATTEMPTS.insert(normalized_email.clone(), ());
+  }
+
   let success_response = || {
     if let Some(redirect) = redirect_uri {
       Redirect::to(&format!(
@@ -59,54 +69,24 @@ pub async fn request_email_verification_handler(
     return Ok(success_response());
   };
 
-  if let Some(last_verification) = user.email_verification_code_sent_at {
-    let Some(timestamp) = chrono::DateTime::from_timestamp(last_verification, 0) else {
-      return Err(AuthError::Internal("Invalid timestamp".into()));
-    };
-
-    let age = chrono::Utc::now() - timestamp;
-    if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
-      return Err(AuthError::TooManyRequests);
-    }
-  }
-
-  let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
-  const UPDATE_VERIFICATION_CODE_QUERY: &str = formatcp!(
-    "\
-      UPDATE '{USER_TABLE}' \
-      SET \
-        email_verification_code = $1, \
-        email_verification_code_sent_at = UNIXEPOCH() \
-      WHERE \
-        id = $2 \
-    "
+  let claims = EmailVerificationTokenClaims::new(
+    &user.uuid(),
+    user.email.clone(),
+    chrono::Duration::seconds(TTL_SEC),
   );
+  let token = state
+    .jwt()
+    .encode(&claims)
+    .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      UPDATE_VERIFICATION_CODE_QUERY,
-      params!(email_verification_code.clone(), user.id),
-    )
-    .await?;
+  let email = Email::verification_email(&state, &user.email, &token)
+    .map_err(|err| AuthError::Internal(err.into()))?;
+  email
+    .send()
+    .await
+    .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
 
-  return match rows_affected {
-    // Race: can only happen if user is removed while email is verified.
-    0 => Err(AuthError::Conflict),
-    1 => {
-      let email = Email::verification_email(&state, &user.email, &email_verification_code)
-        .map_err(|err| AuthError::Internal(err.into()))?;
-      email
-        .send()
-        .await
-        .map_err(|err| AuthError::Internal(err.into()))?;
-
-      Ok(success_response())
-    }
-    _ => {
-      panic!("Password reset affected multiple users: {rows_affected}");
-    }
-  };
+  return Ok(success_response());
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -128,26 +108,25 @@ pub(crate) struct VerifyEmailQuery {
 )]
 pub(crate) async fn verify_email_handler(
   State(state): State<AppState>,
-  Path(email_verification_code): Path<String>,
+  Path(email_verification_token): Path<String>,
   query: Query<VerifyEmailQuery>,
 ) -> Result<Response, AuthError> {
   let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
 
+  let claims = EmailVerificationTokenClaims::decode(state.jwt(), &email_verification_token)
+    .map_err(|_err| AuthError::BadRequest("invalid token"))?;
+
   const UPDATE_CODE_QUERY: &str = formatcp!(
     "\
       UPDATE '{USER_TABLE}' \
-      SET \
-        verified = TRUE, \
-        email_verification_code = NULL, \
-        email_verification_code_sent_at = NULL \
-      WHERE \
-        email_verification_code = $1 AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
+      SET verified = TRUE \
+      WHERE email = $2 \
     "
   );
 
   let rows_affected = state
     .user_conn()
-    .execute(UPDATE_CODE_QUERY, params!(email_verification_code))
+    .execute(UPDATE_CODE_QUERY, params!(claims.email))
     .await?;
 
   return match rows_affected {
@@ -168,3 +147,11 @@ pub(crate) async fn verify_email_handler(
     _ => panic!("email verification affected multiple users: {rows_affected}"),
   };
 }
+
+// Track login attempts for abuse prevention.
+static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+  Cache::builder()
+    .time_to_live(std::time::Duration::from_secs(RATE_LIMIT_SEC as u64))
+    .max_capacity(2048)
+    .build()
+});

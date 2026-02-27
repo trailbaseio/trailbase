@@ -21,11 +21,6 @@ pub(crate) struct DbUser {
   pub created: i64,
   pub updated: i64,
 
-  pub email_verification_code: Option<String>,
-  pub email_verification_code_sent_at: Option<i64>,
-
-  pub pending_email: Option<String>,
-
   pub authorization_code: Option<String>,
   pub authorization_code_sent_at: Option<i64>,
   pub pkce_code_challenge: Option<String>,
@@ -67,9 +62,6 @@ impl DbUser {
       admin: false,
       created: timestamp as i64,
       updated: timestamp as i64,
-      email_verification_code: None,
-      email_verification_code_sent_at: None,
-      pending_email: None,
       authorization_code: None,
       authorization_code_sent_at: None,
       otp_code: None,

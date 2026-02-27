@@ -27,8 +27,6 @@ pub struct UserJson {
   // For external oauth providers.
   pub provider_id: i64,
   pub provider_user_id: Option<String>,
-
-  pub email_verification_code: String,
 }
 
 impl From<DbUser> for UserJson {
@@ -40,7 +38,6 @@ impl From<DbUser> for UserJson {
       admin: value.admin,
       provider_id: value.provider_id,
       provider_user_id: value.provider_user_id,
-      email_verification_code: value.email_verification_code.unwrap_or_default(),
     }
   }
 }
