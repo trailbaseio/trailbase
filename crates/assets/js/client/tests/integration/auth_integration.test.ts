@@ -40,9 +40,13 @@ test("OIDC", async () => {
     userInfoResponse.statusCode = 200;
   });
 
-  const login = await fetch(`http://${ADDRESS}/api/auth/v1/oauth/oidc0/login`, {
-    redirect: "manual",
-  });
+  const redirectUri = "/_/auth/expected";
+  const login = await fetch(
+    `http://${ADDRESS}/api/auth/v1/oauth/oidc0/login?redirect_uri=${redirectUri}`,
+    {
+      redirect: "manual",
+    },
+  );
 
   expect(login.status).toBe(303);
   const location = login.headers.get("location")!;
@@ -62,7 +66,7 @@ test("OIDC", async () => {
   });
 
   expect(callback.status).toBe(303);
-  expect(callback.headers.get("location")).toBe("/_/auth/profile");
+  expect(callback.headers.get("location")).toBe(redirectUri);
 
   const authHeader = callback.headers.get("set-cookie")!;
   expect(authHeader)

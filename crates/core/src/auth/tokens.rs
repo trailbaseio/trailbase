@@ -182,7 +182,7 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let claims = TokenClaims::new(&db_user, expires_in);
+  let claims = TokenClaims::new(db_user, expires_in);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);

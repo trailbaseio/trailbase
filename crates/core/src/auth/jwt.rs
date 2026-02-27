@@ -75,7 +75,7 @@ impl TokenClaims {
       exp: (now + expires_in).timestamp(),
       iat: now.timestamp(),
       r#type: TokenType::Auth as u8,
-      admin: db_user.admin.clone(),
+      admin: db_user.admin,
       mfa: db_user.totp_secret.is_some(),
       email: db_user.email.clone(),
       csrf_token: generate_random_string(20),

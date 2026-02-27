@@ -9,7 +9,7 @@ use tower_cookies::Cookies;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
-use crate::auth::oauth::state::{OAuthState, ResponseType};
+use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::util::new_cookie_opts;
 use crate::constants::COOKIE_OAUTH_STATE;
 
@@ -53,7 +53,7 @@ pub(crate) async fn login_with_external_auth_provider(
     .url();
 
   let oauth_state = match login_params {
-    LoginParams::Password { redirect_uri } => OAuthState {
+    LoginParams::Password { redirect_uri } => OAuthStateClaims {
       // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
       exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
       csrf_secret: csrf_state.secret().to_string(),
@@ -65,7 +65,7 @@ pub(crate) async fn login_with_external_auth_provider(
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
       pkce_code_challenge,
-    } => OAuthState {
+    } => OAuthStateClaims {
       // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
       exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
       csrf_secret: csrf_state.secret().to_string(),

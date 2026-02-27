@@ -116,32 +116,16 @@ async fn ui_login_handler(
   user: Option<&User>,
   query: LoginQuery,
 ) -> Result<Response, HttpError> {
-  if query.redirect_uri.is_none() && user.is_some() {
-    // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
-    // For example, if we're already logged in the browser but want to sign-in with the browser
-    // from an app, we still have to go through the motions of signing in.
-    //
-    // QUESTION: Too much magic, just remove?
-    return Ok(Redirect::to(PROFILE_UI).into_response());
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
   }
 
-  let redirect_uri = auth::hidden_input(
-    "redirect_uri",
-    Some(query.redirect_uri.as_deref().unwrap_or(PROFILE_UI)),
-  );
-  let mfa_redirect_uri = auth::hidden_input(
-    "mfa_redirect_uri",
-    Some(query.mfa_redirect_uri.as_deref().unwrap_or(LOGIN_MFA_UI)),
-  );
-  let response_type = auth::hidden_input("response_type", query.response_type.as_ref());
-  let pkce_code_challenge =
-    auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref());
-
   let oauth_query_params: Vec<(&str, &str)> = [
-    query
-      .redirect_uri
-      .as_ref()
-      .map(|r| ("redirect_uri", r.as_str())),
+    Some(("redirect_uri", redirect_uri)),
     query
       .response_type
       .as_ref()
@@ -157,10 +141,13 @@ async fn ui_login_handler(
 
   let html = auth::LoginTemplate {
     state: [
-      redirect_uri,
-      mfa_redirect_uri,
-      response_type,
-      pkce_code_challenge,
+      auth::hidden_input("redirect_uri", Some(redirect_uri)),
+      auth::hidden_input(
+        "mfa_redirect_uri",
+        Some(query.mfa_redirect_uri.as_deref().unwrap_or(LOGIN_MFA_UI)),
+      ),
+      auth::hidden_input("response_type", query.response_type.as_ref()),
+      auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
     ]
     .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
@@ -186,26 +173,22 @@ async fn ui_login_mfa_handler(
   user: Option<&User>,
   query: LoginMfaQuery,
 ) -> Result<Response, HttpError> {
-  if query.redirect_uri.is_none() && user.is_some() {
-    // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
-    // For example, if we're already logged in the browser but want to sign-in with the browser
-    // from an app, we still have to go through the motions of signing in.
-    //
-    // QUESTION: Too much magic, just remove?
-    return Ok(Redirect::to(PROFILE_UI).into_response());
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
   }
 
-  let mfa_token = auth::hidden_input("mfa_token", Some(query.mfa_token));
-  let redirect_uri = auth::hidden_input(
-    "redirect_uri",
-    Some(query.redirect_uri.as_deref().unwrap_or(PROFILE_UI)),
-  );
-  let response_type = auth::hidden_input("response_type", query.response_type.as_ref());
-  let pkce_code_challenge =
-    auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref());
-
   let html = auth::LoginMfaTemplate {
-    state: [mfa_token, redirect_uri, response_type, pkce_code_challenge].join("\n"),
+    state: [
+      auth::hidden_input("mfa_token", Some(query.mfa_token)),
+      auth::hidden_input("redirect_uri", Some(redirect_uri)),
+      auth::hidden_input("response_type", query.response_type.as_ref()),
+      auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -219,10 +202,8 @@ pub struct LogoutQuery {
 }
 
 async fn ui_logout_handler(query: LogoutQuery) -> Redirect {
-  if let Some(redirect_uri) = query.redirect_uri {
-    return Redirect::to(&format!("/api/auth/v1/logout?redirect_uri={redirect_uri}"));
-  }
-  return Redirect::to("/api/auth/v1/logout");
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
+  return Redirect::to(&format!("/api/auth/v1/logout?redirect_uri={redirect_uri}"));
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -232,8 +213,9 @@ pub struct RegisterQuery {
 }
 
 async fn ui_register_handler(query: RegisterQuery) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let html = auth::RegisterTemplate {
-    state: auth::redirect_uri(query.redirect_uri.as_ref()),
+    state: auth::redirect_uri(Some(redirect_uri)),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -250,8 +232,9 @@ pub struct ResetPasswordRequestQuery {
 async fn ui_reset_password_request_handler(
   query: ResetPasswordRequestQuery,
 ) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let html = auth::ResetPasswordRequestTemplate {
-    state: auth::redirect_uri(query.redirect_uri.as_ref()),
+    state: auth::redirect_uri(Some(redirect_uri)),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();

@@ -1,19 +1,18 @@
-use axum::{
-  extract::{Query, State},
-  response::Redirect,
-};
+use axum::extract::{Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
-use crate::auth::PROFILE_UI;
 use crate::auth::password::{check_user_password, hash_password, validate_password_policy};
 use crate::auth::util::validate_redirect;
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
+use crate::util::urlencode;
 use crate::{app_state::AppState, auth::util::user_by_id};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -27,6 +26,8 @@ pub struct ChangePasswordRequest {
   pub old_password: String,
   pub new_password: String,
   pub new_password_repeat: String,
+
+  pub redirect_uri: Option<String>,
 }
 
 /// Request a change of password.
@@ -37,26 +38,33 @@ pub struct ChangePasswordRequest {
   params(ChangePasswordQuery),
   request_body = ChangePasswordRequest,
   responses(
-    (status = 200, description = "Success.")
+    (status = 200, description = "Success, when redirect_uri not present."),
+    (status = 303, description = "Success, when redirect_uri present."),
   )
 )]
 pub async fn change_password_handler(
   State(state): State<AppState>,
-  Query(ChangePasswordQuery { redirect_uri }): Query<ChangePasswordQuery>,
+  query: Query<ChangePasswordQuery>,
   user: User,
   either_request: Either<ChangePasswordRequest>,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   if state.demo_mode() {
     return Err(AuthError::BadRequest("Disallowed in demo"));
   }
-
-  validate_redirect(&state, redirect_uri.as_deref())?;
 
   let request = match either_request {
     Either::Json(req) => req,
     Either::Multipart(req, _) => req,
     Either::Form(req) => req,
   };
+
+  let redirect_uri = validate_redirect(
+    &state,
+    query
+      .redirect_uri
+      .as_deref()
+      .or(request.redirect_uri.as_deref()),
+  )?;
 
   let auth_options = state.auth_options();
   validate_password_policy(
@@ -97,7 +105,19 @@ pub async fn change_password_handler(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid old password")),
-    1 => Ok(Redirect::to(redirect_uri.as_deref().unwrap_or(PROFILE_UI))),
+    1 => {
+      if let Some(ref redirect) = redirect_uri {
+        Ok(
+          Redirect::to(&format!(
+            "{redirect}?alert={msg}",
+            msg = urlencode("password changed")
+          ))
+          .into_response(),
+        )
+      } else {
+        Ok((StatusCode::OK, "password changed").into_response())
+      }
+    }
     _ => panic!("password changed for multiple users at once: {rows_affected}"),
   };
 }

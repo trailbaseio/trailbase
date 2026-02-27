@@ -85,7 +85,7 @@ pub(crate) fn build_and_validate_input_params(
     Some(ResponseType::Token) | None => {
       if params.pkce_code_challenge.is_some() {
         return Err(AuthError::BadRequest(
-          "set 'response_type=code' or remove pkce challenge",
+          "set 'response_type=code' or remove pkce_code_challenge",
         ));
       }
 

@@ -10,7 +10,7 @@ pub(crate) enum ResponseType {
 ///
 /// NOTE: Consider encrypting the state to make it tamper-proof.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub(crate) struct OAuthState {
+pub(crate) struct OAuthStateClaims {
   /// Expiration timestamp. Required for JWT. We could remove this is we made this tamper-proof w/o
   /// JWT.
   pub exp: i64,
@@ -54,7 +54,7 @@ mod tests {
   async fn test_oauth_state_serialization() {
     let state = test_state(None).await.unwrap();
 
-    let oauth_state = OAuthState {
+    let oauth_state = OAuthStateClaims {
       exp: chrono::Utc::now().timestamp() + 3600,
       csrf_secret: "secret".to_string(),
       pkce_code_verifier: "server verifier".to_string(),
@@ -64,7 +64,7 @@ mod tests {
     };
 
     let encoded = state.jwt().encode(&oauth_state).unwrap();
-    let decoded: OAuthState = state.jwt().decode(&encoded).unwrap();
+    let decoded: OAuthStateClaims = state.jwt().decode(&encoded).unwrap();
 
     assert_eq!(oauth_state, decoded);
 

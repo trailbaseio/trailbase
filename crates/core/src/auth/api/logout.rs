@@ -1,8 +1,6 @@
-use axum::{
-  extract::{Json, Query, State},
-  http::StatusCode,
-  response::{IntoResponse, Redirect, Response},
-};
+use axum::extract::{Json, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use ts_rs::TS;
@@ -10,7 +8,6 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::LOGIN_UI;
 use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
@@ -36,11 +33,11 @@ pub struct LogoutQuery {
 )]
 pub async fn logout_handler(
   State(state): State<AppState>,
-  Query(LogoutQuery { redirect_uri }): Query<LogoutQuery>,
+  query: Query<LogoutQuery>,
   user: Option<User>,
   cookies: Cookies,
-) -> Result<Redirect, AuthError> {
-  validate_redirect(&state, redirect_uri.as_deref())?;
+) -> Result<Response, AuthError> {
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
 
   remove_all_cookies(&cookies);
 
@@ -48,13 +45,13 @@ pub async fn logout_handler(
     delete_all_sessions_for_user(state.user_conn(), user.uuid).await?;
   }
 
-  return Ok(Redirect::to(redirect_uri.as_deref().unwrap_or_else(|| {
-    if state.public_dir().is_some() {
-      "/"
-    } else {
-      LOGIN_UI
-    }
-  })));
+  return if let Some(redirect) = redirect_uri {
+    Ok(Redirect::to(redirect).into_response())
+  } else if state.public_dir().is_some() {
+    Ok(Redirect::to("/").into_response())
+  } else {
+    Ok((StatusCode::OK, "logged out").into_response())
+  };
 }
 
 #[derive(Clone, Debug, Deserialize, ToSchema, TS)]
