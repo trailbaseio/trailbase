@@ -50,6 +50,12 @@ pub struct LoginResponse {
   pub csrf_token: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct MfaTokenResponse {
+  mfa_token: String,
+}
+
 /// Log in users by email and password.
 #[utoipa::path(
   post,
@@ -61,7 +67,8 @@ pub struct LoginResponse {
     (status = 200, description = "Auth, refresh & CSRF tokens.", body = LoginResponse),
     (status = 303, description = "Auth, refresh & CSRF tokens via cookies."),
     (status = 307, description = "Failed, when redirect_uri or HTML form."),
-    (status = 401, description = "Unauthorizd"),
+    (status = 401, description = "Unauthorized"),
+    (status = 403, description = "Forbidden, when login succeeded but MFA is neeeded.", body = MfaTokenResponse),
   )
 )]
 pub(crate) async fn login_handler(
@@ -145,16 +152,7 @@ pub(crate) async fn login_handler(
       .map_err(|err| AuthError::Internal(err.into()))?;
 
     if is_json {
-      return Ok(
-        (
-          StatusCode::UNAUTHORIZED,
-          serde_json::json!({
-              "mfa_token":  mfa_token,
-          })
-          .to_string(),
-        )
-          .into_response(),
-      );
+      return Ok((StatusCode::FORBIDDEN, Json(MfaTokenResponse { mfa_token })).into_response());
     } else {
       let Some(mfa_redirect) = mfa_redirect_uri else {
         return Err(AuthError::BadRequest("?mfa_redirect required"));
