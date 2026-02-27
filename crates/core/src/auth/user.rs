@@ -26,9 +26,6 @@ pub(crate) struct DbUser {
 
   pub pending_email: Option<String>,
 
-  pub password_reset_code: Option<String>,
-  pub password_reset_code_sent_at: Option<i64>,
-
   pub authorization_code: Option<String>,
   pub authorization_code_sent_at: Option<i64>,
   pub pkce_code_challenge: Option<String>,
@@ -73,8 +70,6 @@ impl DbUser {
       email_verification_code: None,
       email_verification_code_sent_at: None,
       pending_email: None,
-      password_reset_code: None,
-      password_reset_code_sent_at: None,
       authorization_code: None,
       authorization_code_sent_at: None,
       otp_code: None,

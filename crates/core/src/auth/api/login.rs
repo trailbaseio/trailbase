@@ -374,10 +374,9 @@ pub(crate) async fn login_mfa_handler(
     }),
   )?;
 
-  let PendingAuthTokenClaims { sub, .. } = state
-    .jwt()
-    .decode(&mfa_token)
-    .map_err(|_err| AuthError::Unauthorized)?;
+  let PendingAuthTokenClaims { sub, .. } =
+    PendingAuthTokenClaims::from_pending_auth_token(state.jwt(), &mfa_token)
+      .map_err(|_err| AuthError::Unauthorized)?;
 
   // Check credentials.
   let db_user: DbUser = user_by_id(

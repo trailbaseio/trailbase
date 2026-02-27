@@ -2,23 +2,25 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
+use mini_moka::sync::Cache;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
-use crate::rand::generate_random_string;
 use crate::util::urlencode;
 
 const TTL_SEC: i64 = 3600;
-const RATE_LIMIT_SEC: i64 = 4 * 3600;
+const RATE_LIMIT_SEC: i64 = 3600;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct ResetPasswordQuery {
@@ -64,6 +66,14 @@ pub async fn reset_password_request_handler(
   )?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
+  {
+    // Rate limit.
+    if ATTEMPTS.get(&normalized_email).is_some() {
+      return Err(AuthError::TooManyRequests);
+    }
+    ATTEMPTS.insert(normalized_email.clone(), ());
+  }
+
   let success_response = || {
     if let Some(redirect) = redirect_uri {
       return Redirect::to(&format!(
@@ -80,54 +90,21 @@ pub async fn reset_password_request_handler(
     return Ok(success_response());
   };
 
-  if let Some(last_reset) = user.password_reset_code_sent_at {
-    let Some(timestamp) = chrono::DateTime::from_timestamp(last_reset, 0) else {
-      return Err(AuthError::Internal("Invalid timestamp".into()));
-    };
+  let password_reset_claims =
+    PasswordResetTokenClaims::new(&normalized_email, chrono::Duration::seconds(TTL_SEC));
+  let token = state
+    .jwt()
+    .encode(&password_reset_claims)
+    .map_err(|err| AuthError::Internal(err.into()))?;
 
-    let age = chrono::Utc::now() - timestamp;
-    if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
-      return Err(AuthError::TooManyRequests);
-    }
-  }
+  let email = Email::password_reset_email(&state, &user.email, &token)
+    .map_err(|err| AuthError::Internal(err.into()))?;
+  email
+    .send()
+    .await
+    .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let password_reset_code = generate_random_string(20);
-  const UPDATE_CODE_QUERY: &str = formatcp!(
-    "\
-      UPDATE '{USER_TABLE}' \
-      SET \
-        password_reset_code = $1, \
-        password_reset_code_sent_at = UNIXEPOCH() \
-      WHERE \
-        id = $2 \
-    "
-  );
-
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      UPDATE_CODE_QUERY,
-      params!(password_reset_code.clone(), user.id),
-    )
-    .await?;
-
-  return match rows_affected {
-    // Race: can only happen if user is removed while password is being reset.
-    0 => Err(AuthError::Conflict),
-    1 => {
-      let email = Email::password_reset_email(&state, &user.email, &password_reset_code)
-        .map_err(|err| AuthError::Internal(err.into()))?;
-      email
-        .send()
-        .await
-        .map_err(|err| AuthError::Internal(err.into()))?;
-
-      Ok(success_response())
-    }
-    _ => {
-      panic!("non-unique email");
-    }
-  };
+  return Ok(success_response());
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -140,7 +117,9 @@ pub struct ResetPasswordUpdateRequest {
   pub password: String,
   pub password_repeat: String,
 
-  pub password_reset_code: String,
+  // NOTE: This is a token. It used to be a code.
+  #[serde(alias = "password_reset_code")]
+  pub password_reset_token: String,
 
   pub redirect_uri: Option<String>,
 }
@@ -185,16 +164,16 @@ pub async fn reset_password_update_handler(
     auth_options.password_options(),
   )?;
 
+  let password_reset_claims =
+    PasswordResetTokenClaims::from_password_reset_token(state.jwt(), &request.password_reset_token)
+      .map_err(|_err| AuthError::BadRequest("Invalid token"))?;
+
   let hashed_password = hash_password(&request.password)?;
   const UPDATE_PASSWORD_QUERY: &str = formatcp!(
     "\
       UPDATE '{USER_TABLE}' \
-      SET \
-        password_hash = $1, \
-        password_reset_code = NULL, \
-        password_reset_code_sent_at = NULL \
-      WHERE \
-        password_reset_code = $2 AND password_reset_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
+      SET password_hash = $1 \
+      WHERE email = $2 \
     "
   );
 
@@ -202,7 +181,7 @@ pub async fn reset_password_update_handler(
     .user_conn()
     .execute(
       UPDATE_PASSWORD_QUERY,
-      params!(hashed_password, request.password_reset_code),
+      params!(hashed_password, password_reset_claims.sub),
     )
     .await?;
 
@@ -226,3 +205,11 @@ pub async fn reset_password_update_handler(
     }
   };
 }
+
+// Track login attempts for abuse prevention.
+static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+  Cache::builder()
+    .time_to_live(std::time::Duration::from_secs(RATE_LIMIT_SEC as u64))
+    .max_capacity(2048)
+    .build()
+});

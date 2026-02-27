@@ -8,10 +8,8 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, errors::Error a
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use tokio::{
-  fs,
-  io::{AsyncReadExt, AsyncWriteExt},
-};
+use tokio::fs;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::data_dir::DataDir;
 
@@ -33,6 +31,9 @@ pub enum TokenType {
   Unknown,
   Auth,
   PendingAuth,
+  ResetPassword,
+  ChangeEmail,
+  VerifyEmail,
 }
 
 /// The actual "AuthToken" used for signed-in users.
@@ -100,20 +101,18 @@ pub enum AuthMethod {
   // Otp,
 }
 
-// A "Pending" token used for multi-factor auth.
+// "Pending" auth token used for multi-factor auth.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PendingAuthTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: String,
-  /// Unix timestamp in seconds when the token was minted.
-  pub iat: i64,
   /// Expiration timestamp
   pub exp: i64,
 
   // Token type.
   pub r#type: u8,
 
-  /// Auth method used for initiating the MFA.
+  /// Auth method used for initiating the MFA, i.e. "first factor".
   pub method: AuthMethod,
 }
 
@@ -123,7 +122,6 @@ impl PendingAuthTokenClaims {
 
     return Self {
       sub: uuid_to_b64(&user_id),
-      iat: now.timestamp(),
       exp: (now + expires_in).timestamp(),
       r#type: TokenType::PendingAuth as u8,
       method: AuthMethod::Password,
@@ -133,6 +131,36 @@ impl PendingAuthTokenClaims {
   pub fn from_pending_auth_token(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
     let claims = jwt.decode::<Self>(token)?;
     assert_eq!(claims.r#type, TokenType::PendingAuth as u8);
+    return Ok(claims);
+  }
+}
+
+// Password reset token.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PasswordResetTokenClaims {
+  /// The email of the account.
+  pub sub: String,
+  /// Expiration timestamp
+  pub exp: i64,
+
+  // Token type.
+  pub r#type: u8,
+}
+
+impl PasswordResetTokenClaims {
+  pub fn new(email: &str, expires_in: chrono::Duration) -> Self {
+    let now = chrono::Utc::now();
+
+    return Self {
+      sub: email.to_string(),
+      exp: (now + expires_in).timestamp(),
+      r#type: TokenType::ResetPassword as u8,
+    };
+  }
+
+  pub fn from_password_reset_token(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
+    let claims = jwt.decode::<Self>(token)?;
+    assert_eq!(claims.r#type, TokenType::ResetPassword as u8);
     return Ok(claims);
   }
 }
