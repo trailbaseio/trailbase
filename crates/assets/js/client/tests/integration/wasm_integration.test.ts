@@ -28,11 +28,20 @@ test("WASM runtime", async () => {
   expect((await fetch(`http://${ADDRESS}/await`)).status).equals(status.OK);
 });
 
-test("WASM runtime DB Query & Execute", async () => {
-  const response = await (
-    await fetch(`http://${ADDRESS}/addDeletePost`)
-  ).text();
-  expect(response).toEqual("Ok");
+test("WASM runtime DB Query & Execute", async ({ expect }) => {
+  const responses = await Promise.all(
+    Array.from({ length: 25 }, async (_v, _i) => {
+      // const response = await fetch(`http://${ADDRESS}/js/addDeletePost`);
+      const response = await fetch(`http://${ADDRESS}/addDeletePost`);
+
+      return await response.text();
+    }),
+  );
+
+  expect(responses).toHaveLength(25);
+  for (const resp of responses) {
+    expect(resp).toEqual("Ok");
+  }
 });
 
 test("WASM runtime custom SQLite extension functions", async () => {

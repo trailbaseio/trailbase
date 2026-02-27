@@ -47,9 +47,14 @@ pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
 pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
+
 pub mod sqlite {
   pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
   pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
+}
+
+pub mod rand {
+  pub use wstd::rand::{get_insecure_random_bytes, get_random_bytes};
 }
 
 #[macro_export]

@@ -70,26 +70,34 @@ impl Guest for Endpoints {
 
         println!("[print from WASM guest] user id: {user_id:?}");
 
-        let now = SystemTime::now();
+        let mut bytes: [u8; 32] = [0; 32];
+        trailbase_wasm::rand::get_random_bytes(&mut bytes);
+
+        let body = format!(
+          "{now:?} - {rand}",
+          now = SystemTime::now(),
+          rand = String::from_utf8_lossy(&bytes),
+        );
+
         let num_insertions = execute(
           "INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)",
-          vec![user_id.clone(), Value::Text(format!("{now:?}"))],
+          vec![user_id.clone(), Value::Text(body.clone())],
         )
         .await
         .unwrap();
 
         let num_deletions = execute(
           "DELETE FROM post WHERE body = ?1",
-          vec![Value::Text(format!("{now:?}"))],
+          vec![Value::Text(body.clone())],
         )
         .await
         .unwrap();
 
-        if num_insertions != num_deletions {
-          panic!("{num_insertions} insertions vs {num_deletions} deletions");
-        }
-
-        return Ok("Ok");
+        return if num_insertions == num_deletions {
+          Ok("Ok")
+        } else {
+          Ok("Fail")
+        };
       }),
       routing::get("/transaction", async |_req| {
         let mut tx = Transaction::begin().map_err(internal)?;

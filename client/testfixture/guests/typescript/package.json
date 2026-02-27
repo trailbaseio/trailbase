@@ -8,7 +8,7 @@
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/wasm_ts_guest_testfixture.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && eslint",
-    "deploy": "npm run build && cp dist/wasm_ts_guest_testfixture.wasm ../../wasm/wasm_guest_testfixture.wasm",
+    "deploy": "npm run build && cp dist/wasm_ts_guest_testfixture.wasm ../../wasm/",
     "format": "prettier -w src"
   },
   "dependencies": {

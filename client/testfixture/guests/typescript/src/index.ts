@@ -10,51 +10,49 @@ import { execute, query, Transaction } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
-    HttpHandler.get("/fibonacci", (req: HttpRequest): string => {
+    HttpHandler.get("/js/fibonacci", (req: HttpRequest): string => {
       const n = req.getQueryParam("n");
       return `${fibonacci(n ? parseInt(n) : 40)}\n`;
     }),
-    HttpHandler.get("/json", jsonHandler),
-    HttpHandler.post("/json", jsonHandler),
-    HttpHandler.get("/fetch", async (req: HttpRequest): Promise<string> => {
+    HttpHandler.get("/js/json", jsonHandler),
+    HttpHandler.post("/js/json", jsonHandler),
+    HttpHandler.get("/js/fetch", async (req: HttpRequest): Promise<string> => {
       const url = req.getQueryParam("url");
       if (url) {
         return await (await fetch(url)).text();
       }
       throw new HttpError(StatusCode.BAD_REQUEST, `Missing ?url param`);
     }),
-    HttpHandler.get("/error", () => {
+    HttpHandler.get("/js/error", () => {
       throw new HttpError(StatusCode.IM_A_TEAPOT, "I'm a teapot");
     }),
-    HttpHandler.get("/await", async (req) => {
+    HttpHandler.get("/js/await", async (req) => {
       const ms = req.getQueryParam("ms");
       await delay(ms ? parseInt(ms) : 10);
 
       // Bodies over 2kB/4kB are streamed.
       return "A".repeat(5000);
     }),
-    HttpHandler.get("/addDeletePost", async () => {
+    HttpHandler.get("/js/addDeletePost", async () => {
       const userId = (
         await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
       )[0][0];
 
-      console.info("[print from WASM guest] user id:", userId);
+      console.info("[print from WASM JS guest] user id:", userId);
 
-      const now = Date.now().toString();
+      const body = `${Date.now()} - ${Math.random()}`;
       const numInsertions = await execute(
         `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
-        [userId, now],
+        [userId, body],
       );
 
       const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [
-        now,
+        body,
       ]);
 
-      console.assert(numInsertions === numDeletions);
-
-      return "Ok";
+      return numInsertions === numDeletions ? "Ok" : "Fail";
     }),
-    HttpHandler.get("/transaction", async () => {
+    HttpHandler.get("/js/transaction", async () => {
       const tx = new Transaction();
 
       tx.execute("CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY)", []);
@@ -72,7 +70,7 @@ export default defineConfig({
 
       return "Ok";
     }),
-    HttpHandler.get("/set_interval", async (): Promise<string> => {
+    HttpHandler.get("/js/set_interval", async (): Promise<string> => {
       var cnt = 0;
 
       console.log(`Registering callback`);
@@ -87,7 +85,7 @@ export default defineConfig({
 
       return `setInterval from Javascript`;
     }),
-    HttpHandler.get("/random", async (): Promise<string> => {
+    HttpHandler.get("/js/random", async (): Promise<string> => {
       return `${Math.random().toString()}\n`;
     }),
   ],
