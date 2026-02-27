@@ -880,7 +880,7 @@ class ClientImpl implements Client {
       } as ConfirmRegisterTotpRequest),
       headers: jsonContentTypeHeader,
     });
-    await this.refreshAuthToken();
+    await this.refreshAuthToken({ force: true });
   }
 
   public async unregisterTOTP(totp: string): Promise<void> {
@@ -891,7 +891,7 @@ class ClientImpl implements Client {
       } as DisableTotpRequest),
       headers: jsonContentTypeHeader,
     });
-    await this.refreshAuthToken();
+    await this.refreshAuthToken({ force: true });
   }
 
   // public async verifyTOTP(
@@ -945,8 +945,11 @@ class ClientImpl implements Client {
     }
   }
 
-  public async refreshAuthToken(): Promise<void> {
-    const refreshToken = shouldRefresh(this._tokenState);
+  public async refreshAuthToken(opts?: { force?: boolean }): Promise<void> {
+    const force = opts?.force ?? false;
+    const refreshToken = force
+      ? this._tokenState.state?.tokens.refresh_token
+      : shouldRefresh(this._tokenState);
     if (refreshToken) {
       // Note: refreshTokenImpl will auto-logout on 401.
       this.setTokenState(await this.refreshTokensImpl(refreshToken));

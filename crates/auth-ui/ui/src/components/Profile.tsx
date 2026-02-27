@@ -11,6 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showToast } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { TotpToggleButton } from "@/components/Totp";
 import {
   Dialog,
   DialogContent,
@@ -19,11 +20,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  TextField,
-  TextFieldInput,
-  TextFieldLabel,
-} from "@/components/ui/text-field";
 
 function avatarUrl(user: User): string {
   return `${AVATAR_API}/${user.id}`;
@@ -162,14 +158,7 @@ function Avatar(props: { client: Client; user: User }) {
   );
 }
 
-interface Totp {
-  url: string;
-  png: string;
-}
-
 function ProfileTable(props: { client: Client; user: User }) {
-  const [totpPng, setTotpPng] = createSignal<Totp | null>(null);
-
   return (
     <Card class="w-[80dvw] max-w-[540px] p-8">
       <div class="flex items-center justify-between">
@@ -225,120 +214,6 @@ function ProfileTable(props: { client: Client; user: User }) {
         </div>
       )}
     </Card>
-  );
-}
-
-function TotpToggleButton(props: { client: Client; user: User }) {
-  return (
-    <Switch>
-      <Match when={props.user.mfa}>
-        <TotpUnregisterButton {...props} />
-      </Match>
-
-      <Match when={true}>
-        <TotpRegisterButton {...props} />
-      </Match>
-    </Switch>
-  );
-}
-
-function TotpUnregisterButton(props: { client: Client }) {
-  let input: HTMLInputElement | undefined;
-  const [open, setOpen] = createSignal(false);
-
-  return (
-    <Dialog open={open()} onOpenChange={setOpen}>
-      <Button onClick={() => setOpen(true)}>Unregister TOTP</Button>
-
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Unregister TOTP</DialogTitle>
-        </DialogHeader>
-
-        <form
-          class="flex flex-col gap-2"
-          method="dialog"
-          onSubmit={async (_ev: SubmitEvent) => {
-            await props.client.unregisterTOTP(input?.value ?? "");
-            setOpen(false);
-          }}
-        >
-          <TextField class="flex w-full items-center">
-            <TextFieldLabel>Code</TextFieldLabel>
-
-            <TextFieldInput ref={input} required={true} pattern="[0-9]+" />
-          </TextField>
-
-          <div class="flex justify-center">
-            <Button type="submit">Submit</Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function TotpRegisterButton(props: { client: Client; user: User }) {
-  let input: HTMLInputElement | undefined;
-  const [totpPng, setTotpPng] = createSignal<Totp | null>(null);
-
-  return (
-    <Dialog
-      open={totpPng() !== null}
-      onOpenChange={(open) => {
-        if (!open) {
-          setTotpPng(null);
-        }
-      }}
-    >
-      <Button
-        onClick={async () => {
-          const resp = await props.client.registerTOTP({ png: true });
-
-          setTotpPng({
-            url: resp.totp_url,
-            png: resp.png ?? "",
-          });
-        }}
-      >
-        Register TOTP
-      </Button>
-
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>TOTP Registration</DialogTitle>
-        </DialogHeader>
-
-        <div class="flex justify-center">
-          <img src={`data:image/png;base64,${totpPng()?.png ?? ""}`} />
-        </div>
-
-        <form
-          class="flex flex-col gap-2"
-          method="dialog"
-          onSubmit={async (_ev: SubmitEvent) => {
-            const totp = totpPng();
-            if (totp === null) {
-              return;
-            }
-
-            await props.client.confirmTOTP(totp.url, input?.value ?? "");
-
-            setTotpPng(null);
-          }}
-        >
-          <TextField class="flex w-full items-center">
-            <TextFieldLabel>Code</TextFieldLabel>
-
-            <TextFieldInput ref={input} required={true} pattern="[0-9]+" />
-          </TextField>
-
-          <div class="flex justify-center">
-            <Button type="submit">Submit</Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
   );
 }
 

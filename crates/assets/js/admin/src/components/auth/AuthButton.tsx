@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { Copy } from "lucide-solid";
+
 import { client, $user } from "@/lib/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,78 +12,15 @@ import {
 } from "@/components/ui/dialog";
 import { navbarIconStyle } from "@/components/Navbar";
 import { Avatar, Profile } from "@/components/auth/Profile";
-import { QRCodeSVG } from "solid-qr-code";
-import { showToast } from "../ui/toast";
-import { TextField, TextFieldInput, TextFieldLabel } from "../ui/text-field";
+import { TotpToggleButton } from "@/components/auth/Totp";
 
 export function AuthButton(props: { iconSize: number }) {
   const [open, setOpen] = createSignal(false);
   const user = useStore($user);
-
-  let totpInput: HTMLInputElement | undefined;
-  const [totpUri, setTotpUri] = createSignal<string | null>(null);
-  const secret = () => {
-    const uri = totpUri();
-    return uri !== null ? URL.parse(uri)?.searchParams.get("secret") : null;
-  };
-
-  const enableTotp = async () => {
-    try {
-      const res = await client.registerTOTP();
-      setTotpUri(res.totp_url);
-    } catch (err) {
-      showToast({
-        title: "Error generating OTP",
-        description: `${err}`,
-        variant: "error",
-      });
-    }
-  };
-
-  const disableTotp = async () => {
-    try {
-      const totp = prompt("Enter current TOTP code to disable 2FA");
-      if (!totp) return;
-      await client.unregisterTOTP(totp);
-      showToast({
-        title: "TOTP disabled",
-        description: "Two-factor authentication has been disabled.",
-        variant: "success",
-      });
-    } catch (err) {
-      showToast({
-        title: "Error disabling TOTP",
-        description: `${err}`,
-        variant: "error",
-      });
-    }
-  };
-
-  const confirmTotp = async () => {
-    try {
-      const totp = totpInput?.value;
-      if (!totp) {
-        return;
-      }
-
-      await client.confirmTOTP(totpUri()!, totp);
-      showToast({
-        title: "TOTP confirmed",
-        description: "Two-factor authentication has been enabled.",
-        variant: "success",
-      });
-      setTotpUri(null);
-    } catch (err) {
-      showToast({
-        title: "Error confirming TOTP",
-        description: `${err}`,
-        variant: "error",
-      });
-    }
-  };
+  const hasTotp = () => user()?.mfa ?? false;
 
   return (
-    <Dialog open={open()} onOpenChange={setOpen}>
+    <Dialog id="auth-dialog" open={open()} onOpenChange={setOpen}>
       <button class={navbarIconStyle} onClick={() => setOpen(true)}>
         <Avatar user={user()} size={props.iconSize} />
       </button>
@@ -94,64 +31,14 @@ export function AuthButton(props: { iconSize: number }) {
         </DialogHeader>
 
         <Show when={user()}>
-          <Profile user={user()!} />
-        </Show>
-
-        <Show when={totpUri() !== null}>
-          <div class="bg-muted/50 flex flex-col items-center gap-4 rounded-md border p-4">
-            <h3 class="text-lg font-semibold">Scan QR Code</h3>
-
-            <div class="rounded bg-white p-2">
-              <QRCodeSVG value={totpUri()!} />
-            </div>
-
-            <div class="flex flex-col items-center gap-1 text-sm">
-              <span class="text-muted-foreground">
-                Or enter secret manually:
-              </span>
-
-              <div class="bg-background flex items-center gap-2 rounded border px-3 py-1 font-mono">
-                {secret()}
-
-                <button
-                  class="hover:text-primary transition-colors"
-                  onClick={() => navigator.clipboard.writeText(totpUri()!)}
-                  title="Copy secret"
-                >
-                  <Copy class="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <p class="text-muted-foreground w-full text-center text-xs">
-              Scan this code with your authenticator app (Google Authenticator,
-              Authy, etc.) to enable 2FA.
-            </p>
-            <TextField class="flex items-center gap-2">
-              <TextFieldLabel>Code</TextFieldLabel>
-
-              <TextFieldInput
-                class="bg-white"
-                type="text"
-                autocomplete="new-password"
-                ref={totpInput}
-              />
-            </TextField>
-
-            <Button type="button" onClick={confirmTotp}>
-              Confirm
-            </Button>
-          </div>
+          <Profile user={user()!} twoFactorEnabled={hasTotp()} />
         </Show>
 
         <DialogFooter>
-          <Show when={totpUri() === null}>
-            <Button type="button" onClick={enableTotp}>
-              Generate TOTP
-            </Button>
-            <Button type="button" variant="outline" onClick={disableTotp}>
-              Disable TOTP
-            </Button>
+          <Show when={user()}>
+            <TotpToggleButton client={client} user={user()!} />
           </Show>
+
           <Button
             type="button"
             variant="outline"
