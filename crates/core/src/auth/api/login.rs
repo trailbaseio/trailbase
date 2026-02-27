@@ -1,7 +1,6 @@
-use axum::{
-  extract::{Json, Query, State},
-  response::{IntoResponse, Redirect, Response},
-};
+use axum::extract::{Json, OriginalUri, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
@@ -14,7 +13,6 @@ use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
 };
 use crate::auth::{AuthError, util::user_by_id};
-use crate::auth::{LOGIN_UI, PROFILE_UI};
 use crate::auth::{password::check_user_password, totp::new_totp};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, DEFAULT_MFA_TOKEN_TTL, USER_TABLE,
@@ -76,6 +74,7 @@ pub struct MfaTokenResponse {
 pub(crate) async fn login_handler(
   State(state): State<AppState>,
   Query(query_login_input): Query<LoginInputParams>,
+  origin: OriginalUri,
   cookies: Cookies,
   either_request: Either<LoginRequest>,
 ) -> Result<Response, AuthError> {
@@ -109,33 +108,42 @@ pub(crate) async fn login_handler(
   )?;
 
   // Check credentials.
-  let normalized_email = validate_and_normalize_email_address(&email)?;
-  let db_user: DbUser = user_by_email(&state, &normalized_email)
-    .await
-    .map_err(|_| {
-      // Don't leak if user wasn't found or password was wrong.
-      return AuthError::Unauthorized;
-    })?;
+  let check_credentials = async || -> Result<DbUser, AuthError> {
+    let normalized_email = validate_and_normalize_email_address(&email)?;
+    let db_user: DbUser = user_by_email(&state, &normalized_email)
+      .await
+      .map_err(|_| {
+        // Don't leak if user wasn't found or password was wrong.
+        return AuthError::Unauthorized;
+      })?;
 
-  // Check password and rate limits attempts.
-  if let Err(err) = check_user_password(&db_user, &password, state.demo_mode()) {
-    if is_json {
-      return Err(err);
+    // Check password and rate limits attempts.
+    check_user_password(&db_user, &password, state.demo_mode())?;
+
+    return Ok(db_user);
+  };
+
+  let db_user = match check_credentials().await {
+    Err(err) => {
+      if is_json {
+        return Err(err);
+      }
+      return Ok(auth_error_to_response(
+        err,
+        &cookies,
+        if is_json {
+          None
+        } else {
+          Some(redirect_uri.as_deref().unwrap_or_else(|| origin.path()))
+        },
+      ));
     }
-    return Ok(auth_error_to_response(
-      err,
-      &cookies,
-      redirect_uri.as_deref(),
-    ));
-  }
+    Ok(db_user) => db_user,
+  };
 
   // Does the user require multi-factor auth (MFA)?
   if db_user.totp_secret.is_some() {
-    let Some(mfa_redirect) = mfa_redirect_uri else {
-      return Err(AuthError::BadRequest("TOTP redirect required"));
-    };
-
-    let token = state
+    let mfa_token = state
       .jwt()
       .encode(&PendingAuthTokenClaims::new(
         db_user.uuid(),
@@ -224,14 +232,13 @@ async fn build_auth_token_flow_response(
         state.dev_mode(),
       ));
 
-      Ok(
-        Redirect::to(match (redirect, state.public_dir()) {
-          (Some(ref redirect), _) => redirect,
-          (None, Some(_)) => "/",
-          (None, None) => PROFILE_UI,
-        })
-        .into_response(),
-      )
+      if let Some(ref redirect) = redirect {
+        Ok(Redirect::to(redirect).into_response())
+      } else if state.public_dir().is_some() {
+        Ok(Redirect::to("/").into_response())
+      } else {
+        Ok((StatusCode::OK, "logged in").into_response())
+      }
     }
     Err(err) if is_json => Err(err),
     Err(err) => Ok(auth_error_to_response(err, cookies, redirect.as_deref())),
@@ -417,20 +424,20 @@ pub(crate) async fn login_mfa_handler(
 fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<&str>) -> Response {
   let err_response: Response = err.into_response();
   let status = err_response.status();
+
   if !status.is_client_error() {
-    return err_response;
+    // We also want to unset existing cookies.
+    remove_cookie(cookies, COOKIE_AUTH_TOKEN);
+    remove_cookie(cookies, COOKIE_REFRESH_TOKEN);
   }
 
-  // We also want to unset existing cookies.
-  remove_cookie(cookies, COOKIE_AUTH_TOKEN);
-  remove_cookie(cookies, COOKIE_REFRESH_TOKEN);
+  if let Some(redirect) = redirect {
+    return Redirect::temporary(&format!(
+      "{redirect}?alert={msg}",
+      msg = urlencode(&format!("Login Failed: {status}")),
+    ))
+    .into_response();
+  }
 
-  // QUESTION: Should we return a different redirect type (e.g. temporary or permanent) in the
-  // error case?
-  let msg = urlencode(&format!("Login Failed: {status}"));
-  return if let Some(redirect) = redirect {
-    Redirect::to(&format!("{LOGIN_UI}?alert={msg}&redirect_uri={redirect}")).into_response()
-  } else {
-    Redirect::to(&format!("{LOGIN_UI}?alert={msg}")).into_response()
-  };
+  return err_response;
 }

@@ -1,27 +1,34 @@
-use axum::{extract::State, response::Redirect};
+use axum::extract::{Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::params;
 use ts_rs::TS;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::LOGIN_UI;
+use crate::auth::AuthError;
+use crate::auth::password::{hash_password, validate_password_policy};
+use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::generate_random_string;
-
-use crate::auth::AuthError;
-use crate::auth::password::{hash_password, validate_password_policy};
-use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
+use crate::util::urlencode;
 
 const TTL_SEC: i64 = 3600;
 const RATE_LIMIT_SEC: i64 = 4 * 3600;
 
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct ResetPasswordQuery {
+  redirect_uri: Option<String>,
+}
+
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 pub struct ResetPasswordRequest {
   pub email: String,
+  pub redirect_uri: Option<String>,
 }
 
 /// Request a password reset.
@@ -29,29 +36,48 @@ pub struct ResetPasswordRequest {
   post,
   path = "/reset_password/request",
   tag = "auth",
+  params(ResetPasswordQuery),
   request_body = ResetPasswordRequest,
   responses(
-    (status = 303, description = "Success or user not found."),
+    (status = 200, description = "Success or user not found, when redirect_uri not present."),
+    (status = 303, description = "Success or user not found, when redirect_uri present"),
     (status = 400, description = "Malformed email address."),
   )
 )]
 pub async fn reset_password_request_handler(
   State(state): State<AppState>,
+  query: Query<ResetPasswordQuery>,
   either_request: Either<ResetPasswordRequest>,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   let request = match either_request {
     Either::Json(req) => req,
     Either::Multipart(req, _) => req,
     Either::Form(req) => req,
   };
 
+  let redirect_uri = validate_redirect(
+    &state,
+    query
+      .redirect_uri
+      .as_deref()
+      .or(request.redirect_uri.as_deref()),
+  )?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
-  let success = Redirect::to(&format!("{LOGIN_UI}?alert=Password reset email sent"));
+  let success_response = || {
+    if let Some(redirect) = redirect_uri {
+      return Redirect::to(&format!(
+        "{redirect}?alert={msg}",
+        msg = urlencode("Password reset email sent")
+      ))
+      .into_response();
+    }
+    return (StatusCode::OK, "Password reset email sent").into_response();
+  };
   let Ok(user) = user_by_email(&state, &normalized_email).await else {
     // In case we don't find a user we still reply with a success to avoid leaking
     // users' email addresses.
-    return Ok(success);
+    return Ok(success_response());
   };
 
   if let Some(last_reset) = user.password_reset_code_sent_at {
@@ -96,12 +122,17 @@ pub async fn reset_password_request_handler(
         .await
         .map_err(|err| AuthError::Internal(err.into()))?;
 
-      Ok(success)
+      Ok(success_response())
     }
     _ => {
       panic!("non-unique email");
     }
   };
+}
+
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct ResetPasswordUpdateQuery {
+  redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
@@ -120,6 +151,7 @@ pub struct ResetPasswordUpdateRequest {
   post,
   path = "/reset_password/update",
   tag = "auth",
+  params(ResetPasswordUpdateQuery),
   request_body = ResetPasswordUpdateRequest,
   responses(
     (status = 303, description = "Success. Redirect to provided `redirect_uri` or login page."),
@@ -129,15 +161,22 @@ pub struct ResetPasswordUpdateRequest {
 )]
 pub async fn reset_password_update_handler(
   State(state): State<AppState>,
+  query: Query<ResetPasswordUpdateQuery>,
   either_request: Either<ResetPasswordUpdateRequest>,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   let request = match either_request {
     Either::Json(req) => req,
     Either::Multipart(req, _) => req,
     Either::Form(req) => req,
   };
 
-  validate_redirect(&state, request.redirect_uri.as_deref())?;
+  let redirect_uri = validate_redirect(
+    &state,
+    query
+      .redirect_uri
+      .as_deref()
+      .or(request.redirect_uri.as_deref()),
+  )?;
 
   let auth_options = state.auth_options();
   validate_password_policy(
@@ -169,9 +208,19 @@ pub async fn reset_password_update_handler(
 
   return match rows_affected {
     0 => Err(AuthError::Unauthorized),
-    1 => Ok(Redirect::to(
-      request.redirect_uri.as_deref().unwrap_or(LOGIN_UI),
-    )),
+    1 => {
+      if let Some(redirect) = redirect_uri {
+        Ok(
+          Redirect::to(&format!(
+            "{redirect}?alert={msg}",
+            msg = urlencode("Password reset")
+          ))
+          .into_response(),
+        )
+      } else {
+        Ok((StatusCode::OK, "Password reset").into_response())
+      }
+    }
     _ => {
       panic!("multiple users with same verification code.");
     }
