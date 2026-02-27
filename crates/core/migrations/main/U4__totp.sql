@@ -17,21 +17,13 @@ CREATE TABLE IF NOT EXISTS _new_with_otp (
 
   -- Ephemeral data for auth flows.
   --
-  -- Email change/verification flow.
-  email_verification_code          TEXT,
-  email_verification_code_sent_at  INTEGER,
-  -- Change email flow.
-  pending_email                    TEXT CHECK(is_email(pending_email)),
-  -- Reset forgotten password flow.
-  password_reset_code              TEXT,
-  password_reset_code_sent_at      INTEGER,
   -- Authorization Code Flow (optionally with PKCE proof key).
   authorization_code               TEXT,
   authorization_code_sent_at       INTEGER,
   pkce_code_challenge              TEXT,
   -- OTP flow.
-  otp_code                         TEXT,
-  otp_sent_at                      INTEGER,
+  -- otp_code                         TEXT,
+  -- otp_sent_at                      INTEGER,
   -- TOTP secret for authenticator.
   totp_secret                      TEXT,
 
@@ -53,11 +45,6 @@ INSERT INTO _new_with_otp(
     admin,
     created,
     updated,
-    email_verification_code,
-    email_verification_code_sent_at,
-    pending_email,
-    password_reset_code,
-    password_reset_code_sent_at,
     authorization_code,
     authorization_code_sent_at,
     pkce_code_challenge,
@@ -73,11 +60,6 @@ INSERT INTO _new_with_otp(
     admin,
     created,
     updated,
-    email_verification_code,
-    email_verification_code_sent_at,
-    pending_email,
-    password_reset_code,
-    password_reset_code_sent_at,
     authorization_code,
     authorization_code_sent_at,
     pkce_code_challenge,
