@@ -1,26 +1,34 @@
-use axum::extract::State;
-use axum::response::Redirect;
+use axum::extract::{OriginalUri, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
-use crate::auth::util::{user_exists, validate_and_normalize_email_address};
-use crate::auth::{LOGIN_UI, REGISTER_USER_UI};
+use crate::auth::util::{user_exists, validate_and_normalize_email_address, validate_redirect};
 use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
 use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::generate_random_string;
+use crate::util::urlencode;
+
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct RegisterQuery {
+  redirect_uri: Option<String>,
+}
 
 #[derive(Debug, Default, Deserialize, ToSchema)]
 pub struct RegisterUserRequest {
   pub email: String,
   pub password: String,
   pub password_repeat: String,
+
+  pub redirect_uri: Option<String>,
 }
 
 /// Registers a new user with email and password.
@@ -28,6 +36,7 @@ pub struct RegisterUserRequest {
   post,
   path = "/register",
   tag = "auth",
+  params(RegisterQuery),
   request_body = RegisterUserRequest,
   responses(
     (status = 303, description = "Success, new user registered, or user already exists."),
@@ -37,8 +46,10 @@ pub struct RegisterUserRequest {
 )]
 pub async fn register_user_handler(
   State(state): State<AppState>,
+  origin: OriginalUri,
+  query: Query<RegisterQuery>,
   either_request: Either<RegisterUserRequest>,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
   if disabled {
     return Err(AuthError::Forbidden);
@@ -50,6 +61,13 @@ pub async fn register_user_handler(
     Either::Form(req) => req,
   };
 
+  let redirect_uri = validate_redirect(
+    &state,
+    query
+      .redirect_uri
+      .as_deref()
+      .or(request.redirect_uri.as_deref()),
+  )?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
   let auth_options = state.auth_options();
@@ -58,21 +76,31 @@ pub async fn register_user_handler(
     &request.password_repeat,
     auth_options.password_options(),
   ) {
-    return Ok(Redirect::temporary(&format!(
-      "{REGISTER_USER_UI}?alert=Invalid password"
-    )));
+    return Ok(
+      Redirect::temporary(&format!(
+        "{path}?alert={msg}",
+        path = origin.path(),
+        msg = urlencode("Invalid password"),
+      ))
+      .into_response(),
+    );
   }
 
-  let success = {
-    let msg = format!(
-      "Registered {normalized_email}. Email verification is needed before signing in. Check your inbox."
-    );
-    Redirect::to(&format!("{LOGIN_UI}?alert={msg}"))
+  let success_response = || {
+    if let Some(redirect) = redirect_uri {
+      return Redirect::to(&format!(
+      "{redirect}?alert={msg}",
+      msg = urlencode(&format!(
+        "Registered {normalized_email}. Email verification is needed before signing in. Check your inbox."
+      ))
+    )).into_response();
+    }
+    return (StatusCode::OK, "registered").into_response();
   };
 
   if user_exists(&state, &normalized_email).await {
     // In case the user already exists, we claim success to avoid leaking users' email addresses.
-    return Ok(success);
+    return Ok(success_response());
   }
 
   let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
@@ -116,5 +144,5 @@ pub async fn register_user_handler(
     .await
     .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
 
-  return Ok(success);
+  return Ok(success_response());
 }

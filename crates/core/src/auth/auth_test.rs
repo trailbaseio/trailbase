@@ -1,5 +1,5 @@
-use axum::extract::{Json, Path, Query, State};
-use axum::http::StatusCode;
+use axum::extract::{Json, OriginalUri, Path, Query, State};
+use axum::http::{StatusCode, Uri};
 use axum::response::Response;
 use base64::prelude::*;
 use regex::Regex;
@@ -21,7 +21,7 @@ use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::{LoginRequest, LoginResponse, login_handler};
 use crate::auth::api::logout::{LogoutQuery, logout_handler};
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
-use crate::auth::api::register::{RegisterUserRequest, register_user_handler};
+use crate::auth::api::register::{RegisterQuery, RegisterUserRequest, register_user_handler};
 use crate::auth::api::reset_password::{
   ResetPasswordRequest, ResetPasswordUpdateRequest, reset_password_request_handler,
   reset_password_update_handler,
@@ -69,9 +69,14 @@ async fn register_test_user(
     ..Default::default()
   };
 
-  let _ = register_user_handler(State(state.clone()), Either::Form(request))
-    .await
-    .unwrap();
+  let _ = register_user_handler(
+    State(state.clone()),
+    axum::extract::OriginalUri(Uri::from_static("/_/auth/register")),
+    Query(RegisterQuery::default()),
+    Either::Form(request),
+  )
+  .await
+  .unwrap();
 
   // Assert that a verification email was sent.
   assert_eq!(mailer.get_logs().len(), 1);
@@ -109,6 +114,7 @@ async fn register_test_user(
     login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      OriginalUri(Uri::from_static("/_/auth/login")),
       Cookies::default(),
       Either::Json(LoginRequest {
         email: email.to_string(),
@@ -171,6 +177,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      OriginalUri(Uri::from_static("/_/auth/login")),
       Cookies::default(),
       request,
     )
@@ -293,6 +300,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      OriginalUri(Uri::from_static("/_/auth/login")),
       Cookies::default(),
       request,
     )
@@ -420,8 +428,10 @@ async fn test_auth_reset_password_flow() {
   // Reset (forgotten) password flow.
   let _ = reset_password_request_handler(
     State(state.clone()),
+    Query(Default::default()),
     Either::Form(ResetPasswordRequest {
       email: email.clone(),
+      ..Default::default()
     }),
   )
   .await
@@ -434,8 +444,10 @@ async fn test_auth_reset_password_flow() {
   assert!(
     reset_password_request_handler(
       State(state.clone()),
+      Query(Default::default()),
       Either::Json(ResetPasswordRequest {
-        email: email.clone()
+        email: email.clone(),
+        ..Default::default()
       }),
     )
     .await
@@ -472,6 +484,7 @@ async fn test_auth_reset_password_flow() {
   let new_password = reset_password.to_string();
   let _ = reset_password_update_handler(
     State(state.clone()),
+    Query(Default::default()),
     Either::Form(ResetPasswordUpdateRequest {
       password: new_password.clone(),
       password_repeat: new_password.clone(),
@@ -532,11 +545,14 @@ async fn test_auth_change_email_flow() {
   assert!(
     change_email::change_email_request_handler(
       State(state.clone()),
+      axum::extract::OriginalUri(Uri::from_static("/_/auth/profile")),
       user.clone(),
+      Query(Default::default()),
       Either::Form(change_email::ChangeEmailRequest {
         csrf_token: user.csrf_token.clone(),
         old_email: None,
         new_email: new_email.clone(),
+        ..Default::default()
       }),
     )
     .await
@@ -545,11 +561,14 @@ async fn test_auth_change_email_flow() {
 
   change_email::change_email_request_handler(
     State(state.clone()),
+    axum::extract::OriginalUri(Uri::from_static("/_/auth/profile")),
     user.clone(),
+    Query(Default::default()),
     Either::Form(change_email::ChangeEmailRequest {
       csrf_token: user.csrf_token.clone(),
       old_email: Some(email.clone()),
       new_email: new_email.clone(),
+      ..Default::default()
     }),
   )
   .await
@@ -588,7 +607,6 @@ async fn test_auth_change_email_flow() {
     State(state.clone()),
     Path(email_verification_code.clone()),
     Query(ChangeEmailConfigQuery { redirect_uri: None }),
-    None,
   )
   .await
   .expect(&format!("CODE: '{email_verification_code}'"));
@@ -632,6 +650,7 @@ async fn test_auth_change_password_flow() {
       old_password: password.clone(),
       new_password: new_password.clone(),
       new_password_repeat: new_password.clone(),
+      ..Default::default()
     }),
   )
   .await
@@ -708,7 +727,7 @@ fn get_redirect_location(response: &Response) -> Option<String> {
 }
 
 fn is_failed_login_redirect_response(response: &Response) -> bool {
-  return response.status() == StatusCode::SEE_OTHER
+  return response.status() == StatusCode::TEMPORARY_REDIRECT
     && get_redirect_location(response).map_or(false, |location| {
       location.starts_with("/_/auth/login?alert=")
     });

@@ -1,7 +1,6 @@
-use axum::{
-  extract::{Path, Query, State},
-  response::Redirect,
-};
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use oauth2::{
   AsyncHttpClient, AuthorizationCode, HttpClientError, HttpRequest, HttpResponse, PkceCodeVerifier,
@@ -15,11 +14,10 @@ use utoipa::IntoParams;
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::PROFILE_UI;
 use crate::auth::oauth::OAuthUser;
 use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::OAuthProviderType;
-use crate::auth::oauth::state::{OAuthState, ResponseType};
+use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{new_cookie, remove_cookie, validate_redirect};
@@ -51,23 +49,23 @@ pub(crate) async fn callback_from_external_auth_provider(
   Path(provider): Path<String>,
   Query(query): Query<AuthQuery>,
   cookies: Cookies,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   let auth_options = state.auth_options();
   let Some(provider) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
   };
 
   // Get round-tripped state from cookies, set by prior call to oauth::login.
-  let OAuthState {
+  let OAuthStateClaims {
     csrf_secret,
     pkce_code_verifier,
     user_pkce_code_challenge,
     response_type,
     redirect_uri,
-    ..
+    exp: _,
   } = state
     .jwt()
-    .decode::<OAuthState>(
+    .decode::<OAuthStateClaims>(
       cookies
         .get(COOKIE_OAUTH_STATE)
         .ok_or_else(|| AuthError::BadRequest("missing state"))?
@@ -121,7 +119,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   redirect: Option<String>,
   auth_code: String,
   server_pkce_code_verifier: String,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   let db_user = get_or_create_user(state, provider, auth_code, server_pkce_code_verifier).await?;
 
   // Mint user token and start a session.
@@ -155,11 +153,13 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   // transient issues, letting users retry.
   remove_cookie(cookies, COOKIE_OAUTH_STATE);
 
-  return Ok(Redirect::to(match (redirect, state.public_dir()) {
-    (Some(ref redirect), _) => redirect,
-    (None, Some(_)) => "/",
-    (None, None) => PROFILE_UI,
-  }));
+  return if let Some(ref redirect) = redirect {
+    Ok(Redirect::to(redirect).into_response())
+  } else if state.public_dir().is_some() {
+    Ok(Redirect::to("/").into_response())
+  } else {
+    Ok((StatusCode::OK, "logged in").into_response())
+  };
 }
 
 /// Creates a random auth code that users can use to subsequently sign in using the
@@ -179,7 +179,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
   auth_code: String,
   server_pkce_code_verifier: String,
   user_pkce_code_challenge: Option<String>,
-) -> Result<Redirect, AuthError> {
+) -> Result<Response, AuthError> {
   let (Some(redirect), Some(user_pkce_code_challenge)) = (redirect, user_pkce_code_challenge)
   else {
     // The OAuth login handler should have already ensured that both are present in the PKCE
@@ -223,9 +223,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
 
   return match rows_affected {
     0 => Err(AuthError::BadRequest("invalid user")),
-    1 => Ok(Redirect::to(&format!(
-      "{redirect}?code={authorization_code}"
-    ))),
+    1 => Ok(Redirect::to(&format!("{redirect}?code={authorization_code}")).into_response()),
     _ => {
       unreachable!("code challenge update affected multiple users: {rows_affected}");
     }

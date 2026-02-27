@@ -17,7 +17,7 @@ use crate::auth::api::token::{
 };
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
-use crate::auth::oauth::state::OAuthState;
+use crate::auth::oauth::state::OAuthStateClaims;
 use crate::auth::oauth::{callback, list_providers, login};
 use crate::auth::user::DbUser;
 use crate::auth::util::derive_pkce_code_challenge;
@@ -169,7 +169,7 @@ async fn test_oauth_login_flow_without_pkce() {
   .unwrap();
 
   // Extract ephemeral OAoauth cookie state set by TB in login handler.
-  let oauth_state: OAuthState = state
+  let oauth_state: OAuthStateClaims = state
     .jwt()
     .decode(cookies.get(COOKIE_OAUTH_STATE).unwrap().value())
     .unwrap();
@@ -274,7 +274,7 @@ async fn test_oauth_login_flow_with_pkce() {
   .unwrap();
 
   // Extract ephemeral OAoauth cookie state set by TB in login handler.
-  let oauth_state: OAuthState = state
+  let oauth_state: OAuthStateClaims = state
     .jwt()
     .decode(cookies.get(COOKIE_OAUTH_STATE).unwrap().value())
     .unwrap();
