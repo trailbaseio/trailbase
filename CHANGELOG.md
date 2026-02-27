@@ -1,3 +1,10 @@
+## v0.24.2
+
+- Revert WASM execution model to not share state between HTTP requests. Rust Guests seem fine but JS guests can get stuck. This requires further investigation.
+- Pass `Client-Id` header for Twitch OAuth provider.
+- Update realtime SSR docs.
+- Update dependencies.
+
 ## v0.24.1
 
 - Add experimental Twitch OAuth provider.
