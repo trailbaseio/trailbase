@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::api::AuthTokenClaims;
-use crate::app_state::{TestStateOptions, test_state};
+use crate::app_state::{TestStateOptions, test_config, test_state};
 use crate::auth::AuthError;
 use crate::auth::api::change_email;
 use crate::auth::api::change_email::ChangeEmailConfigQuery;
@@ -28,9 +28,11 @@ use crate::auth::api::reset_password::{
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
 use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
+use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::login_with_password;
+use crate::config::proto::EmailTemplate;
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::Either;
@@ -44,8 +46,16 @@ async fn setup_state_and_test_user(
   );
 
   let mailer = TestAsyncSmtpTransport::new();
+  let mut config = test_config();
+
+  config.email.password_reset_template = Some(EmailTemplate {
+    subject: None,
+    body: Some("{{ TOKEN }}".to_string()),
+  });
+
   let state = test_state(Some(TestStateOptions {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some(config),
     ..Default::default()
   }))
   .await
@@ -457,17 +467,6 @@ async fn test_auth_reset_password_flow() {
   assert_eq!(mailer.get_logs().len(), 2);
 
   // Steal the reset code.
-  let reset_code: String = state
-    .user_conn()
-    .read_query_row_f(
-      format!("SELECT password_reset_code FROM {USER_TABLE} WHERE id = $1"),
-      params!(user.uuid.into_bytes().to_vec()),
-      |row| row.get(0),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-
   let reset_email_body: String = String::from_utf8_lossy(
     &quoted_printable::decode(
       mailer.get_logs().get(1).unwrap().1.as_bytes(),
@@ -476,9 +475,19 @@ async fn test_auth_reset_password_flow() {
     .unwrap(),
   )
   .to_string();
+
+  let password_reset_re = Regex::new(r"\n(ey.*)$").unwrap();
+  let password_reset_token: String = password_reset_re
+    .captures(&reset_email_body)
+    .unwrap()
+    .get(1)
+    .unwrap()
+    .as_str()
+    .to_string();
+
   assert!(
-    reset_email_body.contains(&reset_code),
-    "code: {reset_code}\nbody: {reset_email_body}"
+    PasswordResetTokenClaims::from_password_reset_token(state.jwt(), &password_reset_token).is_ok(),
+    "{password_reset_token}"
   );
 
   let new_password = reset_password.to_string();
@@ -488,7 +497,7 @@ async fn test_auth_reset_password_flow() {
     Either::Form(ResetPasswordUpdateRequest {
       password: new_password.clone(),
       password_repeat: new_password.clone(),
-      password_reset_code: reset_code.clone(),
+      password_reset_token: password_reset_token,
       redirect_uri: None,
     }),
   )

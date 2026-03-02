@@ -65,12 +65,12 @@ impl Guest for Endpoints {
         },
       ),
       routing::get(
-        "/_/auth/reset_password/update/{password_reset_code}",
+        "/_/auth/reset_password/update/{password_reset_token}",
         async |req: Request| -> Result<Response, HttpError> {
-          let password_reset_code = req
-            .path_param("password_reset_code")
-            .ok_or_else(|| internal("missing code"))?;
-          return ui_reset_password_update_handler(req.query_parse()?, password_reset_code).await;
+          let password_reset_token = req
+            .path_param("password_reset_token")
+            .ok_or_else(|| internal("missing token"))?;
+          return ui_reset_password_update_handler(req.query_parse()?, password_reset_token).await;
         },
       ),
       routing::get(
@@ -250,13 +250,14 @@ pub struct ResetPasswordUpdateQuery {
 
 async fn ui_reset_password_update_handler(
   query: ResetPasswordUpdateQuery,
-  password_reset_code: &str,
+  password_reset_token: &str,
 ) -> Result<Response, HttpError> {
-  let redirect_uri = auth::hidden_input("redirect_uri", query.redirect_uri.as_ref());
-  let password_reset_code = auth::hidden_input("password_reset_code", Some(&password_reset_code));
-
   let html = auth::ResetPasswordUpdateTemplate {
-    state: format!("{redirect_uri}\n{password_reset_code}"),
+    state: [
+      auth::hidden_input("redirect_uri", query.redirect_uri.as_ref()),
+      auth::hidden_input("password_reset_token", Some(&password_reset_token)),
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -290,11 +291,12 @@ async fn ui_change_email_handler(
   query: ChangeEmailQuery,
   user: &User,
 ) -> Result<Response, HttpError> {
-  let redirect_uri = auth::hidden_input("redirect_uri", query.redirect_uri.as_ref());
-  let csrf_token = auth::hidden_input("csrf_token", Some(&user.csrf_token));
-
   let html = auth::ChangeEmailTemplate {
-    state: format!("{redirect_uri}\n{csrf_token}"),
+    state: [
+      auth::hidden_input("redirect_uri", query.redirect_uri.as_ref()),
+      auth::hidden_input("csrf_token", Some(&user.csrf_token)),
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
