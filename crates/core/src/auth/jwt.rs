@@ -27,7 +27,7 @@ pub enum JwtHelperError {
 
 #[repr(u8)]
 #[allow(unused)]
-pub enum TokenType {
+enum TokenType {
   Unknown,
   Auth,
   PendingAuth,
@@ -161,6 +161,79 @@ impl PasswordResetTokenClaims {
   pub fn from_password_reset_token(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
     let claims = jwt.decode::<Self>(token)?;
     assert_eq!(claims.r#type, TokenType::ResetPassword as u8);
+    return Ok(claims);
+  }
+}
+
+// Email verification token.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EmailVerificationTokenClaims {
+  /// Url-safe Base64 encoded id of the current user.
+  pub sub: String,
+  /// Expiration timestamp
+  pub exp: i64,
+
+  // Token type.
+  pub r#type: u8,
+
+  pub email: String,
+}
+
+impl EmailVerificationTokenClaims {
+  pub fn new(user_id: &uuid::Uuid, email: String, expires_in: chrono::Duration) -> Self {
+    let now = chrono::Utc::now();
+
+    return Self {
+      sub: uuid_to_b64(user_id),
+      exp: (now + expires_in).timestamp(),
+      r#type: TokenType::VerifyEmail as u8,
+      email,
+    };
+  }
+
+  pub fn decode(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
+    let claims = jwt.decode::<Self>(token)?;
+    assert_eq!(claims.r#type, TokenType::VerifyEmail as u8);
+    return Ok(claims);
+  }
+}
+
+// Change email token.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EmailChangeTokenClaims {
+  /// Url-safe Base64 encoded id of the current user.
+  pub sub: String,
+  /// Expiration timestamp
+  pub exp: i64,
+
+  // Token type.
+  pub r#type: u8,
+
+  pub old_email: String,
+  pub new_email: String,
+}
+
+impl EmailChangeTokenClaims {
+  pub fn new(
+    user_id: &uuid::Uuid,
+    old_email: String,
+    new_email: String,
+    expires_in: chrono::Duration,
+  ) -> Self {
+    let now = chrono::Utc::now();
+
+    return Self {
+      sub: uuid_to_b64(user_id),
+      exp: (now + expires_in).timestamp(),
+      r#type: TokenType::ChangeEmail as u8,
+      old_email,
+      new_email,
+    };
+  }
+
+  pub fn decode(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
+    let claims = jwt.decode::<Self>(token)?;
+    assert_eq!(claims.r#type, TokenType::ChangeEmail as u8);
     return Ok(claims);
   }
 }

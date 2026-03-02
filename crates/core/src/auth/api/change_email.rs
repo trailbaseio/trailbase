@@ -5,20 +5,18 @@ use axum::{
 };
 use const_format::formatcp;
 use serde::Deserialize;
-use trailbase_sqlite::{named_params, params};
+use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
+use crate::auth::jwt::EmailChangeTokenClaims;
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
-use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
-use crate::rand::generate_random_string;
 use crate::util::urlencode;
-
-const TTL_SEC: i64 = 3600;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct ChangeEmailQuery {
@@ -75,102 +73,63 @@ pub async fn change_email_request_handler(
     return Err(AuthError::BadRequest("Invalid CSRF token"));
   }
 
-  // NOTE: This is pretty arbitrary, we could do away with this entirely.
-  if !json && request.old_email.is_none() {
-    return Err(AuthError::BadRequest("Missing old email address"));
-  }
-
-  if validate_and_normalize_email_address(&request.new_email).is_err() {
-    return Err(AuthError::BadRequest("Invalid email address"));
-  }
+  let new_email = validate_and_normalize_email_address(&request.new_email)?;
   let Ok(db_user) = user_by_id(&state, &user.uuid).await else {
     return Err(AuthError::Forbidden);
   };
 
-  if let Some(last_verification) = db_user.email_verification_code_sent_at {
-    let Some(timestamp) = chrono::DateTime::from_timestamp(last_verification, 0) else {
-      return Err(AuthError::Internal("Invalid timestamp".into()));
+  // NOTE: This is pretty arbitrary, we could do away with this entirely :shrug:.
+  if !json {
+    let Some(ref old_email) = request.old_email else {
+      return Err(AuthError::BadRequest("Missing old email address"));
     };
 
-    // NOTE: rate limiting isn't strictly needed since user is authed. Short limit just egregious
-    // abuse prevention.
-    const RATE_LIMIT_SEC: i64 = 10;
-    let age: chrono::Duration = chrono::Utc::now() - timestamp;
-    if age < chrono::Duration::seconds(RATE_LIMIT_SEC) {
-      return Err(AuthError::TooManyRequests);
+    if validate_and_normalize_email_address(old_email)? != db_user.email {
+      return Err(AuthError::BadRequest("Mismatch: old email address"));
     }
   }
 
-  let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
-  const QUERY: &str = formatcp!(
-    "\
-      UPDATE '{USER_TABLE}' \
-      SET \
-        pending_email = :new_email, \
-        email_verification_code = :email_verification_code, \
-        email_verification_code_sent_at = UNIXEPOCH() \
-      WHERE \
-        id = :user_id AND ( \
-          CASE :old_email \
-            WHEN NULL THEN TRUE \
-            ELSE email = :old_email \
-          END \
-        ) \
-    "
+  let claims = EmailChangeTokenClaims::new(
+    &db_user.uuid(),
+    db_user.email.clone(),
+    new_email,
+    chrono::Duration::hours(4),
   );
+  let token = state
+    .jwt()
+    .encode(&claims)
+    .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let rows_affected = state
-    .user_conn()
-    .execute(
-      QUERY,
-      named_params! {
-        ":new_email": request.new_email,
-        ":old_email": request.old_email,
-        ":email_verification_code": email_verification_code.clone(),
-        ":user_id": user.uuid.into_bytes().to_vec(),
-      },
-    )
-    .await?;
+  let email = Email::change_email_address_email(&state, &db_user.email, &token)
+    .map_err(|err| AuthError::Internal(err.into()))?;
+  email
+    .send()
+    .await
+    .map_err(|err| AuthError::Internal(err.into()))?;
 
-  return match rows_affected {
-    0 => Err(AuthError::BadRequest("failed to change email")),
-    1 => {
-      let email =
-        Email::change_email_address_email(&state, &db_user.email, &email_verification_code)
-          .map_err(|err| AuthError::Internal(err.into()))?;
-      email
-        .send()
-        .await
-        .map_err(|err| AuthError::Internal(err.into()))?;
+  if let Some(ref redirect) = redirect_uri {
+    return Ok(
+      Redirect::to(&format!(
+        "{redirect}?alert={msg}",
+        msg = urlencode("Verification email sent")
+      ))
+      .into_response(),
+    );
+  }
 
-      if let Some(ref redirect) = redirect_uri {
-        return Ok(
-          Redirect::to(&format!(
-            "{redirect}?alert={msg}",
-            msg = urlencode("Verification email sent")
-          ))
-          .into_response(),
-        );
-      }
+  // Fallback
+  if !json {
+    return Ok(
+      Redirect::to(&format!(
+        "{path}?alert={msg}",
+        path = origin.path(),
+        msg = urlencode("Verification email sent")
+      ))
+      .into_response(),
+    );
+  }
 
-      // Fallback
-      if !json {
-        return Ok(
-          Redirect::to(&format!(
-            "{path}?alert={msg}",
-            path = origin.path(),
-            msg = urlencode("Verification email sent")
-          ))
-          .into_response(),
-        );
-      }
-
-      Ok((StatusCode::OK, "Verification email sent.").into_response())
-    }
-    _ => {
-      panic!("Email change request affected multiple users: {rows_affected}");
-    }
-  };
+  return Ok((StatusCode::OK, "Verification email sent.").into_response());
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -190,7 +149,7 @@ pub(crate) struct ChangeEmailConfigQuery {
 )]
 pub async fn change_email_confirm_handler(
   State(state): State<AppState>,
-  Path(email_verification_code): Path<String>,
+  Path(email_verification_token): Path<String>,
   query: Query<ChangeEmailConfigQuery>,
   // user: Option<User>,
 ) -> Result<Response, AuthError> {
@@ -199,34 +158,27 @@ pub async fn change_email_confirm_handler(
   }
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
-
-  if email_verification_code.len() != VERIFICATION_CODE_LENGTH {
-    return Err(AuthError::BadRequest("Invalid code"));
-  }
+  let claims = EmailChangeTokenClaims::decode(state.jwt(), &email_verification_token)
+    .map_err(|_err| AuthError::BadRequest("Invalid token"))?;
 
   const QUERY: &str = formatcp!(
     "\
       UPDATE '{USER_TABLE}' \
       SET \
-        email = pending_email, \
-        verified = TRUE, \
-        pending_email = NULL, \
-        email_verification_code = NULL, \
-        email_verification_code_sent_at = NULL \
+        email = $1, \
+        verified = TRUE \
       WHERE \
-        email_verification_code = $1 \
-          AND email_verification_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
-          AND pending_email IS NOT NULL \
+        email = $2 \
     "
   );
 
   let rows_affected = state
     .user_conn()
-    .execute(QUERY, params!(email_verification_code))
+    .execute(QUERY, params!(claims.new_email, claims.old_email))
     .await?;
 
   return match rows_affected {
-    0 => Err(AuthError::BadRequest("Invalid verification code")),
+    0 => Err(AuthError::Conflict),
     1 => {
       if let Some(redirect) = redirect_uri {
         Ok(Redirect::to(redirect).into_response())

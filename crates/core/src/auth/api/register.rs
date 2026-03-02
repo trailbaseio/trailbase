@@ -8,13 +8,13 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::{user_exists, validate_and_normalize_email_address, validate_redirect};
-use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
-use crate::rand::generate_random_string;
 use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -103,15 +103,14 @@ pub async fn register_user_handler(
     return Ok(success_response());
   }
 
-  let email_verification_code = generate_random_string(VERIFICATION_CODE_LENGTH);
   let hashed_password = hash_password(&request.password)?;
 
   const INSERT_USER_QUERY: &str = formatcp!(
     " \
       INSERT INTO '{USER_TABLE}' \
-        (email, password_hash, email_verification_code, email_verification_code_sent_at) \
+        (email, password_hash) \
       VALUES \
-        (:email, :password_hash, :email_verification_code, UNIXEPOCH()) \
+        (:email, :password_hash) \
       RETURNING * \
     "
   );
@@ -123,13 +122,13 @@ pub async fn register_user_handler(
       named_params! {
         ":email": normalized_email.clone(),
         ":password_hash": hashed_password,
-        ":email_verification_code": email_verification_code.clone(),
       },
     )
     .await
     .map_err(|_err| {
       #[cfg(debug_assertions)]
       log::debug!("Failed to register new user {normalized_email}: {_err}");
+
       // The insert will fail if the user is already registered
       AuthError::Conflict
     })?
@@ -137,7 +136,14 @@ pub async fn register_user_handler(
     return Err(AuthError::Internal("Failed to get user".into()));
   };
 
-  let email = Email::verification_email(&state, &user.email, &email_verification_code)
+  let claims =
+    EmailVerificationTokenClaims::new(&user.uuid(), user.email.clone(), chrono::Duration::hours(4));
+  let token = state
+    .jwt()
+    .encode(&claims)
+    .map_err(|err| AuthError::Internal(err.into()))?;
+
+  let email = Email::verification_email(&state, &user.email, &token)
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
