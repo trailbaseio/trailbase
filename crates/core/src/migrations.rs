@@ -294,7 +294,7 @@ mod tests {
           (),
           |row| row.get(0),
         )
-        .unwrap();
+        .unwrap_or_default();
     }
 
     fn index_exists(conn: &rusqlite::Connection, name: &str) -> bool {
