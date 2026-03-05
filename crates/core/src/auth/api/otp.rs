@@ -26,14 +26,14 @@ use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct RequestOtpQuery {
-  redirect_uri: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct RequestOtpRequest {
-  email: String,
-  redirect_uri: Option<String>,
+  pub email: String,
+  pub redirect_uri: Option<String>,
 }
 
 #[utoipa::path(
@@ -135,17 +135,17 @@ pub async fn request_otp_handler(
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LoginOtpQuery {
-  email: Option<String>,
-  code: Option<String>,
-  redirect_uri: Option<String>,
+  pub email: Option<String>,
+  pub code: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct LoginOtpRequest {
-  email: Option<String>,
-  code: Option<String>,
-  redirect_uri: Option<String>,
+  pub email: Option<String>,
+  pub code: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[utoipa::path(
@@ -192,10 +192,14 @@ pub async fn login_otp_handler(
 
   {
     // Rate limit.
-    if LOGIN_ATTEMPTS.get(&normalized_email).is_some() {
-      return Err(AuthError::TooManyRequests);
+    if let Some(attempts) = LOGIN_ATTEMPTS.get(&normalized_email) {
+      if attempts >= 3 {
+        return Err(AuthError::TooManyRequests);
+      }
+      LOGIN_ATTEMPTS.insert(normalized_email.clone(), attempts + 1);
+    } else {
+      LOGIN_ATTEMPTS.insert(normalized_email.clone(), 1);
     }
-    LOGIN_ATTEMPTS.insert(normalized_email.clone(), ());
   }
 
   const LOOKUP_OTP_QUERY: &str = formatcp!(
@@ -244,9 +248,9 @@ static REQUEST_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
 });
 
 // Track login attempts for abuse prevention.
-static LOGIN_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+static LOGIN_ATTEMPTS: LazyLock<Cache<String, usize>> = LazyLock::new(|| {
   Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(5))
+    .time_to_live(std::time::Duration::from_secs(60))
     .max_capacity(2048)
     .build()
 });
