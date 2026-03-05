@@ -1,0 +1,252 @@
+use axum::extract::{Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
+use chrono::{Duration, Utc};
+use const_format::formatcp;
+use mini_moka::sync::Cache;
+use serde::Deserialize;
+use std::sync::LazyLock;
+use tower_cookies::Cookies;
+use trailbase_sqlite::params;
+use ts_rs::TS;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
+
+use crate::app_state::AppState;
+use crate::auth::AuthError;
+use crate::auth::api::login::{LoginResponse, build_auth_token_flow_response};
+use crate::auth::util::{
+  get_user_by_id, user_by_email, validate_and_normalize_email_address, validate_redirect,
+};
+use crate::constants::OTP_CODE_TABLE;
+use crate::email::Email;
+use crate::extract::Either;
+use crate::rand::generate_random_string;
+use crate::util::urlencode;
+
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct RequestOtpQuery {
+  redirect_uri: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct RequestOtpRequest {
+  email: String,
+  redirect_uri: Option<String>,
+}
+
+#[utoipa::path(
+  post,
+  path = "/otp/request",
+  tag = "auth",
+  params(RequestOtpQuery),
+  request_body = RequestOtpRequest,
+  responses(
+    (status = 200, description = "OTP sent or user not found, when redirect_uri not present."),
+    (status = 303, description = "OTP sent or user not found, when redirect_uri present."),
+    (status = 429, description = "Too many attempts"),
+  )
+)]
+
+pub async fn request_otp_handler(
+  State(state): State<AppState>,
+  query: Query<RequestOtpQuery>,
+  either_request: Either<RequestOtpRequest>,
+) -> Result<Response, AuthError> {
+  if !state.access_config(|c| c.auth.enable_otp_signin()) {
+    return Err(AuthError::MethodNotAllowed);
+  }
+
+  let request = match either_request {
+    Either::Json(req) => req,
+    Either::Multipart(req, _) => req,
+    Either::Form(req) => req,
+  };
+
+  let redirect_uri = validate_redirect(
+    &state,
+    query
+      .redirect_uri
+      .as_deref()
+      .or(request.redirect_uri.as_deref()),
+  )?;
+  let normalized_email = validate_and_normalize_email_address(&request.email)?;
+
+  {
+    // Rate limit.
+    if REQUEST_ATTEMPTS.get(&normalized_email).is_some() {
+      return Err(AuthError::TooManyRequests);
+    }
+    REQUEST_ATTEMPTS.insert(normalized_email.clone(), ());
+  }
+
+  let success_response = || {
+    if let Some(redirect) = redirect_uri {
+      return Redirect::to(&format!(
+        "{redirect}?alert={msg}",
+        msg = urlencode("OTP sent")
+      ))
+      .into_response();
+    }
+    return (StatusCode::OK, "OTP sent").into_response();
+  };
+
+  let Ok(db_user) = user_by_email(&state, &normalized_email).await else {
+    // In case we don't find a user we still reply with a success to avoid leaking
+    // users' email addresses.
+    return Ok(success_response());
+  };
+
+  let otp_code = generate_random_string(OTP_CODE_LENGTH);
+  const UPDATE_OTP_QUERY: &str = formatcp!(
+    "\
+      INSERT INTO '{OTP_CODE_TABLE}' (user, email, otp_code, expires) \
+      VALUES ($1, $2, $3, $4) \
+    "
+  );
+
+  let rows_affected = state
+    .session_conn()
+    .execute(
+      UPDATE_OTP_QUERY,
+      params!(
+        db_user.id,
+        normalized_email,
+        otp_code.clone(),
+        (Utc::now() + OTP_TTL).timestamp(),
+      ),
+    )
+    .await?;
+
+  if rows_affected != 1 {
+    return Err(AuthError::Internal("Failed to insert OTP code".into()));
+  }
+
+  let email = Email::otp_email(&state, &db_user.email, &otp_code)
+    .map_err(|err| AuthError::Internal(err.into()))?;
+  email
+    .send()
+    .await
+    .map_err(|err| AuthError::Internal(err.into()))?;
+
+  return Ok(success_response());
+}
+
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct LoginOtpQuery {
+  email: Option<String>,
+  code: Option<String>,
+  redirect_uri: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[ts(export)]
+pub struct LoginOtpRequest {
+  email: Option<String>,
+  code: Option<String>,
+  redirect_uri: Option<String>,
+}
+
+#[utoipa::path(
+  post,
+  path = "/otp/login",
+  tag = "auth",
+  params(LoginOtpQuery),
+  request_body = LoginOtpRequest,
+  responses(
+    (status = 200, description = "Auth tokens.", body = LoginResponse)
+  )
+)]
+pub async fn login_otp_handler(
+  State(state): State<AppState>,
+  cookies: Cookies,
+  query: Query<LoginOtpQuery>,
+  either_request: Either<LoginOtpRequest>,
+) -> Result<Response, AuthError> {
+  if !state.access_config(|c| c.auth.enable_otp_signin()) {
+    return Err(AuthError::MethodNotAllowed);
+  }
+
+  let (request, is_json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
+  };
+
+  let Some(email) = query.email.as_deref().or(request.email.as_deref()) else {
+    return Err(AuthError::BadRequest("missing email"));
+  };
+  let Some(otp_code) = query.code.as_deref().or(request.code.as_deref()) else {
+    return Err(AuthError::BadRequest("missing code"));
+  };
+
+  let redirect_uri = validate_redirect(
+    &state,
+    query
+      .redirect_uri
+      .as_deref()
+      .or(request.redirect_uri.as_deref()),
+  )?;
+  let normalized_email = validate_and_normalize_email_address(email)?;
+
+  {
+    // Rate limit.
+    if LOGIN_ATTEMPTS.get(&normalized_email).is_some() {
+      return Err(AuthError::TooManyRequests);
+    }
+    LOGIN_ATTEMPTS.insert(normalized_email.clone(), ());
+  }
+
+  const LOOKUP_OTP_QUERY: &str = formatcp!(
+    "\
+      SELECT user FROM '{OTP_CODE_TABLE}' \
+      WHERE  \
+        email = $1 AND \
+        otp_code = $2 AND \
+        expires > UNIXEPOCH() \
+    "
+  );
+
+  let Some(user_id) = state
+    .session_conn()
+    .query_row_f(
+      LOOKUP_OTP_QUERY,
+      params!(normalized_email, otp_code.to_string()),
+      |row| row.get::<_, [u8; 16]>(0),
+    )
+    .await?
+  else {
+    return Err(AuthError::Unauthorized);
+  };
+
+  let db_user = get_user_by_id(state.user_conn(), &Uuid::from_bytes(user_id)).await?;
+
+  return build_auth_token_flow_response(
+    &state,
+    &db_user,
+    &cookies,
+    redirect_uri.map(|uri| uri.to_string()),
+    is_json,
+  )
+  .await;
+}
+
+const OTP_CODE_LENGTH: usize = 6;
+const OTP_TTL: Duration = Duration::minutes(5);
+
+// Track attempts to request OTP codes for abuse prevention.
+static REQUEST_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+  Cache::builder()
+    .time_to_live(std::time::Duration::from_secs(2 * 60))
+    .max_capacity(2048)
+    .build()
+});
+
+// Track login attempts for abuse prevention.
+static LOGIN_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+  Cache::builder()
+    .time_to_live(std::time::Duration::from_secs(5))
+    .max_capacity(2048)
+    .build()
+});

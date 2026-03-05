@@ -23,11 +23,26 @@ CREATE INDEX __session__user_index ON _session (user);
 CREATE TABLE _authorization_code (
   id                           INTEGER PRIMARY KEY NOT NULL,
   user                         BLOB NOT NULL,
-  authorization_code           TEXT,
-  pkce_code_challenge          TEXT,
+  authorization_code           TEXT NOT NULL,
+  pkce_code_challenge          TEXT NOT NULL,
   created                      INTEGER DEFAULT (UNIXEPOCH()) NOT NULL,
   expires                      INTEGER  NOT NULL
 ) STRICT;
 
 -- Main auth-code lookup.
 CREATE UNIQUE INDEX __authorization_code__code ON _authorization_code (authorization_code);
+
+--
+-- OTP codes for password-less login.
+--
+CREATE TABLE _otp_code (
+  id                           INTEGER PRIMARY KEY NOT NULL,
+  user                         BLOB NOT NULL,
+  email                        TEXT NOT NULL,
+  otp_code                     TEXT NOT NULL,
+  created                      INTEGER DEFAULT (UNIXEPOCH()) NOT NULL,
+  expires                      INTEGER  NOT NULL
+) STRICT;
+
+-- Main OTP-code lookup.
+CREATE UNIQUE INDEX __otp_code__email ON _otp_code (email);

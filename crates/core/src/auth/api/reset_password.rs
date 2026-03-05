@@ -1,6 +1,7 @@
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
+use chrono::Duration;
 use const_format::formatcp;
 use mini_moka::sync::Cache;
 use serde::Deserialize;
@@ -18,9 +19,6 @@ use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
-
-const TTL_SEC: i64 = 3600;
-const RATE_LIMIT_SEC: i64 = 3600;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct ResetPasswordQuery {
@@ -90,8 +88,7 @@ pub async fn reset_password_request_handler(
     return Ok(success_response());
   };
 
-  let password_reset_claims =
-    PasswordResetTokenClaims::new(&normalized_email, chrono::Duration::seconds(TTL_SEC));
+  let password_reset_claims = PasswordResetTokenClaims::new(&normalized_email, TTL);
   let token = state
     .jwt()
     .encode(&password_reset_claims)
@@ -206,10 +203,13 @@ pub async fn reset_password_update_handler(
   };
 }
 
+const TTL: Duration = Duration::minutes(60);
+const RATE_LIMIT: Duration = Duration::minutes(60);
+
 // Track login attempts for abuse prevention.
 static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
   Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(RATE_LIMIT_SEC as u64))
+    .time_to_live(RATE_LIMIT.to_std().expect("const"))
     .max_capacity(2048)
     .build()
 });

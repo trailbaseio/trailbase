@@ -6,11 +6,11 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::util::{derive_pkce_code_challenge, get_user_by_id};
-use crate::constants::{AUTHORIZATION_CODE_TABLE, USER_TABLE, VERIFICATION_CODE_LENGTH};
-use crate::{app_state::AppState, auth::user::DbUser};
+use crate::constants::{AUTHORIZATION_CODE_TABLE, VERIFICATION_CODE_LENGTH};
 
 #[derive(Clone, Debug, Deserialize, ToSchema, TS)]
 #[ts(export)]

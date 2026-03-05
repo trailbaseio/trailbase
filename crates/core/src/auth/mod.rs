@@ -23,6 +23,7 @@ pub use jwt::{AuthTokenClaims, JwtHelper};
 // pub(crate) use ui::auth_ui_router;
 pub use user::User;
 
+use crate::config::proto::Config;
 use crate::constants::AUTH_API_PATH;
 
 // NOTE: This import is needed to not mangle names in OpenAPI export.
@@ -45,8 +46,8 @@ use api::*;
     refresh::refresh_handler,
     login::login_handler,
     login::login_mfa_handler,
-    // otp::request_otp_handler,
-    // otp::verify_otp_handler,
+    otp::request_otp_handler,
+    otp::login_otp_handler,
     totp::register_totp_request_handler,
     totp::register_totp_confirm_handler,
     totp::unregister_totp_handler,
@@ -66,7 +67,7 @@ use api::*;
 pub(super) struct AuthApi;
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
-pub(super) fn router() -> Router<crate::AppState> {
+pub(super) fn router(config: &Config) -> Router<crate::AppState> {
   // We support the following authentication flows:
   //
   //  * unauthed: register, login, get-avatar-url
@@ -85,7 +86,7 @@ pub(super) fn router() -> Router<crate::AppState> {
   //
   //  TODO: We should have periodic task to vacuum expired auth, validate-email, reset-password
   //  codes and pending registrations.
-  return Router::new()
+  let router = Router::new()
     // Sign-up new users.
     .route(
       &format!("/{AUTH_API_PATH}/register"),
@@ -136,15 +137,6 @@ pub(super) fn router() -> Router<crate::AppState> {
       &format!("/{AUTH_API_PATH}/login_mfa"),
       post(api::login::login_mfa_handler),
     )
-    // OTP flow
-    // .route(
-    //   &format!("/{AUTH_API_PATH}/otp/request"),
-    //   post(api::otp::request_otp_handler),
-    // )
-    // .route(
-    //   &format!("/{AUTH_API_PATH}/otp/verify"),
-    //   post(api::otp::verify_otp_handler),
-    // )
     // TOTP flow
     .route(
       &format!("/{AUTH_API_PATH}/totp/register"),
@@ -198,6 +190,21 @@ pub(super) fn router() -> Router<crate::AppState> {
     )
     // OAuth flows: list providers, login+callback
     .nest(&format!("/{AUTH_API_PATH}/oauth"), oauth::oauth_router());
+
+  if config.auth.enable_otp_signin() {
+    return router
+      // OTP flow
+      .route(
+        &format!("/{AUTH_API_PATH}/otp/request"),
+        post(api::otp::request_otp_handler),
+      )
+      .route(
+        &format!("/{AUTH_API_PATH}/otp/login"),
+        post(api::otp::login_otp_handler),
+      );
+  }
+
+  return router;
 }
 
 /// Replicating minimal functionality of the above main router in case the admin dash is routed

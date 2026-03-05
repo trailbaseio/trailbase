@@ -17,7 +17,9 @@ use trailbase_sqlite::{Connection, params};
 use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::ConnectionManager;
-use crate::constants::{AUTHORIZATION_CODE_TABLE, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
+use crate::constants::{
+  AUTHORIZATION_CODE_TABLE, LOGS_RETENTION_DEFAULT, OTP_CODE_TABLE, SESSION_TABLE,
+};
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
@@ -332,14 +334,9 @@ fn build_job(
     }
     SystemJobId::AuthCleaner => {
       let session_conn = session_conn.clone();
-      // let main_conn = connection_manager.main_entry().connection.clone();
-      // let refresh_token_ttl = config
-      //   .auth
-      //   .refresh_token_ttl_sec
-      //   .map_or(DEFAULT_REFRESH_TOKEN_TTL, Duration::seconds);
 
       DefaultSystemJob {
-        name: "Auth Cleanup",
+        name: "Session Cleanup",
         default: SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
@@ -352,6 +349,7 @@ fn build_job(
             "\
               DELETE FROM '{SESSION_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
               DELETE FROM '{AUTHORIZATION_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM '{OTP_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
             "
           );
 

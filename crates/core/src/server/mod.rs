@@ -464,7 +464,10 @@ impl Server {
     let mut router = Router::new()
       // Public, stable and versioned APIs.
       .merge(records::router(enable_transactions))
-      .merge(install_auth_rate_limiter.map_or_else(auth::router, |inst| inst(auth::router())))
+      .merge(install_auth_rate_limiter.map_or_else(
+        || auth::router(&state.get_config()),
+        |inst| inst(auth::router(&state.get_config())),
+      ))
       .route("/api/healthcheck", get(healthcheck_handler));
 
     if !has_indepenedent_admin_router(opts) {

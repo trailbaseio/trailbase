@@ -460,7 +460,7 @@ pub mod testing {
 
     {
       let email = Email::otp_email(&state, "foo@bar.org", "12345678").unwrap();
-      assert_eq!(email.subject, "TrailBase OTP");
+      assert_eq!(email.subject, "OTP Sign-in for TrailBase");
       assert!(email.body.contains(&format!("12345678")));
     }
   }
