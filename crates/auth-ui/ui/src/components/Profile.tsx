@@ -1,5 +1,12 @@
-import { createSignal, Switch, Match } from "solid-js";
-import { TbOutlineUser, TbOutlineLogout, TbOutlineTrash } from "solid-icons/tb";
+import { createSignal, Switch, Show, Match } from "solid-js";
+import type { Signal } from "solid-js";
+import {
+  TbFillUser,
+  TbOutlineMenu2,
+  TbOutlineLogout,
+  TbOutlineTrash,
+  TbOutlineEdit,
+} from "solid-icons/tb";
 import { useStore } from "@nanostores/solid";
 import type { Client, User } from "trailbase";
 
@@ -18,24 +25,24 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function avatarUrl(user: User): string {
   return `${AVATAR_API}/${user.id}`;
 }
 
-function DeleteAccountButton(props: { client: Client }) {
-  const [open, setOpen] = createSignal<boolean>(false);
+function DeleteAccountDialog(props: { client: Client; open: Signal<boolean> }) {
+  const [open, setOpen] = props.open;
 
   return (
-    <Dialog open={open()} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <div class={cn(DESTRUCTIVE_ICON_STYLE)}>
-          <TbOutlineTrash />
-        </div>
-      </DialogTrigger>
-
+    <Dialog id="delete-account" open={open()} onOpenChange={setOpen}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete Account</DialogTitle>
@@ -117,7 +124,7 @@ function Avatar(props: { client: Client; user: User }) {
 
       <div class="relative">
         <button
-          class="rounded-sm bg-white p-2"
+          class="rounded-sm bg-gray-100 p-2 hover:bg-gray-200"
           onClick={() => fileRef!.click()}
         >
           <object
@@ -132,12 +139,16 @@ function Avatar(props: { client: Client; user: User }) {
             }}
           >
             {/* Fallback */}
-            <TbOutlineUser size={60} color="#0073aa" />
+            <TbFillUser size={60} color="#0073aa" />
           </object>
+
+          <div class="absolute right-1 bottom-1">
+            <TbOutlineEdit />
+          </div>
         </button>
 
-        {!failed() && (
-          <div class="absolute top-0 right-0">
+        <Show when={!failed()}>
+          <div class="absolute top-1 right-1">
             <button
               class={cn(DESTRUCTIVE_ICON_STYLE, "rounded-full bg-white/75")}
               onClick={async () => {
@@ -152,20 +163,62 @@ function Avatar(props: { client: Client; user: User }) {
               <TbOutlineTrash />
             </button>
           </div>
-        )}
+        </Show>
       </div>
     </form>
   );
 }
 
 function ProfileTable(props: { client: Client; user: User }) {
+  const [deleteAccountOpen, setDeleteAccountOpen] = createSignal(false);
+
   return (
     <Card class="w-[80dvw] max-w-[540px] p-8">
       <div class="flex items-center justify-between">
         <h1>User Profile</h1>
 
         <div class="flex items-center gap-2">
-          <DeleteAccountButton client={props.client} />
+          <DropdownMenu>
+            <DropdownMenuTrigger class={cn(ICON_STYLE, "size-[32px]")}>
+              <TbOutlineMenu2 />
+            </DropdownMenuTrigger>
+
+            <DropdownMenuContent>
+              <a href="/_/auth/change_email">
+                <DropdownMenuItem>Change Email</DropdownMenuItem>
+              </a>
+
+              <a href="/_/auth/change_password">
+                <DropdownMenuItem>Change Password</DropdownMenuItem>
+              </a>
+
+              <DropdownMenuItem>Register 2nd Factor</DropdownMenuItem>
+              <DropdownMenuSeparator />
+
+              <DropdownMenuItem
+                class="data-[highlighted]:bg-destructive"
+                onClick={() => setDeleteAccountOpen((old) => !old)}
+              >
+                <TbOutlineTrash /> Delete Account
+              </DropdownMenuItem>
+
+              <Show when={import.meta.env.DEV}>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => {
+                    throw Error("Exception");
+                  }}
+                >
+                  Throw (DEV)
+                </DropdownMenuItem>
+              </Show>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DeleteAccountDialog
+            client={props.client}
+            open={[deleteAccountOpen, setDeleteAccountOpen]}
+          />
 
           <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
             <TbOutlineLogout />
@@ -183,36 +236,9 @@ function ProfileTable(props: { client: Client; user: User }) {
         </div>
       </div>
 
-      <div class="my-4 flex flex-wrap items-center gap-2">
-        <a
-          class={buttonVariants({ variant: "outline" })}
-          href="/_/auth/change_email"
-        >
-          Change Email
-        </a>
-
-        <a
-          class={buttonVariants({ variant: "outline" })}
-          href="/_/auth/change_password"
-        >
-          Change Password
-        </a>
-
+      <div class="my-4 flex w-full flex-col items-end gap-2">
         <TotpToggleButton {...props} />
       </div>
-
-      {import.meta.env.DEV && (
-        <div class="flex justify-center">
-          <Button
-            variant="destructive"
-            onClick={() => {
-              throw Error("Exception");
-            }}
-          >
-            Throw (DEV)
-          </Button>
-        </div>
-      )}
     </Card>
   );
 }
@@ -252,6 +278,8 @@ const ICON_STYLE = [
   "p-2",
   "hover:text-primary-foreground",
   "hover:bg-primary/90",
+  "data-[expanded]:text-primary-foreground",
+  "data-[expanded]:bg-primary/90",
 ];
 
 const DESTRUCTIVE_ICON_STYLE = [
