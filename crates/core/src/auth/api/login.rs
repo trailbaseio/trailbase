@@ -1,10 +1,11 @@
 use axum::extract::{Json, OriginalUri, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
+use chrono::{Timelike, Utc};
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
-use trailbase_sqlite::named_params;
+use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
@@ -15,8 +16,8 @@ use crate::auth::util::{
 use crate::auth::{AuthError, util::user_by_id};
 use crate::auth::{password::check_user_password, totp::new_totp};
 use crate::constants::{
-  COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, DEFAULT_MFA_TOKEN_TTL, USER_TABLE,
-  VERIFICATION_CODE_LENGTH,
+  AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
+  DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::extract::Either;
 use crate::rand::generate_random_string;
@@ -279,26 +280,23 @@ async fn build_authorization_code_flow_and_pkce_response(
 
   const QUERY: &str = formatcp!(
     "\
-      UPDATE \
-        '{USER_TABLE}' \
-      SET \
-        authorization_code = :authorization_code, \
-        authorization_code_sent_at = UNIXEPOCH(), \
-        pkce_code_challenge = :pkce_code_challenge \
-      WHERE \
-        email = :email \
+      INSERT INTO \
+        '{AUTHORIZATION_CODE_TABLE}' (user, authorization_code, pkce_code_challenge, expires) \
+      VALUES \
+        ($1, $2, $3, $4)
     "
   );
 
   let rows_affected = state
-    .user_conn()
+    .session_conn()
     .execute(
       QUERY,
-      named_params! {
-        ":authorization_code": authorization_code.clone(),
-        ":pkce_code_challenge": pkce_code_challenge,
-        ":email": db_user.email.clone(),
-      },
+      params!(
+        db_user.id,
+        authorization_code.clone(),
+        pkce_code_challenge,
+        (Utc::now() + DEFAULT_AUTHORIZATION_CODE_TTL).timestamp(),
+      ),
     )
     .await?;
 

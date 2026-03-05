@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
+use const_format::formatcp;
 use cron::Schedule;
 use futures_util::future::BoxFuture;
 use log::*;
@@ -16,7 +17,7 @@ use trailbase_sqlite::{Connection, params};
 use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::ConnectionManager;
-use crate::constants::{LOGS_RETENTION_DEFAULT, SESSION_TABLE};
+use crate::constants::{AUTHORIZATION_CODE_TABLE, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
@@ -347,19 +348,18 @@ fn build_job(
         callback: build_callback(move || {
           let session_conn = session_conn.clone();
 
-          return async move {
-            let timestamp = (Utc::now() - Duration::seconds(60)).timestamp();
+          const QUERY: &str = formatcp!(
+            "\
+              DELETE FROM '{SESSION_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM '{AUTHORIZATION_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+            "
+          );
 
-            session_conn
-              .execute(
-                format!("DELETE FROM '{SESSION_TABLE}' WHERE expires < $1"),
-                params!(timestamp),
-              )
-              .await
-              .map_err(|err| {
-                warn!("Periodic session cleanup failed: {err}");
-                err
-              })?;
+          return async move {
+            session_conn.execute_batch(QUERY).await.map_err(|err| {
+              warn!("Periodic session cleanup failed: {err}");
+              err
+            })?;
 
             Ok::<(), trailbase_sqlite::Error>(())
           };

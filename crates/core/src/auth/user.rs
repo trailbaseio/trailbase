@@ -17,15 +17,10 @@ pub(crate) struct DbUser {
   pub password_hash: String,
   pub verified: bool,
   pub admin: bool,
+  pub totp_secret: Option<String>,
 
   pub created: i64,
   pub updated: i64,
-
-  pub authorization_code: Option<String>,
-  pub authorization_code_sent_at: Option<i64>,
-  pub pkce_code_challenge: Option<String>,
-
-  pub totp_secret: Option<String>,
 
   // For external OAuth providers.
   //
@@ -57,12 +52,9 @@ impl DbUser {
       password_hash: crate::auth::password::hash_password(password).unwrap(),
       verified: true,
       admin: false,
+      totp_secret: None,
       created: timestamp as i64,
       updated: timestamp as i64,
-      authorization_code: None,
-      authorization_code_sent_at: None,
-      totp_secret: None,
-      pkce_code_challenge: None,
       provider_id: 0,
       provider_user_id: None,
       provider_avatar_url: None,

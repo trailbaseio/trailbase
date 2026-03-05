@@ -1,6 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
+use chrono::{Timelike, Utc};
 use const_format::formatcp;
 use oauth2::{
   AsyncHttpClient, AuthorizationCode, HttpClientError, HttpRequest, HttpResponse, PkceCodeVerifier,
@@ -23,7 +24,8 @@ use crate::auth::user::DbUser;
 use crate::auth::util::{new_cookie, remove_cookie, validate_redirect};
 use crate::config::proto::OAuthProviderId;
 use crate::constants::{
-  COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, USER_TABLE, VERIFICATION_CODE_LENGTH,
+  AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
+  DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };
 use crate::rand::generate_random_string;
 
@@ -195,25 +197,23 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
 
   const QUERY: &str = formatcp!(
     "\
-      UPDATE '{USER_TABLE}' \
-      SET \
-        authorization_code = :authorization_code, \
-        authorization_code_sent_at = UNIXEPOCH(), \
-        pkce_code_challenge = :pkce_code_challenge \
-      WHERE \
-        id = :user_id \
+      INSERT INTO \
+        '{AUTHORIZATION_CODE_TABLE}' (user, authorization_code, pkce_code_challenge, expires) \
+      VALUES \
+        ($1, $2, $3, $4)
     "
   );
 
   let rows_affected = state
-    .user_conn()
+    .session_conn()
     .execute(
       QUERY,
-      named_params! {
-        ":authorization_code": authorization_code.clone(),
-        ":pkce_code_challenge": user_pkce_code_challenge,
-        ":user_id": db_user.id,
-      },
+      params!(
+        db_user.id,
+        authorization_code.clone(),
+        user_pkce_code_challenge,
+        (Utc::now() + DEFAULT_AUTHORIZATION_CODE_TTL).timestamp(),
+      ),
     )
     .await?;
 
