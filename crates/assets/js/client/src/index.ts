@@ -8,6 +8,7 @@ import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
 import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
 import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
+import type { MfaTokenResponse } from "@bindings/MfaTokenResponse";
 import type { LoginRequest } from "@bindings/LoginRequest";
 import type { LoginMfaRequest } from "@bindings/LoginMfaRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
@@ -241,7 +242,7 @@ export interface DeferredOperation<ResponseType> {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DeferredMutation<
   ResponseType,
-> extends DeferredOperation<ResponseType> { }
+> extends DeferredOperation<ResponseType> {}
 
 export class CreateOperation<
   T = Record<string, unknown>,
@@ -250,7 +251,7 @@ export class CreateOperation<
     private readonly client: Client,
     private readonly apiName: string,
     private readonly record: Partial<T>,
-  ) { }
+  ) {}
 
   async query(): Promise<RecordId> {
     const response = await this.client.fetch(
@@ -283,7 +284,7 @@ export class UpdateOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly record: Partial<T>,
-  ) { }
+  ) {}
 
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
@@ -309,7 +310,7 @@ export class DeleteOperation implements DeferredMutation<void> {
     private readonly client: Client,
     private readonly apiName: string,
     private readonly id: RecordId,
-  ) { }
+  ) {}
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
       method: "DELETE",
@@ -338,7 +339,7 @@ export class ReadOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly opt?: ReadOpts,
-  ) { }
+  ) {}
 
   async query(): Promise<T> {
     const expand = this.opt?.expand;
@@ -368,7 +369,7 @@ export class ListOperation<
     private readonly apiName: string,
     private readonly opts?: ListOpts,
     private readonly geojson?: string,
-  ) { }
+  ) {}
   async query(): Promise<R> {
     const params = new URLSearchParams();
     const pagination = this.opts?.pagination;
@@ -444,7 +445,7 @@ export class RecordApiImpl<
   constructor(
     private readonly client: Client,
     private readonly name: string,
-  ) { }
+  ) {}
 
   public async list(opts?: ListOpts): Promise<ListResponse<T>> {
     return new ListOperation<T>(this.client, this.name, opts).query();
@@ -631,7 +632,7 @@ export class RecordApiImpl<
 }
 
 class ThinClient {
-  constructor(public readonly base: URL | undefined) { }
+  constructor(public readonly base: URL | undefined) {}
 
   async fetch(
     path: string,
@@ -646,9 +647,9 @@ class ThinClient {
       ...init,
       headers: init
         ? {
-          ...headers,
-          ...init?.headers,
-        }
+            ...headers,
+            ...init?.headers,
+          }
         : headers,
     });
 
@@ -661,15 +662,7 @@ export interface ClientOptions {
   onAuthChange?: (client: Client, user?: User) => void;
 }
 
-interface EmailAndPasswordCredentials {
-  email: string;
-  password: string;
-}
-
-interface TotpCredentials {
-  mfaToken: string;
-  totp: string;
-}
+export type MultiFactorAuthCallback = (code: string) => Promise<void>;
 
 export interface Client {
   get base(): URL | undefined;
@@ -688,13 +681,10 @@ export interface Client {
 
   avatarUrl(userId?: string): string | undefined;
 
-  // FIXME: Right now MFA requires users to unpack the FetchError, which is very leaky.
-  // We should probably do the unpacking internally and return an optional MFA
-  // token or something.
   login(
-    creds: EmailAndPasswordCredentials | TotpCredentials | string,
-    password?: string,
-  ): Promise<void>;
+    email: string,
+    password: string,
+  ): Promise<MultiFactorAuthCallback | undefined>;
   logout(): Promise<boolean>;
 
   // requestOTP(email: string): Promise<void>;
@@ -800,30 +790,15 @@ class ClientImpl implements Client {
   }
 
   public async login(
-    creds: EmailAndPasswordCredentials | TotpCredentials | string,
-    password?: string,
-  ): Promise<void> {
-    const pwLogin = async (email: string, password: string) => {
-      const response = await this.fetch(`${authApiBasePath}/login`, {
-        method: "POST",
-        body: JSON.stringify({
-          email: email,
-          password: password,
-        } as LoginRequest),
-        headers: jsonContentTypeHeader,
-      });
-
-      this.setTokenState(
-        buildTokenState((await response.json()) as LoginResponse),
-      );
-    };
-
-    const totpLogin = async (mfaToken: string, totp: string) => {
+    email: string,
+    password: string,
+  ): Promise<MultiFactorAuthCallback | undefined> {
+    const totpLogin = async (code: string, mfaToken: string) => {
       const response = await this.fetch(`${authApiBasePath}/login_mfa`, {
         method: "POST",
         body: JSON.stringify({
           mfa_token: mfaToken,
-          totp,
+          totp: code,
         } as LoginMfaRequest),
         headers: jsonContentTypeHeader,
       });
@@ -833,12 +808,27 @@ class ClientImpl implements Client {
       );
     };
 
-    if (typeof creds === "string") {
-      await pwLogin(creds, password ?? "");
-    } else if ("email" in creds) {
-      await pwLogin(creds.email, creds.password);
-    } else {
-      await totpLogin(creds.mfaToken, creds.totp);
+    try {
+      const response = await this.fetch(`${authApiBasePath}/login`, {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        } as LoginRequest),
+        headers: jsonContentTypeHeader,
+      });
+
+      this.setTokenState(
+        buildTokenState((await response.json()) as LoginResponse),
+      );
+    } catch (err) {
+      if (err instanceof FetchError && err.status === 403) {
+        const mfaTokenResponse = JSON.parse(err.message) as MfaTokenResponse;
+        // MFA is needed. Return TOTP login function.
+        return (code: string) => totpLogin(code, mfaTokenResponse.mfa_token);
+      }
+
+      throw err;
     }
   }
 
@@ -1209,7 +1199,7 @@ declare global {
   }
 }
 
-BigInt.prototype.toJSON = function() {
+BigInt.prototype.toJSON = function () {
   return JSON.rawJSON(this.toString());
 };
 
@@ -1232,9 +1222,9 @@ function parseJSON(text: string) {
 
 export const exportedForTesting = isDev
   ? {
-    base64Decode,
-    base64Encode,
-    parseJSON,
-    subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
-  }
+      base64Decode,
+      base64Encode,
+      parseJSON,
+      subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+    }
   : undefined;

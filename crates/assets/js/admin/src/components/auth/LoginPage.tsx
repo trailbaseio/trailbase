@@ -1,11 +1,10 @@
 import { Match, Show, Switch } from "solid-js";
 import type { Setter } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { FetchError } from "trailbase";
+import { FetchError, type MultiFactorAuthCallback } from "trailbase";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 import { client, $user } from "@/lib/client";
-import { MfaTokenResponse } from "@bindings/MfaTokenResponse";
 
 import { Profile } from "@/components/auth/Profile";
 import { showToast } from "@/components/ui/toast";
@@ -57,25 +56,24 @@ export function LoginPage() {
 }
 
 function LoginForm() {
-  const [mfaToken, setMfaToken] = createWritableMemo<MfaTokenResponse | null>(
-    () => null,
-  );
+  const [mfaCallback, setMfaCallback] =
+    createWritableMemo<MultiFactorAuthCallback | null>(() => null);
 
   return (
     <Switch>
-      <Match when={mfaToken() === null}>
-        <PasswordLoginForm setMfaToken={setMfaToken} />
+      <Match when={mfaCallback() === null}>
+        <PasswordLoginForm setMfaCallback={setMfaCallback} />
       </Match>
 
-      <Match when={mfaToken() !== null}>
-        <MfaLoginForm mfaToken={mfaToken()!} />
+      <Match when={mfaCallback() !== null}>
+        <MfaLoginForm mfaCallback={mfaCallback()!} />
       </Match>
     </Switch>
   );
 }
 
 function PasswordLoginForm(props: {
-  setMfaToken: Setter<MfaTokenResponse | null>;
+  setMfaCallback: Setter<MultiFactorAuthCallback | null>;
 }) {
   let passwordInput: HTMLInputElement | undefined;
   let userInput: HTMLInputElement | undefined;
@@ -95,7 +93,10 @@ function PasswordLoginForm(props: {
         if (!email || !pw) return;
 
         try {
-          await client.login(email, pw);
+          const mfaCallback = await client.login(email, pw);
+          if (mfaCallback !== undefined) {
+            props.setMfaCallback(() => mfaCallback);
+          }
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
@@ -103,9 +104,6 @@ function PasswordLoginForm(props: {
               variant: "warning",
               duration: 5 * 1000,
             });
-          } else if (err instanceof FetchError && err.status === 403) {
-            // MFA is needed. Flip to next form.
-            props.setMfaToken(JSON.parse(err.message) as MfaTokenResponse);
           } else if (err instanceof FetchError && err.status === 429) {
             showToast({
               title: `Too many login attempts for ${email}`,
@@ -162,7 +160,7 @@ function PasswordLoginForm(props: {
   );
 }
 
-function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
+function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
   let totpInput: HTMLInputElement | undefined;
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -179,10 +177,7 @@ function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
         if (!userTotp) return;
 
         try {
-          await client.login({
-            mfaToken: props.mfaToken.mfa_token,
-            totp: userTotp,
-          });
+          props.mfaCallback(userTotp);
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
