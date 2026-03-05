@@ -6,6 +6,7 @@ pub const USER_TABLE: &str = "_user";
 pub(crate) const LOGS_TABLE: &str = "_logs";
 pub(crate) const SESSION_TABLE: &str = "_session";
 pub(crate) const AVATAR_TABLE: &str = "_user_avatar";
+pub(crate) const AUTHORIZATION_CODE_TABLE: &str = "_authorization_code";
 
 pub(crate) const LOGS_TABLE_ID_COLUMN: &str = "id";
 pub const LOGS_RETENTION_DEFAULT: Duration = Duration::days(7);
@@ -24,8 +25,10 @@ pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(2);
 #[cfg(not(debug_assertions))]
 pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(60);
 
-pub const DEFAULT_MFA_TOKEN_TTL: Duration = Duration::minutes(2);
-pub const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
+pub(crate) const DEFAULT_AUTHORIZATION_CODE_TTL: Duration = Duration::minutes(5);
+
+pub(crate) const DEFAULT_MFA_TOKEN_TTL: Duration = Duration::minutes(2);
+pub(crate) const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
 
 pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;
 pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;
