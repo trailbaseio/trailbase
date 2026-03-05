@@ -33,9 +33,6 @@ pub(crate) struct DbUser {
   pub authorization_code_sent_at: Option<i64>,
   pub pkce_code_challenge: Option<String>,
 
-  pub otp_code: Option<String>,
-  pub otp_sent_at: Option<i64>,
-
   pub totp_secret: Option<String>,
 
   // For external OAuth providers.
@@ -77,8 +74,6 @@ impl DbUser {
       password_reset_code_sent_at: None,
       authorization_code: None,
       authorization_code_sent_at: None,
-      otp_code: None,
-      otp_sent_at: None,
       totp_secret: None,
       pkce_code_challenge: None,
       provider_id: 0,
