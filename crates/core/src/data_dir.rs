@@ -23,8 +23,8 @@ impl DataDir {
     return self.data_path().join("main.db");
   }
 
-  pub fn auth_db_path(&self) -> PathBuf {
-    return self.data_path().join("auth.db");
+  pub fn session_db_path(&self) -> PathBuf {
+    return self.data_path().join("session.db");
   }
 
   pub fn logs_db_path(&self) -> PathBuf {

@@ -12,7 +12,7 @@ use trailbase_schema::sqlite::{Table, View};
 
 use crate::data_dir::DataDir;
 use crate::migrations::{
-  apply_auth_migrations, apply_base_migrations, apply_logs_migrations, apply_main_migrations,
+  apply_base_migrations, apply_logs_migrations, apply_main_migrations, apply_session_migrations,
 };
 use crate::wasm::{SqliteFunctions, SqliteStore};
 
@@ -409,8 +409,8 @@ pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
   );
 }
 
-pub(super) fn init_auth_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
-  let path = data_dir.map(|d| d.auth_db_path());
+pub(super) fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+  let path = data_dir.map(|d| d.session_db_path());
 
   return trailbase_sqlite::Connection::new(
     || -> Result<_, ConnectionError> {
@@ -419,7 +419,7 @@ pub(super) fn init_auth_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
 
       trailbase_extension::register_all_extension_functions(&conn, None)?;
 
-      apply_auth_migrations(&mut conn)?;
+      apply_session_migrations(&mut conn)?;
       return Ok(conn);
     },
     None,

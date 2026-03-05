@@ -89,13 +89,13 @@ pub(crate) fn apply_logs_migrations(
   return Ok(());
 }
 
-pub(crate) fn apply_auth_migrations(
+pub(crate) fn apply_session_migrations(
   logs_conn: &mut rusqlite::Connection,
 ) -> Result<(), RefineryError> {
   apply_migrations(
-    "auth",
+    "session",
     logs_conn,
-    vec![load_embedded_migrations::<AuthMigrations>()],
+    vec![load_embedded_migrations::<SessionMigrations>()],
   )?;
   return Ok(());
 }
@@ -281,8 +281,8 @@ struct MainMigrations;
 struct LogsMigrations;
 
 #[derive(Clone, rust_embed::RustEmbed)]
-#[folder = "migrations/auth"]
-struct AuthMigrations;
+#[folder = "migrations/session"]
+struct SessionMigrations;
 
 #[cfg(test)]
 mod tests {
