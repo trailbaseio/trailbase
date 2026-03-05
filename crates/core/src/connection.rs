@@ -409,7 +409,7 @@ pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
   );
 }
 
-pub(super) fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
   let path = data_dir.map(|d| d.session_db_path());
 
   return trailbase_sqlite::Connection::new(

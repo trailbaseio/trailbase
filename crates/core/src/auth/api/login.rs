@@ -204,7 +204,7 @@ async fn build_auth_token_flow_response(
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let build_new_tokens = async || {
     let tokens =
-      crate::auth::tokens::mint_new_tokens(state.user_conn(), db_user, auth_token_ttl).await?;
+      crate::auth::tokens::mint_new_tokens(state.session_conn(), db_user, auth_token_ttl).await?;
 
     return Ok(LoginResponse {
       auth_token: state

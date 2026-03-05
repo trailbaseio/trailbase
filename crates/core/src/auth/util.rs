@@ -8,7 +8,7 @@ use tower_cookies::{
   Cookie, Cookies,
   cookie::{self, SameSite},
 };
-use trailbase_sqlite::{Connection, params};
+use trailbase_sqlite::params;
 use validator::ValidateEmail;
 
 use crate::AppState;
@@ -140,7 +140,7 @@ pub async fn login_with_password_for_test(
 
   let auth_token_ttl = state.access_config(|c| c.auth.token_ttls()).0;
   let tokens =
-    crate::auth::tokens::mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+    crate::auth::tokens::mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
 
   return Ok(Some(NewTokens {
     id: user_id,
@@ -306,13 +306,13 @@ pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
 }
 
 pub(crate) async fn delete_all_sessions_for_user(
-  user_conn: &Connection,
+  session_conn: &trailbase_sqlite::Connection,
   user_id: uuid::Uuid,
 ) -> Result<usize, AuthError> {
   const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE user = $1"#);
 
   return Ok(
-    user_conn
+    session_conn
       .execute(
         QUERY,
         [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
@@ -328,7 +328,7 @@ pub(crate) async fn delete_session(
   const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE refresh_token = $1"#);
 
   return state
-    .user_conn()
+    .session_conn()
     .execute(QUERY, params!(refresh_token))
     .await
     .map_err(|err| {
