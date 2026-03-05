@@ -3,8 +3,8 @@ import * as JSON from "@ungap/raw-json";
 import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
-// import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
-// import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
+import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
+import type { LoginOtpRequest } from "@bindings/LoginOtpRequest";
 import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
 import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
 import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
@@ -664,6 +664,11 @@ export interface ClientOptions {
 
 export type MultiFactorAuthCallback = (code: string) => Promise<void>;
 
+export interface MultiFactor {
+  multiFactorToken: string;
+  callback: MultiFactorAuthCallback;
+}
+
 export interface Client {
   get base(): URL | undefined;
 
@@ -681,14 +686,11 @@ export interface Client {
 
   avatarUrl(userId?: string): string | undefined;
 
-  login(
-    email: string,
-    password: string,
-  ): Promise<MultiFactorAuthCallback | undefined>;
+  login(email: string, password: string): Promise<MultiFactor | undefined>;
+  loginMultiFactor(opts: { token: string; code: string }): Promise<void>;
+  requestOtp(email: string): Promise<void>;
+  loginOtp(email: string, code: string): Promise<void>;
   logout(): Promise<boolean>;
-
-  // requestOTP(email: string): Promise<void>;
-  // verifyOTP(email: string, code: string): Promise<void>;
 
   registerTOTP(opts?: { png: boolean }): Promise<RegisterTotpResponse>;
   confirmTOTP(totpUrl: string, totp: string): Promise<void>;
@@ -792,22 +794,7 @@ class ClientImpl implements Client {
   public async login(
     email: string,
     password: string,
-  ): Promise<MultiFactorAuthCallback | undefined> {
-    const totpLogin = async (code: string, mfaToken: string) => {
-      const response = await this.fetch(`${authApiBasePath}/login_mfa`, {
-        method: "POST",
-        body: JSON.stringify({
-          mfa_token: mfaToken,
-          totp: code,
-        } as LoginMfaRequest),
-        headers: jsonContentTypeHeader,
-      });
-
-      this.setTokenState(
-        buildTokenState((await response.json()) as LoginResponse),
-      );
-    };
-
+  ): Promise<MultiFactor | undefined> {
     try {
       const response = await this.fetch(`${authApiBasePath}/login`, {
         method: "POST",
@@ -824,12 +811,57 @@ class ClientImpl implements Client {
     } catch (err) {
       if (err instanceof FetchError && err.status === 403) {
         const mfaTokenResponse = JSON.parse(err.message) as MfaTokenResponse;
-        // MFA is needed. Return TOTP login function.
-        return (code: string) => totpLogin(code, mfaTokenResponse.mfa_token);
+        return {
+          multiFactorToken: mfaTokenResponse.mfa_token,
+          callback: (code: string) =>
+            this.loginMultiFactor({ token: mfaTokenResponse.mfa_token, code }),
+        };
       }
 
       throw err;
     }
+  }
+
+  public async loginMultiFactor(opts: {
+    token: string;
+    code: string;
+  }): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/login_mfa`, {
+      method: "POST",
+      body: JSON.stringify({
+        mfa_token: opts.token,
+        totp: opts.code,
+      } as LoginMfaRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
+  }
+  public async requestOtp(email: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/otp/request`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+      } as RequestOtpRequest),
+      headers: jsonContentTypeHeader,
+    });
+  }
+
+  public async loginOtp(email: string, code: string): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/otp/login`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        code,
+      } as LoginOtpRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
   }
 
   public async logout(): Promise<boolean> {
@@ -867,31 +899,6 @@ class ClientImpl implements Client {
       headers: jsonContentTypeHeader,
     });
   }
-
-  // public async requestOTP(email: string): Promise<void> {
-  //   await this.fetch(`${authApiBasePath}/otp/request`, {
-  //     method: "POST",
-  //     body: JSON.stringify({
-  //       email: email,
-  //     } as RequestOTPRequest),
-  //     headers: jsonContentTypeHeader,
-  //   });
-  // }
-  //
-  // public async verifyOTP(email: string, code: string): Promise<void> {
-  //   const response = await this.fetch(`${authApiBasePath}/otp/verify`, {
-  //     method: "POST",
-  //     body: JSON.stringify({
-  //       email: email,
-  //       code: code,
-  //     } as VerifyOTPRequest),
-  //     headers: jsonContentTypeHeader,
-  //   });
-  //
-  //   this.setTokenState(
-  //     buildTokenState((await response.json()) as LoginResponse),
-  //   );
-  // }
 
   public async registerTOTP(opts?: {
     png: boolean;

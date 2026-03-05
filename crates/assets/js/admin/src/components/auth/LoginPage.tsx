@@ -95,7 +95,7 @@ function PasswordLoginForm(props: {
         try {
           const mfaCallback = await client.login(email, pw);
           if (mfaCallback !== undefined) {
-            props.setMfaCallback(() => mfaCallback);
+            props.setMfaCallback(() => mfaCallback.callback);
           }
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
