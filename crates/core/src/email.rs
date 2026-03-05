@@ -223,6 +223,7 @@ impl Email {
     state: &AppState,
     email_address: &str,
     otp_code: &str,
+    redirect_uri: Option<&str>,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
     let (server_config, template) =
@@ -252,6 +253,7 @@ impl Email {
         CODE => otp_code,
         SITE_URL => site_url,
         EMAIL => email_address,
+        REDIRECT_URI => redirect_uri,
       })?;
     return Email::new_internal(state, to, subject, body);
   }
@@ -459,9 +461,17 @@ pub mod testing {
     }
 
     {
-      let email = Email::otp_email(&state, "foo@bar.org", "12345678").unwrap();
-      assert_eq!(email.subject, "TrailBase OTP");
-      assert!(email.body.contains(&format!("12345678")));
+      let email = Email::otp_email(&state, "foo@bar.org", "12345678", None).unwrap();
+      assert_eq!(email.subject, "OTP Sign-in for TrailBase");
+      assert!(email.body.contains(&format!("&code=12345678")));
+      assert!(!email.body.contains(&format!("redirect_uri")));
+    }
+
+    {
+      let email = Email::otp_email(&state, "foo@bar.org", "12345678", Some("/go/to")).unwrap();
+      assert_eq!(email.subject, "OTP Sign-in for TrailBase");
+      assert!(email.body.contains(&format!("&code=12345678")));
+      assert!(email.body.contains(&format!("&redirect_uri=/go/to")));
     }
   }
 

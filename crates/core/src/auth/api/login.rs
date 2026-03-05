@@ -1,7 +1,7 @@
 use axum::extract::{Json, OriginalUri, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
-use chrono::{Timelike, Utc};
+use chrono::Utc;
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
@@ -195,7 +195,7 @@ pub(crate) async fn login_handler(
 /// cookie-based approach only works for web-apps hosted with the same origin like the admin UI.
 /// Otherwise, the cookies will be inaccessible and the "authentication code" flow below is needed
 /// to get the tokens to your app.
-async fn build_auth_token_flow_response(
+pub(crate) async fn build_auth_token_flow_response(
   state: &AppState,
   db_user: &DbUser,
   cookies: &Cookies,

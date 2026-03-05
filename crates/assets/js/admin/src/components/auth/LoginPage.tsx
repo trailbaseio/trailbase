@@ -1,11 +1,10 @@
-import { Match, Show, Switch } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import type { Setter } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { FetchError } from "trailbase";
+import { FetchError, type MultiFactorAuthCallback } from "trailbase";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 import { client, $user } from "@/lib/client";
-import { MfaTokenResponse } from "@bindings/MfaTokenResponse";
 
 import { Profile } from "@/components/auth/Profile";
 import { showToast } from "@/components/ui/toast";
@@ -18,6 +17,13 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   TextField,
   TextFieldLabel,
@@ -56,26 +62,74 @@ export function LoginPage() {
   );
 }
 
+const loginOptions = ["Password", "OTP"] as const;
+type LoginOptions = (typeof loginOptions)[number];
+
 function LoginForm() {
-  const [mfaToken, setMfaToken] = createWritableMemo<MfaTokenResponse | null>(
-    () => null,
-  );
+  const [mfaCallback, setMfaCallback] =
+    createWritableMemo<MultiFactorAuthCallback | null>(() => null);
+  const [loginType, setLoginType] = createSignal<LoginOptions>("Password");
+
+  const title = (): string => {
+    if (mfaCallback() !== null) {
+      return "Enter Authenticator Code";
+    }
+    return "Login";
+  };
 
   return (
-    <Switch>
-      <Match when={mfaToken() === null}>
-        <PasswordLoginForm setMfaToken={setMfaToken} />
-      </Match>
+    <>
+      <CardHeader>
+        <div class="flex items-center justify-between gap-2">
+          <CardTitle>{title()}</CardTitle>
 
-      <Match when={mfaToken() !== null}>
-        <MfaLoginForm mfaToken={mfaToken()!} />
-      </Match>
-    </Switch>
+          <Show when={mfaCallback() === null}>
+            <Select
+              multiple={false}
+              options={[...loginOptions]}
+              value={loginType()}
+              itemComponent={(props) => (
+                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+              )}
+              onChange={(option: LoginOptions | null) => {
+                if (option !== null) {
+                  setLoginType(option);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue<string>>
+                  {(state) => state.selectedOption()}
+                </SelectValue>
+              </SelectTrigger>
+
+              <SelectContent />
+            </Select>
+          </Show>
+        </div>
+      </CardHeader >
+
+      <CardContent>
+        <Switch>
+          <Match when={mfaCallback() !== null}>
+            <MfaLoginForm mfaCallback={mfaCallback()!} />
+          </Match>
+
+          <Match when={loginType() === "OTP"}>
+            <OtpLoginForm />
+          </Match>
+
+          <Match when={true}>
+            <PasswordLoginForm setMfaCallback={setMfaCallback} />
+          </Match>
+        </Switch>
+      </CardContent>
+    </>
   );
 }
 
 function PasswordLoginForm(props: {
-  setMfaToken: Setter<MfaTokenResponse | null>;
+  setMfaCallback: Setter<MultiFactorAuthCallback | null>;
 }) {
   let passwordInput: HTMLInputElement | undefined;
   let userInput: HTMLInputElement | undefined;
@@ -85,7 +139,7 @@ function PasswordLoginForm(props: {
 
   return (
     <form
-      class="flex flex-col gap-4 px-8 py-12"
+      class="flex flex-col gap-4"
       method="dialog"
       onSubmit={async (ev: SubmitEvent) => {
         ev.preventDefault();
@@ -95,7 +149,10 @@ function PasswordLoginForm(props: {
         if (!email || !pw) return;
 
         try {
-          await client.login(email, pw);
+          const mfaCallback = await client.login(email, pw);
+          if (mfaCallback !== undefined) {
+            props.setMfaCallback(() => mfaCallback.callback);
+          }
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
@@ -103,9 +160,6 @@ function PasswordLoginForm(props: {
               variant: "warning",
               duration: 5 * 1000,
             });
-          } else if (err instanceof FetchError && err.status === 403) {
-            // MFA is needed. Flip to next form.
-            props.setMfaToken(JSON.parse(err.message) as MfaTokenResponse);
           } else if (err instanceof FetchError && err.status === 429) {
             showToast({
               title: `Too many login attempts for ${email}`,
@@ -115,7 +169,7 @@ function PasswordLoginForm(props: {
             });
           } else {
             showToast({
-              title: "Uncaught Error",
+              title: "Other Error",
               description: `${err}`,
               variant: "error",
             });
@@ -123,8 +177,6 @@ function PasswordLoginForm(props: {
         }
       }}
     >
-      <h1>Login</h1>
-
       <TextField class="flex items-center gap-2">
         <TextFieldLabel class="w-[108px]">Email</TextFieldLabel>
 
@@ -162,7 +214,74 @@ function PasswordLoginForm(props: {
   );
 }
 
-function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
+function OtpLoginForm() {
+  let userInput: HTMLInputElement | undefined;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const message = urlParams.get("loginMessage");
+
+  return (
+    <form
+      class="flex flex-col gap-4"
+      method="dialog"
+      onSubmit={async (ev: SubmitEvent) => {
+        ev.preventDefault();
+
+        const email = userInput?.value;
+        if (!email) return;
+
+        try {
+          await client.requestOtp(email, { redirectUri: "/_/admin" });
+          // NOTE: prompt is not a good approach because there's no way to redo after mispelling the OTP.
+          const otp = prompt("Check your Email and enter the OTP:");
+          if (otp) {
+            client.loginOtp(email, otp);
+          } else {
+            throw new Error("Empty OTP");
+          }
+        } catch (err) {
+          if (err instanceof FetchError && err.status === 405) {
+            showToast({
+              title: "OTP Login Disabled",
+              variant: "error",
+              duration: 5 * 1000,
+            });
+          } else {
+            showToast({
+              title: "Other Error",
+              description: `${err}`,
+              variant: "error",
+            });
+          }
+        }
+      }}
+    >
+      <TextField class="flex items-center gap-2">
+        <TextFieldLabel class="w-[108px]">Email</TextFieldLabel>
+
+        <TextFieldInput
+          type="email"
+          placeholder="Email"
+          autocomplete="username"
+          required={true}
+          ref={userInput}
+        />
+      </TextField>
+
+      <div class="flex justify-end">
+        <Button type="submit">Request OTP</Button>
+      </div>
+
+      <Show when={message}>
+        <div class="flex justify-center">
+          <Badge variant="warning">{message}</Badge>
+        </div>
+      </Show>
+    </form>
+  );
+}
+
+function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
   let totpInput: HTMLInputElement | undefined;
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -170,7 +289,7 @@ function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
 
   return (
     <form
-      class="flex flex-col gap-4 px-8 py-12"
+      class="flex flex-col gap-4"
       method="dialog"
       onSubmit={async (ev: SubmitEvent) => {
         ev.preventDefault();
@@ -179,10 +298,7 @@ function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
         if (!userTotp) return;
 
         try {
-          await client.login({
-            mfaToken: props.mfaToken.mfa_token,
-            totp: userTotp,
-          });
+          props.mfaCallback(userTotp);
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
@@ -192,7 +308,7 @@ function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
             });
           } else {
             showToast({
-              title: "Uncaught Error",
+              title: "Other Error",
               description: `${err}`,
               variant: "error",
             });
@@ -200,8 +316,6 @@ function MfaLoginForm(props: { mfaToken: MfaTokenResponse }) {
         }
       }}
     >
-      <h1>Enter TOTP</h1>
-
       <TextField class="flex items-center gap-2">
         <TextFieldLabel class="w-[108px]">Code</TextFieldLabel>
 

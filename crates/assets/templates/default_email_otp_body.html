@@ -1,9 +1,14 @@
 <html>
 
 <body>
-  <h1>OTP</h1>
+  <h1>OTP Sign-in</h1>
 
-  <p>Paste this code to sign in: <b>{{ CODE }}</b></p>
+  <p>Click the link below to or paste the code sign in.</p>
+
+  <a
+    href="{{ SITE_URL }}/_/auth/otp/login?email={{ EMAIL }}&code={{ CODE }}{%- if REDIRECT_URI -%}&redirect_uri={{ REDIRECT_URI }}{%- endif -%}">
+    {{ CODE }}
+  </a>
 </body>
 
 </html>

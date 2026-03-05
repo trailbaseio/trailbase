@@ -1,7 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
-use chrono::{Timelike, Utc};
+use chrono::Utc;
 use const_format::formatcp;
 use oauth2::{
   AsyncHttpClient, AuthorizationCode, HttpClientError, HttpRequest, HttpResponse, PkceCodeVerifier,

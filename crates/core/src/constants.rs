@@ -7,6 +7,7 @@ pub(crate) const LOGS_TABLE: &str = "_logs";
 pub(crate) const SESSION_TABLE: &str = "_session";
 pub(crate) const AVATAR_TABLE: &str = "_user_avatar";
 pub(crate) const AUTHORIZATION_CODE_TABLE: &str = "_authorization_code";
+pub(crate) const OTP_CODE_TABLE: &str = "_otp_code";
 
 pub(crate) const LOGS_TABLE_ID_COLUMN: &str = "id";
 pub const LOGS_RETENTION_DEFAULT: Duration = Duration::days(7);
@@ -32,9 +33,6 @@ pub(crate) const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
 
 pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;
 pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;
-
-// OTP
-pub(crate) const OTP_LENGTH: usize = 12;
 
 // Public APIs
 pub const RECORD_API_PATH: &str = "api/records/v1";

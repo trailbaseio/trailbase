@@ -15,6 +15,8 @@ pub enum AuthError {
   Conflict,
   #[error("NotFound")]
   NotFound,
+  #[error("MethodNotAllowed")]
+  MethodNotAllowed,
   #[error("OAuth provider not found")]
   OAuthProviderNotFound,
   #[error("Bad request: {0}")]
@@ -64,6 +66,7 @@ impl IntoResponse for AuthError {
       Self::Forbidden => (StatusCode::FORBIDDEN, None),
       Self::Conflict => (StatusCode::CONFLICT, None),
       Self::NotFound => (StatusCode::NOT_FOUND, None),
+      Self::MethodNotAllowed => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::OAuthProviderNotFound => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, Some(msg.to_string())),
       Self::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, None),

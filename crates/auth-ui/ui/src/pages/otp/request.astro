@@ -1,0 +1,46 @@
+---
+import Form from "@/components/Form.astro";
+import Button from "@/components/Button.astro";
+import TextFieldInput from "@/components/TextFieldInput.astro";
+import TextFieldLabel from "@/components/TextFieldLabel.astro";
+
+import { AUTH_API } from "@/lib/constants";
+
+const formBaseAction = `${AUTH_API}/otp/request`;
+const BASE_URL = import.meta.env.BASE_URL;
+---
+
+<Form title="OTP">
+  <div>
+    <form
+      id="login-form"
+      class="flex flex-col gap-2"
+      action={`${formBaseAction}`}
+      data-base_action={formBaseAction}
+      data-base_url={BASE_URL}
+      method="post"
+      enctype="application/x-www-form-urlencoded"
+    >
+      <div class="hidden" set:html={`{{ state | escape("none") }}`} />
+
+      <div
+        class="grid grid-cols-2 items-center gap-4"
+        style={{ "grid-template-columns": "auto 1fr" }}
+      >
+        <TextFieldLabel>User:</TextFieldLabel>
+        <TextFieldInput
+          required
+          tabindex="1"
+          type="email"
+          name="email"
+          placeholder="Email"
+          autocomplete="username"
+        />
+      </div>
+
+      <div class="my-2 flex justify-end">
+        <Button tabindex="1" variant="default" type="submit">Request</Button>
+      </div>
+    </form>
+  </div>
+</Form>

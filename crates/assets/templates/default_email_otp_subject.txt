@@ -1,1 +1,1 @@
-{{ APP_NAME }} OTP
+OTP Sign-in for {{ APP_NAME }}

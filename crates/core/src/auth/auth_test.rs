@@ -12,14 +12,14 @@ use crate::AppState;
 use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_config, test_state};
 use crate::auth::AuthError;
-use crate::auth::api::change_email;
-use crate::auth::api::change_email::ChangeEmailConfigQuery;
+use crate::auth::api::change_email::{self, ChangeEmailConfigQuery};
 use crate::auth::api::change_password::{
   ChangePasswordQuery, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::{LoginRequest, LoginResponse, login_handler};
 use crate::auth::api::logout::{LogoutQuery, logout_handler};
+use crate::auth::api::otp;
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
 use crate::auth::api::register::{RegisterQuery, RegisterUserRequest, register_user_handler};
 use crate::auth::api::reset_password::{
@@ -61,6 +61,9 @@ async fn setup_state_and_test_user(
       subject: None,
       body: Some("{{ TOKEN }}".to_string()),
     });
+
+    config.auth.enable_otp_signin = Some(true);
+
     config
   };
 
@@ -699,6 +702,98 @@ async fn test_auth_delete_user_flow() {
   assert!(!user_exists);
 
   assert!(!session_exists(&state, user.uuid).await);
+}
+
+#[tokio::test]
+async fn test_auth_otp_flow() {
+  let email = "user@test.org".to_string();
+  let password = "secret123".to_string();
+
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password).await;
+
+  // NOTE: We return a success response on unknown user to avoid leaks.
+  otp::request_otp_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Either::Form(otp::RequestOtpRequest {
+      email: "unknown@user.org".to_string(),
+      ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  // Only verify-email email for "user@test.org"
+  assert_eq!(mailer.get_logs().len(), 1, "{:?}", mailer.get_logs());
+
+  otp::request_otp_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Either::Form(otp::RequestOtpRequest {
+      email: user.email.clone(),
+      ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  // Assert that a verification email was sent.
+  assert_eq!(mailer.get_logs().len(), 2);
+
+  // Then steal the verification code from the DB and verify.
+  let otp_email_body: String = String::from_utf8_lossy(
+    &quoted_printable::decode(
+      mailer.get_logs()[1].1.as_bytes(),
+      quoted_printable::ParseMode::Robust,
+    )
+    .unwrap(),
+  )
+  .to_string();
+
+  assert!(
+    otp::login_otp_handler(
+      State(state.clone()),
+      Cookies::default(),
+      Query(Default::default()),
+      Either::Form(otp::LoginOtpRequest {
+        email: Some(user.email.clone()),
+        code: Some("InvalidCode".to_string()),
+        ..Default::default()
+      }),
+    )
+    .await
+    .is_err()
+  );
+
+  let otp_email_re = Regex::new(r"code=([a-zA-Z0-9]*)").unwrap();
+  let otp_email_code: String = otp_email_re
+    .captures(&otp_email_body)
+    .expect(&format!("{otp_email_body}"))
+    .get(1)
+    .unwrap()
+    .as_str()
+    .to_string();
+
+  assert_eq!(otp_email_code.len(), 6, "Got: '{otp_email_code}'");
+
+  let response = otp::login_otp_handler(
+    State(state.clone()),
+    Cookies::default(),
+    Query(Default::default()),
+    Either::Json(otp::LoginOtpRequest {
+      email: Some(user.email.clone()),
+      code: Some(otp_email_code.clone()),
+      ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+
+  let _login_response: LoginResponse = serde_json::from_slice(&body).unwrap();
 }
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
