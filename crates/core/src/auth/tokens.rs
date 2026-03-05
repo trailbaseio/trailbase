@@ -171,7 +171,7 @@ pub struct FreshTokens {
 }
 
 pub(crate) async fn mint_new_tokens(
-  user_conn: &Connection,
+  session_conn: &Connection,
   db_user: &DbUser,
   expires_in: Duration,
 ) -> Result<FreshTokens, AuthError> {
@@ -187,10 +187,13 @@ pub(crate) async fn mint_new_tokens(
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
   const QUERY: &str =
-    formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
+    formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token, expires) VALUES ($1, $2, $3)");
 
-  user_conn
-    .execute(QUERY, params!(db_user.id, refresh_token.clone(),))
+  session_conn
+    .execute(
+      QUERY,
+      params!(db_user.id, refresh_token.clone(), claims.exp),
+    )
     .await?;
 
   return Ok(FreshTokens {
@@ -203,25 +206,22 @@ pub(crate) async fn reauth_with_refresh_token(
   state: &AppState,
   refresh_token: String,
 ) -> Result<(AuthTokenClaims, chrono::Duration), AuthError> {
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+  let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
 
-  const QUERY: &str = formatcp!(
+  const SESSION_QUERY: &str = formatcp!(
     "\
-      SELECT user.* \
-      FROM \
-        '{SESSION_TABLE}' AS s \
-        INNER JOIN '{USER_TABLE}' AS user ON s.user = user.id \
+      SELECT user \
+      FROM '{SESSION_TABLE}' \
       WHERE \
-        s.refresh_token = $1 AND s.updated > (UNIXEPOCH() - $2) AND user.verified \
+        refresh_token = $1 AND expires > UNIXEPOCH() \
     "
   );
 
-  let Some(db_user) = state
-    .user_conn()
-    .read_query_value::<DbUser>(
-      QUERY,
-      params!(refresh_token, refresh_token_ttl.num_seconds()),
-    )
+  let Some(user_id) = state
+    .session_conn()
+    .query_row_f(SESSION_QUERY, params!(refresh_token), |row| {
+      row.get::<_, [u8; 16]>(0)
+    })
     .await?
   else {
     // Row not found case, typically expected in one of 4 cases:
@@ -231,6 +231,24 @@ pub(crate) async fn reauth_with_refresh_token(
     //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
     #[cfg(debug_assertions)]
     log::debug!("Refresh token not found");
+
+    return Err(AuthError::Unauthorized);
+  };
+
+  const USER_QUERY: &str = formatcp!("SELECT * FROM '{USER_TABLE}' WHERE id = $1");
+
+  let Some(db_user) = state
+    .user_conn()
+    .read_query_value::<DbUser>(USER_QUERY, params!(user_id))
+    .await?
+  else {
+    // Row not found case, typically expected in one of 4 cases:
+    //  1. Above where clause doesn't match, e.g. refresh token expired.
+    //  2. Token was actively deleted and thus revoked.
+    //  3. User explicitly logged out, which will delete **all** sessions for that user.
+    //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
+    #[cfg(debug_assertions)]
+    log::debug!("User not found");
 
     return Err(AuthError::Unauthorized);
   };

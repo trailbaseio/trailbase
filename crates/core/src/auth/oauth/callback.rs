@@ -129,7 +129,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     auth_token_claims,
     refresh_token,
     ..
-  } = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+  } = mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
 
   let auth_token = state
     .jwt()

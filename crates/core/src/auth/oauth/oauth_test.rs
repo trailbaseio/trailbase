@@ -386,7 +386,7 @@ fn get_redirect_location<T: IntoResponse>(response: T) -> Option<String> {
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
   return state
-    .user_conn()
+    .session_conn()
     .read_query_row_f(
       format!("SELECT EXISTS(SELECT 1 FROM {SESSION_TABLE} WHERE user = $1)"),
       (user_id.into_bytes().to_vec(),),

@@ -364,7 +364,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   assert_eq!(decoded_claims.email, email);
 
   let refresh_token: String = state
-    .user_conn()
+    .session_conn()
     .read_query_row_f(
       format!("SELECT refresh_token FROM {SESSION_TABLE} WHERE user = $1;"),
       (user.uuid.into_bytes().to_vec(),),
@@ -703,7 +703,7 @@ async fn test_auth_delete_user_flow() {
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
   return state
-    .user_conn()
+    .session_conn()
     .read_query_row_f(
       format!("SELECT EXISTS(SELECT 1 FROM {SESSION_TABLE} WHERE user = $1)"),
       params!(user_id.into_bytes().to_vec()),

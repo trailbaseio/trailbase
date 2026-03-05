@@ -119,6 +119,7 @@ impl AppState {
       args.data_dir.clone(),
       args.connection_manager.clone(),
       args.logs_conn.clone(),
+      args.session_conn.clone(),
       object_store.clone(),
     );
 
@@ -166,14 +167,21 @@ impl AppState {
         jobs: derive_unchecked(&config, move |c| {
           debug!("(re-)building jobs from config");
 
-          let (data_dir, conn_mgr, logs_conn, object_store) = &jobs_input;
+          let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
 
           return Arc::new(
-            build_job_registry_from_config(c, data_dir, conn_mgr, logs_conn, object_store.clone())
-              .unwrap_or_else(|err| {
-                error!("Failed to build JobRegistry for cron jobs: {err}");
-                return JobRegistry::new();
-              }),
+            build_job_registry_from_config(
+              c,
+              data_dir,
+              conn_mgr,
+              logs_conn,
+              session_conn,
+              object_store.clone(),
+            )
+            .unwrap_or_else(|err| {
+              error!("Failed to build JobRegistry for cron jobs: {err}");
+              return JobRegistry::new();
+            }),
           );
         }),
         mailer: derive_unchecked(&config, Mailer::new_from_config),
@@ -237,6 +245,10 @@ impl AppState {
 
   pub fn user_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
+  }
+
+  pub fn session_conn(&self) -> &trailbase_sqlite::Connection {
+    return &self.state.session_conn;
   }
 
   pub fn logs_conn(&self) -> &trailbase_sqlite::Connection {
