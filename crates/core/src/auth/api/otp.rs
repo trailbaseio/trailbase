@@ -84,7 +84,7 @@ pub async fn request_otp_handler(
   let success_response = || {
     if let Some(redirect) = redirect_uri {
       return Redirect::to(&format!(
-        "{redirect}?alert={msg}",
+        "{redirect}?email={normalized_email}&alert={msg}",
         msg = urlencode("OTP sent")
       ))
       .into_response();
@@ -101,7 +101,7 @@ pub async fn request_otp_handler(
   let otp_code = generate_random_string(OTP_CODE_LENGTH);
   const UPDATE_OTP_QUERY: &str = formatcp!(
     "\
-      INSERT INTO '{OTP_CODE_TABLE}' (user, email, otp_code, expires) \
+      INSERT OR REPLACE INTO '{OTP_CODE_TABLE}' (user, email, otp_code, expires) \
       VALUES ($1, $2, $3, $4) \
     "
   );
@@ -112,7 +112,7 @@ pub async fn request_otp_handler(
       UPDATE_OTP_QUERY,
       params!(
         db_user.id,
-        normalized_email,
+        normalized_email.clone(),
         otp_code.clone(),
         (Utc::now() + OTP_TTL).timestamp(),
       ),
@@ -121,6 +121,10 @@ pub async fn request_otp_handler(
 
   if rows_affected != 1 {
     return Err(AuthError::Internal("Failed to insert OTP code".into()));
+  }
+
+  if state.dev_mode() {
+    log::debug!("OTP ({normalized_email}, {otp_code})");
   }
 
   let email = Email::otp_email(&state, &db_user.email, &otp_code)

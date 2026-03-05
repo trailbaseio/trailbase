@@ -47,6 +47,18 @@ impl Guest for Endpoints {
         },
       ),
       routing::get(
+        OTP_REQUEST_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          return ui_otp_request_handler(req.user(), req.query_parse()?).await;
+        },
+      ),
+      routing::get(
+        OTP_LOGIN_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          return ui_otp_login_handler(req.user(), req.query_parse()?).await;
+        },
+      ),
+      routing::get(
         "/_/auth/logout",
         async |req: Request| -> Result<Response, HttpError> {
           return Ok(ui_logout_handler(req.query_parse()?).await.into_response());
@@ -152,6 +164,7 @@ async fn ui_login_handler(
     .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !config.disable_password_auth,
+    enable_otp: config.enable_otp_signin,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
   }
@@ -187,6 +200,65 @@ async fn ui_login_mfa_handler(
       auth::hidden_input("redirect_uri", Some(redirect_uri)),
       auth::hidden_input("response_type", query.response_type.as_ref()),
       auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
+    ]
+    .join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct OtpRequestQuery {
+  redirect_uri: Option<String>,
+  alert: Option<String>,
+}
+
+async fn ui_otp_request_handler(
+  user: Option<&User>,
+  query: OtpRequestQuery,
+) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(OTP_LOGIN_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
+  }
+
+  let html = auth::OtpRequestTemplate {
+    state: [auth::hidden_input("redirect_uri", Some(redirect_uri))].join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct OtpLoginQuery {
+  email: String,
+  redirect_uri: Option<String>,
+  alert: Option<String>,
+}
+
+async fn ui_otp_login_handler(
+  user: Option<&User>,
+  query: OtpLoginQuery,
+) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
+  }
+
+  let html = auth::OtpLoginTemplate {
+    state: [
+      auth::hidden_input("email", Some(query.email)),
+      auth::hidden_input("redirect_uri", Some(redirect_uri)),
     ]
     .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
@@ -332,5 +404,7 @@ fn internal(err: impl std::string::ToString) -> HttpError {
 
 const LOGIN_UI: &str = "/_/auth/login";
 const LOGIN_MFA_UI: &str = "/_/auth/login_mfa";
+const OTP_REQUEST_UI: &str = "/_/auth/otp/request";
+const OTP_LOGIN_UI: &str = "/_/auth/otp/login";
 const PROFILE_UI: &str = "/_/auth/profile";
 const REGISTER_USER_UI: &str = "/_/auth/register";

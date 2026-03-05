@@ -18,6 +18,7 @@ pub struct OAuthProvider {
 #[derive(Deserialize)]
 pub struct AuthConfig {
   pub disable_password_auth: bool,
+  pub enable_otp_signin: bool,
   pub oauth_providers: Vec<OAuthProvider>,
 }
 
@@ -41,6 +42,7 @@ pub struct LoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
   pub enable_registration: bool,
+  pub enable_otp: bool,
   pub oauth_providers: &'a [OAuthProvider],
   pub oauth_query_params: &'a [(&'a str, &'a str)],
 }
@@ -48,6 +50,20 @@ pub struct LoginTemplate<'a> {
 #[derive(Template)]
 #[template(path = "login_mfa/index.html")]
 pub struct LoginMfaTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "otp/request/index.html")]
+pub struct OtpRequestTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "otp/login/index.html")]
+pub struct OtpLoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
 }
@@ -121,6 +137,7 @@ mod tests {
       state: state.clone(),
       alert,
       enable_registration: true,
+      enable_otp: true,
       oauth_providers: &[],
       oauth_query_params: &[("redirect_uri", redirect_uri)],
     }
@@ -137,6 +154,7 @@ mod tests {
       state: state.clone(),
       alert: "",
       enable_registration: false,
+      enable_otp: false,
       oauth_providers: &[OAuthProvider {
         name: "name".to_string(),
         display_name: "Fancy Name".to_string(),

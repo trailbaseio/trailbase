@@ -787,6 +787,7 @@ pub struct OAuthProvider {
 #[derive(Serialize)]
 struct AuthConfig {
   disable_password_auth: bool,
+  enable_otp_signin: bool,
   oauth_providers: Vec<OAuthProvider>,
 }
 
@@ -827,6 +828,7 @@ fn build_auth_config(config: &Config) -> AuthConfig {
 
   return AuthConfig {
     disable_password_auth: config.auth.disable_password_auth(),
+    enable_otp_signin: config.auth.enable_otp_signin(),
     oauth_providers,
   };
 }
