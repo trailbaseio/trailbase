@@ -34,6 +34,7 @@ pub mod job;
 pub mod kv;
 pub mod time;
 
+use std::sync::OnceLock;
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
 use wstd::http::Request;
 use wstd::http::body::IncomingBody;
@@ -62,7 +63,8 @@ macro_rules! export {
     ($impl:ident) => {
         ::trailbase_wasm::assert_impl_all!($impl: ::trailbase_wasm::Guest);
         // Register InitEndpoint.
-        ::trailbase_wasm::wit::export!($impl);
+        type _TrailbaseHandlerIdent = ::trailbase_wasm::TrailbaseHandler<$impl>;
+        ::trailbase_wasm::wit::export!(_TrailbaseHandlerIdent);
         // Register Incoming HTTP handler.
         type _HttpHandlerIdent = ::trailbase_wasm::HttpIncomingHandler<$impl>;
         ::trailbase_wasm::__wasi::http::proxy::export!(
@@ -76,7 +78,7 @@ pub struct Args {
 }
 
 type SqliteFunctionHandler =
-  Box<dyn FnOnce(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error>>;
+  Box<dyn Fn(Vec<sqlite::Value>) -> Result<sqlite::Value, sqlite::Error> + Send + Sync>;
 
 pub struct SqliteFunction {
   name: String,
@@ -88,7 +90,7 @@ pub struct SqliteFunction {
 impl SqliteFunction {
   pub fn new<const N: usize>(
     name: impl std::string::ToString,
-    f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + 'static,
+    f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + Send + Sync + 'static,
     flags: &[sqlite::SqliteFunctionFlags],
   ) -> Self {
     return Self {
@@ -118,12 +120,30 @@ pub trait Guest {
   }
 }
 
-impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest for T {
+pub struct TrailbaseHandler<T: Guest> {
+  phantom: std::marker::PhantomData<T>,
+}
+
+impl<T: Guest> TrailbaseHandler<T> {
+  fn call_init_once(args: Args) -> &'static () {
+    static S: OnceLock<()> = OnceLock::new();
+    return S.get_or_init(|| T::init(args));
+  }
+
+  fn get_sqlite_scalar_functions() -> &'static [SqliteFunction] {
+    // NOTE: This assumes that there's only one `T`, since static are shared across generics.
+    static FUNCS: OnceLock<Vec<SqliteFunction>> = OnceLock::new();
+    return &FUNCS.get_or_init(T::sqlite_scalar_functions);
+  }
+}
+
+impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
+  for TrailbaseHandler<T>
+{
   fn init_http_handlers(
     args: Arguments,
   ) -> wit::exports::trailbase::component::init_endpoint::HttpHandlers {
-    // QUESTION: Should we ensure that init is called only once?
-    T::init(Args {
+    Self::call_init_once(Args {
       version: args.version,
     });
 
@@ -138,7 +158,7 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
   fn init_job_handlers(
     args: Arguments,
   ) -> wit::exports::trailbase::component::init_endpoint::JobHandlers {
-    T::init(Args {
+    Self::call_init_once(Args {
       version: args.version,
     });
 
@@ -158,24 +178,26 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest f
     };
 
     // QUESTION: Should we ensure that init is called only once?
-    T::init(Args {
+    Self::call_init_once(Args {
       version: args.version,
     });
 
     return SqliteFunctions {
-      scalar_functions: T::sqlite_scalar_functions()
-        .into_iter()
+      scalar_functions: Self::get_sqlite_scalar_functions()
+        .iter()
         .map(|f| SqliteScalarFunction {
-          name: f.name,
+          name: f.name.clone(),
           num_args: f.num_args,
-          function_flags: f.flags,
+          function_flags: f.flags.clone(),
         })
         .collect(),
     };
   }
 }
 
-impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest for T {
+impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoint::Guest
+  for TrailbaseHandler<T>
+{
   fn dispatch_scalar_function(
     args: crate::wit::exports::trailbase::component::sqlite_function_endpoint::Arguments,
   ) -> Result<
@@ -183,10 +205,8 @@ impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoi
     crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error,
   > {
     use crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error;
-
-    let functions = T::sqlite_scalar_functions();
-    let f = functions
-      .into_iter()
+    let f = Self::get_sqlite_scalar_functions()
+      .iter()
       .find(|f| f.name == args.function_name)
       .ok_or_else(|| Error::Other("Missing function".to_string()))?;
 
@@ -269,6 +289,6 @@ fn to_method_type(
     Method::PUT => HttpMethodType::Put,
     Method::TRACE => HttpMethodType::Trace,
     Method::CONNECT => HttpMethodType::Connect,
-    _ => panic!("extension"),
+    _ => panic!("unknown http method type: {m}"),
   };
 }

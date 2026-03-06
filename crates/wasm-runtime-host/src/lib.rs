@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
-use tokio::sync::Mutex;
+// use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -316,7 +316,13 @@ impl HttpStore {
       // out of scope.
       let handle = tokio::spawn(async move {
         // Instantiate a store per request, see FIXME below.
-        let (mut lock, _bindings) = state.rt.new_bindings().await?;
+        let mut lock = state
+          .rt
+          .state
+          .store_builder
+          .new_store(&state.rt.state.engine)?;
+        // let (mut lock, _bindings) = state.rt.new_bindings().await?;
+
         let proxy_bindings = wasmtime_wasi_http::bindings::Proxy::instantiate_async(
           &mut lock,
           &state.rt.state.component,

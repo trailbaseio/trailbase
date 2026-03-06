@@ -15,8 +15,12 @@ use trailbase_wasm::{Guest, SqliteFunction, export, sqlite::SqliteFunctionFlags}
 // Implement the function exported in this world (see above).
 struct Endpoints;
 
+static SEQ: AtomicI64 = AtomicI64::new(-32);
+
 impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
+    SEQ.fetch_add(1000, Ordering::SeqCst);
+
     return vec![
       routing::get("/readfile", async |_req| {
         let r = read_file("/crates/sqlite/Cargo.toml")
@@ -141,6 +145,9 @@ impl Guest for Endpoints {
 
         return Ok(format!("{i}\n"));
       }),
+      routing::get("/stateful", async |_req| {
+        return Ok(format!("{}\n", SEQ.fetch_add(1, Ordering::SeqCst)));
+      }),
       routing::get("/sqlite_stateful", async |_req| {
         let Value::Integer(i) = &query("SELECT custom_stateful()", vec![])
           .await
@@ -183,12 +190,15 @@ impl Guest for Endpoints {
   }
 
   fn job_handlers() -> Vec<Job> {
+    SEQ.fetch_add(4000, Ordering::SeqCst);
+
     return vec![Job::hourly("WASM-registered Job", async || {
       println!("JS-registered cron job reporting for duty 🚀");
     })];
   }
 
   fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
+    SEQ.fetch_add(32, Ordering::SeqCst);
     return vec![
       SqliteFunction::new::<1>(
         "custom_echo".to_string(),
@@ -203,9 +213,9 @@ impl Guest for Endpoints {
       SqliteFunction::new::<0>(
         "custom_stateful".to_string(),
         |_args: [trailbase_wasm::sqlite::Value; _]| {
-          static COUNT: AtomicI64 = AtomicI64::new(0);
-          let curr = COUNT.fetch_add(1, Ordering::SeqCst);
-          return Ok(trailbase_wasm::sqlite::Value::Integer(curr));
+          return Ok(trailbase_wasm::sqlite::Value::Integer(
+            SEQ.fetch_add(1, Ordering::SeqCst),
+          ));
         },
         &[],
       ),
