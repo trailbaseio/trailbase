@@ -278,4 +278,49 @@ mod tests {
         .is_empty()
     );
   }
+
+  #[tokio::test]
+  async fn test_schema_invariants_still_hold_after_migrations() {
+    let state = crate::app_state::test_state(None).await.unwrap();
+
+    fn exists(conn: &rusqlite::Connection, name: &str, schema_type: &str) -> bool {
+      return conn
+        .query_one(
+          &format!(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = '{schema_type}' AND name = '{name}')"
+          ),
+          (),
+          |row| row.get(0),
+        )
+        .unwrap();
+    }
+
+    fn index_exists(conn: &rusqlite::Connection, name: &str) -> bool {
+      return exists(conn, name, "index");
+    }
+
+    fn trigger_exists(conn: &rusqlite::Connection, name: &str) -> bool {
+      return exists(conn, name, "trigger");
+    }
+
+    state
+      .conn()
+      .call(|conn| {
+        // QUESTION: Should we push something like this down into startup to assert that
+        // user-provided migrations don't break TB's expectations, e.g. they modified the
+        // `_user` TABLE and forgot to put an index back into place.
+        assert!(index_exists(conn, "__user__email_index"));
+        assert!(index_exists(conn, "__user__email_verification_code_index"));
+        assert!(index_exists(conn, "__user__password_reset_code_index"));
+        assert!(index_exists(conn, "__user__authorization_code_index"));
+        assert!(index_exists(conn, "__user__provider_ids_index"));
+
+        assert!(trigger_exists(conn, "__user__updated_trigger"));
+        assert!(trigger_exists(conn, "__user_avatar__updated_trigger"));
+
+        return Ok(());
+      })
+      .await
+      .unwrap();
+  }
 }
