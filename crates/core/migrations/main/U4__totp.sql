@@ -1,7 +1,5 @@
--- Add OTP/TOTP columns.
-
--- Defer any foreign key integrity checks within this transaction until it's being commited.
-PRAGMA defer_foreign_keys = ON;
+-- Add `totp_secret` column and remove columns containing ephemeral,
+-- session-like state in favor of JWT and a separate "session" DB.
 
 CREATE TABLE IF NOT EXISTS _new_with_otp (
   -- We only check `is_uuid` rather than `is_uuid_v4` to preserve user
@@ -12,20 +10,11 @@ CREATE TABLE IF NOT EXISTS _new_with_otp (
   verified                         INTEGER DEFAULT FALSE NOT NULL,
   admin                            INTEGER DEFAULT FALSE NOT NULL,
 
-  created                          INTEGER DEFAULT (UNIXEPOCH()) NOT NULL,
-  updated                          INTEGER DEFAULT (UNIXEPOCH()) NOT NULL,
-
-  -- Ephemeral data for auth flows.
-  --
-  -- Authorization Code Flow (optionally with PKCE proof key).
-  authorization_code               TEXT,
-  authorization_code_sent_at       INTEGER,
-  pkce_code_challenge              TEXT,
-  -- OTP flow.
-  -- otp_code                         TEXT,
-  -- otp_sent_at                      INTEGER,
   -- TOTP secret for authenticator.
   totp_secret                      TEXT,
+
+  created                          INTEGER DEFAULT (UNIXEPOCH()) NOT NULL,
+  updated                          INTEGER DEFAULT (UNIXEPOCH()) NOT NULL,
 
   -- OAuth metadata
   --
@@ -45,9 +34,6 @@ INSERT INTO _new_with_otp(
     admin,
     created,
     updated,
-    authorization_code,
-    authorization_code_sent_at,
-    pkce_code_challenge,
     provider_id,
     provider_user_id,
     provider_avatar_url
@@ -60,16 +46,13 @@ INSERT INTO _new_with_otp(
     admin,
     created,
     updated,
-    authorization_code,
-    authorization_code_sent_at,
-    pkce_code_challenge,
     provider_id,
     provider_user_id,
     provider_avatar_url
   FROM _user;
 
--- We need to turn ON "legacy" behavior to not upset any indexes or views
--- pointing at _user.
+-- Turn ON legacy behavior to avoid issues with VIEWs referencing the _user
+-- table. FOREIGN_KEY constraints are handled by refinery.
 PRAGMA legacy_alter_table=ON;
 
 DROP TABLE _user;
@@ -77,6 +60,10 @@ ALTER TABLE _new_with_otp RENAME TO _user;
 
 -- Turn OFF legacy behavior.
 PRAGMA legacy_alter_table=OFF;
+
+-- Re-create INDEXes and TRIGGERs removed by `DROP TABLE`.
+CREATE UNIQUE INDEX __user__email_index ON _user (email);
+CREATE UNIQUE INDEX __user__provider_ids_index ON _user (provider_id, provider_user_id);
 
 CREATE TRIGGER __user__updated_trigger AFTER UPDATE ON _user FOR EACH ROW
   BEGIN
