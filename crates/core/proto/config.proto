@@ -47,6 +47,7 @@ enum OAuthProviderId {
   FACEBOOK = 13;
   MICROSOFT = 14;
   TWITCH = 15;
+  YANDEX = 16;
 }
 
 message OAuthProviderConfig {

@@ -65,6 +65,7 @@ export enum OAuthProviderId {
   FACEBOOK = 13,
   MICROSOFT = 14,
   TWITCH = 15,
+  YANDEX = 16,
   UNRECOGNIZED = -1,
 }
 
@@ -100,6 +101,9 @@ export function oAuthProviderIdFromJSON(object: any): OAuthProviderId {
     case 15:
     case "TWITCH":
       return OAuthProviderId.TWITCH;
+    case 16:
+    case "YANDEX":
+      return OAuthProviderId.YANDEX;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -129,6 +133,8 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
       return "MICROSOFT";
     case OAuthProviderId.TWITCH:
       return "TWITCH";
+    case OAuthProviderId.YANDEX:
+      return "YANDEX";
     case OAuthProviderId.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";

@@ -1,5 +1,5 @@
 import { createMemo, For, Suspense, Switch, Show, Match, JSX } from "solid-js";
-import { useQuery } from "@tanstack/solid-query";
+import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
 import {
   TbOutlineArrowBackUp,
@@ -55,7 +55,7 @@ import gitlab from "@shared/assets/oauth2/gitlab.svg";
 import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
 import twitch from "@shared/assets/oauth2/twitch.svg";
-import { useQueryClient } from "@tanstack/solid-query";
+import yandex from "@shared/assets/oauth2/yandex.svg";
 
 export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.OIDC0, openIdConnect],
@@ -66,6 +66,7 @@ export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.GOOGLE, google],
   [OAuthProviderId.MICROSOFT, microsoft],
   [OAuthProviderId.TWITCH, twitch],
+  [OAuthProviderId.YANDEX, yandex],
 ]);
 
 // Using a proxy struct for oauth providers, since tanstack only deals with arrays and not maps.

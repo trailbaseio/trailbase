@@ -795,6 +795,7 @@ fn build_auth_config(config: &Config) -> AuthConfig {
           "google" => "google.svg",
           "microsoft" => "microsoft.svg",
           "twitch" => "twitch.svg",
+          "yandex" => "yandex.svg",
           _ => "oidc.svg",
         };
       }
