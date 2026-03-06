@@ -1,3 +1,10 @@
+## v0.24.3
+
+- Add a Yandex OAuth provider.
+- Expose RNG to Rust WASM guests.
+- Update Rust WASM guest integration to avoid repeated calls to `Guest::Init()` and avoid repeated sqlite function registration.
+- Update dependencies.
+
 ## v0.24.2
 
 - Revert WASM execution model to not share state between HTTP requests. Rust Guests seem fine but JS guests can get stuck. This requires further investigation.
