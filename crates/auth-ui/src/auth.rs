@@ -18,6 +18,7 @@ pub struct OAuthProvider {
 #[derive(Deserialize)]
 pub struct AuthConfig {
   pub disable_password_auth: bool,
+  pub enable_otp_signin: bool,
   pub oauth_providers: Vec<OAuthProvider>,
 }
 
@@ -41,8 +42,30 @@ pub struct LoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
   pub enable_registration: bool,
+  pub enable_otp: bool,
   pub oauth_providers: &'a [OAuthProvider],
   pub oauth_query_params: &'a [(&'a str, &'a str)],
+}
+
+#[derive(Template)]
+#[template(path = "login_mfa/index.html")]
+pub struct LoginMfaTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "otp/request/index.html")]
+pub struct OtpRequestTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
+}
+
+#[derive(Template)]
+#[template(path = "otp/login/index.html")]
+pub struct OtpLoginTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
 }
 
 #[derive(Template)]
@@ -114,6 +137,7 @@ mod tests {
       state: state.clone(),
       alert,
       enable_registration: true,
+      enable_otp: true,
       oauth_providers: &[],
       oauth_query_params: &[("redirect_uri", redirect_uri)],
     }
@@ -130,6 +154,7 @@ mod tests {
       state: state.clone(),
       alert: "",
       enable_registration: false,
+      enable_otp: false,
       oauth_providers: &[OAuthProvider {
         name: "name".to_string(),
         display_name: "Fancy Name".to_string(),
@@ -143,6 +168,26 @@ mod tests {
     assert!(oauth_template.contains(&state), "{template}"); // Not escaped.
     assert!(oauth_template.contains(&redirect_uri), "{template}"); // Not escaped.
     assert!(oauth_template.contains("foo=bar"), "{template}"); // Not escaped.
+  }
+
+  #[test]
+  fn test_login_mfa_template_escaping() {
+    let state = hidden_input("TEST", Some("FOO"));
+    let alert = "<><>";
+    let redirect_uri = "http://localhost:42";
+
+    let template = LoginMfaTemplate {
+      state: state.clone(),
+      alert,
+    }
+    .render()
+    .unwrap();
+
+    assert!(template.contains(&state), "{template}"); // Not escaped.
+    assert!(!template.contains(&redirect_uri), "{template}"); // Not escaped.
+    // Missing because no oauth provider given.
+    assert!(!template.contains("foo=bar"), "{template}"); // Not escaped.
+    assert!(!template.contains(alert), "{template}"); // Is escaped.
   }
 
   #[test]

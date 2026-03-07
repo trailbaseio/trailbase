@@ -8,7 +8,7 @@ use tower_cookies::{
   Cookie, Cookies,
   cookie::{self, SameSite},
 };
-use trailbase_sqlite::{Connection, params};
+use trailbase_sqlite::params;
 use validator::ValidateEmail;
 
 use crate::AppState;
@@ -98,10 +98,10 @@ fn validate_redirect_impl(
 }
 
 /// Validates up to two redirects, typically from query parameter and/or request body.
-pub(crate) fn validate_redirect(
+pub(crate) fn validate_redirect<'a>(
   state: &AppState,
-  redirect_uri: Option<&str>,
-) -> Result<(), AuthError> {
+  redirect_uri: Option<&'a str>,
+) -> Result<Option<&'a str>, AuthError> {
   if let Some(redirect_uri) = redirect_uri {
     let site: &Option<url::Url> = &state.site_url();
     let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
@@ -113,21 +113,57 @@ pub(crate) fn validate_redirect(
       state.dev_mode(),
     )?;
   }
-  return Ok(());
+  return Ok(redirect_uri);
 }
 
+#[derive(Debug)]
+pub struct NewTokens {
+  pub id: uuid::Uuid,
+  pub auth_token: String,
+  pub refresh_token: String,
+  pub csrf_token: String,
+}
+
+pub async fn login_with_password_for_test(
+  state: &AppState,
+  normalized_email: &str,
+  password: &str,
+) -> Result<Option<NewTokens>, AuthError> {
+  let db_user: DbUser = user_by_email(state, normalized_email).await.map_err(|_| {
+    // Don't leak if user wasn't found or password was wrong.
+    return AuthError::Unauthorized;
+  })?;
+  let user_id = db_user.uuid();
+
+  // Validates password and rate limits attempts.
+  crate::auth::password::check_user_password(&db_user, password, state.demo_mode())?;
+
+  let auth_token_ttl = state.access_config(|c| c.auth.token_ttls()).0;
+  let tokens =
+    crate::auth::tokens::mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
+
+  return Ok(Some(NewTokens {
+    id: user_id,
+    auth_token: state
+      .jwt()
+      .encode(&tokens.auth_token_claims)
+      .map_err(|err| AuthError::Internal(err.into()))?,
+    refresh_token: tokens.refresh_token,
+    csrf_token: tokens.auth_token_claims.csrf_token,
+  }));
+}
+
+#[cfg(test)]
 pub async fn login_with_password(
   state: &AppState,
   normalized_email: &str,
   password: &str,
-) -> Result<crate::auth::api::login::NewTokens, AuthError> {
-  return crate::auth::api::login::login_with_password(
-    state,
-    normalized_email,
-    password,
-    state.access_config(|c| c.auth.token_ttls()).0,
-  )
-  .await;
+) -> Result<NewTokens, AuthError> {
+  return Ok(
+    login_with_password_for_test(state, normalized_email, password)
+      .await?
+      .unwrap(),
+  );
 }
 
 pub(crate) fn new_cookie(
@@ -270,13 +306,13 @@ pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
 }
 
 pub(crate) async fn delete_all_sessions_for_user(
-  user_conn: &Connection,
+  session_conn: &trailbase_sqlite::Connection,
   user_id: uuid::Uuid,
 ) -> Result<usize, AuthError> {
   const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE user = $1"#);
 
   return Ok(
-    user_conn
+    session_conn
       .execute(
         QUERY,
         [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
@@ -292,7 +328,7 @@ pub(crate) async fn delete_session(
   const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE refresh_token = $1"#);
 
   return state
-    .user_conn()
+    .session_conn()
     .execute(QUERY, params!(refresh_token))
     .await
     .map_err(|err| {

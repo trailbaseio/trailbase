@@ -1,4 +1,6 @@
-#![allow(clippy::collapsible_if)]
+#![forbid(unsafe_code)]
+#![allow(clippy::collapsible_if, clippy::needless_return)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 mod drivers;
 pub mod error;

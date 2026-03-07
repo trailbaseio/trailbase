@@ -57,6 +57,9 @@ import DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT from "@templates/default_email_chang
 import DEFAULT_EMAIL_RESET_PASSWORD_SUBJECT from "@templates/default_email_reset_password_subject.txt?raw";
 import DEFAULT_EMAIL_RESET_PASSWORD_BODY from "@templates/default_email_reset_password_body.html?raw";
 
+import DEFAULT_EMAIL_OTP_SUBJECT from "@templates/default_email_otp_subject.txt?raw";
+import DEFAULT_EMAIL_OTP_BODY from "@templates/default_email_otp_body.html?raw";
+
 function EmailTemplate(props: {
   form: FormApiT<EmailConfig>;
   fieldName: string;
@@ -310,6 +313,19 @@ export function EmailSettings(props: {
                       fieldName="passwordResetTemplate"
                       subjectPlaceholder={DEFAULT_EMAIL_RESET_PASSWORD_SUBJECT}
                       bodyPlaceholder={DEFAULT_EMAIL_RESET_PASSWORD_BODY}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+
+                <AccordionItem value="item-otp">
+                  <AccordionTrigger>OTP</AccordionTrigger>
+
+                  <AccordionContent>
+                    <EmailTemplate
+                      form={form}
+                      fieldName="otpTemplate"
+                      subjectPlaceholder={DEFAULT_EMAIL_OTP_SUBJECT}
+                      bodyPlaceholder={DEFAULT_EMAIL_OTP_BODY}
                     />
                   </AccordionContent>
                 </AccordionItem>

@@ -85,7 +85,7 @@ impl Email {
   pub(crate) fn verification_email(
     state: &AppState,
     email_address: &str,
-    email_verification_code: &str,
+    email_verification_token: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
 
@@ -104,7 +104,7 @@ impl Email {
     let site_url = get_site_url(state);
     let verification_url = site_url
       .join(&format!(
-        "/{AUTH_API_PATH}/verify_email/confirm/{email_verification_code}"
+        "/{AUTH_API_PATH}/verify_email/confirm/{email_verification_token}"
       ))
       .map_err(|_err| EmailError::Missing("email verification URL"))?
       .to_string();
@@ -122,7 +122,8 @@ impl Email {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
         SITE_URL => site_url,
-        CODE => email_verification_code,
+        CODE => email_verification_token,
+        TOKEN => email_verification_token,
         EMAIL => email_address,
       })?;
 
@@ -132,7 +133,7 @@ impl Email {
   pub(crate) fn change_email_address_email(
     state: &AppState,
     email_address: &str,
-    email_verification_code: &str,
+    email_verification_token: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
     let (server_config, template) =
@@ -150,7 +151,7 @@ impl Email {
     let site_url = get_site_url(state);
     let verification_url = site_url
       .join(&format!(
-        "/{AUTH_API_PATH}/change_email/confirm/{email_verification_code}"
+        "/{AUTH_API_PATH}/change_email/confirm/{email_verification_token}"
       ))
       .map_err(|_err| EmailError::Missing("change email confirmation URL"))?
       .to_string();
@@ -167,8 +168,9 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
-        CODE => email_verification_code,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        CODE => email_verification_token,
+        TOKEN => email_verification_token,
         EMAIL => email_address,
       })?;
 
@@ -178,7 +180,7 @@ impl Email {
   pub(crate) fn password_reset_email(
     state: &AppState,
     email_address: &str,
-    password_reset_code: &str,
+    password_reset_token: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
     let (server_config, template) =
@@ -193,16 +195,9 @@ impl Email {
       .and_then(|t| t.body.as_deref())
       .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_PASSWORD_RESET_BODY);
 
-    let site_url = get_site_url(state);
     // NOTE: Unlike verify_email and change_email, we're linking to page for users to input their
     // new password.
-    // TODO: For a custom change password UI, this would need to be configurable.
-    let verification_url = site_url
-      .join(&format!(
-        "/_/auth/reset_password/update/{password_reset_code}"
-      ))
-      .map_err(|_err| EmailError::Missing("password reset URL"))?
-      .to_string();
+    let site_url = get_site_url(state);
 
     let env = Environment::empty();
     let subject = env
@@ -215,12 +210,51 @@ impl Email {
       .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
-        CODE => password_reset_code,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        CODE => password_reset_token,
+        TOKEN => password_reset_token,
         EMAIL => email_address,
       })?;
 
+    return Email::new_internal(state, to, subject, body);
+  }
+
+  pub(crate) fn otp_email(
+    state: &AppState,
+    email_address: &str,
+    otp_code: &str,
+    redirect_uri: Option<&str>,
+  ) -> Result<Self, EmailError> {
+    let to: Mailbox = email_address.parse()?;
+    let (server_config, template) =
+      state.access_config(|c| (c.server.clone(), c.email.otp_template.clone()));
+
+    let subject_template = template
+      .as_ref()
+      .and_then(|t| t.subject.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_OTP_SUBJECT);
+    let body_template = template
+      .as_ref()
+      .and_then(|t| t.body.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_OTP_BODY);
+    let site_url = get_site_url(state);
+
+    let env = Environment::empty();
+    let subject = env
+      .template_from_named_str("subject", subject_template)?
+      .render(context! {
+        APP_NAME => server_config.application_name,
+        EMAIL => email_address,
+      })?;
+    let body = env
+      .template_from_named_str("body", body_template)?
+      .render(context! {
+        APP_NAME => server_config.application_name,
+        CODE => otp_code,
+        SITE_URL => site_url,
+        EMAIL => email_address,
+        REDIRECT_URI => redirect_uri,
+      })?;
     return Email::new_internal(state, to, subject, body);
   }
 }
@@ -417,9 +451,27 @@ pub mod testing {
     {
       let email = Email::password_reset_email(&state, "foo@bar.org", code).unwrap();
       assert_eq!(email.subject, "Reset your Password for TrailBase");
-      assert!(email.body.contains(&format!(
-        "https://test.org/_/auth/reset_password/update/{code}"
-      )));
+      assert!(
+        email.body.contains(&format!(
+          "https://test.org/_/auth/reset_password/update/{code}"
+        )),
+        "{}",
+        email.body
+      );
+    }
+
+    {
+      let email = Email::otp_email(&state, "foo@bar.org", "12345678", None).unwrap();
+      assert_eq!(email.subject, "OTP Sign-in for TrailBase");
+      assert!(email.body.contains(&format!("&code=12345678")));
+      assert!(!email.body.contains(&format!("redirect_uri")));
+    }
+
+    {
+      let email = Email::otp_email(&state, "foo@bar.org", "12345678", Some("/go/to")).unwrap();
+      assert_eq!(email.subject, "OTP Sign-in for TrailBase");
+      assert!(email.body.contains(&format!("&code=12345678")));
+      assert!(email.body.contains(&format!("&redirect_uri=/go/to")));
     }
   }
 

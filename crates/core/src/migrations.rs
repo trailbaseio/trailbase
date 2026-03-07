@@ -34,7 +34,9 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   // said, `set_abort_divergent` is not a viable way for us to handle collisions (e.g. in tests),
   // since setting it to false, will prevent the migration from failing but divergent migrations
   // are quietly dropped on the floor and not applied. That's not ok.
-  let mut runner = trailbase_refinery::Runner::new(migrations).set_abort_divergent(false);
+  let mut runner = trailbase_refinery::Runner::new(migrations)
+    .set_abort_divergent(false)
+    .set_grouped(false);
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
   return runner;
 }
@@ -61,6 +63,7 @@ pub(crate) fn apply_main_migrations(
   return apply_migrations("main", conn, migrations);
 }
 
+// Base migrations contains things like file deletions table shared across main and user DBs.
 pub(crate) fn apply_base_migrations(
   conn: &mut rusqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
@@ -82,6 +85,17 @@ pub(crate) fn apply_logs_migrations(
     "logs",
     logs_conn,
     vec![load_embedded_migrations::<LogsMigrations>()],
+  )?;
+  return Ok(());
+}
+
+pub(crate) fn apply_session_migrations(
+  logs_conn: &mut rusqlite::Connection,
+) -> Result<(), RefineryError> {
+  apply_migrations(
+    "session",
+    logs_conn,
+    vec![load_embedded_migrations::<SessionMigrations>()],
   )?;
   return Ok(());
 }
@@ -253,6 +267,7 @@ fn load_embedded_migrations<T: rust_embed::RustEmbed>() -> Vec<Migration> {
     .collect();
 }
 
+// Base migrations contains things like file deletions table shared across main and user DBs.
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/base"]
 struct BaseMigrations;
@@ -264,6 +279,10 @@ struct MainMigrations;
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/logs"]
 struct LogsMigrations;
+
+#[derive(Clone, rust_embed::RustEmbed)]
+#[folder = "migrations/session"]
+struct SessionMigrations;
 
 #[cfg(test)]
 mod tests {
@@ -277,5 +296,47 @@ mod tests {
         .unwrap()
         .is_empty()
     );
+  }
+
+  #[tokio::test]
+  async fn test_schema_invariants_still_hold_after_migrations() {
+    let state = crate::app_state::test_state(None).await.unwrap();
+
+    fn exists(conn: &rusqlite::Connection, name: &str, schema_type: &str) -> bool {
+      return conn
+        .query_one(
+          &format!(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = '{schema_type}' AND name = '{name}')"
+          ),
+          (),
+          |row| row.get(0),
+        )
+        .unwrap_or_default();
+    }
+
+    fn index_exists(conn: &rusqlite::Connection, name: &str) -> bool {
+      return exists(conn, name, "index");
+    }
+
+    fn trigger_exists(conn: &rusqlite::Connection, name: &str) -> bool {
+      return exists(conn, name, "trigger");
+    }
+
+    state
+      .conn()
+      .call(|conn| {
+        // QUESTION: Should we push something like this down into startup to assert that
+        // user-provided migrations don't break TB's expectations, e.g. they modified the
+        // `_user` TABLE and forgot to put an index back into place.
+        assert!(index_exists(conn, "__user__email_index"));
+        assert!(index_exists(conn, "__user__provider_ids_index"));
+
+        assert!(trigger_exists(conn, "__user__updated_trigger"));
+        assert!(trigger_exists(conn, "__user_avatar__updated_trigger"));
+
+        return Ok(());
+      })
+      .await
+      .unwrap();
   }
 }

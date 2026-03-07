@@ -175,36 +175,44 @@ async fn async_main(
       };
     }
     SubCommands::User { cmd } => {
-      let (conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
+      let (user_conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
+      let session_conn = api::init_session_db(Some(&data_dir))?;
 
       match cmd {
         Some(UserSubCommands::ChangePassword { user, password }) => {
-          let id = api::cli::change_password(&conn, to_user_reference(user), &password).await?;
+          let id =
+            api::cli::change_password(&user_conn, to_user_reference(user), &password).await?;
           println!("Updated password for '{id}'");
         }
         Some(UserSubCommands::ChangeEmail { user, new_email }) => {
-          let id = api::cli::change_email(&conn, to_user_reference(user), &new_email).await?;
+          let id = api::cli::change_email(&user_conn, to_user_reference(user), &new_email).await?;
           println!("Updated email for '{id}'");
         }
         Some(UserSubCommands::Add { email, password }) => {
-          api::cli::add_user(&conn, &email, &password).await?;
+          api::cli::add_user(&user_conn, &email, &password).await?;
           println!("Added user '{email}'");
         }
         Some(UserSubCommands::Delete { user }) => {
-          api::cli::delete_user(&conn, to_user_reference(user.clone())).await?;
+          api::cli::delete_user(&user_conn, to_user_reference(user.clone())).await?;
           println!("Deleted user '{user}'");
         }
         Some(UserSubCommands::Verify { user, verified }) => {
-          let id = api::cli::set_verified(&conn, to_user_reference(user), verified).await?;
+          let id = api::cli::set_verified(&user_conn, to_user_reference(user), verified).await?;
           println!("Set verified={verified} for '{id}'");
         }
         Some(UserSubCommands::InvalidateSession { user }) => {
-          api::cli::invalidate_sessions(&conn, to_user_reference(user.clone())).await?;
+          api::cli::invalidate_sessions(&user_conn, &session_conn, to_user_reference(user.clone()))
+            .await?;
           println!("Sessions invalidated for '{user}'");
         }
         Some(UserSubCommands::MintToken { user }) => {
-          let auth_token =
-            api::cli::mint_auth_token(&data_dir, &conn, to_user_reference(user.clone())).await?;
+          let auth_token = api::cli::mint_auth_token(
+            &data_dir,
+            &user_conn,
+            &session_conn,
+            to_user_reference(user.clone()),
+          )
+          .await?;
           println!("Bearer {auth_token}");
         }
         Some(UserSubCommands::Import {
@@ -218,7 +226,7 @@ async fn async_main(
             println!("Importing {} users.", users.len());
 
             if !dry_run {
-              api::cli::import_users(&conn, users).await?;
+              api::cli::import_users(&user_conn, users).await?;
             }
           } else {
             return Err("Missing '--auth0_json' path".into());

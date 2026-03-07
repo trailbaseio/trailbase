@@ -133,7 +133,7 @@ impl<T: Guest> TrailbaseHandler<T> {
   fn get_sqlite_scalar_functions() -> &'static [SqliteFunction] {
     // NOTE: This assumes that there's only one `T`, since static are shared across generics.
     static FUNCS: OnceLock<Vec<SqliteFunction>> = OnceLock::new();
-    return &FUNCS.get_or_init(T::sqlite_scalar_functions);
+    return FUNCS.get_or_init(T::sqlite_scalar_functions);
   }
 }
 

@@ -33,6 +33,7 @@ message EmailConfig {
   optional EmailTemplate user_verification_template = 21;
   optional EmailTemplate password_reset_template = 22;
   optional EmailTemplate change_email_template = 23;
+  optional EmailTemplate otp_template = 24;
 }
 
 enum OAuthProviderId {
@@ -75,6 +76,11 @@ message AuthConfig {
 
   /// Disables password-based sign-up. Does not affect already registered users.
   optional bool disable_password_auth = 3;
+
+  /// Whether sign-in via OTP codes (e.g. sent via Email) should be allowed.
+  /// This may be less secure since ultimately you're delegating operational
+  /// security to a user's inbox.
+  optional bool enable_otp_signin = 8;
 
   /// Minimal password length. Defaults to 8.
   optional uint32 password_minimal_length = 4;

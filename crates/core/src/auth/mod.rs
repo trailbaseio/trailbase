@@ -19,15 +19,12 @@ pub(crate) mod util;
 mod error;
 
 pub use error::AuthError;
-pub use jwt::{JwtHelper, TokenClaims};
+pub use jwt::{AuthTokenClaims, JwtHelper};
 // pub(crate) use ui::auth_ui_router;
 pub use user::User;
 
+use crate::config::proto::Config;
 use crate::constants::AUTH_API_PATH;
-
-pub(crate) const LOGIN_UI: &str = "/_/auth/login";
-pub(crate) const REGISTER_USER_UI: &str = "/_/auth/register";
-pub(crate) const PROFILE_UI: &str = "/_/auth/profile";
 
 // NOTE: This import is needed to not mangle names in OpenAPI export.
 use api::*;
@@ -48,6 +45,12 @@ use api::*;
     change_password::change_password_handler,
     refresh::refresh_handler,
     login::login_handler,
+    login::login_mfa_handler,
+    otp::request_otp_handler,
+    otp::login_otp_handler,
+    totp::register_totp_request_handler,
+    totp::register_totp_confirm_handler,
+    totp::unregister_totp_handler,
     token::auth_code_to_token_handler,
     status::login_status_handler,
     logout::logout_handler,
@@ -64,7 +67,7 @@ use api::*;
 pub(super) struct AuthApi;
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
-pub(super) fn router() -> Router<crate::AppState> {
+pub(super) fn router(config: &Config) -> Router<crate::AppState> {
   // We support the following authentication flows:
   //
   //  * unauthed: register, login, get-avatar-url
@@ -83,7 +86,7 @@ pub(super) fn router() -> Router<crate::AppState> {
   //
   //  TODO: We should have periodic task to vacuum expired auth, validate-email, reset-password
   //  codes and pending registrations.
-  return Router::new()
+  let router = Router::new()
     // Sign-up new users.
     .route(
       &format!("/{AUTH_API_PATH}/register"),
@@ -95,7 +98,7 @@ pub(super) fn router() -> Router<crate::AppState> {
       get(api::verify_email::request_email_verification_handler),
     )
     .route(
-      &format!("/{AUTH_API_PATH}/verify_email/confirm/{{email_verification_code}}"),
+      &format!("/{AUTH_API_PATH}/verify_email/confirm/{{email_verification_token}}"),
       get(api::verify_email::verify_email_handler),
     )
     .route(
@@ -103,7 +106,7 @@ pub(super) fn router() -> Router<crate::AppState> {
       post(api::change_email::change_email_request_handler),
     )
     .route(
-      &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_code}}"),
+      &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_token}}"),
       get(api::change_email::change_email_confirm_handler),
     )
     // Password-reset flow.
@@ -129,6 +132,23 @@ pub(super) fn router() -> Router<crate::AppState> {
     .route(
       &format!("/{AUTH_API_PATH}/login"),
       post(api::login::login_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/login_mfa"),
+      post(api::login::login_mfa_handler),
+    )
+    // TOTP flow
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/register"),
+      get(api::totp::register_totp_request_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/confirm"),
+      post(api::totp::register_totp_confirm_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/unregister"),
+      post(api::totp::unregister_totp_handler),
     )
     // Converts auth code (+pkce code verifier) to auth tokens
     .route(
@@ -170,6 +190,21 @@ pub(super) fn router() -> Router<crate::AppState> {
     )
     // OAuth flows: list providers, login+callback
     .nest(&format!("/{AUTH_API_PATH}/oauth"), oauth::oauth_router());
+
+  if config.auth.enable_otp_signin() {
+    return router
+      // OTP flow
+      .route(
+        &format!("/{AUTH_API_PATH}/otp/request"),
+        post(api::otp::request_otp_handler),
+      )
+      .route(
+        &format!("/{AUTH_API_PATH}/otp/login"),
+        post(api::otp::login_otp_handler),
+      );
+  }
+
+  return router;
 }
 
 /// Replicating minimal functionality of the above main router in case the admin dash is routed

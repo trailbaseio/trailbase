@@ -10,14 +10,14 @@ use std::collections::HashMap;
 use tower_cookies::Cookies;
 use uuid::Uuid;
 
-use crate::api::TokenClaims;
+use crate::api::AuthTokenClaims;
 use crate::app_state::{AppState, TestStateOptions, test_state};
 use crate::auth::api::token::{
   AuthCodeToTokenRequest, TokenResponse as TokenHandlerResponse, auth_code_to_token_handler,
 };
-use crate::auth::login_params::LoginInputParams;
+use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
-use crate::auth::oauth::state::OAuthState;
+use crate::auth::oauth::state::OAuthStateClaims;
 use crate::auth::oauth::{callback, list_providers, login};
 use crate::auth::user::DbUser;
 use crate::auth::util::derive_pkce_code_challenge;
@@ -159,6 +159,7 @@ async fn test_oauth_login_flow_without_pkce() {
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
       redirect_uri: Some(redirect_uri.to_string()),
+      mfa_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
     }),
@@ -168,7 +169,7 @@ async fn test_oauth_login_flow_without_pkce() {
   .unwrap();
 
   // Extract ephemeral OAoauth cookie state set by TB in login handler.
-  let oauth_state: OAuthState = state
+  let oauth_state: OAuthStateClaims = state
     .jwt()
     .decode(cookies.get(COOKIE_OAUTH_STATE).unwrap().value())
     .unwrap();
@@ -238,7 +239,7 @@ async fn test_oauth_login_flow_without_pkce() {
 
   // And we have tokens.
   let auth_token = cookies.get(COOKIE_AUTH_TOKEN).unwrap().value().to_string();
-  let decoded_claims = state.jwt().decode::<TokenClaims>(&auth_token).unwrap();
+  let decoded_claims = state.jwt().decode::<AuthTokenClaims>(&auth_token).unwrap();
   assert_eq!(db_user.email, decoded_claims.email);
   let refresh_token = cookies
     .get(COOKIE_REFRESH_TOKEN)
@@ -263,7 +264,8 @@ async fn test_oauth_login_flow_with_pkce() {
     Path(TestOAuthProvider::NAME.to_string()),
     Query(LoginInputParams {
       redirect_uri: Some(redirect_uri.to_string()),
-      response_type: Some("code".to_string()),
+      mfa_redirect_uri: None,
+      response_type: Some(ResponseType::Code),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     }),
     cookies.clone(),
@@ -272,7 +274,7 @@ async fn test_oauth_login_flow_with_pkce() {
   .unwrap();
 
   // Extract ephemeral OAoauth cookie state set by TB in login handler.
-  let oauth_state: OAuthState = state
+  let oauth_state: OAuthStateClaims = state
     .jwt()
     .decode(cookies.get(COOKIE_OAUTH_STATE).unwrap().value())
     .unwrap();
@@ -365,7 +367,7 @@ async fn test_oauth_login_flow_with_pkce() {
 
   let decoded_claims = state
     .jwt()
-    .decode::<TokenClaims>(&token_response.auth_token)
+    .decode::<AuthTokenClaims>(&token_response.auth_token)
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
@@ -384,7 +386,7 @@ fn get_redirect_location<T: IntoResponse>(response: T) -> Option<String> {
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
   return state
-    .user_conn()
+    .session_conn()
     .read_query_row_f(
       format!("SELECT EXISTS(SELECT 1 FROM {SESSION_TABLE} WHERE user = $1)"),
       (user_id.into_bytes().to_vec(),),

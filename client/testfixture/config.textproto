@@ -6,6 +6,7 @@ server {
   enable_record_transactions: true
 }
 auth {
+  enable_otp_signin: true
   oauth_providers: [{
     key: "oidc0"
     value {

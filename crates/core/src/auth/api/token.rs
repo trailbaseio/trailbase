@@ -4,14 +4,13 @@ use serde::{Deserialize, Serialize};
 use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
+use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::mint_new_tokens;
-use crate::auth::util::derive_pkce_code_challenge;
-use crate::constants::{USER_TABLE, VERIFICATION_CODE_LENGTH};
-use crate::{app_state::AppState, auth::user::DbUser};
-
-const TTL_SEC: i64 = 300;
+use crate::auth::util::{derive_pkce_code_challenge, get_user_by_id};
+use crate::constants::{AUTHORIZATION_CODE_TABLE, VERIFICATION_CODE_LENGTH};
 
 #[derive(Clone, Debug, Deserialize, ToSchema, TS)]
 #[ts(export)]
@@ -56,35 +55,33 @@ pub(crate) async fn auth_code_to_token_handler(
     .as_ref()
     .map(|verifier| derive_pkce_code_challenge(verifier));
 
-  const UPDATE_QUERY: &str = formatcp!(
+  const AUTH_CODE_QUERY: &str = formatcp!(
     "\
-      UPDATE '{USER_TABLE}' \
-      SET \
-        authorization_code = NULL, \
-        authorization_code_sent_at = NULL, \
-        pkce_code_challenge = NULL \
+      SELECT user FROM '{AUTHORIZATION_CODE_TABLE}' \
       WHERE \
         authorization_code = $1 \
-          AND authorization_code_sent_at > (UNIXEPOCH() - {TTL_SEC}) \
           AND pkce_code_challenge = $2 \
-      RETURNING * \
+          AND expires > UNIXEPOCH() \
     "
   );
 
-  let Some(db_user) = state
-    .user_conn()
-    .write_query_value::<DbUser>(
-      UPDATE_QUERY,
+  let Some(user_id) = state
+    .session_conn()
+    .query_row_f(
+      AUTH_CODE_QUERY,
       params!(authorization_code, pkce_code_challenge),
+      |row| row.get::<_, [u8; 16]>(0),
     )
     .await?
   else {
     return Err(AuthError::NotFound);
   };
 
+  let db_user = get_user_by_id(state.user_conn(), &Uuid::from_bytes(user_id)).await?;
+
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
 
-  let tokens = mint_new_tokens(state.user_conn(), &db_user, auth_token_ttl).await?;
+  let tokens = mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
   let auth_token = state
     .jwt()
     .encode(&tokens.auth_token_claims)

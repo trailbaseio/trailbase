@@ -7,7 +7,7 @@ use tower_cookies::Cookie;
 use trailbase_sqlite::params;
 
 use trailbase::AppState;
-use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password};
+use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password_for_test};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
 use trailbase::util::id_to_b64;
@@ -85,8 +85,9 @@ async fn test_record_apis() {
     .unwrap()
     .into_bytes();
 
-  let user_x_token = login_with_password(&state, user_x_email, password)
+  let user_x_token = login_with_password_for_test(&state, user_x_email, password)
     .await
+    .unwrap()
     .unwrap();
 
   add_user_to_room(&conn, user_x, room).await.unwrap();

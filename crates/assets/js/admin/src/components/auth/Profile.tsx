@@ -34,7 +34,11 @@ export function Avatar(props: { user: User | undefined; size: number }) {
   );
 }
 
-export function Profile(props: { user: User; showId?: boolean }) {
+export function Profile(props: {
+  user: User;
+  showId?: boolean;
+  twoFactorEnabled?: boolean;
+}) {
   return (
     <div class="flex w-full shrink flex-col">
       <div class="flex shrink items-center gap-4">
@@ -48,6 +52,13 @@ export function Profile(props: { user: User; showId?: boolean }) {
           <Show when={props.showId ?? true}>
             <div>id: {urlSafeBase64ToUuid(props.user.id)}</div>
           </Show>
+
+          <div>
+            Two-factor:{" "}
+            {(props.twoFactorEnabled ?? props.user.mfa ?? false)
+              ? "Enabled"
+              : "Disabled"}
+          </div>
 
           <Show when={import.meta.env.DEV}>
             <span class="bg-red-200">{JSON.stringify(props.user)}</span>

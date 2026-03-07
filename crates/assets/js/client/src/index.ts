@@ -3,7 +3,14 @@ import * as JSON from "@ungap/raw-json";
 import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
+import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
+import type { LoginOtpRequest } from "@bindings/LoginOtpRequest";
+import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
+import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
+import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
+import type { MfaTokenResponse } from "@bindings/MfaTokenResponse";
 import type { LoginRequest } from "@bindings/LoginRequest";
+import type { LoginMfaRequest } from "@bindings/LoginMfaRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
 import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
 import type { LogoutRequest } from "@bindings/LogoutRequest";
@@ -15,6 +22,7 @@ export type User = {
   id: string;
   email: string;
   admin?: boolean;
+  mfa?: boolean;
 };
 
 export type Pagination = {
@@ -42,6 +50,7 @@ type TokenClaims = {
   email: string;
   csrf_token: string;
   admin?: boolean;
+  mfa?: boolean;
 };
 
 type TokenState = {
@@ -75,6 +84,7 @@ function buildUser(state: TokenState): User | undefined {
       id: claims.sub,
       email: claims.email,
       admin: claims.admin,
+      mfa: claims.mfa,
     };
   }
 }
@@ -652,6 +662,13 @@ export interface ClientOptions {
   onAuthChange?: (client: Client, user?: User) => void;
 }
 
+export type MultiFactorAuthCallback = (code: string) => Promise<void>;
+
+export interface MultiFactor {
+  multiFactorToken: string;
+  callback: MultiFactorAuthCallback;
+}
+
 export interface Client {
   get base(): URL | undefined;
 
@@ -669,8 +686,15 @@ export interface Client {
 
   avatarUrl(userId?: string): string | undefined;
 
-  login(email: string, password: string): Promise<void>;
+  login(email: string, password: string): Promise<MultiFactor | undefined>;
+  loginMultiFactor(opts: { token: string; code: string }): Promise<void>;
+  requestOtp(email: string, opts?: { redirectUri?: string }): Promise<void>;
+  loginOtp(email: string, code: string): Promise<void>;
   logout(): Promise<boolean>;
+
+  registerTOTP(opts?: { png: boolean }): Promise<RegisterTotpResponse>;
+  confirmTOTP(totpUrl: string, totp: string): Promise<void>;
+  unregisterTOTP(totp: string): Promise<void>;
 
   deleteUser(): Promise<void>;
   checkCookies(): Promise<Tokens | undefined>;
@@ -767,13 +791,76 @@ class ClientImpl implements Client {
     return undefined;
   }
 
-  public async login(email: string, password: string): Promise<void> {
-    const response = await this.fetch(`${authApiBasePath}/login`, {
+  public async login(
+    email: string,
+    password: string,
+  ): Promise<MultiFactor | undefined> {
+    try {
+      const response = await this.fetch(`${authApiBasePath}/login`, {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        } as LoginRequest),
+        headers: jsonContentTypeHeader,
+      });
+
+      this.setTokenState(
+        buildTokenState((await response.json()) as LoginResponse),
+      );
+    } catch (err) {
+      if (err instanceof FetchError && err.status === 403) {
+        const mfaTokenResponse = JSON.parse(err.message) as MfaTokenResponse;
+        return {
+          multiFactorToken: mfaTokenResponse.mfa_token,
+          callback: (code: string) =>
+            this.loginMultiFactor({ token: mfaTokenResponse.mfa_token, code }),
+        };
+      }
+
+      throw err;
+    }
+  }
+
+  public async loginMultiFactor(opts: {
+    token: string;
+    code: string;
+  }): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/login_mfa`, {
       method: "POST",
       body: JSON.stringify({
-        email: email,
-        password: password,
-      } as LoginRequest),
+        mfa_token: opts.token,
+        totp: opts.code,
+      } as LoginMfaRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
+  }
+  public async requestOtp(
+    email: string,
+    opts?: { redirectUri?: string },
+  ): Promise<void> {
+    const redirect = opts?.redirectUri;
+    const params = redirect ? `?redirect_uri=${redirect}` : "";
+    await this.fetch(`${authApiBasePath}/otp/request${params}`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+      } as RequestOtpRequest),
+      headers: jsonContentTypeHeader,
+    });
+  }
+
+  public async loginOtp(email: string, code: string): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/otp/login`, {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        code,
+      } as LoginOtpRequest),
       headers: jsonContentTypeHeader,
     });
 
@@ -818,6 +905,64 @@ class ClientImpl implements Client {
     });
   }
 
+  public async registerTOTP(opts?: {
+    png: boolean;
+  }): Promise<RegisterTotpResponse> {
+    const response = await this.fetch(
+      `${authApiBasePath}/totp/register?png=${opts?.png ?? false}`,
+      {
+        method: "GET",
+        headers: jsonContentTypeHeader,
+      },
+    );
+    return parseJSON(await response.text());
+  }
+
+  public async confirmTOTP(totpUrl: string, totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/confirm`, {
+      method: "POST",
+      body: JSON.stringify({
+        totp_url: totpUrl,
+        totp,
+      } as ConfirmRegisterTotpRequest),
+      headers: jsonContentTypeHeader,
+    });
+    await this.refreshAuthToken({ force: true });
+  }
+
+  public async unregisterTOTP(totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/unregister`, {
+      method: "POST",
+      body: JSON.stringify({
+        totp,
+      } as DisableTotpRequest),
+      headers: jsonContentTypeHeader,
+    });
+    await this.refreshAuthToken({ force: true });
+  }
+
+  // public async verifyTOTP(
+  //   email: string,
+  //   totp: string,
+  //   password?: string,
+  //   otp?: string,
+  // ): Promise<void> {
+  //   const response = await this.fetch(`${authApiBasePath}/totp/verify`, {
+  //     method: "POST",
+  //     body: JSON.stringify({
+  //       email,
+  //       totp,
+  //       password,
+  //       otp,
+  //     } as VerifyTOTPRequest),
+  //     headers: jsonContentTypeHeader,
+  //   });
+  //
+  //   this.setTokenState(
+  //     buildTokenState((await response.json()) as LoginResponse),
+  //   );
+  // }
+
   /// This will call the status endpoint, which validates any provided tokens
   /// but also hoists any tokens provided as cookies into a JSON response.
   private async checkAuthStatus(): Promise<Tokens | undefined> {
@@ -847,8 +992,11 @@ class ClientImpl implements Client {
     }
   }
 
-  public async refreshAuthToken(): Promise<void> {
-    const refreshToken = shouldRefresh(this._tokenState);
+  public async refreshAuthToken(opts?: { force?: boolean }): Promise<void> {
+    const force = opts?.force ?? false;
+    const refreshToken = force
+      ? this._tokenState.state?.tokens.refresh_token
+      : shouldRefresh(this._tokenState);
     if (refreshToken) {
       // Note: refreshTokenImpl will auto-logout on 401.
       this.setTokenState(await this.refreshTokensImpl(refreshToken));

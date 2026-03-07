@@ -130,11 +130,13 @@ pub async fn set_verified(
 
 pub async fn invalidate_sessions(
   user_conn: &trailbase_sqlite::Connection,
+  session_conn: &trailbase_sqlite::Connection,
   user: UserReference,
 ) -> Result<(), AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  crate::auth::util::delete_all_sessions_for_user(user_conn, Uuid::from_bytes(db_user.id)).await?;
+  crate::auth::util::delete_all_sessions_for_user(session_conn, Uuid::from_bytes(db_user.id))
+    .await?;
 
   return Ok(());
 }
@@ -142,6 +144,7 @@ pub async fn invalidate_sessions(
 pub async fn mint_auth_token(
   data_dir: &DataDir,
   user_conn: &trailbase_sqlite::Connection,
+  session_conn: &trailbase_sqlite::Connection,
   user: UserReference,
 ) -> Result<String, AuthError> {
   let jwt = crate::api::JwtHelper::init_from_path(data_dir)
@@ -149,7 +152,7 @@ pub async fn mint_auth_token(
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
   let db_user = user.lookup_user(user_conn).await?;
 
-  let tokens = mint_new_tokens(user_conn, &db_user, chrono::Duration::hours(12)).await?;
+  let tokens = mint_new_tokens(session_conn, &db_user, chrono::Duration::hours(12)).await?;
 
   let auth_token = jwt
     .encode(&tokens.auth_token_claims)

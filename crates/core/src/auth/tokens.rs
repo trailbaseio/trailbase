@@ -9,7 +9,7 @@ use trailbase_sqlite::{Connection, params};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::jwt::TokenClaims;
+use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::user::DbUser;
 use crate::auth::util::new_cookie;
 use crate::constants::{
@@ -21,7 +21,7 @@ use crate::util::get_header;
 
 #[derive(Clone)]
 pub(crate) struct Tokens {
-  pub auth_token_claims: TokenClaims,
+  pub auth_token_claims: AuthTokenClaims,
   pub refresh_token: Option<String>,
 }
 
@@ -65,7 +65,7 @@ pub(crate) async fn extract_tokens_from_request_parts(
   // means to propagate the new token back (unlike for cookies). The responsibility sits with the
   // client to refresh tokens in time.
   if let Some(tokens) = extract_tokens_from_headers(&parts.headers) {
-    let claims = TokenClaims::from_auth_token(state.jwt(), tokens.auth_token)
+    let claims = AuthTokenClaims::from_auth_token(state.jwt(), tokens.auth_token)
       .map_err(|_| AuthError::Unauthorized)?;
 
     return Ok(Tokens {
@@ -84,8 +84,8 @@ pub(crate) async fn extract_tokens_from_request_parts(
   if let Some(tokens) = extract_tokens_from_cookies(cookies) {
     // If an auth-token is present, first try that before falling back to "auto-refresh".
     if let Some(auth_token) = &tokens.auth_token
-      && let Ok(claims) =
-        TokenClaims::from_auth_token(state.jwt(), auth_token).map_err(|_| AuthError::Unauthorized)
+      && let Ok(claims) = AuthTokenClaims::from_auth_token(state.jwt(), auth_token)
+        .map_err(|_| AuthError::Unauthorized)
     {
       return Ok(Tokens {
         auth_token_claims: claims,
@@ -166,12 +166,12 @@ fn extract_tokens_from_cookies(cookies: &Cookies) -> Option<CookieTokens> {
 
 /// Only difference to Tokens above, refresh token presence is guaranteed.
 pub struct FreshTokens {
-  pub auth_token_claims: TokenClaims,
+  pub auth_token_claims: AuthTokenClaims,
   pub refresh_token: String,
 }
 
 pub(crate) async fn mint_new_tokens(
-  user_conn: &Connection,
+  session_conn: &Connection,
   db_user: &DbUser,
   expires_in: Duration,
 ) -> Result<FreshTokens, AuthError> {
@@ -182,24 +182,17 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let user_id = db_user.uuid();
-  let claims = TokenClaims::new(
-    verified,
-    user_id,
-    db_user.email.clone(),
-    db_user.admin,
-    expires_in,
-  );
+  let claims = AuthTokenClaims::new(db_user, expires_in);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
   const QUERY: &str =
-    formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token) VALUES ($1, $2)");
+    formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token, expires) VALUES ($1, $2, $3)");
 
-  user_conn
+  session_conn
     .execute(
       QUERY,
-      params!(user_id.into_bytes().to_vec(), refresh_token.clone(),),
+      params!(db_user.id, refresh_token.clone(), claims.exp),
     )
     .await?;
 
@@ -212,26 +205,23 @@ pub(crate) async fn mint_new_tokens(
 pub(crate) async fn reauth_with_refresh_token(
   state: &AppState,
   refresh_token: String,
-) -> Result<(TokenClaims, chrono::Duration), AuthError> {
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+) -> Result<(AuthTokenClaims, chrono::Duration), AuthError> {
+  let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
 
-  const QUERY: &str = formatcp!(
+  const SESSION_QUERY: &str = formatcp!(
     "\
-      SELECT user.* \
-      FROM \
-        '{SESSION_TABLE}' AS s \
-        INNER JOIN '{USER_TABLE}' AS user ON s.user = user.id \
+      SELECT user \
+      FROM '{SESSION_TABLE}' \
       WHERE \
-        s.refresh_token = $1 AND s.updated > (UNIXEPOCH() - $2) AND user.verified \
+        refresh_token = $1 AND expires > UNIXEPOCH() \
     "
   );
 
-  let Some(db_user) = state
-    .user_conn()
-    .read_query_value::<DbUser>(
-      QUERY,
-      params!(refresh_token, refresh_token_ttl.num_seconds()),
-    )
+  let Some(user_id) = state
+    .session_conn()
+    .query_row_f(SESSION_QUERY, params!(refresh_token), |row| {
+      row.get::<_, [u8; 16]>(0)
+    })
     .await?
   else {
     // Row not found case, typically expected in one of 4 cases:
@@ -245,19 +235,31 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
+  const USER_QUERY: &str = formatcp!("SELECT * FROM '{USER_TABLE}' WHERE id = $1");
+
+  let Some(db_user) = state
+    .user_conn()
+    .read_query_value::<DbUser>(USER_QUERY, params!(user_id))
+    .await?
+  else {
+    // Row not found case, typically expected in one of 4 cases:
+    //  1. Above where clause doesn't match, e.g. refresh token expired.
+    //  2. Token was actively deleted and thus revoked.
+    //  3. User explicitly logged out, which will delete **all** sessions for that user.
+    //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
+    #[cfg(debug_assertions)]
+    log::debug!("User not found");
+
+    return Err(AuthError::Unauthorized);
+  };
+
   assert!(
     db_user.verified,
     "unverified user, should have been caught by above query"
   );
 
   return Ok((
-    TokenClaims::new(
-      db_user.verified,
-      db_user.uuid(),
-      db_user.email,
-      db_user.admin,
-      auth_token_ttl,
-    ),
+    AuthTokenClaims::new(&db_user, auth_token_ttl),
     auth_token_ttl,
   ));
 }

@@ -521,7 +521,7 @@ pub fn validate_config(
     }
 
     match name.as_str() {
-      "main" | "logs" | "" => {
+      "main" | "logs" | "session" | "" => {
         return ierr(format!("Invalid database name: {name}"));
       }
       name
@@ -658,6 +658,7 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
   validate_email_template(email.user_verification_template.as_ref())?;
   validate_email_template(email.change_email_template.as_ref())?;
   validate_email_template(email.password_reset_template.as_ref())?;
+  validate_email_template(email.otp_template.as_ref())?;
 
   let Some(_host) = &email.smtp_host else {
     match (email.smtp_port, &email.smtp_username, &email.smtp_password) {

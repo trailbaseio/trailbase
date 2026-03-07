@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Utc};
+use const_format::formatcp;
 use cron::Schedule;
 use futures_util::future::BoxFuture;
 use log::*;
@@ -16,7 +17,9 @@ use trailbase_sqlite::{Connection, params};
 use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::ConnectionManager;
-use crate::constants::{DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT, SESSION_TABLE};
+use crate::constants::{
+  AUTHORIZATION_CODE_TABLE, LOGS_RETENTION_DEFAULT, OTP_CODE_TABLE, SESSION_TABLE,
+};
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
@@ -241,6 +244,7 @@ fn build_job(
   config: &Config,
   connection_manager: &ConnectionManager,
   logs_conn: &Connection,
+  session_conn: &Connection,
   object_store: Arc<dyn ObjectStore>,
 ) -> DefaultSystemJob {
   return match id {
@@ -329,35 +333,31 @@ fn build_job(
       }
     }
     SystemJobId::AuthCleaner => {
-      let main_conn = connection_manager.main_entry().connection.clone();
-      let refresh_token_ttl = config
-        .auth
-        .refresh_token_ttl_sec
-        .map_or(DEFAULT_REFRESH_TOKEN_TTL, Duration::seconds);
+      let session_conn = session_conn.clone();
 
       DefaultSystemJob {
-        name: "Auth Cleanup",
+        name: "Session Cleanup",
         default: SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
         },
         callback: build_callback(move || {
-          let user_conn = main_conn.clone();
+          let session_conn = session_conn.clone();
+
+          const QUERY: &str = formatcp!(
+            "\
+              DELETE FROM '{SESSION_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM '{AUTHORIZATION_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM '{OTP_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+            "
+          );
 
           return async move {
-            let timestamp = (Utc::now() - refresh_token_ttl).timestamp();
-
-            user_conn
-              .execute(
-                format!("DELETE FROM '{SESSION_TABLE}' WHERE updated < $1"),
-                params!(timestamp),
-              )
-              .await
-              .map_err(|err| {
-                warn!("Periodic session cleanup failed: {err}");
-                err
-              })?;
+            session_conn.execute_batch(QUERY).await.map_err(|err| {
+              warn!("Periodic session cleanup failed: {err}");
+              err
+            })?;
 
             Ok::<(), trailbase_sqlite::Error>(())
           };
@@ -466,6 +466,7 @@ pub fn build_job_registry_from_config(
   data_dir: &DataDir,
   connection_manager: &ConnectionManager,
   logs_conn: &Connection,
+  session_conn: &Connection,
   object_store: Arc<dyn ObjectStore>,
 ) -> Result<JobRegistry, CallbackError> {
   let job_ids = [
@@ -489,6 +490,7 @@ pub fn build_job_registry_from_config(
       config,
       connection_manager,
       logs_conn,
+      session_conn,
       object_store.clone(),
     );
 

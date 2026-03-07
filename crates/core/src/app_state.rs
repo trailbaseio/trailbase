@@ -41,9 +41,10 @@ struct InternalState {
   config: Reactive<Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
-  // TODO: Maybe remove in favor of connection manager. Note that this is currently also used for
-  // the state.user_conn().
+  // TODO: Maybe remove main `conn` in favor of connection manager. Note that this is currently
+  // also used for the state.user_conn().
   conn: trailbase_sqlite::Connection,
+  session_conn: trailbase_sqlite::Connection,
   logs_conn: trailbase_sqlite::Connection,
   connection_manager: ConnectionManager,
 
@@ -72,6 +73,7 @@ pub(crate) struct AppStateArgs {
   pub demo: bool,
   pub config: Config,
   pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
+  pub session_conn: trailbase_sqlite::Connection,
   pub logs_conn: trailbase_sqlite::Connection,
   pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
@@ -117,6 +119,7 @@ impl AppState {
       args.data_dir.clone(),
       args.connection_manager.clone(),
       args.logs_conn.clone(),
+      args.session_conn.clone(),
       object_store.clone(),
     );
 
@@ -164,20 +167,28 @@ impl AppState {
         jobs: derive_unchecked(&config, move |c| {
           debug!("(re-)building jobs from config");
 
-          let (data_dir, conn_mgr, logs_conn, object_store) = &jobs_input;
+          let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
 
           return Arc::new(
-            build_job_registry_from_config(c, data_dir, conn_mgr, logs_conn, object_store.clone())
-              .unwrap_or_else(|err| {
-                error!("Failed to build JobRegistry for cron jobs: {err}");
-                return JobRegistry::new();
-              }),
+            build_job_registry_from_config(
+              c,
+              data_dir,
+              conn_mgr,
+              logs_conn,
+              session_conn,
+              object_store.clone(),
+            )
+            .unwrap_or_else(|err| {
+              error!("Failed to build JobRegistry for cron jobs: {err}");
+              return JobRegistry::new();
+            }),
           );
         }),
         mailer: derive_unchecked(&config, Mailer::new_from_config),
         config,
         json_schema_registry: args.json_schema_registry,
         conn: (*main_conn).clone(),
+        session_conn: args.session_conn,
         logs_conn: args.logs_conn,
         connection_manager: args.connection_manager,
         jwt: args.jwt,
@@ -234,6 +245,10 @@ impl AppState {
 
   pub fn user_conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
+  }
+
+  pub fn session_conn(&self) -> &trailbase_sqlite::Connection {
+    return &self.state.session_conn;
   }
 
   pub fn logs_conn(&self) -> &trailbase_sqlite::Connection {
@@ -521,6 +536,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
 
   let logs_conn = crate::connection::init_logs_db(None)?;
+  let session_conn = crate::connection::init_session_db(None)?;
 
   let connection_manager =
     ConnectionManager::new_for_test(data_dir.clone(), json_schema_registry.clone(), vec![]);
@@ -571,6 +587,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       config,
       json_schema_registry,
       conn: (*connection_manager.main_entry().connection).clone(),
+      session_conn,
       logs_conn,
       connection_manager,
       jwt: crate::auth::jwt::test_jwt_helper(),
@@ -770,6 +787,7 @@ pub struct OAuthProvider {
 #[derive(Serialize)]
 struct AuthConfig {
   disable_password_auth: bool,
+  enable_otp_signin: bool,
   oauth_providers: Vec<OAuthProvider>,
 }
 
@@ -810,6 +828,7 @@ fn build_auth_config(config: &Config) -> AuthConfig {
 
   return AuthConfig {
     disable_password_auth: config.auth.disable_password_auth(),
+    enable_otp_signin: config.auth.enable_otp_signin(),
     oauth_providers,
   };
 }

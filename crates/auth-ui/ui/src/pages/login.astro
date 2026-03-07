@@ -55,16 +55,24 @@ const BASE_URL = import.meta.env.BASE_URL;
         <a tabindex="5" href={`${BASE_URL}/reset_password/request`} class="text-primary">Reset</a>
       </div>
 
-      <div class="my-2 flex justify-between">
+      <div class="flex justify-between gap-2 my-2">
         {"{% if enable_registration -%}"}
           <a tabindex="4" type="button" href={`${BASE_URL}/register`} class:list={buttonVariants({ variant: "default" })}>
             Register
           </a>
         {"{%- endif %}"}
 
-        <Button tabindex="3" variant="default" type="submit">
-          Sign In
-        </Button>
+        <div class="flex gap-2">
+          {"{% if enable_otp -%}"}
+            <a tabindex="4" type="button" href={`${BASE_URL}/otp/request`} class:list={buttonVariants({ variant: "outline" })}>
+              OTP
+            </a>
+          {"{%- endif %}"}
+
+          <Button tabindex="3" variant="default" type="submit">
+            Sign In
+          </Button>
+        </div>
       </div>
     </form>
 

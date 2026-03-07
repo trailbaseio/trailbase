@@ -41,6 +41,24 @@ impl Guest for Endpoints {
         },
       ),
       routing::get(
+        LOGIN_MFA_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          return ui_login_mfa_handler(req.user(), req.query_parse()?).await;
+        },
+      ),
+      routing::get(
+        OTP_REQUEST_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          return ui_otp_request_handler(req.user(), req.query_parse()?).await;
+        },
+      ),
+      routing::get(
+        OTP_LOGIN_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          return ui_otp_login_handler(req.user(), req.query_parse()?).await;
+        },
+      ),
+      routing::get(
         "/_/auth/logout",
         async |req: Request| -> Result<Response, HttpError> {
           return Ok(ui_logout_handler(req.query_parse()?).await.into_response());
@@ -59,12 +77,12 @@ impl Guest for Endpoints {
         },
       ),
       routing::get(
-        "/_/auth/reset_password/update/{password_reset_code}",
+        "/_/auth/reset_password/update/{password_reset_token}",
         async |req: Request| -> Result<Response, HttpError> {
-          let password_reset_code = req
-            .path_param("password_reset_code")
-            .ok_or_else(|| internal("missing code"))?;
-          return ui_reset_password_update_handler(req.query_parse()?, password_reset_code).await;
+          let password_reset_token = req
+            .path_param("password_reset_token")
+            .ok_or_else(|| internal("missing token"))?;
+          return ui_reset_password_update_handler(req.query_parse()?, password_reset_token).await;
         },
       ),
       routing::get(
@@ -99,6 +117,7 @@ export!(Endpoints);
 #[derive(Debug, Default, Deserialize)]
 pub struct LoginQuery {
   redirect_uri: Option<String>,
+  mfa_redirect_uri: Option<String>,
   response_type: Option<String>,
   pkce_code_challenge: Option<String>,
   alert: Option<String>,
@@ -109,25 +128,16 @@ async fn ui_login_handler(
   user: Option<&User>,
   query: LoginQuery,
 ) -> Result<Response, HttpError> {
-  if query.redirect_uri.is_none() && user.is_some() {
-    // Already logged in. Only redirect to profile-page if no explicit other redirect is provided.
-    // For example, if we're already logged in the browser but want to sign-in with the browser
-    // from an app, we still have to go through the motions of signing in.
-    //
-    // QUESTION: Too much magic, just remove?
-    return Ok(Redirect::to(PROFILE_UI).into_response());
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
   }
 
-  let redirect_uri = auth::hidden_input("redirect_uri", query.redirect_uri.as_ref());
-  let response_type = auth::hidden_input("response_type", query.response_type.as_ref());
-  let pkce_code_challenge =
-    auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref());
-
   let oauth_query_params: Vec<(&str, &str)> = [
-    query
-      .redirect_uri
-      .as_ref()
-      .map(|r| ("redirect_uri", r.as_str())),
+    Some(("redirect_uri", redirect_uri)),
     query
       .response_type
       .as_ref()
@@ -142,11 +152,116 @@ async fn ui_login_handler(
   .collect();
 
   let html = auth::LoginTemplate {
-    state: format!("{redirect_uri}\n{response_type}\n{pkce_code_challenge}"),
+    state: [
+      auth::hidden_input("redirect_uri", Some(redirect_uri)),
+      auth::hidden_input(
+        "mfa_redirect_uri",
+        Some(query.mfa_redirect_uri.as_deref().unwrap_or(LOGIN_MFA_UI)),
+      ),
+      auth::hidden_input("response_type", query.response_type.as_ref()),
+      auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !config.disable_password_auth,
+    enable_otp: config.enable_otp_signin,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct LoginMfaQuery {
+  mfa_token: String,
+  redirect_uri: Option<String>,
+  response_type: Option<String>,
+  pkce_code_challenge: Option<String>,
+  alert: Option<String>,
+}
+
+async fn ui_login_mfa_handler(
+  user: Option<&User>,
+  query: LoginMfaQuery,
+) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
+  }
+
+  let html = auth::LoginMfaTemplate {
+    state: [
+      auth::hidden_input("mfa_token", Some(query.mfa_token)),
+      auth::hidden_input("redirect_uri", Some(redirect_uri)),
+      auth::hidden_input("response_type", query.response_type.as_ref()),
+      auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
+    ]
+    .join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct OtpRequestQuery {
+  redirect_uri: Option<String>,
+  alert: Option<String>,
+}
+
+async fn ui_otp_request_handler(
+  user: Option<&User>,
+  query: OtpRequestQuery,
+) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(OTP_LOGIN_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
+  }
+
+  let html = auth::OtpRequestTemplate {
+    state: [auth::hidden_input("redirect_uri", Some(redirect_uri))].join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct OtpLoginQuery {
+  email: String,
+  redirect_uri: Option<String>,
+  alert: Option<String>,
+}
+
+async fn ui_otp_login_handler(
+  user: Option<&User>,
+  query: OtpLoginQuery,
+) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  if user.is_some() {
+    // Already logged in. We rely on this to redirect to profile page (unless another explicit
+    // redirect is given) on login success. This way, we can always redirect back to login page
+    // both on failure and success rather than conditionally.
+    return Ok(Redirect::to(redirect_uri).into_response());
+  }
+
+  let html = auth::OtpLoginTemplate {
+    state: [
+      auth::hidden_input("email", Some(query.email)),
+      auth::hidden_input("redirect_uri", Some(redirect_uri)),
+    ]
+    .join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
 
@@ -159,10 +274,8 @@ pub struct LogoutQuery {
 }
 
 async fn ui_logout_handler(query: LogoutQuery) -> Redirect {
-  if let Some(redirect_uri) = query.redirect_uri {
-    return Redirect::to(&format!("/api/auth/v1/logout?redirect_uri={redirect_uri}"));
-  }
-  return Redirect::to("/api/auth/v1/logout");
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
+  return Redirect::to(&format!("/api/auth/v1/logout?redirect_uri={redirect_uri}"));
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -172,8 +285,9 @@ pub struct RegisterQuery {
 }
 
 async fn ui_register_handler(query: RegisterQuery) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let html = auth::RegisterTemplate {
-    state: auth::redirect_uri(query.redirect_uri.as_ref()),
+    state: auth::redirect_uri(Some(redirect_uri)),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -190,8 +304,9 @@ pub struct ResetPasswordRequestQuery {
 async fn ui_reset_password_request_handler(
   query: ResetPasswordRequestQuery,
 ) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let html = auth::ResetPasswordRequestTemplate {
-    state: auth::redirect_uri(query.redirect_uri.as_ref()),
+    state: auth::redirect_uri(Some(redirect_uri)),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -207,13 +322,14 @@ pub struct ResetPasswordUpdateQuery {
 
 async fn ui_reset_password_update_handler(
   query: ResetPasswordUpdateQuery,
-  password_reset_code: &str,
+  password_reset_token: &str,
 ) -> Result<Response, HttpError> {
-  let redirect_uri = auth::hidden_input("redirect_uri", query.redirect_uri.as_ref());
-  let password_reset_code = auth::hidden_input("password_reset_code", Some(&password_reset_code));
-
   let html = auth::ResetPasswordUpdateTemplate {
-    state: format!("{redirect_uri}\n{password_reset_code}"),
+    state: [
+      auth::hidden_input("redirect_uri", query.redirect_uri.as_ref()),
+      auth::hidden_input("password_reset_token", Some(&password_reset_token)),
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -247,11 +363,12 @@ async fn ui_change_email_handler(
   query: ChangeEmailQuery,
   user: &User,
 ) -> Result<Response, HttpError> {
-  let redirect_uri = auth::hidden_input("redirect_uri", query.redirect_uri.as_ref());
-  let csrf_token = auth::hidden_input("csrf_token", Some(&user.csrf_token));
-
   let html = auth::ChangeEmailTemplate {
-    state: format!("{redirect_uri}\n{csrf_token}"),
+    state: [
+      auth::hidden_input("redirect_uri", query.redirect_uri.as_ref()),
+      auth::hidden_input("csrf_token", Some(&user.csrf_token)),
+    ]
+    .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
   }
   .render();
@@ -286,5 +403,8 @@ fn internal(err: impl std::string::ToString) -> HttpError {
 }
 
 const LOGIN_UI: &str = "/_/auth/login";
+const LOGIN_MFA_UI: &str = "/_/auth/login_mfa";
+const OTP_REQUEST_UI: &str = "/_/auth/otp/request";
+const OTP_LOGIN_UI: &str = "/_/auth/otp/login";
 const PROFILE_UI: &str = "/_/auth/profile";
 const REGISTER_USER_UI: &str = "/_/auth/register";
