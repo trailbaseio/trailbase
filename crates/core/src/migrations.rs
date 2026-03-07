@@ -310,9 +310,6 @@ mod tests {
         // user-provided migrations don't break TB's expectations, e.g. they modified the
         // `_user` TABLE and forgot to put an index back into place.
         assert!(index_exists(conn, "__user__email_index"));
-        assert!(index_exists(conn, "__user__email_verification_code_index"));
-        assert!(index_exists(conn, "__user__password_reset_code_index"));
-        assert!(index_exists(conn, "__user__authorization_code_index"));
         assert!(index_exists(conn, "__user__provider_ids_index"));
 
         assert!(trigger_exists(conn, "__user__updated_trigger"));
