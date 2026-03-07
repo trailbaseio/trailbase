@@ -148,16 +148,44 @@ pub mod api {
 }
 
 pub(crate) mod rand {
-  use rand::{
-    CryptoRng,
-    distr::{Alphanumeric, SampleString},
-  };
+  use rand::distr::{Alphanumeric, Distribution, SampleString};
+  use rand::{CryptoRng, Rng};
 
-  pub(crate) fn generate_random_string(length: usize) -> String {
+  pub fn random_alphanumeric(length: usize) -> String {
     let mut rng = rand::rng();
     let _: &dyn CryptoRng = &rng;
 
     return Alphanumeric.sample_string(&mut rng, length);
+  }
+
+  struct NumericAndUpperCase;
+
+  impl SampleString for NumericAndUpperCase {
+    fn append_string<R: Rng + ?Sized>(&self, rng: &mut R, string: &mut String, len: usize) {
+      for c in self
+        .sample_iter(rng)
+        .take(len)
+        .inspect(|b| debug_assert!(b.is_ascii_alphanumeric()))
+      {
+        string.push(char::from_u32(c as u32).expect("invariant"));
+      }
+    }
+  }
+
+  impl Distribution<u8> for NumericAndUpperCase {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> u8 {
+      const GEN_ASCII_STR_CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      const RANGE: u32 = GEN_ASCII_STR_CHARSET.len() as u32;
+
+      return GEN_ASCII_STR_CHARSET[(rng.next_u32() % RANGE) as usize];
+    }
+  }
+
+  pub fn random_numeric_and_uppercase(length: usize) -> String {
+    let mut rng = rand::rng();
+    let _: &dyn CryptoRng = &rng;
+
+    return NumericAndUpperCase.sample_string(&mut rng, length);
   }
 
   #[cfg(test)]
@@ -165,11 +193,29 @@ pub(crate) mod rand {
     use super::*;
 
     #[test]
-    fn test_generate_random_string() {
-      let n = 20;
-      let first = generate_random_string(20);
+    fn test_random_alphanumeric() {
+      let n = 50;
+      let first = random_alphanumeric(n);
       assert_eq!(n, first.len());
-      let second = generate_random_string(20);
+      for c in first.chars() {
+        assert!(c.is_alphanumeric());
+      }
+
+      let second = random_alphanumeric(n);
+      assert_eq!(n, second.len());
+      assert_ne!(first, second);
+    }
+
+    #[test]
+    fn test_random_numberic_and_uppercase() {
+      let n = 50;
+      let first = random_numeric_and_uppercase(n);
+      assert_eq!(n, first.len());
+      for c in first.chars() {
+        assert!(c.is_uppercase() || c.is_numeric());
+      }
+
+      let second = random_numeric_and_uppercase(n);
       assert_eq!(n, second.len());
       assert_ne!(first, second);
     }

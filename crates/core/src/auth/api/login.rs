@@ -1,4 +1,4 @@
-use axum::extract::{Json, OriginalUri, Query, State};
+use axum::extract::{Json, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::Utc;
@@ -20,7 +20,7 @@ use crate::constants::{
   DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::extract::Either;
-use crate::rand::generate_random_string;
+use crate::rand::random_alphanumeric;
 use crate::util::urlencode;
 use crate::{app_state::AppState, auth::jwt::PendingAuthTokenClaims};
 use crate::{
@@ -66,16 +66,14 @@ pub struct MfaTokenResponse {
   request_body = LoginRequest,
   responses(
     (status = 200, description = "Auth, refresh & CSRF tokens.", body = LoginResponse),
-    (status = 303, description = "Auth, refresh & CSRF tokens via cookies."),
-    (status = 307, description = "Failed, when redirect_uri or HTML form."),
+    (status = 303, description = "Form Fail OR Auth, refresh & CSRF tokens via cookies."),
     (status = 401, description = "Unauthorized"),
-    (status = 403, description = "Forbidden, when login succeeded but MFA is neeeded.", body = MfaTokenResponse),
+    (status = 403, description = "Forbidden, when login succeeded but MFA is needed.", body = MfaTokenResponse),
   )
 )]
 pub(crate) async fn login_handler(
   State(state): State<AppState>,
   Query(query_login_input): Query<LoginInputParams>,
-  origin: OriginalUri,
   cookies: Cookies,
   either_request: Either<LoginRequest>,
 ) -> Result<Response, AuthError> {
@@ -88,7 +86,7 @@ pub(crate) async fn login_handler(
       redirect_uri,
       mfa_redirect_uri,
     },
-    is_json,
+    json,
   ) = match either_request {
     Either::Json(req) => (req, true),
     Either::Form(req) => (req, false),
@@ -126,18 +124,11 @@ pub(crate) async fn login_handler(
 
   let db_user = match check_credentials().await {
     Err(err) => {
-      if is_json {
-        return Err(err);
+      if !json && let Some(redirect_uri) = redirect_uri.as_deref() {
+        return Ok(auth_error_to_response(err, &cookies, Some(redirect_uri)));
       }
-      return Ok(auth_error_to_response(
-        err,
-        &cookies,
-        if is_json {
-          None
-        } else {
-          Some(redirect_uri.as_deref().unwrap_or_else(|| origin.path()))
-        },
-      ));
+
+      return Err(err);
     }
     Ok(db_user) => db_user,
   };
@@ -152,7 +143,7 @@ pub(crate) async fn login_handler(
       ))
       .map_err(|err| AuthError::Internal(err.into()))?;
 
-    if is_json {
+    if json {
       return Ok((StatusCode::FORBIDDEN, Json(MfaTokenResponse { mfa_token })).into_response());
     } else {
       let Some(mfa_redirect) = mfa_redirect_uri else {
@@ -167,7 +158,7 @@ pub(crate) async fn login_handler(
   return match params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, is_json).await
+      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
@@ -204,8 +195,13 @@ pub(crate) async fn build_auth_token_flow_response(
 ) -> Result<Response, AuthError> {
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let build_new_tokens = async || {
-    let tokens =
-      crate::auth::tokens::mint_new_tokens(state.session_conn(), db_user, auth_token_ttl).await?;
+    let tokens = crate::auth::tokens::mint_new_tokens(
+      state.session_conn(),
+      db_user,
+      &auth_token_ttl,
+      &refresh_token_ttl,
+    )
+    .await?;
 
     return Ok(LoginResponse {
       auth_token: state
@@ -276,7 +272,7 @@ async fn build_authorization_code_flow_and_pkce_response(
   pkce_code_challenge: String,
 ) -> Result<Response, AuthError> {
   // We generate a random code for the auth_code flow.
-  let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
+  let authorization_code = random_alphanumeric(VERIFICATION_CODE_LENGTH);
 
   const QUERY: &str = formatcp!(
     "\
@@ -348,7 +344,7 @@ pub(crate) async fn login_mfa_handler(
       redirect_uri,
       mfa_redirect_uri,
     },
-    is_json,
+    json,
   ) = match either_request {
     Either::Json(req) => (req, true),
     Either::Form(req) => (req, false),
@@ -400,7 +396,7 @@ pub(crate) async fn login_mfa_handler(
   return match params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, is_json).await
+      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
@@ -429,7 +425,7 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<&s
   }
 
   if let Some(redirect) = redirect {
-    return Redirect::temporary(&format!(
+    return Redirect::to(&format!(
       "{redirect}?alert={msg}",
       msg = urlencode(&format!("Login Failed: {status}")),
     ))

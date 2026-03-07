@@ -27,7 +27,7 @@ use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };
-use crate::rand::generate_random_string;
+use crate::rand::random_alphanumeric;
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct AuthQuery {
@@ -84,7 +84,7 @@ pub(crate) async fn callback_from_external_auth_provider(
   }
 
   // NOTE: This was already validated in the login-handler, we're just pedantic.
-  validate_redirect(&state, redirect_uri.as_deref())?;
+  let redirect_uri = validate_redirect(&state, redirect_uri)?;
 
   return match response_type {
     Some(ResponseType::Code) => {
@@ -131,7 +131,13 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     auth_token_claims,
     refresh_token,
     ..
-  } = mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
+  } = mint_new_tokens(
+    state.session_conn(),
+    &db_user,
+    &auth_token_ttl,
+    &refresh_token_ttl,
+  )
+  .await?;
 
   let auth_token = state
     .jwt()
@@ -193,7 +199,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
   let db_user = get_or_create_user(state, provider, auth_code, server_pkce_code_verifier).await?;
 
   // For the auth_code flow we generate a random code.
-  let authorization_code = generate_random_string(VERIFICATION_CODE_LENGTH);
+  let authorization_code = random_alphanumeric(VERIFICATION_CODE_LENGTH);
 
   const QUERY: &str = formatcp!(
     "\

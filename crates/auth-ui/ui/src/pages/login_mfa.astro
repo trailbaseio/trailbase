@@ -7,7 +7,6 @@ import TextFieldLabel from "@/components/TextFieldLabel.astro";
 import { AUTH_API } from "@/lib/constants";
 
 const formBaseAction = `${AUTH_API}/login_mfa`;
-const BASE_URL = import.meta.env.BASE_URL;
 ---
 
 <Form title="2nd Factor Login">
@@ -16,8 +15,6 @@ const BASE_URL = import.meta.env.BASE_URL;
       id="login-form"
       class="flex flex-col gap-2"
       action={`${formBaseAction}`}
-      data-base_action={formBaseAction}
-      data-base_url={BASE_URL}
       method="post"
       enctype="application/x-www-form-urlencoded"
     >
@@ -34,7 +31,7 @@ const BASE_URL = import.meta.env.BASE_URL;
           type="text"
           name="totp"
           placeholder="code"
-          autocomplete="new-password"
+          autocomplete="off"
         />
       </div>
 

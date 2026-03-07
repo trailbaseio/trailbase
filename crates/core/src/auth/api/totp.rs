@@ -178,10 +178,18 @@ pub(crate) fn new_totp(
   account: Option<&str>,
 ) -> Result<TOTP, AuthError> {
   return TOTP::new(
+    // QUESTION: should we require a stronger hashing algorithm. Presumably most serious
+    // authenticator apps support it but not all client library implementations. Many will just
+    // ignore it.
+    //
+    // * `skew` is the number of steps allowed as network delay. 1 would mean one step before
+    //   current step and one step after are valid.
+    // * `step` is the number of seconds per step. [rfc-6238](https://tools.ietf.org/html/rfc6238#section-5.2)
+    //   recommends 30 seconds.
     Algorithm::SHA1,
-    6,
-    1,
-    30,
+    /* num digits= */ 6,
+    /* skew= */ 1,
+    /* step= */ 30,
     secret
       .to_bytes()
       .map_err(|err| AuthError::Internal(err.into()))?,

@@ -17,7 +17,10 @@ use crate::{app_state::AppState, auth::util::user_by_id};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub(crate) struct ChangePasswordQuery {
+  /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
   pub redirect_uri: Option<String>,
+  /// Error redirect target for non-JSON requests.
+  pub err_redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, TS, ToSchema)]
@@ -27,7 +30,10 @@ pub struct ChangePasswordRequest {
   pub new_password: String,
   pub new_password_repeat: String,
 
+  /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
   pub redirect_uri: Option<String>,
+  /// Error redirect target for non-JSON requests.
+  pub err_redirect_uri: Option<String>,
 }
 
 /// Request a change of password.
@@ -44,7 +50,7 @@ pub struct ChangePasswordRequest {
 )]
 pub async fn change_password_handler(
   State(state): State<AppState>,
-  query: Query<ChangePasswordQuery>,
+  Query(query): Query<ChangePasswordQuery>,
   user: User,
   either_request: Either<ChangePasswordRequest>,
 ) -> Result<Response, AuthError> {
@@ -52,31 +58,47 @@ pub async fn change_password_handler(
     return Err(AuthError::BadRequest("Disallowed in demo"));
   }
 
-  let request = match either_request {
-    Either::Json(req) => req,
-    Either::Multipart(req, _) => req,
-    Either::Form(req) => req,
+  let (request, json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(
-    &state,
-    query
-      .redirect_uri
-      .as_deref()
-      .or(request.redirect_uri.as_deref()),
-  )?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
+  let err_redirect_uri =
+    validate_redirect(&state, query.err_redirect_uri.or(request.err_redirect_uri))?;
 
-  let auth_options = state.auth_options();
-  validate_password_policy(
+  if let Err(err) = validate_password_policy(
     &request.new_password,
     &request.new_password_repeat,
-    auth_options.password_options(),
-  )?;
+    state.auth_options().password_options(),
+  ) {
+    if !json && let Some(redirect_uri) = err_redirect_uri.or(redirect_uri) {
+      return Ok(
+        Redirect::to(&format!(
+          "{redirect_uri}?alert={msg}",
+          msg = urlencode(&err.to_string())
+        ))
+        .into_response(),
+      );
+    }
+    return Err(err);
+  }
 
   let db_user = user_by_id(&state, &user.uuid).await?;
 
   // Validate old password.
-  check_user_password(&db_user, &request.old_password, state.demo_mode())?;
+  //
+  // TODO: It would probably be good practice to check TOTP as well for users of multi-factor auth.
+  if let Err(_err) = check_user_password(&db_user, &request.old_password, state.demo_mode()) {
+    const MSG: &str = "invalid `old_password`";
+    if !json && let Some(redirect_uri) = err_redirect_uri.or(redirect_uri) {
+      return Ok(
+        Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG))).into_response(),
+      );
+    }
+    return Err(AuthError::BadRequest(MSG));
+  };
 
   // NOTE: we're using the old_password_hash to prevent races between concurrent change requests
   // for the same user.

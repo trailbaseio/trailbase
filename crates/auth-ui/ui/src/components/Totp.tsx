@@ -73,7 +73,7 @@ export function TotpToggleButton(props: { client: Client; user: User }) {
 
         <Match when={!hasTotp()}>
           <Button type="button" variant="outline" onClick={registerTotp}>
-            Register TOTP
+            Setup Two-Factor
           </Button>
         </Match>
       </Switch>

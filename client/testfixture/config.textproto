@@ -2,6 +2,7 @@
 email {}
 server {
   application_name: "TrailBase"
+  site_url: "http://localhost.trailbase.io:4000"
   logs_retention_sec: 604800
   enable_record_transactions: true
 }

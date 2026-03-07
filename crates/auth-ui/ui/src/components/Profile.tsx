@@ -13,6 +13,7 @@ import type { Client, User } from "trailbase";
 import { HOST, AVATAR_API } from "@/lib/constants";
 import { $client } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { levelToStyle, type Level } from "@/lib/alert";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,6 +40,7 @@ function avatarUrl(user: User): string {
 }
 
 function DeleteAccountDialog(props: { client: Client; open: Signal<boolean> }) {
+  // eslint-disable-next-line
   const [open, setOpen] = props.open;
 
   return (
@@ -170,76 +172,82 @@ function Avatar(props: { client: Client; user: User }) {
 }
 
 function ProfileTable(props: { client: Client; user: User }) {
+  const alert = () => new URL(location.href).searchParams.get("alert");
   const [deleteAccountOpen, setDeleteAccountOpen] = createSignal(false);
 
   return (
-    <Card class="w-[80dvw] max-w-[540px] p-8">
-      <div class="flex items-center justify-between">
-        <h1>User Profile</h1>
+    <>
+      <Card class="w-[80dvw] max-w-[540px] p-8">
+        <div class="flex items-center justify-between">
+          <h1>User Profile</h1>
 
-        <div class="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger class={cn(ICON_STYLE, "size-[32px]")}>
-              <TbOutlineMenu2 />
-            </DropdownMenuTrigger>
+          <div class="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger class={cn(ICON_STYLE, "size-[32px]")}>
+                <TbOutlineMenu2 />
+              </DropdownMenuTrigger>
 
-            <DropdownMenuContent>
-              <a href="/_/auth/change_email">
-                <DropdownMenuItem>Change Email</DropdownMenuItem>
-              </a>
+              <DropdownMenuContent>
+                <a href="/_/auth/change_email">
+                  <DropdownMenuItem>Change Email</DropdownMenuItem>
+                </a>
 
-              <a href="/_/auth/change_password">
-                <DropdownMenuItem>Change Password</DropdownMenuItem>
-              </a>
+                <a href="/_/auth/change_password">
+                  <DropdownMenuItem>Change Password</DropdownMenuItem>
+                </a>
 
-              <DropdownMenuItem>Register 2nd Factor</DropdownMenuItem>
-              <DropdownMenuSeparator />
-
-              <DropdownMenuItem
-                class="data-[highlighted]:bg-destructive"
-                onClick={() => setDeleteAccountOpen((old) => !old)}
-              >
-                <TbOutlineTrash /> Delete Account
-              </DropdownMenuItem>
-
-              <Show when={import.meta.env.DEV}>
                 <DropdownMenuSeparator />
+
                 <DropdownMenuItem
-                  onClick={() => {
-                    throw Error("Exception");
-                  }}
+                  class="data-[highlighted]:bg-destructive"
+                  onClick={() => setDeleteAccountOpen((old) => !old)}
                 >
-                  Throw (DEV)
+                  <TbOutlineTrash /> Delete Account
                 </DropdownMenuItem>
-              </Show>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          <DeleteAccountDialog
-            client={props.client}
-            open={[deleteAccountOpen, setDeleteAccountOpen]}
-          />
+                <Show when={import.meta.env.DEV}>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      throw Error("Exception");
+                    }}
+                  >
+                    Throw (DEV)
+                  </DropdownMenuItem>
+                </Show>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
-            <TbOutlineLogout />
-          </a>
+            <DeleteAccountDialog
+              client={props.client}
+              open={[deleteAccountOpen, setDeleteAccountOpen]}
+            />
+
+            <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
+              <TbOutlineLogout />
+            </a>
+          </div>
         </div>
-      </div>
 
-      <div class="flex w-full items-center gap-4">
-        <Avatar client={props.client} user={props.user} />
+        <div class="flex w-full items-center gap-4">
+          <Avatar client={props.client} user={props.user} />
 
-        <div class="flex flex-col gap-2">
-          <strong>{props.user.email}</strong>
+          <div class="flex flex-col gap-2">
+            <strong>{props.user.email}</strong>
 
-          <div>Id: {props.user.id}</div>
+            <div>Id: {props.user.id}</div>
+          </div>
         </div>
-      </div>
 
-      <div class="my-4 flex w-full flex-col items-end gap-2">
-        <TotpToggleButton {...props} />
-      </div>
-    </Card>
+        <div class="my-4 flex w-full flex-col items-end gap-2">
+          <TotpToggleButton {...props} />
+        </div>
+      </Card>
+
+      <Show when={alert()}>
+        <AlertBox message={alert()!} level="info" />
+      </Show>
+    </>
   );
 }
 
@@ -267,6 +275,17 @@ export function Profile() {
         </Match>
       </Switch>
     </ErrorBoundary>
+  );
+}
+
+function AlertBox(props: { message: string; level: Level }) {
+  return (
+    <div
+      id="alert-box"
+      class={cn("m-4 rounded-xl p-4 outline-1", levelToStyle(props.level))}
+    >
+      {props.message}
+    </div>
   );
 }
 

@@ -59,14 +59,13 @@ pub(crate) fn build_and_validate_input_params(
   state: &AppState,
   params: LoginInputParams,
 ) -> Result<LoginParams, AuthError> {
-  validate_redirect(state, params.redirect_uri.as_deref())?;
-  validate_redirect(state, params.mfa_redirect_uri.as_deref())?;
+  let redirect_uri = validate_redirect(state, params.redirect_uri)?;
+  let _mfa_redirect_uri = validate_redirect(state, params.mfa_redirect_uri)?;
 
   return match params.response_type.as_ref() {
     Some(ResponseType::Code) => {
-      let redirect_uri = params
-        .redirect_uri
-        .ok_or_else(|| AuthError::BadRequest("missing 'redirect_uri'"))?;
+      let redirect_uri =
+        redirect_uri.ok_or_else(|| AuthError::BadRequest("missing 'redirect_uri'"))?;
 
       let pkce_code_challenge = params
         .pkce_code_challenge
@@ -89,9 +88,7 @@ pub(crate) fn build_and_validate_input_params(
         ));
       }
 
-      Ok(LoginParams::Password {
-        redirect_uri: params.redirect_uri,
-      })
+      Ok(LoginParams::Password { redirect_uri })
     }
   };
 }

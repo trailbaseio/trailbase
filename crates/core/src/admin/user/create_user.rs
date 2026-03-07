@@ -87,7 +87,9 @@ pub async fn create_user_handler(
       .encode(&claims)
       .map_err(|err| Error::Internal(err.into()))?;
 
-    Email::verification_email(&state, &user.email, &token)?
+    // NOTE: We cannot pass a valid redirect_uri, since we cannot be sure if auth UI is
+    // installed.
+    Email::verification_email(&state, &user.email, &token, None)?
       .send()
       .await?;
   }

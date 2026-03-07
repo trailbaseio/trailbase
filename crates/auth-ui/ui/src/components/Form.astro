@@ -2,12 +2,14 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 import Card from "@/components/Card.astro";
 import AlertBox from "@/components/AlertBox.astro";
+import type { Level } from "@/lib/alert";
 
 interface Props {
   title: string;
+  level?: Level;
 }
 
-const { title } = Astro.props;
+const { title, level } = Astro.props;
 ---
 
 <BaseLayout title={title}>
@@ -17,7 +19,7 @@ const { title } = Astro.props;
     </Card>
 
     {"{% if !alert.is_empty() %}"}
-    <AlertBox message={`{{ alert | escape("html") }}`} />
+    <AlertBox message={`{{ alert | escape("html") }}`} level={level} />
     {"{% endif %}"}
   </div>
 </BaseLayout>

@@ -33,11 +33,11 @@ pub struct LogoutQuery {
 )]
 pub async fn logout_handler(
   State(state): State<AppState>,
-  query: Query<LogoutQuery>,
+  Query(query): Query<LogoutQuery>,
   user: Option<User>,
   cookies: Cookies,
 ) -> Result<Response, AuthError> {
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
 
   remove_all_cookies(&cookies);
 
@@ -46,7 +46,7 @@ pub async fn logout_handler(
   }
 
   return if let Some(redirect) = redirect_uri {
-    Ok(Redirect::to(redirect).into_response())
+    Ok(Redirect::to(&redirect).into_response())
   } else if state.public_dir().is_some() {
     Ok(Redirect::to("/").into_response())
   } else {

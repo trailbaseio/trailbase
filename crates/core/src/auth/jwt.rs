@@ -1,5 +1,5 @@
 use crate::auth::user::DbUser;
-use crate::rand::generate_random_string;
+use crate::rand::random_alphanumeric;
 use crate::util::{id_to_b64, uuid_to_b64};
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
@@ -67,19 +67,19 @@ pub struct AuthTokenClaims {
 }
 
 impl AuthTokenClaims {
-  pub(crate) fn new(db_user: &DbUser, expires_in: chrono::Duration) -> Self {
+  pub(crate) fn new(db_user: &DbUser, auth_token_ttl: &chrono::Duration) -> Self {
     assert!(db_user.verified);
 
     let now = chrono::Utc::now();
     return AuthTokenClaims {
       sub: id_to_b64(&db_user.id),
-      exp: (now + expires_in).timestamp(),
+      exp: (now + *auth_token_ttl).timestamp(),
       iat: now.timestamp(),
       r#type: TokenType::Auth as u8,
       admin: db_user.admin,
       mfa: db_user.totp_secret.is_some(),
       email: db_user.email.clone(),
-      csrf_token: generate_random_string(20),
+      csrf_token: random_alphanumeric(20),
     };
   }
 
@@ -369,7 +369,7 @@ mod tests {
       ..Default::default()
     };
 
-    let claims = AuthTokenClaims::new(&db_user, crate::constants::DEFAULT_AUTH_TOKEN_TTL);
+    let claims = AuthTokenClaims::new(&db_user, &crate::constants::DEFAULT_AUTH_TOKEN_TTL);
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());

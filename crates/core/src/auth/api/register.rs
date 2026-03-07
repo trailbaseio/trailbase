@@ -1,4 +1,4 @@
-use axum::extract::{OriginalUri, Query, State};
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
@@ -39,15 +39,13 @@ pub struct RegisterUserRequest {
   params(RegisterQuery),
   request_body = RegisterUserRequest,
   responses(
-    (status = 303, description = "Success, new user registered, or user already exists."),
-    (status = 307, description = "Temporary redirect: invalid password."),
+    (status = 303, description = "Form fail OR success, new user registered, or user already exists."),
     (status = 424, description = "Failed to send verification Email."),
   )
 )]
 pub async fn register_user_handler(
   State(state): State<AppState>,
-  origin: OriginalUri,
-  query: Query<RegisterQuery>,
+  Query(query): Query<RegisterQuery>,
   either_request: Either<RegisterUserRequest>,
 ) -> Result<Response, AuthError> {
   let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
@@ -55,39 +53,36 @@ pub async fn register_user_handler(
     return Err(AuthError::Forbidden);
   }
 
-  let request = match either_request {
-    Either::Json(req) => req,
-    Either::Multipart(req, _) => req,
-    Either::Form(req) => req,
+  let (request, json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(
-    &state,
-    query
-      .redirect_uri
-      .as_deref()
-      .or(request.redirect_uri.as_deref()),
-  )?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
   let auth_options = state.auth_options();
-  if let Err(_err) = validate_password_policy(
+  if let Err(err) = validate_password_policy(
     &request.password,
     &request.password_repeat,
     auth_options.password_options(),
   ) {
-    return Ok(
-      Redirect::temporary(&format!(
-        "{path}?alert={msg}",
-        path = origin.path(),
-        msg = urlencode("Invalid password"),
-      ))
-      .into_response(),
-    );
+    if !json && let Some(redirect_uri) = redirect_uri {
+      return Ok(
+        Redirect::to(&format!(
+          "{redirect_uri}?alert={msg}",
+          msg = urlencode(&err.to_string()),
+        ))
+        .into_response(),
+      );
+    }
+
+    return Err(err);
   }
 
   let success_response = || {
-    if let Some(redirect) = redirect_uri {
+    if let Some(ref redirect) = redirect_uri {
       return Redirect::to(&format!(
       "{redirect}?alert={msg}",
       msg = urlencode(&format!(
@@ -143,7 +138,7 @@ pub async fn register_user_handler(
     .encode(&claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let email = Email::verification_email(&state, &user.email, &token)
+  let email = Email::verification_email(&state, &user.email, &token, redirect_uri.as_deref())
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()

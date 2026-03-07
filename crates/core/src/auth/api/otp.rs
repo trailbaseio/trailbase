@@ -21,7 +21,7 @@ use crate::auth::util::{
 use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
-use crate::rand::generate_random_string;
+use crate::rand::random_numeric_and_uppercase;
 use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
@@ -51,26 +51,20 @@ pub struct RequestOtpRequest {
 
 pub async fn request_otp_handler(
   State(state): State<AppState>,
-  query: Query<RequestOtpQuery>,
+  Query(query): Query<RequestOtpQuery>,
   either_request: Either<RequestOtpRequest>,
 ) -> Result<Response, AuthError> {
   if !state.access_config(|c| c.auth.enable_otp_signin()) {
     return Err(AuthError::MethodNotAllowed);
   }
 
-  let request = match either_request {
-    Either::Json(req) => req,
-    Either::Multipart(req, _) => req,
-    Either::Form(req) => req,
+  let (request, json) = match either_request {
+    Either::Json(req) => (req, true),
+    Either::Multipart(req, _) => (req, false),
+    Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(
-    &state,
-    query
-      .redirect_uri
-      .as_deref()
-      .or(request.redirect_uri.as_deref()),
-  )?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
   {
@@ -82,7 +76,7 @@ pub async fn request_otp_handler(
   }
 
   let success_response = || {
-    if let Some(redirect) = redirect_uri {
+    if !json && let Some(ref redirect) = redirect_uri {
       return Redirect::to(&format!(
         "{redirect}?email={normalized_email}&alert={msg}",
         msg = urlencode("OTP sent")
@@ -99,12 +93,12 @@ pub async fn request_otp_handler(
   };
 
   if db_user.totp_secret.is_some() {
-    // If the user has 2/multi-factor-auth enabled, allowing OTP-only login would be a break of
+    // If the user has two/multi-factor-auth enabled, allowing OTP-only login would be a break of
     // contract. We may want to support OTP + TOTP going forward.
     return Ok(success_response());
   }
 
-  let otp_code = generate_random_string(OTP_CODE_LENGTH);
+  let otp_code = random_numeric_and_uppercase(OTP_CODE_LENGTH);
   const UPDATE_OTP_QUERY: &str = formatcp!(
     "\
       INSERT OR REPLACE INTO '{OTP_CODE_TABLE}' (user, email, otp_code, expires) \
@@ -129,11 +123,7 @@ pub async fn request_otp_handler(
     return Err(AuthError::Internal("Failed to insert OTP code".into()));
   }
 
-  if state.dev_mode() {
-    log::debug!("OTP ({normalized_email}, {otp_code})");
-  }
-
-  let email = Email::otp_email(&state, &db_user.email, &otp_code, redirect_uri)
+  let email = Email::otp_email(&state, &db_user.email, &otp_code, redirect_uri.as_deref())
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
@@ -171,34 +161,36 @@ pub struct LoginOtpRequest {
 pub async fn login_otp_handler(
   State(state): State<AppState>,
   cookies: Cookies,
-  query: Query<LoginOtpQuery>,
+  Query(query): Query<LoginOtpQuery>,
   either_request: Either<LoginOtpRequest>,
 ) -> Result<Response, AuthError> {
   if !state.access_config(|c| c.auth.enable_otp_signin()) {
     return Err(AuthError::MethodNotAllowed);
   }
 
-  let (request, is_json) = match either_request {
+  let (request, json) = match either_request {
     Either::Json(req) => (req, true),
     Either::Multipart(req, _) => (req, false),
     Either::Form(req) => (req, false),
   };
 
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
+
   let Some(email) = query.email.as_deref().or(request.email.as_deref()) else {
+    // TODO: Add redirect for non-json
     return Err(AuthError::BadRequest("missing email"));
   };
-  let Some(otp_code) = query.code.as_deref().or(request.code.as_deref()) else {
+  let normalized_email = validate_and_normalize_email_address(email)?;
+
+  let Some(otp_code) = query
+    .code
+    .as_deref()
+    .or(request.code.as_deref())
+    .map(|c| c.trim())
+  else {
+    // TODO: Add redirect for non-json
     return Err(AuthError::BadRequest("missing code"));
   };
-
-  let redirect_uri = validate_redirect(
-    &state,
-    query
-      .redirect_uri
-      .as_deref()
-      .or(request.redirect_uri.as_deref()),
-  )?;
-  let normalized_email = validate_and_normalize_email_address(email)?;
 
   {
     // Rate limit.
@@ -241,7 +233,7 @@ pub async fn login_otp_handler(
     &db_user,
     &cookies,
     redirect_uri.map(|uri| uri.to_string()),
-    is_json,
+    json,
   )
   .await;
 }

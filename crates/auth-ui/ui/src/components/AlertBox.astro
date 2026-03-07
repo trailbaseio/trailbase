@@ -1,9 +1,13 @@
 ---
+import { levelToStyle } from "@/lib/alert"
+import type { Level } from "@/lib/alert"
+
 interface Props {
   message?: string;
+  level?: Level
 }
 
-const { message } = Astro.props;
+const { message, level = "error" } = Astro.props;
 ---
 
 <div
@@ -12,10 +16,9 @@ const { message } = Astro.props;
     "rounded-xl",
     "outline",
     "outline-1",
-    "bg-error",
-    "text-error-foreground",
     "p-4",
     "m-4",
+    levelToStyle(level),
   ]}
   set:html={message}
 >

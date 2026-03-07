@@ -98,18 +98,18 @@ fn validate_redirect_impl(
 }
 
 /// Validates up to two redirects, typically from query parameter and/or request body.
-pub(crate) fn validate_redirect<'a>(
+pub(crate) fn validate_redirect<T: AsRef<str>>(
   state: &AppState,
-  redirect_uri: Option<&'a str>,
-) -> Result<Option<&'a str>, AuthError> {
-  if let Some(redirect_uri) = redirect_uri {
+  redirect_uri: Option<T>,
+) -> Result<Option<T>, AuthError> {
+  if let Some(ref redirect_uri) = redirect_uri {
     let site: &Option<url::Url> = &state.site_url();
     let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
 
     validate_redirect_impl(
       site.as_ref(),
       &custom_uri_schemes,
-      redirect_uri,
+      redirect_uri.as_ref(),
       state.dev_mode(),
     )?;
   }
@@ -138,9 +138,14 @@ pub async fn login_with_password_for_test(
   // Validates password and rate limits attempts.
   crate::auth::password::check_user_password(&db_user, password, state.demo_mode())?;
 
-  let auth_token_ttl = state.access_config(|c| c.auth.token_ttls()).0;
-  let tokens =
-    crate::auth::tokens::mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
+  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+  let tokens = crate::auth::tokens::mint_new_tokens(
+    state.session_conn(),
+    &db_user,
+    &auth_token_ttl,
+    &refresh_token_ttl,
+  )
+  .await?;
 
   return Ok(Some(NewTokens {
     id: user_id,
@@ -410,7 +415,7 @@ mod tests {
   async fn test_validate_redirect() {
     let state = test_state(None).await.unwrap();
 
-    assert!(validate_redirect(&state, None).is_ok());
+    assert!(validate_redirect::<String>(&state, None).is_ok());
     assert!(validate_redirect(&state, Some("invalid")).is_err());
 
     let redirect = "https://test.org";

@@ -21,10 +21,8 @@ pub const COOKIE_OAUTH_STATE: &str = "oauth_state";
 pub const HEADER_REFRESH_TOKEN: &str = "Refresh-Token";
 pub const HEADER_CSRF_TOKEN: &str = "CSRF-Token";
 
-#[cfg(debug_assertions)]
-pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(2);
-#[cfg(not(debug_assertions))]
-pub const DEFAULT_AUTH_TOKEN_TTL: Duration = Duration::minutes(60);
+pub const DEFAULT_AUTH_TOKEN_TTL: Duration =
+  Duration::minutes(if cfg!(debug_assertions) { 2 } else { 60 });
 
 pub(crate) const DEFAULT_AUTHORIZATION_CODE_TTL: Duration = Duration::minutes(5);
 

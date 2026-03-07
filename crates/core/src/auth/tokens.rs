@@ -16,7 +16,7 @@ use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, HEADER_REFRESH_TOKEN, REFRESH_TOKEN_LENGTH,
   SESSION_TABLE, USER_TABLE,
 };
-use crate::rand::generate_random_string;
+use crate::rand::random_alphanumeric;
 use crate::util::get_header;
 
 #[derive(Clone)]
@@ -173,7 +173,8 @@ pub struct FreshTokens {
 pub(crate) async fn mint_new_tokens(
   session_conn: &Connection,
   db_user: &DbUser,
-  expires_in: Duration,
+  auth_token_ttl: &Duration,
+  refresh_token_ttl: &Duration,
 ) -> Result<FreshTokens, AuthError> {
   let verified = db_user.verified;
   if !verified {
@@ -182,17 +183,21 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let claims = AuthTokenClaims::new(db_user, expires_in);
+  let claims = AuthTokenClaims::new(db_user, auth_token_ttl);
 
   // Unlike JWT auth tokens, refresh tokens are opaque.
-  let refresh_token = generate_random_string(REFRESH_TOKEN_LENGTH);
+  let refresh_token = random_alphanumeric(REFRESH_TOKEN_LENGTH);
   const QUERY: &str =
     formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token, expires) VALUES ($1, $2, $3)");
 
   session_conn
     .execute(
       QUERY,
-      params!(db_user.id, refresh_token.clone(), claims.exp),
+      params!(
+        db_user.id,
+        refresh_token.clone(),
+        (chrono::Utc::now() + *refresh_token_ttl).timestamp(),
+      ),
     )
     .await?;
 
@@ -259,7 +264,7 @@ pub(crate) async fn reauth_with_refresh_token(
   );
 
   return Ok((
-    AuthTokenClaims::new(&db_user, auth_token_ttl),
+    AuthTokenClaims::new(&db_user, &auth_token_ttl),
     auth_token_ttl,
   ));
 }

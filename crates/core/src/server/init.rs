@@ -10,7 +10,7 @@ use crate::config::load_or_init_config_textproto;
 use crate::connection::ConnectionManager;
 use crate::constants::USER_TABLE;
 use crate::metadata::load_or_init_metadata_textproto;
-use crate::rand::generate_random_string;
+use crate::rand::random_alphanumeric;
 use crate::server::DataDir;
 
 #[derive(Debug, Error)]
@@ -133,7 +133,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
 
     if num_admins == 0 {
       let email = "admin@localhost";
-      let password = generate_random_string(20);
+      let password = random_alphanumeric(20);
       let hashed_password = crate::auth::password::hash_password(&password)?;
 
       app_state

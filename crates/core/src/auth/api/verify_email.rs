@@ -42,7 +42,7 @@ pub async fn request_email_verification_handler(
   Query(query): Query<EmailVerificationQuery>,
 ) -> Result<Response, AuthError> {
   let normalized_email = validate_and_normalize_email_address(&query.email)?;
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
 
   {
     // Rate limit.
@@ -53,7 +53,7 @@ pub async fn request_email_verification_handler(
   }
 
   let success_response = || {
-    if let Some(redirect) = redirect_uri {
+    if let Some(ref redirect) = redirect_uri {
       Redirect::to(&format!(
         "{redirect}?alert={msg}",
         msg = urlencode("Verification email sent")
@@ -79,7 +79,7 @@ pub async fn request_email_verification_handler(
     .encode(&claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let email = Email::verification_email(&state, &user.email, &token)
+  let email = Email::verification_email(&state, &user.email, &token, redirect_uri.as_deref())
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
@@ -109,9 +109,9 @@ pub(crate) struct VerifyEmailQuery {
 pub(crate) async fn verify_email_handler(
   State(state): State<AppState>,
   Path(email_verification_token): Path<String>,
-  query: Query<VerifyEmailQuery>,
+  Query(query): Query<VerifyEmailQuery>,
 ) -> Result<Response, AuthError> {
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.as_deref())?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
 
   let claims = EmailVerificationTokenClaims::decode(state.jwt(), &email_verification_token)
     .map_err(|_err| AuthError::BadRequest("invalid token"))?;

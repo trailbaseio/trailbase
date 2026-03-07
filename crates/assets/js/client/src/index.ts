@@ -1083,7 +1083,7 @@ export function initClient(site?: URL | string, opts?: ClientOptions): Client {
   return new ClientImpl(site, opts);
 }
 
-/// Asynchronizly initialize a new TrailBase client trying to convert any
+/// Asynchronously initialize a new TrailBase client trying to convert any
 /// potentially existing cookies into an authenticated client.
 export async function initClientFromCookies(
   site?: URL | string,

@@ -28,27 +28,36 @@ function buildClient(): Client {
     },
   });
 
-  // Check and/or update the tokens. In case of a 401 (UNAUTHORIZED), this will
-  // internally trigger a logout, which will invoke `onAuthChange` above, which will
-  // update the $token and $user state.
-  try {
-    client.refreshAuthToken();
-  } catch (err) {
-    if (err instanceof FetchError && err.status === 401) {
-      console.info(
-        "Token refresh failed (401). User should be redirected to login.",
-      );
+  async function asyncHousekeeping() {
+    // Check and/or update the tokens. In case of a 401 (UNAUTHORIZED), this will
+    // internally trigger a logout, which will invoke `onAuthChange` above, which will
+    // update the $token and $user state.
+    if (client.tokens() !== undefined) {
+      try {
+        await client.refreshAuthToken();
+      } catch (err) {
+        if (err instanceof FetchError && err.status === 401) {
+          console.info(
+            "Token refresh failed (401). User should be redirected to login.",
+          );
 
-      showToast({
-        title: "Logged out - redirecting",
-        description:
-          "Your tokens were either expired invalidated server-side. Please try signing in again.",
-        variant: "default",
-      });
+          showToast({
+            title: "Logged out - redirecting",
+            description:
+              "Your tokens were either expired invalidated server-side. Please try signing in again.",
+            variant: "default",
+          });
+        } else {
+          throw err;
+        }
+      }
     } else {
-      throw err;
+      const tokens = await client.checkCookies();
+      console.debug("called auth status to check for cookies", tokens);
     }
   }
+
+  asyncHousekeeping();
 
   return client;
 }

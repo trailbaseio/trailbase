@@ -13,18 +13,20 @@ use crate::constants::AUTH_API_PATH;
 
 #[derive(Debug, Error)]
 pub enum EmailError {
-  #[error("Email address error: {0}")]
+  #[error("EmailAddress: {0}")]
   Address(#[from] AddressError),
-  #[error("Missing error: {0}")]
+  #[error("Missing: {0}")]
   Missing(&'static str),
-  #[error("Senda error: {0}")]
+  #[error("Send: {0}")]
   Send(#[from] lettre::error::Error),
-  #[error("SMTP error: {0}")]
+  #[error("SMTP: {0}")]
   Smtp(#[from] lettre::transport::smtp::Error),
-  #[error("Sendmail error: {0}")]
+  #[error("Sendmail: {0}")]
   Sendmail(#[from] lettre::transport::sendmail::Error),
-  #[error("Template error: {0}")]
+  #[error("Template: {0}")]
   Template(#[from] minijinja::Error),
+  #[error("Internal: {0}")]
+  Internal(Box<dyn std::error::Error + Send + Sync>),
 }
 
 pub struct Email {
@@ -86,6 +88,7 @@ impl Email {
     state: &AppState,
     email_address: &str,
     email_verification_token: &str,
+    redirect_uri: Option<&str>,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
 
@@ -103,58 +106,12 @@ impl Email {
 
     let site_url = get_site_url(state);
     let verification_url = site_url
-      .join(&format!(
-        "/{AUTH_API_PATH}/verify_email/confirm/{email_verification_token}"
-      ))
-      .map_err(|_err| EmailError::Missing("email verification URL"))?
-      .to_string();
-
-    let env = Environment::empty();
-    let subject = env
-      .template_from_named_str("subject", subject_template)?
-      .render(context! {
-        APP_NAME => server_config.application_name,
-        EMAIL => email_address,
-      })?;
-    let body = env
-      .template_from_named_str("body", body_template)?
-      .render(context! {
-        APP_NAME => server_config.application_name,
-        VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
-        CODE => email_verification_token,
-        TOKEN => email_verification_token,
-        EMAIL => email_address,
-      })?;
-
-    return Email::new_internal(state, to, subject, body);
-  }
-
-  pub(crate) fn change_email_address_email(
-    state: &AppState,
-    email_address: &str,
-    email_verification_token: &str,
-  ) -> Result<Self, EmailError> {
-    let to: Mailbox = email_address.parse()?;
-    let (server_config, template) =
-      state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
-
-    let subject_template = template
-      .as_ref()
-      .and_then(|t| t.subject.as_deref())
-      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT);
-    let body_template = template
-      .as_ref()
-      .and_then(|t| t.body.as_deref())
-      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_CHANGE_ADDRESS_BODY);
-
-    let site_url = get_site_url(state);
-    let verification_url = site_url
-      .join(&format!(
-        "/{AUTH_API_PATH}/change_email/confirm/{email_verification_token}"
-      ))
-      .map_err(|_err| EmailError::Missing("change email confirmation URL"))?
-      .to_string();
+      .join(&if let Some(ref redirect_uri) = redirect_uri {
+        format!("/{AUTH_API_PATH}/verify_email/confirm/{email_verification_token}?redirect_uri={redirect_uri}")
+      } else {
+        format!("/{AUTH_API_PATH}/verify_email/confirm/{email_verification_token}")
+      })
+      .map_err(|_err| EmailError::Internal("Invalid URL".into()))?;
 
     let env = Environment::empty();
     let subject = env
@@ -172,6 +129,57 @@ impl Email {
         CODE => email_verification_token,
         TOKEN => email_verification_token,
         EMAIL => email_address,
+        REDIRECT_URI => redirect_uri,
+      })?;
+
+    return Email::new_internal(state, to, subject, body);
+  }
+
+  pub(crate) fn change_email_address_email(
+    state: &AppState,
+    email_address: &str,
+    email_verification_token: &str,
+    redirect_uri: Option<&str>,
+  ) -> Result<Self, EmailError> {
+    let to: Mailbox = email_address.parse()?;
+    let (server_config, template) =
+      state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
+
+    let subject_template = template
+      .as_ref()
+      .and_then(|t| t.subject.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT);
+    let body_template = template
+      .as_ref()
+      .and_then(|t| t.body.as_deref())
+      .unwrap_or(trailbase_assets::email::DEFAULT_EMAIL_CHANGE_ADDRESS_BODY);
+
+    let site_url = get_site_url(state);
+    let verification_url = site_url
+      .join(&if let Some(ref redirect_uri)  = redirect_uri {
+        format!("/{AUTH_API_PATH}/change_email/confirm/{email_verification_token}?redirect_uri={redirect_uri}")
+      } else {
+        format!("/{AUTH_API_PATH}/change_email/confirm/{email_verification_token}")
+      })
+      .map_err(|_err| EmailError::Internal("Invalid URL".into()))?;
+
+    let env = Environment::empty();
+    let subject = env
+      .template_from_named_str("subject", subject_template)?
+      .render(context! {
+        APP_NAME => server_config.application_name,
+        EMAIL => email_address,
+      })?;
+    let body = env
+      .template_from_named_str("body", body_template)?
+      .render(context! {
+        APP_NAME => server_config.application_name,
+        VERIFICATION_URL => verification_url,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        CODE => email_verification_token,
+        TOKEN => email_verification_token,
+        EMAIL => email_address,
+        REDIRECT_URI => redirect_uri,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -251,7 +259,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         CODE => otp_code,
-        SITE_URL => site_url,
+        SITE_URL => site_url.origin().ascii_serialization(),
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
       })?;
@@ -432,20 +440,25 @@ pub mod testing {
 
     let code = "verification_code0123.";
     {
-      let email = Email::verification_email(&state, "foo@bar.org", code).unwrap();
+      let email = Email::verification_email(&state, "foo@bar.org", code, Some("/target")).unwrap();
       assert_eq!(email.subject, "Verify your Email Address for TrailBase");
       assert!(email.body.contains("Welcome foo@bar.org"));
       assert!(email.body.contains(&format!(
-        "https://test.org/api/auth/v1/verify_email/confirm/{code}"
+        "https://test.org/api/auth/v1/verify_email/confirm/{code}?redirect_uri=/target"
       )));
     }
 
     {
-      let email = Email::change_email_address_email(&state, "foo@bar.org", code).unwrap();
+      let email =
+        Email::change_email_address_email(&state, "foo@bar.org", code, Some("/target")).unwrap();
       assert_eq!(email.subject, "Change your Email Address for TrailBase");
-      assert!(email.body.contains(&format!(
-        "https://test.org/api/auth/v1/change_email/confirm/{code}"
-      )));
+      assert!(
+        email.body.contains(&format!(
+          "https://test.org/api/auth/v1/change_email/confirm/{code}?redirect_uri=/target"
+        )),
+        "{}",
+        email.body
+      );
     }
 
     {
@@ -465,6 +478,7 @@ pub mod testing {
       assert_eq!(email.subject, "OTP Sign-in for TrailBase");
       assert!(email.body.contains(&format!("&code=12345678")));
       assert!(!email.body.contains(&format!("redirect_uri")));
+      assert!(email.body.contains("https://test.org/_/auth/otp/login"));
     }
 
     {
@@ -472,6 +486,7 @@ pub mod testing {
       assert_eq!(email.subject, "OTP Sign-in for TrailBase");
       assert!(email.body.contains(&format!("&code=12345678")));
       assert!(email.body.contains(&format!("&redirect_uri=/go/to")));
+      assert!(email.body.contains("https://test.org/_/auth/otp/login"));
     }
   }
 

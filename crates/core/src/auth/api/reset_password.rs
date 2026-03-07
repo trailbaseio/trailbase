@@ -46,7 +46,7 @@ pub struct ResetPasswordRequest {
 )]
 pub async fn reset_password_request_handler(
   State(state): State<AppState>,
-  query: Query<ResetPasswordQuery>,
+  Query(query): Query<ResetPasswordQuery>,
   either_request: Either<ResetPasswordRequest>,
 ) -> Result<Response, AuthError> {
   let request = match either_request {
@@ -55,13 +55,7 @@ pub async fn reset_password_request_handler(
     Either::Form(req) => req,
   };
 
-  let redirect_uri = validate_redirect(
-    &state,
-    query
-      .redirect_uri
-      .as_deref()
-      .or(request.redirect_uri.as_deref()),
-  )?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
   {
@@ -137,7 +131,7 @@ pub struct ResetPasswordUpdateRequest {
 )]
 pub async fn reset_password_update_handler(
   State(state): State<AppState>,
-  query: Query<ResetPasswordUpdateQuery>,
+  Query(query): Query<ResetPasswordUpdateQuery>,
   either_request: Either<ResetPasswordUpdateRequest>,
 ) -> Result<Response, AuthError> {
   let request = match either_request {
@@ -146,13 +140,7 @@ pub async fn reset_password_update_handler(
     Either::Form(req) => req,
   };
 
-  let redirect_uri = validate_redirect(
-    &state,
-    query
-      .redirect_uri
-      .as_deref()
-      .or(request.redirect_uri.as_deref()),
-  )?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
 
   let auth_options = state.auth_options();
   validate_password_policy(

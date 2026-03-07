@@ -10,7 +10,7 @@ const formBaseAction = `${AUTH_API}/otp/login`;
 const BASE_URL = import.meta.env.BASE_URL;
 ---
 
-<Form title="OTP">
+<Form title="OTP" level="info">
   <div>
     <form
       id="login-form"
@@ -33,6 +33,7 @@ const BASE_URL = import.meta.env.BASE_URL;
           tabindex="1"
           type="text"
           name="code"
+          value={`{{ code }}`}
           placeholder="Code"
           autocomplete="off"
         />

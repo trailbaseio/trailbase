@@ -1,5 +1,5 @@
-use axum::extract::{Json, OriginalUri, Path, Query, State};
-use axum::http::{StatusCode, Uri};
+use axum::extract::{Json, Path, Query, State};
+use axum::http::StatusCode;
 use axum::response::Response;
 use base64::prelude::*;
 use regex::Regex;
@@ -95,7 +95,6 @@ async fn register_test_user(
 
   let _ = register_user_handler(
     State(state.clone()),
-    axum::extract::OriginalUri(Uri::from_static("/_/auth/register")),
     Query(RegisterQuery::default()),
     Either::Form(request),
   )
@@ -129,7 +128,6 @@ async fn register_test_user(
     login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
-      OriginalUri(Uri::from_static("/_/auth/login")),
       Cookies::default(),
       Either::Json(LoginRequest {
         email: email.to_string(),
@@ -183,7 +181,6 @@ async fn test_auth_password_login_flow_with_pkce() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
-      OriginalUri(Uri::from_static("/_/auth/login")),
       Cookies::default(),
       request,
     )
@@ -306,7 +303,6 @@ async fn test_auth_password_login_flow_without_pkce() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
-      OriginalUri(Uri::from_static("/_/auth/login")),
       Cookies::default(),
       request,
     )
@@ -324,16 +320,24 @@ async fn test_auth_password_login_flow_without_pkce() {
     Err(AuthError::Unauthorized),
   ));
 
-  // Assert that form-based login yields a redirect.
-  assert!(is_failed_login_redirect_response(
-    &login_helper(Either::Form(LoginRequest {
+  {
+    // Assert that form-based login yields a redirect.
+    let response = login_helper(Either::Form(LoginRequest {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
+      redirect_uri: Some("/_/auth/login".to_string()),
       ..Default::default()
     }))
     .await
-    .unwrap()
-  ));
+    .unwrap();
+
+    assert!(
+      response.status() == StatusCode::SEE_OTHER
+        && get_redirect_location(&response)
+          .unwrap()
+          .starts_with("/_/auth/login?alert=")
+    )
+  }
 
   // Finally, let's try logging in with the correct password.
   let login_response: LoginResponse = {
@@ -550,7 +554,6 @@ async fn test_auth_change_email_flow() {
   assert!(
     change_email::change_email_request_handler(
       State(state.clone()),
-      axum::extract::OriginalUri(Uri::from_static("/_/auth/profile")),
       user.clone(),
       Query(Default::default()),
       Either::Form(change_email::ChangeEmailRequest {
@@ -566,7 +569,6 @@ async fn test_auth_change_email_flow() {
 
   change_email::change_email_request_handler(
     State(state.clone()),
-    axum::extract::OriginalUri(Uri::from_static("/_/auth/profile")),
     user.clone(),
     Query(Default::default()),
     Either::Form(change_email::ChangeEmailRequest {
@@ -814,11 +816,4 @@ fn get_redirect_location(response: &Response) -> Option<String> {
     .headers()
     .get("location")
     .and_then(|h| h.to_str().map(|s| s.to_string()).ok());
-}
-
-fn is_failed_login_redirect_response(response: &Response) -> bool {
-  return response.status() == StatusCode::TEMPORARY_REDIRECT
-    && get_redirect_location(response).map_or(false, |location| {
-      location.starts_with("/_/auth/login?alert=")
-    });
 }

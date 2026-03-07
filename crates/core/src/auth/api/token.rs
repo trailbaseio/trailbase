@@ -79,9 +79,15 @@ pub(crate) async fn auth_code_to_token_handler(
 
   let db_user = get_user_by_id(state.user_conn(), &Uuid::from_bytes(user_id)).await?;
 
-  let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
+  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
 
-  let tokens = mint_new_tokens(state.session_conn(), &db_user, auth_token_ttl).await?;
+  let tokens = mint_new_tokens(
+    state.session_conn(),
+    &db_user,
+    &auth_token_ttl,
+    &refresh_token_ttl,
+  )
+  .await?;
   let auth_token = state
     .jwt()
     .encode(&tokens.auth_token_claims)

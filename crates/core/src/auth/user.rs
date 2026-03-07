@@ -111,7 +111,7 @@ impl User {
       id: crate::util::uuid_to_b64(&user_id),
       email: email.to_string(),
       uuid: user_id,
-      csrf_token: crate::rand::generate_random_string(20),
+      csrf_token: crate::rand::random_alphanumeric(20),
     };
   }
 }
