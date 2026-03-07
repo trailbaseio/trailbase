@@ -239,6 +239,7 @@ async fn ui_otp_request_handler(
 #[derive(Debug, Default, Deserialize)]
 pub struct OtpLoginQuery {
   email: String,
+  code: Option<String>,
   redirect_uri: Option<String>,
   alert: Option<String>,
 }
@@ -248,6 +249,20 @@ async fn ui_otp_login_handler(
   query: OtpLoginQuery,
 ) -> Result<Response, HttpError> {
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  let code = query.code.as_deref().unwrap_or_default();
+  if !code.is_empty() {
+    // QUESTION: We have the code already so we could just proceed, however we currently only
+    // have a POST endpoint, which doesn't work for redirects. Should we have a GET otp login
+    // as well?
+    //   return Ok(
+    //     Redirect::to(&format!(
+    //       "{AUTH_API}/otp/login?email={}&code={code}&redirect_uri={redirect_uri}",
+    //       query.email
+    //     ))
+    //     .into_response(),
+    //   );
+  }
+
   if user.is_some() {
     // Already logged in. We rely on this to redirect to profile page (unless another explicit
     // redirect is given) on login success. This way, we can always redirect back to login page
@@ -262,6 +277,7 @@ async fn ui_otp_login_handler(
     ]
     .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
+    code,
   }
   .render();
 
@@ -275,7 +291,7 @@ pub struct LogoutQuery {
 
 async fn ui_logout_handler(query: LogoutQuery) -> Redirect {
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
-  return Redirect::to(&format!("/api/auth/v1/logout?redirect_uri={redirect_uri}"));
+  return Redirect::to(&format!("{AUTH_API}/logout?redirect_uri={redirect_uri}"));
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -401,6 +417,8 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
 }
+
+const AUTH_API: &str = "/api/auth/v1";
 
 const LOGIN_UI: &str = "/_/auth/login";
 const LOGIN_MFA_UI: &str = "/_/auth/login_mfa";

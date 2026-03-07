@@ -1,5 +1,5 @@
-import { createSignal, Match, Show, Switch } from "solid-js";
-import type { Setter } from "solid-js";
+import { createEffect, createSignal, Match, Show, Switch } from "solid-js";
+import type { Setter, Signal } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { FetchError, type MultiFactorAuthCallback } from "trailbase";
 import { createWritableMemo } from "@solid-primitives/memo";
@@ -32,6 +32,10 @@ import {
 
 export function LoginPage() {
   const user = useStore($user);
+
+  createEffect(() => {
+    console.debug(`current user: ${JSON.stringify(user())}`);
+  });
 
   return (
     <div class="flex h-dvh flex-col items-center justify-center">
@@ -69,6 +73,7 @@ function LoginForm() {
   const [mfaCallback, setMfaCallback] =
     createWritableMemo<MultiFactorAuthCallback | null>(() => null);
   const [loginType, setLoginType] = createSignal<LoginOptions>("Password");
+  const [otpSent, setOtpSent] = createSignal<string | null>(null);
 
   const title = (): string => {
     if (mfaCallback() !== null) {
@@ -114,7 +119,7 @@ function LoginForm() {
           </Match>
 
           <Match when={loginType() === "OTP"}>
-            <OtpLoginForm />
+            <OtpLoginForm otpSent={[otpSent, setOtpSent]} />
           </Match>
 
           <Match when={true}>
@@ -212,11 +217,23 @@ function PasswordLoginForm(props: {
   );
 }
 
-function OtpLoginForm() {
+function OtpLoginForm(props: { otpSent: Signal<string | null> }) {
   let userInput: HTMLInputElement | undefined;
+  let otpInput: HTMLInputElement | undefined;
+
+  const [otpSent, setOtpSent] = props.otpSent;
 
   const urlParams = new URLSearchParams(window.location.search);
   const message = urlParams.get("loginMessage");
+
+  async function requestOtp(email: string) {
+    await client.requestOtp(email, { redirectUri: "/_/admin" });
+    setOtpSent(email);
+  }
+
+  async function login(email: string, otp: string) {
+    await client.loginOtp(email, otp);
+  }
 
   return (
     <form
@@ -228,14 +245,13 @@ function OtpLoginForm() {
         const email = userInput?.value;
         if (!email) return;
 
+        const otp = otpInput?.value;
+
         try {
-          await client.requestOtp(email, { redirectUri: "/_/admin" });
-          // NOTE: prompt is not a good approach because there's no way to redo after mispelling the OTP.
-          const otp = prompt("Check your Email and enter the OTP:");
-          if (otp) {
-            client.loginOtp(email, otp);
+          if (!otp) {
+            await requestOtp(email);
           } else {
-            throw new Error("Empty OTP");
+            await login(email, otp);
           }
         } catch (err) {
           if (err instanceof FetchError && err.status === 405) {
@@ -263,11 +279,26 @@ function OtpLoginForm() {
           autocomplete="username"
           required={true}
           ref={userInput}
+          disabled={otpSent() !== null}
         />
       </TextField>
 
+      <Show when={otpSent()}>
+        <TextField class="flex items-center gap-2">
+          <TextFieldLabel class="w-[108px]">Code</TextFieldLabel>
+
+          <TextFieldInput
+            type="text"
+            placeholder="OTP"
+            autocomplete="off"
+            required={true}
+            ref={otpInput}
+          />
+        </TextField>
+      </Show>
+
       <div class="flex justify-end">
-        <Button type="submit">Request OTP</Button>
+        <Button type="submit">{otpSent() ? "Log in" : "Request OTP"}</Button>
       </div>
 
       <Show when={message}>

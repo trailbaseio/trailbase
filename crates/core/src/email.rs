@@ -121,7 +121,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         VERIFICATION_URL => verification_url,
-        SITE_URL => site_url,
+        SITE_URL => site_url.origin().ascii_serialization(),
         CODE => email_verification_token,
         TOKEN => email_verification_token,
         EMAIL => email_address,
@@ -251,7 +251,7 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         CODE => otp_code,
-        SITE_URL => site_url,
+        SITE_URL => site_url.origin().ascii_serialization(),
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
       })?;
@@ -465,6 +465,7 @@ pub mod testing {
       assert_eq!(email.subject, "OTP Sign-in for TrailBase");
       assert!(email.body.contains(&format!("&code=12345678")));
       assert!(!email.body.contains(&format!("redirect_uri")));
+      assert!(email.body.contains("https://test.org/_/auth/otp/login"));
     }
 
     {
@@ -472,6 +473,7 @@ pub mod testing {
       assert_eq!(email.subject, "OTP Sign-in for TrailBase");
       assert!(email.body.contains(&format!("&code=12345678")));
       assert!(email.body.contains(&format!("&redirect_uri=/go/to")));
+      assert!(email.body.contains("https://test.org/_/auth/otp/login"));
     }
   }
 

@@ -66,6 +66,7 @@ pub struct OtpRequestTemplate<'a> {
 pub struct OtpLoginTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
+  pub code: &'a str,
 }
 
 #[derive(Template)]
