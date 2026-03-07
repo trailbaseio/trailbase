@@ -3,6 +3,18 @@ import { status } from "http-status";
 import { ADDRESS } from "../constants";
 
 test("WASM runtime", async () => {
+  expect(
+    await (await fetch(`http://${ADDRESS}/method`, { method: "GET" })).text(),
+  ).toBe("get");
+  expect(
+    await (await fetch(`http://${ADDRESS}/method`, { method: "POST" })).text(),
+  ).toBe("post");
+  expect(
+    await (
+      await fetch(`http://${ADDRESS}/method`, { method: "DELETE" })
+    ).text(),
+  ).toBe("delete");
+
   const expected = {
     int: 5,
     real: 4.2,

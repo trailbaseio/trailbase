@@ -22,6 +22,9 @@ impl Guest for Endpoints {
     SEQ.fetch_add(1000, Ordering::SeqCst);
 
     return vec![
+      routing::get("/method", async |_req| Ok("get")),
+      routing::post("/method", async |_req| Ok("post")),
+      routing::delete("/method", async |_req| Ok("delete")),
       routing::get("/readfile", async |_req| {
         let r = read_file("/crates/sqlite/Cargo.toml")
           .map_err(|err| HttpError::message(StatusCode::NOT_FOUND, err))?;

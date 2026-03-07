@@ -22,12 +22,19 @@ export function encodeBytes(body: string): Uint8Array {
   return new TextEncoder().encode(body);
 }
 
+function httpKey(path: string, method: Method): string {
+  return `${method}|${path}`;
+}
+
 export function buildIncomingHttpHandler(args: {
   httpHandlers?: HttpHandlerInterface[];
   jobHandlers?: JobHandlerInterface[];
 }): IncomingHandler {
   const httpHandlers = Object.fromEntries(
-    (args.httpHandlers ?? []).map((h) => [h.path, h.handler]),
+    (args.httpHandlers ?? []).map((h) => [
+      httpKey(h.path, h.method),
+      h.handler,
+    ]),
   );
   const jobHandlers = Object.fromEntries(
     (args.jobHandlers ?? []).map((h) => [h.name, h.handler]),
@@ -45,17 +52,20 @@ export function buildIncomingHttpHandler(args: {
 
     if (context.kind === "Job") {
       const handler = jobHandlers[context.registered_path];
-      await handler();
-      return new Uint8Array();
+      if (!handler) {
+        throw new HttpError(StatusCode.NOT_FOUND, "impl not found");
+      }
+      return await handler();
     } else {
-      const handler = httpHandlers[context.registered_path];
+      const method = wasiMethodToMethod(req.method());
+      const handler = httpHandlers[httpKey(context.registered_path, method)];
       if (!handler) {
         throw new HttpError(StatusCode.NOT_FOUND, "impl not found");
       }
 
       return await handler(
         new HttpRequestImpl(
-          wasiMethodToMethod(req.method()),
+          method,
           req.pathWithQuery() ?? "",
           context.path_params,
           req.scheme(),

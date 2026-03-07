@@ -10,6 +10,9 @@ import { execute, query, Transaction } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
+    HttpHandler.get("/js/method", (_: HttpRequest): string => "get"),
+    HttpHandler.post("/js/method", (_: HttpRequest): string => "post"),
+    HttpHandler.delete("/js/method", (_: HttpRequest): string => "delete"),
     HttpHandler.get("/js/fibonacci", (req: HttpRequest): string => {
       const n = req.getQueryParam("n");
       return `${fibonacci(n ? parseInt(n) : 40)}\n`;
