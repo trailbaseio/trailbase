@@ -229,7 +229,7 @@ function OtpLoginForm() {
         if (!email) return;
 
         try {
-          await client.requestOtp(email);
+          await client.requestOtp(email, { redirectUri: "/_/admin" });
           // NOTE: prompt is not a good approach because there's no way to redo after mispelling the OTP.
           const otp = prompt("Check your Email and enter the OTP:");
           if (otp) {

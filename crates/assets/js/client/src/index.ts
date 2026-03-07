@@ -688,7 +688,7 @@ export interface Client {
 
   login(email: string, password: string): Promise<MultiFactor | undefined>;
   loginMultiFactor(opts: { token: string; code: string }): Promise<void>;
-  requestOtp(email: string): Promise<void>;
+  requestOtp(email: string, opts?: { redirectUri?: string }): Promise<void>;
   loginOtp(email: string, code: string): Promise<void>;
   logout(): Promise<boolean>;
 
@@ -839,8 +839,13 @@ class ClientImpl implements Client {
       buildTokenState((await response.json()) as LoginResponse),
     );
   }
-  public async requestOtp(email: string): Promise<void> {
-    await this.fetch(`${authApiBasePath}/otp/request`, {
+  public async requestOtp(
+    email: string,
+    opts?: { redirectUri?: string },
+  ): Promise<void> {
+    const redirect = opts?.redirectUri;
+    const params = redirect ? `?redirect_uri=${redirect}` : "";
+    await this.fetch(`${authApiBasePath}/otp/request${params}`, {
       method: "POST",
       body: JSON.stringify({
         email,
