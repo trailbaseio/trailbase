@@ -1,4 +1,4 @@
-import { Match, Show, Switch } from "solid-js";
+import { createSignal, Match, Show, Switch } from "solid-js";
 import type { Setter } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { FetchError, type MultiFactorAuthCallback } from "trailbase";
@@ -17,6 +17,13 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   TextField,
   TextFieldLabel,
@@ -55,20 +62,67 @@ export function LoginPage() {
   );
 }
 
+const loginOptions = ["Password", "OTP"] as const;
+type LoginOptions = (typeof loginOptions)[number];
+
 function LoginForm() {
   const [mfaCallback, setMfaCallback] =
     createWritableMemo<MultiFactorAuthCallback | null>(() => null);
+  const [loginType, setLoginType] = createSignal<LoginOptions>("Password");
+
+  const title = (): string => {
+    if (mfaCallback() !== null) {
+      return "Enter Authenticator Code";
+    }
+    return "Login";
+  };
 
   return (
-    <Switch>
-      <Match when={mfaCallback() === null}>
-        <PasswordLoginForm setMfaCallback={setMfaCallback} />
-      </Match>
+    <>
+      <CardHeader>
+        <div class="flex items-center justify-between gap-2">
+          <CardTitle>{title()}</CardTitle>
 
-      <Match when={mfaCallback() !== null}>
-        <MfaLoginForm mfaCallback={mfaCallback()!} />
-      </Match>
-    </Switch>
+          <Select
+            multiple={false}
+            options={[...loginOptions]}
+            value={loginType()}
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+            )}
+            onChange={(option: LoginOptions | null) => {
+              if (option !== null) {
+                setLoginType(option);
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue<string>>
+                {(state) => state.selectedOption()}
+              </SelectValue>
+            </SelectTrigger>
+
+            <SelectContent />
+          </Select>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <Switch>
+          <Match when={mfaCallback() !== null}>
+            <MfaLoginForm mfaCallback={mfaCallback()!} />
+          </Match>
+
+          <Match when={loginType() === "OTP"}>
+            <OtpLoginForm />
+          </Match>
+
+          <Match when={true}>
+            <PasswordLoginForm setMfaCallback={setMfaCallback} />
+          </Match>
+        </Switch>
+      </CardContent>
+    </>
   );
 }
 
@@ -83,7 +137,7 @@ function PasswordLoginForm(props: {
 
   return (
     <form
-      class="flex flex-col gap-4 px-8 py-12"
+      class="flex flex-col gap-4"
       method="dialog"
       onSubmit={async (ev: SubmitEvent) => {
         ev.preventDefault();
@@ -113,7 +167,7 @@ function PasswordLoginForm(props: {
             });
           } else {
             showToast({
-              title: "Uncaught Error",
+              title: "Other Error",
               description: `${err}`,
               variant: "error",
             });
@@ -121,8 +175,6 @@ function PasswordLoginForm(props: {
         }
       }}
     >
-      <h1>Login</h1>
-
       <TextField class="flex items-center gap-2">
         <TextFieldLabel class="w-[108px]">Email</TextFieldLabel>
 
@@ -160,6 +212,73 @@ function PasswordLoginForm(props: {
   );
 }
 
+function OtpLoginForm() {
+  let userInput: HTMLInputElement | undefined;
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const message = urlParams.get("loginMessage");
+
+  return (
+    <form
+      class="flex flex-col gap-4"
+      method="dialog"
+      onSubmit={async (ev: SubmitEvent) => {
+        ev.preventDefault();
+
+        const email = userInput?.value;
+        if (!email) return;
+
+        try {
+          await client.requestOtp(email);
+          // NOTE: prompt is not a good approach because there's no way to redo after mispelling the OTP.
+          const otp = prompt("Check your Email and enter the OTP:");
+          if (otp) {
+            client.loginOtp(email, otp);
+          } else {
+            throw new Error("Empty OTP");
+          }
+        } catch (err) {
+          if (err instanceof FetchError && err.status === 405) {
+            showToast({
+              title: "OTP Login Disabled",
+              variant: "error",
+              duration: 5 * 1000,
+            });
+          } else {
+            showToast({
+              title: "Other Error",
+              description: `${err}`,
+              variant: "error",
+            });
+          }
+        }
+      }}
+    >
+      <TextField class="flex items-center gap-2">
+        <TextFieldLabel class="w-[108px]">Email</TextFieldLabel>
+
+        <TextFieldInput
+          type="email"
+          placeholder="Email"
+          autocomplete="username"
+          required={true}
+          ref={userInput}
+        />
+      </TextField>
+
+      <div class="flex justify-end">
+        <Button type="submit">Request OTP</Button>
+      </div>
+
+      <Show when={message}>
+        <div class="flex justify-center">
+          <Badge variant="warning">{message}</Badge>
+        </div>
+      </Show>
+    </form>
+  );
+}
+
 function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
   let totpInput: HTMLInputElement | undefined;
 
@@ -168,7 +287,7 @@ function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
 
   return (
     <form
-      class="flex flex-col gap-4 px-8 py-12"
+      class="flex flex-col gap-4"
       method="dialog"
       onSubmit={async (ev: SubmitEvent) => {
         ev.preventDefault();
@@ -187,7 +306,7 @@ function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
             });
           } else {
             showToast({
-              title: "Uncaught Error",
+              title: "Other Error",
               description: `${err}`,
               variant: "error",
             });
@@ -195,8 +314,6 @@ function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
         }
       }}
     >
-      <h1>Enter TOTP</h1>
-
       <TextField class="flex items-center gap-2">
         <TextFieldLabel class="w-[108px]">Code</TextFieldLabel>
 

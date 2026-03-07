@@ -5,7 +5,8 @@
 
   <p>Click the link below to or paste the code sign in.</p>
 
-  <a href="{{ SITE_URL }}/_/auth/otp/login?email={{ EMAIL }}&code={{ CODE }}">
+  <a
+    href="{{ SITE_URL }}/_/auth/otp/login?email={{ EMAIL }}&code={{ CODE }}{%- if REDIRECT_URI -%}&redirect_uri={{ REDIRECT_URI }}{%- endif -%}">
     {{ CODE }}
   </a>
 </body>

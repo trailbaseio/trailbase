@@ -127,7 +127,7 @@ pub async fn request_otp_handler(
     log::debug!("OTP ({normalized_email}, {otp_code})");
   }
 
-  let email = Email::otp_email(&state, &db_user.email, &otp_code)
+  let email = Email::otp_email(&state, &db_user.email, &otp_code, redirect_uri)
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
