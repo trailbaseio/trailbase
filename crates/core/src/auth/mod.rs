@@ -19,12 +19,14 @@ pub(crate) mod util;
 mod error;
 
 pub use error::AuthError;
-pub use jwt::{JwtHelper, TokenClaims};
+pub use jwt::{AuthTokenClaims, JwtHelper};
 // pub(crate) use ui::auth_ui_router;
 pub use user::User;
 
 use crate::constants::AUTH_API_PATH;
 
+// FIXME: With the auth UI now being decoupled from the server, these hard-coded UI paths should go
+// away. Any redirect_uri target should be driven by the UI.
 pub(crate) const LOGIN_UI: &str = "/_/auth/login";
 pub(crate) const REGISTER_USER_UI: &str = "/_/auth/register";
 pub(crate) const PROFILE_UI: &str = "/_/auth/profile";
@@ -48,6 +50,12 @@ use api::*;
     change_password::change_password_handler,
     refresh::refresh_handler,
     login::login_handler,
+    login::login_mfa_handler,
+    // otp::request_otp_handler,
+    // otp::verify_otp_handler,
+    totp::register_totp_request_handler,
+    totp::register_totp_confirm_handler,
+    totp::unregister_totp_handler,
     token::auth_code_to_token_handler,
     status::login_status_handler,
     logout::logout_handler,
@@ -129,6 +137,32 @@ pub(super) fn router() -> Router<crate::AppState> {
     .route(
       &format!("/{AUTH_API_PATH}/login"),
       post(api::login::login_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/login_mfa"),
+      post(api::login::login_mfa_handler),
+    )
+    // OTP flow
+    // .route(
+    //   &format!("/{AUTH_API_PATH}/otp/request"),
+    //   post(api::otp::request_otp_handler),
+    // )
+    // .route(
+    //   &format!("/{AUTH_API_PATH}/otp/verify"),
+    //   post(api::otp::verify_otp_handler),
+    // )
+    // TOTP flow
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/register"),
+      get(api::totp::register_totp_request_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/confirm"),
+      post(api::totp::register_totp_confirm_handler),
+    )
+    .route(
+      &format!("/{AUTH_API_PATH}/totp/unregister"),
+      post(api::totp::unregister_totp_handler),
     )
     // Converts auth code (+pkce code verifier) to auth tokens
     .route(

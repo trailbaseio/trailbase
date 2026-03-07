@@ -9,7 +9,7 @@ use trailbase_sqlite::params;
 use uuid::Uuid;
 
 use crate::AppState;
-use crate::api::TokenClaims;
+use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::AuthError;
 use crate::auth::api::change_email;
@@ -28,7 +28,7 @@ use crate::auth::api::reset_password::{
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
 use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
-use crate::auth::login_params::LoginInputParams;
+use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::login_with_password;
 use crate::constants::*;
@@ -186,7 +186,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: password.clone(),
-      response_type: Some("code".to_string()),
+      response_type: Some(ResponseType::Code),
       redirect_uri: Some(redirect_uri.clone()),
       pkce_code_challenge: None,
       ..Default::default()
@@ -200,7 +200,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: password.clone(),
-      response_type: Some("code".to_string()),
+      response_type: Some(ResponseType::Code),
       redirect_uri: None,
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
@@ -210,24 +210,24 @@ async fn test_auth_password_login_flow_with_pkce() {
   ));
 
   // Bad password.
-  assert!(is_failed_login_redirect_response(
+  assert!(matches!(
     &login_helper(Either::Json(LoginRequest {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
-      response_type: Some("code".to_string()),
+      response_type: Some(ResponseType::Code),
       redirect_uri: Some(redirect_uri.clone()),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
       ..Default::default()
     }))
-    .await
-    .unwrap()
+    .await,
+    Err(AuthError::Unauthorized),
   ));
 
   // Finally let's log in successfully.
   let login_response = login_helper(Either::Json(LoginRequest {
     email: email.clone(),
     password: password.clone(),
-    response_type: Some("code".to_string()),
+    response_type: Some(ResponseType::Code),
     redirect_uri: Some(redirect_uri.clone()),
     pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
     ..Default::default()
@@ -262,7 +262,7 @@ async fn test_auth_password_login_flow_with_pkce() {
 
   let decoded_claims = state
     .jwt()
-    .decode::<TokenClaims>(&token_response.auth_token)
+    .decode::<AuthTokenClaims>(&token_response.auth_token)
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
@@ -344,7 +344,7 @@ async fn test_auth_password_login_flow_without_pkce() {
 
   let decoded_claims = state
     .jwt()
-    .decode::<TokenClaims>(&login_response.auth_token)
+    .decode::<AuthTokenClaims>(&login_response.auth_token)
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
@@ -397,8 +397,8 @@ async fn test_auth_token_refresh_flow() {
   .await
   .unwrap();
 
-  let original_claims: TokenClaims = state.jwt().decode(&tokens.auth_token).unwrap();
-  let refreshed_claims: TokenClaims = state.jwt().decode(&refreshed_tokens.auth_token).unwrap();
+  let original_claims: AuthTokenClaims = state.jwt().decode(&tokens.auth_token).unwrap();
+  let refreshed_claims: AuthTokenClaims = state.jwt().decode(&refreshed_tokens.auth_token).unwrap();
 
   assert_eq!(original_claims.sub, refreshed_claims.sub);
   // Make sure, they were actually re-minted.
@@ -495,7 +495,7 @@ async fn test_auth_reset_password_flow() {
     assert_eq!(tokens.id, user.uuid);
     state
       .jwt()
-      .decode::<TokenClaims>(&tokens.auth_token)
+      .decode::<AuthTokenClaims>(&tokens.auth_token)
       .unwrap();
   }
 
@@ -516,7 +516,7 @@ async fn test_auth_reset_password_flow() {
   assert_eq!(tokens.id, user.uuid);
   state
     .jwt()
-    .decode::<TokenClaims>(&tokens.auth_token)
+    .decode::<AuthTokenClaims>(&tokens.auth_token)
     .unwrap();
 }
 

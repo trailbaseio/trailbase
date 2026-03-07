@@ -40,6 +40,7 @@ async-channel = "2.3.1"
 async-trait = "0.1.80"
 axum = { workspace = true }
 axum-tracing-opentelemetry = { version = "0.33.0", optional = true }
+base32 = "0.5.1"
 base64 = { workspace = true }
 bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
@@ -90,6 +91,7 @@ sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
 tokio = { workspace = true }
 tokio-rustls = { version = "0.26.1", default-features = false }
+totp-rs = { version = "5.7.0", features = ["gen_secret", "qr", "otpauth"] }
 tower = "0.5.0"
 tower-cookies = "0.11.0"
 tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }

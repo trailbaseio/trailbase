@@ -11,6 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { showToast } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { TotpToggleButton } from "@/components/Totp";
 import {
   Dialog,
   DialogContent,
@@ -159,7 +160,7 @@ function Avatar(props: { client: Client; user: User }) {
 
 function ProfileTable(props: { client: Client; user: User }) {
   return (
-    <Card class="w-[80dvw] max-w-[460px] p-8">
+    <Card class="w-[80dvw] max-w-[540px] p-8">
       <div class="flex items-center justify-between">
         <h1>User Profile</h1>
 
@@ -182,7 +183,7 @@ function ProfileTable(props: { client: Client; user: User }) {
         </div>
       </div>
 
-      <div class="my-4 flex items-end gap-2">
+      <div class="my-4 flex flex-wrap items-center gap-2">
         <a
           class={buttonVariants({ variant: "outline" })}
           href="/_/auth/change_email"
@@ -196,6 +197,8 @@ function ProfileTable(props: { client: Client; user: User }) {
         >
           Change Password
         </a>
+
+        <TotpToggleButton {...props} />
       </div>
 
       {import.meta.env.DEV && (

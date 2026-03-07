@@ -3,7 +3,13 @@ import * as JSON from "@ungap/raw-json";
 import { FeatureCollection } from "geojson";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
+// import type { RequestOTPRequest } from "@bindings/RequestOTPRequest";
+// import type { VerifyOTPRequest } from "@bindings/VerifyOTPRequest";
+import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
+import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
+import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
 import type { LoginRequest } from "@bindings/LoginRequest";
+import type { LoginMfaRequest } from "@bindings/LoginMfaRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
 import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
 import type { LogoutRequest } from "@bindings/LogoutRequest";
@@ -15,6 +21,7 @@ export type User = {
   id: string;
   email: string;
   admin?: boolean;
+  mfa?: boolean;
 };
 
 export type Pagination = {
@@ -42,6 +49,7 @@ type TokenClaims = {
   email: string;
   csrf_token: string;
   admin?: boolean;
+  mfa?: boolean;
 };
 
 type TokenState = {
@@ -75,6 +83,7 @@ function buildUser(state: TokenState): User | undefined {
       id: claims.sub,
       email: claims.email,
       admin: claims.admin,
+      mfa: claims.mfa,
     };
   }
 }
@@ -232,7 +241,7 @@ export interface DeferredOperation<ResponseType> {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface DeferredMutation<
   ResponseType,
-> extends DeferredOperation<ResponseType> {}
+> extends DeferredOperation<ResponseType> { }
 
 export class CreateOperation<
   T = Record<string, unknown>,
@@ -241,7 +250,7 @@ export class CreateOperation<
     private readonly client: Client,
     private readonly apiName: string,
     private readonly record: Partial<T>,
-  ) {}
+  ) { }
 
   async query(): Promise<RecordId> {
     const response = await this.client.fetch(
@@ -274,7 +283,7 @@ export class UpdateOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly record: Partial<T>,
-  ) {}
+  ) { }
 
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
@@ -300,7 +309,7 @@ export class DeleteOperation implements DeferredMutation<void> {
     private readonly client: Client,
     private readonly apiName: string,
     private readonly id: RecordId,
-  ) {}
+  ) { }
   async query(): Promise<void> {
     await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
       method: "DELETE",
@@ -329,7 +338,7 @@ export class ReadOperation<
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly opt?: ReadOpts,
-  ) {}
+  ) { }
 
   async query(): Promise<T> {
     const expand = this.opt?.expand;
@@ -359,7 +368,7 @@ export class ListOperation<
     private readonly apiName: string,
     private readonly opts?: ListOpts,
     private readonly geojson?: string,
-  ) {}
+  ) { }
   async query(): Promise<R> {
     const params = new URLSearchParams();
     const pagination = this.opts?.pagination;
@@ -435,7 +444,7 @@ export class RecordApiImpl<
   constructor(
     private readonly client: Client,
     private readonly name: string,
-  ) {}
+  ) { }
 
   public async list(opts?: ListOpts): Promise<ListResponse<T>> {
     return new ListOperation<T>(this.client, this.name, opts).query();
@@ -622,7 +631,7 @@ export class RecordApiImpl<
 }
 
 class ThinClient {
-  constructor(public readonly base: URL | undefined) {}
+  constructor(public readonly base: URL | undefined) { }
 
   async fetch(
     path: string,
@@ -637,9 +646,9 @@ class ThinClient {
       ...init,
       headers: init
         ? {
-            ...headers,
-            ...init?.headers,
-          }
+          ...headers,
+          ...init?.headers,
+        }
         : headers,
     });
 
@@ -650,6 +659,16 @@ class ThinClient {
 export interface ClientOptions {
   tokens?: Tokens;
   onAuthChange?: (client: Client, user?: User) => void;
+}
+
+interface EmailAndPasswordCredentials {
+  email: string;
+  password: string;
+}
+
+interface TotpCredentials {
+  mfaToken: string;
+  totp: string;
 }
 
 export interface Client {
@@ -669,8 +688,21 @@ export interface Client {
 
   avatarUrl(userId?: string): string | undefined;
 
-  login(email: string, password: string): Promise<void>;
+  // FIXME: Right now MFA requires users to unpack the FetchError, which is very leaky.
+  // We should probably do the unpacking internally and return an optional MFA
+  // token or something.
+  login(
+    creds: EmailAndPasswordCredentials | TotpCredentials | string,
+    password?: string,
+  ): Promise<void>;
   logout(): Promise<boolean>;
+
+  // requestOTP(email: string): Promise<void>;
+  // verifyOTP(email: string, code: string): Promise<void>;
+
+  registerTOTP(opts?: { png: boolean }): Promise<RegisterTotpResponse>;
+  confirmTOTP(totpUrl: string, totp: string): Promise<void>;
+  unregisterTOTP(totp: string): Promise<void>;
 
   deleteUser(): Promise<void>;
   checkCookies(): Promise<Tokens | undefined>;
@@ -767,19 +799,47 @@ class ClientImpl implements Client {
     return undefined;
   }
 
-  public async login(email: string, password: string): Promise<void> {
-    const response = await this.fetch(`${authApiBasePath}/login`, {
-      method: "POST",
-      body: JSON.stringify({
-        email: email,
-        password: password,
-      } as LoginRequest),
-      headers: jsonContentTypeHeader,
-    });
+  public async login(
+    creds: EmailAndPasswordCredentials | TotpCredentials | string,
+    password?: string,
+  ): Promise<void> {
+    const pwLogin = async (email: string, password: string) => {
+      const response = await this.fetch(`${authApiBasePath}/login`, {
+        method: "POST",
+        body: JSON.stringify({
+          email: email,
+          password: password,
+        } as LoginRequest),
+        headers: jsonContentTypeHeader,
+      });
 
-    this.setTokenState(
-      buildTokenState((await response.json()) as LoginResponse),
-    );
+      this.setTokenState(
+        buildTokenState((await response.json()) as LoginResponse),
+      );
+    };
+
+    const totpLogin = async (mfaToken: string, totp: string) => {
+      const response = await this.fetch(`${authApiBasePath}/login_mfa`, {
+        method: "POST",
+        body: JSON.stringify({
+          mfa_token: mfaToken,
+          totp,
+        } as LoginMfaRequest),
+        headers: jsonContentTypeHeader,
+      });
+
+      this.setTokenState(
+        buildTokenState((await response.json()) as LoginResponse),
+      );
+    };
+
+    if (typeof creds === "string") {
+      await pwLogin(creds, password ?? "");
+    } else if ("email" in creds) {
+      await pwLogin(creds.email, creds.password);
+    } else {
+      await totpLogin(creds.mfaToken, creds.totp);
+    }
   }
 
   public async logout(): Promise<boolean> {
@@ -818,6 +878,89 @@ class ClientImpl implements Client {
     });
   }
 
+  // public async requestOTP(email: string): Promise<void> {
+  //   await this.fetch(`${authApiBasePath}/otp/request`, {
+  //     method: "POST",
+  //     body: JSON.stringify({
+  //       email: email,
+  //     } as RequestOTPRequest),
+  //     headers: jsonContentTypeHeader,
+  //   });
+  // }
+  //
+  // public async verifyOTP(email: string, code: string): Promise<void> {
+  //   const response = await this.fetch(`${authApiBasePath}/otp/verify`, {
+  //     method: "POST",
+  //     body: JSON.stringify({
+  //       email: email,
+  //       code: code,
+  //     } as VerifyOTPRequest),
+  //     headers: jsonContentTypeHeader,
+  //   });
+  //
+  //   this.setTokenState(
+  //     buildTokenState((await response.json()) as LoginResponse),
+  //   );
+  // }
+
+  public async registerTOTP(opts?: {
+    png: boolean;
+  }): Promise<RegisterTotpResponse> {
+    const response = await this.fetch(
+      `${authApiBasePath}/totp/register?png=${opts?.png ?? false}`,
+      {
+        method: "GET",
+        headers: jsonContentTypeHeader,
+      },
+    );
+    return parseJSON(await response.text());
+  }
+
+  public async confirmTOTP(totpUrl: string, totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/confirm`, {
+      method: "POST",
+      body: JSON.stringify({
+        totp_url: totpUrl,
+        totp,
+      } as ConfirmRegisterTotpRequest),
+      headers: jsonContentTypeHeader,
+    });
+    await this.refreshAuthToken({ force: true });
+  }
+
+  public async unregisterTOTP(totp: string): Promise<void> {
+    await this.fetch(`${authApiBasePath}/totp/unregister`, {
+      method: "POST",
+      body: JSON.stringify({
+        totp,
+      } as DisableTotpRequest),
+      headers: jsonContentTypeHeader,
+    });
+    await this.refreshAuthToken({ force: true });
+  }
+
+  // public async verifyTOTP(
+  //   email: string,
+  //   totp: string,
+  //   password?: string,
+  //   otp?: string,
+  // ): Promise<void> {
+  //   const response = await this.fetch(`${authApiBasePath}/totp/verify`, {
+  //     method: "POST",
+  //     body: JSON.stringify({
+  //       email,
+  //       totp,
+  //       password,
+  //       otp,
+  //     } as VerifyTOTPRequest),
+  //     headers: jsonContentTypeHeader,
+  //   });
+  //
+  //   this.setTokenState(
+  //     buildTokenState((await response.json()) as LoginResponse),
+  //   );
+  // }
+
   /// This will call the status endpoint, which validates any provided tokens
   /// but also hoists any tokens provided as cookies into a JSON response.
   private async checkAuthStatus(): Promise<Tokens | undefined> {
@@ -847,8 +990,11 @@ class ClientImpl implements Client {
     }
   }
 
-  public async refreshAuthToken(): Promise<void> {
-    const refreshToken = shouldRefresh(this._tokenState);
+  public async refreshAuthToken(opts?: { force?: boolean }): Promise<void> {
+    const force = opts?.force ?? false;
+    const refreshToken = force
+      ? this._tokenState.state?.tokens.refresh_token
+      : shouldRefresh(this._tokenState);
     if (refreshToken) {
       // Note: refreshTokenImpl will auto-logout on 401.
       this.setTokenState(await this.refreshTokensImpl(refreshToken));
@@ -1063,7 +1209,7 @@ declare global {
   }
 }
 
-BigInt.prototype.toJSON = function () {
+BigInt.prototype.toJSON = function() {
   return JSON.rawJSON(this.toString());
 };
 
@@ -1086,9 +1232,9 @@ function parseJSON(text: string) {
 
 export const exportedForTesting = isDev
   ? {
-      base64Decode,
-      base64Encode,
-      parseJSON,
-      subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
-    }
+    base64Decode,
+    base64Encode,
+    parseJSON,
+    subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+  }
   : undefined;

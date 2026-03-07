@@ -34,7 +34,9 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   // said, `set_abort_divergent` is not a viable way for us to handle collisions (e.g. in tests),
   // since setting it to false, will prevent the migration from failing but divergent migrations
   // are quietly dropped on the floor and not applied. That's not ok.
-  let mut runner = trailbase_refinery::Runner::new(migrations).set_abort_divergent(false);
+  let mut runner = trailbase_refinery::Runner::new(migrations)
+    .set_abort_divergent(false)
+    .set_grouped(false);
   runner.set_migration_table_name(MIGRATION_TABLE_NAME);
   return runner;
 }
@@ -310,9 +312,6 @@ mod tests {
         // user-provided migrations don't break TB's expectations, e.g. they modified the
         // `_user` TABLE and forgot to put an index back into place.
         assert!(index_exists(conn, "__user__email_index"));
-        assert!(index_exists(conn, "__user__email_verification_code_index"));
-        assert!(index_exists(conn, "__user__password_reset_code_index"));
-        assert!(index_exists(conn, "__user__authorization_code_index"));
         assert!(index_exists(conn, "__user__provider_ids_index"));
 
         assert!(trigger_exists(conn, "__user__updated_trigger"));

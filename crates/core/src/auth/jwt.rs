@@ -1,5 +1,6 @@
+use crate::auth::user::DbUser;
 use crate::rand::generate_random_string;
-use crate::util::uuid_to_b64;
+use crate::util::{id_to_b64, uuid_to_b64};
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
@@ -26,8 +27,17 @@ pub enum JwtHelperError {
   PKCS8Spki(#[from] ed25519_dalek::pkcs8::spki::Error),
 }
 
+#[repr(u8)]
+#[allow(unused)]
+pub enum TokenType {
+  Unknown,
+  Auth,
+  PendingAuth,
+}
+
+/// The actual "AuthToken" used for signed-in users.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct TokenClaims {
+pub struct AuthTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: String,
   /// Unix timestamp in seconds when the token was minted.
@@ -35,42 +45,95 @@ pub struct TokenClaims {
   /// Expiration timestamp
   pub exp: i64,
 
+  pub r#type: u8,
+
+  /// Is admin user.
+  #[serde(default)]
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub admin: bool,
+
+  // Requires multi-factor auth (MFA).
+  #[serde(default)]
+  #[serde(skip_serializing_if = "std::ops::Not::not")]
+  pub mfa: bool,
+
   /// E-mail address of the [sub].
   pub email: String,
 
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
   pub csrf_token: String,
-
-  /// Is admin user.
-  #[serde(default)]
-  #[serde(skip_serializing_if = "std::ops::Not::not")]
-  pub admin: bool,
 }
 
-impl TokenClaims {
-  pub fn new(
-    verified: bool,
-    user_id: uuid::Uuid,
-    email: String,
-    admin: bool,
-    expires_in: chrono::Duration,
-  ) -> Self {
-    assert!(verified);
+impl AuthTokenClaims {
+  pub(crate) fn new(db_user: &DbUser, expires_in: chrono::Duration) -> Self {
+    assert!(db_user.verified);
 
     let now = chrono::Utc::now();
-    return TokenClaims {
-      sub: uuid_to_b64(&user_id),
+    return AuthTokenClaims {
+      sub: id_to_b64(&db_user.id),
       exp: (now + expires_in).timestamp(),
       iat: now.timestamp(),
-      email,
+      r#type: TokenType::Auth as u8,
+      admin: db_user.admin.clone(),
+      mfa: db_user.totp_secret.is_some(),
+      email: db_user.email.clone(),
       csrf_token: generate_random_string(20),
-      admin,
     };
   }
 
   pub fn from_auth_token(jwt: &JwtHelper, auth_token: &str) -> Result<Self, JwtError> {
-    return jwt.decode(auth_token);
+    let claims = jwt.decode::<Self>(auth_token)?;
+    assert_eq!(claims.r#type, TokenType::Auth as u8);
+    return Ok(claims);
+  }
+}
+
+#[repr(u8)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum AuthMethod {
+  #[serde(rename = "pw")]
+  Password,
+  // #[serde(rename = "totp")]
+  // Totp,
+  // #[serde(rename = "otp")]
+  // Otp,
+}
+
+// A "Pending" token used for multi-factor auth.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PendingAuthTokenClaims {
+  /// Url-safe Base64 encoded id of the current user.
+  pub sub: String,
+  /// Unix timestamp in seconds when the token was minted.
+  pub iat: i64,
+  /// Expiration timestamp
+  pub exp: i64,
+
+  // Token type.
+  pub r#type: u8,
+
+  /// Auth method used for initiating the MFA.
+  pub method: AuthMethod,
+}
+
+impl PendingAuthTokenClaims {
+  pub fn new(user_id: uuid::Uuid, expires_in: chrono::Duration) -> Self {
+    let now = chrono::Utc::now();
+
+    return Self {
+      sub: uuid_to_b64(&user_id),
+      iat: now.timestamp(),
+      exp: (now + expires_in).timestamp(),
+      r#type: TokenType::PendingAuth as u8,
+      method: AuthMethod::Password,
+    };
+  }
+
+  pub fn from_pending_auth_token(jwt: &JwtHelper, token: &str) -> Result<Self, JwtError> {
+    let claims = jwt.decode::<Self>(token)?;
+    assert_eq!(claims.r#type, TokenType::PendingAuth as u8);
+    return Ok(claims);
   }
 }
 
@@ -197,16 +260,34 @@ mod tests {
   fn test_decode_encode() {
     let jwt = test_jwt_helper();
 
-    let claims = TokenClaims::new(
-      true,
-      uuid::Uuid::now_v7(),
-      "foo@bar.com".to_string(),
-      false,
-      crate::constants::DEFAULT_AUTH_TOKEN_TTL,
-    );
+    let db_user = DbUser {
+      id: uuid::Uuid::new_v4().into_bytes(),
+      email: "foo@bar.com".to_string(),
+      verified: true,
+      admin: false,
+      ..Default::default()
+    };
+
+    let claims = AuthTokenClaims::new(&db_user, crate::constants::DEFAULT_AUTH_TOKEN_TTL);
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());
+    assert_eq!(
+      claims,
+      AuthTokenClaims::from_auth_token(&jwt, &token).unwrap()
+    );
+
+    let pending_auth_claims = PendingAuthTokenClaims::new(
+      uuid::Uuid::now_v7(),
+      crate::constants::DEFAULT_MFA_TOKEN_TTL,
+    );
+    let pending_auth_token = jwt.encode(&pending_auth_claims).unwrap();
+
+    assert_eq!(
+      pending_auth_claims,
+      PendingAuthTokenClaims::from_pending_auth_token(&jwt, &pending_auth_token).unwrap()
+    );
+    assert!(AuthTokenClaims::from_auth_token(&jwt, &pending_auth_token).is_err())
   }
 }
 

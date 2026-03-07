@@ -12,13 +12,15 @@ import {
 } from "@/components/ui/dialog";
 import { navbarIconStyle } from "@/components/Navbar";
 import { Avatar, Profile } from "@/components/auth/Profile";
+import { TotpToggleButton } from "@/components/auth/Totp";
 
 export function AuthButton(props: { iconSize: number }) {
   const [open, setOpen] = createSignal(false);
   const user = useStore($user);
+  const hasTotp = () => user()?.mfa ?? false;
 
   return (
-    <Dialog open={open()} onOpenChange={setOpen}>
+    <Dialog id="auth-dialog" open={open()} onOpenChange={setOpen}>
       <button class={navbarIconStyle} onClick={() => setOpen(true)}>
         <Avatar user={user()} size={props.iconSize} />
       </button>
@@ -29,11 +31,19 @@ export function AuthButton(props: { iconSize: number }) {
         </DialogHeader>
 
         <Show when={user()}>
-          <Profile user={user()!} />
+          <Profile user={user()!} twoFactorEnabled={hasTotp()} />
         </Show>
 
         <DialogFooter>
-          <Button type="button" onClick={() => client.logout()}>
+          <Show when={user()}>
+            <TotpToggleButton client={client} user={user()!} />
+          </Show>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => client.logout()}
+          >
             Logout
           </Button>
         </DialogFooter>
