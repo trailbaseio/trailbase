@@ -4,9 +4,9 @@
 [versions]
 agp = "9.0.1"
 junit = "6.0.3"
-kotlin = "2.2.20"
+kotlin = "2.3.10"
 kotlin-gradle-plugin = "2.1.20"
-ktor = "3.2.3"
+ktor = "3.4.1"
 maven-publish = "0.34.0"
 spotless = "8.3.0"
 

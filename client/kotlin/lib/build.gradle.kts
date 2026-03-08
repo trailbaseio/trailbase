@@ -28,7 +28,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.junit.jupiter)
             runtimeOnly(libs.junit.jupiter.engine)
-	}
+        }
     }
 }
 
