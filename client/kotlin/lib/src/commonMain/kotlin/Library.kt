@@ -407,6 +407,7 @@ fun addFiltersToParams(params: MutableMap<String, String>, path: String, filter:
             }
         }
     }
+
 }
 
 private const val AUTH_API: String = "api/auth/v1"

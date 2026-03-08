@@ -1,5 +1,6 @@
 plugins {
-    id("buildlogic.kotlin-common-conventions")
+    alias(libs.plugins.kotlin.jvm)
+    alias(libs.plugins.kotlin.serialization)
 
     application
 }
@@ -7,7 +8,8 @@ plugins {
 application { mainClass = "MainKt" }
 
 dependencies {
-    api(project(":lib"))
+    implementation(project(":lib"))
 
+    implementation(libs.ktor.serialization.json)
     implementation(libs.kotlinx.coroutines.core)
 }

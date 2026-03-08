@@ -1,9 +1,9 @@
 test:
-	gradle test
+	./gradlew allTests
 
 # Note `gradle build` also runs the tests.
 build:
-	gradle assemble
+	./gradlew assemble
 
 # Version number is in `lib/build.gradle.kts`.
 # Tokens are in `~/.gradle/gradle.properties`
@@ -28,19 +28,23 @@ build:
 #
 # NOTE: Only publishes, requires subsequent manual release on maven central.
 publish:
-	gradle publishToMavenCentral
+	./gradlew publishToMavenCentral
 
 release:
 	source .env && gradle publishAndReleaseToMavenCentral
 
 format:
-	gradle spotlessApply
+	./gradlew spotlessApply
 
 list:
-	gradle tasks
+	./gradlew tasks
+
+# Run the example application.
+run:
+	./gradlew run
 
 clean:
 	rm -rf lib/build/
 
 
-.PHONY: test build publish release format list clean
+.PHONY: test build publish release format list clean run

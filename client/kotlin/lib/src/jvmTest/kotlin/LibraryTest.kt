@@ -17,6 +17,7 @@ import kotlin.time.Clock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.test.*
 import kotlinx.serialization.Serializable
+import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.assertThrows
@@ -27,13 +28,14 @@ import org.junit.jupiter.api.assertThrows
 
 @Serializable data class SimpleStrictUpdate(val text_not_null: String?)
 
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ClientTest {
     companion object {
         const val port = 4061
         const val address = "127.0.0.1:${port}"
         var process: Process? = null
+      }
 
-        @JvmStatic
         @BeforeAll
         fun setUpAll() {
             val workingDirectory: Path = Paths.get("").toAbsolutePath().parent
@@ -72,7 +74,7 @@ class ClientTest {
                 val client = HttpClient(CIO.create())
                 val url = Url("http://${address}/api/healthcheck")
 
-                for (i in 0..50) {
+                for (i in 0..100) {
                     try {
                         val response = client.get(url)
                         if (response.status.isSuccess()) {
@@ -97,13 +99,11 @@ class ClientTest {
             }
         }
 
-        @JvmStatic
         @AfterAll
         fun tearDownAll() {
             process?.destroyForcibly()?.waitFor()
             process?.exitValue()
         }
-    }
 
     @Test
     fun `filter params`() {

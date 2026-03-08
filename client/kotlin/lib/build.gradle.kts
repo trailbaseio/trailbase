@@ -1,52 +1,38 @@
-import org.gradle.api.tasks.testing.logging.TestExceptionFormat
-import org.gradle.api.tasks.testing.logging.TestLogEvent
-
 plugins {
-    id("buildlogic.kotlin-common-conventions")
-
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.android.kotlin.multiplatform.library)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.maven.publish)
-
-    // Apply the java-library plugin for API and implementation separation.
-    id("java-library")
 }
 
-repositories {
-    // Use Maven Central for resolving dependencies.
-    mavenCentral()
-}
+kotlin {
+    jvm()
+    iosX64()
+    iosArm64()
 
-dependencies {
-    implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.cio)
-    implementation(libs.ktor.client.negotiation)
-    implementation(libs.ktor.serialization.json)
-
-    testImplementation(libs.kotlinx.coroutines.test)
-}
-
-testing {
-    suites {
-        // Configure the built-in test suite
-        val test by
-            getting(JvmTestSuite::class) {
-                // Use Kotlin Test test framework
-                useKotlinTest("2.1.20")
-            }
+    android {
+        namespace = "io.trailbase.client"
+        compileSdk { version = release(36) }
     }
-}
 
-allprojects {
-    tasks.withType<Test> {
-        testLogging {
-            showStandardStreams = true
-            showExceptions = true
-            showCauses = true
-            events = setOf(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED)
-            exceptionFormat = TestExceptionFormat.FULL
+    sourceSets {
+        commonMain.dependencies {
+            implementation(libs.ktor.client.core)
+            implementation(libs.ktor.client.cio)
+            implementation(libs.ktor.client.negotiation)
+            implementation(libs.ktor.serialization.json)
         }
-        outputs.upToDateWhen { false }
+
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.test)
+            implementation(libs.junit.jupiter)
+            runtimeOnly(libs.junit.jupiter.engine)
+	}
     }
 }
+
+tasks { named<Test>("jvmTest") { useJUnitPlatform() } }
 
 group = "io.trailbase"
 
