@@ -96,6 +96,9 @@ pub async fn request_otp_handler(
   if db_user.totp_secret.is_some() {
     // If the user has two/multi-factor-auth enabled, allowing OTP-only login would be a break of
     // contract. We may want to support OTP + TOTP going forward.
+    #[cfg(debug_assertions)]
+    log::debug!("Skipping OTP request for user with two-factor auth enabled.");
+
     return Ok(success_response());
   }
 

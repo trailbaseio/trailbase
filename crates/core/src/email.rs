@@ -31,6 +31,7 @@ pub enum EmailError {
 
 pub struct Email {
   mailer: Mailer,
+  dev: bool,
 
   from: Mailbox,
   to: Mailbox,
@@ -57,6 +58,7 @@ impl Email {
   ) -> Result<Self, EmailError> {
     return Ok(Self {
       mailer: state.mailer(),
+      dev: state.dev_mode(),
       from: get_sender(state)?,
       to,
       subject,
@@ -65,18 +67,41 @@ impl Email {
   }
 
   pub async fn send(&self) -> Result<(), EmailError> {
-    let email = Message::builder()
-      .to(self.to.clone())
-      .from(self.from.clone())
-      .subject(self.subject.clone())
-      .header(ContentType::TEXT_HTML)
-      .body(Body::new(self.body.clone()))?;
+    let Email {
+      mailer,
+      dev,
+      from,
+      to,
+      subject,
+      body,
+    } = self;
 
-    match self.mailer {
-      Mailer::Smtp(ref mailer) => {
+    let email = Message::builder()
+      .to(to.clone())
+      .from(from.clone())
+      .subject(subject.clone())
+      .header(ContentType::TEXT_HTML)
+      .body(Body::new(body.clone()))?;
+
+    #[cfg(not(test))]
+    if *dev {
+      log::info!(
+        "\
+            [dev] Skip sending email:\
+            \nFROM: {from}\
+            \nTO: {to}\
+            \nSUBJECT: {subject}\
+            \nBODY: {body}\
+            "
+      );
+      return Ok(());
+    }
+
+    match mailer {
+      Mailer::Smtp(mailer) => {
         mailer.send(email).await?;
       }
-      Mailer::Local(ref mailer) => {
+      Mailer::Local(mailer) => {
         mailer.send(email).await?;
       }
     };
