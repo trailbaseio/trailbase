@@ -34,3 +34,4 @@ lazy_static = "1.4.0"
 reqwest = { version = "0.13.1", features = ["stream", "multipart", "json"] }
 temp-dir = "0.2.0"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+totp-rs = { version = "5.7.1", default-features = false, features = ["otpauth"] }

@@ -146,7 +146,7 @@ struct Comment {
 
 async fn connect() -> Client {
   let client = Client::new(&site(), None).unwrap();
-  let _ = client.login("admin@localhost", "secret").await.unwrap();
+  client.login("admin@localhost", "secret").await.unwrap();
   return client;
 }
 
@@ -165,6 +165,45 @@ async fn login_test() {
 
   client.logout().await.unwrap();
   assert!(client.tokens().is_none());
+}
+
+async fn login_otp() {
+  let client = Client::new(&site(), None).unwrap();
+
+  // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint
+  // responds ok.
+  client.request_otp("fake0@localhost", None).await.unwrap();
+  client
+    .request_otp("fake1@localhost", Some("/target"))
+    .await
+    .unwrap();
+}
+
+async fn login_multi_factor_test() {
+  let client = Client::new(&site(), None).unwrap();
+  let Some(mfa_token) = client.login("alice@trailbase.io", "secret").await.unwrap() else {
+    panic!("expected multi-factor token");
+  };
+
+  let totp = totp_rs::TOTP::new(
+    totp_rs::Algorithm::SHA1,
+    /* num digits= */ 6,
+    /* skew= */ 1,
+    /* step= */ 30,
+    totp_rs::Secret::Encoded("YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5".to_string())
+      .to_bytes()
+      .unwrap(),
+    None,
+    "alice".to_string(),
+  )
+  .unwrap();
+
+  let code = totp.generate_current().unwrap();
+
+  client.login_second(&mfa_token, &code).await.unwrap();
+
+  assert!(client.tokens().is_some());
+  assert_eq!(client.user().unwrap().email, "alice@trailbase.io");
 }
 
 async fn records_test() {
@@ -744,6 +783,12 @@ fn integration_test() {
 
   runtime.block_on(login_test());
   println!("Ran login tests");
+
+  runtime.block_on(login_otp());
+  println!("Ran login OTP tests");
+
+  runtime.block_on(login_multi_factor_test());
+  println!("Ran login multi-factor tests");
 
   runtime.block_on(records_test());
   println!("Ran records tests");

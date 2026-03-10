@@ -45,6 +45,7 @@ pub struct RequestOtpRequest {
   responses(
     (status = 200, description = "OTP sent or user not found, when redirect_uri not present."),
     (status = 303, description = "OTP sent or user not found, when redirect_uri present."),
+    (status = 400, description = "Bad request"),
     (status = 429, description = "Too many attempts"),
   )
 )]
@@ -155,7 +156,9 @@ pub struct LoginOtpRequest {
   params(LoginOtpQuery),
   request_body = LoginOtpRequest,
   responses(
-    (status = 200, description = "Auth tokens.", body = LoginResponse)
+    (status = 200, description = "Auth tokens for JSONl logins.", body = LoginResponse),
+    (status = 303, description = "For form logins."),
+    (status = 400, description = "Bad request"),
   )
 )]
 pub async fn login_otp_handler(
@@ -244,7 +247,7 @@ const OTP_TTL: Duration = Duration::minutes(5);
 // Track attempts to request OTP codes for abuse prevention.
 static REQUEST_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
   Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(2 * 60))
+    .time_to_live(std::time::Duration::from_secs(OTP_TTL.num_seconds() as u64))
     .max_capacity(2048)
     .build()
 });

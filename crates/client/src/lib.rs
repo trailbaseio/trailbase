@@ -74,6 +74,11 @@ pub struct Tokens {
   pub csrf_token: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct MultiFactorAuthToken {
+  mfa_token: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Pagination {
   cursor: Option<String>,
@@ -479,6 +484,7 @@ impl RecordApi {
         Method::GET,
         None::<&()>,
         Some(&params),
+        /* error_for_status= */ true,
       )
       .await?;
 
@@ -504,6 +510,7 @@ impl RecordApi {
         Method::GET,
         None::<&()>,
         expand.as_deref(),
+        /* error_for_status= */ true,
       )
       .await?;
 
@@ -526,6 +533,7 @@ impl RecordApi {
         Method::POST,
         Some(&record),
         None,
+        /* error_for_status= */ true,
       )
       .await?;
 
@@ -553,6 +561,7 @@ impl RecordApi {
         Method::PATCH,
         Some(&record),
         None,
+        /* error_for_status= */ true,
       )
       .await?;
 
@@ -571,6 +580,7 @@ impl RecordApi {
         Method::DELETE,
         None::<&()>,
         None,
+        /* error_for_status= */ true,
       )
       .await?;
 
@@ -593,6 +603,7 @@ impl RecordApi {
         Method::GET,
         None::<&()>,
         None,
+        /* error_for_status= */ true,
       )
       .await?;
 
@@ -689,6 +700,7 @@ impl ClientState {
     method: Method,
     body: Option<&T>,
     query_params: Option<&[(Cow<'static, str>, Cow<'static, str>)]>,
+    error_for_status: bool,
   ) -> Result<reqwest::Response, Error> {
     let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
     if let Some(refresh_token) = refresh_token {
@@ -698,13 +710,15 @@ impl ClientState {
       *self.tokens.write() = new_tokens;
     }
 
-    return Ok(
-      self
-        .client
-        .fetch_impl(path, headers, method, body, query_params)
-        .await?
-        .error_for_status()?,
-    );
+    let response = self
+      .client
+      .fetch_impl(path, headers, method, body, query_params)
+      .await?;
+
+    if error_for_status {
+      return Ok(response.error_for_status()?);
+    }
+    return Ok(response);
   }
 
   #[cfg(feature = "ws")]
@@ -848,7 +862,11 @@ impl Client {
     return Ok(());
   }
 
-  pub async fn login(&self, email: &str, password: &str) -> Result<Tokens, Error> {
+  pub async fn login(
+    &self,
+    email: &str,
+    password: &str,
+  ) -> Result<Option<MultiFactorAuthToken>, Error> {
     #[derive(Serialize)]
     struct Credentials<'a> {
       email: &'a str,
@@ -862,12 +880,98 @@ impl Client {
         Method::POST,
         Some(&Credentials { email, password }),
         None,
+        /* error_for_status= */ false,
       )
       .await?;
 
-    let tokens: Tokens = json(response).await?;
+    if response.status() == StatusCode::FORBIDDEN {
+      let mfa_token: MultiFactorAuthToken = json(response).await?;
+      return Ok(Some(mfa_token));
+    }
+
+    let tokens: Tokens = json(response.error_for_status()?).await?;
     self.update_tokens(Some(&tokens));
-    return Ok(tokens);
+
+    return Ok(None);
+  }
+
+  pub async fn login_second(
+    &self,
+    mfa_token: &MultiFactorAuthToken,
+    totp_code: &str,
+  ) -> Result<(), Error> {
+    #[derive(Serialize)]
+    struct Credentials<'a> {
+      mfa_token: &'a str,
+      totp: &'a str,
+    }
+
+    let response = self
+      .state
+      .fetch(
+        &format!("/{AUTH_API}/login_mfa"),
+        Method::POST,
+        Some(&Credentials {
+          mfa_token: &mfa_token.mfa_token,
+          totp: totp_code,
+        }),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    let tokens: Tokens = json(response.error_for_status()?).await?;
+    self.update_tokens(Some(&tokens));
+
+    return Ok(());
+  }
+
+  pub async fn request_otp(&self, email: &str, redirect_uri: Option<&str>) -> Result<(), Error> {
+    #[derive(Serialize)]
+    struct Credentials<'a> {
+      email: &'a str,
+      redirect_uri: Option<&'a str>,
+    }
+
+    let _response = self
+      .state
+      .fetch(
+        &format!("/{AUTH_API}/otp/request"),
+        Method::POST,
+        Some(&Credentials {
+          email,
+          redirect_uri,
+        }),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    return Ok(());
+  }
+
+  pub async fn login_otp(&self, email: &str, code: &str) -> Result<(), Error> {
+    #[derive(Serialize)]
+    struct Credentials<'a> {
+      email: &'a str,
+      code: &'a str,
+    }
+
+    let response = self
+      .state
+      .fetch(
+        &format!("/{AUTH_API}/otp/login"),
+        Method::POST,
+        Some(&Credentials { email, code }),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    let tokens: Tokens = json(response.error_for_status()?).await?;
+    self.update_tokens(Some(&tokens));
+
+    return Ok(());
   }
 
   pub async fn logout(&self) -> Result<(), Error> {
@@ -885,6 +989,7 @@ impl Client {
             Method::POST,
             Some(&LogoutRequest { refresh_token }),
             None,
+            /* error_for_status= */ true,
           )
           .await
       }
@@ -896,6 +1001,7 @@ impl Client {
             Method::GET,
             None::<&()>,
             None,
+            /* error_for_status= */ true,
           )
           .await
       }
