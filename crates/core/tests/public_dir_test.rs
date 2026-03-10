@@ -32,7 +32,7 @@ async fn test_without_spa_fallback() {
   let Server { main_router, .. } = Server::init(options).await.unwrap();
 
   let (_address, router) = main_router;
-  let server = TestServer::new(router).unwrap();
+  let server = TestServer::new(router);
 
   // Existing file should be served
   let response = server.get("/index.html").await;

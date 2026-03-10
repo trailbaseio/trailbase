@@ -124,7 +124,7 @@ async fn test_record_apis() {
   }
 
   {
-    let server = TestServer::new(router).unwrap();
+    let server = TestServer::new(router);
 
     #[cfg(feature = "otel")]
     {

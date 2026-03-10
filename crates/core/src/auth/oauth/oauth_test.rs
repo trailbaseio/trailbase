@@ -102,8 +102,7 @@ async fn setup_fake_oauth_server(site_url: &str) -> (TestServer, AppState) {
       transport: Some(axum_test::Transport::HttpRandomPort),
       ..Default::default()
     },
-  )
-  .unwrap();
+  );
 
   let state = test_state(Some(TestStateOptions {
     config: Some({

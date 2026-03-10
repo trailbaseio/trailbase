@@ -33,7 +33,7 @@ fn test_admin_permissions() {
     assert!(admin_router.is_none());
     assert!(tls.is_none());
 
-    let server = TestServer::new(main_router.1).unwrap();
+    let server = TestServer::new(main_router.1);
 
     assert_eq!(
       server.get("/api/healthcheck").await.status_code(),

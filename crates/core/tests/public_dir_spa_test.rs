@@ -49,7 +49,7 @@ async fn test_spa_fallback() {
   let Server { main_router, .. } = Server::init(options).await.unwrap();
 
   let (_address, router) = main_router;
-  let server = TestServer::new(router).unwrap();
+  let server = TestServer::new(router);
 
   // Existing file should be served
   let response = server.get("/index.html").await;
@@ -130,5 +130,5 @@ async fn test_spa_fallback() {
   // ServeDir behavior: redirect
   let response = server.get("/docs").await;
   assert_eq!(response.status_code(), StatusCode::TEMPORARY_REDIRECT);
-  assert_eq!(response.header("location"), "http://localhost/docs/");
+  assert_eq!(response.header("location"), "/docs/");
 }
