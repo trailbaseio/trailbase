@@ -1,3 +1,11 @@
+## v0.24.4
+
+- Disable SQLite FK constraints during migrations and re-enable just before the transaction is committed to avoid getting stuck with inconsistencies while allowing more flexible table alterations in preparation for major auth changes.
+- Fix HTTP routing ambiguities for JS/TS WASM guests.
+- Add support for "realtime" change subscriptions to Kotlin client.
+- Release Kotlin client as multi-platform library.
+- Update dependencies.
+
 ## v0.24.3
 
 - Add a Yandex OAuth provider.
