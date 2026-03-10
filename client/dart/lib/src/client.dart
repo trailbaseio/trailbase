@@ -29,6 +29,7 @@ class User {
   int get hashCode => Object.hash(id, email);
 }
 
+/// Auth tokens: auth JWT, refresh & CSRF.
 class Tokens {
   final String auth;
   final String? refresh;
@@ -54,6 +55,26 @@ class Tokens {
 
   @override
   String toString() => 'Tokens(${auth}, ${refresh}, ${csrf})';
+}
+
+class MultiFactorAuthToken {
+  final String token;
+
+  const MultiFactorAuthToken(this.token);
+
+  MultiFactorAuthToken.fromJson(Map<String, dynamic> json)
+      : token = json['mfa_token'];
+
+  @override
+  bool operator ==(Object other) {
+    return other is MultiFactorAuthToken && token == other.token;
+  }
+
+  @override
+  int get hashCode => Object.hash(token, null);
+
+  @override
+  String toString() => 'MultiFactorAuthToken(${token})';
 }
 
 class Pagination {
@@ -419,7 +440,7 @@ class Client {
   /// Accessor for Record APIs with given [name].
   RecordApi records(String name) => RecordApi(this, name);
 
-  Future<Tokens> login(String email, String password) async {
+  Future<MultiFactorAuthToken?> login(String email, String password) async {
     final response = await fetch(
       '${_authApi}/login',
       method: Method.post,
@@ -427,14 +448,21 @@ class Client {
         'email': email,
         'password': password,
       }),
+      throwOnError: false,
     );
+
+    if (response.statusCode == 403) {
+      return MultiFactorAuthToken.fromJson(jsonDecode(response.body));
+    } else if (response.statusCode != 200) {
+      throw HttpException(response.statusCode, response.body);
+    }
 
     final tokens = Tokens.fromJson(jsonDecode(response.body));
     _updateTokens(tokens);
-    return tokens;
+    return null;
   }
 
-  Future<Tokens> loginWithAuthCode(
+  Future<void> loginWithAuthCode(
     String authCode, {
     String? pkceCodeVerifier,
   }) async {
@@ -449,7 +477,45 @@ class Client {
 
     final tokens = Tokens.fromJson(jsonDecode(response.body));
     _updateTokens(tokens);
-    return tokens;
+  }
+
+  Future<void> login2nd(MultiFactorAuthToken token, String code) async {
+    final response = await fetch(
+      '${_authApi}/login_mfa',
+      method: Method.post,
+      data: jsonEncode({
+        'mfa_token': token.token,
+        'totp': code,
+      }),
+    );
+
+    final tokens = Tokens.fromJson(jsonDecode(response.body));
+    _updateTokens(tokens);
+  }
+
+  Future<void> requestOtp(String email, {String? redirectUri}) async {
+    await fetch(
+      '${_authApi}/otp/request',
+      method: Method.post,
+      data: jsonEncode({
+        'email': email,
+        if (redirectUri != null) 'redirect_uri': redirectUri,
+      }),
+    );
+  }
+
+  Future<void> loginOtp(String email, String code) async {
+    final response = await fetch(
+      '${_authApi}/otp/login',
+      method: Method.post,
+      data: jsonEncode({
+        'email': email,
+        'code': code,
+      }),
+    );
+
+    final tokens = Tokens.fromJson(jsonDecode(response.body));
+    _updateTokens(tokens);
   }
 
   Future<void> logout() async {

@@ -19,3 +19,4 @@ dependencies:
 dev_dependencies:
   lints: ^6.0.0
   test: ^1.25.0
+  totp_authenticator: ^1.0.1

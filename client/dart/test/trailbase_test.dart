@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:trailbase/trailbase.dart';
 import 'package:test/test.dart';
 import 'package:http/http.dart' as http;
+import 'package:totp_authenticator/totp_authenticator.dart';
 
 const port = 4006;
 const address = '127.0.0.1:${port}';
@@ -183,7 +184,7 @@ Future<Process> initTrailBase() async {
   for (int i = 0; i < 100; ++i) {
     try {
       final response = await http.get(uri);
-      if (response.statusCode == 200) {
+      if (response.statusCode == HttpStatus.ok) {
         return process;
       }
     } catch (err) {
@@ -264,13 +265,46 @@ Future<void> main() async {
       // We need to wait a little to push the expiry time in seconds to avoid just getting the same token minted again.
       await Future.delayed(Duration(milliseconds: 1500));
 
-      final newTokens = await client.login('admin@localhost', 'secret');
+      final mfaToken = await client.login('admin@localhost', 'secret');
+      expect(mfaToken, isNull);
+      final newTokens = client.tokens();
       expect(newTokens, isNotNull);
 
       expect(newTokens, isNot(equals(oldTokens)));
 
       await client.refreshAuthToken();
       expect(newTokens, equals(client.tokens()));
+    });
+
+    test('multi-factor-auth', () async {
+      final client = Client('http://${address}');
+      final mfaToken = await client.login('alice@trailbase.io', 'secret');
+      expect(mfaToken, isNotNull);
+
+      const secret = 'YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5';
+      final code = TOTP().generateTOTPCode(secret,
+          time: DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
+
+      await client.login2nd(mfaToken!, code);
+      expect(client.tokens(), isNotNull);
+      expect(client.user()?.email, equals('alice@trailbase.io'));
+    });
+
+    test('login OTP', () async {
+      final client = Client('http://${address}');
+
+      // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint responds ok.
+      await client.requestOtp('fake0@localhost');
+      await client.requestOtp('fake1@localhost', redirectUri: '/foo');
+
+      expect(() async {
+        await client.requestOtp('notAnEmail');
+      }, throwsA(predicate((e) {
+        if (e is HttpException) {
+          return e.status == HttpStatus.badRequest;
+        }
+        return false;
+      })));
     });
 
     test('records', () async {
@@ -573,7 +607,7 @@ Future<void> main() async {
         });
       }, throwsA(predicate((e) {
         if (e is HttpException) {
-          return e.status == 400;
+          return e.status == HttpStatus.badRequest;
         }
         return false;
       })));
