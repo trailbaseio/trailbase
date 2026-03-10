@@ -390,6 +390,14 @@ export interface AuthConfig {
   disablePasswordAuth?:
     | boolean
     | undefined;
+  /**
+   * / Whether sign-in via OTP codes (e.g. sent via Email) should be allowed.
+   * / This may be less secure since ultimately you're delegating operational
+   * / security to a user's inbox.
+   */
+  enableOtpSignin?:
+    | boolean
+    | undefined;
   /** / Minimal password length. Defaults to 8. */
   passwordMinimalLength?:
     | number
@@ -879,6 +887,8 @@ export const EmailConfig: MessageFns<EmailConfig> = {
         : undefined,
       otpTemplate: isSet(object.otpTemplate)
         ? EmailTemplate.fromJSON(object.otpTemplate)
+        : isSet(object.otp_template)
+        ? EmailTemplate.fromJSON(object.otp_template)
         : undefined,
     };
   },
@@ -1156,6 +1166,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       writer.uint32(24).bool(message.disablePasswordAuth);
     }
+    if (message.enableOtpSignin !== undefined && message.enableOtpSignin !== false) {
+      writer.uint32(64).bool(message.enableOtpSignin);
+    }
     if (message.passwordMinimalLength !== undefined && message.passwordMinimalLength !== 0) {
       writer.uint32(32).uint32(message.passwordMinimalLength);
     }
@@ -1212,6 +1225,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
           }
 
           message.disablePasswordAuth = reader.bool();
+          continue;
+        }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.enableOtpSignin = reader.bool();
           continue;
         }
         case 4: {
@@ -1291,6 +1312,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : isSet(object.disable_password_auth)
         ? globalThis.Boolean(object.disable_password_auth)
         : undefined,
+      enableOtpSignin: isSet(object.enableOtpSignin)
+        ? globalThis.Boolean(object.enableOtpSignin)
+        : isSet(object.enable_otp_signin)
+        ? globalThis.Boolean(object.enable_otp_signin)
+        : undefined,
       passwordMinimalLength: isSet(object.passwordMinimalLength)
         ? globalThis.Number(object.passwordMinimalLength)
         : isSet(object.password_minimal_length)
@@ -1347,6 +1373,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       obj.disablePasswordAuth = message.disablePasswordAuth;
     }
+    if (message.enableOtpSignin !== undefined && message.enableOtpSignin !== false) {
+      obj.enableOtpSignin = message.enableOtpSignin;
+    }
     if (message.passwordMinimalLength !== undefined && message.passwordMinimalLength !== 0) {
       obj.passwordMinimalLength = Math.round(message.passwordMinimalLength);
     }
@@ -1388,6 +1417,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.authTokenTtlSec = object.authTokenTtlSec ?? 0n;
     message.refreshTokenTtlSec = object.refreshTokenTtlSec ?? 0n;
     message.disablePasswordAuth = object.disablePasswordAuth ?? false;
+    message.enableOtpSignin = object.enableOtpSignin ?? false;
     message.passwordMinimalLength = object.passwordMinimalLength ?? 0;
     message.passwordMustContainUpperAndLowerCase = object.passwordMustContainUpperAndLowerCase ?? false;
     message.passwordMustContainDigits = object.passwordMustContainDigits ?? false;

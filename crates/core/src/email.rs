@@ -124,12 +124,12 @@ impl Email {
       .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        VERIFICATION_URL => verification_url,
-        SITE_URL => site_url.origin().ascii_serialization(),
         CODE => email_verification_token,
-        TOKEN => email_verification_token,
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        TOKEN => email_verification_token,
+        VERIFICATION_URL => verification_url,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -174,12 +174,12 @@ impl Email {
       .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        VERIFICATION_URL => verification_url,
-        SITE_URL => site_url.origin().ascii_serialization(),
         CODE => email_verification_token,
-        TOKEN => email_verification_token,
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        TOKEN => email_verification_token,
+        VERIFICATION_URL => verification_url,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -218,10 +218,10 @@ impl Email {
       .template_from_named_str("body", body_template)?
       .render(context! {
         APP_NAME => server_config.application_name,
-        SITE_URL => site_url.origin().ascii_serialization(),
         CODE => password_reset_token,
-        TOKEN => password_reset_token,
         EMAIL => email_address,
+        SITE_URL => site_url.origin().ascii_serialization(),
+        TOKEN => password_reset_token,
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -259,9 +259,9 @@ impl Email {
       .render(context! {
         APP_NAME => server_config.application_name,
         CODE => otp_code,
-        SITE_URL => site_url.origin().ascii_serialization(),
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
+        SITE_URL => site_url.origin().ascii_serialization(),
       })?;
     return Email::new_internal(state, to, subject, body);
   }

@@ -223,6 +223,7 @@ function OtpLoginForm(props: { otpSent: Signal<string | null> }) {
   let userInput: HTMLInputElement | undefined;
   let otpInput: HTMLInputElement | undefined;
 
+  // eslint-disable-next-line solid/reactivity
   const [otpSent, setOtpSent] = props.otpSent;
 
   const urlParams = new URLSearchParams(window.location.search);

@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createSignal, For, Switch, Match } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
 import { useStore } from "@nanostores/solid";
@@ -65,6 +65,7 @@ function EmailTemplate(props: {
   fieldName: string;
   subjectPlaceholder?: string;
   bodyPlaceholder?: string;
+  availableTemplateParams: string[];
 }) {
   const Parameter = (props: { label: string }) => (
     <>
@@ -104,15 +105,28 @@ function EmailTemplate(props: {
             placeholder: props.bodyPlaceholder,
             info: (
               <p>
-                Valid parameters: <Parameter label="APP_NAME" />
-                ,
-                <Parameter label="SITE_URL" />
-                ,
-                <Parameter label="EMAIL" />
-                ,
-                <Parameter label="VERIFICATION_URL" />
-                and
-                <Parameter label="CODE" />.
+                Valid parameters:
+                <For each={props.availableTemplateParams}>
+                  {(label, index) => (
+                    <Switch>
+                      <Match when={index() === 0}>
+                        <Parameter label={label} />
+                      </Match>
+
+                      <Match
+                        when={
+                          index() >= props.availableTemplateParams.length - 1
+                        }
+                      >
+                        and <Parameter label={label} />
+                      </Match>
+
+                      <Match when={true}>
+                        , <Parameter label={label} />
+                      </Match>
+                    </Switch>
+                  )}
+                </For>
               </p>
             ),
           },
@@ -287,6 +301,14 @@ export function EmailSettings(props: {
                       fieldName="userVerificationTemplate"
                       subjectPlaceholder={DEFAULT_EMAIL_VERIFICATION_SUBJECT}
                       bodyPlaceholder={DEFAULT_EMAIL_VERIFICATION_BODY}
+                      availableTemplateParams={[
+                        "APP_NAME",
+                        "EMAIL",
+                        "REDIRECT_URI",
+                        "SITE_URL",
+                        "TOKEN",
+                        "VERIFICATION_URL",
+                      ]}
                     />
                   </AccordionContent>
                 </AccordionItem>
@@ -300,6 +322,14 @@ export function EmailSettings(props: {
                       fieldName="changeEmailTemplate"
                       subjectPlaceholder={DEFAULT_EMAIL_CHANGE_ADDRESS_SUBJECT}
                       bodyPlaceholder={DEFAULT_EMAIL_CHANGE_ADDRESS_BODY}
+                      availableTemplateParams={[
+                        "APP_NAME",
+                        "EMAIL",
+                        "REDIRECT_URI",
+                        "SITE_URL",
+                        "TOKEN",
+                        "VERIFICATION_URL",
+                      ]}
                     />
                   </AccordionContent>
                 </AccordionItem>
@@ -313,12 +343,18 @@ export function EmailSettings(props: {
                       fieldName="passwordResetTemplate"
                       subjectPlaceholder={DEFAULT_EMAIL_RESET_PASSWORD_SUBJECT}
                       bodyPlaceholder={DEFAULT_EMAIL_RESET_PASSWORD_BODY}
+                      availableTemplateParams={[
+                        "APP_NAME",
+                        "EMAIL",
+                        "SITE_URL",
+                        "TOKEN",
+                      ]}
                     />
                   </AccordionContent>
                 </AccordionItem>
 
                 <AccordionItem value="item-otp">
-                  <AccordionTrigger>OTP</AccordionTrigger>
+                  <AccordionTrigger>OTP Request</AccordionTrigger>
 
                   <AccordionContent>
                     <EmailTemplate
@@ -326,6 +362,13 @@ export function EmailSettings(props: {
                       fieldName="otpTemplate"
                       subjectPlaceholder={DEFAULT_EMAIL_OTP_SUBJECT}
                       bodyPlaceholder={DEFAULT_EMAIL_OTP_BODY}
+                      availableTemplateParams={[
+                        "APP_NAME",
+                        "CODE",
+                        "EMAIL",
+                        "REDIRECT_URI",
+                        "SITE_URL",
+                      ]}
                     />
                   </AccordionContent>
                 </AccordionItem>

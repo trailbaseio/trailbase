@@ -481,6 +481,34 @@ function AuthSettingsForm(props: {
 
         <Card>
           <CardHeader>
+            <h2>OTP Settings</h2>
+          </CardHeader>
+
+          <CardContent>
+            <div class="flex flex-col gap-4">
+              <p class="mb-4 text-sm">
+                Enabling OTP sign-in allows users to receive a code in their
+                inbox to sign-in w/o a password. This delegates security to a
+                user's inbox and thus may be less secure. This may work
+                acceptably in a corporate settings for internal tooling where
+                stricter guarantees over inbox security can be guaranteed.
+                <br />
+                <br />
+                As a single factor, OTP sign-in is automatically disabled for
+                any user with two-factor auth enabled.
+              </p>
+
+              <form.Field name="enableOtpSignin">
+                {buildOptionalBoolFormField({
+                  label: () => <L>Enable OTP Sign-in</L>,
+                })}
+              </form.Field>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
             <h2>OAuth Providers</h2>
           </CardHeader>
 
