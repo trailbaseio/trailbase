@@ -37,6 +37,10 @@ export type ListResponse<T> = {
   total_count?: number;
 };
 
+export interface MultiFactorAuthToken {
+  token: string;
+}
+
 export type Tokens = {
   auth_token: string;
   refresh_token: string | null;
@@ -662,13 +666,6 @@ export interface ClientOptions {
   onAuthChange?: (client: Client, user?: User) => void;
 }
 
-export type MultiFactorAuthCallback = (code: string) => Promise<void>;
-
-export interface MultiFactor {
-  multiFactorToken: string;
-  callback: MultiFactorAuthCallback;
-}
-
 export interface Client {
   get base(): URL | undefined;
 
@@ -686,8 +683,14 @@ export interface Client {
 
   avatarUrl(userId?: string): string | undefined;
 
-  login(email: string, password: string): Promise<MultiFactor | undefined>;
-  loginMultiFactor(opts: { token: string; code: string }): Promise<void>;
+  login(
+    email: string,
+    password: string,
+  ): Promise<MultiFactorAuthToken | undefined>;
+  login2nd(opts: {
+    mfaToken: MultiFactorAuthToken;
+    totpCode: string;
+  }): Promise<void>;
   requestOtp(email: string, opts?: { redirectUri?: string }): Promise<void>;
   loginOtp(email: string, code: string): Promise<void>;
   logout(): Promise<boolean>;
@@ -794,7 +797,7 @@ class ClientImpl implements Client {
   public async login(
     email: string,
     password: string,
-  ): Promise<MultiFactor | undefined> {
+  ): Promise<MultiFactorAuthToken | undefined> {
     try {
       const response = await this.fetch(`${authApiBasePath}/login`, {
         method: "POST",
@@ -812,9 +815,7 @@ class ClientImpl implements Client {
       if (err instanceof FetchError && err.status === 403) {
         const mfaTokenResponse = JSON.parse(err.message) as MfaTokenResponse;
         return {
-          multiFactorToken: mfaTokenResponse.mfa_token,
-          callback: (code: string) =>
-            this.loginMultiFactor({ token: mfaTokenResponse.mfa_token, code }),
+          token: mfaTokenResponse.mfa_token,
         };
       }
 
@@ -822,15 +823,15 @@ class ClientImpl implements Client {
     }
   }
 
-  public async loginMultiFactor(opts: {
-    token: string;
-    code: string;
+  public async login2nd(opts: {
+    mfaToken: MultiFactorAuthToken;
+    totpCode: string;
   }): Promise<void> {
     const response = await this.fetch(`${authApiBasePath}/login_mfa`, {
       method: "POST",
       body: JSON.stringify({
-        mfa_token: opts.token,
-        totp: opts.code,
+        mfa_token: opts.mfaToken.token,
+        totp: opts.totpCode,
       } as LoginMfaRequest),
       headers: jsonContentTypeHeader,
     });
@@ -839,6 +840,7 @@ class ClientImpl implements Client {
       buildTokenState((await response.json()) as LoginResponse),
     );
   }
+
   public async requestOtp(
     email: string,
     opts?: { redirectUri?: string },

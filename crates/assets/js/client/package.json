@@ -42,6 +42,7 @@
     "jsdom": "^28.1.0",
     "nano-spawn": "^2.0.0",
     "oauth2-mock-server": "^8.2.1",
+    "otplib": "^13.3.0",
     "prettier": "^3.8.1",
     "tinybench": "^6.0.0",
     "typescript": "^5.9.3",

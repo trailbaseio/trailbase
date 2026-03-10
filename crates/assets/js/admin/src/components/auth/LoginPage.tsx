@@ -1,7 +1,7 @@
 import { createEffect, createSignal, Match, Show, Switch } from "solid-js";
 import type { Setter, Signal } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { FetchError, type MultiFactorAuthCallback } from "trailbase";
+import { FetchError, type MultiFactorAuthToken } from "trailbase";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 import { client, $user } from "@/lib/client";
@@ -70,13 +70,13 @@ const loginOptions = ["Password", "OTP"] as const;
 type LoginOptions = (typeof loginOptions)[number];
 
 function LoginForm() {
-  const [mfaCallback, setMfaCallback] =
-    createWritableMemo<MultiFactorAuthCallback | null>(() => null);
+  const [mfaToken, setMfaToken] =
+    createWritableMemo<MultiFactorAuthToken | null>(() => null);
   const [loginType, setLoginType] = createSignal<LoginOptions>("Password");
   const [otpSent, setOtpSent] = createSignal<string | null>(null);
 
   const title = (): string => {
-    if (mfaCallback() !== null) {
+    if (mfaToken() !== null) {
       return "Enter Authenticator Code";
     }
     return "Login";
@@ -88,7 +88,7 @@ function LoginForm() {
         <div class="flex items-center justify-between gap-2">
           <CardTitle>{title()}</CardTitle>
 
-          <Show when={mfaCallback() === null}>
+          <Show when={mfaToken() === null}>
             <Select
               multiple={false}
               options={[...loginOptions]}
@@ -116,8 +116,8 @@ function LoginForm() {
 
       <CardContent>
         <Switch>
-          <Match when={mfaCallback() !== null}>
-            <MfaLoginForm mfaCallback={mfaCallback()!} />
+          <Match when={mfaToken() !== null}>
+            <MfaLoginForm mfaToken={mfaToken()!} />
           </Match>
 
           <Match when={loginType() === "OTP"}>
@@ -125,7 +125,7 @@ function LoginForm() {
           </Match>
 
           <Match when={true}>
-            <PasswordLoginForm setMfaCallback={setMfaCallback} />
+            <PasswordLoginForm setMfaToken={setMfaToken} />
           </Match>
         </Switch>
       </CardContent>
@@ -134,7 +134,7 @@ function LoginForm() {
 }
 
 function PasswordLoginForm(props: {
-  setMfaCallback: Setter<MultiFactorAuthCallback | null>;
+  setMfaToken: Setter<MultiFactorAuthToken | null>;
 }) {
   let passwordInput: HTMLInputElement | undefined;
   let userInput: HTMLInputElement | undefined;
@@ -154,9 +154,9 @@ function PasswordLoginForm(props: {
         if (!email || !pw) return;
 
         try {
-          const mfaCallback = await client.login(email, pw);
-          if (mfaCallback !== undefined) {
-            props.setMfaCallback(() => mfaCallback.callback);
+          const mfaToken = await client.login(email, pw);
+          if (mfaToken !== undefined) {
+            props.setMfaToken(mfaToken);
           }
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
@@ -313,7 +313,7 @@ function OtpLoginForm(props: { otpSent: Signal<string | null> }) {
   );
 }
 
-function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
+function MfaLoginForm(props: { mfaToken: MultiFactorAuthToken }) {
   let totpInput: HTMLInputElement | undefined;
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -330,7 +330,10 @@ function MfaLoginForm(props: { mfaCallback: MultiFactorAuthCallback }) {
         if (!userTotp) return;
 
         try {
-          props.mfaCallback(userTotp);
+          await client.login2nd({
+            mfaToken: props.mfaToken,
+            totpCode: userTotp,
+          });
         } catch (err) {
           if (err instanceof FetchError && err.status === 401) {
             showToast({
