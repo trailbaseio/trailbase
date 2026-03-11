@@ -4,8 +4,34 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
+
+/// <summary>
+/// Error representing fetch errors.
+/// </summary>
+public class FetchException : Exception {
+  /// <summary>Auth subject, i.e. user id.</summary>
+  public System.Net.HttpStatusCode Status { get; }
+  /// <summary>The user's email address.</summary>
+  public string Message { get; }
+
+  /// <summary>
+  /// FetchException constructor.
+  /// </summary>
+  /// <param name="status">HTTP status code.</param>
+  /// <param name="message">Error message</param>
+  public FetchException(System.Net.HttpStatusCode status, string message) {
+    this.Status = status;
+    this.Message = message;
+  }
+
+  /// <summary>Stringify FetchException.</summary>
+  public override string ToString() {
+    return $"FetchException(status={Status}, '{Message}')";
+  }
+}
 
 /// <summary>
 /// Representation of User JSON objects.
@@ -44,6 +70,26 @@ public class Credentials {
   public Credentials(string email, string password) {
     this.email = email;
     this.password = password;
+  }
+}
+
+/// <summary>
+/// Representation of MultiFactorAuthCredentials JSON objects used for multi-factor log in.
+/// </summary>
+public class MultiFactorAuthCredentials {
+  /// <summary>The user's email address.</summary>
+  public string mfa_token { get; }
+  /// <summary>The user's password.</summary>
+  public string totp { get; }
+
+  /// <summary>
+  /// Credentials constructor.
+  /// </summary>
+  /// <param name="mfa_token">Multi-factor auth token received on first-factor login</param>
+  /// <param name="totp">TOTP code, e.g. from an authenticator app</param>
+  public MultiFactorAuthCredentials(string mfa_token, string totp) {
+    this.mfa_token = mfa_token;
+    this.totp = totp;
   }
 }
 
@@ -103,7 +149,7 @@ public class Tokens {
     this.csrf_token = csrf_token;
   }
 
-  /// <summary>Serialize Tokens.</summary>
+  /// <summary>Stringify Tokens.</summary>
   public override string ToString() {
     return $"Tokens({auth_token}, {refresh_token}, {csrf_token})";
   }
@@ -141,13 +187,36 @@ public class JwtToken {
   }
 }
 
+/// <summary>
+/// Representation of a MultiFactorAuthToken
+/// </summary>
+public class MultiFactorAuthToken {
+  /// <summary>User auth token.</summary>
+  public string mfa_token { get; }
+
+  /// <summary>
+  /// MultiFactorAuthToken constructor.
+  /// </summary>
+  public MultiFactorAuthToken(string mfa_token) {
+    this.mfa_token = mfa_token;
+  }
+
+  /// <summary>Stringify Tokens.</summary>
+  public override string ToString() {
+    return $"MFAToken({mfa_token})";
+  }
+}
+
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(Credentials))]
+[JsonSerializable(typeof(MultiFactorAuthCredentials))]
 [JsonSerializable(typeof(JwtToken))]
 [JsonSerializable(typeof(Tokens))]
+[JsonSerializable(typeof(MultiFactorAuthToken))]
 [JsonSerializable(typeof(RefreshTokenResponse))]
 [JsonSerializable(typeof(RefreshTokenRequest))]
 [JsonSerializable(typeof(User))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 internal partial class SourceGenerationContext : JsonSerializerContext {
 }
 
@@ -293,18 +362,79 @@ public class Client {
   }
 
   /// <summary>Log in with the given credentials.</summary>
-  public async Task<Tokens> Login(string email, string password) {
+  public async Task<MultiFactorAuthToken?> Login(string email, string password) {
     var response = await Fetch(
       $"{_authApi}/login",
       HttpMethod.Post,
       JsonContent.Create(new Credentials(email, password), SourceGenerationContext.Default.Credentials),
+      null,
+      throwOnError: false
+    );
+
+
+    if (response.StatusCode == System.Net.HttpStatusCode.Forbidden) {
+      MultiFactorAuthToken mfaToken = JsonSerializer.Deserialize<MultiFactorAuthToken>(
+          await response.Content.ReadAsStringAsync(),
+          SourceGenerationContext.Default.MultiFactorAuthToken)!;
+      return mfaToken;
+    }
+    else if (response.StatusCode != System.Net.HttpStatusCode.OK) {
+      throw new FetchException(response.StatusCode, await response.Content.ReadAsStringAsync());
+    }
+
+    Tokens tokens = JsonSerializer.Deserialize<Tokens>(
+        await response.Content.ReadAsStringAsync(),
+        SourceGenerationContext.Default.Tokens)!;
+    updateTokens(tokens);
+
+    return null;
+  }
+
+  /// <summary>Log in with a second factor.</summary>
+  public async Task LoginSecond(MultiFactorAuthToken token, string code) {
+    var response = await Fetch(
+      $"{_authApi}/login_mfa",
+      HttpMethod.Post,
+      JsonContent.Create(new MultiFactorAuthCredentials(token.mfa_token, code), SourceGenerationContext.Default.MultiFactorAuthCredentials),
       null
     );
 
-    string json = await response.Content.ReadAsStringAsync();
-    Tokens tokens = JsonSerializer.Deserialize<Tokens>(json, SourceGenerationContext.Default.Tokens)!;
+    Tokens tokens = JsonSerializer.Deserialize<Tokens>(await response.Content.ReadAsStringAsync(), SourceGenerationContext.Default.Tokens)!;
     updateTokens(tokens);
-    return tokens;
+  }
+
+  /// <summary>Request an OTP code via Email.</summary>
+  public async Task RequestOTP(string email, string? redirectUri = null) {
+    var json = new Dictionary<string, string>() {
+      ["email"] = email,
+    };
+
+    if (redirectUri != null) {
+      json.Add("redirect_uri", redirectUri);
+    }
+
+    await Fetch(
+      $"{_authApi}/otp/request",
+      HttpMethod.Post,
+      JsonContent.Create(json, SourceGenerationContext.Default.DictionaryStringString),
+      queryParams: null
+    );
+  }
+
+  /// <summary>Log in with a second factor.</summary>
+  public async Task LoginOTP(string email, string code) {
+    var response = await Fetch(
+      $"{_authApi}/otp/login",
+      HttpMethod.Post,
+      JsonContent.Create(new Dictionary<string, string>() {
+        ["email"] = email,
+        ["code"] = code,
+      }, SourceGenerationContext.Default.DictionaryStringString),
+      queryParams: null
+    );
+
+    Tokens tokens = JsonSerializer.Deserialize<Tokens>(await response.Content.ReadAsStringAsync(), SourceGenerationContext.Default.Tokens)!;
+    updateTokens(tokens);
   }
 
   /// <summary>Log out the current user.</summary>
@@ -375,7 +505,7 @@ public class Client {
         SourceGenerationContext.Default.RefreshTokenRequest
       ),
       HttpMethod.Post,
-      null
+      queryParams: null
     );
 
     string json = await response.Content.ReadAsStringAsync();
@@ -396,7 +526,8 @@ public class Client {
     HttpMethod? method,
     HttpContent? data,
     Dictionary<string, string>? queryParams,
-    HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead
+    HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead,
+    bool throwOnError = true
   ) {
     var ts = tokenState;
     var refreshToken = shouldRefresh(tokenState);
@@ -406,9 +537,8 @@ public class Client {
 
     var response = await client.Fetch(path, ts, data, method, queryParams, completion);
 
-    if (response.StatusCode != System.Net.HttpStatusCode.OK) {
-      string errMsg = await response.Content.ReadAsStringAsync();
-      throw new Exception($"Fetch failed [{response.StatusCode}]: {errMsg}");
+    if (response.StatusCode != System.Net.HttpStatusCode.OK && throwOnError) {
+      throw new FetchException(response.StatusCode, await response.Content.ReadAsStringAsync());
     }
 
     return response;

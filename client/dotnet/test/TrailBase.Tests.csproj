@@ -8,7 +8,8 @@
     <PackageProjectUrl>https://trailbase.io</PackageProjectUrl>
     <RepositoryUrl>https://github.com/trailbaseio/trailbase</RepositoryUrl>
 
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <!-- <TargetFrameworks>net8.0;net10.0</TargetFrameworks> -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
 
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>
@@ -18,6 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
     <ProjectReference Include="../trailbase\TrailBase.csproj" />
 
     <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.1" />

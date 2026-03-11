@@ -9,7 +9,7 @@
     <PackageProjectUrl>https://trailbase.io</PackageProjectUrl>
     <RepositoryUrl>https://github.com/trailbaseio/trailbase</RepositoryUrl>
 
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
 
     <IsPackable>true</IsPackable>
     <IsAotCompatible>true</IsAotCompatible>

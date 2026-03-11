@@ -1,9 +1,10 @@
-using Xunit;
+using OtpNet;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using System.Diagnostics.CodeAnalysis;
+using Xunit;
 
 namespace TrailBase;
 
@@ -65,7 +66,7 @@ public class ClientTestFixture : IDisposable {
 
     var client = new HttpClient();
     Task.Run(async () => {
-      for (int i = 0; i < 100; ++i) {
+      for (int i = 0; i < 200; ++i) {
         try {
           var response = await client.GetAsync($"http://{address}/api/healthcheck");
           if (response.StatusCode == System.Net.HttpStatusCode.OK) {
@@ -111,8 +112,10 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   [Fact]
   public async Task AuthTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
-    var oldTokens = await client.Login("admin@localhost", "secret");
-    Assert.NotNull(oldTokens?.auth_token);
+    var mfaToken = await client.Login("admin@localhost", "secret");
+    Assert.Null(mfaToken);
+    var firstTokens = client.Tokens();
+    Assert.NotNull(firstTokens);
     var user = client.User();
     Assert.NotNull(user);
     Assert.Equal("admin@localhost", user!.email);
@@ -121,9 +124,34 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     await client.Logout();
 
     await Task.Delay(1500);
-    var newTokens = await client.Login("admin@localhost", "secret");
+    await client.Login("admin@localhost", "secret");
 
-    Assert.NotEqual(newTokens?.auth_token, oldTokens?.auth_token);
+    Assert.NotEqual(client.Tokens()?.auth_token, firstTokens?.auth_token);
+  }
+
+  [Fact]
+  public async Task MultiFactorAuthTest() {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+    var mfaToken = await client.Login("alice@trailbase.io", "secret");
+    Assert.NotNull(mfaToken);
+
+    var secret = Base32Encoding.ToBytes("YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5");
+    var totp = new Totp(secret, mode: OtpHashMode.Sha1);
+    var totpCode = totp.ComputeTotp();
+
+    await client.LoginSecond(mfaToken, totpCode);
+    Assert.Equal("alice@trailbase.io", client.User()?.email);
+  }
+
+  [Fact]
+  public async Task OTPAuthTest() {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+
+    await client.RequestOTP("fake0@localhost");
+    await client.RequestOTP("fake1@localhost", redirectUri: "/target");
+
+    var exception = await Assert.ThrowsAsync<FetchException>(() => client.LoginOTP("fake0@localhost", "invalid"));
+    Assert.Equal(System.Net.HttpStatusCode.Unauthorized, exception.Status);
   }
 
   [Fact]
