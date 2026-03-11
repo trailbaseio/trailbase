@@ -1,5 +1,7 @@
 package io.trailbase.client
 
+import dev.samstevens.totp.code.*
+import dev.samstevens.totp.time.SystemTimeProvider
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -136,9 +138,50 @@ class ClientTest {
     assertNull(client.user())
     assertNull(client.tokens())
 
-    val tokens = client.login("admin@localhost", "secret")
-    assertNotNull(tokens)
+    val mfaToken = client.login("admin@localhost", "secret")
+    assertNull(mfaToken)
+    assertNotNull(client.tokens())
     assertEquals("admin@localhost", client.user()?.email)
+
+    client.logout()
+    assertNull(client.tokens())
+  }
+
+  @Test
+  fun `client OTP authentication`() = runTest {
+    val client = Client("http://${address}")
+
+    // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint responds
+    // ok.
+    client.requestOtp("fake0@localhost")
+    client.requestOtp("fake1@localhost", "/target")
+
+    val exception0 =
+            assertThrows<HttpException>({ client.loginOtp("fake1@localhost", "invalidCode") })
+    assertEquals(exception0.status, 401)
+
+    val exception1 =
+            assertThrows<HttpException>({ client.loginOtp("unrequested@localhost", "invalidCode") })
+    assertEquals(exception1.status, 401)
+  }
+
+  @Test
+  fun `client multi-factor authentication`() = runTest {
+    val client = Client("http://${address}")
+    val mfaToken = client.login("alice@trailbase.io", "secret")
+    assertNotNull(mfaToken)
+
+    val secret = "YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5"
+
+    val timeProvider = SystemTimeProvider()
+    val currentBucket = Math.floorDiv(timeProvider.getTime(), 30)
+    val g = DefaultCodeGenerator(HashingAlgorithm.SHA1)
+    val code: String = g.generate(secret, currentBucket)
+    assertEquals(6, code.length)
+
+    client.login2nd(mfaToken!!, code)
+    assertNotNull(client.user())
+    assertEquals("alice@trailbase.io", client.user()?.email)
 
     client.logout()
     assertNull(client.tokens())

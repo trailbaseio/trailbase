@@ -21,6 +21,8 @@ import kotlinx.serialization.json.*
 @Serializable
 data class Tokens(val auth_token: String, val refresh_token: String?, val csrf_token: String?)
 
+@Serializable data class MultiFactorAuthToken(val mfa_token: String)
+
 @Serializable
 data class JwtTokenClaims(
         val sub: String,
@@ -276,7 +278,11 @@ enum class Method {
   delete,
 }
 
-class HttpException(val status: Int, message: String?) : Throwable(message) {}
+class HttpException(val status: Int, message: String?) : Throwable(message) {
+  override fun toString(): String {
+    return "HttpException(status='$status', message='$message')"
+  }
+}
 
 class Client(
         private val site: Url,
@@ -315,13 +321,65 @@ class Client(
     return RecordApi(name, this)
   }
 
-  suspend fun login(email: String, password: String): Tokens {
+  suspend fun login(email: String, password: String): MultiFactorAuthToken? {
     @Serializable data class Credentials(val email: String, val password: String)
 
-    val tokens: Tokens =
-            fetch("${AUTH_API}/login", Method.post, Credentials(email, password)).body()
+    val response =
+            fetch(
+                    "${AUTH_API}/login",
+                    Method.post,
+                    Credentials(email, password),
+                    throwOnError = false
+            )
+
+    if (response.status == HttpStatusCode.Forbidden) {
+      val token: MultiFactorAuthToken = response.body()
+      return token
+    } else if (!response.status.isSuccess()) {
+      throw HttpException(response.status.value, response.body())
+    }
+
+    val tokens: Tokens = response.body()
     tokenState = TokenState.build(tokens)
-    return tokens
+    return null
+  }
+
+  suspend fun login2nd(token: MultiFactorAuthToken, code: String) {
+    @Serializable data class Credentials(val mfa_token: String, val totp: String)
+
+    val response =
+            fetch(
+                    "${AUTH_API}/login_mfa",
+                    Method.post,
+                    Credentials(token.mfa_token, code),
+            )
+
+    val tokens: Tokens = response.body()
+    tokenState = TokenState.build(tokens)
+  }
+
+  suspend fun requestOtp(email: String, redirectUri: String? = null) {
+    @Serializable data class Credentials(val email: String, val redirect_uri: String?)
+
+    fetch(
+            "${AUTH_API}/otp/request",
+            Method.post,
+            Credentials(email, redirectUri),
+    )
+  }
+
+  suspend fun loginOtp(email: String, code: String) {
+    @Serializable data class Credentials(val email: String, val code: String)
+
+    val response =
+            fetch(
+                    "${AUTH_API}/otp/login",
+                    Method.post,
+                    Credentials(email, code),
+            )
+
+    val tokens: Tokens = response.body()
+    tokenState = TokenState.build(tokens)
   }
 
   suspend fun logout() {
@@ -351,6 +409,7 @@ class Client(
           method: Method = Method.get,
           body: Any? = null,
           params: Map<String, String>? = null,
+          throwOnError: Boolean = true,
   ): HttpResponse {
     val refreshToken = tokenState.shouldRefresh()
     if (refreshToken != null) {
@@ -379,7 +438,7 @@ class Client(
               setBody(body)
             }
 
-    if (!response.status.isSuccess()) {
+    if (!response.status.isSuccess() && throwOnError) {
       throw HttpException(response.status.value, response.body())
     }
 

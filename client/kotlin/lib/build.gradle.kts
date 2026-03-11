@@ -14,10 +14,10 @@ kotlin {
     macosArm64()
 
     js(IR) {
-      browser()
+        browser()
     }
-    wasmJs() {
-      browser()
+    wasmJs {
+        browser()
     }
 
     android {
@@ -37,6 +37,7 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.junit.jupiter)
+            implementation(libs.totp)
             runtimeOnly(libs.junit.jupiter.engine)
         }
     }
