@@ -1,7 +1,8 @@
-from trailbase import Client, CompareOp, Filter, RecordId, JSON, JSON_OBJECT
+from trailbase import Client, CompareOp, FetchException, Filter, RecordId, JSON, JSON_OBJECT
 
 import httpx
 import logging
+import mintotp  # type: ignore
 import os
 import pytest
 import subprocess
@@ -81,7 +82,7 @@ def connect() -> Client:
     return client
 
 
-def test_client_login(trailbase: TrailBaseFixture):
+def test_authentication(trailbase: TrailBaseFixture):
     assert trailbase.isUp()
 
     client = connect()
@@ -96,6 +97,37 @@ def test_client_login(trailbase: TrailBaseFixture):
 
     client.logout()
     assert client.tokens() is None
+
+
+def test_second_factor_authentication(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    client = Client(site, tokens=None)
+    mfaToken = client.login("alice@trailbase.io", "secret")
+    assert mfaToken is not None
+
+    secret = "YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5"
+    code: str = mintotp.totp(secret)  # pyright: ignore [reportUnknownMemberType]
+
+    client.login_second(mfaToken, code)
+    user = client.user()
+    assert user is not None and user.email == "alice@trailbase.io"
+
+    client.logout()
+    assert client.tokens() is None
+
+
+def test_otp_auth(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    client = Client(site, tokens=None)
+    client.request_otp("fake0@trailbase.io")
+    client.request_otp("fake1@trailbase.io", redirect_uri="/target")
+
+    with pytest.raises(FetchException) as exec:
+        client.login_otp("fake0@trailbase.io", "invalid")
+
+    assert exec.value.status == 401
 
 
 def test_records(trailbase: TrailBaseFixture):
@@ -163,7 +195,7 @@ def test_records(trailbase: TrailBaseFixture):
     if True:
         api.delete(ids[0])
 
-        with pytest.raises(Exception):
+        with pytest.raises(FetchException):
             api.read(ids[0])
 
 

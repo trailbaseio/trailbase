@@ -18,6 +18,16 @@ JSON_OBJECT: TypeAlias = dict[str, JSON]
 JSON_ARRAY: TypeAlias = list[JSON]
 
 
+class FetchException(Exception):
+    status: int
+    message: str
+
+    def __init__(self, status: int, message: str):
+        self.status = status
+        self.message = message
+        super().__init__(f"FetchException(status={self.status}, '{self.message}')")
+
+
 class RecordId:
     id: str
 
@@ -55,12 +65,6 @@ class User:
         assert isinstance(email, str)
 
         return User(sub, email)
-
-    def to_json(self) -> dict[str, str]:
-        return {
-            "sub": self.id,
-            "email": self.email,
-        }
 
 
 class ListResponse:
@@ -106,16 +110,22 @@ class Tokens:
 
         return Tokens(auth, refresh, csrf)
 
-    def to_json(self) -> dict[str, str | None]:
-        return {
-            "auth_token": self.auth,
-            "refresh_token": self.refresh,
-            "csrf_token": self.csrf,
-        }
-
     def valid(self) -> bool:
         claims = jwt.decode(self.auth, algorithms=["EdDSA"], options={"verify_signature": False})
         return len(claims) > 0
+
+
+class MultiFactorAuthToken:
+    token: str
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+
+    @staticmethod
+    def from_json(json: JSON_OBJECT) -> "MultiFactorAuthToken":
+        token = json["mfa_token"]
+        assert isinstance(token, str)
+        return MultiFactorAuthToken(token)
 
 
 class JwtToken:
@@ -288,7 +298,7 @@ class Client:
     def site(self) -> str:
         return self._site
 
-    def login(self, email: str, password: str) -> Tokens:
+    def login(self, email: str, password: str) -> MultiFactorAuthToken | None:
         response = self.fetch(
             f"{self._authApi}/login",
             method="POST",
@@ -296,17 +306,54 @@ class Client:
                 "email": email,
                 "password": password,
             },
+            throwOnError=False,
         )
 
-        json = response.json()
-        tokens = Tokens(
-            json["auth_token"],
-            json["refresh_token"],
-            json["csrf_token"],
-        )
+        if response.status_code == 403:
+            return MultiFactorAuthToken.from_json(response.json())
+        elif response.status_code > 200:
+            raise FetchException(response.status_code, response.text)
 
+        tokens = Tokens.from_json(response.json())
         self._updateTokens(tokens)
-        return tokens
+
+        return None
+
+    def login_second(self, token: MultiFactorAuthToken, code: str) -> None:
+        response = self.fetch(
+            f"{self._authApi}/login_mfa",
+            method="POST",
+            data={
+                "mfa_token": token.token,
+                "totp": code,
+            },
+        )
+
+        tokens = Tokens.from_json(response.json())
+        self._updateTokens(tokens)
+
+    def request_otp(self, email: str, redirect_uri: str | None = None) -> None:
+        self.fetch(
+            f"{self._authApi}/otp/request",
+            method="POST",
+            data={
+                "email": email,
+                "redirect_uri": redirect_uri,
+            },
+        )
+
+    def login_otp(self, email: str, code: str) -> None:
+        response = self.fetch(
+            f"{self._authApi}/otp/login",
+            method="POST",
+            data={
+                "email": email,
+                "code": code,
+            },
+        )
+
+        tokens = Tokens.from_json(response.json())
+        self._updateTokens(tokens)
 
     def logout(self) -> None:
         state = self._tokenState.state
@@ -376,13 +423,19 @@ class Client:
         method: str | None = "GET",
         data: JSON | None = None,
         queryParams: dict[str, str] | None = None,
+        throwOnError: bool = True,
     ) -> httpx.Response:
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
         if refreshToken is not None:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
-        return self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
+        response = self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
+
+        if response.status_code > 200 and throwOnError:
+            raise FetchException(response.status_code, response.text)
+
+        return response
 
     def stream(
         self,
@@ -555,9 +608,6 @@ class RecordApi:
             method="POST",
             data=record,
         )
-        if response.status_code > 200:
-            raise Exception(f"{response}")
-
         return record_ids_from_json(response.json())[0]
 
     def create_bulk(self, records: JSON_ARRAY):
@@ -566,29 +616,22 @@ class RecordApi:
             method="POST",
             data=records,
         )
-        if response.status_code > 200:
-            raise Exception(f"{response}")
-
         return record_ids_from_json(response.json())
 
     def update(self, recordId: RecordId | str | int, record: JSON_OBJECT) -> None:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
-        response = self._client.fetch(
+        self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",
             method="PATCH",
             data=record,
         )
-        if response.status_code > 200:
-            raise Exception(f"{response}")
 
     def delete(self, recordId: RecordId | str | int) -> None:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
-        response = self._client.fetch(
+        self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",
             method="DELETE",
         )
-        if response.status_code > 200:
-            raise Exception(f"{response}")
 
     def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[JSON_OBJECT]:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
@@ -599,7 +642,7 @@ class RecordApi:
         def impl() -> typing.Generator[JSON_OBJECT]:
             with context as response:
                 if response.status_code > 200:
-                    raise Exception(f"{response}")
+                    raise FetchException(response.status_code, response.text)
 
                 for line in response.iter_lines():
                     if line.startswith("data: "):
