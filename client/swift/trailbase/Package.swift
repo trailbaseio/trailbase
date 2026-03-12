@@ -18,7 +18,8 @@ let package = Package(
       targets: ["TrailBase"])
   ],
   dependencies: [
-    .package(url: "https://github.com/swiftlang/swift-subprocess.git", branch: "main")
+    .package(url: "https://github.com/swiftlang/swift-subprocess.git", branch: "main"),
+    .package(url: "https://github.com/lachlanbell/SwiftOTP.git", .upToNextMinor(from: "3.0.0")),
   ],
   targets: [
     .target(
@@ -27,6 +28,7 @@ let package = Package(
       name: "TrailBaseTests",
       dependencies: [
         "TrailBase",
+        .product(name: "SwiftOTP", package: "SwiftOTP"),
         .product(name: "Subprocess", package: "swift-subprocess"),
       ]
     ),
