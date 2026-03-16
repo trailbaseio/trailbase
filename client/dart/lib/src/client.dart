@@ -479,7 +479,7 @@ class Client {
     _updateTokens(tokens);
   }
 
-  Future<void> login2nd(MultiFactorAuthToken token, String code) async {
+  Future<void> loginSecond(MultiFactorAuthToken token, String code) async {
     final response = await fetch(
       '${_authApi}/login_mfa',
       method: Method.post,

@@ -344,7 +344,7 @@ class Client(
     return null
   }
 
-  suspend fun login2nd(token: MultiFactorAuthToken, code: String) {
+  suspend fun loginSecond(token: MultiFactorAuthToken, code: String) {
     @Serializable data class Credentials(val mfa_token: String, val totp: String)
 
     val response =

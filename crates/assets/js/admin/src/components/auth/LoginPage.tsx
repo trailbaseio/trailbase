@@ -330,7 +330,7 @@ function MfaLoginForm(props: { mfaToken: MultiFactorAuthToken }) {
         if (!userTotp) return;
 
         try {
-          await client.login2nd({
+          await client.loginSecond({
             mfaToken: props.mfaToken,
             totpCode: userTotp,
           });

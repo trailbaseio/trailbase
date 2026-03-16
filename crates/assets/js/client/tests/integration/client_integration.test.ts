@@ -87,7 +87,7 @@ test("Multi-factor auth integration tests", async () => {
   const secret = "YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5";
   const code = await generate({ secret });
 
-  await client.login2nd({ mfaToken: mfaToken!, totpCode: code });
+  await client.loginSecond({ mfaToken: mfaToken!, totpCode: code });
   expect(client.tokens()).not.toBeUndefined();
   expect(client.user()?.email).toBe("alice@trailbase.io");
 });

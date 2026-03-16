@@ -285,7 +285,7 @@ Future<void> main() async {
       final code = TOTP().generateTOTPCode(secret,
           time: DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000);
 
-      await client.login2nd(mfaToken!, code);
+      await client.loginSecond(mfaToken!, code);
       expect(client.tokens(), isNotNull);
       expect(client.user()?.email, equals('alice@trailbase.io'));
     });

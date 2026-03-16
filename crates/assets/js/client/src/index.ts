@@ -687,7 +687,7 @@ export interface Client {
     email: string,
     password: string,
   ): Promise<MultiFactorAuthToken | undefined>;
-  login2nd(opts: {
+  loginSecond(opts: {
     mfaToken: MultiFactorAuthToken;
     totpCode: string;
   }): Promise<void>;
@@ -823,7 +823,7 @@ class ClientImpl implements Client {
     }
   }
 
-  public async login2nd(opts: {
+  public async loginSecond(opts: {
     mfaToken: MultiFactorAuthToken;
     totpCode: string;
   }): Promise<void> {
