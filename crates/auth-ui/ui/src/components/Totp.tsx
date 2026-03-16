@@ -177,7 +177,7 @@ function RegisterTotpDialog(props: {
           class="bg-white"
           required={true}
           type="text"
-          autocomplete="new-password"
+          autocomplete="off"
           ref={totpInput}
         />
       </TextField>

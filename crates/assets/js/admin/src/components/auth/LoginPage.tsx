@@ -357,7 +357,7 @@ function MfaLoginForm(props: { mfaToken: MultiFactorAuthToken }) {
         <TextFieldInput
           type="text"
           placeholder="Code"
-          autocomplete="new-password"
+          autocomplete="off"
           required={true}
           ref={totpInput}
         />
