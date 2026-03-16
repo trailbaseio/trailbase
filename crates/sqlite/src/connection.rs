@@ -606,14 +606,18 @@ pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
       .map(|idx| -> Value {
         accessor
           .get_new_column_value(idx)
-          .map_or(rusqlite::types::Value::Null, |v| v.into())
+          .map_or(rusqlite::types::Value::Null, |v| {
+            v.try_into().unwrap_or(rusqlite::types::Value::Null)
+          })
       })
       .collect(),
     PreUpdateCase::Delete(accessor) => (0..accessor.get_column_count())
       .map(|idx| -> rusqlite::types::Value {
         accessor
           .get_old_column_value(idx)
-          .map_or(rusqlite::types::Value::Null, |v| v.into())
+          .map_or(rusqlite::types::Value::Null, |v| {
+            v.try_into().unwrap_or(rusqlite::types::Value::Null)
+          })
       })
       .collect(),
     PreUpdateCase::Update {
@@ -623,7 +627,9 @@ pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
       .map(|idx| -> rusqlite::types::Value {
         accessor
           .get_new_column_value(idx)
-          .map_or(rusqlite::types::Value::Null, |v| v.into())
+          .map_or(rusqlite::types::Value::Null, |v| {
+            v.try_into().unwrap_or(rusqlite::types::Value::Null)
+          })
       })
       .collect(),
     PreUpdateCase::Unknown => {

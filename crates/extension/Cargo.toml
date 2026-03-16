@@ -22,7 +22,7 @@ parking_lot = { workspace = true }
 quick_cache = { version = "0.6.18", default-features = false }
 regex = "1.11.0"
 # NOTE: rusqlite must not enable "bundled" for the .so built to work.
-rusqlite = { version = "0.38.0", default-features = false, features = ["functions"] }
+rusqlite = { version = "0.39.0", default-features = false, features = ["functions"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.12"
