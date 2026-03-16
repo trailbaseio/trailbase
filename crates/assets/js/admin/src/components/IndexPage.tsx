@@ -186,7 +186,7 @@ export function IndexPage() {
             />
             <FactCard
               title="Size"
-              content={`${(Number(dashboardFetch.data!.dbSize) / 1024 / 1024).toPrecision(2)} MB`}
+              content={formatBytes(Number(dashboardFetch?.data.dbSize ?? 0))}
             />
           </div>
         )}
@@ -247,3 +247,16 @@ function castToInteger(value: SqlValue): bigint {
   }
   throw Error(`Expected integer, got: ${value}`);
 }
+
+function formatBytes(bytes: number, decimals: number = 0) {
+  const k = 1024;
+
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const value: string = (bytes / Math.pow(k, i)).toFixed(
+    decimals < 0 ? 0 : decimals,
+  );
+
+  return `${value} ${suffixes[i]}`;
+}
+
+const suffixes = ["Bytes", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
