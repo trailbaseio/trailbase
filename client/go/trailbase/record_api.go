@@ -85,6 +85,14 @@ func (r *RecordApi[T]) Read(id RecordId) (*T, error) {
 	return &value, nil
 }
 
+func (r *RecordApi[T]) SubscribeAll() (<-chan Event, func(), error) {
+	return r.client.stream("GET", fmt.Sprintf("%s/%s/subscribe/*", recordApi, r.name), []byte{}, []QueryParam{})
+}
+
+func (r *RecordApi[T]) Subscribe(id RecordId) (<-chan Event, func(), error) {
+	return r.client.stream("GET", fmt.Sprintf("%s/%s/subscribe/%s", recordApi, r.name, id.ToString()), []byte{}, []QueryParam{})
+}
+
 func (r *RecordApi[T]) Update(id RecordId, record T) error {
 	reqBody, err := json.Marshal(record)
 	if err != nil {

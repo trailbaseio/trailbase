@@ -1,6 +1,8 @@
 package trailbase
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"io"
 	"strings"
@@ -56,25 +58,6 @@ type TokenState struct {
 	headers []Header
 }
 
-func decodeJwtTokenClaims(jwt string) (*JwtTokenClaims, error) {
-	parts := strings.Split(jwt, ".")
-	if len(parts) != 3 {
-		return nil, errors.New("Invalid JWT format")
-	}
-
-	data, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-
-	var jwtTokenClaims JwtTokenClaims
-	err = json.Unmarshal(data, &jwtTokenClaims)
-	if err != nil {
-		return nil, err
-	}
-	return &jwtTokenClaims, nil
-}
-
 func NewTokenState(tokens *Tokens) (*TokenState, error) {
 	if tokens == nil {
 		return &TokenState{
@@ -97,31 +80,37 @@ func NewTokenState(tokens *Tokens) (*TokenState, error) {
 	}, nil
 }
 
-func buildHeaders(tokens *Tokens) []Header {
-	headers := []Header{jsonHeader}
+type ValueEvent interface {
+	Value() *map[string]any
+}
 
-	if tokens != nil {
-		headers = append(headers, Header{
-			key:   "Authorization",
-			value: "Bearer " + tokens.AuthToken,
-		})
+type InsertEvent struct {
+	value map[string]any
+}
 
-		if tokens.RefreshToken != nil {
-			headers = append(headers, Header{
-				key:   "Refresh-Token",
-				value: *tokens.RefreshToken,
-			})
-		}
+func (ev *InsertEvent) Value() *map[string]any {
+	return &ev.value
+}
 
-		if tokens.CsrfToken != nil {
-			headers = append(headers, Header{
-				key:   "CSRF-Token",
-				value: *tokens.CsrfToken,
-			})
-		}
-	}
+type UpdateEvent struct {
+	value map[string]any
+}
 
-	return headers
+func (ev *UpdateEvent) Value() *map[string]any {
+	return &ev.value
+}
+
+type DeleteEvent struct {
+	value map[string]any
+}
+
+func (ev *DeleteEvent) Value() *map[string]any {
+	return &ev.value
+}
+
+type Event struct {
+	Value ValueEvent
+	Error *string
 }
 
 type Client interface {
@@ -139,6 +128,31 @@ type Client interface {
 
 	// Internal
 	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
+	stream(method string, path string, body []byte, queryParams []QueryParam) (<-chan Event, func(), error)
+}
+
+func NewClient(site string) (Client, error) {
+	return NewClientWithTokens(site, nil)
+}
+
+func NewClientWithTokens(site string, tokens *Tokens) (Client, error) {
+	base, err := url.Parse(site)
+	if err != nil {
+		return nil, err
+	}
+	tokenState, err := NewTokenState(tokens)
+	if err != nil {
+		return nil, err
+	}
+	return &ClientImpl{
+		base: base,
+		client: &thinClient{
+			base:   base,
+			client: &http.Client{},
+		},
+		tokenState: tokenState,
+		tokenMutex: &sync.Mutex{},
+	}, nil
 }
 
 type ClientImpl struct {
@@ -381,6 +395,78 @@ func (c *ClientImpl) do(method string, path string, body []byte, queryParams []Q
 	return c.client.do(method, path, headers, body, queryParams, true)
 }
 
+func (c *ClientImpl) stream(method string, path string, body []byte, queryParams []QueryParam) (<-chan Event, func(), error) {
+	headers, refreshToken := c.getHeadersAndRefreshTokenIfExpired()
+	if refreshToken != nil {
+		newTokenState, err := doRefreshToken(c.client, headers, *refreshToken)
+		if err != nil {
+			return nil, nil, err
+		}
+		headers = newTokenState.headers
+		c.tokenMutex.Lock()
+		defer c.tokenMutex.Unlock()
+
+		c.tokenState = newTokenState
+	}
+
+	resp, err := c.client.do(method, path, headers, body, queryParams, true)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Split(sseSplitter)
+
+	stream := make(chan Event)
+
+	go func() {
+		defer close(stream)
+
+		for scanner.Scan() {
+			b := scanner.Bytes()
+			if !bytes.HasPrefix(b, []byte("data: ")) {
+				continue
+			}
+
+			var evMap map[string]any
+			err = json.Unmarshal(b[6:], &evMap)
+			if err != nil {
+				return
+			}
+
+			if val, ok := evMap["Error"]; ok {
+				var errString string = val.(string)
+				stream <- Event{
+					Error: &errString,
+				}
+				continue
+			} else if val, ok := evMap["Insert"]; ok {
+				stream <- Event{
+					Value: &InsertEvent{
+						value: val.(map[string]any),
+					},
+				}
+			} else if val, ok := evMap["Update"]; ok {
+				stream <- Event{
+					Value: &UpdateEvent{
+						value: val.(map[string]any),
+					},
+				}
+			} else if val, ok := evMap["Delete"]; ok {
+				stream <- Event{
+					Value: &DeleteEvent{
+						value: val.(map[string]any),
+					},
+				}
+			}
+		}
+	}()
+
+	return stream, func() {
+		resp.Body.Close()
+	}, nil
+}
+
 func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {
 	state, err := NewTokenState(tokens)
 	if err != nil {
@@ -480,28 +566,66 @@ func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (
 	})
 }
 
-func NewClient(site string) (Client, error) {
-	return NewClientWithTokens(site, nil)
+func decodeJwtTokenClaims(jwt string) (*JwtTokenClaims, error) {
+	parts := strings.Split(jwt, ".")
+	if len(parts) != 3 {
+		return nil, errors.New("Invalid JWT format")
+	}
+
+	data, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
+
+	var jwtTokenClaims JwtTokenClaims
+	err = json.Unmarshal(data, &jwtTokenClaims)
+	if err != nil {
+		return nil, err
+	}
+	return &jwtTokenClaims, nil
 }
 
-func NewClientWithTokens(site string, tokens *Tokens) (Client, error) {
-	base, err := url.Parse(site)
-	if err != nil {
-		return nil, err
+func buildHeaders(tokens *Tokens) []Header {
+	headers := []Header{jsonHeader}
+
+	if tokens != nil {
+		headers = append(headers, Header{
+			key:   "Authorization",
+			value: "Bearer " + tokens.AuthToken,
+		})
+
+		if tokens.RefreshToken != nil {
+			headers = append(headers, Header{
+				key:   "Refresh-Token",
+				value: *tokens.RefreshToken,
+			})
+		}
+
+		if tokens.CsrfToken != nil {
+			headers = append(headers, Header{
+				key:   "CSRF-Token",
+				value: *tokens.CsrfToken,
+			})
+		}
 	}
-	tokenState, err := NewTokenState(tokens)
-	if err != nil {
-		return nil, err
+
+	return headers
+}
+
+func sseSplitter(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
 	}
-	return &ClientImpl{
-		base: base,
-		client: &thinClient{
-			base:   base,
-			client: &http.Client{},
-		},
-		tokenState: tokenState,
-		tokenMutex: &sync.Mutex{},
-	}, nil
+	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
+		return i + 2, data[0:i], nil
+	}
+	if i := bytes.Index(data, []byte("\n")); i >= 0 {
+		return i + 1, data[0:i], nil
+	}
+	if atEOF {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }
 
 var jsonHeader Header = Header{key: "Content-Type", value: "application/json"}

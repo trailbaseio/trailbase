@@ -297,11 +297,92 @@ func TestRecordApi(t *testing.T) {
 	assert(t, r == nil, "expected nil value reading delete record")
 }
 
+func TestRecordApiSubscriptions(t *testing.T) {
+	client := connect(t)
+	api := NewRecordApi[SimpleStrict](client, "simple_strict_table")
+
+	done := make(chan bool)
+
+	allEvents := make([]Event, 0)
+	allCh, allCancel, err := api.SubscribeAll()
+	assertFine(t, err)
+	go func() {
+		for i := 0; i < 100; i += 1 {
+			ev, ok := <-allCh
+			if !ok {
+				break
+			}
+			allEvents = append(allEvents, ev)
+		}
+
+		done <- true
+	}()
+
+	now := time.Now().Unix()
+	id, err := api.Create(SimpleStrict{
+		TextNotNull: fmt.Sprint("go client subscription test 0: =?&", now),
+	})
+	assertFine(t, err)
+
+	filteredEvents := make([]Event, 0)
+	filteredCh, filteredCancel, err := api.Subscribe(id)
+	assertFine(t, err)
+	go func() {
+		for true {
+			ev, ok := <-filteredCh
+			if !ok {
+				break
+			}
+			filteredEvents = append(filteredEvents, ev)
+		}
+
+		done <- true
+	}()
+
+	_, err = api.Create(SimpleStrict{
+		TextNotNull: fmt.Sprint("go client subscription test 1: =?&", now),
+	})
+	assertFine(t, err)
+
+	err = api.Update(id, SimpleStrict{
+		TextNotNull: fmt.Sprint("go client updated subscription test 0: =?&", now),
+	})
+	assertFine(t, err)
+
+	err = api.Delete(id)
+	assertFine(t, err)
+
+	time.Sleep(500 * time.Millisecond)
+
+	allCancel()
+	filteredCancel()
+
+	<-done
+	<-done
+
+	assertEqual(t, 4, len(allEvents))
+	assertIs[*InsertEvent](t, allEvents[0].Value)
+	assertIs[*InsertEvent](t, allEvents[1].Value)
+	assertIs[*UpdateEvent](t, allEvents[2].Value)
+	assertIs[*DeleteEvent](t, allEvents[3].Value)
+
+	assertEqual(t, 2, len(filteredEvents))
+	assertIs[*UpdateEvent](t, filteredEvents[0].Value)
+	assertIs[*DeleteEvent](t, filteredEvents[1].Value)
+}
+
 func assertEqual[T comparable](t *testing.T, expected T, got T) {
 	if expected != got {
 		buf := make([]byte, 1<<16)
 		runtime.Stack(buf, true)
 		t.Fatal("Expected", expected, ", got:", got, "\n", string(buf))
+	}
+}
+
+func assertIs[T comparable](t *testing.T, v any) {
+	_, ok := v.(T)
+	if !ok {
+		t.Fatalf("Expected %T, got %T: %+v", *new(T), v, v)
 	}
 }
 
