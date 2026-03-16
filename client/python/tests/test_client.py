@@ -26,7 +26,7 @@ class TrailBaseFixture:
 
         logger.info("Building TrailBase")
         build = subprocess.run(["cargo", "build"])
-        assert build.returncode == 0
+        assert build.returncode == 0, f"{build.stderr}"
 
         logger.info("Starting TrailBase")
         self.process = subprocess.Popen(

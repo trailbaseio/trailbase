@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.8.0
+
+- Add support for two-factor TOTP (e.g. authenticator app) login.
+- Add support for OTP code login via email.
+
 ## 0.7.2
 
 - Geospatial filtering.
