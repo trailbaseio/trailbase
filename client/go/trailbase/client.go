@@ -24,6 +24,10 @@ type Tokens struct {
 	CsrfToken    *string `json:"csrf_token,omitempty"`
 }
 
+type MultiFactorAuthToken struct {
+	Token string `json:"mfa_token"`
+}
+
 type JwtTokenClaims struct {
 	Sub       string `json:"sub"`
 	Iat       int64  `json:"iat"`
@@ -126,7 +130,10 @@ type Client interface {
 	User() *User
 
 	// Authenticate
-	Login(email string, password string) (*Tokens, error)
+	Login(email string, password string) (*MultiFactorAuthToken, error)
+	LoginSecond(token *MultiFactorAuthToken, code string) error
+	RequestOtp(email string, redirectUri *string) error
+	LoginOtp(email string, code string) error
 	Logout() error
 	Refresh() error
 
@@ -171,7 +178,7 @@ func (c *ClientImpl) User() *User {
 	return nil
 }
 
-func (c *ClientImpl) Login(email string, password string) (*Tokens, error) {
+func (c *ClientImpl) Login(email string, password string) (*MultiFactorAuthToken, error) {
 	type Credentials struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -185,8 +192,19 @@ func (c *ClientImpl) Login(email string, password string) (*Tokens, error) {
 		return nil, err
 	}
 
-	resp, err := c.client.do("POST", authApi+"/login", []Header{jsonHeader}, reqBody, []QueryParam{})
+	resp, err := c.client.do("POST", authApi+"/login", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
 	if err != nil {
+		ferr, ok := err.(*FetchError)
+		if ok && ferr != nil && ferr.StatusCode == 403 {
+			var mfaToken MultiFactorAuthToken
+			err = json.Unmarshal([]byte(ferr.Message), &mfaToken)
+			if err != nil {
+				return nil, err
+			}
+
+			return &mfaToken, nil
+		}
+
 		return nil, err
 	}
 
@@ -201,7 +219,101 @@ func (c *ClientImpl) Login(email string, password string) (*Tokens, error) {
 		return nil, err
 	}
 
-	return c.updateTokens(&tokens)
+	c.updateTokens(&tokens)
+
+	return nil, nil
+}
+
+func (c *ClientImpl) LoginSecond(token *MultiFactorAuthToken, code string) error {
+	type Credentials struct {
+		Token    string `json:"mfa_token"`
+		TotpCode string `json:"totp"`
+	}
+
+	reqBody, err := json.Marshal(Credentials{
+		Token:    token.Token,
+		TotpCode: code,
+	})
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.client.do("POST", authApi+"/login_mfa", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	if err != nil {
+		return err
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var tokens Tokens
+	err = json.Unmarshal(respBody, &tokens)
+	if err != nil {
+		return err
+	}
+
+	c.updateTokens(&tokens)
+
+	return nil
+}
+
+func (c *ClientImpl) RequestOtp(email string, redirectUri *string) error {
+	type Request struct {
+		Email       string  `json:"email"`
+		RedirectUri *string `json:"redirect_uri,omitempty"`
+	}
+
+	reqBody, err := json.Marshal(Request{
+		Email:       email,
+		RedirectUri: redirectUri,
+	})
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.client.do("POST", authApi+"/otp/request", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	if err != nil {
+		return err
+	}
+	_ = resp
+
+	return nil
+}
+
+func (c *ClientImpl) LoginOtp(email string, code string) error {
+	type Request struct {
+		Email string `json:"email"`
+		Code  string `json:"code"`
+	}
+
+	reqBody, err := json.Marshal(Request{
+		Email: email,
+		Code:  code,
+	})
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.client.do("POST", authApi+"/otp/login", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	if err != nil {
+		return err
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var tokens Tokens
+	err = json.Unmarshal(respBody, &tokens)
+	if err != nil {
+		return err
+	}
+	c.updateTokens(&tokens)
+
+	return nil
 }
 
 func (c *ClientImpl) Logout() error {
@@ -219,7 +331,7 @@ func (c *ClientImpl) Logout() error {
 			return err
 		}
 
-		_, err = c.client.do("POST", authApi+"/logout", []Header{jsonHeader}, body, []QueryParam{})
+		_, err = c.client.do("POST", authApi+"/logout", []Header{jsonHeader}, body, []QueryParam{}, true)
 		if err != nil {
 			return err
 		}
@@ -266,7 +378,7 @@ func (c *ClientImpl) do(method string, path string, body []byte, queryParams []Q
 		c.tokenState = newTokenState
 	}
 
-	return c.client.do(method, path, headers, body, queryParams)
+	return c.client.do(method, path, headers, body, queryParams, true)
 }
 
 func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {
@@ -341,7 +453,7 @@ func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (
 		return nil, err
 	}
 
-	resp, err := client.do("POST", authApi+"/refresh", headers, reqBody, []QueryParam{})
+	resp, err := client.do("POST", authApi+"/refresh", headers, reqBody, []QueryParam{}, true)
 	if err != nil {
 		return nil, err
 	}

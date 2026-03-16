@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"testing"
+
+	ttp "github.com/pquerna/otp/totp"
 )
 
 const (
@@ -98,10 +100,14 @@ func connect(t *testing.T) Client {
 	if err != nil {
 		panic(err)
 	}
-	tokens, err := client.Login("admin@localhost", "secret")
+	mfaToken, err := client.Login("admin@localhost", "secret")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if mfaToken != nil {
+		t.Fatal("Unexpected MFA token")
+	}
+	tokens := client.Tokens()
 	if tokens == nil {
 		t.Fatal("Missing tokens")
 	}
@@ -142,6 +148,46 @@ func TestAuth(t *testing.T) {
 	assertFine(t, err)
 	assert(t, client.Tokens() == nil, "should be nil")
 	assert(t, client.User() == nil, "should be nil")
+}
+
+func TestMultiFactorAuth(t *testing.T) {
+	client, err := NewClient(SITE)
+	if err != nil {
+		panic(err)
+	}
+	mfaToken, err := client.Login("alice@trailbase.io", "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert(t, mfaToken != nil, "missing MFA token")
+
+	secret := "YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5"
+
+	code, err := ttp.GenerateCodeCustom(secret, time.Now(), ttp.ValidateOpts{})
+
+	err = client.LoginSecond(mfaToken, code)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func TestOtpLogin(t *testing.T) {
+	client, err := NewClient(SITE)
+	if err != nil {
+		panic(err)
+	}
+
+	client.RequestOtp("fake0@localhost", nil)
+	requestUri := "/target"
+	client.RequestOtp("fake1@localhost", &requestUri)
+
+	err = client.LoginOtp("fake1@localhost", "invalid")
+	ferr, ok := err.(*FetchError)
+	if ok && ferr != nil {
+		assertEqual(t, ferr.StatusCode, 401)
+	} else {
+		panic(err)
+	}
 }
 
 type SimpleStrict struct {
