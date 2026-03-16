@@ -1,3 +1,25 @@
+## v0.25.0
+
+- Add support for TOTP (e.g. authenticator app) two-factor auth: APIs, auth UI and admin UI 🎉.
+  - Added support for two-factor login to client libraries in all 8 languages.
+- Add support for single-factor OTP authentication, i.e. receive a code/link by email: APIs, auth UI and admin UI.
+  - Note that this is disabled by default. Using single-factor OTPs delegates security to your users' inboxes, which may be more or less secure.
+  - Access is rate-limited to avoid brute-force, enumeration attacks.
+  - Added support for request/login OTP to client libraries in all 8 languages.
+- Hardening: move all session-like, ephemeral state into JWTs or a separate `session.db` database.
+  - This way a WASM component-level SQL injection vulnerability cannot leak session artifacts.
+  - This also makes it possible to just drop the entire `session.db` to invalidate all refresh tokens and other auth codes (however not JWTs like the auth token).
+  - The new setup may also allow more flexible expiration times for various codes and tokens.
+- Many small and big (breaking) improvements to auth APIs and auth UIs. If you're using the `auth-ui` WASM component, make sure to update:
+  ```sh
+  trail --data-dir client/testfixture components add trailbase/auth_ui
+  ```
+  - If you're running your own auth UI or customized the auth-ui component, this update will prompt significant but hopefully welcome changes on your end. If you run into any issues, don't hesitate to reach out.
+  - Auth APIs and UI are no fully decoupled allowing custom UIs to use all of the same facilities.
+- Stop sending emails in dev-mode, instead print to stderr.
+- Minor: fix DB size formatting in admin UI.
+- Update dependencies, including critical SQLite update.
+
 ## v0.24.4
 
 - Disable SQLite FK constraints during migrations and re-enable just before the transaction is committed to avoid getting stuck with inconsistencies while allowing more flexible table alterations in preparation for major auth changes.
