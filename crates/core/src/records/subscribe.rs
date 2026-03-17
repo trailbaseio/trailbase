@@ -106,12 +106,6 @@ pub enum Event {
   Sse(SseEvent),
 }
 
-impl From<DbEvent> for Event {
-  fn from(value: DbEvent) -> Self {
-    return Event::DbEvent(value);
-  }
-}
-
 impl Event {
   #[inline]
   fn into_sse_event(self, seq: usize) -> Result<SseEvent, axum::Error> {
@@ -139,20 +133,21 @@ impl Event {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl From<DbEvent> for Event {
+  fn from(value: DbEvent) -> Self {
+    return Event::DbEvent(value);
+  }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum DbEvent {
-  Update(String),
-  Insert(String),
-  Delete(String),
-  Error(String),
+  Update(Arc<str>),
+  Insert(Arc<str>),
+  Delete(Arc<str>),
+  Error(Arc<str>),
 }
 
 impl DbEvent {
-  #[inline]
-  fn into_event(self) -> Result<Event, axum::Error> {
-    return Ok(Event::DbEvent(self));
-  }
-
   #[inline]
   fn to_json(&self, seq: Option<usize>) -> String {
     if let Some(seq) = seq {
@@ -399,8 +394,6 @@ impl PerConnectionState {
     } else {
       Filter::Passthrough
     };
-
-    // let (sender, receiver) = async_channel::bounded::<Event>(16);
 
     let qualified_name = api.qualified_name();
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -746,17 +739,11 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
 
     let str_value = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
 
-    let db_event = match action {
-      RecordAction::Delete => DbEvent::Delete(str_value),
-      RecordAction::Insert => DbEvent::Insert(str_value),
-      RecordAction::Update => DbEvent::Update(str_value),
-    };
-
-    let Ok(event) = db_event.into_event() else {
-      return;
-    };
-
-    event
+    match action {
+      RecordAction::Delete => DbEvent::Delete(str_value.into()).into(),
+      RecordAction::Insert => DbEvent::Insert(str_value.into()).into(),
+      RecordAction::Update => DbEvent::Update(str_value.into()).into(),
+    }
   };
 
   let mut read_lock = state.subscriptions.upgradable_read();
@@ -1229,7 +1216,7 @@ mod tests {
       "a": 5,
       "b": "text",
     });
-    let db_event = DbEvent::Delete(serde_json::to_string(&json).unwrap());
+    let db_event = DbEvent::Delete(serde_json::to_string(&json).unwrap().into());
     let event = Event::DbEvent(db_event.clone());
 
     assert_eq!(decode_db_event(event).await.unwrap(), db_event);
