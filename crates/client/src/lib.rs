@@ -104,12 +104,21 @@ impl Pagination {
   }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum DbEvent {
-  Update(Option<serde_json::Value>),
-  Insert(Option<serde_json::Value>),
-  Delete(Option<serde_json::Value>),
+type JsonObject = serde_json::value::Map<String, serde_json::Value>;
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub enum EventPayload {
+  Update(JsonObject),
+  Insert(JsonObject),
+  Delete(JsonObject),
   Error(String),
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct ChangeEvent {
+  #[serde(flatten)]
+  pub event: Arc<EventPayload>,
+  pub seq: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -617,7 +626,7 @@ impl RecordApi {
   pub async fn subscribe<'a, T: RecordId<'a>>(
     &self,
     id: T,
-  ) -> Result<impl Stream<Item = DbEvent> + use<T>, Error> {
+  ) -> Result<impl Stream<Item = ChangeEvent> + use<T>, Error> {
     // TODO: Might have to add HeaderValue::from_static("text/event-stream").
     let response = self
       .client
@@ -638,10 +647,15 @@ impl RecordApi {
       http_body_util::BodyDataStream::new(response.into_body())
         .eventsource()
         .filter_map(|event_or| {
-          // QUESTION: Should we instead return a `Stream<Item = Result<DbEvent, _>>` to allow for
-          // better error handling here.
+          // QUESTION: Should we instead return a `Stream<Item = Result<ChangeEvent, _>>` to allow
+          // for better error handling here.
           if let Ok(event) = event_or {
-            return serde_json::from_str::<DbEvent>(&event.data).ok();
+            return serde_json::from_str::<ChangeEvent>(&event.data)
+              .map_err(|err| {
+                println!("FOO: {err}, {}", event.data);
+                return err;
+              })
+              .ok();
           }
           return None;
         }),
@@ -652,7 +666,7 @@ impl RecordApi {
   pub async fn subscribe_ws<'a, T: RecordId<'a>>(
     &self,
     id: T,
-  ) -> Result<impl Stream<Item = DbEvent> + use<T>, Error> {
+  ) -> Result<impl Stream<Item = ChangeEvent> + use<T>, Error> {
     let response = self
       .client
       .upgrade_ws(
@@ -672,7 +686,7 @@ impl RecordApi {
       use reqwest_websocket::Message;
 
       return match message {
-        Ok(Message::Text(msg)) => serde_json::from_str::<DbEvent>(&msg)
+        Ok(Message::Text(msg)) => serde_json::from_str::<ChangeEvent>(&msg)
           .map_err(|err| {
             warn!("json error: {err}");
             return err;

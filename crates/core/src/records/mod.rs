@@ -6,6 +6,7 @@ use utoipa::OpenApi;
 
 pub(crate) mod create_record;
 pub(crate) mod delete_record;
+pub(crate) mod event;
 pub(crate) mod files;
 pub(crate) mod filter;
 pub(crate) mod json_schema;
