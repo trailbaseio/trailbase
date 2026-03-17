@@ -11,7 +11,7 @@ use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
@@ -36,8 +36,8 @@ use crate::schema_metadata::ConnectionMetadata;
 #[derive(Default, Debug)]
 struct SubscriptionId {
   table_name: QualifiedName,
-  row_id: Option<i64>,
   sub_id: i64,
+  row_id: Option<i64>,
 }
 
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
@@ -100,60 +100,70 @@ pub enum RecordAction {
   Update,
 }
 
-#[cfg(not(feature = "ws"))]
 #[derive(Clone, Debug)]
 pub enum Event {
+  DbEvent(DbEvent),
   Sse(SseEvent),
-}
-
-#[cfg(feature = "ws")]
-#[derive(Clone, Debug)]
-pub enum Event {
-  Sse(SseEvent),
-  Json(String),
 }
 
 impl Event {
   #[inline]
-  fn into_sse_event(self) -> Result<SseEvent, axum::Error> {
-    return match self {
-      Self::Sse(ev) => Ok(ev),
-      #[cfg(feature = "ws")]
-      Self::Json(s) => Ok(SseEvent::default().data(&s)),
+  fn into_sse_event(self, seq: usize) -> Result<SseEvent, axum::Error> {
+    let s = match self {
+      Self::DbEvent(ev) => ev.to_json(Some(seq)),
+      Self::Sse(ev) => {
+        return Ok(ev);
+      }
     };
+
+    return Ok(SseEvent::default().data(&s));
   }
 
   #[cfg(feature = "ws")]
   #[inline]
   fn into_ws_event(self) -> Result<axum::extract::ws::Message, &'static str> {
-    return match self {
-      Self::Sse(_ev) => Err("Got SSE event in WS mode"),
-      Self::Json(s) => Ok(axum::extract::ws::Message::Text(s.into())),
+    let s = match self {
+      Self::DbEvent(ev) => ev.to_json(None),
+      Self::Sse(ev) => {
+        return Err("not sse");
+      }
     };
+
+    return Ok(axum::extract::ws::Message::Text(s));
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum DbEvent {
-  Update(Option<serde_json::Value>),
-  Insert(Option<serde_json::Value>),
-  Delete(Option<serde_json::Value>),
+  Update(String),
+  Insert(String),
+  Delete(String),
   Error(String),
 }
 
 impl DbEvent {
-  #[cfg(not(feature = "ws"))]
   #[inline]
   fn into_event(self) -> Result<Event, axum::Error> {
-    return Ok(Event::Sse(SseEvent::default().json_data(self)?));
+    return Ok(Event::DbEvent(self));
   }
 
-  #[cfg(feature = "ws")]
   #[inline]
-  fn into_event(self) -> Result<Event, axum::Error> {
-    return Ok(Event::Json(
-      serde_json::to_string(&self).map_err(axum::Error::new)?,
-    ));
+  fn to_json(&self, seq: Option<usize>) -> String {
+    if let Some(seq) = seq {
+      return match self {
+        Self::Update(json) => format!(r#"{{ "Update": {json}, "Seq": {seq} }}"#),
+        Self::Insert(json) => format!(r#"{{ "Insert": {json}, "Seq": {seq} }}"#),
+        Self::Delete(json) => format!(r#"{{ "Delete": {json}, "Seq": {seq} }}"#),
+        Self::Error(msg) => format!(r#"{{ "Error": {msg}, "Seq": {seq} }}"#),
+      };
+    }
+
+    return match self {
+      Self::Update(json) => format!(r#"{{ "Update": {json} }}"#),
+      Self::Insert(json) => format!(r#"{{ "Insert": {json} }}"#),
+      Self::Delete(json) => format!(r#"{{ "Delete": {json} }}"#),
+      Self::Error(msg) => format!(r#"{{ "Error": {msg} }}"#),
+    };
   }
 }
 
@@ -628,6 +638,7 @@ fn broker_subscriptions(
       continue;
     }
 
+    // We don't memoize and look up the APIs to make sure we get an up-to-date version.
     let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
       dead_subscriptions.push(idx);
       sub.sender.close();
@@ -722,10 +733,12 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
         .collect(),
     );
 
+    let str_value = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
+
     let db_event = match action {
-      RecordAction::Delete => DbEvent::Delete(Some(json_value)),
-      RecordAction::Insert => DbEvent::Insert(Some(json_value)),
-      RecordAction::Update => DbEvent::Update(Some(json_value)),
+      RecordAction::Delete => DbEvent::Delete(str_value),
+      RecordAction::Insert => DbEvent::Insert(str_value),
+      RecordAction::Update => DbEvent::Update(str_value),
     };
 
     let Ok(event) = db_event.into_event() else {
@@ -899,8 +912,10 @@ pub async fn subscribe_sse(
         .add_sse_table_subscription(api, user, filter)
         .await?;
 
+      let seq = AtomicUsize::default();
+
       Ok(
-        Sse::new(receiver.map(|ev| ev.into_sse_event()))
+        Sse::new(receiver.map(move |ev| ev.into_sse_event(seq.fetch_add(1, Ordering::SeqCst))))
           .keep_alive(KeepAlive::default())
           .into_response(),
       )
@@ -916,8 +931,10 @@ pub async fn subscribe_sse(
         .add_sse_record_subscription(api, record_id, user)
         .await?;
 
+      let seq = AtomicUsize::default();
+
       Ok(
-        Sse::new(receiver.map(|ev| ev.into_sse_event()))
+        Sse::new(receiver.map(move |ev| ev.into_sse_event(seq.fetch_add(1, Ordering::SeqCst))))
           .keep_alive(KeepAlive::default())
           .into_response(),
       )
@@ -1121,18 +1138,8 @@ static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
 static ESTABLISHED_EVENT: LazyLock<Event> =
   LazyLock::new(|| Event::Sse(SseEvent::default().comment("subscription established")));
-#[cfg(not(feature = "ws"))]
-static ACCESS_DENIED_EVENT: LazyLock<Event> = LazyLock::new(|| {
-  Event::Sse(
-    SseEvent::default()
-      .json_data(DbEvent::Error("Access denied".into()))
-      .expect("static"),
-  )
-});
-#[cfg(feature = "ws")]
-static ACCESS_DENIED_EVENT: LazyLock<Event> = LazyLock::new(|| {
-  Event::Json(serde_json::to_string(&DbEvent::Error("Access denied".into())).expect("static"))
-});
+static ACCESS_DENIED_EVENT: LazyLock<Event> =
+  LazyLock::new(|| Event::DbEvent(DbEvent::Error("Access denied".into())));
 
 const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
 
@@ -1141,6 +1148,7 @@ mod tests {
   use async_channel::TryRecvError;
   use axum::response::IntoResponse;
   use futures_util::StreamExt;
+  use serde_json::Value;
   use trailbase_sqlite::params;
 
   use super::DbEvent;
@@ -1156,33 +1164,32 @@ mod tests {
 
   async fn decode_db_event(ev: Event) -> Option<DbEvent> {
     return match ev {
-      Event::Sse(ev) => decode_sse_db_event(ev).await,
-      #[cfg(feature = "ws")]
-      Event::Json(s) => serde_json::from_str(&s).ok(),
+      Event::DbEvent(ev) => Some(ev),
+      _ => None,
     };
   }
 
-  async fn decode_sse_db_event(event: SseEvent) -> Option<DbEvent> {
-    let (sender, receiver) = async_channel::unbounded::<SseEvent>();
-    let sse = Sse::new(receiver.map(|ev| -> Result<SseEvent, axum::Error> { Ok(ev) }));
-
-    sender.send(event.clone()).await.unwrap();
-    sender.close();
-
-    let resp = sse.into_response();
-    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
-      .await
-      .unwrap();
-
-    let str = String::from_utf8_lossy(&bytes);
-    let Some(data) = str.strip_prefix("data: ") else {
-      // There are non-data events such as "subscription established" or heartbeat.
-      return None;
-    };
-
-    let x = data.strip_suffix("\n\n").unwrap();
-    return serde_json::from_str(x).unwrap();
-  }
+  // async fn decode_sse_db_event(event: SseEvent) -> Option<DbEvent> {
+  //   let (sender, receiver) = async_channel::unbounded::<SseEvent>();
+  //   let sse = Sse::new(receiver.map(|ev| -> Result<SseEvent, axum::Error> { Ok(ev) }));
+  //
+  //   sender.send(event.clone()).await.unwrap();
+  //   sender.close();
+  //
+  //   let resp = sse.into_response();
+  //   let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+  //     .await
+  //     .unwrap();
+  //
+  //   let str = String::from_utf8_lossy(&bytes);
+  //   let Some(data) = str.strip_prefix("data: ") else {
+  //     // There are non-data events such as "subscription established" or heartbeat.
+  //     return None;
+  //   };
+  //
+  //   let x = data.strip_suffix("\n\n").unwrap();
+  //   return serde_json::from_str(x).unwrap();
+  // }
 
   #[tokio::test]
   async fn sse_event_encoding_test() {
@@ -1190,10 +1197,18 @@ mod tests {
       "a": 5,
       "b": "text",
     });
-    let db_event = DbEvent::Delete(Some(json));
-    let event = Event::Sse(SseEvent::default().json_data(db_event.clone()).unwrap());
+    let db_event = DbEvent::Delete(serde_json::to_string(&json).unwrap());
+    let event = Event::DbEvent(db_event.clone());
 
     assert_eq!(decode_db_event(event).await.unwrap(), db_event);
+
+    let x = db_event.to_json(None);
+    let x_value = serde_json::from_str::<Value>(&x);
+    assert!(x_value.is_ok(), "{x}: {x_value:?}");
+
+    let y = db_event.to_json(Some(42));
+    let y_value = serde_json::from_str::<Value>(&y);
+    assert!(y_value.is_ok(), "{y}: {y_value:?}");
   }
 
   #[tokio::test]
@@ -1301,8 +1316,8 @@ mod tests {
       "text": "bar",
     });
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Update(Some(value))) => {
-        assert_eq!(value, expected);
+      Some(DbEvent::Update(obj)) => {
+        assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
       }
       x => {
         panic!("Expected update, got: {x:?}");
@@ -1315,8 +1330,8 @@ mod tests {
       .unwrap();
 
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Delete(Some(value))) => {
-        assert_eq!(value, expected);
+      Some(DbEvent::Delete(obj)) => {
+        assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
       }
       x => {
         panic!("Expected delete, got: {x:?}");
@@ -1372,12 +1387,12 @@ mod tests {
         .unwrap();
 
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Insert(Some(value))) => {
+        Some(DbEvent::Insert(obj)) => {
           let expected = serde_json::json!({
             "id": record_id_raw,
             "text": "foo",
           });
-          assert_eq!(value, expected);
+          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
         }
         x => {
           panic!("Expected insert, got: {x:?}");
@@ -1389,8 +1404,8 @@ mod tests {
         "text": "bar",
       });
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Update(Some(value))) => {
-          assert_eq!(value, expected);
+        Some(DbEvent::Update(obj)) => {
+          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
         }
         x => {
           panic!("Expected update, got: {x:?}");
@@ -1403,8 +1418,8 @@ mod tests {
         .unwrap();
 
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Delete(Some(value))) => {
-          assert_eq!(value, expected);
+        Some(DbEvent::Delete(obj)) => {
+          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
         }
         x => {
           panic!("Expected delete, got: {x:?}");
@@ -1661,13 +1676,13 @@ mod tests {
         .unwrap();
 
       match decode_db_event(user_x_subscription.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Insert(Some(value))) => {
+        Some(DbEvent::Insert(obj)) => {
           let expected = serde_json::json!({
             "id": record_id_raw,
             "user": uuid_to_b64(&user_x),
             "text": "foo",
           });
-          assert_eq!(value, expected);
+          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
         }
         x => {
           panic!("Expected insert, got: {x:?}");
@@ -1761,13 +1776,13 @@ mod tests {
       .unwrap();
 
     match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Update(Some(value))) => {
+      Some(DbEvent::Update(obj)) => {
         let expected = serde_json::json!({
           "id": record_id,
           "user": uuid_to_b64(&user_x_id),
           "text": "bar",
         });
-        assert_eq!(value, expected);
+        assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
       }
       x => {
         panic!("Expected update, got: {x:?}");
@@ -1833,12 +1848,12 @@ mod tests {
         .unwrap();
 
       match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Insert(Some(value))) => {
+        Some(DbEvent::Insert(obj)) => {
           let expected = serde_json::json!({
             "id": 25,
             "text": "foo",
           });
-          assert_eq!(value, expected);
+          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
         }
         x => {
           panic!("Expected insert, got: {x:?}");
