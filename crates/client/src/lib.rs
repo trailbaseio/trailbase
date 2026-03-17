@@ -104,13 +104,27 @@ impl Pagination {
   }
 }
 
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
 pub enum DbEvent {
-  Update(Option<serde_json::Value>),
-  Insert(Option<serde_json::Value>),
-  Delete(Option<serde_json::Value>),
+  Update {
+    Update: serde_json::Value,
+    Seq: Option<usize>,
+  },
+  Insert {
+    Insert: serde_json::Value,
+    Seq: Option<usize>,
+  },
+  Delete {
+    Delete: serde_json::Value,
+    Seq: Option<usize>,
+  },
   Error(String),
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SseEvent {}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ListResponse<T> {
@@ -641,7 +655,12 @@ impl RecordApi {
           // QUESTION: Should we instead return a `Stream<Item = Result<DbEvent, _>>` to allow for
           // better error handling here.
           if let Ok(event) = event_or {
-            return serde_json::from_str::<DbEvent>(&event.data).ok();
+            return serde_json::from_str::<DbEvent>(&event.data)
+              .map_err(|err| {
+                println!("FOO: {err}, {}", event.data);
+                return err;
+              })
+              .ok();
           }
           return None;
         }),
