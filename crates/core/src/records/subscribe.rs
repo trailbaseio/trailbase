@@ -106,6 +106,12 @@ pub enum Event {
   Sse(SseEvent),
 }
 
+impl From<DbEvent> for Event {
+  fn from(value: DbEvent) -> Self {
+    return Event::DbEvent(value);
+  }
+}
+
 impl Event {
   #[inline]
   fn into_sse_event(self, seq: usize) -> Result<SseEvent, axum::Error> {
@@ -129,7 +135,7 @@ impl Event {
       }
     };
 
-    return Ok(axum::extract::ws::Message::Text(s));
+    return Ok(axum::extract::ws::Message::Text(s.into()));
   }
 }
 
@@ -329,10 +335,9 @@ impl PerConnectionState {
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
-  ) -> Result<(async_channel::Sender<Event>, AutoCleanupEventStream), RecordError> {
+    sender: async_channel::Sender<Event>,
+  ) -> Result<SubscriptionId, RecordError> {
     let table_name = api.table_name();
-    let qualified_table_name = api.qualified_name().clone();
-
     let pk_column = &api.record_pk_column().column.name;
 
     let Some(row_id): Option<i64> = api
@@ -347,14 +352,14 @@ impl PerConnectionState {
       return Err(RecordError::RecordNotFound);
     };
 
-    let (sender, receiver) = async_channel::bounded::<Event>(16);
-
+    let qualified_name = api.qualified_name();
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
       let mut lock = self.subscriptions.write();
       let empty = lock.is_empty();
+      let sender = sender.clone();
 
-      let subscriptions = lock.entry(api.qualified_name().clone()).or_default();
+      let subscriptions = lock.entry(qualified_name.clone()).or_default();
       subscriptions
         .write()
         .record
@@ -364,7 +369,7 @@ impl PerConnectionState {
           subscription_id,
           record_api_name: api.api_name().to_string(),
           user,
-          sender: sender.clone(),
+          sender,
           filter: Filter::Passthrough,
         });
 
@@ -372,24 +377,14 @@ impl PerConnectionState {
     };
 
     if install_hook {
-      self.add_hook(api);
+      self.add_hook(api.clone());
     }
 
-    return Ok((
-      sender,
-      AutoCleanupEventStream {
-        state: AutoCleanupEventStreamState {
-          receiver: receiver.downgrade(),
-          state: self,
-          id: SubscriptionId {
-            table_name: qualified_table_name,
-            row_id: Some(row_id),
-            sub_id: subscription_id,
-          },
-        },
-        receiver,
-      },
-    ));
+    return Ok(SubscriptionId {
+      table_name: qualified_name.clone(),
+      row_id: Some(row_id),
+      sub_id: subscription_id,
+    });
   }
 
   async fn add_table_subscription(
@@ -397,27 +392,29 @@ impl PerConnectionState {
     api: RecordApi,
     user: Option<User>,
     filter: Option<ValueOrComposite>,
-  ) -> Result<(async_channel::Sender<Event>, AutoCleanupEventStream), RecordError> {
-    let table_name = api.qualified_name().clone();
-
+    sender: async_channel::Sender<Event>,
+  ) -> Result<SubscriptionId, RecordError> {
     let filter = if let Some(filter) = filter {
       Filter::Record(qs_filter_to_record_filter(api.columns(), filter)?)
     } else {
       Filter::Passthrough
     };
 
-    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    // let (sender, receiver) = async_channel::bounded::<Event>(16);
+
+    let qualified_name = api.qualified_name();
     let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
     let install_hook: bool = {
       let mut lock = self.subscriptions.write();
       let empty = lock.is_empty();
+      let sender = sender.clone();
 
-      let subscriptions = lock.entry(api.qualified_name().clone()).or_default();
+      let subscriptions = lock.entry(qualified_name.clone()).or_default();
       subscriptions.write().table.push(Subscription {
         subscription_id,
         record_api_name: api.api_name().to_string(),
         user,
-        sender: sender.clone(),
+        sender,
         filter,
       });
 
@@ -425,24 +422,14 @@ impl PerConnectionState {
     };
 
     if install_hook {
-      self.add_hook(api);
+      self.add_hook(api.clone());
     }
 
-    return Ok((
-      sender,
-      AutoCleanupEventStream {
-        state: AutoCleanupEventStreamState {
-          receiver: receiver.downgrade(),
-          state: self,
-          id: SubscriptionId {
-            table_name,
-            row_id: None,
-            sub_id: subscription_id,
-          },
-        },
-        receiver,
-      },
-    ));
+    return Ok(SubscriptionId {
+      table_name: qualified_name.clone(),
+      row_id: None,
+      sub_id: subscription_id,
+    });
   }
 }
 
@@ -542,15 +529,27 @@ impl SubscriptionManager {
     user: Option<User>,
     filter: Option<ValueOrComposite>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = self
-      .get_per_connection_state(&api)
-      .add_table_subscription(api, user, filter)
+    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    let state = self.get_per_connection_state(&api);
+
+    let id = state
+      .clone()
+      .add_table_subscription(api, user, filter, sender.clone())
       .await?;
 
     // Send an immediate comment to flush SSE headers and establish the connection
     if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
       return Err(RecordError::BadRequest("channel already closed"));
     }
+
+    let receiver = AutoCleanupEventStream {
+      state: AutoCleanupEventStreamState {
+        receiver: receiver.downgrade(),
+        state,
+        id,
+      },
+      receiver,
+    };
 
     return Ok(receiver);
   }
@@ -561,15 +560,27 @@ impl SubscriptionManager {
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = self
-      .get_per_connection_state(&api)
-      .add_record_subscription(api, record, user)
+    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    let state = self.get_per_connection_state(&api);
+
+    let id = state
+      .clone()
+      .add_record_subscription(api, record, user, sender.clone())
       .await?;
 
     // Send an immediate comment to flush SSE headers and establish the connection
     if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
       return Err(RecordError::BadRequest("channel already closed"));
     }
+
+    let receiver = AutoCleanupEventStream {
+      state: AutoCleanupEventStreamState {
+        receiver: receiver.downgrade(),
+        state,
+        id,
+      },
+      receiver,
+    };
 
     return Ok(receiver);
   }
@@ -1086,17 +1097,28 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let Ok((_, sqlite_receiver)) = state
-          .subscription_manager()
-          .get_per_connection_state(&api)
-          .add_table_subscription(api, user, filter)
+        let (sender, receiver) = async_channel::bounded::<Event>(16);
+        let state = state.subscription_manager().get_per_connection_state(&api);
+
+        let Ok(id) = state
+          .clone()
+          .add_table_subscription(api, user, filter, sender)
           .await
         else {
           abort(&mut ws_sender, Code::Unexpected, "subscription failed").await;
           return;
         };
 
-        broker(sqlite_receiver, &mut ws_sender).await
+        let receiver = AutoCleanupEventStream {
+          state: AutoCleanupEventStreamState {
+            receiver: receiver.downgrade(),
+            state,
+            id,
+          },
+          receiver,
+        };
+
+        broker(receiver, &mut ws_sender).await
       }))
     }
     _ => {
@@ -1118,17 +1140,28 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let Ok((_, sqlite_receiver)) = state
-          .subscription_manager()
-          .get_per_connection_state(&api)
-          .add_record_subscription(api, record_id, user)
+        let (sender, receiver) = async_channel::bounded::<Event>(16);
+        let state = state.subscription_manager().get_per_connection_state(&api);
+
+        let Ok(id) = state
+          .clone()
+          .add_record_subscription(api, record_id, user, sender)
           .await
         else {
           abort(&mut ws_sender, Code::Unexpected, "subscription failed").await;
           return;
         };
 
-        broker(sqlite_receiver, &mut ws_sender).await;
+        let receiver = AutoCleanupEventStream {
+          state: AutoCleanupEventStreamState {
+            receiver: receiver.downgrade(),
+            state,
+            id,
+          },
+          receiver,
+        };
+
+        broker(receiver, &mut ws_sender).await;
       }))
     }
   };
