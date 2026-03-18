@@ -42,9 +42,12 @@ jobs:
       - name: Install Poetry and Python Dependencies
         run: |
           pipx install --python python3.13 "poetry==2.1.3" && poetry -C client/python install
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
       - uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
       - name: PNPM install
         run: |
           pnpm i

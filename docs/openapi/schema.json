@@ -48,7 +48,10 @@
         "operationId": "change_email_confirm_handler",
         "responses": {
           "200": {
-            "description": "Success."
+            "description": "Success, when redirect_uri is not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri is present."
           }
         }
       }
@@ -58,6 +61,26 @@
         "tags": ["auth"],
         "summary": "Request an email change.",
         "operationId": "change_email_request_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -70,7 +93,19 @@
         },
         "responses": {
           "200": {
-            "description": "Success."
+            "description": "Success, when redirect_uri is not present and JSON input"
+          },
+          "303": {
+            "description": "Success, when redirect_uri is present or HTML form input"
+          },
+          "400": {
+            "description": "Bad request."
+          },
+          "403": {
+            "description": "User conflict."
+          },
+          "429": {
+            "description": "Too many attempts."
           }
         }
       }
@@ -84,6 +119,16 @@
           {
             "name": "redirect_uri",
             "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
             "required": false,
             "schema": {
               "type": ["string", "null"]
@@ -102,7 +147,10 @@
         },
         "responses": {
           "200": {
-            "description": "Success."
+            "description": "Success, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri present."
           }
         }
       }
@@ -134,11 +182,26 @@
             }
           },
           {
-            "name": "response_type",
+            "name": "mfa_redirect_uri",
             "in": "query",
             "required": false,
             "schema": {
               "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ResponseType"
+                }
+              ]
             }
           },
           {
@@ -155,6 +218,92 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auth, refresh & CSRF tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Form Fail OR Auth, refresh & CSRF tokens via cookies."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden, when login succeeded but MFA is needed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaTokenResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/login_mfa": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Log in users by email and password.",
+        "operationId": "login_mfa_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "mfa_redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ResponseType"
+                }
+              ]
+            }
+          },
+          {
+            "name": "pkce_code_challenge",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginMfaRequest"
               }
             }
           },
@@ -290,11 +439,26 @@
             }
           },
           {
-            "name": "response_type",
+            "name": "mfa_redirect_uri",
             "in": "query",
             "required": false,
             "schema": {
               "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ResponseType"
+                }
+              ]
             }
           },
           {
@@ -317,6 +481,106 @@
         "responses": {
           "200": {
             "description": "Redirect."
+          }
+        }
+      }
+    },
+    "/api/auth/v1/otp/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "login_otp_handler",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginOtpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auth tokens for JSONl logins.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "For form logins."
+          },
+          "400": {
+            "description": "Bad request"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/otp/request": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "request_otp_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestOtpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent or user not found, when redirect_uri not present."
+          },
+          "303": {
+            "description": "OTP sent or user not found, when redirect_uri present."
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "429": {
+            "description": "Too many attempts"
           }
         }
       }
@@ -356,6 +620,16 @@
         "tags": ["auth"],
         "summary": "Registers a new user with email and password.",
         "operationId": "register_user_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -368,10 +642,7 @@
         },
         "responses": {
           "303": {
-            "description": "Success, new user registered, or user already exists."
-          },
-          "307": {
-            "description": "Temporary redirect: invalid password."
+            "description": "Form fail OR success, new user registered, or user already exists."
           },
           "424": {
             "description": "Failed to send verification Email."
@@ -384,6 +655,16 @@
         "tags": ["auth"],
         "summary": "Request a password reset.",
         "operationId": "reset_password_request_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -395,8 +676,11 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Success or user not found, when redirect_uri not present."
+          },
           "303": {
-            "description": "Success or user not found."
+            "description": "Success or user not found, when redirect_uri present"
           },
           "400": {
             "description": "Malformed email address."
@@ -409,6 +693,16 @@
         "tags": ["auth"],
         "summary": "Endpoint for setting a new password after the user has requested a reset and provided a\nreplacement password.",
         "operationId": "reset_password_update_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -481,14 +775,79 @@
         }
       }
     },
+    "/api/auth/v1/totp/confirm": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Verify the current user's TOTP",
+        "operationId": "register_totp_confirm_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRegisterTotpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "TOTP verified"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/totp/register": {
+      "get": {
+        "tags": ["auth"],
+        "summary": "Sign-up user for TOTP second factor.",
+        "operationId": "register_totp_request_handler",
+        "responses": {
+          "200": {
+            "description": "TOTP secret and QR code URI.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegisterTotpResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/totp/unregister": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "unregister_totp_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisableTotpRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "TOTP disabled successfully."
+          }
+        }
+      }
+    },
     "/api/auth/v1/verify_email/confirm/:email_verification_code": {
       "get": {
         "tags": ["auth"],
         "summary": "Request a new email to verify email address.",
         "operationId": "verify_email_handler",
         "responses": {
+          "200": {
+            "description": "Email verified, when redirect_uri not present"
+          },
           "303": {
-            "description": "Email verified."
+            "description": "Email verified, when redirect_uri present"
           },
           "400": {
             "description": "Bad request: invalid redirect_uri."
@@ -504,19 +863,30 @@
         "tags": ["auth"],
         "summary": "Request a new email to verify email address.",
         "operationId": "request_email_verification_handler",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EmailVerificationRequest"
-              }
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
             }
           },
-          "required": true
-        },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
         "responses": {
+          "200": {
+            "description": "Email verification sent or user not found, when redirect_uri not present."
+          },
           "303": {
-            "description": "Email verification sent or user not found."
+            "description": "Email verification sent or user not found, when redirect_uri present."
           },
           "400": {
             "description": "Malformed email address."
@@ -787,11 +1157,20 @@
           "csrf_token": {
             "type": "string"
           },
+          "err_redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Error redirect target for non-JSON requests."
+          },
           "new_email": {
             "type": "string"
           },
           "old_email": {
-            "type": ["string", "null"]
+            "type": ["string", "null"],
+            "description": "Old email address. Only required in form mode."
+          },
+          "redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
           }
         }
       },
@@ -799,6 +1178,10 @@
         "type": "object",
         "required": ["old_password", "new_password", "new_password_repeat"],
         "properties": {
+          "err_redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Error redirect target for non-JSON requests."
+          },
           "new_password": {
             "type": "string"
           },
@@ -807,6 +1190,10 @@
           },
           "old_password": {
             "type": "string"
+          },
+          "redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
           }
         }
       },
@@ -832,6 +1219,18 @@
           }
         }
       },
+      "ConfirmRegisterTotpRequest": {
+        "type": "object",
+        "required": ["totp_url", "totp"],
+        "properties": {
+          "totp": {
+            "type": "string"
+          },
+          "totp_url": {
+            "type": "string"
+          }
+        }
+      },
       "CreateRecordResponse": {
         "type": "object",
         "required": ["ids"],
@@ -845,12 +1244,57 @@
           }
         }
       },
-      "EmailVerificationRequest": {
+      "DisableTotpRequest": {
         "type": "object",
-        "required": ["email"],
+        "required": ["totp"],
         "properties": {
-          "email": {
+          "totp": {
             "type": "string"
+          }
+        }
+      },
+      "LoginMfaRequest": {
+        "type": "object",
+        "required": ["mfa_token"],
+        "properties": {
+          "mfa_redirect_uri": {
+            "type": ["string", "null"]
+          },
+          "mfa_token": {
+            "type": "string"
+          },
+          "pkce_code_challenge": {
+            "type": ["string", "null"]
+          },
+          "redirect_uri": {
+            "type": ["string", "null"]
+          },
+          "response_type": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResponseType"
+              }
+            ]
+          },
+          "totp": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "LoginOtpRequest": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": ["string", "null"]
+          },
+          "email": {
+            "type": ["string", "null"]
+          },
+          "redirect_uri": {
+            "type": ["string", "null"]
           }
         }
       },
@@ -860,6 +1304,9 @@
         "properties": {
           "email": {
             "type": "string"
+          },
+          "mfa_redirect_uri": {
+            "type": ["string", "null"]
           },
           "password": {
             "type": "string"
@@ -871,7 +1318,14 @@
             "type": ["string", "null"]
           },
           "response_type": {
-            "type": ["string", "null"]
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ResponseType"
+              }
+            ]
           }
         }
       },
@@ -913,6 +1367,15 @@
           }
         }
       },
+      "MfaTokenResponse": {
+        "type": "object",
+        "required": ["mfa_token"],
+        "properties": {
+          "mfa_token": {
+            "type": "string"
+          }
+        }
+      },
       "RefreshRequest": {
         "type": "object",
         "required": ["refresh_token"],
@@ -934,6 +1397,18 @@
           }
         }
       },
+      "RegisterTotpResponse": {
+        "type": "object",
+        "required": ["totp_url"],
+        "properties": {
+          "png": {
+            "type": ["string", "null"]
+          },
+          "totp_url": {
+            "type": "string"
+          }
+        }
+      },
       "RegisterUserRequest": {
         "type": "object",
         "required": ["email", "password", "password_repeat"],
@@ -946,6 +1421,21 @@
           },
           "password_repeat": {
             "type": "string"
+          },
+          "redirect_uri": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "RequestOtpRequest": {
+        "type": "object",
+        "required": ["email"],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": ["string", "null"]
           }
         }
       },
@@ -955,12 +1445,15 @@
         "properties": {
           "email": {
             "type": "string"
+          },
+          "redirect_uri": {
+            "type": ["string", "null"]
           }
         }
       },
       "ResetPasswordUpdateRequest": {
         "type": "object",
-        "required": ["password", "password_repeat", "password_reset_code"],
+        "required": ["password", "password_repeat", "password_reset_token"],
         "properties": {
           "password": {
             "type": "string"
@@ -968,13 +1461,18 @@
           "password_repeat": {
             "type": "string"
           },
-          "password_reset_code": {
+          "password_reset_token": {
             "type": "string"
           },
           "redirect_uri": {
             "type": ["string", "null"]
           }
         }
+      },
+      "ResponseType": {
+        "type": "string",
+        "description": "https://www.rfc-editor.org/rfc/rfc6749#section-3.1.1",
+        "enum": ["token", "code"]
       },
       "TokenResponse": {
         "type": "object",

@@ -1,5 +1,5 @@
 ---
-import { getCollection, getEntry } from "astro:content";
+import { getCollection, getEntry, render } from "astro:content";
 // import { Image } from "astro:assets";
 
 import Base from "@/layouts/Base.astro";
@@ -11,17 +11,17 @@ export async function getStaticPaths() {
   const blogEntries = await getCollection("blog");
 
   return blogEntries.map((entry) => ({
-    params: { slug: entry.slug },
+    params: { slug: entry.id },
     props: { entry },
   }));
 }
 const { entry } = Astro.props;
 
-const { Content } = await entry.render();
+const { Content } = await render(entry);
 const author = await getEntry(entry.data.author);
 
 const avgWordsPerMinute = 220;
-const readMinutes = entry.body.split(" ").length / avgWordsPerMinute;
+const readMinutes = (entry.body ?? "").split(" ").length / avgWordsPerMinute;
 
 const proseStyle: string[] = [
   "prose",

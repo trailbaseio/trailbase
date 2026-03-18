@@ -63,6 +63,8 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
+      // http://eslint.org/docs/rules/no-unassigned-vars
+      "no-unassigned-vars": "warn",
       // Collides with astro, we'd have to configure the solid plugin to ignore astro files.
       "solid/no-unknown-namespaces": "off",
       // Prettier prefers explicit closing.

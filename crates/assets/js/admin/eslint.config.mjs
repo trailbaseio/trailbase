@@ -66,6 +66,8 @@ export default [
           varsIgnorePattern: "^_",
         },
       ],
+      // http://eslint.org/docs/rules/no-unassigned-vars
+      "no-unassigned-vars": "warn",
     },
     languageOptions: { globals: globals.browser },
   },

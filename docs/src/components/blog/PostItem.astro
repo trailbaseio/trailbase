@@ -30,7 +30,7 @@ const isOdd = num % 2;
     ]}
   >
     <div>
-      <a href={"/blog/" + postData.slug}>
+      <a href={"/blog/" + postData.id}>
         {
           postData?.data?.image && (
             <Image
@@ -49,7 +49,7 @@ const isOdd = num % 2;
     </div>
 
     <div>
-      <a href={"/blog/" + postData.slug}>
+      <a href={"/blog/" + postData.id}>
         <h2>{postData.data.title}</h2>
       </a>
 
