@@ -177,16 +177,7 @@ pub(crate) fn new_cookie(
   ttl: Duration,
   dev: bool,
 ) -> Cookie<'static> {
-  return Cookie::build((key, value))
-    .path("/")
-    // Not available to client-side JS.
-    .http_only(true)
-    // Only send cookie over HTTPs.
-    .secure(!dev)
-    // Only include cookie if request originates from origin site.
-    .same_site(if dev { SameSite::Lax } else { SameSite::Strict })
-    .max_age(cookie::time::Duration::seconds(ttl.num_seconds()))
-    .build();
+  return new_cookie_opts(key, value, ttl, !dev, !dev);
 }
 
 pub(crate) fn new_cookie_opts(

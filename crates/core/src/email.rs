@@ -69,6 +69,7 @@ impl Email {
   pub async fn send(&self) -> Result<(), EmailError> {
     let Email {
       mailer,
+      #[allow(unused)]
       dev,
       from,
       to,

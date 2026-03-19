@@ -1,6 +1,7 @@
 mod apple;
 mod discord;
 mod facebook;
+mod github;
 mod gitlab;
 mod google;
 mod microsoft;
@@ -36,7 +37,7 @@ pub(crate) struct OAuthProviderFactory {
 }
 
 pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactory] {
-  const N: usize = if cfg!(test) { 10 } else { 9 };
+  const N: usize = if cfg!(test) { 11 } else { 10 };
   static REGISTRY: LazyLock<[OAuthProviderFactory; N]> = LazyLock::new(|| {
     [
       #[cfg(test)]
@@ -47,6 +48,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
       apple::AppleOAuthProvider::factory(),
       discord::DiscordOAuthProvider::factory(),
       gitlab::GitlabOAuthProvider::factory(),
+      github::GithubOAuthProvider::factory(),
       google::GoogleOAuthProvider::factory(),
       facebook::FacebookOAuthProvider::factory(),
       microsoft::MicrosoftOAuthProvider::factory(),

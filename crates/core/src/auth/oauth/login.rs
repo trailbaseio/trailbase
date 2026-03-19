@@ -80,16 +80,26 @@ pub(crate) async fn login_with_external_auth_provider(
     COOKIE_OAUTH_STATE,
     // Encoding as JWT token for tamper proofing. This doesn't encrypt anything but merely adds a
     // signature. None of the state handed to the user needs to be hidden from the user.
+    //
+    // NOTE: we need cookie to be included redirected back from oauth provider, thus
+    // `same_site=false`.
     state
       .jwt()
       .encode(&oauth_state)
       .map_err(|err| AuthError::Internal(err.into()))?,
     Duration::minutes(5),
-    state.dev_mode(),
-    // We need to include cookies on redirect back from oauth provider.
-    /* same_site: */
-    false,
+    /* secure/tls_only= */ secure_tls_only(&state),
+    /* same_site= */ false,
   ));
 
   Ok(Redirect::to(authorize_url.as_str()))
+}
+
+#[inline]
+fn secure_tls_only(state: &AppState) -> bool {
+  // Be strict in prod-mode and when the site is configured with HTTPS/TLS.
+  return !state.dev_mode()
+    && (*state.site_url())
+      .as_ref()
+      .is_some_and(|url| url.scheme() == "https");
 }

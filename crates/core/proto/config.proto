@@ -49,6 +49,7 @@ enum OAuthProviderId {
   MICROSOFT = 14;
   TWITCH = 15;
   YANDEX = 16;
+  GITHUB = 17;
 }
 
 message OAuthProviderConfig {

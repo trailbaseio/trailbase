@@ -251,13 +251,24 @@ async fn get_or_create_user(
   // Call provider's TOKEN endpoint to exchange auth_code + (server_)pkce_code_verifier
   // for tokens. We then use these tokens to call the USER_INFO endpoint below to get
   // information, such as email address, to create a local TrailBase user.
-  let token_response: TokenResponse = provider
-    .oauth_client(state)?
+  let client = provider.oauth_client(state)?;
+  let token_response: TokenResponse = client
     .exchange_code(AuthorizationCode::new(auth_code))
     .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
     .request_async(&ReqwestClient(http_client))
     .await
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    .map_err(|err| {
+      return if cfg!(debug_assertions) {
+        match err {
+          oauth2::RequestTokenError::Parse(_path, resp) => {
+            AuthError::Internal(String::from_utf8_lossy(&resp).into())
+          }
+          err => AuthError::FailedDependency(format!("{err:?}").into()),
+        }
+      } else {
+        AuthError::FailedDependency(err.into())
+      };
+    })?;
 
   // Call provider's USER_INFO endpoint with the tokens acquired above.
   let oauth_user = provider.get_user(&token_response).await?;

@@ -809,6 +809,7 @@ fn build_auth_config(config: &Config) -> AuthConfig {
         return match name {
           "discord" => "discord.svg",
           "facebook" => "facebook.svg",
+          "github" => "github.svg",
           "gitlab" => "gitlab.svg",
           "google" => "google.svg",
           "microsoft" => "microsoft.svg",

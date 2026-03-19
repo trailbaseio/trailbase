@@ -51,6 +51,7 @@ import openIdConnect from "@shared/assets/oauth2/oidc.svg";
 import apple from "@shared/assets/oauth2/apple.svg";
 import discord from "@shared/assets/oauth2/discord.svg";
 import facebook from "@shared/assets/oauth2/facebook.svg";
+import github from "@shared/assets/oauth2/github.svg";
 import gitlab from "@shared/assets/oauth2/gitlab.svg";
 import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
@@ -62,6 +63,7 @@ export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.APPLE, apple],
   [OAuthProviderId.DISCORD, discord],
   [OAuthProviderId.FACEBOOK, facebook],
+  [OAuthProviderId.GITHUB, github],
   [OAuthProviderId.GITLAB, gitlab],
   [OAuthProviderId.GOOGLE, google],
   [OAuthProviderId.MICROSOFT, microsoft],
