@@ -124,8 +124,8 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
     const p = entry.provider;
 
     // Only add complete providers back to config, i.e. once that have both a provider id and client secret.
-    const clientId = entry.state?.clientId;
-    const clientSecret = entry.state?.clientSecret;
+    const clientId = entry.state?.clientId?.trim();
+    const clientSecret = entry.state?.clientSecret?.trim();
 
     if (clientId && clientSecret) {
       config.oauthProviders[p.name] = {

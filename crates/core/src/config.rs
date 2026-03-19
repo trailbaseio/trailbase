@@ -578,12 +578,24 @@ pub fn validate_config(
       return ierr(format!("Factory name mismatch for: {name}"));
     }
 
-    if provider.client_secret.is_none() {
-      return ierr(format!("Missing secret for: {name}"));
+    if let Some(ref client_id) = provider.client_id {
+      if client_id != client_id.trim() {
+        return ierr(format!(
+          "OAuth provider {name}'s client id contains unexpected whitespaces"
+        ));
+      }
+    } else {
+      return ierr(format!("Missing client id for: {name}"));
     }
 
-    if provider.client_id.is_none() {
-      return ierr(format!("Missing client id for: {name}"));
+    if let Some(ref client_secret) = provider.client_secret {
+      if client_secret != client_secret.trim() {
+        return ierr(format!(
+          "OAuth provider {name}'s client secret contains unexpected whitespaces"
+        ));
+      }
+    } else {
+      return ierr(format!("Missing secret for: {name}"));
     }
 
     if provider_id == OAuthProviderId::Oidc0 {
