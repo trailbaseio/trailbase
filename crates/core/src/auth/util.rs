@@ -172,12 +172,32 @@ pub async fn login_with_password(
 }
 
 pub(crate) fn new_cookie(
+  state: &AppState,
   key: &'static str,
   value: String,
   ttl: Duration,
-  dev: bool,
 ) -> Cookie<'static> {
-  return new_cookie_opts(key, value, ttl, !dev, !dev);
+  // TODO: We may want to make `same_site` configurable. By default we pick the strict setting,
+  // i.e. have browsers not attach the cookie when coming from another site. This can prevent
+  // some o the most blatant XSS attacks, however generally isn't enough. For example,
+  // same-origin user-generated content can by-pass this. When cookies are used, forms should
+  // also check the CSRF token.
+  return new_cookie_opts(
+    key,
+    value,
+    ttl,
+    /* tls_only= */ secure_tls_only(state),
+    /* same_site= */ true,
+  );
+}
+
+#[inline]
+pub(crate) fn secure_tls_only(state: &AppState) -> bool {
+  // Be strict in prod-mode and when the site is configured with HTTPS/TLS.
+  return !state.dev_mode()
+    && (*state.site_url())
+      .as_ref()
+      .is_some_and(|url| url.scheme() == "https");
 }
 
 pub(crate) fn new_cookie_opts(

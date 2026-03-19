@@ -145,16 +145,16 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     .map_err(|err| AuthError::Internal(err.into()))?;
 
   cookies.add(new_cookie(
+    state,
     COOKIE_AUTH_TOKEN,
     auth_token,
     auth_token_ttl,
-    state.dev_mode(),
   ));
   cookies.add(new_cookie(
+    state,
     COOKIE_REFRESH_TOKEN,
     refresh_token,
     refresh_token_ttl,
-    state.dev_mode(),
   ));
 
   // NOTE: we're removing the OAUTH_STATE cookie deliberately late in case there are any

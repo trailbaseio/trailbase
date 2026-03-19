@@ -10,7 +10,7 @@ use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
-use crate::auth::util::new_cookie_opts;
+use crate::auth::util::{new_cookie_opts, secure_tls_only};
 use crate::constants::COOKIE_OAUTH_STATE;
 
 /// Log in via external OAuth provider.
@@ -93,13 +93,4 @@ pub(crate) async fn login_with_external_auth_provider(
   ));
 
   Ok(Redirect::to(authorize_url.as_str()))
-}
-
-#[inline]
-fn secure_tls_only(state: &AppState) -> bool {
-  // Be strict in prod-mode and when the site is configured with HTTPS/TLS.
-  return !state.dev_mode()
-    && (*state.site_url())
-      .as_ref()
-      .is_some_and(|url| url.scheme() == "https");
 }

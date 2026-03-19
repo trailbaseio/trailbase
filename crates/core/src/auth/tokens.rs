@@ -105,12 +105,7 @@ pub(crate) async fn extract_tokens_from_request_parts(
         return AuthError::Internal(err.into());
       })?;
 
-      cookies.add(new_cookie(
-        COOKIE_AUTH_TOKEN,
-        new_auth_token,
-        ttl,
-        state.dev_mode(),
-      ));
+      cookies.add(new_cookie(state, COOKIE_AUTH_TOKEN, new_auth_token, ttl));
 
       return Ok(Tokens {
         auth_token_claims: claims,

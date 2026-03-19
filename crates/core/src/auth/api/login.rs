@@ -217,16 +217,16 @@ pub(crate) async fn build_auth_token_flow_response(
     Ok(response) if is_json => Ok(Json(response).into_response()),
     Ok(response) => {
       cookies.add(new_cookie(
+        state,
         COOKIE_AUTH_TOKEN,
         response.auth_token,
         auth_token_ttl,
-        state.dev_mode(),
       ));
       cookies.add(new_cookie(
+        state,
         COOKIE_REFRESH_TOKEN,
         response.refresh_token,
         refresh_token_ttl,
-        state.dev_mode(),
       ));
 
       if let Some(ref redirect) = redirect {
