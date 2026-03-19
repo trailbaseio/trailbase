@@ -12,12 +12,11 @@ mod yandex;
 #[cfg(test)]
 pub(crate) mod test;
 
-use std::collections::hash_map::HashMap;
 use std::sync::LazyLock;
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
-use crate::config::proto::{AuthConfig, OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 #[derive(Debug, Error)]
 pub enum OAuthProviderError {
@@ -58,27 +57,4 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
   });
 
   return REGISTRY.as_slice();
-}
-
-pub(crate) fn build_oauth_providers_from_config(
-  config: AuthConfig,
-) -> Result<HashMap<String, OAuthProviderType>, OAuthProviderError> {
-  return config
-    .oauth_providers
-    .iter()
-    .map(|(key, config)| {
-      let entry = oauth_providers_static_registry()
-        .iter()
-        .find(|registered| config.provider_id == Some(registered.id as i32));
-
-      let Some(entry) = entry else {
-        return Err(OAuthProviderError::Missing(format!(
-          "Missing implementation for oauth provider: {key}"
-        )));
-      };
-
-      let provider = (entry.factory)(key, config)?;
-      return Ok((provider.name().to_string(), provider));
-    })
-    .collect();
 }

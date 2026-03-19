@@ -209,7 +209,13 @@ pub(crate) fn new_cookie_opts(
 /// thus override them.
 pub(crate) fn remove_cookie(cookies: &Cookies, key: &'static str) {
   if cookies.get(key).is_some() {
-    cookies.add(new_cookie(key, "".to_string(), Duration::seconds(1), false));
+    cookies.add(new_cookie_opts(
+      key,
+      "".to_string(),
+      Duration::seconds(1),
+      /* tls_only= */ false,
+      /* same_site= */ false,
+    ));
   }
 }
 

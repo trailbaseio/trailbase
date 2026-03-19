@@ -1,14 +1,17 @@
+use indexmap::IndexMap;
+use itertools::Itertools;
 use log::*;
-use std::collections::HashMap;
 
-use crate::auth::oauth::providers::{OAuthProviderType, build_oauth_providers_from_config};
+use crate::auth::oauth::providers::{
+  OAuthProviderError, OAuthProviderType, oauth_providers_static_registry,
+};
 use crate::auth::password::PasswordOptions;
 use crate::config::proto::AuthConfig;
 
 #[derive(Default)]
 pub struct AuthOptions {
   password_options: PasswordOptions,
-  oauth_providers: HashMap<String, OAuthProviderType>,
+  oauth_providers: IndexMap<String, OAuthProviderType>,
 }
 
 #[derive(Default)]
@@ -60,4 +63,34 @@ impl AuthOptions {
       })
       .collect();
   }
+}
+
+fn build_oauth_providers_from_config(
+  config: AuthConfig,
+) -> Result<IndexMap<String, OAuthProviderType>, OAuthProviderError> {
+  let providers = config
+    .oauth_providers
+    .iter()
+    .map(|(key, config)| {
+      let entry = oauth_providers_static_registry()
+        .iter()
+        .find(|registered| config.provider_id == Some(registered.id as i32));
+
+      let Some(entry) = entry else {
+        return Err(OAuthProviderError::Missing(format!(
+          "Missing implementation for oauth provider: {key}"
+        )));
+      };
+
+      let provider = (entry.factory)(key, config)?;
+      return Ok(provider);
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+
+  return Ok(IndexMap::from_iter(
+    providers
+      .into_iter()
+      .sorted_by(|a, b| Ord::cmp(a.name(), b.name()))
+      .map(|p| (p.name().to_string(), p)),
+  ));
 }
