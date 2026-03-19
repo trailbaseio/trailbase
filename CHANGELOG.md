@@ -1,3 +1,14 @@
+## v0.25.1
+
+- Add GitHub OAuth provider (validated).
+- Minor: stable, lexicograpic sorting of OAuth providers.
+- Fix smaller cookie issues and inconsistencies, previously:
+  - `same-site` policy shouldn't depend on dev-mode to avoid inconsitencies and late surprises.
+  - OAuth state cookies were `secure` in dev-mode and not as strict as they could be in prod-mode. Now all cookies `secure` policy depends on dev-mode + HTTPS site.
+  - Empty override-cookies during logout API should not bet `secure`, i.e require TLS.
+- QoL: Trim whitespaces from OAuth client id/secret in UI.
+- Update Rust and JS dependencies (Astro 6, vite 8, ...).
+
 ## v0.25.0
 
 - Add support for TOTP (e.g. authenticator app) two-factor auth: APIs, auth UI and admin UI 🎉.
