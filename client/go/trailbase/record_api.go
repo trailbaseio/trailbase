@@ -36,7 +36,7 @@ type ListResponse[T any] struct {
 }
 
 type RecordApi[T any] struct {
-	client Client
+	client *Client
 	name   string
 }
 
@@ -46,7 +46,7 @@ func (r *RecordApi[T]) Create(record T) (RecordId, error) {
 		return nil, err
 	}
 
-	resp, err := r.client.do("POST", fmt.Sprintf("%s/%s", recordApi, r.name), reqBody, []QueryParam{})
+	resp, err := r.client.do("POST", fmt.Sprintf("%s/%s", recordApi, r.name), reqBody, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (r *RecordApi[T]) Create(record T) (RecordId, error) {
 }
 
 func (r *RecordApi[T]) Read(id RecordId) (*T, error) {
-	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), []byte{}, []QueryParam{})
+	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (r *RecordApi[T]) Update(id RecordId, record T) error {
 	if err != nil {
 		return err
 	}
-	_, err = r.client.do("PATCH", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), reqBody, []QueryParam{})
+	_, err = r.client.do("PATCH", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), reqBody, nil)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (r *RecordApi[T]) Update(id RecordId, record T) error {
 }
 
 func (r *RecordApi[T]) Delete(id RecordId) error {
-	_, err := r.client.do("DELETE", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), []byte{}, []QueryParam{})
+	_, err := r.client.do("DELETE", fmt.Sprintf("%s/%s/%s", recordApi, r.name, id.ToString()), nil, nil)
 	if err != nil {
 		return err
 	}
@@ -270,7 +270,7 @@ func (r *RecordApi[T]) List(args *ListArguments) (*ListResponse[T], error) {
 		}
 	}
 
-	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s", recordApi, r.name), []byte{}, queryParams)
+	resp, err := r.client.do("GET", fmt.Sprintf("%s/%s", recordApi, r.name), nil, queryParams)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (r *RecordApi[T]) List(args *ListArguments) (*ListResponse[T], error) {
 	return &listResponse, nil
 }
 
-func NewRecordApi[T any](c Client, name string) *RecordApi[T] {
+func NewRecordApi[T any](c *Client, name string) *RecordApi[T] {
 	return &RecordApi[T]{
 		client: c,
 		name:   name,

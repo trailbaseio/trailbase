@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -14,6 +15,19 @@ import (
 	"net/http"
 	"net/url"
 )
+
+type FetchError struct {
+	StatusCode int
+	Message    string
+	URL        *url.URL
+}
+
+func (e *FetchError) Error() string {
+	if e.URL != nil {
+		return fmt.Sprintf("FetchError(%d: %s, %s)", e.StatusCode, e.Message, e.URL)
+	}
+	return fmt.Sprintf("FetchError(%d: %s)", e.StatusCode, e.Message)
+}
 
 type User struct {
 	Sub   string
@@ -113,30 +127,12 @@ type Event struct {
 	Error *string
 }
 
-type Client interface {
-	Site() *url.URL
-	Tokens() *Tokens
-	User() *User
-
-	// Authenticate
-	Login(email string, password string) (*MultiFactorAuthToken, error)
-	LoginSecond(token *MultiFactorAuthToken, code string) error
-	RequestOtp(email string, redirectUri *string) error
-	LoginOtp(email string, code string) error
-	Logout() error
-	Refresh() error
-
-	// Internal
-	do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error)
-	stream(method string, path string, body []byte, queryParams []QueryParam) (<-chan Event, func(), error)
+func NewClient(baseUrl string) (*Client, error) {
+	return NewClientWithTokens(baseUrl, nil)
 }
 
-func NewClient(site string) (Client, error) {
-	return NewClientWithTokens(site, nil)
-}
-
-func NewClientWithTokens(site string, tokens *Tokens) (Client, error) {
-	base, err := url.Parse(site)
+func NewClientWithTokens(baseUrl string, tokens *Tokens) (*Client, error) {
+	base, err := url.Parse(baseUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -144,9 +140,8 @@ func NewClientWithTokens(site string, tokens *Tokens) (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ClientImpl{
-		base: base,
-		client: &thinClient{
+	return &Client{
+		client: &defaultTransport{
 			base:   base,
 			client: &http.Client{},
 		},
@@ -155,19 +150,18 @@ func NewClientWithTokens(site string, tokens *Tokens) (Client, error) {
 	}, nil
 }
 
-type ClientImpl struct {
-	base   *url.URL
-	client *thinClient
+type Client struct {
+	client Transport
 
 	tokenState *TokenState
 	tokenMutex *sync.Mutex
 }
 
-func (c *ClientImpl) Site() *url.URL {
-	return c.base
+func (c *Client) BaseUrl() *url.URL {
+	return c.client.BaseUrl()
 }
 
-func (c *ClientImpl) Tokens() *Tokens {
+func (c *Client) Tokens() *Tokens {
 	c.tokenMutex.Lock()
 	defer c.tokenMutex.Unlock()
 	if c.tokenState != nil && c.tokenState.s != nil {
@@ -176,7 +170,7 @@ func (c *ClientImpl) Tokens() *Tokens {
 	return nil
 }
 
-func (c *ClientImpl) User() *User {
+func (c *Client) User() *User {
 	c.tokenMutex.Lock()
 	defer c.tokenMutex.Unlock()
 	if c.tokenState != nil && c.tokenState.s != nil {
@@ -192,7 +186,7 @@ func (c *ClientImpl) User() *User {
 	return nil
 }
 
-func (c *ClientImpl) Login(email string, password string) (*MultiFactorAuthToken, error) {
+func (c *Client) Login(email string, password string) (*MultiFactorAuthToken, error) {
 	type Credentials struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -206,7 +200,7 @@ func (c *ClientImpl) Login(email string, password string) (*MultiFactorAuthToken
 		return nil, err
 	}
 
-	resp, err := c.client.do("POST", authApi+"/login", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	resp, err := c.do("POST", authApi+"/login", reqBody, nil)
 	if err != nil {
 		ferr, ok := err.(*FetchError)
 		if ok && ferr != nil && ferr.StatusCode == 403 {
@@ -238,7 +232,7 @@ func (c *ClientImpl) Login(email string, password string) (*MultiFactorAuthToken
 	return nil, nil
 }
 
-func (c *ClientImpl) LoginSecond(token *MultiFactorAuthToken, code string) error {
+func (c *Client) LoginSecond(token *MultiFactorAuthToken, code string) error {
 	type Credentials struct {
 		Token    string `json:"mfa_token"`
 		TotpCode string `json:"totp"`
@@ -252,7 +246,7 @@ func (c *ClientImpl) LoginSecond(token *MultiFactorAuthToken, code string) error
 		return err
 	}
 
-	resp, err := c.client.do("POST", authApi+"/login_mfa", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	resp, err := c.do("POST", authApi+"/login_mfa", reqBody, nil)
 	if err != nil {
 		return err
 	}
@@ -273,7 +267,7 @@ func (c *ClientImpl) LoginSecond(token *MultiFactorAuthToken, code string) error
 	return nil
 }
 
-func (c *ClientImpl) RequestOtp(email string, redirectUri *string) error {
+func (c *Client) RequestOtp(email string, redirectUri *string) error {
 	type Request struct {
 		Email       string  `json:"email"`
 		RedirectUri *string `json:"redirect_uri,omitempty"`
@@ -287,7 +281,7 @@ func (c *ClientImpl) RequestOtp(email string, redirectUri *string) error {
 		return err
 	}
 
-	resp, err := c.client.do("POST", authApi+"/otp/request", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	resp, err := c.do("POST", authApi+"/otp/request", reqBody, nil)
 	if err != nil {
 		return err
 	}
@@ -296,7 +290,7 @@ func (c *ClientImpl) RequestOtp(email string, redirectUri *string) error {
 	return nil
 }
 
-func (c *ClientImpl) LoginOtp(email string, code string) error {
+func (c *Client) LoginOtp(email string, code string) error {
 	type Request struct {
 		Email string `json:"email"`
 		Code  string `json:"code"`
@@ -310,7 +304,7 @@ func (c *ClientImpl) LoginOtp(email string, code string) error {
 		return err
 	}
 
-	resp, err := c.client.do("POST", authApi+"/otp/login", []Header{jsonHeader}, reqBody, []QueryParam{}, true)
+	resp, err := c.do("POST", authApi+"/otp/login", reqBody, nil)
 	if err != nil {
 		return err
 	}
@@ -330,8 +324,8 @@ func (c *ClientImpl) LoginOtp(email string, code string) error {
 	return nil
 }
 
-func (c *ClientImpl) Logout() error {
-	url := c.base.JoinPath(authApi, "logout").String()
+func (c *Client) Logout() error {
+	url := c.BaseUrl().JoinPath(authApi, "logout").String()
 	r := c.getHeadersAndRefreshToken()
 	if r != nil {
 		type LogoutRequest struct {
@@ -345,12 +339,12 @@ func (c *ClientImpl) Logout() error {
 			return err
 		}
 
-		_, err = c.client.do("POST", authApi+"/logout", []Header{jsonHeader}, body, []QueryParam{}, true)
+		_, err = c.do("POST", authApi+"/logout", body, nil)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err := c.client.get(url)
+		_, err := c.client.Get(url)
 		if err != nil {
 			return err
 		}
@@ -360,7 +354,7 @@ func (c *ClientImpl) Logout() error {
 	return err
 }
 
-func (c *ClientImpl) Refresh() error {
+func (c *Client) Refresh() error {
 	headerAndRefresh := c.getHeadersAndRefreshToken()
 	if headerAndRefresh == nil {
 		return errors.New("Unauthenticated")
@@ -378,7 +372,7 @@ func (c *ClientImpl) Refresh() error {
 	return nil
 }
 
-func (c *ClientImpl) do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error) {
+func (c *Client) do(method string, path string, body []byte, queryParams []QueryParam) (*http.Response, error) {
 	headers, refreshToken := c.getHeadersAndRefreshTokenIfExpired()
 	if refreshToken != nil {
 		newTokenState, err := doRefreshToken(c.client, headers, *refreshToken)
@@ -392,24 +386,24 @@ func (c *ClientImpl) do(method string, path string, body []byte, queryParams []Q
 		c.tokenState = newTokenState
 	}
 
-	return c.client.do(method, path, headers, body, queryParams, true)
-}
-
-func (c *ClientImpl) stream(method string, path string, body []byte, queryParams []QueryParam) (<-chan Event, func(), error) {
-	headers, refreshToken := c.getHeadersAndRefreshTokenIfExpired()
-	if refreshToken != nil {
-		newTokenState, err := doRefreshToken(c.client, headers, *refreshToken)
-		if err != nil {
-			return nil, nil, err
-		}
-		headers = newTokenState.headers
-		c.tokenMutex.Lock()
-		defer c.tokenMutex.Unlock()
-
-		c.tokenState = newTokenState
+	resp, err := c.client.Do(method, path, headers, body, queryParams)
+	if err != nil {
+		return nil, err
 	}
 
-	resp, err := c.client.do(method, path, headers, body, queryParams, true)
+	if resp.StatusCode >= 400 {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &FetchError{StatusCode: resp.StatusCode, Message: string(respBody), URL: c.BaseUrl().JoinPath(path)}
+	}
+
+	return resp, nil
+}
+
+func (c *Client) stream(method string, path string, body []byte, queryParams []QueryParam) (<-chan Event, func(), error) {
+	resp, err := c.do(method, path, body, queryParams)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -467,7 +461,7 @@ func (c *ClientImpl) stream(method string, path string, body []byte, queryParams
 	}, nil
 }
 
-func (c *ClientImpl) updateTokens(tokens *Tokens) (*Tokens, error) {
+func (c *Client) updateTokens(tokens *Tokens) (*Tokens, error) {
 	state, err := NewTokenState(tokens)
 	if err != nil {
 		return nil, err
@@ -485,7 +479,7 @@ type HeadersAndRefreshToken struct {
 	refreshToken string
 }
 
-func (c *ClientImpl) getHeadersAndRefreshToken() *HeadersAndRefreshToken {
+func (c *Client) getHeadersAndRefreshToken() *HeadersAndRefreshToken {
 	var r *HeadersAndRefreshToken
 
 	c.tokenMutex.Lock()
@@ -502,7 +496,7 @@ func (c *ClientImpl) getHeadersAndRefreshToken() *HeadersAndRefreshToken {
 	return r
 }
 
-func (c *ClientImpl) getHeadersAndRefreshTokenIfExpired() ([]Header, *string) {
+func (c *Client) getHeadersAndRefreshTokenIfExpired() ([]Header, *string) {
 	shouldRefresh := func(exp int64) bool {
 		now := time.Now()
 		return exp-60 < now.Unix()
@@ -528,7 +522,7 @@ func (c *ClientImpl) getHeadersAndRefreshTokenIfExpired() ([]Header, *string) {
 	return headers, refreshToken
 }
 
-func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (*TokenState, error) {
+func doRefreshToken(client Transport, headers []Header, refreshToken string) (*TokenState, error) {
 	type RefreshRequest struct {
 		RefreshToken string `json:"refresh_token"`
 	}
@@ -539,9 +533,18 @@ func doRefreshToken(client *thinClient, headers []Header, refreshToken string) (
 		return nil, err
 	}
 
-	resp, err := client.do("POST", authApi+"/refresh", headers, reqBody, []QueryParam{}, true)
+	path := authApi + "/refresh"
+	resp, err := client.Do("POST", path, headers, reqBody, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.StatusCode >= 400 {
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &FetchError{StatusCode: resp.StatusCode, Message: string(respBody), URL: client.BaseUrl().JoinPath(path)}
 	}
 
 	respBody, err := io.ReadAll(resp.Body)

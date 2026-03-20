@@ -95,7 +95,7 @@ func stopTrailBase(cmd *exec.Cmd) {
 	}
 }
 
-func connect(t *testing.T) Client {
+func connect(t *testing.T) *Client {
 	client, err := NewClient(SITE)
 	if err != nil {
 		panic(err)
