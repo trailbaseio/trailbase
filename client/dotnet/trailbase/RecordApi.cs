@@ -619,8 +619,8 @@ public class RecordApi {
 
   private static async IAsyncEnumerable<Event> StreamToEnumerableImpl(Stream stream) {
     using (var streamReader = new StreamReader(stream)) {
-      while (!streamReader.EndOfStream) {
-        var message = await streamReader.ReadLineAsync();
+      string? message;
+      while ((message = await streamReader.ReadLineAsync()) is not null) {
         if (message != null) {
           message.Trim();
           if (message.StartsWith("data: ")) {

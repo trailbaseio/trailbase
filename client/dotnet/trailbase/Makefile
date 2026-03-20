@@ -13,7 +13,13 @@ format:
 docs:
 	cd ../docs && docfx docfx.json --serve
 
+outdated:
+	dotnet list package --outdated
+
+upgrade:
+	dotnet outdated --upgrade
+
 clean:
 	rm -rf bin obj
 
-.PHONY: release clean docs format test
+.PHONY: release clean docs format test outdated upgrade

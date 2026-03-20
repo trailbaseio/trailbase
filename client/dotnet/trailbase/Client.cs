@@ -4,7 +4,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
-using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
 
@@ -14,17 +13,14 @@ namespace TrailBase;
 public class FetchException : Exception {
   /// <summary>Auth subject, i.e. user id.</summary>
   public System.Net.HttpStatusCode Status { get; }
-  /// <summary>The user's email address.</summary>
-  public string Message { get; }
 
   /// <summary>
   /// FetchException constructor.
   /// </summary>
   /// <param name="status">HTTP status code.</param>
   /// <param name="message">Error message</param>
-  public FetchException(System.Net.HttpStatusCode status, string message) {
+  public FetchException(System.Net.HttpStatusCode status, string message) : base(message) {
     this.Status = status;
-    this.Message = message;
   }
 
   /// <summary>Stringify FetchException.</summary>
@@ -220,8 +216,12 @@ public class MultiFactorAuthToken {
 internal partial class SourceGenerationContext : JsonSerializerContext {
 }
 
-class TokenState {
-  public (Tokens, JwtToken)? state;
+/// <summary>
+/// Container managing the various tokens and caching the derived headers.
+/// </summary>
+public class TokenState {
+  internal (Tokens, JwtToken)? state;
+  /// Derived headers.
   public HttpRequestHeaders headers;
 
   TokenState((Tokens, JwtToken)? state, HttpRequestHeaders headers) {
@@ -229,7 +229,7 @@ class TokenState {
     this.headers = headers;
   }
 
-  public static TokenState build(Tokens? tokens) {
+  internal static TokenState build(Tokens? tokens) {
     var authToken = tokens?.auth_token;
     if (authToken != null) {
       var handler = new JwtSecurityTokenHandler();
@@ -247,7 +247,7 @@ class TokenState {
     return new TokenState(null, buildHeaders(tokens));
   }
 
-  static HttpRequestHeaders buildHeaders(Tokens? tokens) {
+  private static HttpRequestHeaders buildHeaders(Tokens? tokens) {
     var headers = new HttpRequestMessage().Headers;
 
     if (tokens != null) {
@@ -268,16 +268,39 @@ class TokenState {
   }
 }
 
-internal class ThinClient {
+/// <summary>
+/// The main API for interacting with TrailBase servers.
+/// </summary>
+public abstract class Transport {
+  /// <summary>
+  /// HTTP fetch.
+  /// </summary>
+  /// <param name="path">HTTP path relative to site, e.g. `/test`.</param>
+  /// <param name="tokenState">Tokens</param>
+  /// <param name="data">Optional HTTP body.</param>
+  /// <param name="method">Optional HTTP method, default GET.</param>
+  /// <param name="queryParams">Optional query parameters</param>
+  /// <param name="completion">Can be used to control eagerness of reading HTTP response body. Useful for streaming.</param>
+  public abstract Task<HttpResponseMessage> Fetch(
+    String path,
+    TokenState tokenState,
+    HttpContent? data,
+    HttpMethod? method,
+    Dictionary<string, string>? queryParams,
+    HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead
+  );
+}
+
+internal class ThinClient : Transport {
   static readonly HttpClient client = new HttpClient();
 
-  string site;
+  Uri baseUrl;
 
-  internal ThinClient(string site) {
-    this.site = site;
+  internal ThinClient(Uri baseUrl) {
+    this.baseUrl = baseUrl;
   }
 
-  internal async Task<HttpResponseMessage> Fetch(
+  public override async Task<HttpResponseMessage> Fetch(
     String path,
     TokenState tokenState,
     HttpContent? data,
@@ -297,13 +320,15 @@ internal class ThinClient {
               p.Select(kvp => $"{encode(kvp.Key)}={encode(kvp.Value)}"));
     };
 
+    var uriBuilder = new UriBuilder(baseUrl);
+    uriBuilder.Path = path;
+    if (queryParams != null) {
+      uriBuilder.Query = query(queryParams);
+    }
+
     var httpRequestMessage = new HttpRequestMessage {
       Method = method ?? HttpMethod.Post,
-      RequestUri =
-        queryParams switch {
-          null => new Uri($"{site}/{path}"),
-          _ => new Uri($"{site}/{path}?{query(queryParams)}"),
-        },
+      RequestUri = uriBuilder.Uri,
       Content = data,
     };
 
@@ -325,19 +350,21 @@ public class Client {
   static readonly ILogger logger = LoggerFactory.Create(
       builder => builder.AddConsole()).CreateLogger("TrailBase.Client");
 
-  ThinClient client;
   /// <summary>Site this Client is connected to.</summary>
-  public string site { get; }
-  TokenState tokenState;
+  public Uri site { get; }
+
+  internal Transport client;
+  internal TokenState tokenState;
 
   /// <summary>
   /// Construct a TrailBase Client for the given [site] and [tokens].
   /// </summary>
   /// <param name="site">Site URL, e.g. https://trailbase.io:4000.</param>
   /// <param name="tokens">Optional tokens for a given authenticated user</param>
-  public Client(String site, Tokens? tokens) {
-    client = new ThinClient(site);
-    this.site = site;
+  /// <param name="transport">Optional, custom transport implementation</param>
+  public Client(String site, Tokens? tokens = null, Transport? transport = null) {
+    this.site = new Uri(site);
+    client = transport ?? new ThinClient(this.site);
     tokenState = TokenState.build(tokens);
   }
 
