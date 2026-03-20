@@ -10,8 +10,7 @@
     "declaration": true,
     "outDir": "./dist",
     "paths": {
-      "@/*": ["./src/*"],
-      "@bindings/*": ["../bindings/*"]
+      "@bindings/*": ["./bindings/*"]
     }
   },
   "include": [

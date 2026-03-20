@@ -1,7 +1,7 @@
 import { test } from "vitest";
-import { FetchError, initClient, exportedForTesting } from "../src/index";
 
-const { parseJSON } = exportedForTesting!;
+import { FetchError, initClient } from "../src/index";
+import { parseJSON } from "../src/json";
 
 test("error-handling", async ({ expect }) => {
   expect(new FetchError(404, "test", "url").toString()).toEqual(

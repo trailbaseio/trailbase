@@ -6,7 +6,7 @@ import { FeatureCollection } from "geojson";
 import { generate } from "otplib";
 
 import {
-  exportedForTesting,
+  exportedForTesting as indexExportForTesting,
   FetchError,
   filePath,
   filesPath,
@@ -14,9 +14,12 @@ import {
   urlSafeBase64Encode,
 } from "../../src/index";
 import type { Client, Event, RecordApiImpl } from "../../src/index";
+import { exportedForTesting as recordExportForTesting } from "../../src/record_api";
+
 import { ADDRESS, USE_WS } from "../constants";
 
-const { base64Encode, subscribeWs } = exportedForTesting!;
+const { base64Encode } = indexExportForTesting!;
+const { subscribeWs } = recordExportForTesting!;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -214,7 +217,7 @@ test("Record integration tests", async () => {
 
   await api.delete(ids[1]);
 
-  await expect(async () => await api.read(ids[1])).rejects.toThrowError(
+  await expect(async () => await api.read(ids[1])).rejects.toThrow(
     expect.objectContaining({
       status: status.NOT_FOUND,
     }),
@@ -223,7 +226,7 @@ test("Record integration tests", async () => {
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
 
-  await expect(async () => await api.read(ids[0])).rejects.toThrowError(
+  await expect(async () => await api.read(ids[0])).rejects.toThrow(
     expect.objectContaining({
       status: status.FORBIDDEN,
     }),
@@ -375,7 +378,7 @@ test("API Errors", async () => {
 
   await expect(
     async () => await client.fetch("/nonexistent/api/path"),
-  ).rejects.toThrowError(
+  ).rejects.toThrow(
     new FetchError(
       status.NOT_FOUND,
       "Not Found",
@@ -387,7 +390,7 @@ test("API Errors", async () => {
   const nonExistentApi = client.records("non-existent");
   await expect(
     async () => await nonExistentApi.read(nonExistentId),
-  ).rejects.toThrowError(
+  ).rejects.toThrow(
     new FetchError(
       status.METHOD_NOT_ALLOWED,
       "Method Not Allowed",
@@ -397,7 +400,7 @@ test("API Errors", async () => {
 
   const api = client.records("simple_strict_table");
   const invalidId = "InvalidId0123";
-  await expect(async () => await api.read(invalidId)).rejects.toThrowError(
+  await expect(async () => await api.read(invalidId)).rejects.toThrow(
     new FetchError(
       status.BAD_REQUEST,
       // Custom error reply by RecordError's IntoResponse impl.
@@ -408,7 +411,7 @@ test("API Errors", async () => {
     ),
   );
 
-  await expect(async () => await api.read(nonExistentId)).rejects.toThrowError(
+  await expect(async () => await api.read(nonExistentId)).rejects.toThrow(
     new FetchError(
       status.NOT_FOUND,
       "Not Found",
@@ -724,7 +727,6 @@ test("GeoJson access", async ({ expect }) => {
 
   {
     const json: FeatureCollection = await api.listGeoOp("geom").query();
-    console.log("HERE", json);
     expect(json.features).toHaveLength(4);
   }
 

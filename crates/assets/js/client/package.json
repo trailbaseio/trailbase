@@ -2,18 +2,18 @@
   "name": "trailbase",
   "description": "Official TrailBase Client",
   "homepage": "https://trailbase.io",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "license": "Apache-2.0 OR OSL-3.0",
   "type": "module",
   "main": "./src/index.ts",
   "publishConfig": {
     "access": "public",
-    "main": "./dist/client/src/index.js",
-    "types": "/dist/client/src/index.d.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "exports": {
       ".": {
-        "default": "./dist/client/src/index.js",
-        "types": "./dist/client/src/index.d.ts"
+        "default": "./dist/index.js",
+        "types": "./dist/index.d.ts"
       }
     }
   },
@@ -27,12 +27,18 @@
     "directory": "crates/assets/js/client"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "vite build",
     "check": "tsc --noEmit --skipLibCheck && eslint",
     "format": "prettier -w src tests",
-    "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/client/src/index.js",
-    "start": "tsc && node dist/client/src/index.js",
+    "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/index.js",
     "test": "vitest run && vite-node tests/integration_test_runner.ts"
+  },
+  "dependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@ungap/raw-json": "0.4.4",
+    "geojson": "^0.5.0",
+    "jwt-decode": "^4.0.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -47,14 +53,9 @@
     "tinybench": "^6.0.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.57.1",
+    "vite": "^8.0.1",
     "vite-node": "^6.0.0",
+    "vite-plugin-dts": "^4.5.4",
     "vitest": "^4.1.0"
-  },
-  "dependencies": {
-    "@types/geojson": "^7946.0.16",
-    "@ungap/raw-json": "0.4.4",
-    "geojson": "^0.5.0",
-    "jwt-decode": "^4.0.0",
-    "uuid": "^13.0.0"
   }
 }

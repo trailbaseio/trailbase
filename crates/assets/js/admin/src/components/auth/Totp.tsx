@@ -30,7 +30,7 @@ export function TotpToggleButton(props: { client: Client; user: User }) {
     try {
       const res = await props.client.registerTOTP({ png: true });
       setTotp({
-        url: res.totp_url,
+        url: res.url,
         png: res.png ?? "",
       });
     } catch (err) {
