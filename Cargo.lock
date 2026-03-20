@@ -6705,9 +6705,13 @@ dependencies = [
 name = "trailbase-client"
 version = "0.6.0"
 dependencies = [
+ "async-trait",
  "base64",
+ "bytes",
  "eventsource-stream",
  "futures-lite",
+ "http",
+ "http-body-util",
  "jsonwebtoken",
  "lazy_static",
  "parking_lot",

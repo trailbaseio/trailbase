@@ -145,7 +145,7 @@ struct Comment {
 }
 
 async fn connect() -> Client {
-  let client = Client::new(&site(), None).unwrap();
+  let client = Client::new(&*site(), None).unwrap();
   client.login("admin@localhost", "secret").await.unwrap();
   return client;
 }
@@ -168,7 +168,7 @@ async fn login_test() {
 }
 
 async fn login_otp() {
-  let client = Client::new(&site(), None).unwrap();
+  let client = Client::new(&*site(), None).unwrap();
 
   // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint
   // responds ok.
@@ -180,7 +180,7 @@ async fn login_otp() {
 }
 
 async fn login_multi_factor_test() {
-  let client = Client::new(&site(), None).unwrap();
+  let client = Client::new(&*site(), None).unwrap();
   let Some(mfa_token) = client.login("alice@trailbase.io", "secret").await.unwrap() else {
     panic!("expected multi-factor token");
   };

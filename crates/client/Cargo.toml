@@ -16,8 +16,12 @@ default = []
 ws = ["dep:reqwest-websocket"]
 
 [dependencies]
+async-trait = "0.1.89"
+bytes = "1.11.1"
 eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
+http = "1.4.0"
+http-body-util = "0.1.3"
 jsonwebtoken = { version = "10.2.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
 reqwest = { version = "0.13.1", features = ["stream"] }
