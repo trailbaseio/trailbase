@@ -7,6 +7,7 @@ import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
 
 import './sse.dart';
+import './transport.dart';
 
 class User {
   final String id;
@@ -297,7 +298,7 @@ class RecordApi {
     final response = await _client.fetch(
       '${_recordApi}/${_name}',
       method: Method.post,
-      data: jsonEncode(record),
+      body: jsonEncode(record),
     );
 
     final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
@@ -309,7 +310,7 @@ class RecordApi {
     final response = await _client.fetch(
       '${_recordApi}/${_name}',
       method: Method.post,
-      data: jsonEncode(records),
+      body: jsonEncode(records),
     );
 
     final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
@@ -323,7 +324,7 @@ class RecordApi {
     await _client.fetch(
       '${_recordApi}/${_name}/${id}',
       method: Method.patch,
-      data: jsonEncode(record),
+      body: jsonEncode(record),
     );
   }
 
@@ -358,15 +359,14 @@ class RecordApi {
       _client._tokenState = await _client._refreshTokensImpl(refreshToken);
     }
 
-    final uri = _client._site.replace(
+    final uri = _client._baseUrl.replace(
         path: '${_recordApi}/${_name}/subscribe/${id}',
         queryParameters: params);
-    final request = http.Request('GET', uri)
-      ..headers.addAll(_client._tokenState.headers);
 
     return await connectSse(
-      _client._http,
-      request,
+      _client._transport,
+      uri,
+      headers: _client._tokenState.headers,
       cache: _client.cache.cast<String, Future<StreamController<Event>>>(),
     );
   }
@@ -382,16 +382,9 @@ class RecordApi {
   }
 }
 
-enum Method {
-  get,
-  post,
-  patch,
-  delete,
-}
-
 class Client {
-  final _http = http.Client();
-  final Uri _site;
+  final Uri _baseUrl;
+  final Transport _transport;
 
   _TokenState _tokenState;
   final void Function(Client, Tokens?)? _authChange;
@@ -402,19 +395,27 @@ class Client {
   Client._(
     String site, {
     Tokens? tokens,
+    Transport? transport,
     void Function(Client, Tokens?)? onAuthChange,
-  })  : _site = Uri.parse(site),
+  })  : _baseUrl = Uri.parse(site),
+        _transport = transport ?? DefaultTransport(Uri.parse(site)),
         _tokenState = _TokenState.build(tokens),
         _authChange = onAuthChange;
 
   Client(
     String site, {
     void Function(Client, Tokens?)? onAuthChange,
-  }) : this._(site, onAuthChange: onAuthChange);
+    Transport? transport,
+  }) : this._(site, transport: transport, onAuthChange: onAuthChange);
 
-  static Future<Client> withTokens(String site, Tokens tokens,
-      {void Function(Client, Tokens?)? onAuthChange}) async {
-    final client = Client(site, onAuthChange: onAuthChange);
+  static Future<Client> withTokens(
+    String site,
+    Tokens tokens, {
+    Transport? transport,
+    void Function(Client, Tokens?)? onAuthChange,
+  }) async {
+    final client =
+        Client(site, transport: transport, onAuthChange: onAuthChange);
 
     // Initial check if tokens are valid and potentially refresh auth token.
     // Do not use _updateToken to not call [onAuthChange] on intial tokens.
@@ -429,7 +430,7 @@ class Client {
   }
 
   /// TrailBase server's address.
-  Uri site() => _site;
+  Uri site() => _baseUrl;
 
   /// Access to the raw tokens, can be used to persist login state.
   Tokens? tokens() => _tokenState.state?.$1;
@@ -444,7 +445,7 @@ class Client {
     final response = await fetch(
       '${_authApi}/login',
       method: Method.post,
-      data: jsonEncode({
+      body: jsonEncode({
         'email': email,
         'password': password,
       }),
@@ -469,7 +470,7 @@ class Client {
     final response = await fetch(
       '${_authApi}/token',
       method: Method.post,
-      data: jsonEncode({
+      body: jsonEncode({
         'authorization_code': authCode,
         'pkce_code_verifier': pkceCodeVerifier,
       }),
@@ -483,7 +484,7 @@ class Client {
     final response = await fetch(
       '${_authApi}/login_mfa',
       method: Method.post,
-      data: jsonEncode({
+      body: jsonEncode({
         'mfa_token': token.token,
         'totp': code,
       }),
@@ -497,7 +498,7 @@ class Client {
     await fetch(
       '${_authApi}/otp/request',
       method: Method.post,
-      data: jsonEncode({
+      body: jsonEncode({
         'email': email,
         if (redirectUri != null) 'redirect_uri': redirectUri,
       }),
@@ -508,7 +509,7 @@ class Client {
     final response = await fetch(
       '${_authApi}/otp/login',
       method: Method.post,
-      data: jsonEncode({
+      body: jsonEncode({
         'email': email,
         'code': code,
       }),
@@ -524,7 +525,7 @@ class Client {
       if (refreshToken != null) {
         await fetch('${_authApi}/logout',
             method: Method.post,
-            data: jsonEncode({
+            body: jsonEncode({
               'refresh_token': refreshToken,
             }));
       } else {
@@ -534,21 +535,6 @@ class Client {
       _updateTokens(null);
     }
   }
-
-  // Future<void> deleteUser() async {
-  //   await fetch('${_authApi}/delete');
-  //   _updateTokens(null);
-  // }
-  //
-  // Future<void> changeEmail(String email) async {
-  //   await fetch(
-  //     '${_authApi}/change_email',
-  //     method: Method.post,
-  //     data: jsonEncode({
-  //       'new_email': email,
-  //     }),
-  //   );
-  // }
 
   Future<void> refreshAuthToken() async {
     final refreshToken = _tokenState._shouldRefresh();
@@ -560,7 +546,7 @@ class Client {
   Future<http.Response> fetch(
     String path, {
     Method method = Method.get,
-    String? data,
+    String? body,
     Map<String, dynamic>? queryParams,
     bool throwOnError = true,
   }) async {
@@ -569,15 +555,13 @@ class Client {
       _tokenState = await _refreshTokensImpl(refreshToken);
     }
 
-    final uri = _site.replace(path: path, queryParameters: queryParams);
-    final headers = _tokenState.headers;
-
-    final response = switch (method) {
-      Method.get => await _http.get(uri, headers: headers),
-      Method.post => await _http.post(uri, headers: headers, body: data),
-      Method.patch => await _http.patch(uri, headers: headers, body: data),
-      Method.delete => await _http.delete(uri, headers: headers, body: data),
-    };
+    final response = await _transport.fetch(
+      path,
+      method: method,
+      headers: _tokenState.headers,
+      body: body,
+      queryParams: queryParams,
+    );
 
     if (response.statusCode != 200 && throwOnError) {
       throw HttpException(response.statusCode, response.body);
@@ -608,8 +592,8 @@ class Client {
   }
 
   Future<_TokenState> _refreshTokensImpl(String refreshToken) async {
-    final uri = site().replace(path: '${_authApi}/refresh');
-    final response = await _http.post(uri,
+    final response = await _transport.fetch('${_authApi}/refresh',
+        method: Method.post,
         headers: _tokenState.headers,
         body: jsonEncode({
           'refresh_token': refreshToken,

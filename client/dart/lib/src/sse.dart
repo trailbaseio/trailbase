@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:http/http.dart' as http;
+import './transport.dart';
 
 class HttpException implements Exception {
   final int status;
@@ -61,14 +61,19 @@ class ErrorEvent extends Event {
 }
 
 Future<Stream<Event>> connectSse(
-  http.Client client,
-  http.Request request, {
+  Transport client,
+  Uri uri, {
+  Map<String, String>? headers,
   Map<String, Future<StreamController<Event>>>? cache,
 }) async {
-  final key = request.url.toString();
+  final key = uri.toString();
 
   Future<StreamController<Event>> connectSseImpl() async {
-    final response = await client.send(request);
+    final response = await client.stream(
+      uri,
+      headers: headers,
+    );
+
     if (response.statusCode != 200) {
       throw HttpException(response.statusCode, response.toString());
     }
