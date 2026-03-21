@@ -1,97 +1,158 @@
+use axum::response::sse::Event as SseEvent;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::records::RecordError;
+
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
-pub enum JsonPayload {
-  #[serde(rename = "update")]
+#[derive(Debug, Clone, PartialEq)]
+pub enum JsonEventPayload {
   Update { value: JsonObject },
-  #[serde(rename = "insert")]
   Insert { value: JsonObject },
-  #[serde(rename = "delete")]
   Delete { value: JsonObject },
-  #[serde(rename = "error")]
-  Error { msg: String },
+  Error { error: String },
+  Ping,
 }
 
-fn serialize_raw_json<S>(json: &str, s: S) -> Result<S::Ok, S::Error>
+fn serialize_raw_json<S>(json: &Option<String>, s: S) -> Result<S::Ok, S::Error>
 where
   S: serde::ser::Serializer,
 {
   // This should be pretty efficient: it just checks that the string is valid;
   // it doesn't parse it into a new data structure.
-  let v: &serde_json::value::RawValue = serde_json::from_str(json).expect("invalid json");
-  v.serialize(s)
+  if let Some(json) = json {
+    let v: &serde_json::value::RawValue = serde_json::from_str(json).expect("invalid json");
+    return v.serialize(s);
+  }
+
+  return s.serialize_none();
 }
 
-// #[derive(Debug, Clone, Serialize, Deserialize)]
-// pub struct SerializedJsonObject(Box<serde_json::value::RawValue>);
-//
-// impl PartialEq for SerializedJsonObject {
-//   fn eq(&self, other: &Self) -> bool {
-//     return self.0.get() == other.0.get();
-//   }
-// }
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
-pub enum SerializedJsonPayload {
-  #[serde(rename = "update")]
-  Update {
-    #[serde(serialize_with = "serialize_raw_json")]
-    value: String,
-  },
-  #[serde(rename = "insert")]
-  Insert {
-    #[serde(serialize_with = "serialize_raw_json")]
-    value: String,
-  },
-  #[serde(rename = "delete")]
-  Delete {
-    #[serde(serialize_with = "serialize_raw_json")]
-    value: String,
-  },
-  #[serde(rename = "error")]
-  Error { msg: String },
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializedJsonObject {
+  #[serde(flatten)]
+  json: Box<serde_json::value::RawValue>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum Payload {
-  Json(JsonPayload),
-  SerializedJson(SerializedJsonPayload),
-}
-
-impl Payload {
-  fn prerender(self) -> Result<Self, serde_json::Error> {
-    return Ok(match self {
-      Self::Json(payload) => match payload {
-        JsonPayload::Update { value } => Self::SerializedJson(SerializedJsonPayload::Update {
-          value: serde_json::to_string(&value)?,
-        }),
-        JsonPayload::Insert { value } => Self::SerializedJson(SerializedJsonPayload::Insert {
-          value: serde_json::to_string(&value)?,
-        }),
-        JsonPayload::Delete { value } => Self::SerializedJson(SerializedJsonPayload::Delete {
-          value: serde_json::to_string(&value)?,
-        }),
-        JsonPayload::Error { msg } => Self::SerializedJson(SerializedJsonPayload::Error { msg }),
-      },
-      x => x,
-    });
+impl PartialEq for SerializedJsonObject {
+  fn eq(&self, other: &Self) -> bool {
+    return self.json.get() == other.json.get();
   }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Event {
+pub enum PayloadType {
+  #[serde(rename = "update")]
+  Update,
+  #[serde(rename = "insert")]
+  Insert,
+  #[serde(rename = "delete")]
+  Delete,
+  #[serde(rename = "error")]
+  Error,
+  #[serde(rename = "ping")]
+  Ping,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventPayload {
+  r#type: PayloadType,
+  #[serde(
+    skip_serializing_if = "Option::is_none",
+    // serialize_with = "serialize_raw_json"
+  )]
+  value: Option<Box<serde_json::value::RawValue>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  error: Option<String>,
+}
+
+impl PartialEq for EventPayload {
+  fn eq(&self, other: &Self) -> bool {
+    fn get(v: &Option<Box<serde_json::value::RawValue>>) -> Option<&str> {
+      return v.as_ref().map(|v| v.get());
+    }
+
+    return self.r#type == other.r#type
+      && get(&self.value) == get(&other.value)
+      && self.error == other.error;
+  }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub(crate) struct Event {
   #[serde(flatten)]
-  payload: Arc<Payload>,
+  pub payload: Arc<EventPayload>,
   // NOTE: we chose u32 since it should be large enough and can be safely and portably represented
   // in JSON.
   #[serde(skip_serializing_if = "Option::is_none")]
-  seq: Option<u32>,
+  pub seq: Option<u32>,
+}
+
+impl EventPayload {
+  pub fn from(value: &JsonEventPayload) -> Self {
+    return match value {
+      JsonEventPayload::Update { value } => EventPayload {
+        r#type: PayloadType::Update,
+        value: serde_json::value::to_raw_value(&value)
+          .map(|v| v.to_owned())
+          .ok(),
+        error: None,
+      },
+      JsonEventPayload::Insert { value } => EventPayload {
+        r#type: PayloadType::Insert,
+        value: serde_json::value::to_raw_value(&value)
+          .map(|v| v.to_owned())
+          .ok(),
+        error: None,
+      },
+      JsonEventPayload::Delete { value } => EventPayload {
+        r#type: PayloadType::Delete,
+        value: serde_json::value::to_raw_value(&value)
+          .map(|v| v.to_owned())
+          .ok(),
+        error: None,
+      },
+      JsonEventPayload::Error { error } => EventPayload {
+        r#type: PayloadType::Error,
+        value: None,
+        error: Some(error.clone()),
+      },
+      JsonEventPayload::Ping => EventPayload {
+        r#type: PayloadType::Ping,
+        value: None,
+        error: None,
+      },
+    };
+  }
+
+  #[inline]
+  fn into_sse_event(self: Arc<EventPayload>, seq: Option<u32>) -> Result<SseEvent, RecordError> {
+    if let Some(seq) = seq {
+      let ev = Event {
+        payload: self,
+        seq: Some(seq),
+      };
+      let s = serde_json::to_string(&ev).map_err(|err| RecordError::Internal(err.into()))?;
+      return Ok(SseEvent::default().data(&s));
+    } else {
+      let s = serde_json::to_string(&*self).map_err(|err| RecordError::Internal(err.into()))?;
+      return Ok(SseEvent::default().data(&s));
+    }
+  }
+
+  // #[cfg(feature = "ws")]
+  // #[inline]
+  // fn into_ws_event(self) -> Result<axum::extract::ws::Message, &'static str> {
+  //   let s = match self {
+  //     Self::DbEvent(ev) => ev.to_json(None),
+  //     Self::Sse(ev) => {
+  //       return Err("not sse");
+  //     }
+  //   };
+  //
+  //   return Ok(axum::extract::ws::Message::Text(s.into()));
+  // }
 }
 
 #[cfg(test)]
@@ -101,7 +162,7 @@ mod tests {
 
   #[test]
   fn serialization_test() {
-    let payload0 = Payload::Json(JsonPayload::Insert {
+    let payload0 = EventPayload::from(&JsonEventPayload::Insert {
       value: JsonObject::from_iter([("key0".to_string(), json!("value0"))]),
     });
 
@@ -116,25 +177,24 @@ mod tests {
     assert_eq!(
       expected0,
       serde_json::to_string(&Event {
-        payload: Arc::new(payload0.prerender().unwrap()),
+        payload: Arc::new(payload0.clone()),
         seq: None,
       })
       .unwrap()
     );
 
-    let ev0deserialized: Event = serde_json::from_str(&expected0).unwrap();
-    assert!(matches!(*ev0deserialized.payload, Payload::Json(_)));
-    assert_eq!(ev0, ev0deserialized);
+    let ev0deserialized: EventPayload = serde_json::from_str(&expected0).unwrap();
+    assert_eq!(payload0, ev0deserialized);
 
-    let payload1 = Payload::Json(JsonPayload::Error {
-      msg: "boom".to_string(),
+    let payload1 = EventPayload::from(&JsonEventPayload::Error {
+      error: "boom".to_string(),
     });
     let ev1 = Event {
       payload: Arc::new(payload1),
       seq: Some(11),
     };
 
-    let expected1 = r#"{"type":"error","msg":"boom","seq":11}"#;
+    let expected1 = r#"{"type":"error","error":"boom","seq":11}"#;
     let ev1str = serde_json::to_string(&ev1).unwrap();
     assert_eq!(expected1, ev1str);
   }
