@@ -11,7 +11,7 @@ use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
@@ -23,6 +23,7 @@ use ts_rs::TS;
 use crate::app_state::{AppState, derive_unchecked};
 use crate::auth::User;
 use crate::records::RecordApi;
+use crate::records::event::{Event, EventPayload, JsonEventPayload};
 use crate::records::filter::{
   Filter, apply_filter_recursively_to_record, qs_filter_to_record_filter,
 };
@@ -43,7 +44,7 @@ struct SubscriptionId {
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
 /// e.g. client disconnects.
 struct AutoCleanupEventStreamState {
-  receiver: WeakReceiver<Event>,
+  receiver: WeakReceiver<Arc<EventPayload>>,
   state: Arc<PerConnectionState>,
   id: SubscriptionId,
 }
@@ -75,12 +76,12 @@ pin_project! {
     state: AutoCleanupEventStreamState,
 
     #[pin]
-    receiver: async_channel::Receiver<Event>,
+    receiver: async_channel::Receiver<Arc<EventPayload>>,
   }
 }
 
 impl Stream for AutoCleanupEventStream {
-  type Item = Event;
+  type Item = Arc<EventPayload>;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
@@ -100,73 +101,73 @@ pub enum RecordAction {
   Update,
 }
 
-#[derive(Clone, Debug)]
-pub enum Event {
-  DbEvent(DbEvent),
-  Sse(SseEvent),
-}
-
-impl Event {
-  #[inline]
-  fn into_sse_event(self, seq: usize) -> Result<SseEvent, axum::Error> {
-    let s = match self {
-      Self::DbEvent(ev) => ev.to_json(Some(seq)),
-      Self::Sse(ev) => {
-        return Ok(ev);
-      }
-    };
-
-    return Ok(SseEvent::default().data(&s));
-  }
-
-  #[cfg(feature = "ws")]
-  #[inline]
-  fn into_ws_event(self) -> Result<axum::extract::ws::Message, &'static str> {
-    let s = match self {
-      Self::DbEvent(ev) => ev.to_json(None),
-      Self::Sse(ev) => {
-        return Err("not sse");
-      }
-    };
-
-    return Ok(axum::extract::ws::Message::Text(s.into()));
-  }
-}
-
-impl From<DbEvent> for Event {
-  fn from(value: DbEvent) -> Self {
-    return Event::DbEvent(value);
-  }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum DbEvent {
-  Update(Arc<str>),
-  Insert(Arc<str>),
-  Delete(Arc<str>),
-  Error(Arc<str>),
-}
-
-impl DbEvent {
-  #[inline]
-  fn to_json(&self, seq: Option<usize>) -> String {
-    if let Some(seq) = seq {
-      return match self {
-        Self::Update(json) => format!(r#"{{ "Update": {json}, "Seq": {seq} }}"#),
-        Self::Insert(json) => format!(r#"{{ "Insert": {json}, "Seq": {seq} }}"#),
-        Self::Delete(json) => format!(r#"{{ "Delete": {json}, "Seq": {seq} }}"#),
-        Self::Error(msg) => format!(r#"{{ "Error": {msg}, "Seq": {seq} }}"#),
-      };
-    }
-
-    return match self {
-      Self::Update(json) => format!(r#"{{ "Update": {json} }}"#),
-      Self::Insert(json) => format!(r#"{{ "Insert": {json} }}"#),
-      Self::Delete(json) => format!(r#"{{ "Delete": {json} }}"#),
-      Self::Error(msg) => format!(r#"{{ "Error": {msg} }}"#),
-    };
-  }
-}
+// #[derive(Clone, Debug)]
+// pub enum Event {
+//   DbEvent(DbEvent),
+//   Sse(SseEvent),
+// }
+//
+// impl Event {
+//   #[inline]
+//   fn into_sse_event(self, seq: usize) -> Result<SseEvent, axum::Error> {
+//     let s = match self {
+//       Self::DbEvent(ev) => ev.to_json(Some(seq)),
+//       Self::Sse(ev) => {
+//         return Ok(ev);
+//       }
+//     };
+//
+//     return Ok(SseEvent::default().data(&s));
+//   }
+//
+//   #[cfg(feature = "ws")]
+//   #[inline]
+//   fn into_ws_event(self) -> Result<axum::extract::ws::Message, &'static str> {
+//     let s = match self {
+//       Self::DbEvent(ev) => ev.to_json(None),
+//       Self::Sse(ev) => {
+//         return Err("not sse");
+//       }
+//     };
+//
+//     return Ok(axum::extract::ws::Message::Text(s.into()));
+//   }
+// }
+//
+// impl From<DbEvent> for Event {
+//   fn from(value: DbEvent) -> Self {
+//     return Event::DbEvent(value);
+//   }
+// }
+//
+// #[derive(Debug, Clone, PartialEq)]
+// pub enum DbEvent {
+//   Update(Arc<str>),
+//   Insert(Arc<str>),
+//   Delete(Arc<str>),
+//   Error(Arc<str>),
+// }
+//
+// impl DbEvent {
+//   #[inline]
+//   fn to_json(&self, seq: Option<usize>) -> String {
+//     if let Some(seq) = seq {
+//       return match self {
+//         Self::Update(json) => format!(r#"{{ "Update": {json}, "Seq": {seq} }}"#),
+//         Self::Insert(json) => format!(r#"{{ "Insert": {json}, "Seq": {seq} }}"#),
+//         Self::Delete(json) => format!(r#"{{ "Delete": {json}, "Seq": {seq} }}"#),
+//         Self::Error(msg) => format!(r#"{{ "Error": {msg}, "Seq": {seq} }}"#),
+//       };
+//     }
+//
+//     return match self {
+//       Self::Update(json) => format!(r#"{{ "Update": {json} }}"#),
+//       Self::Insert(json) => format!(r#"{{ "Insert": {json} }}"#),
+//       Self::Delete(json) => format!(r#"{{ "Delete": {json} }}"#),
+//       Self::Error(msg) => format!(r#"{{ "Error": {msg} }}"#),
+//     };
+//   }
+// }
 
 pub struct Subscription {
   /// Id uniquely identifying this subscription.
@@ -177,7 +178,7 @@ pub struct Subscription {
   /// User associated with subscriber.
   user: Option<User>,
   /// Channel for sending events to the SSE handler.
-  sender: async_channel::Sender<Event>,
+  sender: async_channel::Sender<Arc<EventPayload>>,
   /// Filter
   filter: Filter,
 }
@@ -330,7 +331,7 @@ impl PerConnectionState {
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
-    sender: async_channel::Sender<Event>,
+    sender: async_channel::Sender<Arc<EventPayload>>,
   ) -> Result<SubscriptionId, RecordError> {
     let table_name = api.table_name();
     let pk_column = &api.record_pk_column().column.name;
@@ -387,7 +388,7 @@ impl PerConnectionState {
     api: RecordApi,
     user: Option<User>,
     filter: Option<ValueOrComposite>,
-    sender: async_channel::Sender<Event>,
+    sender: async_channel::Sender<Arc<EventPayload>>,
   ) -> Result<SubscriptionId, RecordError> {
     let filter = if let Some(filter) = filter {
       Filter::Record(qs_filter_to_record_filter(api.columns(), filter)?)
@@ -522,7 +523,7 @@ impl SubscriptionManager {
     user: Option<User>,
     filter: Option<ValueOrComposite>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
     let state = self.get_per_connection_state(&api);
 
     let id = state
@@ -553,7 +554,7 @@ impl SubscriptionManager {
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Event>(16);
+    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
     let state = self.get_per_connection_state(&api);
 
     let id = state
@@ -631,7 +632,7 @@ fn broker_subscriptions(
   subs: &[Subscription],
   record_subscriptions: bool,
   record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
-  event: &Event,
+  event: &Arc<EventPayload>,
 ) -> Vec<usize> {
   let mut dead_subscriptions: Vec<usize> = vec![];
   for (idx, sub) in subs.iter().enumerate() {
@@ -725,25 +726,25 @@ fn hook_continuation(conn: &rusqlite::Connection, s: ContinuationState) {
     .collect();
 
   // Build a JSON-encoded SQLite event (insert, update, delete).
-  let event: Event = {
-    let json_value = serde_json::Value::Object(
-      record
-        .iter()
-        .filter_map(|(name, value)| {
-          return value_to_flat_json(value)
-            .ok()
-            .map(|v| (name.to_string(), v));
-        })
-        .collect(),
-    );
+  let event: Arc<EventPayload> = {
+    let json_obj = record
+      .iter()
+      .filter_map(|(name, value)| {
+        return value_to_flat_json(value)
+          .ok()
+          .map(|v| (name.to_string(), v));
+      })
+      .collect();
 
-    let str_value = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
+    // let str_value = serde_json::to_string(&json_value).unwrap_or_else(|_| "{}".to_string());
 
-    match action {
-      RecordAction::Delete => DbEvent::Delete(str_value.into()).into(),
-      RecordAction::Insert => DbEvent::Insert(str_value.into()).into(),
-      RecordAction::Update => DbEvent::Update(str_value.into()).into(),
-    }
+    let payload = EventPayload::from(&match action {
+      RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
+      RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
+      RecordAction::Update => JsonEventPayload::Update { value: json_obj },
+    });
+
+    Arc::new(payload)
   };
 
   let mut read_lock = state.subscriptions.upgradable_read();
@@ -910,12 +911,14 @@ pub async fn subscribe_sse(
         .add_sse_table_subscription(api, user, filter)
         .await?;
 
-      let seq = AtomicUsize::default();
+      let seq = AtomicU32::default();
 
       Ok(
-        Sse::new(receiver.map(move |ev| ev.into_sse_event(seq.fetch_add(1, Ordering::SeqCst))))
-          .keep_alive(KeepAlive::default())
-          .into_response(),
+        Sse::new(
+          receiver.map(move |ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst)))),
+        )
+        .keep_alive(KeepAlive::default())
+        .into_response(),
       )
     }
     _ => {
@@ -929,12 +932,14 @@ pub async fn subscribe_sse(
         .add_sse_record_subscription(api, record_id, user)
         .await?;
 
-      let seq = AtomicUsize::default();
+      let seq = AtomicU32::default();
 
       Ok(
-        Sse::new(receiver.map(move |ev| ev.into_sse_event(seq.fetch_add(1, Ordering::SeqCst))))
-          .keep_alive(KeepAlive::default())
-          .into_response(),
+        Sse::new(
+          receiver.map(move |ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst)))),
+        )
+        .keep_alive(KeepAlive::default())
+        .into_response(),
       )
     }
   };
@@ -1084,7 +1089,7 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let (sender, receiver) = async_channel::bounded::<Event>(16);
+        let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
         let state = state.subscription_manager().get_per_connection_state(&api);
 
         let Ok(id) = state
@@ -1127,7 +1132,7 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let (sender, receiver) = async_channel::bounded::<Event>(16);
+        let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
         let state = state.subscription_manager().get_per_connection_state(&api);
 
         let Ok(id) = state
@@ -1156,10 +1161,13 @@ pub async fn subscribe_ws(
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
-static ESTABLISHED_EVENT: LazyLock<Event> =
-  LazyLock::new(|| Event::Sse(SseEvent::default().comment("subscription established")));
-static ACCESS_DENIED_EVENT: LazyLock<Event> =
-  LazyLock::new(|| Event::DbEvent(DbEvent::Error("Access denied".into())));
+static ESTABLISHED_EVENT: LazyLock<Arc<EventPayload>> =
+  LazyLock::new(|| Arc::new(EventPayload::from(&JsonEventPayload::Ping)));
+static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
+  Arc::new(EventPayload::from(&JsonEventPayload::Error {
+    error: "Access denied".into(),
+  }))
+});
 
 const NO_HOOK: Option<fn(Action, &str, &str, &PreUpdateCase)> = None;
 
@@ -1170,7 +1178,6 @@ mod tests {
   use serde_json::Value;
   use trailbase_sqlite::params;
 
-  use super::DbEvent;
   use super::*;
 
   use crate::admin::user::*;
@@ -1181,59 +1188,14 @@ mod tests {
   use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
 
-  async fn decode_db_event(ev: Event) -> Option<DbEvent> {
-    return match ev {
-      Event::DbEvent(ev) => Some(ev),
-      _ => None,
-    };
-  }
-
-  // async fn decode_sse_db_event(event: SseEvent) -> Option<DbEvent> {
-  //   let (sender, receiver) = async_channel::unbounded::<SseEvent>();
-  //   let sse = Sse::new(receiver.map(|ev| -> Result<SseEvent, axum::Error> { Ok(ev) }));
-  //
-  //   sender.send(event.clone()).await.unwrap();
-  //   sender.close();
-  //
-  //   let resp = sse.into_response();
-  //   let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
-  //     .await
-  //     .unwrap();
-  //
-  //   let str = String::from_utf8_lossy(&bytes);
-  //   let Some(data) = str.strip_prefix("data: ") else {
-  //     // There are non-data events such as "subscription established" or heartbeat.
-  //     return None;
-  //   };
-  //
-  //   let x = data.strip_suffix("\n\n").unwrap();
-  //   return serde_json::from_str(x).unwrap();
-  // }
-
-  #[tokio::test]
-  async fn sse_event_encoding_test() {
-    let json = serde_json::json!({
-      "a": 5,
-      "b": "text",
-    });
-    let db_event = DbEvent::Delete(serde_json::to_string(&json).unwrap().into());
-    let event = Event::DbEvent(db_event.clone());
-
-    assert_eq!(decode_db_event(event).await.unwrap(), db_event);
-
-    let x = db_event.to_json(None);
-    let x_value = serde_json::from_str::<Value>(&x);
-    assert!(x_value.is_ok(), "{x}: {x_value:?}");
-
-    let y = db_event.to_json(Some(42));
-    let y_value = serde_json::from_str::<Value>(&y);
-    assert!(y_value.is_ok(), "{y}: {y_value:?}");
+  fn decode_db_event(ev: Arc<EventPayload>) -> JsonEventPayload {
+    return ev.deserialize().unwrap();
   }
 
   #[tokio::test]
   async fn static_sse_event_test() {
-    let _x: Event = (*ACCESS_DENIED_EVENT).clone();
-    let _y: Event = (*ESTABLISHED_EVENT).clone();
+    let _x: Arc<EventPayload> = (*ACCESS_DENIED_EVENT).clone();
+    let _y: Arc<EventPayload> = (*ESTABLISHED_EVENT).clone();
   }
 
   async fn setup_world_readable() -> AppState {
@@ -1307,11 +1269,10 @@ mod tests {
       .unwrap();
 
     // First event is "connection established".
-    assert!(
-      decode_db_event(stream.receiver.recv().await.unwrap())
-        .await
-        .is_none(),
-    );
+    assert!(matches!(
+      decode_db_event(stream.receiver.recv().await.unwrap()),
+      JsonEventPayload::Ping
+    ));
 
     // This should do nothing since nobody is subscribed to id = 5.
     let _ = conn
@@ -1334,9 +1295,9 @@ mod tests {
       "id": record_id_raw,
       "text": "bar",
     });
-    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Update(obj)) => {
-        assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      JsonEventPayload::Update { value: obj } => {
+        assert_eq!(Value::Object(obj), expected);
       }
       x => {
         panic!("Expected update, got: {x:?}");
@@ -1348,9 +1309,9 @@ mod tests {
       .await
       .unwrap();
 
-    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Delete(obj)) => {
-        assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      JsonEventPayload::Delete { value: obj } => {
+        assert_eq!(Value::Object(obj), expected);
       }
       x => {
         panic!("Expected delete, got: {x:?}");
@@ -1382,11 +1343,10 @@ mod tests {
 
       assert_eq!(1, manager.num_table_subscriptions());
       // First event is "connection established".
-      assert!(
-        decode_db_event(stream.receiver.recv().await.unwrap())
-          .await
-          .is_none(),
-      );
+      assert!(matches!(
+        decode_db_event(stream.receiver.recv().await.unwrap()),
+        JsonEventPayload::Ping
+      ));
 
       let record_id_raw = 0;
       conn
@@ -1405,13 +1365,13 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Insert(obj)) => {
+      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+        JsonEventPayload::Insert { value: obj } => {
           let expected = serde_json::json!({
             "id": record_id_raw,
             "text": "foo",
           });
-          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+          assert_eq!(Value::Object(obj), expected);
         }
         x => {
           panic!("Expected insert, got: {x:?}");
@@ -1422,9 +1382,9 @@ mod tests {
         "id": record_id_raw,
         "text": "bar",
       });
-      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Update(obj)) => {
-          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+        JsonEventPayload::Update { value: obj } => {
+          assert_eq!(Value::Object(obj), expected);
         }
         x => {
           panic!("Expected update, got: {x:?}");
@@ -1436,9 +1396,9 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Delete(obj)) => {
-          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+        JsonEventPayload::Delete { value: obj } => {
+          assert_eq!(Value::Object(obj), expected);
         }
         x => {
           panic!("Expected delete, got: {x:?}");
@@ -1665,11 +1625,10 @@ mod tests {
         .unwrap();
 
       // First event is "connection established".
-      assert!(
-        decode_db_event(user_x_subscription.receiver.recv().await.unwrap())
-          .await
-          .is_none(),
-      );
+      assert!(matches!(
+        decode_db_event(user_x_subscription.receiver.recv().await.unwrap()),
+        JsonEventPayload::Ping
+      ));
 
       let user_y_subscription = manager
         .add_sse_table_subscription(
@@ -1694,14 +1653,14 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(user_x_subscription.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Insert(obj)) => {
+      match decode_db_event(user_x_subscription.receiver.recv().await.unwrap()) {
+        JsonEventPayload::Insert { value: obj } => {
           let expected = serde_json::json!({
             "id": record_id_raw,
             "user": uuid_to_b64(&user_x),
             "text": "foo",
           });
-          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+          assert_eq!(Value::Object(obj), expected);
         }
         x => {
           panic!("Expected insert, got: {x:?}");
@@ -1771,11 +1730,10 @@ mod tests {
 
     assert_eq!(1, manager.num_record_subscriptions());
     // First event is "connection established".
-    assert!(
-      decode_db_event(stream.receiver.recv().await.unwrap())
-        .await
-        .is_none(),
-    );
+    assert!(matches!(
+      decode_db_event(stream.receiver.recv().await.unwrap()),
+      JsonEventPayload::Ping
+    ));
 
     conn
       .execute(
@@ -1794,22 +1752,22 @@ mod tests {
       .await
       .unwrap();
 
-    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Update(obj)) => {
+    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      JsonEventPayload::Update { value: obj } => {
         let expected = serde_json::json!({
           "id": record_id,
           "user": uuid_to_b64(&user_x_id),
           "text": "bar",
         });
-        assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+        assert_eq!(Value::Object(obj), expected);
       }
       x => {
         panic!("Expected update, got: {x:?}");
       }
     }
 
-    match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-      Some(DbEvent::Error(_msg)) => {}
+    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      JsonEventPayload::Error { .. } => {}
       x => {
         panic!("Expected error, got: {x:?}");
       }
@@ -1845,11 +1803,10 @@ mod tests {
 
       assert_eq!(1, manager.num_table_subscriptions());
       // First event is "connection established".
-      assert!(
-        decode_db_event(stream.receiver.recv().await.unwrap())
-          .await
-          .is_none(),
-      );
+      assert!(matches!(
+        decode_db_event(stream.receiver.recv().await.unwrap()),
+        JsonEventPayload::Ping
+      ));
 
       // This one should be filter out.
       conn
@@ -1866,13 +1823,13 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(stream.receiver.recv().await.unwrap()).await {
-        Some(DbEvent::Insert(obj)) => {
+      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+        JsonEventPayload::Insert { value: obj } => {
           let expected = serde_json::json!({
             "id": 25,
             "text": "foo",
           });
-          assert_eq!(serde_json::from_str::<Value>(&obj).unwrap(), expected);
+          assert_eq!(Value::Object(obj), expected);
         }
         x => {
           panic!("Expected insert, got: {x:?}");

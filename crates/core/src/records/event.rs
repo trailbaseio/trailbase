@@ -126,8 +126,33 @@ impl EventPayload {
     };
   }
 
+  pub fn deserialize(&self) -> Result<JsonEventPayload, RecordError> {
+    return Ok(match self.r#type {
+      PayloadType::Update => JsonEventPayload::Update {
+        value: serde_json::from_str(self.value.as_ref().map_or("", |v| v.get())).unwrap(),
+      },
+      PayloadType::Insert => JsonEventPayload::Insert {
+        value: serde_json::from_str(self.value.as_ref().map_or("", |v| v.get())).unwrap(),
+      },
+      PayloadType::Delete => JsonEventPayload::Delete {
+        value: serde_json::from_str(self.value.as_ref().map_or("", |v| v.get())).unwrap(),
+      },
+      PayloadType::Error => JsonEventPayload::Error {
+        error: self.error.as_deref().unwrap_or_default().to_string(),
+      },
+      PayloadType::Ping => JsonEventPayload::Ping,
+    });
+  }
+
   #[inline]
-  fn into_sse_event(self: Arc<EventPayload>, seq: Option<u32>) -> Result<SseEvent, RecordError> {
+  pub fn into_sse_event(
+    self: Arc<EventPayload>,
+    seq: Option<u32>,
+  ) -> Result<SseEvent, RecordError> {
+    if self.r#type == PayloadType::Ping {
+      return Ok(SseEvent::default().comment("ping"));
+    }
+
     if let Some(seq) = seq {
       let ev = Event {
         payload: self,
