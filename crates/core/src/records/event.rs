@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
@@ -86,20 +87,11 @@ impl Payload {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
   #[serde(flatten)]
-  payload: Payload,
+  payload: Arc<Payload>,
   // NOTE: we chose u32 since it should be large enough and can be safely and portably represented
   // in JSON.
   #[serde(skip_serializing_if = "Option::is_none")]
   seq: Option<u32>,
-}
-
-impl Event {
-  fn prerender(self) -> Result<Self, serde_json::Error> {
-    return Ok(Self {
-      payload: self.payload.prerender()?,
-      seq: self.seq,
-    });
-  }
 }
 
 #[cfg(test)]
@@ -109,10 +101,12 @@ mod tests {
 
   #[test]
   fn serialization_test() {
+    let payload0 = Payload::Json(JsonPayload::Insert {
+      value: JsonObject::from_iter([("key0".to_string(), json!("value0"))]),
+    });
+
     let ev0 = Event {
-      payload: Payload::Json(JsonPayload::Insert {
-        value: JsonObject::from_iter([("key0".to_string(), json!("value0"))]),
-      }),
+      payload: Arc::new(payload0.clone()),
       seq: None,
     };
 
@@ -121,17 +115,22 @@ mod tests {
     assert_eq!(expected0, ev0str);
     assert_eq!(
       expected0,
-      serde_json::to_string(&ev0.clone().prerender().unwrap()).unwrap()
+      serde_json::to_string(&Event {
+        payload: Arc::new(payload0.prerender().unwrap()),
+        seq: None,
+      })
+      .unwrap()
     );
 
     let ev0deserialized: Event = serde_json::from_str(&expected0).unwrap();
-    assert!(matches!(ev0deserialized.payload, Payload::Json(_)));
+    assert!(matches!(*ev0deserialized.payload, Payload::Json(_)));
     assert_eq!(ev0, ev0deserialized);
 
+    let payload1 = Payload::Json(JsonPayload::Error {
+      msg: "boom".to_string(),
+    });
     let ev1 = Event {
-      payload: Payload::Json(JsonPayload::Error {
-        msg: "boom".to_string(),
-      }),
+      payload: Arc::new(payload1),
       seq: Some(11),
     };
 

@@ -63,7 +63,7 @@ rand = "^0.10.0"
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
 rusqlite = { version = "0.39.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
-serde = { version = "^1.0.203", features = ["derive"] }
+serde = { version = "^1.0.203", features = ["derive", "rc"] }
 serde_json = { version = "^1.0.117" }
 serde_qs = { version = "1.0.0", default-features = false, features = [] }
 serde_rusqlite = { path = "vendor/serde_rusqlite" }
