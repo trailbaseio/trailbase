@@ -284,17 +284,69 @@ class HttpException(val status: Int, message: String?) : Throwable(message) {
   }
 }
 
+abstract class Transport {
+  abstract suspend fun fetch(
+          path: String,
+          method: Method = Method.get,
+          headers: Map<String, List<String>>?,
+          params: Map<String, String>? = null,
+          body: Any? = null,
+  ): HttpResponse
+}
+
+class DefaultTransport(private val base: Url, public val http: HttpClient = initClient()) :
+        Transport() {
+
+  override suspend fun fetch(
+          path: String,
+          method: Method,
+          headers: Map<String, List<String>>?,
+          params: Map<String, String>?,
+          body: Any?,
+  ): HttpResponse {
+    val response =
+            http.request("${base}${path}") {
+              this.method =
+                      when (method) {
+                        Method.get -> HttpMethod.Get
+                        Method.post -> HttpMethod.Post
+                        Method.patch -> HttpMethod.Patch
+                        Method.delete -> HttpMethod.Delete
+                      }
+              headers { headers?.forEach { appendAll(it.key, it.value) } }
+              contentType(ContentType.Application.Json)
+              setBody(body)
+            }
+
+    return response
+  }
+
+  suspend inline fun sse(
+          path: String,
+          method: Method,
+          headers: Map<String, List<String>>?,
+          params: Map<String, String>?,
+  ):  {
+    val url = "${client.site()}/${RECORD_API}/${name}/subscribe/${id.id()}"
+    val tokenState = TokenState.build(client.tokens())
+
+            return http.sseSession(
+                    urlString = url,
+                    block = {
+                      method = HttpMethod.Get
+                      headers { tokenState.headers.forEach { appendAll(it.key, it.value) } }
+                      contentType(ContentType.Application.Json)
+                    }
+            )
+          }
+}
+
 class Client(
         private val site: Url,
         private var tokenState: TokenState,
-        public val http: HttpClient = initClient()
+        public val http: Transport
 ) {
-  constructor(
-          site: String
-  ) : this(
-          Url(site),
-          TokenState.build(null),
-  )
+  constructor(site: String) : this(Url(site), TokenState.build(null), DefaultTransport(Url(site)))
 
   companion object {
     suspend fun withTokens(site: String, tokens: Tokens): Client {
@@ -416,28 +468,7 @@ class Client(
       tokenState = refreshTokensImpl(refreshToken)
     }
 
-    val response =
-            http.request(site) {
-              this.method =
-                      when (method) {
-                        Method.get -> HttpMethod.Get
-                        Method.post -> HttpMethod.Post
-                        Method.patch -> HttpMethod.Patch
-                        Method.delete -> HttpMethod.Delete
-                      }
-              url {
-                path(path)
-                if (params != null) {
-                  for ((k, v) in params) {
-                    parameters.append(k, v)
-                  }
-                }
-              }
-              headers { tokenState.headers.forEach { appendAll(it.key, it.value) } }
-              contentType(ContentType.Application.Json)
-              setBody(body)
-            }
-
+    val response = http.fetch(path, method, tokenState.headers, params, body)
     if (!response.status.isSuccess() && throwOnError) {
       throw HttpException(response.status.value, response.body())
     }

@@ -5,6 +5,9 @@
 *.jar
 !gradle/wrapper/gradle-wrapper.jar
 
+# KMP
+kotlin-js-store
+
 # Ignore Gradle build output directory
 build
 *.db
