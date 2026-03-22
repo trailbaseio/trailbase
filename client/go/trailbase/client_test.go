@@ -362,9 +362,13 @@ func TestRecordApiSubscriptions(t *testing.T) {
 
 	assertEqual(t, 4, len(allEvents))
 	assertIs[*InsertEvent](t, allEvents[0].Value)
+	assertEqual(t, 1, *allEvents[0].Seq)
 	assertIs[*InsertEvent](t, allEvents[1].Value)
+	assertEqual(t, 2, *allEvents[1].Seq)
 	assertIs[*UpdateEvent](t, allEvents[2].Value)
+	assertEqual(t, 3, *allEvents[2].Seq)
 	assertIs[*DeleteEvent](t, allEvents[3].Value)
+	assertEqual(t, 4, *allEvents[3].Seq)
 
 	assertEqual(t, 2, len(filteredEvents))
 	assertIs[*UpdateEvent](t, filteredEvents[0].Value)
