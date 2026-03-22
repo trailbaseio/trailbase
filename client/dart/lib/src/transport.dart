@@ -1,5 +1,15 @@
 import 'package:http/http.dart' as http;
 
+class HttpException implements Exception {
+  final int status;
+  final String? message;
+
+  const HttpException(this.status, this.message);
+
+  @override
+  String toString() => 'HttpException(${status}, "${message}")';
+}
+
 enum Method {
   get,
   post,
