@@ -4,35 +4,30 @@ import 'dart:typed_data';
 
 import './transport.dart';
 
-class HttpException implements Exception {
-  final int status;
-  final String? message;
-
-  const HttpException(this.status, this.message);
-
-  @override
-  String toString() => 'HttpException(${status}, "${message}")';
-}
-
 sealed class Event {
+  int? get seq;
   Map<String, dynamic>? get value;
 }
 
-class InsertEvent extends Event {
+class InsertEvent implements Event {
+  @override
+  final int? seq;
   @override
   final Map<String, dynamic> value;
 
-  InsertEvent(this.value);
+  InsertEvent(this.seq, this.value);
 
   @override
   String toString() => 'InsertEvent(${value})';
 }
 
-class UpdateEvent extends Event {
+class UpdateEvent implements Event {
+  @override
+  final int? seq;
   @override
   final Map<String, dynamic> value;
 
-  UpdateEvent(this.value);
+  UpdateEvent(this.seq, this.value);
 
   @override
   String toString() => 'UpdateEvent(${value})';
@@ -40,24 +35,28 @@ class UpdateEvent extends Event {
 
 class DeleteEvent extends Event {
   @override
+  final int? seq;
+  @override
   final Map<String, dynamic> value;
 
-  DeleteEvent(this.value);
+  DeleteEvent(this.seq, this.value);
 
   @override
   String toString() => 'DeleteEvent(${value})';
 }
 
 class ErrorEvent extends Event {
-  final String _error;
+  @override
+  final int? seq;
+  final String error;
 
-  ErrorEvent(this._error);
+  ErrorEvent(this.seq, this.error);
 
   @override
   Map<String, dynamic>? get value => null;
 
   @override
-  String toString() => 'ErrorEvent(${_error})';
+  String toString() => 'ErrorEvent(${error})';
 }
 
 Future<Stream<Event>> connectSse(
@@ -133,27 +132,19 @@ bool _endsWithNewlineNewline(List<int> bytes) {
 }
 
 Event _eventfromJson(Map<String, dynamic> json) {
-  final insert = json['Insert'];
-  if (insert != null) {
-    return InsertEvent(insert as Map<String, dynamic>);
+  final type = json['type'];
+  if (type == null) {
+    throw Exception('Unknown event type: ${json}');
   }
+  final seq = json['seq'] as int?;
 
-  final update = json['Update'];
-  if (update != null) {
-    return UpdateEvent(update as Map<String, dynamic>);
-  }
-
-  final delete = json['Delete'];
-  if (delete != null) {
-    return DeleteEvent(delete as Map<String, dynamic>);
-  }
-
-  final error = json['Error'];
-  if (error != null) {
-    return ErrorEvent(error as String);
-  }
-
-  throw Exception('Failed to parse event: ${json}');
+  return switch (type) {
+    'insert' => InsertEvent(seq, json['value']),
+    'update' => UpdateEvent(seq, json['value']),
+    'delete' => DeleteEvent(seq, json['value']),
+    'error' => ErrorEvent(seq, json['error'] as String),
+    _ => throw Exception('Failed to parse event: ${json}'),
+  };
 }
 
 Event? _decodeEvent(List<int> bytes) {
