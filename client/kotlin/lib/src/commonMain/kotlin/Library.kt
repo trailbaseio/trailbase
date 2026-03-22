@@ -33,32 +33,28 @@ data class JwtTokenClaims(
 )
 
 @Serializable
-sealed class DbEvent {
-  public class Update(val obj: JsonObject) : DbEvent()
-  public class Insert(val obj: JsonObject) : DbEvent()
-  public class Delete(val obj: JsonObject) : DbEvent()
-  public class Error(val msg: String) : DbEvent()
+sealed class Event(val seq: UInt?) {
+  public class Update(seq: UInt?, val obj: JsonObject) : Event(seq)
+  public class Insert(seq: UInt?, val obj: JsonObject) : Event(seq)
+  public class Delete(seq: UInt?, val obj: JsonObject) : Event(seq)
+  public class Error(seq: UInt?, val msg: String) : Event(seq)
 
   companion object {
-    fun from(obj: JsonObject): DbEvent? {
-      val update = obj.get("Update")
-      if (update != null) {
-        return DbEvent.Update(update.jsonObject)
-      }
-      val insert = obj.get("Insert")
-      if (insert != null) {
-        return DbEvent.Insert(insert.jsonObject)
-      }
-      val delete = obj.get("Delete")
-      if (delete != null) {
-        return DbEvent.Delete(delete.jsonObject)
-      }
-      val error = obj.get("Error")
-      if (error != null) {
-        return DbEvent.Error("${error}")
+    fun from(obj: JsonObject): Event {
+      val type: String? = obj.get("type")?.jsonPrimitive?.content
+      if (type == null) {
+        throw Exception("Unknown event type: ${obj}")
       }
 
-      return null
+      val seq: UInt? = obj.get("seq")?.jsonPrimitive?.content?.toUInt()
+
+      return when (type) {
+        "update" -> Event.Update(seq, obj.get("value")?.jsonObject ?: JsonObject(emptyMap()))
+        "insert" -> Event.Insert(seq, obj.get("value")?.jsonObject ?: JsonObject(emptyMap()))
+        "delete" -> Event.Delete(seq, obj.get("value")?.jsonObject ?: JsonObject(emptyMap()))
+        "error" -> Event.Error(seq, obj.get("error")?.jsonPrimitive?.content ?: "<missing>")
+        else -> throw Exception("failed to parse event: ${obj}")
+      }
     }
   }
 }
@@ -235,7 +231,7 @@ class RecordApi(val name: String, val client: Client) {
     client.fetch("${RECORD_API}/${name}/${id.id()}", Method.delete)
   }
 
-  suspend inline fun <reified T> subscribe(id: RecordId): Flow<DbEvent> {
+  suspend inline fun <reified T> subscribe(id: RecordId): Flow<Event> {
     val path = "${RECORD_API}/${name}/subscribe/${id.id()}"
 
     // NOTE: We should probably push this into a Client.sse.
@@ -254,7 +250,7 @@ class RecordApi(val name: String, val client: Client) {
         val data = ev.data
         if (data != null) {
           val obj: JsonObject = jsonSerializer.decodeFromString(data)
-          val event = DbEvent.from(obj)
+          val event = Event.from(obj)
           if (event != null) {
             emit(event)
           }
