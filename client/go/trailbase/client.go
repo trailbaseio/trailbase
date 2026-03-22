@@ -94,39 +94,6 @@ func NewTokenState(tokens *Tokens) (*TokenState, error) {
 	}, nil
 }
 
-type ValueEvent interface {
-	Value() *map[string]any
-}
-
-type InsertEvent struct {
-	value map[string]any
-}
-
-func (ev *InsertEvent) Value() *map[string]any {
-	return &ev.value
-}
-
-type UpdateEvent struct {
-	value map[string]any
-}
-
-func (ev *UpdateEvent) Value() *map[string]any {
-	return &ev.value
-}
-
-type DeleteEvent struct {
-	value map[string]any
-}
-
-func (ev *DeleteEvent) Value() *map[string]any {
-	return &ev.value
-}
-
-type Event struct {
-	Value ValueEvent
-	Error *string
-}
-
 func NewClient(baseUrl string) (*Client, error) {
 	return NewClientWithTokens(baseUrl, nil)
 }
@@ -428,31 +395,12 @@ func (c *Client) stream(method string, path string, body []byte, queryParams []Q
 				return
 			}
 
-			if val, ok := evMap["Error"]; ok {
-				var errString string = val.(string)
-				stream <- Event{
-					Error: &errString,
-				}
-				continue
-			} else if val, ok := evMap["Insert"]; ok {
-				stream <- Event{
-					Value: &InsertEvent{
-						value: val.(map[string]any),
-					},
-				}
-			} else if val, ok := evMap["Update"]; ok {
-				stream <- Event{
-					Value: &UpdateEvent{
-						value: val.(map[string]any),
-					},
-				}
-			} else if val, ok := evMap["Delete"]; ok {
-				stream <- Event{
-					Value: &DeleteEvent{
-						value: val.(map[string]any),
-					},
-				}
+			ev, err := parseEvent(evMap)
+			if err != nil {
+				return
 			}
+
+			stream <- *ev
 		}
 	}()
 
