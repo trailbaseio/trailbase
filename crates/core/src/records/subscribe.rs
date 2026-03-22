@@ -1,6 +1,6 @@
 use async_channel::{TrySendError, WeakReceiver};
 use axum::extract::{Path, RawQuery, Request, State};
-use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use axum::response::sse::{KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use futures_util::{Stream, StreamExt};
 use log::*;
@@ -23,7 +23,7 @@ use ts_rs::TS;
 use crate::app_state::{AppState, derive_unchecked};
 use crate::auth::User;
 use crate::records::RecordApi;
-use crate::records::event::{Event, EventPayload, JsonEventPayload};
+use crate::records::event::{EventPayload, JsonEventPayload};
 use crate::records::filter::{
   Filter, apply_filter_recursively_to_record, qs_filter_to_record_filter,
 };
@@ -100,74 +100,6 @@ pub enum RecordAction {
   Insert,
   Update,
 }
-
-// #[derive(Clone, Debug)]
-// pub enum Event {
-//   DbEvent(DbEvent),
-//   Sse(SseEvent),
-// }
-//
-// impl Event {
-//   #[inline]
-//   fn into_sse_event(self, seq: usize) -> Result<SseEvent, axum::Error> {
-//     let s = match self {
-//       Self::DbEvent(ev) => ev.to_json(Some(seq)),
-//       Self::Sse(ev) => {
-//         return Ok(ev);
-//       }
-//     };
-//
-//     return Ok(SseEvent::default().data(&s));
-//   }
-//
-//   #[cfg(feature = "ws")]
-//   #[inline]
-//   fn into_ws_event(self) -> Result<axum::extract::ws::Message, &'static str> {
-//     let s = match self {
-//       Self::DbEvent(ev) => ev.to_json(None),
-//       Self::Sse(ev) => {
-//         return Err("not sse");
-//       }
-//     };
-//
-//     return Ok(axum::extract::ws::Message::Text(s.into()));
-//   }
-// }
-//
-// impl From<DbEvent> for Event {
-//   fn from(value: DbEvent) -> Self {
-//     return Event::DbEvent(value);
-//   }
-// }
-//
-// #[derive(Debug, Clone, PartialEq)]
-// pub enum DbEvent {
-//   Update(Arc<str>),
-//   Insert(Arc<str>),
-//   Delete(Arc<str>),
-//   Error(Arc<str>),
-// }
-//
-// impl DbEvent {
-//   #[inline]
-//   fn to_json(&self, seq: Option<usize>) -> String {
-//     if let Some(seq) = seq {
-//       return match self {
-//         Self::Update(json) => format!(r#"{{ "Update": {json}, "Seq": {seq} }}"#),
-//         Self::Insert(json) => format!(r#"{{ "Insert": {json}, "Seq": {seq} }}"#),
-//         Self::Delete(json) => format!(r#"{{ "Delete": {json}, "Seq": {seq} }}"#),
-//         Self::Error(msg) => format!(r#"{{ "Error": {msg}, "Seq": {seq} }}"#),
-//       };
-//     }
-//
-//     return match self {
-//       Self::Update(json) => format!(r#"{{ "Update": {json} }}"#),
-//       Self::Insert(json) => format!(r#"{{ "Insert": {json} }}"#),
-//       Self::Delete(json) => format!(r#"{{ "Delete": {json} }}"#),
-//       Self::Error(msg) => format!(r#"{{ "Error": {msg} }}"#),
-//     };
-//   }
-// }
 
 pub struct Subscription {
   /// Id uniquely identifying this subscription.
@@ -1185,12 +1117,9 @@ mod tests {
   use crate::auth::util::login_with_password;
   use crate::config::proto::RecordApiConfig;
   use crate::records::PermissionFlag;
+  use crate::records::event::deserialize_event;
   use crate::records::test_utils::add_record_api_config;
   use crate::util::uuid_to_b64;
-
-  fn decode_db_event(ev: Arc<EventPayload>) -> JsonEventPayload {
-    return ev.deserialize().unwrap();
-  }
 
   #[tokio::test]
   async fn static_sse_event_test() {
@@ -1270,7 +1199,7 @@ mod tests {
 
     // First event is "connection established".
     assert!(matches!(
-      decode_db_event(stream.receiver.recv().await.unwrap()),
+      deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
       JsonEventPayload::Ping
     ));
 
@@ -1295,7 +1224,7 @@ mod tests {
       "id": record_id_raw,
       "text": "bar",
     });
-    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
       JsonEventPayload::Update { value: obj } => {
         assert_eq!(Value::Object(obj), expected);
       }
@@ -1309,7 +1238,7 @@ mod tests {
       .await
       .unwrap();
 
-    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
       JsonEventPayload::Delete { value: obj } => {
         assert_eq!(Value::Object(obj), expected);
       }
@@ -1344,7 +1273,7 @@ mod tests {
       assert_eq!(1, manager.num_table_subscriptions());
       // First event is "connection established".
       assert!(matches!(
-        decode_db_event(stream.receiver.recv().await.unwrap()),
+        deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
         JsonEventPayload::Ping
       ));
 
@@ -1365,7 +1294,7 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
         JsonEventPayload::Insert { value: obj } => {
           let expected = serde_json::json!({
             "id": record_id_raw,
@@ -1382,7 +1311,7 @@ mod tests {
         "id": record_id_raw,
         "text": "bar",
       });
-      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
         JsonEventPayload::Update { value: obj } => {
           assert_eq!(Value::Object(obj), expected);
         }
@@ -1396,7 +1325,7 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
         JsonEventPayload::Delete { value: obj } => {
           assert_eq!(Value::Object(obj), expected);
         }
@@ -1626,7 +1555,7 @@ mod tests {
 
       // First event is "connection established".
       assert!(matches!(
-        decode_db_event(user_x_subscription.receiver.recv().await.unwrap()),
+        deserialize_event(user_x_subscription.receiver.recv().await.unwrap()).unwrap(),
         JsonEventPayload::Ping
       ));
 
@@ -1653,7 +1582,7 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(user_x_subscription.receiver.recv().await.unwrap()) {
+      match deserialize_event(user_x_subscription.receiver.recv().await.unwrap()).unwrap() {
         JsonEventPayload::Insert { value: obj } => {
           let expected = serde_json::json!({
             "id": record_id_raw,
@@ -1731,7 +1660,7 @@ mod tests {
     assert_eq!(1, manager.num_record_subscriptions());
     // First event is "connection established".
     assert!(matches!(
-      decode_db_event(stream.receiver.recv().await.unwrap()),
+      deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
       JsonEventPayload::Ping
     ));
 
@@ -1752,7 +1681,7 @@ mod tests {
       .await
       .unwrap();
 
-    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
       JsonEventPayload::Update { value: obj } => {
         let expected = serde_json::json!({
           "id": record_id,
@@ -1766,7 +1695,7 @@ mod tests {
       }
     }
 
-    match decode_db_event(stream.receiver.recv().await.unwrap()) {
+    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
       JsonEventPayload::Error { .. } => {}
       x => {
         panic!("Expected error, got: {x:?}");
@@ -1804,7 +1733,7 @@ mod tests {
       assert_eq!(1, manager.num_table_subscriptions());
       // First event is "connection established".
       assert!(matches!(
-        decode_db_event(stream.receiver.recv().await.unwrap()),
+        deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
         JsonEventPayload::Ping
       ));
 
@@ -1823,7 +1752,7 @@ mod tests {
         .await
         .unwrap();
 
-      match decode_db_event(stream.receiver.recv().await.unwrap()) {
+      match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
         JsonEventPayload::Insert { value: obj } => {
           let expected = serde_json::json!({
             "id": 25,

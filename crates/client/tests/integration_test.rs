@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use temp_dir::TempDir;
 use trailbase_client::{
-  Client, CompareOp, DbEvent, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
+  ChangeEvent, Client, CompareOp, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
 };
 
 struct Server {
@@ -479,20 +479,14 @@ async fn subscription_test() {
   {
     let record_events = record_stream.take(2).collect::<Vec<_>>().await;
     match &record_events[0] {
-      DbEvent::Update {
-        Update: serde_json::Value::Object(obj),
-        Seq: seq,
-      } => {
+      ChangeEvent::Update { value: obj, seq } => {
         assert_eq!(obj["text_not_null"], updated_message);
         assert_eq!(Some(1), *seq);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
     match &record_events[1] {
-      DbEvent::Delete {
-        Delete: serde_json::Value::Object(obj),
-        Seq: seq,
-      } => {
+      ChangeEvent::Delete { value: obj, seq } => {
         assert_eq!(obj["text_not_null"], updated_message);
         assert_eq!(Some(2), *seq);
       }
@@ -503,28 +497,19 @@ async fn subscription_test() {
   {
     let table_events = table_stream.take(3).collect::<Vec<_>>().await;
     match &table_events[0] {
-      DbEvent::Insert {
-        Insert: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Insert { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], create_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
     match &table_events[1] {
-      DbEvent::Update {
-        Update: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Update { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
     match &table_events[2] {
-      DbEvent::Delete {
-        Delete: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Delete { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
@@ -559,19 +544,13 @@ async fn subscription_ws_test() {
   {
     let record_events = record_stream.take(2).collect::<Vec<_>>().await;
     match &record_events[0] {
-      DbEvent::Update {
-        Update: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Update { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
     match &record_events[1] {
-      DbEvent::Delete {
-        Delete: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Delete { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
@@ -581,28 +560,19 @@ async fn subscription_ws_test() {
   {
     let table_events = table_stream.take(3).collect::<Vec<_>>().await;
     match &table_events[0] {
-      DbEvent::Insert {
-        Insert: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Insert { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], create_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
     match &table_events[1] {
-      DbEvent::Update {
-        Update: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Update { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
     match &table_events[2] {
-      DbEvent::Delete {
-        Delete: serde_json::Value::Object(obj),
-        ..
-      } => {
+      ChangeEvent::Delete { value: obj, .. } => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
