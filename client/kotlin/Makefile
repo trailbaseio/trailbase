@@ -1,5 +1,5 @@
 test:
-	./gradlew allTests
+	./gradlew allTests --info
 
 # Note `gradle build` also runs the tests.
 build:

@@ -301,17 +301,19 @@ class ClientTest {
     val id = api.create(SimpleStrictInsert("kotlin subscription test 0: =?&${now}"))
     api.delete(id)
 
-    val result = mutableListOf<DbEvent>()
+    val result = mutableListOf<Event>()
     flow.take(2).toList(result)
 
     assertEquals(2, result.count())
 
-    val insert: SimpleStrict =
-            localJsonSerializer.decodeFromJsonElement((result[0] as DbEvent.Insert).obj)
-    assertEquals(insert.id, id.id())
+    val ev0 = result[0] as Event.Insert
+    assertEquals(1U, ev0.seq)
+    val insert0: SimpleStrict = localJsonSerializer.decodeFromJsonElement(ev0.obj)
+    assertEquals(id.id(), insert0.id)
 
-    val delete: SimpleStrict =
-            localJsonSerializer.decodeFromJsonElement((result[1] as DbEvent.Delete).obj)
+    val ev1 = result[1] as Event.Delete
+    assertEquals(2U, ev1.seq)
+    val delete: SimpleStrict = localJsonSerializer.decodeFromJsonElement(ev1.obj)
     assertEquals(delete.id, id.id())
   }
 }
