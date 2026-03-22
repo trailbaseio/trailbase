@@ -1,33 +1,24 @@
-import { isDev } from "./constants";
-
 export interface Transport {
-  fetch: (
-    path: string,
-    headers: HeadersInit,
-    init?: RequestInit,
-  ) => Promise<Response>;
+  fetch: (path: string, init?: RequestInit) => Promise<Response>;
 }
 
-export class ThinClient implements Transport {
-  constructor(private readonly base: URL | undefined) {}
+export class DefaultTransport implements Transport {
+  constructor(
+    private readonly base: URL | undefined,
+    private readonly headers?: HeadersInit,
+  ) {}
 
-  async fetch(
-    path: string,
-    headers: HeadersInit,
-    init?: RequestInit,
-  ): Promise<Response> {
-    // NOTE: We need to merge the headers in such a complicated fashion
-    // to avoid user-provided `init` with headers unintentionally suppressing
-    // the credentials.
+  async fetch(path: string, init?: RequestInit): Promise<Response> {
     const response = await fetch(this.base ? new URL(path, this.base) : path, {
-      credentials: isDev ? "include" : "same-origin",
       ...init,
-      headers: init
+      headers: this.headers
         ? {
-            ...headers,
+            // NOTE: user-provided headers first to avoid them accidentally
+            // overriding critical headers like credentials and content-type.
+            ...this.headers,
             ...init?.headers,
           }
-        : headers,
+        : init?.headers,
     });
 
     return response;

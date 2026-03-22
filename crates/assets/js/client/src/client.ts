@@ -12,7 +12,7 @@ import type {
   DeleteOperation,
 } from "./record_api";
 import { RecordApiImpl } from "./record_api";
-import { ThinClient, Transport } from "./transport";
+import { DefaultTransport, Transport } from "./transport";
 
 export type { Transport } from "./transport";
 
@@ -214,7 +214,7 @@ export interface Client {
 /// Client for interacting with TrailBase auth and record APIs.
 class ClientImpl implements Client {
   private readonly _base: URL | undefined;
-  private readonly _client: Transport;
+  private readonly _transport: Transport;
   private readonly _authChange:
     | undefined
     | ((client: Client, user?: User) => void);
@@ -222,7 +222,7 @@ class ClientImpl implements Client {
 
   constructor(baseUrl: URL | string | undefined, opts?: ClientOptions) {
     this._base = baseUrl ? new URL(baseUrl) : undefined;
-    this._client = opts?.transport ?? new ThinClient(this._base);
+    this._transport = opts?.transport ?? new DefaultTransport(this._base);
     this._authChange = opts?.onAuthChange;
 
     const tokens = opts?.tokens;
@@ -484,12 +484,13 @@ class ClientImpl implements Client {
 
   private async refreshTokensImpl(refreshToken: string): Promise<TokenState> {
     const path = `${authApiBasePath}/refresh`;
-    const response = await this._client.fetch(path, this._tokenState.headers, {
+    const response = await this.fetch(path, {
       method: "POST",
       body: JSON.stringify({
         refresh_token: refreshToken,
       } as RefreshRequest),
       headers: jsonContentTypeHeader,
+      throwOnError: false,
     });
 
     if (!response.ok) {
@@ -540,13 +541,24 @@ class ClientImpl implements Client {
     }
 
     try {
-      const response = await this._client.fetch(path, tokenState.headers, init);
+      const response = await this._transport.fetch(path, {
+        ...init,
+        headers: init
+          ? {
+              credentials: isDev ? "include" : "same-origin",
+              ...tokenState.headers,
+              ...init?.headers,
+            }
+          : tokenState.headers,
+      });
+
       if (!response.ok && (init?.throwOnError ?? true)) {
         throw await FetchError.from(
           response,
           isDev ? new URL(path, this.base) : undefined,
         );
       }
+
       return response;
     } catch (err) {
       if (err instanceof TypeError) {
