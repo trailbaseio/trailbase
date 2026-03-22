@@ -203,6 +203,68 @@ class TokenState:
         return base
 
 
+class Event:
+    seq: int | None
+
+    def __init__(self, seq: int | None):
+        self.seq = seq
+
+
+class InsertEvent(Event):
+    value: JSON_OBJECT
+
+    def __init__(self, seq: int | None, value: JSON_OBJECT):
+        super().__init__(seq)
+        self.value = value
+
+
+class UpdateEvent(Event):
+    value: JSON_OBJECT
+
+    def __init__(self, seq: int | None, value: JSON_OBJECT):
+        super().__init__(seq)
+        self.value = value
+
+
+class DeleteEvent(Event):
+    value: JSON_OBJECT
+
+    def __init__(self, seq: int | None, value: JSON_OBJECT):
+        super().__init__(seq)
+        self.value = value
+
+
+class ErrorEvent(Event):
+    message: str
+
+    def __init__(self, seq: int | None, message: str):
+        super().__init__(seq)
+        self.message = message
+
+
+EVENT: TypeAlias = UpdateEvent | InsertEvent | DeleteEvent | ErrorEvent
+
+
+def _parseEvent(obj: JSON_OBJECT) -> EVENT | None:
+    seq = cast(int | None, obj["seq"])
+
+    t = obj["type"]
+    if t is None or type(t) is not str:
+        raise Exception(f"Event with unknown type: {t} {obj}")
+
+    match t:
+        case "insert":
+            return InsertEvent(seq, cast(JSON_OBJECT, obj["value"]))
+        case "update":
+            return UpdateEvent(seq, cast(JSON_OBJECT, obj["value"]))
+        case "delete":
+            return DeleteEvent(seq, cast(JSON_OBJECT, obj["value"]))
+        case "error":
+            return ErrorEvent(seq, cast(str, obj["error"]))
+        case _:
+            raise Exception(f"Failed to parse event: {obj}")
+
+
 class Transport(ABC):
     @abstractmethod
     def fetch(
@@ -639,22 +701,27 @@ class RecordApi:
             method="DELETE",
         )
 
-    def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[JSON_OBJECT]:
+    def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[EVENT]:
         id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
         context = self._client.stream(
             f"{self._recordApi}/{self._name}/subscribe/{id}", timeout=httpx.Timeout(None)
         )
 
-        def impl() -> typing.Generator[JSON_OBJECT]:
+        def impl() -> typing.Generator[EVENT]:
             with context as response:
                 if response.status_code > 200:
                     raise FetchException(response.status_code, response.text)
 
                 for line in response.iter_lines():
                     if line.startswith("data: "):
-                        yield json.loads(line.rstrip("\n")[6:])
+                        ev = _parseEvent(json.loads(line.rstrip("\n")[6:]))
+                        if ev is not None:
+                            yield ev
 
         return impl()
+
+    def subscribe_all(self) -> typing.Generator[EVENT]:
+        return self.subscribe("*")
 
 
 def _refreshTokensImpl(transport: Transport, refreshToken: str) -> TokenState:
