@@ -7,6 +7,41 @@ import { Client } from "./client";
 
 import type { WsProtocol } from "@bindings/WsProtocol";
 
+export type InsertEvent<T extends object = object> = {
+  value: Partial<T>;
+  seq?: number;
+  type: "insert";
+};
+
+export type UpdateEvent<T extends object = object> = {
+  value: Partial<T>;
+  seq?: number;
+  type: "update";
+};
+
+export type DeleteEvent<T extends object = object> = {
+  value: Partial<T>;
+  seq?: number;
+  type: "delete";
+};
+
+export type ErrorEvent = {
+  error: string;
+  seq?: number;
+  type: "error";
+};
+
+export type ChangeEvent<T extends object = object> =
+  | InsertEvent<T>
+  | UpdateEvent<T>
+  | DeleteEvent<T>
+  | ErrorEvent;
+
+// Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
+// from renaming to `Event_2` to avoid a possible collision with the DOM
+// `Event` type (KeyboardEvent, MouseEvent, ...).
+export type Event<T extends object = object> = ChangeEvent<T>;
+
 export interface FileUpload {
   content_type?: null | string;
   filename?: null | string;
@@ -70,17 +105,6 @@ export type Or = {
 export type FilterOrComposite = Filter | And | Or;
 
 export type RecordId = string | number;
-
-export type ChangeEvent =
-  | { Insert: object }
-  | { Update: object }
-  | { Delete: object }
-  | { Error: string };
-
-// Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
-// from renaming to `Event_2` to avoid a possible collision with the DOM
-// `Event` type (KeyboardEvent, MouseEvent, ...).
-export type Event = ChangeEvent;
 
 // TODO: Use `ts-rs` generated types.
 interface CreateOp {
@@ -316,8 +340,12 @@ export interface RecordApi<T = Record<string, unknown>> {
   delete(id: RecordId): Promise<void>;
   deleteOp(id: RecordId): DeleteOperation;
 
-  subscribe(id: RecordId): Promise<ReadableStream<ChangeEvent>>;
-  subscribeAll(opts?: SubscribeOpts): Promise<ReadableStream<ChangeEvent>>;
+  subscribe<T extends object = object>(
+    id: RecordId,
+  ): Promise<ReadableStream<ChangeEvent<T>>>;
+  subscribeAll<T extends object = object>(
+    opts?: SubscribeOpts,
+  ): Promise<ReadableStream<ChangeEvent<T>>>;
 }
 
 /// Provides CRUD access to records through TrailBase's record API.
@@ -398,20 +426,22 @@ export class RecordApiImpl<
     return new DeleteOperation(this.client, this.name, id);
   }
 
-  public async subscribe(id: RecordId): Promise<ReadableStream<ChangeEvent>> {
-    return await this.subscribeImpl(id);
+  public async subscribe<T extends object = object>(
+    id: RecordId,
+  ): Promise<ReadableStream<ChangeEvent<T>>> {
+    return await this.subscribeImpl<T>(id);
   }
 
-  public async subscribeAll(
+  public async subscribeAll<T extends object = object>(
     opts?: SubscribeOpts,
-  ): Promise<ReadableStream<ChangeEvent>> {
-    return await this.subscribeImpl("*", opts);
+  ): Promise<ReadableStream<ChangeEvent<T>>> {
+    return await this.subscribeImpl<T>("*", opts);
   }
 
-  private async subscribeImpl(
+  private async subscribeImpl<T extends object>(
     id: RecordId,
     opts?: SubscribeOpts,
-  ): Promise<ReadableStream<ChangeEvent>> {
+  ): Promise<ReadableStream<ChangeEvent<T>>> {
     const params = new URLSearchParams();
     const filters = opts?.filters ?? [];
     if (filters.length > 0) {
@@ -431,7 +461,7 @@ export class RecordApiImpl<
     }
 
     const decoder = new TextDecoder();
-    const transformStream = new TransformStream<Uint8Array, ChangeEvent>({
+    const transformStream = new TransformStream<Uint8Array, ChangeEvent<T>>({
       transform(chunk: Uint8Array, controller) {
         const messages = decoder.decode(chunk).trimEnd().split("\n\n");
         for (const msg of messages) {
@@ -448,10 +478,10 @@ export class RecordApiImpl<
     return body.pipeThrough(transformStream);
   }
 
-  async subscribeWs(
+  async subscribeWs<T extends object = object>(
     id: RecordId,
     opts?: SubscribeOpts,
-  ): Promise<ReadableStream<ChangeEvent>> {
+  ): Promise<ReadableStream<ChangeEvent<T>>> {
     const params = new URLSearchParams();
     params.append("ws", "true");
 
@@ -462,7 +492,7 @@ export class RecordApiImpl<
       }
     }
 
-    return new Promise<ReadableStream<ChangeEvent>>((resolve, reject) => {
+    return new Promise<ReadableStream<ChangeEvent<T>>>((resolve, reject) => {
       const host = this.client.base?.host ?? "";
       const protocol = this.client.base?.protocol === "https" ? "wss" : "ws";
       const url = `${protocol}://${host}${recordApiBasePath}/${this.name}/subscribe/${id}?${params}`;
@@ -558,6 +588,11 @@ const recordApiBasePath = "/api/records/v1";
 
 export const exportedForTesting = isDev
   ? {
-      subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+      subscribeWs: function <T extends object = object>(
+        api: RecordApiImpl,
+        id: RecordId,
+      ) {
+        return api.subscribeWs<T>(id);
+      },
     }
   : undefined;
