@@ -113,32 +113,28 @@ public class ListResponse<T> {
 public abstract class Event {
   /// <summary>Get associated record value as JSON object.</summary>
   public abstract JsonNode? Value { get; }
+  /// <summary>Get sequence number.</summary>
+  public abstract UInt32? Seq { get; }
 
   internal static Event Parse(string message) {
     var obj = (JsonObject?)JsonNode.Parse(message);
-    if (obj != null) {
-      var insert = obj["Insert"];
-      if (insert != null) {
-        return new InsertEvent(insert);
-      }
-
-      var update = obj["Update"];
-      if (update != null) {
-        return new UpdateEvent(update);
-      }
-
-      var delete = obj["Delete"];
-      if (delete != null) {
-        return new DeleteEvent(delete);
-      }
-
-      var error = obj["Error"];
-      if (error != null) {
-        return new ErrorEvent(error.ToString());
-      }
+    if (obj == null) {
+      throw new Exception($"Failed to event: {message}");
     }
 
-    throw new Exception($"Failed to parse {message}");
+    var type = obj["type"]?.GetValue<string>();
+    if (type == null) {
+      throw new Exception($"Unknown event type: {message}");
+    }
+
+    var seq = obj["seq"]?.GetValue<UInt32>();
+    return type switch {
+      "insert" => new InsertEvent(seq, obj["value"]),
+      "update" => new UpdateEvent(seq, obj["value"]),
+      "delete" => new DeleteEvent(seq, obj["value"]),
+      "error" => new ErrorEvent(seq, obj["error"]?.GetValue<string>() ?? "<missing>"),
+      _ => throw new Exception($"Unknown event type: {message}"),
+    };
   }
 }
 
@@ -146,9 +142,12 @@ public abstract class Event {
 public class InsertEvent : Event {
   /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get; }
+  /// <summary>Get sequence number.</summary>
+  public override UInt32? Seq { get; }
 
   /// <summary>InsertEvent constructor.</summary>
-  public InsertEvent(JsonNode? value) {
+  public InsertEvent(UInt32? seq, JsonNode? value) {
+    this.Seq = seq;
     this.Value = value;
   }
 
@@ -160,9 +159,12 @@ public class InsertEvent : Event {
 public class UpdateEvent : Event {
   /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get; }
+  /// <summary>Get sequence number.</summary>
+  public override UInt32? Seq { get; }
 
   /// <summary>UpdateEvent constructor.</summary>
-  public UpdateEvent(JsonNode? value) {
+  public UpdateEvent(UInt32? seq, JsonNode? value) {
+    this.Seq = seq;
     this.Value = value;
   }
 
@@ -174,9 +176,12 @@ public class UpdateEvent : Event {
 public class DeleteEvent : Event {
   /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get; }
+  /// <summary>Get sequence number.</summary>
+  public override UInt32? Seq { get; }
 
   /// <summary>DeleteEvent constructor.</summary>
-  public DeleteEvent(JsonNode? value) {
+  public DeleteEvent(UInt32? seq, JsonNode? value) {
+    this.Seq = seq;
     this.Value = value;
   }
 
@@ -188,16 +193,20 @@ public class DeleteEvent : Event {
 public class ErrorEvent : Event {
   /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get { return null; } }
+  /// <summary>Get sequence number.</summary>
+  public override UInt32? Seq { get; }
+
   /// <summary>Get associated error message.</summary>
-  public string ErrorMessage { get; }
+  public string Message { get; }
 
   /// <summary>ErrorEvent constructor.</summary>
-  public ErrorEvent(string errorMsg) {
-    this.ErrorMessage = errorMsg;
+  public ErrorEvent(UInt32? seq, string errorMsg) {
+    this.Seq = seq;
+    this.Message = errorMsg;
   }
 
   /// <summary>Serialize ErrorEvent.</summary>
-  public override string ToString() => $"ErrorEvent({ErrorMessage})";
+  public override string ToString() => $"ErrorEvent({Message})";
 }
 
 [JsonSourceGenerationOptions(WriteIndented = true)]

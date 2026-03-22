@@ -427,39 +427,53 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     await api.Delete(id);
 
-    List<Event> events = [];
-    await foreach (Event msg in eventStream) {
-      events.Add(msg);
-    }
-
-    Assert.Equal(2, events.Count);
-
-    Assert.True(events[0] is UpdateEvent);
-    Assert.Equal(updatedMessage, events[0].Value!["text_not_null"]?.ToString());
-
-    Assert.True(events[1] is DeleteEvent);
-    Assert.Equal(updatedMessage, events[1].Value!["text_not_null"]?.ToString());
-
-    List<Event> tableEvents = [];
-    await foreach (Event msg in tableEventStream) {
-      tableEvents.Add(msg);
-
-      // TODO: Maybe use a timeout instead.
-      if (tableEvents.Count >= 3) {
-        break;
+    {
+      // Record events.
+      List<Event> events = [];
+      await foreach (Event msg in eventStream) {
+        events.Add(msg);
       }
+
+      Assert.Equal(2, events.Count);
+
+      var ev0 = events[0] as UpdateEvent;
+      Assert.NotNull(ev0);
+      Assert.Equal((uint)1, ev0.Seq);
+      Assert.Equal(updatedMessage, ev0.Value!["text_not_null"]?.ToString());
+
+      var ev1 = events[1] as DeleteEvent;
+      Assert.NotNull(ev1);
+      Assert.Equal((uint)2, ev1.Seq);
+      Assert.Equal(updatedMessage, ev1.Value!["text_not_null"]?.ToString());
     }
 
-    Assert.Equal(3, tableEvents.Count);
+    {
+      // Table events.
+      List<Event> tableEvents = [];
+      await foreach (Event msg in tableEventStream) {
+        tableEvents.Add(msg);
 
-    Assert.True(tableEvents[0] is InsertEvent);
-    Assert.Equal(createMessage, tableEvents[0].Value!["text_not_null"]?.ToString());
+        // TODO: Maybe use a timeout instead.
+        if (tableEvents.Count >= 3) {
+          break;
+        }
+      }
 
-    Assert.True(tableEvents[1] is UpdateEvent);
-    Assert.Equal(updatedMessage, tableEvents[1].Value!["text_not_null"]?.ToString());
+      Assert.Equal(3, tableEvents.Count);
 
-    Assert.True(tableEvents[2] is DeleteEvent);
-    Assert.Equal(updatedMessage, tableEvents[2].Value!["text_not_null"]?.ToString());
+      var ev0 = tableEvents[0] as InsertEvent;
+      Assert.NotNull(ev0);
+      Assert.Equal((uint)1, ev0.Seq);
+      Assert.Equal(createMessage, ev0.Value!["text_not_null"]?.ToString());
+
+      var ev1 = tableEvents[1] as UpdateEvent;
+      Assert.NotNull(ev1);
+      Assert.Equal(updatedMessage, ev1.Value!["text_not_null"]?.ToString());
+
+      var ev2 = tableEvents[2] as DeleteEvent;
+      Assert.NotNull(ev2);
+      Assert.Equal(updatedMessage, ev2.Value!["text_not_null"]?.ToString());
+    }
   }
 
   [Fact]
