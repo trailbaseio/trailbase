@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
-// use tokio::sync::Mutex;
+use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -230,11 +230,11 @@ impl StoreBuilder<State> for Arc<SharedState> {
 }
 
 struct HttpStoreInternal {
-  // store: Mutex<Store<State>>,
-  // bindings: crate::host::Interfaces,
-  // proxy_bindings: wasmtime_wasi_http::bindings::Proxy,
+  store: Mutex<Store<State>>,
+  bindings: crate::host::Interfaces,
+  proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
   runtime_state: Arc<RuntimeInternal<Arc<SharedState>>>,
-  rt: Runtime,
+  // rt: Runtime,
 }
 
 #[derive(Clone)]
@@ -244,22 +244,22 @@ pub struct HttpStore {
 
 impl HttpStore {
   pub async fn new(rt: &Runtime) -> Result<Self, Error> {
-    // let (mut store, bindings) = rt.new_bindings().await?;
-    //
-    // let proxy_bindings = wasmtime_wasi_http::bindings::Proxy::instantiate_async(
-    //   &mut store,
-    //   &rt.state.component,
-    //   &rt.state.linker,
-    // )
-    // .await?;
+    let (mut store, bindings) = rt.new_bindings().await?;
+
+    let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+      &mut store,
+      &rt.state.component,
+      &rt.state.linker,
+    )
+    .await?;
 
     return Ok(Self {
       state: Arc::new(HttpStoreInternal {
-        // store: Mutex::new(store),
-        // bindings,
-        // proxy_bindings,
+        store: Mutex::new(store),
+        bindings,
+        proxy_bindings,
         runtime_state: rt.state.clone(),
-        rt: rt.clone(),
+        // rt: rt.clone(),
       }),
     });
   }
@@ -268,14 +268,15 @@ impl HttpStore {
     let state = self.state.clone();
 
     return Self::call(&self.state.runtime_state, async move {
-      let (mut store, bindings) = state.rt.new_bindings().await?;
-      let api = bindings.trailbase_component_init_endpoint();
+      let api = state.bindings.trailbase_component_init_endpoint();
+      // let (mut store, bindings) = state.rt.new_bindings().await?;
+      // let api = bindings.trailbase_component_init_endpoint();
 
       let args = Arguments {
         version: args.version,
       };
 
-      // let mut store = state.store.lock().await;
+      let mut store = state.store.lock().await;
       store
         .run_concurrent(async |accessor| -> Result<InitResult, Error> {
           let http = api.call_init_http_handlers(accessor, args.clone()).await?;
@@ -318,20 +319,20 @@ impl HttpStore {
       // out of scope.
       let handle = tokio::spawn(async move {
         // Instantiate a store per request, see FIXME below.
-        let mut lock = state
-          .rt
-          .state
-          .store_builder
-          .new_store(&state.rt.state.engine)?;
+        // let mut lock = state
+        //   .rt
+        //   .state
+        //   .store_builder
+        //   .new_store(&state.rt.state.engine)?;
         // let (mut lock, _bindings) = state.rt.new_bindings().await?;
 
-        let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
-          &mut lock,
-          &state.rt.state.component,
-          &state.rt.state.linker,
-        )
-        .await?;
-        // let mut lock = state.store.lock().await;
+        // let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+        //   &mut lock,
+        //   &state.rt.state.component,
+        //   &state.rt.state.linker,
+        // )
+        // .await?;
+        let mut lock = state.store.lock().await;
 
         let req = lock.data_mut().http().new_incoming_request(
           wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
@@ -345,7 +346,8 @@ impl HttpStore {
         // incorrect termination?
         // state
         //   .proxy_bindings
-        proxy_bindings
+        state
+          .proxy_bindings
           .wasi_http_incoming_handler()
           .call_handle(lock.as_context_mut(), req, out)
           .await
