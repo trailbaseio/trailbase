@@ -236,19 +236,12 @@ class RecordApi(val name: String, val client: Client) {
   }
 
   suspend inline fun <reified T> subscribe(id: RecordId): Flow<DbEvent> {
+    val path = "${RECORD_API}/${name}/subscribe/${id.id()}"
 
-    val url = "${client.site()}/${RECORD_API}/${name}/subscribe/${id.id()}"
+    // NOTE: We should probably push this into a Client.sse.
     val tokenState = TokenState.build(client.tokens())
 
-    val session =
-            client.http.sseSession(
-                    urlString = url,
-                    block = {
-                      method = HttpMethod.Get
-                      headers { tokenState.headers.forEach { appendAll(it.key, it.value) } }
-                      contentType(ContentType.Application.Json)
-                    }
-            )
+    val session = client.transport.sse(path, Method.get, tokenState.headers)
 
     // Check HTTP status before processing SSE events
     if (!session.call.response.status.isSuccess()) {
@@ -284,10 +277,101 @@ class HttpException(val status: Int, message: String?) : Throwable(message) {
   }
 }
 
+abstract class Transport {
+  abstract suspend fun fetch(
+          path: String,
+          method: Method = Method.get,
+          headers: Map<String, List<String>>? = null,
+          params: Map<String, String>? = null,
+          body: Any? = null,
+  ): HttpResponse
+
+  abstract suspend fun sse(
+          path: String,
+          method: Method = Method.get,
+          headers: Map<String, List<String>>? = null,
+          params: Map<String, String>? = null,
+  ): ClientSSESession
+}
+
+class DefaultTransport(private val base: Url, public val http: HttpClient = initClient()) :
+        Transport() {
+
+  override suspend fun fetch(
+          path: String,
+          method: Method,
+          headers: Map<String, List<String>>?,
+          params: Map<String, String>?,
+          body: Any?,
+  ): HttpResponse {
+    if (path.startsWith("/")) {
+      throw Exception("path start with '/': ${path}")
+    }
+
+    val response =
+            http.request(base) {
+              this.method =
+                      when (method) {
+                        Method.get -> HttpMethod.Get
+                        Method.post -> HttpMethod.Post
+                        Method.patch -> HttpMethod.Patch
+                        Method.delete -> HttpMethod.Delete
+                      }
+              url {
+                path(path)
+                if (params != null) {
+                  for ((k, v) in params) {
+                    parameters.append(k, v)
+                  }
+                }
+              }
+              headers { headers?.forEach { appendAll(it.key, it.value) } }
+              contentType(ContentType.Application.Json)
+              setBody(body)
+            }
+
+    return response
+  }
+
+  override suspend fun sse(
+          path: String,
+          method: Method,
+          headers: Map<String, List<String>>?,
+          params: Map<String, String>?,
+  ): ClientSSESession {
+    if (path.startsWith("/")) {
+      throw Exception("path start with '/': ${path}")
+    }
+
+    return http.sseSession(
+            urlString = base.toString(),
+            block = {
+              this.method =
+                      when (method) {
+                        Method.get -> HttpMethod.Get
+                        Method.post -> HttpMethod.Post
+                        Method.patch -> HttpMethod.Patch
+                        Method.delete -> HttpMethod.Delete
+                      }
+              url {
+                path(path)
+                if (params != null) {
+                  for ((k, v) in params) {
+                    parameters.append(k, v)
+                  }
+                }
+              }
+              headers { headers?.forEach { appendAll(it.key, it.value) } }
+              contentType(ContentType.Application.Json)
+            }
+    )
+  }
+}
+
 class Client(
         private val site: Url,
         private var tokenState: TokenState,
-        public val http: HttpClient = initClient()
+        public val transport: Transport = DefaultTransport(site),
 ) {
   constructor(
           site: String
@@ -416,28 +500,7 @@ class Client(
       tokenState = refreshTokensImpl(refreshToken)
     }
 
-    val response =
-            http.request(site) {
-              this.method =
-                      when (method) {
-                        Method.get -> HttpMethod.Get
-                        Method.post -> HttpMethod.Post
-                        Method.patch -> HttpMethod.Patch
-                        Method.delete -> HttpMethod.Delete
-                      }
-              url {
-                path(path)
-                if (params != null) {
-                  for ((k, v) in params) {
-                    parameters.append(k, v)
-                  }
-                }
-              }
-              headers { tokenState.headers.forEach { appendAll(it.key, it.value) } }
-              contentType(ContentType.Application.Json)
-              setBody(body)
-            }
-
+    val response = transport.fetch(path, method, tokenState.headers, params, body)
     if (!response.status.isSuccess() && throwOnError) {
       throw HttpException(response.status.value, response.body())
     }
@@ -448,17 +511,7 @@ class Client(
   private suspend fun refreshTokensImpl(refreshToken: String): TokenState {
     @Serializable data class Body(val refresh_token: String)
 
-    val tokens: Tokens =
-            http
-                    .post(site) {
-                      url { path("${AUTH_API}/refresh") }
-                      contentType(ContentType.Application.Json)
-                      headers { tokenState.headers.forEach { appendAll(it.key, it.value) } }
-                      setBody(Body(refreshToken))
-                    }
-                    .body()
-
-    return TokenState.build(tokens)
+    return TokenState.build(fetch("${AUTH_API}/refresh", Method.post, refreshToken).body())
   }
 }
 

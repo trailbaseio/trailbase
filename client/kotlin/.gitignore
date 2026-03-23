@@ -9,3 +9,5 @@
 build
 *.db
 *.gpg
+
+kotlin-js-store/

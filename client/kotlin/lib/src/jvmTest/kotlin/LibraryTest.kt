@@ -179,7 +179,7 @@ class ClientTest {
     val code: String = g.generate(secret, currentBucket)
     assertEquals(6, code.length)
 
-    client.loginSecond(mfaToken!!, code)
+    client.loginSecond(mfaToken, code)
     assertNotNull(client.user())
     assertEquals("alice@trailbase.io", client.user()?.email)
 
