@@ -19,16 +19,21 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/swiftlang/swift-subprocess.git", branch: "main"),
+    .package(url: "https://github.com/Recouse/EventSource.git", .upToNextMinor(from: "0.1.7")),
     .package(url: "https://github.com/lachlanbell/SwiftOTP.git", .upToNextMinor(from: "3.0.0")),
   ],
   targets: [
     .target(
-      name: "TrailBase"),
+      name: "TrailBase",
+      dependencies: [
+        "EventSource"
+      ]
+    ),
     .testTarget(
       name: "TrailBaseTests",
       dependencies: [
         "TrailBase",
-        .product(name: "SwiftOTP", package: "SwiftOTP"),
+        "SwiftOTP",
         .product(name: "Subprocess", package: "swift-subprocess"),
       ]
     ),

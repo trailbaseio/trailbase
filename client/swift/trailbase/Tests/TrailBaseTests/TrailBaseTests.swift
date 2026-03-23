@@ -223,4 +223,72 @@ extension Trait where Self == SetupTrailBaseTrait {
     } catch {
     }
   }
+
+  // WARN: EventSource doesn't seem to receive SSE events - at least on linux
+  // - we may want to debug this on a Mac before moving forward.
+  //
+  // @Test func subscribtionTest() async throws {
+  //     let client = try await connect()
+  //     let api = client.records("simple_strict_table")
+  //     let events = try await api.subscribeAll()
+  //
+  //     try await Task.sleep(for: .seconds(1))
+  //
+  //     print("Create record")
+  //     let now = NSDate().timeIntervalSince1970
+  //     let createMessage = "swift client subscribe test 0: =?&\(now)"
+  //     let _ = try await api.create(record: SimpleStrict(text_not_null: createMessage))
+  //
+  //     var collected: [Event] = []
+  //     for try await event in events {
+  //         print("GOT", event)
+  //         collected.append(event)
+  //     }
+  // }
+}
+
+@Test()
+func eventEncoding() async throws {
+  let data0 = """
+    {
+        "type": "update",
+        "seq": 5,
+        "value": {
+            "array": [1,2]
+        }
+    }
+    """
+
+  let ev0 = try JSONDecoder().decode(Event.self, from: Data(data0.utf8))
+  assert(
+    ev0
+      == Event.Update(
+        type: "update", seq: 5,
+        value: ["array": JSON.array([JSON.number(1), JSON.number(2)])]))
+
+  struct A: Codable {
+    let array: [Int]
+  }
+
+  let a: A? = try ev0.decodeValue()
+  assert(a?.array == [1, 2])
+
+  switch ev0 {
+  case .Update(_, let seq, let value):
+    assert(seq == 5)
+    let a: A? = try value.decodeValue()
+    assert(a?.array == [1, 2])
+  default:
+    panic("Not an update")
+  }
+
+  let data1 = """
+    {
+        "type": "error",
+        "error": "test"
+    }
+    """
+
+  let ev1 = try JSONDecoder().decode(Event.self, from: Data(data1.utf8))
+  assert(ev1 == Event.Error(type: "error", seq: nil, error: "test"))
 }

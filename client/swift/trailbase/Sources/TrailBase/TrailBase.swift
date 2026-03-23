@@ -1,3 +1,4 @@
+import EventSource
 import Foundation
 import FoundationNetworking
 import Synchronization
@@ -49,12 +50,12 @@ private struct TokenState {
       }
 
       self.state = (t, claims)
-      self.headers = build_headers(tokens: tokens)
+      self.headers = buildHeaders(tokens: tokens)
       return
     }
 
     self.state = nil
-    self.headers = build_headers(tokens: tokens)
+    self.headers = buildHeaders(tokens: tokens)
   }
 }
 
@@ -197,8 +198,8 @@ public class RecordApi {
     let (_, data) = try await self.client.fetch(
       path: "/\(RECORD_API)/\(name)",
       method: "GET",
+      queryParams: queryParams,
       body: nil,
-      queryParams: queryParams
     )
 
     return try JSONDecoder().decode(ListResponse.self, from: data)
@@ -242,8 +243,30 @@ public class RecordApi {
       path: "/\(RECORD_API)/\(name)/\(recordId)", method: "DELETE")
   }
 
-  // TODO: Implement subscriptions. It seems that Swift's Foundation doesn't
-  // support streaming HTTP on Linux :/.
+  // public func subscribe(recordId: RecordId) async throws -> AsyncStream<Event> {
+  //   let events = try await self.client.stream(
+  //     path: "/\(RECORD_API)/\(name)/subscribe/\(recordId)", method: "GET")
+  //
+  //   return events.filterMap({
+  //     (event) -> Event? in
+  //
+  //     print("subscribe(): GOT", event)
+  //
+  //     switch event {
+  //     case .event(let event):
+  //       if let data = event.data?.data(using: .utf8) {
+  //         return try? JSONDecoder().decode(Event.self, from: Data(data))
+  //       }
+  //     default:
+  //       break
+  //     }
+  //     return nil
+  //   })
+  // }
+  //
+  // public func subscribeAll() async throws -> AsyncStream<Event> {
+  //   return try await subscribe(recordId: RecordId.string("*"))
+  // }
 }
 
 public enum ClientError: Error {
@@ -253,63 +276,17 @@ public enum ClientError: Error {
   case invalidJwt
   case unauthenticated
   case invalidFilter(String)
-}
-
-private class ThinClient {
-  private let base: URL
-  private let session: URLSession
-
-  init(base: URL) {
-    self.base = base
-    self.session = URLSession(configuration: URLSessionConfiguration.default)
-  }
-
-  func fetch(
-    path: String,
-    headers: [(String, String)],
-    method: String,
-    body: Data? = nil,
-    queryParams: [URLQueryItem]? = nil,
-    throwOnError: Bool = true,
-  ) async throws -> (HTTPURLResponse, Data) {
-    assert(path.starts(with: "/"))
-    guard var url = URL(string: path, relativeTo: self.base) else {
-      throw ClientError.invalidUrl
-    }
-
-    if let params = queryParams {
-      url.append(queryItems: params)
-    }
-
-    var request = URLRequest(url: url)
-    for (name, value) in headers {
-      request.setValue(value, forHTTPHeaderField: name)
-    }
-    request.httpMethod = method
-    request.httpBody = body
-
-    let (data, response) = try await self.session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw ClientError.invalidStatusCode(code: -1)
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) || !throwOnError else {
-      throw ClientError.invalidStatusCode(
-        code: httpResponse.statusCode, body: String(data: data, encoding: .utf8))
-    }
-
-    return (httpResponse, data)
-  }
+  case invalidEvent
 }
 
 public class Client {
   private let base: URL
-  private let client: ThinClient
+  private let transport: Transport
   private let tokenState: Mutex<TokenState>
 
-  public init(site: URL, tokens: Tokens? = nil) throws {
+  public init(site: URL, tokens: Tokens? = nil, transport: Transport? = nil) throws {
     self.base = site
-    self.client = ThinClient(base: site)
+    self.transport = transport ?? DefaultTransport(base: site)
     self.tokenState = Mutex(try TokenState(tokens: tokens))
   }
 
@@ -345,7 +322,7 @@ public class Client {
     }
 
     let newTokens = try await Client.doRefreshToken(
-      client: self.client, headers: headers, refreshToken: refreshToken)
+      client: self.transport, headers: headers, refreshToken: refreshToken)
 
     self.tokenState.withLock({ (tokens) in
       tokens = newTokens
@@ -441,23 +418,42 @@ public class Client {
   fileprivate func fetch(
     path: String,
     method: String,
-    body: Data? = nil,
     queryParams: [URLQueryItem]? = nil,
+    body: Data? = nil,
     throwOnError: Bool = true,
   ) async throws -> (HTTPURLResponse, Data) {
     var (headers, refreshToken) = getHeadersAndRefreshTokenIfExpired()
     if let rt = refreshToken {
       let newTokens = try await Client.doRefreshToken(
-        client: self.client, headers: headers, refreshToken: rt)
+        client: self.transport, headers: headers, refreshToken: rt)
       headers = newTokens.headers
       self.tokenState.withLock({ (tokens) in
         tokens = newTokens
       })
     }
 
-    return try await client.fetch(
-      path: path, headers: headers, method: method, body: body, queryParams: queryParams,
+    return try await transport.fetch(
+      path: path, headers: headers, method: method, queryParams: queryParams, body: body,
       throwOnError: throwOnError)
+  }
+
+  fileprivate func stream(
+    path: String,
+    method: String,
+    queryParams: [URLQueryItem]? = nil,
+  ) async throws -> AsyncStream<EventSource.EventType> {
+    var (headers, refreshToken) = getHeadersAndRefreshTokenIfExpired()
+    if let rt = refreshToken {
+      let newTokens = try await Client.doRefreshToken(
+        client: self.transport, headers: headers, refreshToken: rt)
+      headers = newTokens.headers
+      self.tokenState.withLock({ (tokens) in
+        tokens = newTokens
+      })
+    }
+
+    return try transport.stream(
+      path: path, headers: headers, method: method, queryParams: queryParams)
   }
 
   private func getHeaderAndRefreshToken() -> ([(String, String)], String)? {
@@ -487,7 +483,7 @@ public class Client {
   }
 
   private static func doRefreshToken(
-    client: ThinClient, headers: [(String, String)], refreshToken: String
+    client: Transport, headers: [(String, String)], refreshToken: String
   ) async throws -> TokenState {
     struct RefreshRequest: Encodable {
       let refresh_token: String
@@ -511,7 +507,7 @@ public class Client {
   }
 }
 
-private func build_headers(tokens: Tokens?) -> [(String, String)] {
+private func buildHeaders(tokens: Tokens?) -> [(String, String)] {
   var headers: [(String, String)] = [
     ("Content-Type", "application/json")
   ]
@@ -559,6 +555,44 @@ private func decodeJwtTokenClaims(_ jwt: String) -> JwtTokenClaims? {
     return claims
   } catch {
     return nil
+  }
+}
+
+// Used for EventSource.events().map().
+extension AsyncStream {
+  public func map<Transformed: Sendable>(
+    _ transform: @escaping @Sendable (Element) -> Transformed
+  ) -> AsyncStream<Transformed> where Element: Sendable {
+    return AsyncStream<Transformed> { continuation in
+      let task = Task {
+        for await element in self {
+          continuation.yield(transform(element))
+        }
+        continuation.finish()
+      }
+      continuation.onTermination = { _ in
+        task.cancel()
+      }
+    }
+  }
+
+  public func filterMap<Transformed: Sendable>(
+    _ transform: @escaping @Sendable (Element) -> Transformed?
+  ) -> AsyncStream<Transformed> where Element: Sendable {
+    return AsyncStream<Transformed> { continuation in
+      let task = Task {
+        for await element in self {
+          let transformed = transform(element)
+          if transformed != nil {
+            continuation.yield(transformed!)
+          }
+        }
+        continuation.finish()
+      }
+      continuation.onTermination = { _ in
+        task.cancel()
+      }
+    }
   }
 }
 
