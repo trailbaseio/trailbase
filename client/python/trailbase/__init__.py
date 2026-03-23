@@ -8,10 +8,11 @@ import logging
 import typing
 import json
 
+from abc import ABC, abstractmethod
 from enum import Enum
 from contextlib import contextmanager
 from time import time
-from typing import TypeAlias, cast, final
+from typing import ContextManager, TypeAlias, cast, final
 
 JSON: TypeAlias = dict[str, "JSON"] | list["JSON"] | str | int | float | bool | None
 JSON_OBJECT: TypeAlias = dict[str, JSON]
@@ -202,7 +203,31 @@ class TokenState:
         return base
 
 
-class ThinClient:
+class Transport(ABC):
+    @abstractmethod
+    def fetch(
+        self,
+        path: str,
+        tokenState: TokenState,
+        method: str | None = "GET",
+        data: JSON | None = None,
+        queryParams: dict[str, str] | None = None,
+    ) -> httpx.Response:
+        pass
+
+    @abstractmethod
+    def stream(
+        self,
+        path: str,
+        tokenState: TokenState,
+        method: str | None = "GET",
+        queryParams: dict[str, str] | None = None,
+        timeout: httpx.Timeout | None = None,
+    ) -> ContextManager[httpx.Response]:
+        pass
+
+
+class DefaultTransport(Transport):
     http_client: httpx.Client
     site: str
 
@@ -234,7 +259,7 @@ class ThinClient:
         method: str | None = "GET",
         queryParams: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
-    ):
+    ) -> ContextManager[httpx.Response]:
         assert not path.startswith("/")
         headers = tokenState.headers.copy()
         headers["Accept"] = "text/event-stream"
@@ -266,7 +291,7 @@ class ThinClient:
 class Client:
     _authApi: str = "api/auth/v1"
 
-    _client: ThinClient
+    _transport: Transport
     _site: str
     _tokenState: TokenState
 
@@ -274,9 +299,9 @@ class Client:
         self,
         site: str,
         tokens: Tokens | None = None,
-        http_client: httpx.Client | None = None,
+        transport: Transport | None = None,
     ) -> None:
-        self._client = ThinClient(site, http_client)
+        self._transport = transport or DefaultTransport(site)
         self._site = site
         self._tokenState = TokenState.build(tokens)
 
@@ -399,9 +424,8 @@ class Client:
         return None
 
     def _refreshTokensImpl(self, refreshToken: str) -> TokenState:
-        response = self._client.fetch(
+        response = self.fetch(
             f"{self._authApi}/refresh",
-            self._tokenState,
             method="POST",
             data={
                 "refresh_token": refreshToken,
@@ -430,7 +454,9 @@ class Client:
         if refreshToken is not None:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
-        response = self._client.fetch(path, tokenState, method=method, data=data, queryParams=queryParams)
+        response = self._transport.fetch(
+            path, tokenState, method=method, data=data, queryParams=queryParams
+        )
 
         if response.status_code > 200 and throwOnError:
             raise FetchException(response.status_code, response.text)
@@ -449,7 +475,7 @@ class Client:
         if refreshToken is not None:
             tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
 
-        return self._client.stream(
+        return self._transport.stream(
             path,
             tokenState,
             method=method,
