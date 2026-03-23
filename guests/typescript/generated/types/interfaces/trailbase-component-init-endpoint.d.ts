@@ -1,9 +1,9 @@
-declare module 'trailbase:component/init-endpoint@0.1.0' {
+declare module "trailbase:component/init-endpoint@0.1.0" {
   export function initHttpHandlers(args: Arguments): HttpHandlers;
   export function initJobHandlers(args: Arguments): JobHandlers;
   export function initSqliteFunctions(args: Arguments): SqliteFunctions;
   export interface Arguments {
-    version?: string,
+    version?: string;
   }
   /**
    * # Variants
@@ -26,18 +26,27 @@ declare module 'trailbase:component/init-endpoint@0.1.0' {
    *
    * ## `"connect"`
    */
-  export type HttpMethodType = 'get' | 'post' | 'head' | 'options' | 'patch' | 'delete' | 'put' | 'trace' | 'connect';
+  export type HttpMethodType =
+    | "get"
+    | "post"
+    | "head"
+    | "options"
+    | "patch"
+    | "delete"
+    | "put"
+    | "trace"
+    | "connect";
   export interface HttpHandlers {
     /**
      * Registered http handlers (method, path)[].
      */
-    handlers: Array<[HttpMethodType, string]>,
+    handlers: Array<[HttpMethodType, string]>;
   }
   export interface JobHandlers {
     /**
      * Registered jobs (name, spec)[].
      */
-    handlers: Array<[string, string]>,
+    handlers: Array<[string, string]>;
   }
   /**
    * # Variants
@@ -73,13 +82,23 @@ declare module 'trailbase:component/init-endpoint@0.1.0' {
    *
    * Indicates that the function is an aggregate that internally orders the values provided to the first argument.
    */
-  export type SqliteFunctionFlags = 'utf8' | 'utf16le' | 'utf16be' | 'utf16' | 'deterministic' | 'direct-only' | 'subtype' | 'innocuous' | 'result-subtype' | 'selforder1';
+  export type SqliteFunctionFlags =
+    | "utf8"
+    | "utf16le"
+    | "utf16be"
+    | "utf16"
+    | "deterministic"
+    | "direct-only"
+    | "subtype"
+    | "innocuous"
+    | "result-subtype"
+    | "selforder1";
   export interface SqliteScalarFunction {
-    name: string,
-    numArgs: number,
-    functionFlags: Array<SqliteFunctionFlags>,
+    name: string;
+    numArgs: number;
+    functionFlags: Array<SqliteFunctionFlags>;
   }
   export interface SqliteFunctions {
-    scalarFunctions: Array<SqliteScalarFunction>,
+    scalarFunctions: Array<SqliteScalarFunction>;
   }
 }

@@ -11,11 +11,6 @@ const entryPoints = {
   "kv": resolve(__dirname, 'src/kv/index.ts'),
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function external(source: string, _importer: string | undefined, _isResolved: boolean): boolean {
-  return source.startsWith("wasi:") || source.startsWith("trailbase:");
-}
-
 export default defineConfig({
   build: {
     outDir: "./dist",
@@ -44,7 +39,10 @@ export default defineConfig({
       output: {
         entryFileNames: "[name].js",
       },
-      external: external,
+      external: [
+        /^wasi:.*/,
+        /^trailbase:.*/,
+      ],
     },
   },
 });

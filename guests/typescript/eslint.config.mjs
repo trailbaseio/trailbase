@@ -5,7 +5,7 @@ export default [
   pluginJs.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ["dist/", "node_modules/"],
+    ignores: ["dist/", "node_modules/", "generated/types"],
   },
   {
     files: ["src/**/*.{js,mjs,cjs,mts,ts,tsx,jsx}"],
@@ -13,8 +13,6 @@ export default [
       // https://typescript-eslint.io/rules/no-explicit-any/
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-wrapper-object-types": "warn",
-      "@typescript-eslint/no-namespace": "off",
-      "no-var": "off",
       // http://eslint.org/docs/rules/no-unused-vars
       "@typescript-eslint/no-unused-vars": [
         "error",

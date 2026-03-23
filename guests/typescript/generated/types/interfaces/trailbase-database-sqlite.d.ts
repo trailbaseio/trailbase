@@ -1,36 +1,53 @@
-declare module 'trailbase:database/sqlite@0.1.0' {
+declare module "trailbase:database/sqlite@0.1.0" {
+  /**
+   * NOTE: Ideally, we'd use these but they can currently block guests, w/o a
+   * better non-blocking event loop.
+   * @since(version = 0.1.0)
+   * execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+   * @since(version = 0.1.0)
+   * query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
+   * However, transactions have to be sync.
+   */
   export function txBegin(): void;
   export function txCommit(): void;
   export function txRollback(): void;
   export function txExecute(query: string, params: Array<Value>): bigint;
-  export function txQuery(query: string, params: Array<Value>): Array<Array<Value>>;
+  export function txQuery(
+    query: string,
+    params: Array<Value>,
+  ): Array<Array<Value>>;
   /**
    * WARNING: Evolving a variant currently breaks the ABI:
    *   https://github.com/WebAssembly/component-model/issues/454
    */
   export type TxError = TxErrorOther;
   export interface TxErrorOther {
-    tag: 'other',
-    val: string,
+    tag: "other";
+    val: string;
   }
-  export type Value = ValueNull | ValueText | ValueBlob | ValueInteger | ValueReal;
+  export type Value =
+    | ValueNull
+    | ValueText
+    | ValueBlob
+    | ValueInteger
+    | ValueReal;
   export interface ValueNull {
-    tag: 'null',
+    tag: "null";
   }
   export interface ValueText {
-    tag: 'text',
-    val: string,
+    tag: "text";
+    val: string;
   }
   export interface ValueBlob {
-    tag: 'blob',
-    val: Uint8Array,
+    tag: "blob";
+    val: Uint8Array;
   }
   export interface ValueInteger {
-    tag: 'integer',
-    val: bigint,
+    tag: "integer";
+    val: bigint;
   }
   export interface ValueReal {
-    tag: 'real',
-    val: number,
+    tag: "real";
+    val: number;
   }
 }
