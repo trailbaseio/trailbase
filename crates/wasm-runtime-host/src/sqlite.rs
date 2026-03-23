@@ -6,7 +6,7 @@ use tokio::time::Duration;
 use trailbase_sqlite::connection::ArcLockGuard;
 use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
-use wasmtime_wasi_http::bindings::http::types::ErrorCode;
+use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
 self_cell!(
   pub(crate) struct OwnedTx {
@@ -36,7 +36,7 @@ pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx
 
 async fn handle_sqlite_request_impl(
   conn: trailbase_sqlite::Connection,
-  request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
+  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
 ) -> Result<SqliteResponse, String> {
   return match request.uri().path() {
     "/execute" => {
@@ -76,8 +76,8 @@ async fn handle_sqlite_request_impl(
 
 pub(crate) async fn handle_sqlite_request(
   conn: trailbase_sqlite::Connection,
-  request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
-) -> Result<wasmtime_wasi_http::types::IncomingResponse, ErrorCode> {
+  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
   return match handle_sqlite_request_impl(conn, request).await {
     Ok(response) => to_response(response),
     Err(err) => to_response(SqliteResponse::Error(err)),
@@ -85,7 +85,7 @@ pub(crate) async fn handle_sqlite_request(
 }
 
 async fn to_request(
-  request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
+  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
 ) -> Result<SqliteRequest, String> {
   let (_parts, body) = request.into_parts();
   let bytes: Bytes = body.collect().await.map_err(sqlite_err)?.to_bytes();
@@ -94,7 +94,7 @@ async fn to_request(
 
 fn to_response(
   response: SqliteResponse,
-) -> Result<wasmtime_wasi_http::types::IncomingResponse, ErrorCode> {
+) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
   let body =
     serde_json::to_vec(&response).map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
 
@@ -103,7 +103,7 @@ fn to_response(
     .body(bytes_to_body(Bytes::from_owner(body)))
     .map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
 
-  return Ok(wasmtime_wasi_http::types::IncomingResponse {
+  return Ok(wasmtime_wasi_http::p2::types::IncomingResponse {
     resp,
     worker: None,
     between_bytes_timeout: std::time::Duration::ZERO,

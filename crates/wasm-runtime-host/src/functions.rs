@@ -51,8 +51,7 @@ impl SqliteStore {
     let mut store = self.state.store.lock().await;
     let functions = store
       .run_concurrent(async |accessor| -> Result<_, Error> {
-        let (functions, task_exit) = api.call_init_sqlite_functions(accessor, args).await?;
-        task_exit.block(accessor).await;
+        let functions = api.call_init_sqlite_functions(accessor, args).await?;
         return Ok(functions);
       })
       .await??;
@@ -99,8 +98,7 @@ impl SqliteStore {
     let mut store = self.state.store.lock().await;
     let result = store
       .run_concurrent(async |accessor| -> Result<_, Error> {
-        let (result, task_exit) = api.call_dispatch_scalar_function(accessor, args).await?;
-        task_exit.block(accessor).await;
+        let result = api.call_dispatch_scalar_function(accessor, args).await?;
         return Ok(result);
       })
       .await??;

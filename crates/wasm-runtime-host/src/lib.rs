@@ -19,8 +19,9 @@ use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Result, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
-use wasmtime_wasi_http::bindings::http::types::ErrorCode;
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::p2::WasiHttpView;
+use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
 use host::exports::trailbase::component::init_endpoint::Arguments;
 
@@ -124,7 +125,7 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
       wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
 
       // Adds default HTTP interfaces - incoming and outgoing.
-      wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+      wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
 
       // Add default KV interfaces.
       trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
@@ -216,7 +217,10 @@ impl StoreBuilder<State> for Arc<SharedState> {
       State {
         resource_table: ResourceTable::new(),
         wasi_ctx: wasi_ctx.build(),
-        http: WasiHttpCtx::new(),
+        http_ctx: WasiHttpCtx::new(),
+        hooks: host::Hooks {
+          shared: self.clone(),
+        },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
         shared: self.clone(),
         tx: Arc::new(parking_lot::Mutex::new(None)),
@@ -274,11 +278,9 @@ impl HttpStore {
       // let mut store = state.store.lock().await;
       store
         .run_concurrent(async |accessor| -> Result<InitResult, Error> {
-          let (http, task_exit) = api.call_init_http_handlers(accessor, args.clone()).await?;
-          task_exit.block(accessor).await;
+          let http = api.call_init_http_handlers(accessor, args.clone()).await?;
 
-          let (job, task_exit) = api.call_init_job_handlers(accessor, args).await?;
-          task_exit.block(accessor).await;
+          let job = api.call_init_job_handlers(accessor, args).await?;
 
           return Ok(InitResult {
             http_handlers: http.handlers,
@@ -294,12 +296,12 @@ impl HttpStore {
   pub async fn call_incoming_http_handler(
     &self,
     request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
-  ) -> Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, Error> {
+  ) -> Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, Error> {
     let state = self.state.clone();
 
     return Self::call(&self.state.runtime_state, async move {
       let (sender, receiver) = tokio::sync::oneshot::channel::<
-        Result<hyper::Response<wasmtime_wasi_http::body::HyperOutgoingBody>, ErrorCode>,
+        Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, ErrorCode>,
       >();
 
       // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been
@@ -323,7 +325,7 @@ impl HttpStore {
           .new_store(&state.rt.state.engine)?;
         // let (mut lock, _bindings) = state.rt.new_bindings().await?;
 
-        let proxy_bindings = wasmtime_wasi_http::bindings::Proxy::instantiate_async(
+        let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
           &mut lock,
           &state.rt.state.component,
           &state.rt.state.linker,
@@ -331,12 +333,12 @@ impl HttpStore {
         .await?;
         // let mut lock = state.store.lock().await;
 
-        let req = lock.data_mut().new_incoming_request(
-          wasmtime_wasi_http::bindings::http::types::Scheme::Http,
+        let req = lock.data_mut().http().new_incoming_request(
+          wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
           request,
         )?;
 
-        let out = lock.data_mut().new_response_outparam(sender)?;
+        let out = lock.data_mut().http().new_response_outparam(sender)?;
 
         // FIXME: Using the shared store, this may not trigger the execution of JS guests.
         // Rust guests don't have the same issue. Yet unclear what exactly is happening. Some

@@ -7,7 +7,8 @@ use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
 use wasmtime::component::{HasData, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
+use wasmtime_wasi_http::WasiHttpCtx;
+use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
@@ -42,7 +43,7 @@ wasmtime::component::bindgen!({
         "trailbase:database/sqlite.tx-begin": async,
     },
     exports: {
-        default: async | store | task_exit,
+        default: async | store,
     },
 });
 
@@ -62,7 +63,8 @@ pub struct SharedState {
 pub struct State {
   pub(crate) resource_table: ResourceTable,
   pub(crate) wasi_ctx: WasiCtx,
-  pub(crate) http: WasiHttpCtx,
+  pub(crate) http_ctx: WasiHttpCtx,
+  pub(crate) hooks: Hooks,
   pub(crate) kv: WasiKeyValueCtx,
 
   pub(crate) shared: Arc<SharedState>,
@@ -93,23 +95,17 @@ impl WasiView for State {
   }
 }
 
-impl WasiHttpView for State {
-  fn ctx(&mut self) -> &mut WasiHttpCtx {
-    return &mut self.http;
-  }
+pub(crate) struct Hooks {
+  pub shared: Arc<SharedState>,
+}
 
-  fn table(&mut self) -> &mut ResourceTable {
-    return &mut self.resource_table;
-  }
-
-  /// Receives HTTP fetches from the guest.
-  ///
-  /// Based on `WasiView`' default implementation.
+impl WasiHttpHooks for Hooks {
   fn send_request(
     &mut self,
-    request: hyper::Request<wasmtime_wasi_http::body::HyperOutgoingBody>,
-    config: wasmtime_wasi_http::types::OutgoingRequestConfig,
-  ) -> wasmtime_wasi_http::HttpResult<wasmtime_wasi_http::types::HostFutureIncomingResponse> {
+    request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+    config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
+  ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
+  {
     // log::debug!(
     //   "send_request {:?} {}: {request:?}",
     //   request.uri().host(),
@@ -120,27 +116,35 @@ impl WasiHttpView for State {
       Some("__sqlite") => {
         let conn = self.shared.conn.clone().ok_or_else(|| {
           debug_assert!(false, "missing SQLite connection");
-          wasmtime_wasi_http::bindings::http::types::ErrorCode::InternalError(Some(
+          wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
             "missing SQLite connection".to_string(),
           ))
         })?;
         Ok(
-          wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(
+          wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
             wasmtime_wasi::runtime::spawn(async move {
               Ok(crate::sqlite::handle_sqlite_request(conn, request).await)
             }),
           ),
         )
       }
-      _ => {
-        let handle = wasmtime_wasi::runtime::spawn(async move {
-          Ok(wasmtime_wasi_http::types::default_send_request_handler(request, config).await)
-        });
-        Ok(wasmtime_wasi_http::types::HostFutureIncomingResponse::pending(handle))
-      }
+      _ => Ok(wasmtime_wasi_http::p2::default_send_request(
+        request, config,
+      )),
     };
   }
 }
+
+impl WasiHttpView for State {
+  fn http(&mut self) -> wasmtime_wasi_http::p2::WasiHttpCtxView<'_> {
+    wasmtime_wasi_http::p2::WasiHttpCtxView {
+      ctx: &mut self.http_ctx,
+      table: &mut self.resource_table,
+      hooks: &mut self.hooks,
+    }
+  }
+}
+
 impl HasData for State {
   type Data<'a> = &'a mut State;
 }
