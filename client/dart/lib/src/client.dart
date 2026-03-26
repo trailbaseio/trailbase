@@ -356,7 +356,8 @@ class RecordApi {
 
     final refreshToken = _client._tokenState._shouldRefresh();
     if (refreshToken != null) {
-      _client._tokenState = await _client._refreshTokensImpl(refreshToken);
+      _client._tokenState =
+          await _refreshTokensImpl(_client._transport, refreshToken);
     }
 
     final uri = _client._baseUrl.replace(
@@ -539,7 +540,7 @@ class Client {
   Future<void> refreshAuthToken() async {
     final refreshToken = _tokenState._shouldRefresh();
     if (refreshToken != null) {
-      _tokenState = await _refreshTokensImpl(refreshToken);
+      _tokenState = await _refreshTokensImpl(_transport, refreshToken);
     }
   }
 
@@ -552,7 +553,7 @@ class Client {
   }) async {
     final refreshToken = _tokenState._shouldRefresh();
     if (refreshToken != null) {
-      _tokenState = await _refreshTokensImpl(refreshToken);
+      _tokenState = await _refreshTokensImpl(_transport, refreshToken);
     }
 
     final response = await _transport.fetch(
@@ -590,19 +591,24 @@ class Client {
 
     return state;
   }
+}
 
-  Future<_TokenState> _refreshTokensImpl(String refreshToken) async {
-    final response = await _transport.fetch('${_authApi}/refresh',
-        method: Method.post,
-        headers: _tokenState.headers,
-        body: jsonEncode({
-          'refresh_token': refreshToken,
-        }));
+Future<_TokenState> _refreshTokensImpl(
+  Transport transport,
+  String refreshToken,
+) async {
+  // NOTE: We cannot use `Client.fetch`, which may refresh tokens to prevent a loop.
+  final response = await transport.fetch('${_authApi}/refresh',
+      method: Method.post,
+      body: jsonEncode({
+        'refresh_token': refreshToken,
+      }));
 
-    final tokens = Tokens.fromJson(jsonDecode(response.body));
-    assert(tokens.refresh == refreshToken);
-    return _updateTokens(tokens);
+  if (response.statusCode != 200) {
+    throw HttpException(response.statusCode, response.body);
   }
+
+  return _TokenState.build(Tokens.fromJson(jsonDecode(response.body)));
 }
 
 Map<String, String> _buildHeaders(Tokens? tokens) {

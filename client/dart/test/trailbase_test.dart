@@ -262,6 +262,8 @@ Future<void> main() async {
       await client.logout();
       expect(client.tokens(), isNull);
 
+      await client.refreshAuthToken();
+
       // We need to wait a little to push the expiry time in seconds to avoid just getting the same token minted again.
       await Future.delayed(Duration(milliseconds: 1500));
 
