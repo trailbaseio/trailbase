@@ -165,6 +165,7 @@ async fn login_test() {
 
   client.logout().await.unwrap();
   assert!(client.tokens().is_none());
+  client.refresh().await.unwrap();
 }
 
 async fn login_otp() {

@@ -27,9 +27,6 @@ pub enum Error {
   #[error("HTTP status: {0}")]
   HttpStatus(StatusCode),
 
-  #[error("MissingRefreshToken")]
-  MissingRefreshToken,
-
   #[error("RecordSerialization: {0}")]
   RecordSerialization(serde_json::Error),
 
@@ -213,13 +210,22 @@ pub trait Transport {
   ) -> Result<reqwest_websocket::UpgradeResponse, Error>;
 }
 
-struct ThinClient {
+pub struct DefaultTransport {
   client: reqwest::Client,
   url: url::Url,
 }
 
+impl DefaultTransport {
+  pub fn new(url: url::Url) -> Self {
+    return Self {
+      client: reqwest::Client::new(),
+      url,
+    };
+  }
+}
+
 #[async_trait::async_trait]
-impl Transport for ThinClient {
+impl Transport for DefaultTransport {
   async fn fetch(
     &self,
     path: &str,
@@ -706,7 +712,7 @@ impl TokenState {
 }
 
 struct ClientState {
-  client: Box<dyn Transport + Send + Sync>,
+  transport: Box<dyn Transport + Send + Sync>,
   base_url: url::Url,
   tokens: RwLock<TokenState>,
 }
@@ -723,14 +729,15 @@ impl ClientState {
   ) -> Result<http::Response<reqwest::Body>, Error> {
     let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
     if let Some(refresh_token) = refresh_token {
-      let new_tokens = ClientState::refresh_tokens(&*self.client, headers, refresh_token).await?;
+      let new_tokens =
+        ClientState::refresh_tokens_impl(&*self.transport, headers, refresh_token).await?;
 
       headers = new_tokens.headers.clone();
       *self.tokens.write() = new_tokens;
     }
 
     let response = self
-      .client
+      .transport
       .fetch(path, headers, method, body, query_params)
       .await?;
 
@@ -750,7 +757,8 @@ impl ClientState {
   ) -> Result<reqwest_websocket::UpgradeResponse, Error> {
     let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
     if let Some(refresh_token) = refresh_token {
-      let new_tokens = ClientState::refresh_tokens(&*self.client, headers, refresh_token).await?;
+      let new_tokens =
+        ClientState::refresh_tokens_impl(&*self.transport, headers, refresh_token).await?;
 
       headers = new_tokens.headers.clone();
       *self.tokens.write() = new_tokens;
@@ -787,8 +795,8 @@ impl ClientState {
     return None;
   }
 
-  async fn refresh_tokens(
-    client: &(dyn Transport + Send + Sync),
+  async fn refresh_tokens_impl(
+    transport: &(dyn Transport + Send + Sync),
     headers: HeaderMap,
     refresh_token: String,
   ) -> Result<TokenState, Error> {
@@ -797,7 +805,8 @@ impl ClientState {
       refresh_token: &'a str,
     }
 
-    let response = client
+    // NOTE: Do not use `ClientState::fetch`, which may do token refreshing to avoid loops.
+    let response = transport
       .fetch(
         &format!("/{AUTH_API}/refresh"),
         headers,
@@ -847,11 +856,8 @@ impl Client {
     let base_url = base_url.try_into().map_err(Error::InvalidUrl)?;
     return Ok(Client {
       state: Arc::new(ClientState {
-        client: opts.transport.unwrap_or_else(|| {
-          Box::new(ThinClient {
-            client: reqwest::Client::new(),
-            url: base_url.clone(),
-          })
+        transport: opts.transport.unwrap_or_else(|| {
+          return Box::new(DefaultTransport::new(base_url.clone()));
         }),
         base_url,
         tokens: RwLock::new(TokenState::build(opts.tokens.as_ref())),
@@ -886,11 +892,12 @@ impl Client {
 
   pub async fn refresh(&self) -> Result<(), Error> {
     let Some((headers, refresh_token)) = self.state.extract_headers_refresh_token() else {
-      return Err(Error::MissingRefreshToken);
+      // Not logged in - nothing to do.
+      return Ok(());
     };
 
     let new_tokens =
-      ClientState::refresh_tokens(&*self.state.client, headers, refresh_token).await?;
+      ClientState::refresh_tokens_impl(&*self.state.transport, headers, refresh_token).await?;
 
     *self.state.tokens.write() = new_tokens;
     return Ok(());
