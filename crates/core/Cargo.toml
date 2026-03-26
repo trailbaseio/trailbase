@@ -46,7 +46,7 @@ bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.2.1"
 const_format = "0.2.35"
-cron = "0.15.0"
+cron = "0.16.0"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 form_urlencoded = "1.2.1"
@@ -85,7 +85,7 @@ serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 serde_qs = { workspace = true }
 serde_urlencoded = "0.7.1"
-sha2 = "0.10.8"
+sha2 = "0.11.0"
 sqlformat = "0.5.0"
 sqlite3-parser = "0.15.0"
 thiserror = "2.0.12"
