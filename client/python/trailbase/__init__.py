@@ -208,10 +208,10 @@ class Transport(ABC):
     def fetch(
         self,
         path: str,
-        tokenState: TokenState,
         method: str | None = "GET",
-        data: JSON | None = None,
+        headers: dict[str, str] | None = None,
         queryParams: dict[str, str] | None = None,
+        body: JSON | None = None,
     ) -> httpx.Response:
         pass
 
@@ -219,8 +219,8 @@ class Transport(ABC):
     def stream(
         self,
         path: str,
-        tokenState: TokenState,
         method: str | None = "GET",
+        headers: dict[str, str] | None = None,
         queryParams: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ) -> ContextManager[httpx.Response]:
@@ -238,30 +238,30 @@ class DefaultTransport(Transport):
     def fetch(
         self,
         path: str,
-        tokenState: TokenState,
         method: str | None = "GET",
-        data: JSON | None = None,
+        headers: dict[str, str] | None = None,
         queryParams: dict[str, str] | None = None,
+        body: JSON | None = None,
     ) -> httpx.Response:
         assert not path.startswith("/")
         return self.http_client.request(
             method=method or "GET",
             url=f"{self.site}/{path}",
-            json=data,
-            headers=tokenState.headers,
+            json=body,
+            headers=headers,
             params=queryParams,
         )
 
     def stream(
         self,
         path: str,
-        tokenState: TokenState,
         method: str | None = "GET",
+        headers: dict[str, str] | None = None,
         queryParams: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ) -> ContextManager[httpx.Response]:
         assert not path.startswith("/")
-        headers = tokenState.headers.copy()
+        headers = (headers or {}).copy()
         headers["Accept"] = "text/event-stream"
         headers["Cache-Control"] = "no-store"
 
@@ -289,8 +289,6 @@ class DefaultTransport(Transport):
 
 
 class Client:
-    _authApi: str = "api/auth/v1"
-
     _transport: Transport
     _site: str
     _tokenState: TokenState
@@ -325,7 +323,7 @@ class Client:
 
     def login(self, email: str, password: str) -> MultiFactorAuthToken | None:
         response = self.fetch(
-            f"{self._authApi}/login",
+            f"{_AUTH_API}/login",
             method="POST",
             data={
                 "email": email,
@@ -339,14 +337,13 @@ class Client:
         elif response.status_code > 200:
             raise FetchException(response.status_code, response.text)
 
-        tokens = Tokens.from_json(response.json())
-        self._updateTokens(tokens)
+        self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
 
         return None
 
     def login_second(self, token: MultiFactorAuthToken, code: str) -> None:
         response = self.fetch(
-            f"{self._authApi}/login_mfa",
+            f"{_AUTH_API}/login_mfa",
             method="POST",
             data={
                 "mfa_token": token.token,
@@ -354,12 +351,11 @@ class Client:
             },
         )
 
-        tokens = Tokens.from_json(response.json())
-        self._updateTokens(tokens)
+        self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
 
     def request_otp(self, email: str, redirect_uri: str | None = None) -> None:
         self.fetch(
-            f"{self._authApi}/otp/request",
+            f"{_AUTH_API}/otp/request",
             method="POST",
             data={
                 "email": email,
@@ -369,7 +365,7 @@ class Client:
 
     def login_otp(self, email: str, code: str) -> None:
         response = self.fetch(
-            f"{self._authApi}/otp/login",
+            f"{_AUTH_API}/otp/login",
             method="POST",
             data={
                 "email": email,
@@ -377,8 +373,7 @@ class Client:
             },
         )
 
-        tokens = Tokens.from_json(response.json())
-        self._updateTokens(tokens)
+        self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
 
     def logout(self) -> None:
         state = self._tokenState.state
@@ -387,33 +382,36 @@ class Client:
         try:
             if refreshToken is not None:
                 self.fetch(
-                    f"{self._authApi}/logout",
+                    f"{_AUTH_API}/logout",
                     method="POST",
                     data={
                         "refresh_token": refreshToken,
                     },
                 )
             else:
-                self.fetch(f"{self._authApi}/logout")
+                self.fetch(f"{_AUTH_API}/logout")
         finally:
-            self._updateTokens(None)
+            self._set_token_state(TokenState.build(None))
 
     def records(self, name: str) -> "RecordApi":
         return RecordApi(name, self)
 
-    def _updateTokens(self, tokens: Tokens | None):
-        state = TokenState.build(tokens)
+    def refresh_auth_tokens(self):
+        refreshToken = Client._shouldRefresh(self._tokenState)
+        if refreshToken is not None:
+            self._set_token_state(_refreshTokensImpl(self._transport, refreshToken))
 
-        self._tokenState = state
+    def _set_token_state(self, tokenState: TokenState) -> TokenState:
+        self._tokenState = tokenState
 
-        state = state.state
+        state = tokenState.state
         if state is not None:
             claims = state[1]
             now = int(time())
             if claims.exp < now:
-                logger.warning("Token expired")
+                _logger.warning("Token expired")
 
-        return state
+        return tokenState
 
     @staticmethod
     def _shouldRefresh(tokenState: TokenState) -> str | None:
@@ -422,24 +420,6 @@ class Client:
         if state is not None and state[1].exp - 60 < now:
             return state[0].refresh
         return None
-
-    def _refreshTokensImpl(self, refreshToken: str) -> TokenState:
-        response = self.fetch(
-            f"{self._authApi}/refresh",
-            method="POST",
-            data={
-                "refresh_token": refreshToken,
-            },
-        )
-
-        json = response.json()
-        return TokenState.build(
-            Tokens(
-                json["auth_token"],
-                refreshToken,
-                json["csrf_token"],
-            )
-        )
 
     def fetch(
         self,
@@ -452,10 +432,10 @@ class Client:
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
         if refreshToken is not None:
-            tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
+            tokenState = self._set_token_state(_refreshTokensImpl(self._transport, refreshToken))
 
         response = self._transport.fetch(
-            path, tokenState, method=method, data=data, queryParams=queryParams
+            path, method=method, headers=tokenState.headers, queryParams=queryParams, body=data
         )
 
         if response.status_code > 200 and throwOnError:
@@ -473,12 +453,12 @@ class Client:
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
         if refreshToken is not None:
-            tokenState = self._tokenState = self._refreshTokensImpl(refreshToken)
+            tokenState = self._set_token_state(_refreshTokensImpl(self._transport, refreshToken))
 
         return self._transport.stream(
             path,
-            tokenState,
             method=method,
+            headers=tokenState.headers,
             queryParams=queryParams,
             timeout=timeout,
         )
@@ -677,4 +657,23 @@ class RecordApi:
         return impl()
 
 
-logger = logging.getLogger(__name__)
+def _refreshTokensImpl(transport: Transport, refreshToken: str) -> TokenState:
+    response = transport.fetch(
+        f"{_AUTH_API}/refresh",
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+        },
+        body={
+            "refresh_token": refreshToken,
+        },
+    )
+
+    if response.status_code > 200:
+        raise FetchException(response.status_code, response.text)
+
+    return TokenState.build(Tokens.from_json(response.json()))
+
+
+_logger = logging.getLogger(__name__)
+_AUTH_API: str = "api/auth/v1"

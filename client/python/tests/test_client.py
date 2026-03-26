@@ -91,12 +91,16 @@ def test_authentication(trailbase: TrailBaseFixture):
     tokens = client.tokens()
     assert tokens is not None and tokens.valid()
 
+    client.refresh_auth_tokens()
+
     user = client.user()
     assert user is not None and user.id != ""
     assert user is not None and user.email == "admin@localhost"
 
     client.logout()
     assert client.tokens() is None
+
+    client.refresh_auth_tokens()
 
 
 def test_second_factor_authentication(trailbase: TrailBaseFixture):
