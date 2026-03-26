@@ -1,3 +1,10 @@
+## v0.25.2
+
+- Update clients for all eight supported language environments to allow injecting custom "transport" implementations.
+  - This can be used for testing but also in prod. For example, a backend may want to inject users' original IPs via `X-Forwarded-For` to make sure logging and rate limiting works correctly.
+- Update JS/TS WASM guest runtime to use canonical jco generated types.
+- Update Rust and JavaScript dependencies including latest Wasmtime & TS6.
+
 ## v0.25.1
 
 - Add GitHub OAuth provider (validated).
