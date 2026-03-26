@@ -196,7 +196,7 @@ export interface Client {
 
   deleteUser(): Promise<void>;
   checkCookies(): Promise<Tokens | undefined>;
-  refreshAuthToken(): Promise<void>;
+  refreshAuthToken(opts?: { force?: boolean }): Promise<void>;
 
   /// Fetches data from TrailBase endpoints, e.g.:
   ///    const response = await client.fetch("/api/auth/v1/status");
@@ -276,7 +276,6 @@ class ClientImpl implements Client {
     const response = await this.fetch(transactionApiBasePath, {
       method: "POST",
       body: JSON.stringify({ operations, transaction }),
-      headers: jsonContentTypeHeader,
     });
 
     return parseJSON(await response.text()).ids;
@@ -301,7 +300,6 @@ class ClientImpl implements Client {
           email,
           password,
         } as LoginRequest),
-        headers: jsonContentTypeHeader,
       });
 
       this.setTokenState(
@@ -329,7 +327,6 @@ class ClientImpl implements Client {
         mfa_token: opts.mfaToken.token,
         totp: opts.totpCode,
       } as LoginMfaRequest),
-      headers: jsonContentTypeHeader,
     });
 
     this.setTokenState(
@@ -348,7 +345,6 @@ class ClientImpl implements Client {
       body: JSON.stringify({
         email,
       } as RequestOtpRequest),
-      headers: jsonContentTypeHeader,
     });
   }
 
@@ -359,7 +355,6 @@ class ClientImpl implements Client {
         email,
         code,
       } as LoginOtpRequest),
-      headers: jsonContentTypeHeader,
     });
 
     this.setTokenState(
@@ -376,7 +371,6 @@ class ClientImpl implements Client {
           body: JSON.stringify({
             refresh_token,
           } as LogoutRequest),
-          headers: jsonContentTypeHeader,
         });
       } else {
         await this.fetch(`${authApiBasePath}/logout`);
@@ -399,7 +393,6 @@ class ClientImpl implements Client {
       body: JSON.stringify({
         new_email: email,
       } as ChangeEmailRequest),
-      headers: jsonContentTypeHeader,
     });
   }
 
@@ -408,7 +401,6 @@ class ClientImpl implements Client {
       `${authApiBasePath}/totp/register?png=${opts?.png ?? false}`,
       {
         method: "GET",
-        headers: jsonContentTypeHeader,
       },
     );
 
@@ -426,7 +418,6 @@ class ClientImpl implements Client {
         totp_url: totpUrl,
         totp,
       } as ConfirmRegisterTotpRequest),
-      headers: jsonContentTypeHeader,
     });
     await this.refreshAuthToken({ force: true });
   }
@@ -437,7 +428,6 @@ class ClientImpl implements Client {
       body: JSON.stringify({
         totp,
       } as DisableTotpRequest),
-      headers: jsonContentTypeHeader,
     });
     await this.refreshAuthToken({ force: true });
   }
@@ -478,35 +468,10 @@ class ClientImpl implements Client {
       : shouldRefresh(this._tokenState);
     if (refreshToken) {
       // Note: refreshTokenImpl will auto-logout on 401.
-      this.setTokenState(await this.refreshTokensImpl(refreshToken));
-    }
-  }
-
-  private async refreshTokensImpl(refreshToken: string): Promise<TokenState> {
-    const path = `${authApiBasePath}/refresh`;
-    const response = await this.fetch(path, {
-      method: "POST",
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-      } as RefreshRequest),
-      headers: jsonContentTypeHeader,
-      throwOnError: false,
-    });
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        this.logout();
-      }
-      throw await FetchError.from(
-        response,
-        isDev ? new URL(path, this.base) : undefined,
+      this.setTokenState(
+        await refreshTokensImpl(this._transport, refreshToken),
       );
     }
-
-    return buildTokenState({
-      ...((await response.json()) as RefreshResponse),
-      refresh_token: refreshToken,
-    });
   }
 
   private setTokenState(
@@ -536,20 +501,19 @@ class ClientImpl implements Client {
     const refreshToken = shouldRefresh(tokenState);
     if (refreshToken) {
       tokenState = this.setTokenState(
-        await this.refreshTokensImpl(refreshToken),
+        await refreshTokensImpl(this._transport, refreshToken),
       );
     }
 
     try {
       const response = await this._transport.fetch(path, {
         ...init,
-        headers: init
-          ? {
-              credentials: isDev ? "include" : "same-origin",
-              ...tokenState.headers,
-              ...init?.headers,
-            }
-          : tokenState.headers,
+        headers: {
+          credentials: isDev ? "include" : "same-origin",
+          ...jsonContentTypeHeader,
+          ...tokenState?.headers,
+          ...init?.headers,
+        },
       });
 
       if (!response.ok && (init?.throwOnError ?? true)) {
@@ -595,8 +559,39 @@ export async function initClientFromCookies(
   return client;
 }
 
-const authApiBasePath = "/api/auth/v1";
-const transactionApiBasePath = "/api/transaction/v1/execute";
+// NOTE: We cannot not use ClientIMpl.fetch, which itself does token refreshing to avoid a loop.
+async function refreshTokensImpl(
+  transport: Transport,
+  refreshToken: string,
+): Promise<TokenState> {
+  const path = `${authApiBasePath}/refresh`;
+  try {
+    const response = await transport.fetch(path, {
+      method: "POST",
+      body: JSON.stringify({
+        refresh_token: refreshToken,
+      } as RefreshRequest),
+      headers: jsonContentTypeHeader,
+    });
+
+    if (!response.ok) {
+      throw await FetchError.from(
+        response,
+        isDev ? new URL(path, path) : undefined,
+      );
+    }
+
+    return buildTokenState({
+      ...((await response.json()) as RefreshResponse),
+      refresh_token: refreshToken,
+    });
+  } catch (err) {
+    if (err instanceof TypeError) {
+      console.debug(`Connection refused ${err}. TrailBase down or CORS?`);
+    }
+    throw err;
+  }
+}
 
 function headers(tokens?: Tokens): HeadersInit {
   if (tokens) {
@@ -616,3 +611,6 @@ function headers(tokens?: Tokens): HeadersInit {
 
   return {};
 }
+
+const authApiBasePath = "/api/auth/v1";
+const transactionApiBasePath = "/api/transaction/v1/execute";
