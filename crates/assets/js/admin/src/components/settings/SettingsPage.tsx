@@ -272,17 +272,17 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
 
   // Running second timer
   const [uptime, setUptime] = createSignal(calcUptime());
-  let handle: unknown = undefined;
+  let handle: ReturnType<typeof setTimeout> | undefined = undefined;
   onMount(() => {
     if (handle) {
-      clearInterval(handle as any);
+      clearInterval(handle);
     }
     handle = setInterval(() => setUptime(calcUptime()), 1000);
   });
 
   onCleanup(() => {
     if (handle) {
-      clearInterval(handle as any);
+      clearInterval(handle);
     }
     handle = undefined;
   });
@@ -339,7 +339,6 @@ function formatDuration(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
 
-  // @ts-expect-error Intl.DurationFormat type definitions missing: https://github.com/microsoft/TypeScript/issues/60608
   return new Intl.DurationFormat("en").format({
     days,
     hours,
