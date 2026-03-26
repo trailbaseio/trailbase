@@ -169,7 +169,7 @@ repos:
       entry: sh -c 'DIFF=$(gofmt -d -e client/go/trailbase/) && echo "${DIFF}" && test -z "${DIFF}"'
       language: system
       types: [go]
-      files: .*\.(go)$
+      # files: .*\.(go)$
       pass_filenames: false
 
     - id: go_test
@@ -182,7 +182,7 @@ repos:
     # Kotlin test
     - id: kotlin_test
       name: Kotlin test
-      entry: sh -c 'cd client/kotlin && ./gradlew test'
+      entry: sh -c 'cd client/kotlin && ./gradlew allTests'
       language: system
       types: [kotlin]
       pass_filenames: false

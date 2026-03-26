@@ -484,7 +484,7 @@ class Client(
   suspend fun refreshAuthToken() {
     val refreshToken = tokenState.shouldRefresh()
     if (refreshToken != null) {
-      tokenState = refreshTokensImpl(refreshToken)
+      tokenState = refreshTokensImpl(transport, refreshToken)
     }
   }
 
@@ -497,7 +497,7 @@ class Client(
   ): HttpResponse {
     val refreshToken = tokenState.shouldRefresh()
     if (refreshToken != null) {
-      tokenState = refreshTokensImpl(refreshToken)
+      tokenState = refreshTokensImpl(transport, refreshToken)
     }
 
     val response = transport.fetch(path, method, tokenState.headers, params, body)
@@ -507,12 +507,24 @@ class Client(
 
     return response
   }
+}
 
-  private suspend fun refreshTokensImpl(refreshToken: String): TokenState {
-    @Serializable data class Body(val refresh_token: String)
+private suspend fun refreshTokensImpl(transport: Transport, refreshToken: String): TokenState {
+  @Serializable data class Body(val refresh_token: String)
 
-    return TokenState.build(fetch("${AUTH_API}/refresh", Method.post, refreshToken).body())
+  val response =
+          transport.fetch(
+                  "${AUTH_API}/refresh",
+                  Method.post,
+                  /*headers=*/ null,
+                  /*params=*/ null,
+                  Body(refreshToken),
+          )
+  if (!response.status.isSuccess()) {
+    throw HttpException(response.status.value, response.body())
   }
+
+  return TokenState.build(response.body())
 }
 
 private fun initClient(): HttpClient {

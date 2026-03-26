@@ -143,8 +143,12 @@ class ClientTest {
     assertNotNull(client.tokens())
     assertEquals("admin@localhost", client.user()?.email)
 
+    client.refreshAuthToken()
+    assertNotNull(client.tokens())
+
     client.logout()
     assertNull(client.tokens())
+    client.refreshAuthToken()
   }
 
   @Test
