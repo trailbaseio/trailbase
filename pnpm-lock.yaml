@@ -592,8 +592,8 @@ importers:
         specifier: ^1.9.12
         version: 1.9.12
       trailbase:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^6.0.1
@@ -727,8 +727,8 @@ importers:
         specifier: ^1.9.12
         version: 1.9.12
       trailbase:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -810,8 +810,8 @@ importers:
         specifier: ^5.6.0
         version: 5.6.0
       trailbase:
-        specifier: ^0.10.0
-        version: 0.10.0
+        specifier: ^0.11.0
+        version: 0.11.0
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -5926,6 +5926,9 @@ packages:
 
   trailbase@0.10.0:
     resolution: {integrity: sha512-IGIofZQWU3RRUZVXIAztWQ1vBabtbcuFFLZhTLj5gtZOIR2ml/levQgKaWNE+RhcDsFE/pD1gf+tfHVfrC9NGw==}
+
+  trailbase@0.11.0:
+    resolution: {integrity: sha512-ZcSl8mrMGnrCMUav40hzS3J/lOoU8qA9hV00rUDQD+bFd4ipxxh+oeitOLfA7+DIm2a+bPI9CfhsuY+CxkTvLg==}
 
   trim-lines@3.0.1:
     resolution: {integrity: sha512-kRj8B+YHZCc9kQYdWfJB2/oUl9rA99qbowYYBtr4ui4mZyAQ2JpvVBd/6U2YloATfqBhBTSMhTpgBHtU0Mf3Rg==}
@@ -12481,6 +12484,14 @@ snapshots:
       punycode: 2.3.1
 
   trailbase@0.10.0:
+    dependencies:
+      '@types/geojson': 7946.0.16
+      '@ungap/raw-json': 0.4.4
+      geojson: 0.5.0
+      jwt-decode: 4.0.0
+      uuid: 13.0.0
+
+  trailbase@0.11.0:
     dependencies:
       '@types/geojson': 7946.0.16
       '@ungap/raw-json': 0.4.4

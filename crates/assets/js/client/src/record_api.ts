@@ -71,6 +71,17 @@ export type FilterOrComposite = Filter | And | Or;
 
 export type RecordId = string | number;
 
+export type ChangeEvent =
+  | { Insert: object }
+  | { Update: object }
+  | { Delete: object }
+  | { Error: string };
+
+// Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
+// from renaming to `Event_2` to avoid a possible collision with the DOM
+// `Event` type (KeyboardEvent, MouseEvent, ...).
+export type Event = ChangeEvent;
+
 // TODO: Use `ts-rs` generated types.
 interface CreateOp {
   Create: {
@@ -305,8 +316,8 @@ export interface RecordApi<T = Record<string, unknown>> {
   delete(id: RecordId): Promise<void>;
   deleteOp(id: RecordId): DeleteOperation;
 
-  subscribe(id: RecordId): Promise<ReadableStream<Event>>;
-  subscribeAll(opts?: SubscribeOpts): Promise<ReadableStream<Event>>;
+  subscribe(id: RecordId): Promise<ReadableStream<ChangeEvent>>;
+  subscribeAll(opts?: SubscribeOpts): Promise<ReadableStream<ChangeEvent>>;
 }
 
 /// Provides CRUD access to records through TrailBase's record API.
@@ -387,20 +398,20 @@ export class RecordApiImpl<
     return new DeleteOperation(this.client, this.name, id);
   }
 
-  public async subscribe(id: RecordId): Promise<ReadableStream<Event>> {
+  public async subscribe(id: RecordId): Promise<ReadableStream<ChangeEvent>> {
     return await this.subscribeImpl(id);
   }
 
   public async subscribeAll(
     opts?: SubscribeOpts,
-  ): Promise<ReadableStream<Event>> {
+  ): Promise<ReadableStream<ChangeEvent>> {
     return await this.subscribeImpl("*", opts);
   }
 
   private async subscribeImpl(
     id: RecordId,
     opts?: SubscribeOpts,
-  ): Promise<ReadableStream<Event>> {
+  ): Promise<ReadableStream<ChangeEvent>> {
     const params = new URLSearchParams();
     const filters = opts?.filters ?? [];
     if (filters.length > 0) {
@@ -420,7 +431,7 @@ export class RecordApiImpl<
     }
 
     const decoder = new TextDecoder();
-    const transformStream = new TransformStream<Uint8Array, Event>({
+    const transformStream = new TransformStream<Uint8Array, ChangeEvent>({
       transform(chunk: Uint8Array, controller) {
         const messages = decoder.decode(chunk).trimEnd().split("\n\n");
         for (const msg of messages) {
@@ -440,7 +451,7 @@ export class RecordApiImpl<
   async subscribeWs(
     id: RecordId,
     opts?: SubscribeOpts,
-  ): Promise<ReadableStream<Event>> {
+  ): Promise<ReadableStream<ChangeEvent>> {
     const params = new URLSearchParams();
     params.append("ws", "true");
 
@@ -451,7 +462,7 @@ export class RecordApiImpl<
       }
     }
 
-    return new Promise<ReadableStream<Event>>((resolve, reject) => {
+    return new Promise<ReadableStream<ChangeEvent>>((resolve, reject) => {
       const host = this.client.base?.host ?? "";
       const protocol = this.client.base?.protocol === "https" ? "wss" : "ws";
       const url = `${protocol}://${host}${recordApiBasePath}/${this.name}/subscribe/${id}?${params}`;

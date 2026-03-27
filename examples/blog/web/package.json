@@ -21,7 +21,7 @@
     "nanostores": "^1.2.0",
     "solid-icons": "^1.2.0",
     "solid-js": "^1.9.12",
-    "trailbase": "^0.10.0"
+    "trailbase": "^0.11.0"
   },
   "devDependencies": {
     "@astrojs/solid-js": "^6.0.1",

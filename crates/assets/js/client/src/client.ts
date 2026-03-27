@@ -68,12 +68,6 @@ type TokenState = {
   headers: HeadersInit;
 };
 
-export type Event =
-  | { Insert: object }
-  | { Update: object }
-  | { Delete: object }
-  | { Error: string };
-
 function buildTokenState(tokens?: Tokens): TokenState {
   return {
     state: tokens && {

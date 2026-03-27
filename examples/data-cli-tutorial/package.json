@@ -22,6 +22,6 @@
   },
   "dependencies": {
     "csv-parse": "^5.6.0",
-    "trailbase": "^0.10.0"
+    "trailbase": "^0.11.0"
   }
 }
