@@ -7,35 +7,35 @@ import { Client } from "./client";
 
 import type { WsProtocol } from "@bindings/WsProtocol";
 
-export type InsertEvent<T extends object = object> = {
+export type InsertChangeEvent<T extends object = object> = {
   value: Partial<T>;
   seq?: number;
   type: "insert";
 };
 
-export type UpdateEvent<T extends object = object> = {
+export type UpdateChangeEvent<T extends object = object> = {
   value: Partial<T>;
   seq?: number;
   type: "update";
 };
 
-export type DeleteEvent<T extends object = object> = {
+export type DeleteChangeEvent<T extends object = object> = {
   value: Partial<T>;
   seq?: number;
   type: "delete";
 };
 
-export type ErrorEvent = {
+export type ErrorChangeEvent = {
   error: string;
   seq?: number;
   type: "error";
 };
 
 export type ChangeEvent<T extends object = object> =
-  | InsertEvent<T>
-  | UpdateEvent<T>
-  | DeleteEvent<T>
-  | ErrorEvent;
+  | InsertChangeEvent<T>
+  | UpdateChangeEvent<T>
+  | DeleteChangeEvent<T>
+  | ErrorChangeEvent;
 
 // Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
 // from renaming to `Event_2` to avoid a possible collision with the DOM
