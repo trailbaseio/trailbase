@@ -31,7 +31,7 @@ publish:
 	./gradlew publishToMavenCentral
 
 release:
-	source .env && gradle publishKotlinMultiplatformPublicationToMavenCentralRepository
+	/gradlew publishKotlinMultiplatformPublicationToMavenCentralRepository
 
 format:
 	./gradlew spotlessApply

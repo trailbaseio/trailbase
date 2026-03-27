@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0
+
+- Add a `Transport` abstraction to allow for custom implementations. This can be used for testing or production use-cases like injecting headers such as `X-Forwarded-For`.
+
 ## 0.8.0
 
 - Add support for two-factor TOTP (e.g. authenticator app) login.

@@ -291,12 +291,12 @@ public abstract class Transport {
   );
 }
 
-internal class ThinClient : Transport {
+internal class DefaultTransport : Transport {
   static readonly HttpClient client = new HttpClient();
 
   Uri baseUrl;
 
-  internal ThinClient(Uri baseUrl) {
+  internal DefaultTransport(Uri baseUrl) {
     this.baseUrl = baseUrl;
   }
 
@@ -364,7 +364,7 @@ public class Client {
   /// <param name="transport">Optional, custom transport implementation</param>
   public Client(String site, Tokens? tokens = null, Transport? transport = null) {
     this.site = new Uri(site);
-    client = transport ?? new ThinClient(this.site);
+    client = transport ?? new DefaultTransport(this.site);
     tokenState = TokenState.build(tokens);
   }
 

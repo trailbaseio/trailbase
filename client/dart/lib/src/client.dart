@@ -399,7 +399,7 @@ class Client {
     Transport? transport,
     void Function(Client, Tokens?)? onAuthChange,
   })  : _baseUrl = Uri.parse(site),
-        _transport = transport ?? DefaultTransport(Uri.parse(site)),
+        _transport = transport ?? DefaultTransport(url: Uri.parse(site)),
         _tokenState = _TokenState.build(tokens),
         _authChange = onAuthChange;
 
