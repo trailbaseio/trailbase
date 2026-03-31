@@ -1,21 +1,21 @@
 use axum::Json;
 use axum::extract::{Form, FromRequest, Request, rejection::*};
 use axum::http::StatusCode;
-use axum::http::header::CONTENT_TYPE;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 use trailbase_schema::FileUploadInput;
 
+use crate::extract::content_type::{ContentTypeRejection, RequestContentType};
 use crate::extract::multipart::{Rejection as MultipartRejection, parse_multipart};
 
 #[derive(Debug, Error)]
 pub enum EitherRejection {
   // #[error("Missing Content-Type")]
   // MissingContentType,
-  #[error("Unsupported Content-Type found")]
-  UnsupportedContentType,
+  #[error("Unsupported Content-Type: {0}")]
+  UnsupportedContentType(String),
   #[error("Form error: {0}")]
   Form(#[from] FormRejection),
   #[error("Json error: {0}")]
@@ -30,15 +30,21 @@ impl IntoResponse for EitherRejection {
   }
 }
 
-// NOTE: For serde_json::Value as T, the different formats will produce very different results,
-// e.g. json has a notion of types, whereas Multipart and Form don't. They're s practically a:
-//   Map<String, String | Vec<String>>
+pub enum ResponseContentType {
+  Json,
+}
+
+/// Deserialization helper to support requests in multiple formats.
+///
+/// Eventually, we'd like to support Avro as well. In which case, we might have to delay
+/// de-serialization to pass a schema or we'll only be able to support generic:
+/// `Map<string, long | string, ...>` types, which may still provide some compression benefits
+/// :shrug:.
 #[derive(Debug)]
 pub enum Either<T> {
   Json(T),
   Multipart(T, Vec<FileUploadInput>),
   Form(T),
-  // Proto(DynamicMessage),
 }
 
 impl<S, T> FromRequest<S> for Either<T>
@@ -49,30 +55,23 @@ where
   type Rejection = EitherRejection;
 
   async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
-    return match req.headers().get(CONTENT_TYPE) {
-      Some(x) if x.as_ref().starts_with(b"application/json") => {
-        let Json(value): Json<T> = Json::from_request(req, state).await?;
-        Ok(Either::Json(value))
+    return match RequestContentType::from_headers(req.headers()) {
+      Ok(RequestContentType::Json) => {
+        Ok(Either::Json(Json::<T>::from_request(req, state).await?.0))
       }
-      Some(x) if x.as_ref().starts_with(b"application/x-www-form-urlencoded") => {
+      Ok(RequestContentType::Form) => {
         let Form(value): Form<T> = Form::from_request(req, state).await?;
         Ok(Either::Form(value))
       }
-      Some(x) if x.as_ref().starts_with(b"multipart/form-data") => {
+      Ok(RequestContentType::Multipart) => {
         let (value, files) = parse_multipart(req).await?;
         Ok(Either::Multipart(value, files))
       }
-      // Some(x) if x == "application/x-protobuf" => {
-      //   return Ok(Either::Proto(DynamicMessage::decode::from_request(req,
-      // state).await.unwrap())); }
-      Some(_) => Err(EitherRejection::UnsupportedContentType),
-      None => {
-        // TODO: Not convinced this is a sensible default for "None" but convenient for testing with
-        // curl.
-        let Json(value): Json<T> = Json::from_request(req, state).await?;
-        Ok(Either::Json(value))
-        // Err(EitherRejection::MissingContentType),
-      }
+      Err(err) => match err {
+        ContentTypeRejection::UnsupportedContentType(v) => {
+          Err(EitherRejection::UnsupportedContentType(v))
+        }
+      },
     };
   }
 }
@@ -157,7 +156,7 @@ mod test {
     "#};
 
     let request = axum::http::Request::builder()
-      .header("content-type", "application/json; boundary=fieldB")
+      .header("ContenT-tYpe", "application/json")
       .header("content-length", body.len())
       .body(axum::body::Body::from(body))
       .unwrap();

@@ -1,3 +1,4 @@
+mod content_type;
 mod either;
 pub mod ip;
 mod multipart;
