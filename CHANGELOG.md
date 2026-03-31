@@ -1,3 +1,13 @@
+## v0.25.3
+
+- Concurrent `SELECT`s for WASM guests.
+  - The guest APIs don't distinguish between reads and writes, hence everything was assumed to be potentially mutating.
+  - We're now "pre-parsing" queries to handle `SELECT`s and `ATTACH/DETACH DATABASE` specially and multiplex to multiple connections.
+- Stricter `Content-Type` handling and some preparations for supporting more encodings. This is part of an exploration to support Avro.
+- Fix JSON schemas for nullable JSON and expanded foreign key columns.
+- Add JSON input/output validation to record APIs in debug builds.
+- Update dependencies.
+
 ## v0.25.2
 
 - Update clients for all eight supported language environments to allow injecting custom "transport" implementations.
