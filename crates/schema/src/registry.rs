@@ -44,7 +44,7 @@ fn builtin_schemas() -> Vec<(String, Schema)> {
     (
       "std.FileUpload".to_string(),
       Schema::from(
-        serde_json::to_value(schema_for!(FileUpload)).expect("infallible"),
+        schema_for!(FileUpload).to_value(),
         Some(Arc::new(validate_mime_type)),
         true,
       )
@@ -52,12 +52,7 @@ fn builtin_schemas() -> Vec<(String, Schema)> {
     ),
     (
       "std.FileUploads".to_string(),
-      Schema::from(
-        serde_json::to_value(schema_for!(FileUploads)).expect("infallible"),
-        None,
-        true,
-      )
-      .expect("infallible"),
+      Schema::from(schema_for!(FileUploads).to_value(), None, true).expect("infallible"),
     ),
   ];
 }

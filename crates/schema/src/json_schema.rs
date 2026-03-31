@@ -12,7 +12,7 @@ use crate::metadata::{
 };
 use crate::sqlite::{ColumnDataType, ColumnOption};
 
-/// Influeces the generated JSON schema. In `Insert` mode columns with default values will be
+/// Influences the generated JSON schema. In `Insert` mode columns with default values will be
 /// optional.
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum JsonSchemaMode {
@@ -121,7 +121,14 @@ fn build_json_schema_expanded_impl(
               // work
               if let Some(nested_defs) = schema_obj.get("$defs").and_then(|d| d.as_object()) {
                 for (k, v) in nested_defs {
-                  defs.insert(k.clone(), v.clone());
+                  match defs.entry(k.clone()) {
+                    Entry::Vacant(e) => {
+                      e.insert(v.clone());
+                    }
+                    Entry::Occupied(_e) => {
+                      println!("SKIPPING: {k}");
+                    }
+                  };
                 }
               }
 
@@ -245,12 +252,12 @@ fn build_json_schema_expanded_impl(
 
       // The way we represent NULL DB values in the output json is that they're still present
       // but explicitly null (as opposed to absent).
-      if nullable {
-        def.as_object_mut().map(|obj| match obj.entry("type") {
+      if nullable && let Some(obj) = def.as_object_mut() {
+        match obj.entry("type") {
           Entry::Occupied(mut e) => match e.get() {
             Value::Array(types) => {
               let mut new_types = vec![serde_json::Value::String("null".into())];
-              new_types.extend_from_slice(&types);
+              new_types.extend_from_slice(types);
               e.insert(serde_json::json!(new_types));
             }
             Value::String(t) => {
@@ -264,7 +271,7 @@ fn build_json_schema_expanded_impl(
             // GeoJSON doesn't seem to specify an explicit type :/.
             // debug_assert!(false)
           }
-        });
+        };
       }
 
       defs.insert(def_name, def);

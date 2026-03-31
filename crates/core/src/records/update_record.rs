@@ -38,14 +38,22 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-  let pk_meta = api.record_pk_column();
+
+  #[cfg(debug_assertions)]
+  crate::records::json_schema::validate_api_json_schema(
+    &state,
+    &api,
+    trailbase_schema::json_schema::JsonSchemaMode::Update,
+    &serde_json::Value::Object(request.clone()),
+  )
+  .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
   let mut lazy_params = LazyParams::for_update(
     &api,
     state.json_schema_registry().clone(),
     request,
     multipart_files,
-    pk_meta.column.name.clone(),
+    api.record_pk_column().column.name.clone(),
     record_id.clone(),
   );
 

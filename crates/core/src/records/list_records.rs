@@ -353,6 +353,16 @@ pub async fn list_records_handler(
     )));
   }
 
+  #[cfg(debug_assertions)]
+  for record in &records {
+    crate::records::json_schema::validate_api_json_schema(
+      &state,
+      &api,
+      trailbase_schema::json_schema::JsonSchemaMode::Select,
+      record,
+    )?;
+  }
+
   return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
     cursor,
     total_count,

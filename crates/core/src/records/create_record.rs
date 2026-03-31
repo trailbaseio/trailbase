@@ -115,6 +115,15 @@ pub async fn create_record_handler(
       }
     }
 
+    #[cfg(debug_assertions)]
+    crate::records::json_schema::validate_api_json_schema(
+      &state,
+      &api,
+      trailbase_schema::json_schema::JsonSchemaMode::Update,
+      &serde_json::Value::Object(record.clone()),
+    )
+    .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
     let mut lazy_params =
       LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, files);
 

@@ -75,7 +75,9 @@ impl FileUploadInput {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
+// NOTE: Currently we must allow unknown fields since we re-use the same json schema for API inputs
+// and storage. There's an additional "name" field referencing form input's name.
+#[cfg_attr(not(debug_assertions), serde(deny_unknown_fields))]
 pub struct FileUpload {
   /// The file's text-encoded UUID from which the objectstore path is derived.
   #[serde(default, skip_serializing_if = "String::is_empty")]
