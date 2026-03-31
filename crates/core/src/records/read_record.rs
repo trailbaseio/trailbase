@@ -11,6 +11,7 @@ use crate::auth::user::User;
 use crate::records::expand::expand_tables;
 use crate::records::expand::row_to_json_expand;
 use crate::records::files::read_file_into_response;
+use crate::records::json_schema::validate_api_json_schema;
 use crate::records::read_queries::{
   ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
   run_select_query,
@@ -120,10 +121,18 @@ pub async fn read_record_handler(
     return Err(RecordError::RecordNotFound);
   };
 
-  return Ok(Json(
-    row_to_json_expand(api.columns(), &row, prefix_filter, api.expand())
-      .map_err(|err| RecordError::Internal(err.into()))?,
-  ));
+  let json_response = row_to_json_expand(api.columns(), &row, prefix_filter, api.expand())
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+  #[cfg(debug_assertions)]
+  validate_api_json_schema(
+    &state,
+    &api,
+    trailbase_schema::json_schema::JsonSchemaMode::Select,
+    &json_response,
+  )?;
+
+  return Ok(Json(json_response));
 }
 
 type GetUploadedFileFromRecordPath = Path<(

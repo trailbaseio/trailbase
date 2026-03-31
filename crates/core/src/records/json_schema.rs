@@ -39,13 +39,11 @@ pub async fn json_schema_handler(
   return Ok(Json(build_api_json_schema(&state, &api, request.mode)?));
 }
 
-pub fn build_api_json_schema(
+fn build_api_json_schema_internal(
   state: &AppState,
   api: &RecordApi,
-  mode: Option<JsonSchemaMode>,
-) -> Result<serde_json::Value, RecordError> {
-  let mode = mode.unwrap_or(JsonSchemaMode::Insert);
-
+  mode: JsonSchemaMode,
+) -> Result<(jsonschema::Validator, serde_json::Value), RecordError> {
   if let (Some(config_expand), JsonSchemaMode::Select) = (api.expand(), mode) {
     let metadata = api.connection_metadata();
     let all_tables: Vec<_> = metadata.tables.values().collect();
@@ -55,24 +53,51 @@ pub fn build_api_json_schema(
       foreign_key_columns,
     };
 
-    let (_schema, json) = build_json_schema_expanded(
+    return build_json_schema_expanded(
       &state.json_schema_registry().read(),
       api.api_name(),
       api.columns(),
       mode,
       Some(expand),
     )
-    .map_err(|err| RecordError::Internal(err.into()))?;
-    return Ok(json);
+    .map_err(|err| RecordError::Internal(err.into()));
   }
 
-  let (_schema, json) = build_json_schema(
+  return build_json_schema(
     &state.json_schema_registry().read(),
     api.api_name(),
     api.columns(),
     mode,
   )
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  .map_err(|err| RecordError::Internal(err.into()));
+}
 
+#[cfg(debug_assertions)]
+pub fn validate_api_json_schema(
+  state: &AppState,
+  api: &RecordApi,
+  mode: JsonSchemaMode,
+  value: &serde_json::Value,
+) -> Result<(), RecordError> {
+  let (validator, json_schema) = build_api_json_schema_internal(state, api, mode)?;
+
+  let result = validator.evaluate(value);
+  let errors: Vec<_> = result.iter_errors().collect();
+  if errors.is_empty() {
+    return Ok(());
+  }
+
+  return Err(RecordError::Internal(
+    format!("Json value '{value}' does not match '{json_schema}: {errors:?}' ").into(),
+  ));
+}
+
+pub fn build_api_json_schema(
+  state: &AppState,
+  api: &RecordApi,
+  mode: Option<JsonSchemaMode>,
+) -> Result<serde_json::Value, RecordError> {
+  let (_validator, json) =
+    build_api_json_schema_internal(state, api, mode.unwrap_or(JsonSchemaMode::Insert))?;
   return Ok(json);
 }

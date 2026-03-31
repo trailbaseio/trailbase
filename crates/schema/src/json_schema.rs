@@ -2,6 +2,7 @@ use jsonschema::Validator;
 use log::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::map::Entry;
 use std::sync::LazyLock;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
@@ -13,7 +14,7 @@ use crate::sqlite::{ColumnDataType, ColumnOption};
 
 /// Influeces the generated JSON schema. In `Insert` mode columns with default values will be
 /// optional.
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub enum JsonSchemaMode {
   /// Insert mode.
   Insert,
@@ -82,14 +83,17 @@ fn build_json_schema_expanded_impl(
 
   for meta in columns_metadata {
     let col = &meta.column;
+    if col.name.starts_with("_") && mode == JsonSchemaMode::Select {
+      continue;
+    }
 
-    let mut def_name: Option<String> = None;
-    let mut not_null = false;
+    let mut nullable = true;
     let mut default = false;
+    let mut new_type_definition: Option<(String, serde_json::Value)> = None;
 
     for opt in &col.options {
       match opt {
-        ColumnOption::NotNull => not_null = true,
+        ColumnOption::NotNull => nullable = false,
         ColumnOption::Default(_) => default = true,
         ColumnOption::Check(_) => {
           let Some(json_metadata) = extract_json_metadata(registry, opt)? else {
@@ -110,6 +114,9 @@ fn build_json_schema_expanded_impl(
               // Re-parent nested references to the schema root, to continue to be reference-able
               // via: `{"$ref": "#/$defs/<name>"}`, otherwise they won't be found.
               //
+              // An example is `FileUploads`, which references `FileUpload`. We need to hoist
+              // `FileUpload` to the root for schema validation to work.
+              //
               // QUESTION: is there a better API for us to merge JSON schemas, w/o that manual
               // work
               if let Some(nested_defs) = schema_obj.get("$defs").and_then(|d| d.as_object()) {
@@ -118,12 +125,10 @@ fn build_json_schema_expanded_impl(
                 }
               }
 
-              defs.insert(col.name.clone(), entry.schema.clone());
-              def_name = Some(col.name.clone());
+              new_type_definition = Some((col.name.clone(), entry.schema.clone()));
             }
             JsonColumnMetadata::Pattern(pattern) => {
-              defs.insert(col.name.clone(), pattern.clone());
-              def_name = Some(col.name.clone());
+              new_type_definition = Some((col.name.clone(), pattern.clone()));
             }
           }
         }
@@ -136,7 +141,7 @@ fn build_json_schema_expanded_impl(
           // source: https://www.sqlite.org/lang_createtable.html
           if *is_primary {
             if col.data_type == ColumnDataType::Integer {
-              not_null = true;
+              nullable = false;
             }
 
             default = true;
@@ -151,7 +156,7 @@ fn build_json_schema_expanded_impl(
             let column_is_expanded = expand
               .foreign_key_columns
               .iter()
-              .any(|column_name| *column_name != col.name);
+              .any(|column_name| *column_name == col.name);
             if !column_is_expanded {
               continue;
             }
@@ -191,9 +196,8 @@ fn build_json_schema_expanded_impl(
               None,
             )?;
 
-            let new_def_name = foreign_table.clone();
-            defs.insert(
-              new_def_name.clone(),
+            new_type_definition = Some((
+              format!("{title}.{}", col.name),
               serde_json::json!({
                 "type": "object",
                 "properties": {
@@ -204,8 +208,7 @@ fn build_json_schema_expanded_impl(
                 },
                 "required": ["id"],
               }),
-            );
-            def_name = Some(new_def_name);
+            ));
           }
         }
         _ => {}
@@ -214,36 +217,72 @@ fn build_json_schema_expanded_impl(
 
     if meta.is_geometry {
       const KEY: &str = "_geojson_geometry";
-      defs.insert(KEY.to_string(), GEOJSON_GEOMETRY.clone());
-      def_name = Some(KEY.to_string());
+      debug_assert!(new_type_definition.is_none());
+      new_type_definition = Some((KEY.to_string(), GEOJSON_GEOMETRY.clone()));
     }
 
     match mode {
       JsonSchemaMode::Insert => {
-        if not_null && !default {
+        if !nullable && !default {
           required_cols.push(col.name.clone());
         }
       }
       JsonSchemaMode::Select => {
-        if not_null {
+        if !nullable {
           required_cols.push(col.name.clone());
         }
       }
       JsonSchemaMode::Update => {}
     }
 
-    properties.insert(
-      col.name.clone(),
-      if let Some(def_name) = def_name {
+    if let Some((def_name, mut def)) = new_type_definition {
+      properties.insert(
+        col.name.clone(),
         serde_json::json!({
           "$ref": format!("#/$defs/{def_name}")
-        })
-      } else {
+        }),
+      );
+
+      // The way we represent NULL DB values in the output json is that they're still present
+      // but explicitly null (as opposed to absent).
+      if nullable {
+        def.as_object_mut().map(|obj| match obj.entry("type") {
+          Entry::Occupied(mut e) => match e.get() {
+            Value::Array(types) => {
+              let mut new_types = vec![serde_json::Value::String("null".into())];
+              new_types.extend_from_slice(&types);
+              e.insert(serde_json::json!(new_types));
+            }
+            Value::String(t) => {
+              e.insert(serde_json::json!(["null", t]));
+            }
+            _ => {
+              debug_assert!(false)
+            }
+          },
+          Entry::Vacant(_e) => {
+            // GeoJSON doesn't seem to specify an explicit type :/.
+            // debug_assert!(false)
+          }
+        });
+      }
+
+      defs.insert(def_name, def);
+    } else {
+      properties.insert(
+        col.name.clone(),
         serde_json::json!({
-          "type": column_data_type_to_json_type(col.data_type),
-        })
-      },
-    );
+          // NOTE: Right now we serialize absent values as explicit null rather than ommit them.
+          // Not sure this is the best approach, especially since we also don't mark them as
+          // required.
+          "type": if nullable {
+            serde_json::json!(["null", column_data_type_to_json_type(col.data_type)])
+          } else {
+            column_data_type_to_json_type(col.data_type)
+          }
+        }),
+      );
+    }
   }
 
   if defs.is_empty() {

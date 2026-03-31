@@ -228,29 +228,25 @@ mod tests {
       } = state.connection_manager().main_entry();
 
       conn
-        .execute(
-          "CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT",
-          (),
-        )
-        .await
-        .unwrap();
+        .execute_batch(format!(
+          "
+            CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT;
 
-      conn
-        .execute(
-          format!(
-            r#"CREATE TABLE {table_name} (
-            id INTEGER PRIMARY KEY,
-            fk INTEGER REFERENCES foreign_table(id)
-          ) STRICT"#,
-            table_name = table_name.escaped_string(),
-          ),
-          (),
-        )
+            CREATE TABLE {table_name} (
+              id       INTEGER PRIMARY KEY,
+              fk       INTEGER NOT NULL REFERENCES foreign_table(id),
+              fk_null  INTEGER REFERENCES foreign_table(id)
+            ) STRICT;
+          ",
+          table_name = table_name.escaped_string(),
+        ))
         .await
         .unwrap();
 
       state.rebuild_connection_metadata().await.unwrap();
     }
+
+    let expanded_cols = vec!["fk", "fk_null"];
 
     add_record_api_config(
       &state,
@@ -258,7 +254,7 @@ mod tests {
         name: Some("test_table_api".to_string()),
         table_name: Some(table_name.name.clone()),
         acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
-        expand: vec!["fk".to_string()],
+        expand: expanded_cols.iter().map(|c| c.to_string()).collect(),
         ..Default::default()
       },
     )
@@ -279,7 +275,7 @@ mod tests {
       JsonSchemaMode::Select,
       Some(Expand {
         tables: &metadata.tables.values().collect::<Vec<_>>(),
-        foreign_key_columns: vec!["foreign_table"],
+        foreign_key_columns: expanded_cols,
       }),
     )
     .unwrap();
@@ -292,12 +288,28 @@ mod tests {
         "type": "object",
         "properties": {
           "id": { "type": "integer" },
-          "fk": { "$ref": "#/$defs/foreign_table" },
+          "fk": { "$ref": "#/$defs/test_table.fk" },
+          "fk_null": { "$ref": "#/$defs/test_table.fk_null" },
         },
-        "required": ["id"],
+        "required": ["id", "fk"],
         "$defs": {
-          "foreign_table": {
+          "test_table.fk": {
             "type": "object",
+            "properties": {
+              "id" : { "type": "integer"},
+              "data": {
+                "title": "foreign_table",
+                "type": "object",
+                "properties": {
+                  "id" : { "type": "integer" },
+                },
+                "required": ["id"],
+              },
+            },
+            "required": ["id"],
+          },
+          "test_table.fk_null": {
+            "type": ["null", "object"],
             "properties": {
               "id" : { "type": "integer"},
               "data": {
@@ -361,13 +373,14 @@ mod tests {
     {
       let expected = json!({
         "id": 1,
-        "fk":{ "id": 1 },
+        "fk": { "id": 1 },
+        "fk_null": null,
       });
 
       let Json(value) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
-        Query(ReadRecordQuery::default()),
+        Query(ReadRecordQuery { expand: None }),
         None,
       )
       .await
@@ -403,6 +416,7 @@ mod tests {
           "id": 1,
         },
       },
+      "fk_null": null,
     });
 
     {
