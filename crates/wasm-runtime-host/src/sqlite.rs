@@ -1,9 +1,13 @@
 use bytes::Bytes;
+use http::Uri;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use rusqlite::Transaction;
 use self_cell::{MutBorrow, self_cell};
+use sqlite3_parser::ast::Stmt;
 use tokio::time::Duration;
-use trailbase_sqlite::connection::ArcLockGuard;
+use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::sqlite::unquote_expr;
+use trailbase_sqlite::{Rows, connection::ArcLockGuard};
 use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
@@ -34,51 +38,122 @@ pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx
   ));
 }
 
-async fn handle_sqlite_request_impl(
+async fn handle_sqlite_execute(
   conn: trailbase_sqlite::Connection,
-  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+  request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
-  return match request.uri().path() {
-    "/execute" => {
-      let sqlite_request = to_request(request).await?;
-
-      let rows_affected = conn
-        .execute(
-          sqlite_request.query,
-          sql_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?,
-        )
-        .await
+  // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
+  // this to more intelligently schedule requests based on whether they're reads or writes w/o
+  // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
+  // we believe it's worth it to allow cheap reads.
+  let rows_affected = match parse_into_statement(&request.query) {
+    // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
+    // apply to all internal read and write connections.
+    Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
+      conn
+        .attach(&unquote_expr(&db_name), &unquote_expr(&expr))
         .map_err(sqlite_err)?;
-
-      Ok(SqliteResponse::Execute { rows_affected })
+      0
     }
-    "/query" => {
-      let sqlite_request = to_request(request).await?;
-
-      let rows = conn
-        .write_query_rows(
-          sqlite_request.query,
-          sql_values_to_sqlite_params(sqlite_request.params).map_err(sqlite_err)?,
-        )
-        .await
-        .map_err(sqlite_err)?;
-
-      let json_rows = rows
-        .iter()
-        .map(convert_values)
-        .collect::<Result<Vec<_>, _>>()?;
-
-      Ok(SqliteResponse::Query { rows: json_rows })
+    Ok(Some(Stmt::Detach(name))) => {
+      conn.detach(&unquote_expr(&name)).map_err(sqlite_err)?;
+      0
     }
-    _ => Err("Not found".to_string()),
+    _ => conn
+      .execute(
+        request.query,
+        sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
+      )
+      .await
+      .map_err(sqlite_err)?,
   };
+
+  Ok(SqliteResponse::Execute { rows_affected })
+}
+
+async fn handle_sqlite_query(
+  conn: trailbase_sqlite::Connection,
+  request: SqliteRequest,
+) -> Result<SqliteResponse, String> {
+  async fn write(
+    conn: trailbase_sqlite::Connection,
+    request: SqliteRequest,
+  ) -> Result<Rows, String> {
+    return conn
+      .write_query_rows(
+        request.query,
+        sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
+      )
+      .await
+      .map_err(sqlite_err);
+  }
+
+  async fn read(
+    conn: trailbase_sqlite::Connection,
+    request: SqliteRequest,
+  ) -> Result<Rows, String> {
+    return conn
+      .read_query_rows(
+        request.query,
+        sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
+      )
+      .await
+      .map_err(sqlite_err);
+  }
+
+  // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
+  // this to more intelligently schedule requests based on whether they're reads or writes w/o
+  // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
+  // we believe it's worth it to allow cheap reads.
+  let rows = match parse_into_statement(&request.query) {
+    // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
+    // apply to all internal read and write connections.
+    Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
+      conn
+        .attach(&unquote_expr(&db_name), &unquote_expr(&expr))
+        .map_err(sqlite_err)?;
+      Rows::empty()
+    }
+    Ok(Some(Stmt::Detach(name))) => {
+      conn.detach(&unquote_expr(&name)).map_err(sqlite_err)?;
+      Rows::empty()
+    }
+    Ok(Some(Stmt::Select(_))) => read(conn, request).await?,
+    _ => write(conn, request).await?,
+  };
+
+  let json_rows = rows
+    .iter()
+    .map(convert_values)
+    .collect::<Result<Vec<_>, _>>()?;
+
+  Ok(SqliteResponse::Query { rows: json_rows })
 }
 
 pub(crate) async fn handle_sqlite_request(
   conn: trailbase_sqlite::Connection,
   request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
 ) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
-  return match handle_sqlite_request_impl(conn, request).await {
+  let (uri, sqlite_request) = match to_request(request).await {
+    Ok(request) => request,
+    Err(err) => {
+      return to_response(SqliteResponse::Error(err));
+    }
+  };
+
+  let response = match uri.path() {
+    "/execute" => handle_sqlite_execute(conn, sqlite_request).await,
+    "/query" => handle_sqlite_query(conn, sqlite_request).await,
+    _ => {
+      // NOTE: Should not happen and doesn't need to be handled by the client as
+      // SqliteResponse::Error.
+      return Err(ErrorCode::InternalError(Some(format!(
+        "Invalid path: {uri}"
+      ))));
+    }
+  };
+
+  return match response {
     Ok(response) => to_response(response),
     Err(err) => to_response(SqliteResponse::Error(err)),
   };
@@ -86,10 +161,13 @@ pub(crate) async fn handle_sqlite_request(
 
 async fn to_request(
   request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-) -> Result<SqliteRequest, String> {
-  let (_parts, body) = request.into_parts();
+) -> Result<(Uri, SqliteRequest), String> {
+  let (parts, body) = request.into_parts();
   let bytes: Bytes = body.collect().await.map_err(sqlite_err)?.to_bytes();
-  return serde_json::from_slice(&bytes).map_err(sqlite_err);
+  return Ok((
+    parts.uri,
+    serde_json::from_slice(&bytes).map_err(sqlite_err)?,
+  ));
 }
 
 fn to_response(

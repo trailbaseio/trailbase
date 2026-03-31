@@ -588,7 +588,7 @@ impl From<AstQualifiedName> for QualifiedName {
   fn from(qn: AstQualifiedName) -> Self {
     return Self {
       database_schema: unquote_db_name(&qn),
-      name: unquote_qualified(qn),
+      name: unquote_qualified(&qn),
     };
   }
 }
@@ -688,14 +688,14 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               conflict_clause,
             } => {
               unique.push(UniqueConstraint {
-                name: constraint.name.map(unquote_name),
-                columns: columns.into_iter().map(|c| unquote_expr(c.expr)).collect(),
+                name: constraint.name.as_ref().map(unquote_name),
+                columns: columns.into_iter().map(|c| unquote_expr(&c.expr)).collect(),
                 conflict_clause: conflict_clause.map(|c| c.into()),
               });
             }
             TableConstraint::Check(expr) => {
               checks.push(Check {
-                name: constraint.name.map(unquote_name),
+                name: constraint.name.as_ref().map(unquote_name),
                 expr: expr.to_string(),
               });
             }
@@ -716,7 +716,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
             } = def;
             assert_eq!(name, col_name);
 
-            let name = unquote_name(col_name);
+            let name = unquote_name(&col_name);
             assert!(!name.is_empty());
 
             let (type_name, affinity_type, data_type): (
@@ -845,11 +845,11 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
         where_clause,
       } => Ok(TableIndex {
         name: idx_name.into(),
-        table_name: unquote_name(tbl_name),
+        table_name: unquote_name(&tbl_name),
         columns: columns
           .into_iter()
           .map(|order_expr| ColumnOrder {
-            column_name: unquote_expr(order_expr.expr),
+            column_name: unquote_expr(&order_expr.expr),
             ascending: order_expr
               .order
               .map(|order| order == sqlite3_parser::ast::SortOrder::Asc),
@@ -1032,7 +1032,7 @@ fn extract_column_mapping(
         }
       }
       ResultColumn::TableStar(name) => {
-        let name = unquote_name(name);
+        let name = unquote_name(&name);
         let referred_table = find_table_by_alias(&name)?;
 
         for c in &referred_table.table.columns {
@@ -1045,7 +1045,7 @@ fn extract_column_mapping(
       }
       ResultColumn::Expr(expr, alias) => match expr {
         Expr::Id(id) => {
-          let (referred_table, column) = find_column_by_unqualified_name(&unquote_id(id.clone()))?;
+          let (referred_table, column) = find_column_by_unqualified_name(&unquote_id(&id))?;
 
           mapping.push(ViewColumn {
             column: column_with_alias(
@@ -1057,10 +1057,10 @@ fn extract_column_mapping(
           });
         }
         Expr::Qualified(qualifier, name) => {
-          let qualifier = unquote_name(qualifier);
+          let qualifier = unquote_name(&qualifier);
           let referred_table = find_table_by_alias(&qualifier)?;
 
-          let col_name = unquote_name(name);
+          let col_name = unquote_name(&name);
           let column = referred_table
             .table
             .columns
@@ -1134,7 +1134,7 @@ fn extract_column_mapping(
                   to_alias(alias).unwrap_or_else(|| column.name.to_string()),
                 ),
                 parent_name: get_parent_name(referred_table),
-                aggregation: Some(unquote_id(fname)),
+                aggregation: Some(unquote_id(&fname)),
               });
 
               continue;
@@ -1148,7 +1148,7 @@ fn extract_column_mapping(
                   to_alias(alias).unwrap_or_else(|| column.name.to_string()),
                 ),
                 parent_name: get_parent_name(referred_table),
-                aggregation: Some(unquote_id(fname)),
+                aggregation: Some(unquote_id(&fname)),
               });
 
               continue;
@@ -1432,7 +1432,7 @@ fn precondition(m: &str) -> SchemaError {
 
 fn extract_single_arg(args: Option<Vec<Expr>>) -> Option<(Option<String>, String)> {
   return match args {
-    Some(mut args) if args.len() == 1 => match args.remove(0) {
+    Some(args) if args.len() == 1 => match &args[0] {
       Expr::Id(id) => Some((None, unquote_id(id))),
       Expr::Qualified(qualifier, name) => Some((Some(unquote_name(qualifier)), unquote_name(name))),
       _ => None,
@@ -1481,15 +1481,15 @@ fn extract_group_by_key_candidate(
   return match &group_by[0] {
     Expr::Id(id) => Ok(Some(GroupBy {
       qualifier: None,
-      name: unquote_id(id.clone()),
+      name: unquote_id(id),
     })),
     Expr::Name(name) => Ok(Some(GroupBy {
       qualifier: None,
-      name: unquote_name(name.clone()),
+      name: unquote_name(name),
     })),
     Expr::Qualified(qualifier, name) => Ok(Some(GroupBy {
-      qualifier: Some(unquote_name(qualifier.clone())),
-      name: unquote_name(name.clone()),
+      qualifier: Some(unquote_name(qualifier)),
+      name: unquote_name(name),
     })),
     expr => Err(precondition(&format!(
       "For RecordAPIs GROUP BY expressions must reference an exposed VIEW column, got {expr:?}"
@@ -1511,18 +1511,18 @@ fn build_foreign_key(
   let (on_update, on_delete) = unparse_fk_trigger(&clause.args);
 
   return ForeignKey {
-    name: name.map(unquote_name),
-    foreign_table: unquote_name(clause.tbl_name.clone()),
+    name: name.as_ref().map(unquote_name),
+    foreign_table: unquote_name(&clause.tbl_name),
     columns: columns
       .unwrap_or_default()
       .into_iter()
-      .map(|c| unquote_name(c.col_name))
+      .map(|c| unquote_name(&c.col_name))
       .collect(),
     referred_columns: clause
       .columns
       .unwrap_or_default()
       .into_iter()
-      .map(|c| unquote_name(c.col_name))
+      .map(|c| unquote_name(&c.col_name))
       .collect(),
     on_update,
     on_delete,
@@ -1590,27 +1590,28 @@ fn unquote_string(s: &str) -> String {
   };
 }
 
-fn unquote_name(name: Name) -> String {
+fn unquote_name(name: &Name) -> String {
   return unquote_string(&name.0);
 }
 
-fn unquote_qualified(name: AstQualifiedName) -> String {
-  return unquote_name(name.name);
+fn unquote_qualified(name: &AstQualifiedName) -> String {
+  return unquote_name(&name.name);
 }
 
 fn unquote_db_name(name: &AstQualifiedName) -> Option<String> {
-  return name.db_name.clone().map(unquote_name);
+  return name.db_name.as_ref().map(unquote_name);
 }
 
-fn unquote_id(id: sqlite3_parser::ast::Id) -> String {
+fn unquote_id(id: &sqlite3_parser::ast::Id) -> String {
   return unquote_string(&id.0);
 }
 
-fn unquote_expr(expr: Expr) -> String {
+pub fn unquote_expr(expr: &Expr) -> String {
   return match expr {
     Expr::Name(n) => unquote_name(n),
     Expr::Id(id) => unquote_id(id),
-    Expr::Literal(Literal::String(s)) => unquote_string(&s),
+    Expr::Literal(Literal::String(s)) => unquote_string(s),
+    Expr::Qualified(q, n) => format!("{}.{}", unquote_name(q), unquote_name(n)),
     x => x.to_string(),
   };
 }
@@ -1618,9 +1619,9 @@ fn unquote_expr(expr: Expr) -> String {
 fn to_alias(alias: Option<sqlite3_parser::ast::As>) -> Option<String> {
   return alias.map(|a| match a {
     // "FROM table_name AS alias"
-    sqlite3_parser::ast::As::As(name) => unquote_name(name),
+    sqlite3_parser::ast::As::As(name) => unquote_name(&name),
     // "FROM table_name alias"
-    sqlite3_parser::ast::As::Elided(name) => unquote_name(name),
+    sqlite3_parser::ast::As::Elided(name) => unquote_name(&name),
   });
 }
 
@@ -1645,7 +1646,7 @@ pub fn lookup_and_parse_table_schema(
 }
 
 fn builtin_function_preserving_type(name: &sqlite3_parser::ast::Id) -> bool {
-  let name = unquote_id(name.clone()).to_uppercase();
+  let name = unquote_id(name).to_uppercase();
   return matches!(name.as_str(), "MAX" | "MIN" | "SUM");
 }
 
@@ -1673,9 +1674,9 @@ mod tests {
 
   #[test]
   fn test_unquote() {
-    assert_eq!(unquote_name(Name("".into())), "");
-    assert_eq!(unquote_name(Name("['``']".into())), "'``'");
-    assert_eq!(unquote_name(Name("\"[]\"".into())), "[]");
+    assert_eq!(unquote_name(&Name("".into())), "");
+    assert_eq!(unquote_name(&Name("['``']".into())), "'``'");
+    assert_eq!(unquote_name(&Name("\"[]\"".into())), "[]");
   }
 
   #[test]

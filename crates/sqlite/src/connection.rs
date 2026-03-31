@@ -512,6 +512,14 @@ impl Connection {
     return Ok(());
   }
 
+  pub fn detach(&self, name: &str) -> Result<()> {
+    let lock = self.conns.write();
+    for conn in &lock.0 {
+      conn.execute(&format!("DETACH DATABASE {name} "), ())?;
+    }
+    return Ok(());
+  }
+
   pub async fn list_databases(&self) -> Result<Vec<Database>> {
     return self.call_reader(list_databases).await;
   }

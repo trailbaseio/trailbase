@@ -1,3 +1,4 @@
+use futures_util::future::join_all;
 use rusqlite::ffi;
 use rusqlite::hooks::PreUpdateCase;
 use serde::Deserialize;
@@ -58,10 +59,10 @@ async fn call_failure_test() {
 #[tokio::test]
 async fn close_success_test() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
-  let fname = tmp_dir.path().join("main.sqlite");
+  let db_path = tmp_dir.path().join("main.sqlite");
 
   let conn = Connection::new(
-    move || rusqlite::Connection::open(&fname),
+    move || rusqlite::Connection::open(&db_path),
     Some(Options {
       n_read_threads: 2,
       ..Default::default()
@@ -525,15 +526,111 @@ enum MyError {
 async fn test_attach() {
   let conn = Connection::open_in_memory().unwrap();
 
-  conn.attach(":memory:", "NAME").unwrap();
+  assert!(
+    conn
+      .execute(
+        "
+          CREATE TABLE test (id INTEGER PRIMARY KEY);
+          ATTACH DATABASE ':memory:' AS foo;
+        ",
+        (),
+      )
+      .await
+      .is_err()
+  );
+
+  conn
+    .write_query_rows("ATTACH DATABASE ':memory:' AS foo", ())
+    .await
+    .unwrap();
+
+  conn.attach(":memory:", "bar").unwrap();
 
   let databases = conn.list_databases().await.unwrap();
-  assert_eq!(databases.len(), 2);
+  assert_eq!(databases.len(), 3);
   assert_eq!(
-    databases[1],
+    databases[2],
     Database {
-      seq: 2,
-      name: "NAME".to_string(),
+      seq: 3,
+      name: "bar".to_string(),
     }
   );
+
+  conn.detach("bar").unwrap();
+  conn.detach("foo").unwrap();
+
+  let databases = conn.list_databases().await.unwrap();
+  assert_eq!(databases.len(), 1);
+}
+
+#[test]
+fn test_busy() {
+  let rt = tokio::runtime::Builder::new_multi_thread()
+    .worker_threads(4)
+    .enable_all()
+    .build()
+    .unwrap();
+
+  let tmp_dir = tempfile::TempDir::new().unwrap();
+  let db_path = tmp_dir.path().join("main.sqlite");
+
+  let conn = Connection::new(
+    move || -> Result<_, rusqlite::Error> {
+      let conn = rusqlite::Connection::open(&db_path)?;
+
+      // NOTE: The busy handler should NEVER be triggered, since exclusive locking happens on the
+      // `Connection` level. BUSY_TIMEOUT would only trigger if multiple SQLite connections
+      // were trying to lock the DB concurrently.
+      conn
+        .busy_timeout(std::time::Duration::from_micros(1))
+        .unwrap();
+      conn
+        .busy_handler(Some(|_| -> bool {
+          assert!(false);
+          return false;
+        }))
+        .unwrap();
+
+      return Ok(conn);
+    },
+    Some(Options {
+      n_read_threads: 2,
+      ..Default::default()
+    }),
+  )
+  .unwrap();
+
+  rt.block_on(async move {
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE test (
+            id    INTEGER PRIMARY KEY,
+            data  TEXT
+        ) STRICT;
+
+        INSERT INTO test (data) VALUES ('a'), ('b'), ('c');
+      ",
+      )
+      .await
+      .unwrap();
+
+    // We use writes for SELECTs to trigger busy states.
+    const N: usize = 10000;
+    let futures: Vec<_> = (0..N)
+      .map(|_| {
+        let conn = conn.clone();
+        return tokio::spawn(async move {
+          conn
+            .write_query_rows("SELECT * FROM test", ())
+            .await
+            .unwrap();
+        });
+      })
+      .collect();
+
+    for result in join_all(futures).await {
+      result.unwrap();
+    }
+  });
 }

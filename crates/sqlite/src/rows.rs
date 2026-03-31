@@ -49,6 +49,10 @@ impl Rows {
     return Ok(Self(result, columns));
   }
 
+  pub fn empty() -> Self {
+    return Self(vec![], Arc::new(vec![]));
+  }
+
   pub fn len(&self) -> usize {
     return self.0.len();
   }

@@ -23,7 +23,7 @@ rusqlite = { workspace = true }
 schemars = "1.0.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
-sqlite3-parser = "0.15.0"
+sqlite3-parser = { workspace = true }
 thiserror = "2.0.12"
 trailbase-extension = { workspace = true }
 ts-rs = { workspace = true }

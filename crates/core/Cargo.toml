@@ -87,7 +87,7 @@ serde_qs = { workspace = true }
 serde_urlencoded = "0.7.1"
 sha2 = "0.11.0"
 sqlformat = "0.5.0"
-sqlite3-parser = "0.15.0"
+sqlite3-parser = { workspace = true }
 thiserror = "2.0.12"
 tokio = { workspace = true }
 tokio-rustls = { version = "0.26.1", default-features = false }
