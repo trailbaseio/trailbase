@@ -11,7 +11,7 @@ use rusqlite::hooks::{Action, PreUpdateCase};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, hash_map::Entry};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
@@ -843,7 +843,7 @@ pub async fn subscribe_sse(
         .add_sse_table_subscription(api, user, filter)
         .await?;
 
-      let seq = AtomicU32::default();
+      let seq = AtomicI64::default();
 
       Ok(
         Sse::new(
@@ -864,7 +864,7 @@ pub async fn subscribe_sse(
         .add_sse_record_subscription(api, record_id, user)
         .await?;
 
-      let seq = AtomicU32::default();
+      let seq = AtomicI64::default();
 
       Ok(
         Sse::new(

@@ -106,21 +106,20 @@ impl Pagination {
 
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum ChangeEvent {
-  #[serde(rename = "update")]
-  Update { value: JsonObject, seq: Option<u32> },
-  #[serde(rename = "insert")]
-  Insert { value: JsonObject, seq: Option<u32> },
-  #[serde(rename = "delete")]
-  Delete { value: JsonObject, seq: Option<u32> },
-  #[serde(rename = "error")]
-  Error { error: String, seq: Option<u32> },
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub enum EventPayload {
+  Update(JsonObject),
+  Insert(JsonObject),
+  Delete(JsonObject),
+  Error(String),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct SseEvent {}
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct ChangeEvent {
+  #[serde(flatten)]
+  pub event: Arc<EventPayload>,
+  pub seq: Option<i64>,
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct ListResponse<T> {
@@ -648,8 +647,8 @@ impl RecordApi {
       http_body_util::BodyDataStream::new(response.into_body())
         .eventsource()
         .filter_map(|event_or| {
-          // QUESTION: Should we instead return a `Stream<Item = Result<ChangeEvent, _>>` to allow for
-          // better error handling here.
+          // QUESTION: Should we instead return a `Stream<Item = Result<ChangeEvent, _>>` to allow
+          // for better error handling here.
           if let Ok(event) = event_or {
             return serde_json::from_str::<ChangeEvent>(&event.data)
               .map_err(|err| {

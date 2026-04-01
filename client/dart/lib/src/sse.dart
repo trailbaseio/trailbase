@@ -4,16 +4,6 @@ import 'dart:typed_data';
 
 import './transport.dart';
 
-class HttpException implements Exception {
-  final int status;
-  final String? message;
-
-  const HttpException(this.status, this.message);
-
-  @override
-  String toString() => 'HttpException(${status}, "${message}")';
-}
-
 sealed class Event {
   Map<String, dynamic>? get value;
 }

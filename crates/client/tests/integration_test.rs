@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use temp_dir::TempDir;
 use trailbase_client::{
-  ChangeEvent, Client, CompareOp, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
+  Client, CompareOp, EventPayload, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
 };
 
 struct Server {
@@ -478,17 +478,21 @@ async fn subscription_test() {
 
   {
     let record_events = record_stream.take(2).collect::<Vec<_>>().await;
-    match &record_events[0] {
-      ChangeEvent::Update { value: obj, seq } => {
+
+    let ev0 = &record_events[0];
+    match &*ev0.event {
+      EventPayload::Update(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
-        assert_eq!(Some(1), *seq);
+        assert_eq!(Some(1), ev0.seq);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
-    match &record_events[1] {
-      ChangeEvent::Delete { value: obj, seq } => {
+
+    let ev1 = &record_events[1];
+    match &*ev1.event {
+      EventPayload::Delete(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
-        assert_eq!(Some(2), *seq);
+        assert_eq!(Some(2), ev1.seq);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
@@ -496,20 +500,26 @@ async fn subscription_test() {
 
   {
     let table_events = table_stream.take(3).collect::<Vec<_>>().await;
-    match &table_events[0] {
-      ChangeEvent::Insert { value: obj, .. } => {
+
+    let ev0 = &table_events[0];
+    match &*ev0.event {
+      EventPayload::Insert(obj) => {
         assert_eq!(obj["text_not_null"], create_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
-    match &table_events[1] {
-      ChangeEvent::Update { value: obj, .. } => {
+
+    let ev1 = &table_events[1];
+    match &*ev1.event {
+      EventPayload::Update(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
-    match &table_events[2] {
-      ChangeEvent::Delete { value: obj, .. } => {
+
+    let ev2 = &table_events[2];
+    match &*ev2.event {
+      EventPayload::Delete(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
@@ -543,14 +553,18 @@ async fn subscription_ws_test() {
 
   {
     let record_events = record_stream.take(2).collect::<Vec<_>>().await;
-    match &record_events[0] {
-      ChangeEvent::Update { value: obj, .. } => {
+
+    let ev0 = &record_events[0];
+    match &*ev0.event {
+      EventPayload::Update(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
-    match &record_events[1] {
-      ChangeEvent::Delete { value: obj, .. } => {
+
+    let ev1 = &record_events[1];
+    match &*ev1.event {
+      EventPayload::Delete(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
@@ -559,20 +573,26 @@ async fn subscription_ws_test() {
 
   {
     let table_events = table_stream.take(3).collect::<Vec<_>>().await;
-    match &table_events[0] {
-      ChangeEvent::Insert { value: obj, .. } => {
+
+    let ev0 = &table_events[0];
+    match &*ev0.event {
+      EventPayload::Insert(obj) => {
         assert_eq!(obj["text_not_null"], create_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
-    match &table_events[1] {
-      ChangeEvent::Update { value: obj, .. } => {
+
+    let ev1 = &table_events[1];
+    match &*ev1.event {
+      EventPayload::Update(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
-    match &table_events[2] {
-      ChangeEvent::Delete { value: obj, .. } => {
+
+    let ev2 = &table_events[2];
+    match &*ev2.event {
+      EventPayload::Delete(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
       }
       msg => panic!("Unexpected event: {msg:?}"),
