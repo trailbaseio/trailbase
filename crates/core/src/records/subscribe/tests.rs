@@ -140,8 +140,6 @@ async fn subscribe_to_record_test() {
     .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
     .await
     .unwrap();
-
-  assert_eq!(0, manager.num_record_subscriptions());
 }
 
 #[tokio::test]

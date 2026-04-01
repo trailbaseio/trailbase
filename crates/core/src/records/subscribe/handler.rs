@@ -153,8 +153,10 @@ pub async fn subscribe_ws(
   use axum::extract::FromRequestParts;
   use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
   use futures_util::SinkExt;
+  use std::sync::Arc;
 
-  use crate::records::subscribe::subscribe::AutoCleanupEventStream;
+  use crate::records::subscribe::event::EventPayload;
+  use crate::records::subscribe::state::AutoCleanupEventStream;
 
   let (mut parts, _body) = request.into_parts();
   let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
@@ -205,7 +207,8 @@ pub async fn subscribe_ws(
       match ev.into_ws_event() {
         Ok(msg) => {
           if let Err(_value) = sender.send(msg).await {
-            debug!("Sending WS event to client failed");
+            log::debug!("Sending WS event to client failed");
+
             abort(sender, Code::Unexpected, "Failed to send event").await;
             return;
           }
@@ -292,14 +295,7 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream {
-          state: AutoCleanupEventStreamState {
-            receiver: receiver.downgrade(),
-            state,
-            id,
-          },
-          receiver,
-        };
+        let receiver = AutoCleanupEventStream::new(receiver, state, id);
 
         broker(receiver, &mut ws_sender).await
       }))
@@ -335,14 +331,7 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream {
-          state: AutoCleanupEventStreamState {
-            receiver: receiver.downgrade(),
-            state,
-            id,
-          },
-          receiver,
-        };
+        let receiver = AutoCleanupEventStream::new(receiver, state, id);
 
         broker(receiver, &mut ws_sender).await;
       }))

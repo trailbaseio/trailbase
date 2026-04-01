@@ -289,6 +289,16 @@ impl Connection {
     receiver.await.map_err(|_| Error::ConnectionClosed)?
   }
 
+  #[inline]
+  pub fn call_reader_and_forget(
+    &self,
+    function: impl FnOnce(&rusqlite::Connection) + Send + 'static,
+  ) {
+    let _ = self
+      .writer
+      .send(Message::RunConst(Box::new(move |conn| function(conn))));
+  }
+
   /// Query SQL statement.
   pub async fn read_query_rows(
     &self,
@@ -596,6 +606,7 @@ fn event_loop(id: usize, conns: Arc<RwLock<ConnectionVec>>, receiver: Receiver<M
   }
 }
 
+#[inline]
 pub fn extract_row_id(case: &PreUpdateCase) -> Option<i64> {
   return match case {
     PreUpdateCase::Insert(accessor) => Some(accessor.get_new_row_id()),
@@ -608,6 +619,7 @@ pub fn extract_row_id(case: &PreUpdateCase) -> Option<i64> {
   };
 }
 
+#[inline]
 pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
   return Some(match case {
     PreUpdateCase::Insert(accessor) => (0..accessor.get_column_count())
