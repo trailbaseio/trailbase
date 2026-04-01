@@ -182,95 +182,32 @@ impl PerConnectionState {
     }
   }
 
-  // fn add_hook(self: &Arc<Self>, api: RecordApi) {
-  //   let conn = api.conn().clone();
-  //   let state = self.clone();
-  //
-  //   api
-  //     .conn()
-  //     .write_lock()
-  //     .preupdate_hook(Some(
-  //       move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
-  //         let action = match action {
-  //           Action::SQLITE_UPDATE => RecordAction::Update,
-  //           Action::SQLITE_INSERT => RecordAction::Insert,
-  //           Action::SQLITE_DELETE => RecordAction::Delete,
-  //           a => {
-  //             warn!("Skipping unknown action: {a:?}");
-  //             return;
-  //           }
-  //         };
-  //
-  //         let Some(rowid) = extract_row_id(case) else {
-  //           warn!("Failed to extract row id");
-  //           return;
-  //         };
-  //
-  //         let qualified_table_name = QualifiedName {
-  //           name: table_name.to_string(),
-  //           database_schema: Some(db.to_string()),
-  //         };
-  //
-  //         // If there are no matching subscriptions, skip.
-  //         {
-  //           let lock = state.subscriptions.read();
-  //           let Some(subscriptions) = lock.get(&qualified_table_name).map(|r| r.read()) else {
-  //             return;
-  //           };
-  //
-  //           if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&rowid) {
-  //             return;
-  //           }
-  //         }
-  //
-  //         let Some(record_values) = extract_record_values(case) else {
-  //           error!("Failed to extract values");
-  //           return;
-  //         };
-  //
-  //         let s = ContinuationState {
-  //           state: state.clone(),
-  //           table_name: qualified_table_name,
-  //           action,
-  //           rowid,
-  //           record_values,
-  //         };
-  //
-  //         // TODO: Optimization: in cases where there's only table-level access restrictions, we
-  //         // could avoid the continuation and even dispatch the subscription handling to a
-  //         // different thread entirely to take more work off the SQLite thread.
-  //         conn.call_reader_and_forget(move |conn| {
-  //           hook_continuation(conn, s);
-  //         });
-  //       },
-  //     ))
-  //     .expect("owned conn");
-  // }
-
   fn add_hook(self: &Arc<Self>, api: RecordApi) {
     let conn = (**api.conn()).clone();
     let state = self.clone();
 
-    tokio::spawn(async move {
-      let receiver = install_hook(&conn).to_async();
+    let receiver = install_hook(&conn).to_async();
 
+    tokio::spawn(async move {
       loop {
         if receiver.sender_count() == 0 {
-          debug!("No more sender: terminating subscription broker task.");
-          return;
+          break;
         }
 
         let event = match receiver.recv().await {
           Ok(event) => event,
           Err(kanal::ReceiveError::Closed) | Err(kanal::ReceiveError::SendClosed) => {
-            debug!("Channel closed: terminating subscription broker task.");
-            return;
+            break;
           }
         };
 
         let state = state.clone();
-        conn.call_reader_and_forget(move |conn| broker_event(conn, state, event));
+        conn.call_reader_and_forget(move |conn| {
+          broker_event(conn, state, event);
+        });
       }
+
+      debug!("Channel closed: terminating subscription broker task.");
     });
   }
 
@@ -604,8 +541,6 @@ fn broker_subscriptions(
         user: sub.user.as_ref(),
       },
     ) {
-      println!("ERROR: {_err}");
-
       // NOTE: that access failures for table subscriptions for specific records are simply ignored,
       // i.e. those events will just not be send. Other records in the table may pass the
       // check. For record subscriptions, however, missing access is a death sentence.
@@ -732,37 +667,30 @@ fn broker_event(
     (dead_record_subscriptions, dead_table_subscriptions)
   };
 
-  // Clean up, only if necessary.
-  if dead_record_subscriptions.is_empty() && dead_table_subscriptions.is_empty() {
-    // No cleanup needed.
-    return;
-  }
-
   let remove_subscription_entry_for_table = {
     let Some(mut subscriptions) = subscriptions_lock.get(&table_name).map(|l| l.write()) else {
       return;
     };
 
     // Record subscription cleanup.
-    if !dead_record_subscriptions.is_empty() {
-      match action {
-        RecordAction::Delete => {
-          // This is unique for record subscriptions: if the record is deleted, cancel all
-          // subscriptions.
-          subscriptions.record.remove(&row_id);
-        }
-        _ => {
-          if let Some(m) = subscriptions.record.get_mut(&row_id) {
-            for idx in dead_record_subscriptions.iter().rev() {
-              m.swap_remove(*idx);
-            }
+    match action {
+      RecordAction::Delete => {
+        // This is unique for record subscriptions: if the record is deleted, cancel all
+        // subscriptions.
+        subscriptions.record.remove(&row_id);
+      }
+      _ if dead_record_subscriptions.len() > 0 => {
+        if let Some(m) = subscriptions.record.get_mut(&row_id) {
+          for idx in dead_record_subscriptions.iter().rev() {
+            m.swap_remove(*idx);
+          }
 
-            if m.is_empty() {
-              subscriptions.record.remove(&row_id);
-            }
+          if m.is_empty() {
+            subscriptions.record.remove(&row_id);
           }
         }
       }
+      _ => {}
     }
 
     // Table subscription cleanup.

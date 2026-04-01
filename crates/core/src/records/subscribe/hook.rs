@@ -55,7 +55,7 @@ pub fn install_hook(conn: &Connection) -> kanal::Receiver<PreupdateHookEvent> {
             return;
           };
 
-          match sender.try_send(PreupdateHookEvent {
+          let event = PreupdateHookEvent {
             action,
             table_name: QualifiedName {
               name: table_name.to_string(),
@@ -67,7 +67,9 @@ pub fn install_hook(conn: &Connection) -> kanal::Receiver<PreupdateHookEvent> {
             },
             row_id,
             record,
-          }) {
+          };
+
+          match sender.try_send(event) {
             Ok(true) => {}
             Ok(false) => {
               warn!("Channel full. Failed to forward preupdate event.")
