@@ -738,6 +738,8 @@ async fn start_listen(
 
   if let Err(err) = match tls {
     Some((cert, key)) => {
+      info!("TLS enabled");
+
       serve::serve(
         serve::TlsListener {
           listener: tcp_listener,
