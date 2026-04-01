@@ -3,8 +3,7 @@ use futures_util::Stream;
 use log::*;
 use parking_lot::RwLock;
 use pin_project_lite::pin_project;
-use reactivate::Reactive;
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, LazyLock};
@@ -13,7 +12,6 @@ use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
 use trailbase_schema::json::value_to_flat_json;
 
-use crate::app_state::derive_unchecked;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
@@ -31,10 +29,10 @@ use crate::schema_metadata::ConnectionMetadata;
 ///
 /// If row_id is Some, this is considered to reference a subscription to a specific record.
 #[derive(Default, Debug)]
-struct SubscriptionId {
-  table_name: QualifiedName,
-  sub_id: i64,
-  row_id: Option<i64>,
+pub struct SubscriptionId {
+  pub table_name: QualifiedName,
+  pub sub_id: i64,
+  pub row_id: Option<i64>,
 }
 
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
@@ -75,6 +73,22 @@ pin_project! {
     pub receiver: async_channel::Receiver<Arc<EventPayload>>,
   }
 }
+impl AutoCleanupEventStream {
+  pub fn new(
+    receiver: async_channel::Receiver<Arc<EventPayload>>,
+    state: Arc<PerConnectionState>,
+    id: SubscriptionId,
+  ) -> Self {
+    return Self {
+      state: AutoCleanupEventStreamState {
+        receiver: receiver.downgrade(),
+        state,
+        id,
+      },
+      receiver,
+    };
+  }
+}
 
 impl Stream for AutoCleanupEventStream {
   type Item = Arc<EventPayload>;
@@ -105,12 +119,12 @@ pub struct Subscription {
 }
 
 #[derive(Default)]
-struct Subscriptions {
+pub struct Subscriptions {
   /// A list of table subscriptions for this table.
-  table: Vec<Subscription>,
+  pub table: Vec<Subscription>,
 
   /// A map of record subscriptions for this.
-  record: HashMap<i64, Vec<Subscription>>,
+  pub record: HashMap<i64, Vec<Subscription>>,
 }
 
 impl Subscriptions {
@@ -119,18 +133,18 @@ impl Subscriptions {
   }
 }
 
-struct PerConnectionState {
+pub struct PerConnectionState {
   /// Metadata: always updated together when config -> record APIs change.
-  record_apis: RwLock<HashMap<String, RecordApi>>,
+  pub record_apis: RwLock<HashMap<String, RecordApi>>,
   /// Denormalized metadata. We could also grab this from:
   ///   `record_apis.read().nth(0).unwrap().connection_metadata()`.
-  connection_metadata: RwLock<Arc<ConnectionMetadata>>,
+  pub connection_metadata: RwLock<Arc<ConnectionMetadata>>,
 
   /// Map from table name to row id to list of subscriptions.
   ///
   /// NOTE: Use layered locking to allow cleaning up per-table subscriptions w/o having to
   /// exclusively lock the entire map.
-  subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, RwLock<Subscriptions>>>,
+  pub subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, RwLock<Subscriptions>>>,
 }
 
 impl PerConnectionState {
@@ -211,7 +225,7 @@ impl PerConnectionState {
     });
   }
 
-  async fn add_record_subscription(
+  pub async fn add_record_subscription(
     self: Arc<Self>,
     api: RecordApi,
     record: trailbase_sqlite::Value,
@@ -268,7 +282,7 @@ impl PerConnectionState {
     });
   }
 
-  async fn add_table_subscription(
+  pub async fn add_table_subscription(
     self: Arc<Self>,
     api: RecordApi,
     user: Option<User>,
@@ -317,187 +331,6 @@ impl Drop for PerConnectionState {
     if let Some(first) = self.record_apis.read().values().nth(0) {
       uninstall_hook(first.conn());
     }
-  }
-}
-
-/// Internal, shareable state of the cloneable SubscriptionManager.
-struct ManagerState {
-  /// Record API configurations.
-  record_apis: Reactive<Vec<RecordApi>>,
-
-  /// Manages subscriptions for different connections based on `conn.id()`.
-  connections: RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>,
-}
-
-#[derive(Clone)]
-pub struct SubscriptionManager {
-  state: Arc<ManagerState>,
-}
-
-fn filter_record_apis(conn_id: usize, record_apis: &[RecordApi]) -> HashMap<String, RecordApi> {
-  return record_apis
-    .iter()
-    .flat_map(|api| {
-      if !api.enable_subscriptions() {
-        return None;
-      }
-      if api.conn().id() == conn_id {
-        return Some((api.api_name().to_string(), api.clone()));
-      }
-
-      return None;
-    })
-    .collect();
-}
-
-impl SubscriptionManager {
-  pub fn new(record_apis: Reactive<HashMap<String, RecordApi>>) -> Self {
-    let record_apis = derive_unchecked(&record_apis, |apis| apis.values().cloned().collect());
-    let state = Arc::new(ManagerState {
-      record_apis: record_apis.clone(),
-      connections: RwLock::new(HashMap::new()),
-    });
-
-    {
-      let state = state.clone();
-      record_apis.add_observer(move |record_apis| {
-        let mut lock = state.connections.write();
-
-        let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
-
-        for api in record_apis.iter() {
-          if !api.enable_subscriptions() {
-            continue;
-          }
-
-          let id = api.conn().id();
-
-          // TODO: Clean subscriptions from existing entries for tables that not longer have a
-          // corresponding API.
-          if let Some(existing) = old.remove(&id) {
-            let apis = filter_record_apis(id, record_apis);
-            let Some(first) = apis.values().nth(0) else {
-              continue;
-            };
-
-            // Update metadata and add back.
-            *existing.connection_metadata.write() = first.connection_metadata().clone();
-            *existing.record_apis.write() = apis;
-            lock.insert(id, existing);
-          }
-        }
-      });
-    }
-
-    return Self { state };
-  }
-
-  pub async fn add_sse_table_subscription(
-    &self,
-    api: RecordApi,
-    user: Option<User>,
-    filter: Option<ValueOrComposite>,
-  ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
-    let state = self.get_per_connection_state(&api);
-
-    let id = state
-      .clone()
-      .add_table_subscription(api, user, filter, sender.clone())
-      .await?;
-
-    // Send an immediate comment to flush SSE headers and establish the connection
-    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
-      return Err(RecordError::BadRequest("channel already closed"));
-    }
-
-    let receiver = AutoCleanupEventStream {
-      state: AutoCleanupEventStreamState {
-        receiver: receiver.downgrade(),
-        state,
-        id,
-      },
-      receiver,
-    };
-
-    return Ok(receiver);
-  }
-
-  pub async fn add_sse_record_subscription(
-    &self,
-    api: RecordApi,
-    record: trailbase_sqlite::Value,
-    user: Option<User>,
-  ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
-    let state = self.get_per_connection_state(&api);
-
-    let id = state
-      .clone()
-      .add_record_subscription(api, record, user, sender.clone())
-      .await?;
-
-    // Send an immediate comment to flush SSE headers and establish the connection
-    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
-      return Err(RecordError::BadRequest("channel already closed"));
-    }
-
-    let receiver = AutoCleanupEventStream {
-      state: AutoCleanupEventStreamState {
-        receiver: receiver.downgrade(),
-        state,
-        id,
-      },
-      receiver,
-    };
-
-    return Ok(receiver);
-  }
-
-  fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
-    let id: usize = api.conn().id();
-    let mut lock = self.state.connections.upgradable_read();
-    if let Some(state) = lock.get(&id) {
-      return state.clone();
-    }
-
-    return lock.with_upgraded(|m| {
-      return match m.entry(id) {
-        Entry::Occupied(v) => v.get().clone(),
-        Entry::Vacant(v) => {
-          let state = Arc::new(PerConnectionState {
-            connection_metadata: RwLock::new(api.connection_metadata().clone()),
-            record_apis: RwLock::new(filter_record_apis(id, &self.state.record_apis.value())),
-            subscriptions: Default::default(),
-          });
-          v.insert(state).clone()
-        }
-      };
-    });
-  }
-
-  #[cfg(test)]
-  pub fn num_record_subscriptions(&self) -> usize {
-    let mut count: usize = 0;
-    for state in self.state.connections.read().values() {
-      for (_table_name, subs) in state.subscriptions.read().iter() {
-        for record in subs.read().record.values() {
-          count += record.len();
-        }
-      }
-    }
-    return count;
-  }
-
-  #[cfg(test)]
-  pub fn num_table_subscriptions(&self) -> usize {
-    let mut count: usize = 0;
-    for state in self.state.connections.read().values() {
-      for (_table_name, subs) in state.subscriptions.read().iter() {
-        count += subs.read().table.len();
-      }
-    }
-    return count;
   }
 }
 
@@ -717,8 +550,6 @@ fn broker_event(
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
 
-static ESTABLISHED_EVENT: LazyLock<Arc<EventPayload>> =
-  LazyLock::new(|| Arc::new(EventPayload::from(&JsonEventPayload::Ping)));
 static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
   Arc::new(EventPayload::from(&JsonEventPayload::Error {
     error: "Access denied".into(),
@@ -732,6 +563,5 @@ mod tests {
   #[test]
   fn static_sse_event_test() {
     let _x: Arc<EventPayload> = (*ACCESS_DENIED_EVENT).clone();
-    let _y: Arc<EventPayload> = (*ESTABLISHED_EVENT).clone();
   }
 }

@@ -19,7 +19,7 @@ use crate::connection::{ConnectionEntry, ConnectionError, ConnectionManager};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::records::RecordApi;
-use crate::records::subscribe::subscribe::SubscriptionManager;
+use crate::records::subscribe::manager::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::wasm::Runtime;
 
