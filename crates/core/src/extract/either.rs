@@ -30,10 +30,6 @@ impl IntoResponse for EitherRejection {
   }
 }
 
-pub enum ResponseContentType {
-  Json,
-}
-
 /// Deserialization helper to support requests in multiple formats.
 ///
 /// Eventually, we'd like to support Avro as well. In which case, we might have to delay
