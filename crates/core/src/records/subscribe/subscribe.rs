@@ -315,7 +315,7 @@ impl PerConnectionState {
 impl Drop for PerConnectionState {
   fn drop(&mut self) {
     if let Some(first) = self.record_apis.read().values().nth(0) {
-      uninstall_hook(&first.conn());
+      uninstall_hook(first.conn());
     }
   }
 }
@@ -333,14 +333,6 @@ struct ManagerState {
 pub struct SubscriptionManager {
   state: Arc<ManagerState>,
 }
-
-// struct ContinuationState {
-//   state: Arc<PerConnectionState>,
-//   table_name: QualifiedName,
-//   action: RecordAction,
-//   rowid: i64,
-//   record_values: Vec<rusqlite::types::Value>,
-// }
 
 fn filter_record_apis(conn_id: usize, record_apis: &[RecordApi]) -> HashMap<String, RecordApi> {
   return record_apis
@@ -590,18 +582,7 @@ fn broker_event(
     record,
   } = event;
 
-  // Check if there are any matching subscriptions and otherwise go back to
-  // listening.
-  let mut subscriptions_lock = state.subscriptions.upgradable_read();
-  {
-    let Some(subscriptions) = subscriptions_lock.get(&table_name).map(|r| r.read()) else {
-      return;
-    };
-
-    if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&row_id) {
-      return;
-    }
-  }
+  let mut per_table_subscriptions = state.subscriptions.upgradable_read();
 
   // If table_metadata is missing, the config/schema must have changed, thus removing the
   // subscriptions.
@@ -609,7 +590,7 @@ fn broker_event(
   let Some(table_metadata) = connection_metadata_lock.get_table(&table_name) else {
     warn!("Table {table_name:?} not found. Removing subscriptions");
 
-    subscriptions_lock.with_upgraded(|lock| {
+    per_table_subscriptions.with_upgraded(|lock| {
       lock.remove(&table_name);
       if lock.is_empty() {
         uninstall_hook_rusqlite(conn);
@@ -619,91 +600,109 @@ fn broker_event(
     return;
   };
 
-  // Join values with column names.
-  let record: indexmap::IndexMap<&str, rusqlite::types::Value> = record
-    .into_iter()
-    .enumerate()
-    .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
-    .collect();
+  let remove_subscription_entry_for_table = {
+    // Check if there are any matching subscriptions and otherwise go back to listening.
+    let Some(mut subscriptions) = per_table_subscriptions
+      .get(&table_name)
+      .map(|r| r.upgradable_read())
+    else {
+      return;
+    };
+    if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&row_id) {
+      return;
+    }
 
-  // Build a JSON-encoded SQLite event (insert, update, delete).
-  let event: Arc<EventPayload> = {
-    let json_obj = record
-      .iter()
-      .filter_map(|(name, value)| {
-        return value_to_flat_json(value)
-          .ok()
-          .map(|v| (name.to_string(), v));
-      })
+    // Join values with column names. We use a map rather than a Vec<(String, Value)> for filter
+    // access.
+    let record: indexmap::IndexMap<&str, rusqlite::types::Value> = record
+      .into_iter()
+      .enumerate()
+      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
       .collect();
 
-    let payload = EventPayload::from(&match action {
-      RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
-      RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
-      RecordAction::Update => JsonEventPayload::Update { value: json_obj },
-    });
+    // Build a JSON-encoded SQLite event (insert, update, delete).
+    let event: Arc<EventPayload> = {
+      let json_obj = record
+        .iter()
+        .filter_map(|(name, value)| {
+          return value_to_flat_json(value)
+            .ok()
+            .map(|v| (name.to_string(), v));
+        })
+        .collect();
 
-    Arc::new(payload)
-  };
+      let payload = EventPayload::from(&match action {
+        RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
+        RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
+        RecordAction::Update => JsonEventPayload::Update { value: json_obj },
+      });
 
-  // First broker record subscriptions.
-  let (dead_record_subscriptions, dead_table_subscriptions) = {
-    let Some(subscriptions) = subscriptions_lock.get(&table_name).map(|r| r.read()) else {
-      return;
+      Arc::new(payload)
     };
 
-    let dead_record_subscriptions = subscriptions
-      .record
-      .get(&row_id)
-      .map(|record_subscriptions| {
-        broker_subscriptions(&state, &conn, record_subscriptions, true, &record, &event)
-      })
-      .unwrap_or_default();
+    // First broker record subscriptions.
+    let (dead_record_subscriptions, dead_table_subscriptions) = {
+      // let Some(subscriptions) = per_table_subscriptions.get(&table_name).map(|r| r.read()) else {
+      //   return;
+      // };
 
-    // Then broker table subscriptions.
-    let dead_table_subscriptions =
-      broker_subscriptions(&state, &conn, &subscriptions.table, false, &record, &event);
+      let dead_record_subscriptions = subscriptions
+        .record
+        .get(&row_id)
+        .map(|record_subscriptions| {
+          broker_subscriptions(&state, conn, record_subscriptions, true, &record, &event)
+        })
+        .unwrap_or_default();
 
-    (dead_record_subscriptions, dead_table_subscriptions)
-  };
+      // Then broker table subscriptions.
+      let dead_table_subscriptions =
+        broker_subscriptions(&state, conn, &subscriptions.table, false, &record, &event);
 
-  let remove_subscription_entry_for_table = {
-    let Some(mut subscriptions) = subscriptions_lock.get(&table_name).map(|l| l.write()) else {
-      return;
+      (dead_record_subscriptions, dead_table_subscriptions)
     };
 
-    // Record subscription cleanup.
-    match action {
-      RecordAction::Delete => {
-        // This is unique for record subscriptions: if the record is deleted, cancel all
-        // subscriptions.
-        subscriptions.record.remove(&row_id);
-      }
-      _ if dead_record_subscriptions.len() > 0 => {
-        if let Some(m) = subscriptions.record.get_mut(&row_id) {
-          for idx in dead_record_subscriptions.iter().rev() {
-            m.swap_remove(*idx);
-          }
+    if dead_record_subscriptions.is_empty()
+      && dead_table_subscriptions.is_empty()
+      && action != RecordAction::Delete
+    {
+      // No cleanup needed.
+      return;
+    }
 
-          if m.is_empty() {
-            subscriptions.record.remove(&row_id);
+    subscriptions.with_upgraded(|subscriptions| {
+      // Record subscription cleanup.
+      match action {
+        RecordAction::Delete => {
+          // This is unique for record subscriptions: if the record is deleted, cancel all
+          // subscriptions.
+          subscriptions.record.remove(&row_id);
+        }
+        RecordAction::Update | RecordAction::Insert => {
+          if let Some(m) = subscriptions.record.get_mut(&row_id) {
+            for idx in dead_record_subscriptions.iter().rev() {
+              m.swap_remove(*idx);
+            }
+
+            if m.is_empty() {
+              subscriptions.record.remove(&row_id);
+            }
           }
         }
       }
-      _ => {}
-    }
 
-    // Table subscription cleanup.
-    for idx in dead_table_subscriptions.iter().rev() {
-      subscriptions.table.swap_remove(*idx);
-    }
+      // Table subscription cleanup.
+      for idx in dead_table_subscriptions.iter().rev() {
+        subscriptions.table.swap_remove(*idx);
+      }
 
-    subscriptions.is_empty()
+      /* remove_subscription_entry_for_table = */
+      subscriptions.is_empty()
+    })
   };
 
   if remove_subscription_entry_for_table {
     // NOTE: Only write lock across all tables when necessary.
-    subscriptions_lock.with_upgraded(|lock| {
+    per_table_subscriptions.with_upgraded(|lock| {
       // Check again to avoid races:
       if lock.get(&table_name).is_some_and(|e| e.read().is_empty()) {
         lock.remove(&table_name);

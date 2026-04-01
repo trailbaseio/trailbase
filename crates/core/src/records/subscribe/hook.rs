@@ -90,7 +90,7 @@ pub fn install_hook(conn: &Connection) -> kanal::Receiver<PreupdateHookEvent> {
 }
 
 pub fn uninstall_hook(conn: &Connection) {
-  uninstall_hook_rusqlite(&*conn.write_lock());
+  uninstall_hook_rusqlite(&conn.write_lock());
 }
 
 pub fn uninstall_hook_rusqlite(conn: &rusqlite::Connection) {
