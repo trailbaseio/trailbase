@@ -80,7 +80,16 @@ async fn handle_accept_error(e: io::Error) {
   // > and then the listener will sleep for 1 second.
   //
   // hyper allowed customizing this but axum does not.
-  warn!("accept error: {e}");
+  warn!(
+    "\
+      Failed to accept incoming connection: {e} [{}].\n\n\
+      \
+      If this is a \"Too many open files\" issue, you may have to lift your OS' limit:\n\
+          `$ ulimit -n 16384`
+    ",
+    e.kind()
+  );
+
   tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
 }
 
@@ -103,12 +112,20 @@ impl Listener for TlsListener {
   type Addr = std::net::SocketAddr;
 
   async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
+    let mut cnt = 0;
     loop {
       match self.listener.accept().await {
         Ok((stream, remote_addr)) => {
           return Ok((self.acceptor.accept(stream).await?, remote_addr));
         }
-        Err(e) => handle_accept_error(e).await,
+        Err(err) => {
+          if cnt >= 3 {
+            return Err(err);
+          }
+          cnt += 1;
+
+          handle_accept_error(err).await
+        }
       }
     }
   }

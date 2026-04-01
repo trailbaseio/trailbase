@@ -1,3 +1,5 @@
+use std::os::unix::process::CommandExt;
+
 use base64::prelude::*;
 use futures_lite::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -32,7 +34,7 @@ fn site() -> String {
 }
 
 fn start_server() -> Result<Option<Server>, std::io::Error> {
-  let child = if port() == 4000 {
+  let mut child = if port() == 4000 {
     // Use an externally bootstrapped server.
     None
   } else {
@@ -60,12 +62,33 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
       "--runtime-threads=2".to_string(),
     ];
 
-    Some(
-      std::process::Command::new("cargo")
-        .args(&args)
-        .current_dir(&command_cwd)
-        .spawn()?,
-    )
+    let mut run_command = std::process::Command::new("cargo");
+
+    #[cfg(target_os = "linux")]
+    unsafe {
+      run_command.pre_exec(|| {
+        use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
+
+        let current_limits = getrlimit(Resource::Nofile);
+        eprintln!("Current process limits: {current_limits:?}");
+
+        if let Err(err) = setrlimit(
+          Resource::Nofile,
+          Rlimit {
+            // Soft limit.
+            current: Some(current_limits.maximum.unwrap_or(1024).min(2048)),
+            // Hard limit.
+            maximum: None,
+          },
+        ) {
+          eprintln!("ERROR: Failed to raise OPEN FILE LIMIT: {err}");
+        }
+
+        return Ok(());
+      });
+    }
+
+    Some(run_command.args(&args).current_dir(&command_cwd).spawn()?)
   };
 
   // Wait for server to become healthy.
@@ -79,6 +102,14 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
     let url = format!("{site}/api/healthcheck", site = site());
 
     for _ in 0..100 {
+      if let Some(child) = &mut child
+        && let Ok(Some(status)) = child.try_wait()
+      {
+        panic!(
+          "Test server already exited with {status}. Maybe other server running at same port?"
+        );
+      }
+
       let response = client.get(&url).send().await;
 
       if let Ok(response) = response {
@@ -527,6 +558,77 @@ async fn subscription_test() {
   }
 }
 
+async fn subscription_performance_test() {
+  let client = connect().await;
+  let api = client.records("simple_strict_table");
+
+  // WARN: The default Linux file limit is 1024 limitting how many connection we can accept
+  // w/o changing the limits (which requires root).
+  const N: usize = 800;
+
+  let mut table_subscriptions: Vec<_> =
+    futures_util::future::join_all((0..N).map(|_| api.subscribe("*")))
+      .await
+      .into_iter()
+      .map(|subscription| subscription.unwrap())
+      .collect();
+
+  let start = std::time::SystemTime::now();
+
+  let now = now();
+  let message = |i: i64| format!("rust client realtime performance test {i}: =?&{now}");
+
+  let _id = api
+    .create(json!({"text_not_null": message(-1)}))
+    .await
+    .unwrap();
+
+  let _events = futures_util::future::join_all(
+    table_subscriptions
+      .iter_mut()
+      .map(|subscription| subscription.next()),
+  )
+  .await
+  .into_iter()
+  .map(|ev0| ev0.unwrap());
+
+  println!(
+    "Receiving 1 message via {N} subscriptions took: {elapsed:?}",
+    elapsed = std::time::SystemTime::now().duration_since(start)
+  );
+
+  let start = std::time::SystemTime::now();
+  const M: usize = 100;
+  for i in 0..M {
+    let _id = api
+      .create(json!({"text_not_null": message(i as i64)}))
+      .await
+      .unwrap();
+  }
+
+  println!("{M} records created.");
+
+  let _events =
+    futures_util::future::join_all(table_subscriptions.iter_mut().map(|subscription| {
+      return tokio::time::timeout(
+        tokio::time::Duration::from_secs(60),
+        subscription.take(M).collect::<Vec<_>>(),
+      );
+    }))
+    .await
+    .into_iter()
+    .map(|events_or_timeout| {
+      let events = events_or_timeout.unwrap();
+      assert_eq!(M, events.len());
+      return events;
+    });
+
+  println!(
+    "Receiving {M} message via {N} subscriptions took: {elapsed:?}",
+    elapsed = std::time::SystemTime::now().duration_since(start)
+  );
+}
+
 #[cfg(feature = "ws")]
 async fn subscription_ws_test() {
   let client = connect().await;
@@ -824,6 +926,9 @@ fn integration_test() {
 
   runtime.block_on(subscription_test());
   println!("Ran subscription tests");
+
+  runtime.block_on(subscription_performance_test());
+  println!("Ran subscription performance tests");
 
   #[cfg(feature = "ws")]
   {
