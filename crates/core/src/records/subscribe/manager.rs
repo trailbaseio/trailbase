@@ -115,7 +115,7 @@ impl SubscriptionManager {
     return Ok(receiver);
   }
 
-  fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
+  pub fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
     let id: usize = api.conn().id();
     let mut lock = self.state.connections.upgradable_read();
     if let Some(state) = lock.get(&id) {
