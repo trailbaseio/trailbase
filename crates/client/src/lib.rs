@@ -765,7 +765,7 @@ impl ClientState {
     }
 
     return self
-      .client
+      .transport
       .upgrade_ws(path, headers, method, query_params)
       .await;
   }
