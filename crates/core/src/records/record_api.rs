@@ -705,7 +705,7 @@ impl RecordApi {
 }
 
 pub(crate) struct SubscriptionAclParams<'a> {
-  pub params: &'a indexmap::IndexMap<&'a str, rusqlite::types::Value>,
+  pub params: &'a indexmap::IndexMap<String, rusqlite::types::Value>,
   pub user: Option<&'a User>,
 }
 

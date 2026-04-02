@@ -10,6 +10,7 @@ use ts_rs::TS;
 use crate::app_state::AppState;
 use crate::auth::User;
 use crate::records::RecordApi;
+use crate::records::subscribe::state::EventCandidate;
 use crate::records::{Permission, RecordError};
 
 #[derive(Clone, Default, Debug, PartialEq, Deserialize)]
@@ -103,9 +104,10 @@ pub async fn subscribe_sse(
       let seq = AtomicI64::default();
 
       Ok(
-        Sse::new(
-          receiver.map(move |ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst)))),
-        )
+        Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+          let s = seq.fetch_add(1, Ordering::SeqCst);
+          return async move { Some(ev.payload.into_sse_event(Some(s))) };
+        }))
         .keep_alive(KeepAlive::default())
         .into_response(),
       )
@@ -124,9 +126,10 @@ pub async fn subscribe_sse(
       let seq = AtomicI64::default();
 
       Ok(
-        Sse::new(
-          receiver.map(move |ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst)))),
-        )
+        Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+          let s = seq.fetch_add(1, Ordering::SeqCst);
+          return async move { Some(ev.payload.into_sse_event(Some(s))) };
+        }))
         .keep_alive(KeepAlive::default())
         .into_response(),
       )
@@ -157,6 +160,7 @@ pub async fn subscribe_ws(
 
   use crate::records::subscribe::event::EventPayload;
   use crate::records::subscribe::state::AutoCleanupEventStream;
+  use crate::records::subscribe::state::EventCandidate;
 
   let (mut parts, _body) = request.into_parts();
   let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
@@ -271,6 +275,8 @@ pub async fn subscribe_ws(
   return match record.as_str() {
     "*" => {
       Ok(ws.on_upgrade(async move |socket: WebSocket| {
+        use crate::records::subscribe::state::EventCandidate;
+
         let Some(mut ws_sender) = init(&state, socket, &mut user).await else {
           return;
         };
@@ -283,7 +289,7 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
+        let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
         let state = state.subscription_manager().get_per_connection_state(&api);
 
         let Ok(id) = state
@@ -304,6 +310,8 @@ pub async fn subscribe_ws(
       let record_id = api.primary_key_to_value(record)?;
 
       Ok(ws.on_upgrade(async move |socket: WebSocket| {
+        use crate::records::subscribe::state::EventCandidate;
+
         let Some(mut ws_sender) = init(&state, socket, &mut user).await else {
           return;
         };
@@ -319,7 +327,7 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
+        let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
         let state = state.subscription_manager().get_per_connection_state(&api);
 
         let Ok(id) = state

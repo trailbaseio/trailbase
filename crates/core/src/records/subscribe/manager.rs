@@ -9,7 +9,9 @@ use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
-use crate::records::subscribe::state::{AutoCleanupEventStream, PerConnectionState};
+use crate::records::subscribe::state::{
+  AutoCleanupEventStream, EventCandidate, PerConnectionState,
+};
 
 /// Internal, shareable state of the cloneable SubscriptionManager.
 struct ManagerState {
@@ -73,20 +75,27 @@ impl SubscriptionManager {
     user: Option<User>,
     filter: Option<ValueOrComposite>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
+    let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
     let state = self.get_per_connection_state(&api);
 
-    let id = state
+    let subscription = state
       .clone()
       .add_table_subscription(api, user, filter, sender.clone())
       .await?;
 
     // Send an immediate comment to flush SSE headers and establish the connection
-    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
+    if sender
+      .send(EventCandidate {
+        record: None,
+        payload: ESTABLISHED_EVENT.clone(),
+      })
+      .await
+      .is_err()
+    {
       return Err(RecordError::BadRequest("channel already closed"));
     }
 
-    let receiver = AutoCleanupEventStream::new(receiver, state, id);
+    let receiver = AutoCleanupEventStream::new(receiver, state, subscription.id.clone());
 
     return Ok(receiver);
   }
@@ -97,20 +106,27 @@ impl SubscriptionManager {
     record: trailbase_sqlite::Value,
     user: Option<User>,
   ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
+    let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
     let state = self.get_per_connection_state(&api);
 
-    let id = state
+    let subscription = state
       .clone()
       .add_record_subscription(api, record, user, sender.clone())
       .await?;
 
     // Send an immediate comment to flush SSE headers and establish the connection
-    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
+    if sender
+      .send(EventCandidate {
+        record: None,
+        payload: ESTABLISHED_EVENT.clone(),
+      })
+      .await
+      .is_err()
+    {
       return Err(RecordError::BadRequest("channel already closed"));
     }
 
-    let receiver = AutoCleanupEventStream::new(receiver, state, id);
+    let receiver = AutoCleanupEventStream::new(receiver, state, subscription.id.clone());
 
     return Ok(receiver);
   }

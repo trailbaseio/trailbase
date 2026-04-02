@@ -28,7 +28,7 @@ use crate::schema_metadata::ConnectionMetadata;
 /// Composite id uniquely identifying a subscription.
 ///
 /// If row_id is Some, this is considered to reference a subscription to a specific record.
-#[derive(Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct SubscriptionId {
   pub table_name: QualifiedName,
   pub sub_id: i64,
@@ -38,7 +38,7 @@ pub struct SubscriptionId {
 /// RAII type for automatically cleaning up subscriptions when the receiving side gets dropped,
 /// e.g. client disconnects.
 struct AutoCleanupEventStreamState {
-  receiver: WeakReceiver<Arc<EventPayload>>,
+  receiver: WeakReceiver<EventCandidate>,
   state: Arc<PerConnectionState>,
   id: SubscriptionId,
 }
@@ -70,12 +70,12 @@ pin_project! {
     state: AutoCleanupEventStreamState,
 
     #[pin]
-    pub receiver: async_channel::Receiver<Arc<EventPayload>>,
+    pub receiver: async_channel::Receiver<EventCandidate>,
   }
 }
 impl AutoCleanupEventStream {
   pub fn new(
-    receiver: async_channel::Receiver<Arc<EventPayload>>,
+    receiver: async_channel::Receiver<EventCandidate>,
     state: Arc<PerConnectionState>,
     id: SubscriptionId,
   ) -> Self {
@@ -91,7 +91,7 @@ impl AutoCleanupEventStream {
 }
 
 impl Stream for AutoCleanupEventStream {
-  type Item = Arc<EventPayload>;
+  type Item = EventCandidate;
 
   fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
     let mut this = self.project();
@@ -106,25 +106,36 @@ impl Stream for AutoCleanupEventStream {
 
 pub struct Subscription {
   /// Id uniquely identifying this subscription.
-  subscription_id: i64,
+  pub id: SubscriptionId,
   /// Name of the API this subscription is subscribed to. We need to lookup the Record API on the
   /// hot path to make sure we're getting the latest configuration.
   record_api_name: String,
   /// User associated with subscriber.
   user: Option<User>,
-  /// Channel for sending events to the SSE handler.
-  sender: async_channel::Sender<Arc<EventPayload>>,
-  /// Filter
+  /// Record filter.
   filter: Filter,
+  /// Channel for sending events to the SSE handler.
+  sender: async_channel::Sender<EventCandidate>,
+}
+
+// Represents a change event that needs further filtering, e.g. ACLs.
+//
+// TODO: Maybe add some sequence number to detect drops if we don't get enough insight from the
+// channel.
+#[derive(Debug)]
+pub struct EventCandidate {
+  // pub subscription: Arc<Subscription>,
+  pub record: Option<Arc<indexmap::IndexMap<String, rusqlite::types::Value>>>,
+  pub payload: Arc<EventPayload>,
 }
 
 #[derive(Default)]
 pub struct Subscriptions {
   /// A list of table subscriptions for this table.
-  pub table: Vec<Subscription>,
+  pub table: Vec<Arc<Subscription>>,
 
   /// A map of record subscriptions for this.
-  pub record: HashMap<i64, Vec<Subscription>>,
+  pub record: HashMap<i64, Vec<Arc<Subscription>>>,
 }
 
 impl Subscriptions {
@@ -164,7 +175,7 @@ impl PerConnectionState {
       if let Some(row_id) = id.row_id {
         if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
           record_subscriptions.retain(|sub| {
-            return sub.subscription_id != id.sub_id;
+            return sub.id.sub_id != id.sub_id;
           });
 
           if record_subscriptions.is_empty() {
@@ -173,7 +184,7 @@ impl PerConnectionState {
         }
       } else {
         subscriptions.table.retain(|sub| {
-          return sub.subscription_id != id.sub_id;
+          return sub.id.sub_id != id.sub_id;
         });
       }
 
@@ -230,8 +241,8 @@ impl PerConnectionState {
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
-    sender: async_channel::Sender<Arc<EventPayload>>,
-  ) -> Result<SubscriptionId, RecordError> {
+    sender: async_channel::Sender<EventCandidate>,
+  ) -> Result<Arc<Subscription>, RecordError> {
     let table_name = api.table_name();
     let pk_column = &api.record_pk_column().column.name;
 
@@ -248,11 +259,21 @@ impl PerConnectionState {
     };
 
     let qualified_name = api.qualified_name();
-    let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let subscription_entry = Arc::new(Subscription {
+      id: SubscriptionId {
+        table_name: qualified_name.clone(),
+        row_id: Some(row_id),
+        sub_id: SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst),
+      },
+      record_api_name: api.api_name().to_string(),
+      user,
+      sender,
+      filter: Filter::Passthrough,
+    });
+
     let install_hook: bool = {
       let mut lock = self.subscriptions.write();
       let empty = lock.is_empty();
-      let sender = sender.clone();
 
       let subscriptions = lock.entry(qualified_name.clone()).or_default();
       subscriptions
@@ -260,13 +281,7 @@ impl PerConnectionState {
         .record
         .entry(row_id)
         .or_default()
-        .push(Subscription {
-          subscription_id,
-          record_api_name: api.api_name().to_string(),
-          user,
-          sender,
-          filter: Filter::Passthrough,
-        });
+        .push(subscription_entry.clone());
 
       empty
     };
@@ -275,11 +290,7 @@ impl PerConnectionState {
       self.add_hook(api.clone());
     }
 
-    return Ok(SubscriptionId {
-      table_name: qualified_name.clone(),
-      row_id: Some(row_id),
-      sub_id: subscription_id,
-    });
+    return Ok(subscription_entry);
   }
 
   pub async fn add_table_subscription(
@@ -287,8 +298,8 @@ impl PerConnectionState {
     api: RecordApi,
     user: Option<User>,
     filter: Option<ValueOrComposite>,
-    sender: async_channel::Sender<Arc<EventPayload>>,
-  ) -> Result<SubscriptionId, RecordError> {
+    sender: async_channel::Sender<EventCandidate>,
+  ) -> Result<Arc<Subscription>, RecordError> {
     let filter = if let Some(filter) = filter {
       Filter::Record(qs_filter_to_record_filter(api.columns(), filter)?)
     } else {
@@ -296,20 +307,24 @@ impl PerConnectionState {
     };
 
     let qualified_name = api.qualified_name();
-    let subscription_id = SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst);
+    let subscription_entry = Arc::new(Subscription {
+      id: SubscriptionId {
+        table_name: qualified_name.clone(),
+        row_id: None,
+        sub_id: SUBSCRIPTION_COUNTER.fetch_add(1, Ordering::SeqCst),
+      },
+      record_api_name: api.api_name().to_string(),
+      user,
+      sender,
+      filter,
+    });
+
     let install_hook: bool = {
       let mut lock = self.subscriptions.write();
       let empty = lock.is_empty();
-      let sender = sender.clone();
 
       let subscriptions = lock.entry(qualified_name.clone()).or_default();
-      subscriptions.write().table.push(Subscription {
-        subscription_id,
-        record_api_name: api.api_name().to_string(),
-        user,
-        sender,
-        filter,
-      });
+      subscriptions.write().table.push(subscription_entry.clone());
 
       empty
     };
@@ -318,11 +333,7 @@ impl PerConnectionState {
       self.add_hook(api.clone());
     }
 
-    return Ok(SubscriptionId {
-      table_name: qualified_name.clone(),
-      row_id: None,
-      sub_id: subscription_id,
-    });
+    return Ok(subscription_entry);
   }
 }
 
@@ -334,12 +345,86 @@ impl Drop for PerConnectionState {
   }
 }
 
-fn broker_subscriptions(
+// fn broker_subscriptions(
+//   s: &PerConnectionState,
+//   conn: &rusqlite::Connection,
+//   subs: &[Arc<Subscription>],
+//   record_subscriptions: bool,
+//   record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
+//   event: &Arc<EventPayload>,
+// ) -> Vec<usize> {
+//   let mut dead_subscriptions: Vec<usize> = vec![];
+//
+//   for (idx, sub) in subs.iter().enumerate() {
+//     // Skip events for records that are being filtered out anyway.
+//     if let Filter::Record(ref filter) = sub.filter
+//       && !apply_filter_recursively_to_record(filter, record)
+//     {
+//       continue;
+//     }
+//
+//     // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date version.
+//     let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
+//       dead_subscriptions.push(idx);
+//       sub.sender.close();
+//       continue;
+//     };
+//
+//     if let Err(_err) = api.check_record_level_read_access_for_subscriptions(
+//       conn,
+//       SubscriptionAclParams {
+//         params: record,
+//         user: sub.user.as_ref(),
+//       },
+//     ) {
+//       // NOTE: that access failures for table subscriptions for specific records are simply ignored,
+//       // i.e. those events will just not be send. Other records in the table may pass the
+//       // check. For record subscriptions, however, missing access is a death sentence.
+//       if record_subscriptions {
+//         // This can happen if the record api configuration has changed since originally
+//         // subscribed. In this case we just send and error and cancel the subscription.
+//         match sub.sender.try_send(EventCandidate {
+//           record: None,
+//           payload: ACCESS_DENIED_EVENT.clone(),
+//         }) {
+//           Ok(_) | Err(TrySendError::Full(_)) => {
+//             sub.sender.close();
+//           }
+//           Err(TrySendError::Closed(_)) => {}
+//         };
+//
+//         dead_subscriptions.push(idx);
+//       }
+//       continue;
+//     }
+//
+//     // Cloning the event. It's important that we use a try_send here to not block other
+//     // subscriptions if a subscriber is slow and their channel fills up.
+//     if let Err(err) = sub.sender.try_send(EventCandidate {
+//       record: Some(record.clone()),
+//       payload: event.clone(),
+//     }) {
+//       match err {
+//         async_channel::TrySendError::Full(ev) => {
+//           debug!("Channel full, dropping event: {ev:?}");
+//         }
+//         async_channel::TrySendError::Closed(_ev) => {
+//           dead_subscriptions.push(idx);
+//           sub.sender.close();
+//         }
+//       }
+//     }
+//   }
+//
+//   return dead_subscriptions;
+// }
+
+fn broker_subscriptions2(
   s: &PerConnectionState,
   conn: &rusqlite::Connection,
-  subs: &[Subscription],
+  subs: &[Arc<Subscription>],
   record_subscriptions: bool,
-  record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
+  record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
   event: &Arc<EventPayload>,
 ) -> Vec<usize> {
   let mut dead_subscriptions: Vec<usize> = vec![];
@@ -372,7 +457,10 @@ fn broker_subscriptions(
       if record_subscriptions {
         // This can happen if the record api configuration has changed since originally
         // subscribed. In this case we just send and error and cancel the subscription.
-        match sub.sender.try_send(ACCESS_DENIED_EVENT.clone()) {
+        match sub.sender.try_send(EventCandidate {
+          record: None,
+          payload: ACCESS_DENIED_EVENT.clone(),
+        }) {
           Ok(_) | Err(TrySendError::Full(_)) => {
             sub.sender.close();
           }
@@ -386,7 +474,10 @@ fn broker_subscriptions(
 
     // Cloning the event. It's important that we use a try_send here to not block other
     // subscriptions if a subscriber is slow and their channel fills up.
-    if let Err(err) = sub.sender.try_send(event.clone()) {
+    if let Err(err) = sub.sender.try_send(EventCandidate {
+      record: Some(record.clone()),
+      payload: event.clone(),
+    }) {
       match err {
         async_channel::TrySendError::Full(ev) => {
           debug!("Channel full, dropping event: {ev:?}");
@@ -447,11 +538,13 @@ fn broker_event(
 
     // Join values with column names. We use a map rather than a Vec<(String, Value)> for filter
     // access.
-    let record: indexmap::IndexMap<&str, rusqlite::types::Value> = record
-      .into_iter()
-      .enumerate()
-      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.as_str(), v))
-      .collect();
+    let record: Arc<indexmap::IndexMap<String, rusqlite::types::Value>> = Arc::new(
+      record
+        .into_iter()
+        .enumerate()
+        .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
+        .collect(),
+    );
 
     // Build a JSON-encoded SQLite event (insert, update, delete).
     let event: Arc<EventPayload> = {
@@ -483,13 +576,13 @@ fn broker_event(
         .record
         .get(&row_id)
         .map(|record_subscriptions| {
-          broker_subscriptions(&state, conn, record_subscriptions, true, &record, &event)
+          broker_subscriptions2(&state, conn, record_subscriptions, true, &record, &event)
         })
         .unwrap_or_default();
 
       // Then broker table subscriptions.
       let dead_table_subscriptions =
-        broker_subscriptions(&state, conn, &subscriptions.table, false, &record, &event);
+        broker_subscriptions2(&state, conn, &subscriptions.table, false, &record, &event);
 
       (dead_record_subscriptions, dead_table_subscriptions)
     };

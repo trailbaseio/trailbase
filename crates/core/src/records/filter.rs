@@ -224,7 +224,7 @@ fn parse_geometries(record: &[u8], filter: &str) -> Option<(geos::Geometry, geos
 
 pub(crate) fn apply_filter_recursively_to_record(
   filter: &ValueOrComposite,
-  record: &indexmap::IndexMap<&str, rusqlite::types::Value>,
+  record: &indexmap::IndexMap<String, rusqlite::types::Value>,
 ) -> bool {
   return match filter {
     ValueOrComposite::Value(col_op_value) => {
@@ -314,7 +314,10 @@ mod tests {
 
   #[test]
   fn test_basic_value_filter() {
-    let record: IndexMap<&str, Value> = IndexMap::from([("a", Value::Text("a value".to_string()))]);
+    let record: IndexMap<String, Value> = IndexMap::from([(
+      "a".to_string(),
+      Value::Text("a value".to_string().to_string()),
+    )]);
 
     assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
@@ -355,8 +358,10 @@ mod tests {
 
   #[test]
   fn test_basic_composite_filter() {
-    let record: IndexMap<&str, Value> =
-      IndexMap::from([("a", Value::Integer(5)), ("b", Value::Integer(-5))]);
+    let record: IndexMap<String, Value> = IndexMap::from([
+      ("a".to_string(), Value::Integer(5)),
+      ("b".to_string(), Value::Integer(-5)),
+    ]);
 
     assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Composite(

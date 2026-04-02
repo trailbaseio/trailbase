@@ -87,7 +87,7 @@ async fn subscribe_to_record_test() {
 
   // First event is "connection established".
   assert!(matches!(
-    deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
+    deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap(),
     JsonEventPayload::Ping
   ));
 
@@ -112,7 +112,7 @@ async fn subscribe_to_record_test() {
     "id": record_id_raw,
     "text": "bar",
   });
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+  match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
     JsonEventPayload::Update { value: obj } => {
       assert_eq!(Value::Object(obj), expected);
     }
@@ -126,7 +126,7 @@ async fn subscribe_to_record_test() {
     .await
     .unwrap();
 
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+  match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
     JsonEventPayload::Delete { value: obj } => {
       assert_eq!(Value::Object(obj), expected);
     }
@@ -159,7 +159,7 @@ async fn subscribe_to_table_test() {
     assert_eq!(1, manager.num_table_subscriptions());
     // First event is "connection established".
     assert!(matches!(
-      deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
+      deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap(),
       JsonEventPayload::Ping
     ));
 
@@ -180,7 +180,7 @@ async fn subscribe_to_table_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+    match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
       JsonEventPayload::Insert { value: obj } => {
         let expected = serde_json::json!({
           "id": record_id_raw,
@@ -197,7 +197,7 @@ async fn subscribe_to_table_test() {
       "id": record_id_raw,
       "text": "bar",
     });
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+    match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
       JsonEventPayload::Update { value: obj } => {
         assert_eq!(Value::Object(obj), expected);
       }
@@ -211,7 +211,7 @@ async fn subscribe_to_table_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+    match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
       JsonEventPayload::Delete { value: obj } => {
         assert_eq!(Value::Object(obj), expected);
       }
@@ -441,7 +441,7 @@ async fn test_acl_selective_table_subs() {
 
     // First event is "connection established".
     assert!(matches!(
-      deserialize_event(user_x_subscription.receiver.recv().await.unwrap()).unwrap(),
+      deserialize_event(user_x_subscription.receiver.recv().await.unwrap().payload).unwrap(),
       JsonEventPayload::Ping
     ));
 
@@ -468,7 +468,7 @@ async fn test_acl_selective_table_subs() {
       .await
       .unwrap();
 
-    match deserialize_event(user_x_subscription.receiver.recv().await.unwrap()).unwrap() {
+    match deserialize_event(user_x_subscription.receiver.recv().await.unwrap().payload).unwrap() {
       JsonEventPayload::Insert { value: obj } => {
         let expected = serde_json::json!({
           "id": record_id_raw,
@@ -546,7 +546,7 @@ async fn subscription_acl_change_owner() {
   assert_eq!(1, manager.num_record_subscriptions());
   // First event is "connection established".
   assert!(matches!(
-    deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
+    deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap(),
     JsonEventPayload::Ping
   ));
 
@@ -567,7 +567,7 @@ async fn subscription_acl_change_owner() {
     .await
     .unwrap();
 
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+  match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
     JsonEventPayload::Update { value: obj } => {
       let expected = serde_json::json!({
         "id": record_id,
@@ -581,7 +581,7 @@ async fn subscription_acl_change_owner() {
     }
   }
 
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+  match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
     JsonEventPayload::Error { .. } => {}
     x => {
       panic!("Expected error, got: {x:?}");
@@ -618,7 +618,7 @@ async fn subscription_filter_test() {
     assert_eq!(1, manager.num_table_subscriptions());
     // First event is "connection established".
     assert!(matches!(
-      deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
+      deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap(),
       JsonEventPayload::Ping
     ));
 
@@ -637,7 +637,7 @@ async fn subscription_filter_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
+    match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
       JsonEventPayload::Insert { value: obj } => {
         let expected = serde_json::json!({
           "id": 25,
