@@ -20,6 +20,7 @@ pub enum ValueOrComposite {
   Composite(Combiner, Vec<ValueOrComposite>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum Filter {
   Passthrough,
   Record(ValueOrComposite),

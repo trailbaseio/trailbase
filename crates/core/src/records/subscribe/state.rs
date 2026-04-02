@@ -104,18 +104,19 @@ impl Stream for AutoCleanupEventStream {
   }
 }
 
+#[derive(Debug)]
 pub struct Subscription {
   /// Id uniquely identifying this subscription.
   pub id: SubscriptionId,
   /// Name of the API this subscription is subscribed to. We need to lookup the Record API on the
   /// hot path to make sure we're getting the latest configuration.
-  record_api_name: String,
+  pub record_api_name: String,
   /// User associated with subscriber.
-  user: Option<User>,
+  pub user: Option<User>,
   /// Record filter.
-  filter: Filter,
+  pub filter: Filter,
   /// Channel for sending events to the SSE handler.
-  sender: async_channel::Sender<EventCandidate>,
+  pub sender: async_channel::Sender<EventCandidate>,
 }
 
 // Represents a change event that needs further filtering, e.g. ACLs.
@@ -124,7 +125,9 @@ pub struct Subscription {
 // channel.
 #[derive(Debug)]
 pub struct EventCandidate {
-  // pub subscription: Arc<Subscription>,
+  // TODO: We could proably also just keep the relevant data in the handler rather than passing
+  // static subscription metadata over and over again.
+  pub subscription: Arc<Subscription>,
   pub record: Option<Arc<indexmap::IndexMap<String, rusqlite::types::Value>>>,
   pub payload: Arc<EventPayload>,
 }
@@ -227,9 +230,7 @@ impl PerConnectionState {
         };
 
         let state = state.clone();
-        conn.call_reader_and_forget(move |conn| {
-          broker_event(conn, state, event);
-        });
+        broker_event(conn.clone(), state, event).await;
       }
 
       debug!("Channel closed: terminating subscription broker task.");
@@ -419,62 +420,18 @@ impl Drop for PerConnectionState {
 //   return dead_subscriptions;
 // }
 
-fn broker_subscriptions2(
-  s: &PerConnectionState,
-  conn: &rusqlite::Connection,
+async fn broker_subscriptions2(
   subs: &[Arc<Subscription>],
-  record_subscriptions: bool,
   record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
   event: &Arc<EventPayload>,
 ) -> Vec<usize> {
   let mut dead_subscriptions: Vec<usize> = vec![];
 
-  for (idx, sub) in subs.iter().enumerate() {
-    // Skip events for records that are being filtered out anyway.
-    if let Filter::Record(ref filter) = sub.filter
-      && !apply_filter_recursively_to_record(filter, record)
-    {
-      continue;
-    }
-
-    // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date version.
-    let Some(api) = s.lookup_record_api(&sub.record_api_name) else {
-      dead_subscriptions.push(idx);
-      sub.sender.close();
-      continue;
-    };
-
-    if let Err(_err) = api.check_record_level_read_access_for_subscriptions(
-      conn,
-      SubscriptionAclParams {
-        params: record,
-        user: sub.user.as_ref(),
-      },
-    ) {
-      // NOTE: that access failures for table subscriptions for specific records are simply ignored,
-      // i.e. those events will just not be send. Other records in the table may pass the
-      // check. For record subscriptions, however, missing access is a death sentence.
-      if record_subscriptions {
-        // This can happen if the record api configuration has changed since originally
-        // subscribed. In this case we just send and error and cancel the subscription.
-        match sub.sender.try_send(EventCandidate {
-          record: None,
-          payload: ACCESS_DENIED_EVENT.clone(),
-        }) {
-          Ok(_) | Err(TrySendError::Full(_)) => {
-            sub.sender.close();
-          }
-          Err(TrySendError::Closed(_)) => {}
-        };
-
-        dead_subscriptions.push(idx);
-      }
-      continue;
-    }
-
+  futures_util::future::join_all(subs.iter().enumerate().map(async |(idx, sub)| {
     // Cloning the event. It's important that we use a try_send here to not block other
     // subscriptions if a subscriber is slow and their channel fills up.
     if let Err(err) = sub.sender.try_send(EventCandidate {
+      subscription: sub.clone(),
       record: Some(record.clone()),
       payload: event.clone(),
     }) {
@@ -483,19 +440,22 @@ fn broker_subscriptions2(
           debug!("Channel full, dropping event: {ev:?}");
         }
         async_channel::TrySendError::Closed(_ev) => {
-          dead_subscriptions.push(idx);
-          sub.sender.close();
+          // dead_subscriptions.push(idx);
+          // sub.sender.close();
         }
       }
     }
-  }
+
+    return ();
+  }))
+  .await;
 
   return dead_subscriptions;
 }
 
 /// Broker event to various subscriptions.
-fn broker_event(
-  conn: &rusqlite::Connection,
+async fn broker_event(
+  conn: trailbase_sqlite::Connection,
   state: Arc<PerConnectionState>,
   event: PreupdateHookEvent,
 ) {
@@ -517,7 +477,7 @@ fn broker_event(
     per_table_subscriptions.with_upgraded(|lock| {
       lock.remove(&table_name);
       if lock.is_empty() {
-        uninstall_hook_rusqlite(conn);
+        uninstall_hook(&conn);
       }
     });
 
@@ -568,21 +528,16 @@ fn broker_event(
 
     // First broker record subscriptions.
     let (dead_record_subscriptions, dead_table_subscriptions) = {
-      // let Some(subscriptions) = per_table_subscriptions.get(&table_name).map(|r| r.read()) else {
-      //   return;
-      // };
-
-      let dead_record_subscriptions = subscriptions
-        .record
-        .get(&row_id)
-        .map(|record_subscriptions| {
-          broker_subscriptions2(&state, conn, record_subscriptions, true, &record, &event)
-        })
-        .unwrap_or_default();
+      let dead_record_subscriptions =
+        if let Some(record_subscriptions) = subscriptions.record.get(&row_id) {
+          broker_subscriptions2(record_subscriptions, &record, &event).await
+        } else {
+          vec![]
+        };
 
       // Then broker table subscriptions.
       let dead_table_subscriptions =
-        broker_subscriptions2(&state, conn, &subscriptions.table, false, &record, &event);
+        broker_subscriptions2(&subscriptions.table, &record, &event).await;
 
       (dead_record_subscriptions, dead_table_subscriptions)
     };
@@ -634,7 +589,7 @@ fn broker_event(
         lock.remove(&table_name);
 
         if lock.is_empty() {
-          uninstall_hook_rusqlite(conn);
+          uninstall_hook(&conn);
         }
       }
     });

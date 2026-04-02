@@ -86,6 +86,7 @@ impl SubscriptionManager {
     // Send an immediate comment to flush SSE headers and establish the connection
     if sender
       .send(EventCandidate {
+        subscription: subscription.clone(),
         record: None,
         payload: ESTABLISHED_EVENT.clone(),
       })
@@ -117,6 +118,7 @@ impl SubscriptionManager {
     // Send an immediate comment to flush SSE headers and establish the connection
     if sender
       .send(EventCandidate {
+        subscription: subscription.clone(),
         record: None,
         payload: ESTABLISHED_EVENT.clone(),
       })
