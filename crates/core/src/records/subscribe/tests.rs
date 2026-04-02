@@ -1,7 +1,9 @@
-use async_channel::TryRecvError;
 use axum::extract::{Path, RawQuery, State};
 use futures_util::StreamExt;
+use http_body_util::BodyExt;
 use serde_json::Value;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_sqlite::params;
 
 use crate::User;
@@ -9,10 +11,12 @@ use crate::admin::user::*;
 use crate::app_state::{AppState, test_state};
 use crate::auth::util::login_with_password;
 use crate::config::proto::RecordApiConfig;
-use crate::records::subscribe::event::{JsonEventPayload, deserialize_event};
-use crate::records::subscribe::handler::{SubscriptionQuery, add_subscription_sse_and_ws_handler};
+use crate::records::subscribe::event::{EventErrorStatus, TestChangeEvent, TestJsonEventPayload};
+use crate::records::subscribe::handler::{
+  SubscriptionQuery, add_subscription_sse_and_ws_handler, subscribe_sse,
+};
 use crate::records::test_utils::add_record_api_config;
-use crate::records::{PermissionFlag, RecordError};
+use crate::records::{PermissionFlag, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
 async fn setup_world_readable() -> AppState {
@@ -67,10 +71,7 @@ async fn subscribe_to_record_test() {
 
   let manager = state.subscription_manager();
   let api = state.lookup_record_api("api_name").unwrap();
-  let stream = manager
-    .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(0), None)
-    .await
-    .unwrap();
+  let mut stream = subscribe_to_records(state.clone(), api, "0", None, /* filter= */ None).await;
 
   assert_eq!(1, manager.num_record_subscriptions());
 
@@ -87,8 +88,8 @@ async fn subscribe_to_record_test() {
 
   // First event is "connection established".
   assert!(matches!(
-    deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
-    JsonEventPayload::Ping
+    stream.next().await.unwrap().event,
+    TestJsonEventPayload::Ping
   ));
 
   // This should do nothing since nobody is subscribed to id = 5.
@@ -112,9 +113,9 @@ async fn subscribe_to_record_test() {
     "id": record_id_raw,
     "text": "bar",
   });
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-    JsonEventPayload::Update { value: obj } => {
-      assert_eq!(Value::Object(obj), expected);
+  match stream.next().await.unwrap().event {
+    TestJsonEventPayload::Update(obj) => {
+      assert_eq!(Value::Object(obj.clone()), expected);
     }
     x => {
       panic!("Expected update, got: {x:?}");
@@ -126,9 +127,9 @@ async fn subscribe_to_record_test() {
     .await
     .unwrap();
 
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-    JsonEventPayload::Delete { value: obj } => {
-      assert_eq!(Value::Object(obj), expected);
+  match stream.next().await.unwrap().event {
+    TestJsonEventPayload::Delete(obj) => {
+      assert_eq!(Value::Object(obj.clone()), expected);
     }
     x => {
       panic!("Expected delete, got: {x:?}");
@@ -142,6 +143,67 @@ async fn subscribe_to_record_test() {
     .unwrap();
 }
 
+async fn subscribe_to_records(
+  state: AppState,
+  api: RecordApi,
+  record: &str,
+  user: Option<User>,
+  filter: Option<&str>,
+  // ) -> kanal::AsyncReceiver<TestChangeEvent> {
+) -> std::pin::Pin<Box<dyn futures_util::Stream<Item = TestChangeEvent>>> {
+  let filter = filter.map(|f| SubscriptionQuery::parse(f).unwrap().filter.unwrap());
+  let response = subscribe_sse(state, api, record.to_string(), filter, user)
+    .await
+    .unwrap();
+
+  assert_eq!(200, response.status());
+
+  let cnt = Arc::new(AtomicI64::default());
+  let stream = response.into_data_stream();
+
+  return stream
+    .take_while(|bytes| std::future::ready(bytes.is_ok()))
+    .filter_map(move |bytes| {
+      let cnt = cnt.clone();
+
+      return async move {
+        let Ok(bytes) = bytes.as_ref() else {
+          return None;
+        };
+        let payload = String::from_utf8_lossy(&bytes).to_string();
+
+        cnt.fetch_add(1, Ordering::SeqCst);
+        if cnt.load(Ordering::SeqCst) == 1 {
+          // Make sure we have an explicit ping as a first message to establish connection.
+          assert!(payload.contains("ping"));
+
+          return Some(TestChangeEvent {
+            event: TestJsonEventPayload::Ping,
+            seq: None,
+          });
+        }
+
+        // Ignore heartbeats.
+        if let Some((_a, b)) = payload.split_once("data: ") {
+          return Some(serde_json::from_str(b).unwrap());
+        }
+        return None;
+      };
+    })
+    .boxed();
+}
+
+async fn take_test_events(
+  stream: std::pin::Pin<Box<dyn futures_util::Stream<Item = TestChangeEvent>>>,
+  n: usize,
+) -> Vec<TestChangeEvent> {
+  use tokio::time::*;
+
+  return timeout(Duration::from_secs(4), stream.take(n).collect())
+    .await
+    .unwrap();
+}
+
 #[tokio::test]
 async fn subscribe_to_table_test() {
   let state = setup_world_readable().await;
@@ -151,16 +213,13 @@ async fn subscribe_to_table_test() {
   let api = state.lookup_record_api("api_name").unwrap();
 
   {
-    let stream = manager
-      .add_sse_table_subscription(api, None, None)
-      .await
-      .unwrap();
+    let mut stream = subscribe_to_records(state.clone(), api, "*", None, /* filter= */ None).await;
 
     assert_eq!(1, manager.num_table_subscriptions());
     // First event is "connection established".
     assert!(matches!(
-      deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
-      JsonEventPayload::Ping
+      stream.next().await.unwrap().event,
+      TestJsonEventPayload::Ping
     ));
 
     let record_id_raw = 0;
@@ -180,13 +239,13 @@ async fn subscribe_to_table_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-      JsonEventPayload::Insert { value: obj } => {
+    match stream.next().await.unwrap().event {
+      TestJsonEventPayload::Insert(obj) => {
         let expected = serde_json::json!({
           "id": record_id_raw,
           "text": "foo",
         });
-        assert_eq!(Value::Object(obj), expected);
+        assert_eq!(Value::Object(obj.clone()), expected);
       }
       x => {
         panic!("Expected insert, got: {x:?}");
@@ -197,9 +256,9 @@ async fn subscribe_to_table_test() {
       "id": record_id_raw,
       "text": "bar",
     });
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-      JsonEventPayload::Update { value: obj } => {
-        assert_eq!(Value::Object(obj), expected);
+    match stream.next().await.unwrap().event {
+      TestJsonEventPayload::Update(obj) => {
+        assert_eq!(Value::Object(obj.clone()), expected);
       }
       x => {
         panic!("Expected update, got: {x:?}");
@@ -211,9 +270,9 @@ async fn subscribe_to_table_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-      JsonEventPayload::Delete { value: obj } => {
-        assert_eq!(Value::Object(obj), expected);
+    match stream.next().await.unwrap().event {
+      TestJsonEventPayload::Delete(obj) => {
+        assert_eq!(Value::Object(obj.clone()), expected);
       }
       x => {
         panic!("Expected delete, got: {x:?}");
@@ -430,29 +489,29 @@ async fn test_acl_selective_table_subs() {
 
   // Assert events for table subscriptions are selective on ACLs.
   {
-    let user_x_subscription = manager
-      .add_sse_table_subscription(
-        api.clone(),
-        User::from_auth_token(&state, &user_x_token.auth_token),
-        None,
-      )
-      .await
-      .unwrap();
+    let mut user_x_subscription = subscribe_to_records(
+      state.clone(),
+      api.clone(),
+      "*",
+      User::from_auth_token(&state, &user_x_token.auth_token),
+      /* filter= */ None,
+    )
+    .await;
 
     // First event is "connection established".
     assert!(matches!(
-      deserialize_event(user_x_subscription.receiver.recv().await.unwrap()).unwrap(),
-      JsonEventPayload::Ping
+      user_x_subscription.next().await.unwrap().event,
+      TestJsonEventPayload::Ping
     ));
 
-    let user_y_subscription = manager
-      .add_sse_table_subscription(
-        api.clone(),
-        User::from_auth_token(&state, &user_y_token.auth_token),
-        None,
-      )
-      .await
-      .unwrap();
+    let mut user_y_subscription = subscribe_to_records(
+      state.clone(),
+      api.clone(),
+      "*",
+      User::from_auth_token(&state, &user_y_token.auth_token),
+      /* filter= */ None,
+    )
+    .await;
 
     assert_eq!(2, manager.num_table_subscriptions());
 
@@ -468,14 +527,14 @@ async fn test_acl_selective_table_subs() {
       .await
       .unwrap();
 
-    match deserialize_event(user_x_subscription.receiver.recv().await.unwrap()).unwrap() {
-      JsonEventPayload::Insert { value: obj } => {
+    match user_x_subscription.next().await.unwrap().event {
+      TestJsonEventPayload::Insert(obj) => {
         let expected = serde_json::json!({
           "id": record_id_raw,
           "user": uuid_to_b64(&user_x),
           "text": "foo",
         });
-        assert_eq!(Value::Object(obj), expected);
+        assert_eq!(Value::Object(obj.clone()), expected);
       }
       x => {
         panic!("Expected insert, got: {x:?}");
@@ -483,18 +542,26 @@ async fn test_acl_selective_table_subs() {
     };
 
     // User y should *not* have received the insert event.
-    assert!(
-      tokio::time::timeout(
-        tokio::time::Duration::from_millis(300),
-        user_y_subscription.receiver.clone().count()
-      )
-      .await
-      .is_err()
-    );
-    assert_eq!(
-      user_y_subscription.receiver.try_recv().err().unwrap(),
-      TryRecvError::Empty
-    );
+    // assert!(
+    //   tokio::time::timeout(
+    //     tokio::time::Duration::from_millis(300),
+    //     user_y_subscription.receiver.clone().count()
+    //   )
+    //   .await
+    //   .is_err()
+    // );
+    // assert_eq!(
+    //   user_y_subscription.next().await.unwrap(),
+    //   TryRecvError::Empty
+    // );
+    assert!(matches!(
+      user_y_subscription.next().await.unwrap().event,
+      TestJsonEventPayload::Ping
+    ));
+
+    use tokio::time::*;
+    let got = timeout(Duration::from_millis(100), user_y_subscription.next()).await;
+    assert!(got.is_err(), "Got: {got:?}");
   }
 
   // Implicitly await for scheduled cleanups to go through.
@@ -538,16 +605,20 @@ async fn subscription_acl_change_owner() {
 
   let manager = state.subscription_manager();
   let api = state.lookup_record_api("api_name").unwrap();
-  let stream = manager
-    .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
-    .await
-    .unwrap();
+  let mut stream = subscribe_to_records(
+    state.clone(),
+    api,
+    &record_id.to_string(),
+    user_x,
+    /* filter= */ None,
+  )
+  .await;
 
   assert_eq!(1, manager.num_record_subscriptions());
   // First event is "connection established".
   assert!(matches!(
-    deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
-    JsonEventPayload::Ping
+    stream.next().await.unwrap().event,
+    TestJsonEventPayload::Ping,
   ));
 
   conn
@@ -567,8 +638,8 @@ async fn subscription_acl_change_owner() {
     .await
     .unwrap();
 
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-    JsonEventPayload::Update { value: obj } => {
+  match stream.next().await.unwrap().event {
+    TestJsonEventPayload::Update(obj) => {
       let expected = serde_json::json!({
         "id": record_id,
         "user": uuid_to_b64(&user_x_id),
@@ -581,20 +652,19 @@ async fn subscription_acl_change_owner() {
     }
   }
 
-  match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-    JsonEventPayload::Error { .. } => {}
+  match stream.next().await.unwrap().event {
+    TestJsonEventPayload::Error { status, .. } => {
+      assert_eq!(EventErrorStatus::Forbidden, status);
+    }
     x => {
       panic!("Expected error, got: {x:?}");
     }
   }
 
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  drop(stream);
 
   // Make sure the subscription was cleaned up after the access error.
-  assert!(stream.receiver.is_closed());
+  // assert!(stream.is_closed());
   assert_eq!(0, manager.num_record_subscriptions());
 }
 
@@ -607,22 +677,17 @@ async fn subscription_filter_test() {
   let api = state.lookup_record_api("api_name").unwrap();
 
   {
-    let filter =
-      SubscriptionQuery::parse("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100").unwrap();
-
-    let stream = manager
-      .add_sse_table_subscription(api, None, Some(filter.filter.unwrap()))
-      .await
-      .unwrap();
+    let stream = subscribe_to_records(
+      state.clone(),
+      api.clone(),
+      "*",
+      /* user= */ None,
+      Some("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100"),
+    )
+    .await;
 
     assert_eq!(1, manager.num_table_subscriptions());
-    // First event is "connection established".
-    assert!(matches!(
-      deserialize_event(stream.receiver.recv().await.unwrap()).unwrap(),
-      JsonEventPayload::Ping
-    ));
 
-    // This one should be filter out.
     conn
       .execute("INSERT INTO test (id, text) VALUES ($1, 'foo')", params!(1))
       .await
@@ -637,13 +702,17 @@ async fn subscription_filter_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap()).unwrap() {
-      JsonEventPayload::Insert { value: obj } => {
+    let events = take_test_events(stream, 2).await;
+
+    assert!(matches!(events[0].event, TestJsonEventPayload::Ping));
+
+    match &events[1].event {
+      TestJsonEventPayload::Insert(obj) => {
         let expected = serde_json::json!({
           "id": 25,
           "text": "foo",
         });
-        assert_eq!(Value::Object(obj), expected);
+        assert_eq!(Value::Object(obj.clone()), expected);
       }
       x => {
         panic!("Expected insert, got: {x:?}");

@@ -1,6 +1,7 @@
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use reactivate::Reactive;
 use std::collections::{HashMap, hash_map::Entry};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
 
@@ -9,7 +10,10 @@ use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
-use crate::records::subscribe::state::{AutoCleanupEventStream, PerConnectionState};
+use crate::records::subscribe::state::{
+  AutoCleanupEventStream, EventCandidate, PerConnectionState, PerConnectionStateInternal,
+  Subscription,
+};
 
 /// Internal, shareable state of the cloneable SubscriptionManager.
 struct ManagerState {
@@ -47,17 +51,21 @@ impl SubscriptionManager {
 
           let id = api.conn().id();
 
-          // TODO: Clean subscriptions from existing entries for tables that not longer have a
-          // corresponding API.
+          // TODO: Skip/cleanup subscriptions from existing entries for tables that not longer have
+          // a corresponding API.
           if let Some(existing) = old.remove(&id) {
             let apis = filter_record_apis(id, record_apis);
             let Some(first) = apis.values().nth(0) else {
               continue;
             };
 
-            // Update metadata and add back.
-            *existing.connection_metadata.write() = first.connection_metadata().clone();
-            *existing.record_apis.write() = apis;
+            {
+              let mut state = existing.state.lock();
+              // Update metadata and add back.
+              state.connection_metadata = first.connection_metadata().clone();
+              state.record_apis = apis;
+            }
+
             lock.insert(id, existing);
           }
         }
@@ -72,23 +80,32 @@ impl SubscriptionManager {
     api: RecordApi,
     user: Option<User>,
     filter: Option<ValueOrComposite>,
-  ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
+  ) -> Result<(AutoCleanupEventStream, Arc<Subscription>), RecordError> {
+    let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
     let state = self.get_per_connection_state(&api);
 
-    let id = state
+    let subscription = state
       .clone()
       .add_table_subscription(api, user, filter, sender.clone())
       .await?;
 
     // Send an immediate comment to flush SSE headers and establish the connection
-    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
+    if sender
+      .send(EventCandidate {
+        record: None,
+        payload: ESTABLISHED_EVENT.clone(),
+        seq: subscription.candidate_seq.fetch_add(1, Ordering::SeqCst),
+      })
+      .await
+      .is_err()
+    {
       return Err(RecordError::BadRequest("channel already closed"));
     }
 
-    let receiver = AutoCleanupEventStream::new(receiver, state, id);
-
-    return Ok(receiver);
+    return Ok((
+      AutoCleanupEventStream::new(receiver, state, subscription.id.clone()),
+      subscription,
+    ));
   }
 
   pub async fn add_sse_record_subscription(
@@ -96,23 +113,32 @@ impl SubscriptionManager {
     api: RecordApi,
     record: trailbase_sqlite::Value,
     user: Option<User>,
-  ) -> Result<AutoCleanupEventStream, RecordError> {
-    let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
+  ) -> Result<(AutoCleanupEventStream, Arc<Subscription>), RecordError> {
+    let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
     let state = self.get_per_connection_state(&api);
 
-    let id = state
+    let subscription = state
       .clone()
       .add_record_subscription(api, record, user, sender.clone())
       .await?;
 
     // Send an immediate comment to flush SSE headers and establish the connection
-    if sender.send(ESTABLISHED_EVENT.clone()).await.is_err() {
+    if sender
+      .send(EventCandidate {
+        record: None,
+        payload: ESTABLISHED_EVENT.clone(),
+        seq: subscription.candidate_seq.fetch_add(1, Ordering::SeqCst),
+      })
+      .await
+      .is_err()
+    {
       return Err(RecordError::BadRequest("channel already closed"));
     }
 
-    let receiver = AutoCleanupEventStream::new(receiver, state, id);
-
-    return Ok(receiver);
+    return Ok((
+      AutoCleanupEventStream::new(receiver, state, subscription.id.clone()),
+      subscription,
+    ));
   }
 
   pub fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
@@ -127,9 +153,12 @@ impl SubscriptionManager {
         Entry::Occupied(v) => v.get().clone(),
         Entry::Vacant(v) => {
           let state = Arc::new(PerConnectionState {
-            connection_metadata: RwLock::new(api.connection_metadata().clone()),
-            record_apis: RwLock::new(filter_record_apis(id, &self.state.record_apis.value())),
-            subscriptions: Default::default(),
+            state: Mutex::new(PerConnectionStateInternal {
+              connection_metadata: api.connection_metadata().clone(),
+              record_apis: filter_record_apis(id, &self.state.record_apis.value()),
+              conn: api.conn().clone(),
+              subscriptions: Default::default(),
+            }),
           });
           v.insert(state).clone()
         }
@@ -141,8 +170,8 @@ impl SubscriptionManager {
   pub fn num_record_subscriptions(&self) -> usize {
     let mut count: usize = 0;
     for state in self.state.connections.read().values() {
-      for (_table_name, subs) in state.subscriptions.read().iter() {
-        for record in subs.read().record.values() {
+      for (_table_name, subs) in state.state.lock().subscriptions.iter() {
+        for record in subs.record.values() {
           count += record.len();
         }
       }
@@ -154,8 +183,8 @@ impl SubscriptionManager {
   pub fn num_table_subscriptions(&self) -> usize {
     let mut count: usize = 0;
     for state in self.state.connections.read().values() {
-      for (_table_name, subs) in state.subscriptions.read().iter() {
-        count += subs.read().table.len();
+      for (_table_name, subs) in state.state.lock().subscriptions.iter() {
+        count += subs.table.len();
       }
     }
     return count;

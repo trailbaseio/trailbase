@@ -564,43 +564,60 @@ impl RecordApi {
 
   /// Check if the given user (if any) can access a record given the request and the operation.
   #[inline]
-  pub(crate) fn check_record_level_read_access_for_subscriptions(
+  pub(crate) async fn check_record_level_read_access_for_subscriptions(
     &self,
-    conn: &rusqlite::Connection,
-    params: SubscriptionAclParams<'_>,
+    conn: &trailbase_sqlite::Connection,
+    record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
+    user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(Permission::Read, params.user)?;
+    self.check_table_level_access(Permission::Read, user)?;
 
     let Some(ref access_query) = self.state.subscription_read_access_query else {
       return Ok(());
     };
 
-    let mut stmt = conn
-      .prepare_cached(access_query)
-      .map_err(|_err| RecordError::Forbidden)?;
+    conn
+      .call_reader({
+        let access_query = access_query.clone();
+        let user = user.cloned();
+        let record = record.clone();
 
-    // NOTE: the `bind` impl does the heavy lifting.
-    params
-      .bind(&mut stmt)
-      .map_err(|_err| RecordError::Forbidden)?;
+        move |conn| {
+          let params = SubscriptionAclParams {
+            params: &record,
+            user: user.as_ref(),
+          };
 
-    match stmt.raw_query().next() {
-      Ok(Some(row)) => {
-        if row.get(0).unwrap_or(false) {
-          return Ok(());
+          let mut stmt = conn.prepare_cached(&access_query)?;
+
+          // NOTE: the `bind` impl does the heavy lifting.
+          params.bind(&mut stmt)?;
+
+          match stmt.raw_query().next() {
+            Ok(Some(row)) => {
+              if row.get(0).unwrap_or(false) {
+                return Ok(());
+              }
+            }
+            Ok(None) => {}
+            Err(err) => {
+              warn!("RLA query failed: {err}");
+
+              #[cfg(test)]
+              panic!("RLA query failed: {err}");
+            }
+          };
+
+          return Err(trailbase_sqlite::Error::Other(
+            RecordError::Forbidden.into(),
+          ));
         }
-      }
-      Ok(None) => {}
-      Err(err) => {
-        warn!("RLA query failed: {err}");
+      })
+      .await
+      .map_err(|_| RecordError::Forbidden)?;
 
-        #[cfg(test)]
-        panic!("RLA query failed: {err}");
-      }
-    }
-
-    return Err(RecordError::Forbidden);
+    return Ok(());
   }
 
   #[inline]
@@ -704,9 +721,9 @@ impl RecordApi {
   }
 }
 
-pub(crate) struct SubscriptionAclParams<'a> {
-  pub params: &'a indexmap::IndexMap<&'a str, rusqlite::types::Value>,
-  pub user: Option<&'a User>,
+struct SubscriptionAclParams<'a> {
+  params: &'a indexmap::IndexMap<String, rusqlite::types::Value>,
+  user: Option<&'a User>,
 }
 
 impl<'a> trailbase_sqlite::Params for SubscriptionAclParams<'a> {

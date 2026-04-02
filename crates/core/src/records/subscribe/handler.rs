@@ -1,15 +1,22 @@
 use axum::extract::{Path, RawQuery, Request, State};
-use axum::response::sse::{KeepAlive, Sse};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use futures_util::StreamExt;
+use futures_util::stream;
 use serde::Deserialize;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
 use ts_rs::TS;
 
 use crate::app_state::AppState;
 use crate::auth::User;
 use crate::records::RecordApi;
+use crate::records::filter::{Filter, apply_filter_recursively_to_record};
+use crate::records::subscribe::event::{
+  EventError, EventErrorStatus, EventPayload, JsonEventPayload,
+};
+use crate::records::subscribe::state::{EventCandidate, Subscription};
 use crate::records::{Permission, RecordError};
 
 #[derive(Clone, Default, Debug, PartialEq, Deserialize)]
@@ -84,6 +91,48 @@ pub async fn add_subscription_sse_and_ws_handler(
   };
 }
 
+struct ValidateEventArgs {
+  state: AppState,
+  // FIXME: We could probably do with a subset of information from the `Subscription` and keep it
+  // internal.
+  subscription: Arc<Subscription>,
+  expected_candidate_seq: AtomicI64,
+}
+
+async fn validate_event(
+  args: Arc<ValidateEventArgs>,
+  ev: EventCandidate,
+) -> Result<Option<Arc<EventPayload>>, RecordError> {
+  if ev.seq != args.expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
+    args.expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
+    return Ok(Some(EVENT_LOSS_EVENT.clone()));
+  }
+
+  let Some(ref record) = ev.record else {
+    // Established events.
+    return Ok(Some(ev.payload));
+  };
+
+  let sub: &Subscription = &args.subscription;
+  if let Filter::Record(ref filter) = sub.filter
+    && !apply_filter_recursively_to_record(filter, record)
+  {
+    return Ok(None);
+  }
+
+  // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+  // version.
+  let Some(api) = args.state.lookup_record_api(&sub.record_api_name) else {
+    return Ok(None);
+  };
+
+  api
+    .check_record_level_read_access_for_subscriptions(api.conn(), record, sub.user.as_ref())
+    .await?;
+
+  return Ok(Some(ev.payload));
+}
+
 pub async fn subscribe_sse(
   state: AppState,
   api: RecordApi,
@@ -91,21 +140,35 @@ pub async fn subscribe_sse(
   filter: Option<ValueOrComposite>,
   user: Option<User>,
 ) -> Result<Response, RecordError> {
+  let seq = Arc::new(AtomicI64::default());
+
   return match record.as_str() {
     "*" => {
       api.check_table_level_access(Permission::Read, user.as_ref())?;
 
-      let receiver = state
+      let (receiver, subscription) = state
         .subscription_manager()
         .add_sse_table_subscription(api, user, filter)
         .await?;
 
-      let seq = AtomicI64::default();
+      let args = Arc::new(ValidateEventArgs {
+        state,
+        subscription,
+        expected_candidate_seq: AtomicI64::default(),
+      });
 
       Ok(
-        Sse::new(
-          receiver.map(move |ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst)))),
-        )
+        Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+          let seq = seq.clone();
+          let args = args.clone();
+
+          return async move {
+            validate_event(args.clone(), ev)
+              .await
+              .unwrap_or_default()
+              .map(|ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))))
+          };
+        }))
         .keep_alive(KeepAlive::default())
         .into_response(),
       )
@@ -116,16 +179,48 @@ pub async fn subscribe_sse(
         .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
         .await?;
 
-      let receiver = state
+      let (receiver, subscription) = state
         .subscription_manager()
         .add_sse_record_subscription(api, record_id, user)
         .await?;
 
-      let seq = AtomicI64::default();
+      let args = Arc::new(ValidateEventArgs {
+        state,
+        subscription,
+        expected_candidate_seq: AtomicI64::default(),
+      });
 
       Ok(
         Sse::new(
-          receiver.map(move |ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst)))),
+          receiver
+            .then(move |ev: EventCandidate| {
+              let seq = seq.clone();
+              let args = args.clone();
+
+              return async move {
+                match validate_event(args.clone(), ev).await {
+                  Ok(None) => stream::empty().boxed(),
+                  Ok(Some(ev)) => stream::once(std::future::ready(
+                    ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                  ))
+                  .boxed(),
+                  Err(_) => {
+                    // Death sentence for record subscriptions to not have access
+                    stream::iter(vec![
+                      // First send an error event to the user.
+                      ACCESS_DENIED_EVENT
+                        .clone()
+                        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                      // Then terminate the stream via the `take_while` below.
+                      Err(RecordError::Forbidden),
+                    ])
+                    .boxed()
+                  }
+                }
+              };
+            })
+            .flatten()
+            .take_while(|event: &Result<SseEvent, RecordError>| std::future::ready(event.is_ok())),
         )
         .keep_alive(KeepAlive::default())
         .into_response(),
@@ -157,6 +252,7 @@ pub async fn subscribe_ws(
 
   use crate::records::subscribe::event::EventPayload;
   use crate::records::subscribe::state::AutoCleanupEventStream;
+  use crate::records::subscribe::state::EventCandidate;
 
   let (mut parts, _body) = request.into_parts();
   let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
@@ -197,14 +293,42 @@ pub async fn subscribe_ws(
   }
 
   async fn broker<S: SinkExt<Message> + std::marker::Unpin>(
+    state: AppState,
+    subscription: Arc<Subscription>,
     // Receive events from SQLite
     receiver: AutoCleanupEventStream,
     // Send messages via WebSocket.
     sender: &mut S,
+    is_record_subscription: bool,
   ) {
+    let args = Arc::new(ValidateEventArgs {
+      state,
+      subscription,
+      expected_candidate_seq: AtomicI64::default(),
+    });
+
     let mut pinned_receiver = std::pin::pin!(receiver);
     while let Some(ev) = pinned_receiver.next().await {
-      match ev.into_ws_event() {
+      let payload = match validate_event(args.clone(), ev).await {
+        Ok(Some(payload)) => payload,
+        Ok(None) => {
+          continue;
+        }
+        Err(_) => {
+          if is_record_subscription {
+            // Death sentence for record subscriptions to not have access
+            let _ = ACCESS_DENIED_EVENT
+              .clone()
+              .into_ws_event()
+              .map(|ev| sender.send(ev));
+            return;
+          } else {
+            continue;
+          }
+        }
+      };
+
+      match payload.into_ws_event() {
         Ok(msg) => {
           if let Err(_value) = sender.send(msg).await {
             log::debug!("Sending WS event to client failed");
@@ -271,6 +395,8 @@ pub async fn subscribe_ws(
   return match record.as_str() {
     "*" => {
       Ok(ws.on_upgrade(async move |socket: WebSocket| {
+        use crate::records::subscribe::state::EventCandidate;
+
         let Some(mut ws_sender) = init(&state, socket, &mut user).await else {
           return;
         };
@@ -283,10 +409,10 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
-        let state = state.subscription_manager().get_per_connection_state(&api);
+        let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
+        let conn_state = state.subscription_manager().get_per_connection_state(&api);
 
-        let Ok(id) = state
+        let Ok(subscription) = conn_state
           .clone()
           .add_table_subscription(api, user, filter, sender)
           .await
@@ -295,15 +421,17 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream::new(receiver, state, id);
+        let receiver = AutoCleanupEventStream::new(receiver, conn_state, subscription.id.clone());
 
-        broker(receiver, &mut ws_sender).await
+        broker(state, subscription, receiver, &mut ws_sender, false).await
       }))
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
 
       Ok(ws.on_upgrade(async move |socket: WebSocket| {
+        use crate::records::subscribe::state::EventCandidate;
+
         let Some(mut ws_sender) = init(&state, socket, &mut user).await else {
           return;
         };
@@ -319,10 +447,10 @@ pub async fn subscribe_ws(
           return;
         }
 
-        let (sender, receiver) = async_channel::bounded::<Arc<EventPayload>>(16);
-        let state = state.subscription_manager().get_per_connection_state(&api);
+        let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
+        let conn_state = state.subscription_manager().get_per_connection_state(&api);
 
-        let Ok(id) = state
+        let Ok(subscription) = conn_state
           .clone()
           .add_record_subscription(api, record_id, user, sender)
           .await
@@ -331,10 +459,37 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream::new(receiver, state, id);
+        let receiver = AutoCleanupEventStream::new(receiver, conn_state, subscription.id.clone());
 
-        broker(receiver, &mut ws_sender).await;
+        broker(state, subscription, receiver, &mut ws_sender, true).await;
       }))
     }
   };
+}
+
+static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
+  Arc::new(EventPayload::from(&JsonEventPayload::Error {
+    value: EventError {
+      status: EventErrorStatus::Forbidden,
+      message: Some("Access denied".into()),
+    },
+  }))
+});
+static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
+  Arc::new(EventPayload::from(&JsonEventPayload::Error {
+    value: EventError {
+      status: EventErrorStatus::Loss,
+      message: None,
+    },
+  }))
+});
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn static_sse_event_test() {
+    let _x: Arc<EventPayload> = (*ACCESS_DENIED_EVENT).clone();
+  }
 }
