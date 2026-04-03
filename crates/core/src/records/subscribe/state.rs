@@ -1,12 +1,12 @@
 use async_channel::{TrySendError, WeakReceiver};
 use futures_util::Stream;
 use log::*;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use pin_project_lite::pin_project;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
@@ -36,25 +36,23 @@ pub struct SubscriptionId {
 /// e.g. client disconnects.
 struct AutoCleanupEventStreamState {
   receiver: WeakReceiver<EventCandidate>,
-  state: Arc<PerConnectionState>,
+  state: Weak<PerConnectionState>,
   id: SubscriptionId,
 }
 
 impl Drop for AutoCleanupEventStreamState {
   fn drop(&mut self) {
     // Subscriptions can be cleaned up either by the sender, i.e. when trying to broker events and
-    // tables or records get deleted, or by the client-receiver, e.g. by disconnecting. In the
-    // latter case, we need to clean up the subscription.
+    // tables or records get deleted, or by the client-receiver, e.g. by disconnecting.
+    // When dropped by the client-side, we need to clean up the subscription.
     if self.receiver.upgrade().is_some() {
       let id = std::mem::take(&mut self.id);
-      let state = self.state.clone();
 
-      if let Some(first) = self.state.record_apis.read().values().nth(0) {
-        state.remove_subscription2(first.conn(), id);
-        // first.conn().call_and_forget(move |conn| {
-        //   state.remove_subscription(conn, id);
-        // });
-      }
+      let Some(state) = self.state.upgrade() else {
+        return;
+      };
+
+      state.state.lock().remove_subscription2(id);
     } else {
       debug!("Subscription cleaned up already by the sender side.");
     }
@@ -80,7 +78,7 @@ impl AutoCleanupEventStream {
     return Self {
       state: AutoCleanupEventStreamState {
         receiver: receiver.downgrade(),
-        state,
+        state: Arc::downgrade(&state),
         id,
       },
       receiver,
@@ -125,7 +123,7 @@ pub struct Subscription {
 // channel.
 #[derive(Debug)]
 pub struct EventCandidate {
-  // TODO: We could proably also just keep the relevant data in the handler rather than passing
+  // TODO: We could probably also just keep the relevant data in the handler rather than passing
   // static subscription metadata over and over again.
   pub subscription: Arc<Subscription>,
   pub record: Option<Arc<indexmap::IndexMap<String, rusqlite::types::Value>>>,
@@ -148,119 +146,67 @@ impl Subscriptions {
   }
 }
 
-pub struct PerConnectionState {
+pub struct PerConnectionStateInternal {
   /// Metadata: always updated together when config -> record APIs change.
-  pub record_apis: RwLock<HashMap<String, RecordApi>>,
+  pub record_apis: HashMap<String, RecordApi>,
 
   /// Denormalized metadata. We could also grab this from:
   ///   `record_apis.read().nth(0).unwrap().connection_metadata()`.
-  pub connection_metadata: RwLock<Arc<ConnectionMetadata>>,
+  pub connection_metadata: Arc<ConnectionMetadata>,
+
+  /// Should be the same as for all `record_apis` above.
+  pub conn: trailbase_sqlite::Connection,
 
   /// Map from table name to row id to list of subscriptions.
   ///
   /// NOTE: Use layered locking to allow cleaning up per-table subscriptions w/o having to
   /// exclusively lock the entire map.
-  pub subscriptions: RwLock<HashMap</* table_name= */ QualifiedName, RwLock<Subscriptions>>>,
+  pub subscriptions: HashMap</* table_name= */ QualifiedName, Subscriptions>,
+}
+
+impl PerConnectionStateInternal {
+  pub fn remove_subscription2(&mut self, id: SubscriptionId) {
+    let Some(subscriptions) = self.subscriptions.get_mut(&id.table_name) else {
+      return;
+    };
+
+    if let Some(row_id) = id.row_id {
+      if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
+        record_subscriptions.retain(|sub| {
+          return sub.id.sub_id != id.sub_id;
+        });
+
+        if record_subscriptions.is_empty() {
+          subscriptions.record.remove(&row_id);
+        }
+      }
+    } else {
+      subscriptions.table.retain(|sub| {
+        return sub.id.sub_id != id.sub_id;
+      });
+    }
+
+    if subscriptions.is_empty() {
+      self.subscriptions.remove(&id.table_name);
+      if self.subscriptions.is_empty() {
+        uninstall_hook(&self.conn);
+      }
+    }
+  }
+}
+
+pub struct PerConnectionState {
+  pub state: Mutex<PerConnectionStateInternal>,
 }
 
 impl PerConnectionState {
-  fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-    return self.record_apis.read().get(name).cloned();
-  }
-
-  // Gets called by the Stream destructor, e.g. when a client disconnects.
-  // pub fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) {
-  //   let mut read_lock = self.subscriptions.upgradable_read();
-  //
-  //   let remove_subscription_entry_for_table = {
-  //     let Some(mut subscriptions) = read_lock.get(&id.table_name).map(|l| l.write()) else {
-  //       return;
-  //     };
-  //
-  //     if let Some(row_id) = id.row_id {
-  //       if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
-  //         record_subscriptions.retain(|sub| {
-  //           return sub.id.sub_id != id.sub_id;
-  //         });
-  //
-  //         if record_subscriptions.is_empty() {
-  //           subscriptions.record.remove(&row_id);
-  //         }
-  //       }
-  //     } else {
-  //       subscriptions.table.retain(|sub| {
-  //         return sub.id.sub_id != id.sub_id;
-  //       });
-  //     }
-  //
-  //     subscriptions.is_empty()
-  //   };
-  //
-  //   if remove_subscription_entry_for_table {
-  //     let table_name = &id.table_name;
-  //     // NOTE: Only write lock across all tables when necessary.
-  //     read_lock.with_upgraded(|lock| {
-  //       // Check again to avoid races:
-  //       if lock.get(table_name).is_some_and(|e| e.read().is_empty()) {
-  //         lock.remove(table_name);
-  //
-  //         if lock.is_empty() {
-  //           uninstall_hook_rusqlite(conn);
-  //         }
-  //       }
-  //     });
-  //   }
-  // }
-
-  pub fn remove_subscription2(&self, conn: &trailbase_sqlite::Connection, id: SubscriptionId) {
-    let mut read_lock = self.subscriptions.upgradable_read();
-
-    let remove_subscription_entry_for_table = {
-      let Some(mut subscriptions) = read_lock.get(&id.table_name).map(|l| l.write()) else {
-        return;
-      };
-
-      if let Some(row_id) = id.row_id {
-        if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
-          record_subscriptions.retain(|sub| {
-            return sub.id.sub_id != id.sub_id;
-          });
-
-          if record_subscriptions.is_empty() {
-            subscriptions.record.remove(&row_id);
-          }
-        }
-      } else {
-        subscriptions.table.retain(|sub| {
-          return sub.id.sub_id != id.sub_id;
-        });
-      }
-
-      subscriptions.is_empty()
-    };
-
-    if remove_subscription_entry_for_table {
-      let table_name = &id.table_name;
-      // NOTE: Only write lock across all tables when necessary.
-      read_lock.with_upgraded(|lock| {
-        // Check again to avoid races:
-        if lock.get(table_name).is_some_and(|e| e.read().is_empty()) {
-          lock.remove(table_name);
-
-          if lock.is_empty() {
-            uninstall_hook(conn);
-          }
-        }
-      });
-    }
-  }
-
   fn add_hook(self: &Arc<Self>, api: RecordApi) {
     let conn = (**api.conn()).clone();
     let state = self.clone();
 
     let receiver = install_hook(&conn).to_async();
 
+    // Spawn broker task.
     tokio::spawn(async move {
       let mut expected = 1;
       loop {
@@ -274,10 +220,9 @@ impl PerConnectionState {
               // QUESTION: There's several ways we could deal with failure. We
               // probably shouldn't create back pressure on the preupdate_hook and gunk up the
               // SQLite access. We could try to deliver event loss messages to all receivers but
-              // that may just make the probem worse. We're probably at limit already
+              // that may just make the problem worse. We're probably at limit already
               // if we don't manage to catch up. Should we just disconnect all subscriptions?
-              let mut all_subscriptions = state.subscriptions.write();
-              all_subscriptions.clear();
+              state.state.lock().subscriptions.clear();
               break;
             }
             expected += 1;
@@ -333,12 +278,14 @@ impl PerConnectionState {
     });
 
     let install_hook: bool = {
-      let mut lock = self.subscriptions.write();
-      let empty = lock.is_empty();
+      let mut lock = self.state.lock();
+      let empty = lock.subscriptions.is_empty();
 
-      let subscriptions = lock.entry(qualified_name.clone()).or_default();
+      let subscriptions = lock
+        .subscriptions
+        .entry(qualified_name.clone())
+        .or_default();
       subscriptions
-        .write()
         .record
         .entry(row_id)
         .or_default()
@@ -382,11 +329,15 @@ impl PerConnectionState {
     });
 
     let install_hook: bool = {
-      let mut lock = self.subscriptions.write();
-      let empty = lock.is_empty();
+      let mut lock = self.state.lock();
+      let empty = lock.subscriptions.is_empty();
 
-      let subscriptions = lock.entry(qualified_name.clone()).or_default();
-      subscriptions.write().table.push(subscription_entry.clone());
+      let subscriptions = lock
+        .subscriptions
+        .entry(qualified_name.clone())
+        .or_default();
+
+      subscriptions.table.push(subscription_entry.clone());
 
       empty
     };
@@ -401,23 +352,16 @@ impl PerConnectionState {
 
 impl Drop for PerConnectionState {
   fn drop(&mut self) {
-    if let Some(first) = self.record_apis.read().values().nth(0) {
-      uninstall_hook(first.conn());
-    }
+    uninstall_hook(&self.state.lock().conn);
   }
 }
 
 async fn broker_subscriptions(
-  state: &Arc<PerConnectionState>,
-  conn: &trailbase_sqlite::Connection,
   subs: &[Arc<Subscription>],
   record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
   event: &Arc<EventPayload>,
-) {
-  let state = state.clone();
-  let conn = conn.clone();
-
-  futures_util::future::join_all(subs.iter().map(move |sub| {
+) -> Vec<Option<usize>> {
+  return futures_util::future::join_all(subs.iter().enumerate().map(async move |(idx, sub)| {
     // Cloning the event. It's important that we use a try_send here to not block other
     // subscriptions if a subscriber is slow and their channel fills up.
     if let Err(err) = sub.sender.try_send(EventCandidate {
@@ -431,12 +375,12 @@ async fn broker_subscriptions(
           debug!("Channel full, dropping event: {ev:?}");
         }
         async_channel::TrySendError::Closed(_ev) => {
-          state.remove_subscription2(&conn, sub.id.clone());
+          return Some(idx);
         }
       }
-    }
+    };
 
-    return async { () };
+    return None;
   }))
   .await;
 }
@@ -454,27 +398,23 @@ async fn broker(
     record,
   } = event;
 
-  let mut per_table_subscriptions = state.subscriptions.upgradable_read();
+  let mut state = state.state.lock();
 
   // If table_metadata is missing, the config/schema must have changed, thus removing the
   // subscriptions.
-  let connection_metadata_lock = state.connection_metadata.read();
-  let Some(table_metadata) = connection_metadata_lock.get_table(&table_name) else {
+  let connection_metadata = state.connection_metadata.clone();
+  let Some(table_metadata) = connection_metadata.get_table(&table_name) else {
     warn!("Table {table_name:?} not found. Removing subscriptions");
 
-    per_table_subscriptions.with_upgraded(|lock| {
-      lock.remove(&table_name);
-
-      if lock.is_empty() {
-        uninstall_hook(conn);
-      }
-    });
-
+    state.subscriptions.remove(&table_name);
+    if state.subscriptions.is_empty() {
+      uninstall_hook(conn);
+    }
     return;
   };
 
   // Check if there are any matching subscriptions and otherwise go back to listening.
-  let Some(subscriptions) = per_table_subscriptions.get(&table_name).map(|r| r.read()) else {
+  let Some(subscriptions) = state.subscriptions.get_mut(&table_name) else {
     return;
   };
   if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&row_id) {
@@ -510,12 +450,27 @@ async fn broker(
   };
 
   // First broker record subscriptions.
-  if let Some(record_subscriptions) = subscriptions.record.get(&row_id) {
-    broker_subscriptions(state, conn, record_subscriptions, &record, &event).await
+  if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
+    let dead = broker_subscriptions(record_subscriptions, &record, &event).await;
+
+    for idx in dead.iter().rev() {
+      if let Some(idx) = idx {
+        record_subscriptions.remove(*idx);
+      }
+    }
   }
 
   // Then broker table subscriptions.
-  broker_subscriptions(state, conn, &subscriptions.table, &record, &event).await;
+  let dead = broker_subscriptions(&subscriptions.table, &record, &event).await;
+  for idx in dead.iter().rev() {
+    if let Some(idx) = idx {
+      subscriptions.table.remove(*idx);
+    }
+  }
+
+  if subscriptions.is_empty() {
+    uninstall_hook(conn);
+  }
 }
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);

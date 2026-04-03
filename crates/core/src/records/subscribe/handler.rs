@@ -113,9 +113,6 @@ pub async fn subscribe_sse(
           let seq = seq.clone();
           let expected_candidate_seq = expected_candidate_seq.clone();
 
-          // FIXME: The sequence number should only be incremented when event is send and
-          // not filtered.
-
           return async move {
             if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
               expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
@@ -216,9 +213,11 @@ pub async fn subscribe_sse(
               .is_err()
             {
               // Death sentence for record subscriptions to not have access
-              // TODO: We should move this out. We just currently depend on rusqlite::Connection.
               let foo = state.subscription_manager().get_per_connection_state(&api);
-              foo.remove_subscription2(&api.conn(), ev.subscription.id.clone());
+              foo
+                .state
+                .lock()
+                .remove_subscription2(ev.subscription.id.clone());
 
               let s = seq.fetch_add(1, Ordering::SeqCst);
               return Some(ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)));
