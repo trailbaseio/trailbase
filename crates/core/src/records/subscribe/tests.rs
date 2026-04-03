@@ -4,7 +4,6 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
-use tokio::time::timeout;
 use trailbase_sqlite::params;
 
 use crate::User;
@@ -72,11 +71,6 @@ async fn subscribe_to_record_test() {
 
   let manager = state.subscription_manager();
   let api = state.lookup_record_api("api_name").unwrap();
-  // let stream = manager
-  //   .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(0), None)
-  //   .await
-  //   .unwrap();
-
   let mut stream = subscribe_to_records(state.clone(), api, "0", None, /* filter= */ None).await;
 
   assert_eq!(1, manager.num_record_subscriptions());
@@ -219,11 +213,6 @@ async fn subscribe_to_table_test() {
   let api = state.lookup_record_api("api_name").unwrap();
 
   {
-    // let stream = manager
-    //   .add_sse_table_subscription(api, None, None)
-    //   .await
-    //   .unwrap();
-
     let mut stream = subscribe_to_records(state.clone(), api, "*", None, /* filter= */ None).await;
 
     assert_eq!(1, manager.num_table_subscriptions());
@@ -508,29 +497,12 @@ async fn test_acl_selective_table_subs() {
       /* filter= */ None,
     )
     .await;
-    // let user_x_subscription = manager
-    //   .add_sse_table_subscription(
-    //     api.clone(),
-    //     User::from_auth_token(&state, &user_x_token.auth_token),
-    //     None,
-    //   )
-    //   .await
-    //   .unwrap();
 
     // First event is "connection established".
     assert!(matches!(
       user_x_subscription.next().await.unwrap().event,
       TestJsonEventPayload::Ping
     ));
-
-    // let user_y_subscription = manager
-    //   .add_sse_table_subscription(
-    //     api.clone(),
-    //     User::from_auth_token(&state, &user_y_token.auth_token),
-    //     None,
-    //   )
-    //   .await
-    //   .unwrap();
 
     let mut user_y_subscription = subscribe_to_records(
       state.clone(),
@@ -641,10 +613,6 @@ async fn subscription_acl_change_owner() {
     /* filter= */ None,
   )
   .await;
-  // manager
-  // .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
-  // .await
-  // .unwrap();
 
   assert_eq!(1, manager.num_record_subscriptions());
   // First event is "connection established".

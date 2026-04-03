@@ -1,8 +1,8 @@
 use axum::extract::{Path, RawQuery, Request, State};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
+use futures_util::StreamExt;
 use futures_util::stream;
-use futures_util::{FutureExt, StreamExt};
 use serde::Deserialize;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, LazyLock};
@@ -14,7 +14,7 @@ use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
-use crate::records::subscribe::state::EventCandidate;
+use crate::records::subscribe::state::{EventCandidate, Subscription};
 use crate::records::{Permission, RecordError};
 
 #[derive(Clone, Default, Debug, PartialEq, Deserialize)]
@@ -89,6 +89,61 @@ pub async fn add_subscription_sse_and_ws_handler(
   };
 }
 
+async fn validate_event(
+  state: AppState,
+  ev: EventCandidate,
+  subscription: Arc<Subscription>,
+  seq: Arc<AtomicI64>,
+  expected_candidate_seq: Arc<AtomicI64>,
+) -> Result<Option<Result<SseEvent, RecordError>>, RecordError> {
+  // let subscription = subscription.clone();
+  // let state = state.clone();
+  // let seq = seq.clone();
+  // let expected_candidate_seq = expected_candidate_seq.clone();
+
+  if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
+    expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
+    return Ok(Some(
+      EVENT_LOSS_EVENT
+        .clone()
+        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+    ));
+  }
+
+  let Some(ref record) = ev.record else {
+    // Established events.
+    return Ok(Some(
+      ev.payload
+        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+    ));
+  };
+
+  if let Filter::Record(ref filter) = subscription.filter
+    && !apply_filter_recursively_to_record(filter, &record)
+  {
+    return Ok(None);
+  }
+
+  // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+  // version.
+  let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
+    return Ok(None);
+  };
+
+  api
+    .check_record_level_read_access_for_subscriptions(
+      api.conn(),
+      record,
+      subscription.user.as_ref(),
+    )
+    .await?;
+
+  return Ok(Some(
+    ev.payload
+      .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+  ));
+}
+
 pub async fn subscribe_sse(
   state: AppState,
   api: RecordApi,
@@ -116,47 +171,10 @@ pub async fn subscribe_sse(
           let expected_candidate_seq = expected_candidate_seq.clone();
 
           return async move {
-            if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
-              expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
-              return Some(
-                EVENT_LOSS_EVENT
-                  .clone()
-                  .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
-              );
+            match validate_event(state, ev, subscription, seq, expected_candidate_seq).await {
+              Ok(x) => x,
+              Err(_) => None,
             }
-
-            let Some(ref record) = ev.record else {
-              // Established events.
-              let s = seq.fetch_add(1, Ordering::SeqCst);
-              return Some(ev.payload.into_sse_event(Some(s)));
-            };
-
-            if let Filter::Record(ref filter) = subscription.filter
-              && !apply_filter_recursively_to_record(filter, &record)
-            {
-              return None;
-            }
-
-            // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
-            // version.
-            let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
-              return None;
-            };
-
-            if api
-              .check_record_level_read_access_for_subscriptions(
-                api.conn(),
-                record,
-                subscription.user.as_ref(),
-              )
-              .await
-              .is_err()
-            {
-              return None;
-            }
-
-            let s = seq.fetch_add(1, Ordering::SeqCst);
-            Some(ev.payload.into_sse_event(Some(s)))
           };
         }))
         .keep_alive(KeepAlive::default())
@@ -187,53 +205,23 @@ pub async fn subscribe_sse(
               let expected_candidate_seq = expected_candidate_seq.clone();
 
               return async move {
-                if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
-                  expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
-                  return stream::iter(vec![
-                    EVENT_LOSS_EVENT
-                      .clone()
-                      .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
-                  ])
-                  .boxed();
-                }
-
-                let Some(ref record) = ev.record else {
-                  // Established events.
-                  let s = seq.fetch_add(1, Ordering::SeqCst);
-                  return stream::iter(vec![ev.payload.into_sse_event(Some(s))]).boxed();
-                };
-
-                if let Filter::Record(ref filter) = subscription.filter
-                  && !apply_filter_recursively_to_record(filter, &record)
-                {
-                  return stream::empty().boxed();
-                }
-
-                // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
-                // version.
-                let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
-                  return stream::empty().boxed();
-                };
-
-                if api
-                  .check_record_level_read_access_for_subscriptions(
-                    api.conn(),
-                    record,
-                    subscription.user.as_ref(),
-                  )
+                match validate_event(state, ev, subscription, seq.clone(), expected_candidate_seq)
                   .await
-                  .is_err()
                 {
-                  // Death sentence for record subscriptions to not have access
-                  let s = seq.fetch_add(1, Ordering::SeqCst);
-                  stream::iter(vec![
-                    ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)),
-                    Err(RecordError::Forbidden),
-                  ])
-                  .boxed()
-                } else {
-                  let s = seq.fetch_add(1, Ordering::SeqCst);
-                  stream::iter(vec![ev.payload.into_sse_event(Some(s))]).boxed()
+                  Ok(None) => stream::empty().boxed(),
+                  Ok(Some(x)) => stream::once(std::future::ready(x)).boxed(),
+                  Err(_) => {
+                    // Death sentence for record subscriptions to not have access
+                    stream::iter(vec![
+                      // First send an error event to the user.
+                      ACCESS_DENIED_EVENT
+                        .clone()
+                        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                      // Then terminate the stream via the `take_while` below.
+                      Err(RecordError::Forbidden),
+                    ])
+                    .boxed()
+                  }
                 }
               };
             })
