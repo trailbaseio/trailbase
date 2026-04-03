@@ -115,8 +115,10 @@ pub async fn subscribe_sse(
           // not filtered.
 
           return async move {
-            let Some(record) = ev.record else {
-              return None;
+            let Some(ref record) = ev.record else {
+              // Established events.
+              let s = seq.fetch_add(1, Ordering::SeqCst);
+              return Some(ev.payload.into_sse_event(Some(s)));
             };
 
             if let Filter::Record(ref filter) = ev.subscription.filter
@@ -182,8 +184,10 @@ pub async fn subscribe_sse(
           // not filtered.
 
           return async move {
-            let Some(record) = ev.record else {
-              return None;
+            let Some(ref record) = ev.record else {
+              // Established events.
+              let s = seq.fetch_add(1, Ordering::SeqCst);
+              return Some(ev.payload.into_sse_event(Some(s)));
             };
 
             if let Filter::Record(ref filter) = ev.subscription.filter

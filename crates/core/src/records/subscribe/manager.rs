@@ -98,6 +98,61 @@ impl SubscriptionManager {
 
     let receiver = AutoCleanupEventStream::new(receiver, state, subscription.id.clone());
 
+    // receiver.filter_map(move |ev: EventCandidate| {
+    //   let state = state.clone();
+    //   let seq = seq.clone();
+    //
+    //   return async move {
+    //     let Some(ref record) = ev.record else {
+    //       // Established events.
+    //       log::error!(
+    //         "BYPASS {:?} got past {:?}",
+    //         ev.record,
+    //         ev.subscription.filter
+    //       );
+    //       let s = seq.fetch_add(1, Ordering::SeqCst);
+    //       return Some(ev.payload.into_sse_event(Some(s)));
+    //     };
+    //
+    //     if let Filter::Record(ref filter) = ev.subscription.filter
+    //       && !apply_filter_recursively_to_record(filter, &record)
+    //     {
+    //       return None;
+    //     }
+    //     panic!("{:?} got past {:?}", ev.record, ev.subscription.filter);
+    //
+    //     // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date version.
+    //     let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name) else {
+    //       return None;
+    //     };
+    //
+    //     let record = record.clone();
+    //     let user = ev.subscription.user.clone();
+    //     let conn = api.conn().clone();
+    //     if let Err(_err) = conn
+    //       .call_reader(move |conn| {
+    //         api
+    //           .check_record_level_read_access_for_subscriptions(
+    //             conn,
+    //             SubscriptionAclParams {
+    //               params: &record,
+    //               user: user.as_ref(),
+    //             },
+    //           )
+    //           .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+    //
+    //         return Ok(());
+    //       })
+    //       .await
+    //     {
+    //       return None;
+    //     }
+    //
+    //     let s = seq.fetch_add(1, Ordering::SeqCst);
+    //     Some(ev.payload.into_sse_event(Some(s)))
+    //   };
+    // });
+
     return Ok(receiver);
   }
 

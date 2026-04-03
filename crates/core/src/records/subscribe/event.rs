@@ -1,12 +1,12 @@
 use axum::response::sse::Event as SseEvent;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::records::RecordError;
 
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum JsonEventPayload {
   Update { value: JsonObject },
   Insert { value: JsonObject },
@@ -115,6 +115,23 @@ pub struct ChangeEvent {
   // NOTE: Because unsigned isn't supported by Avro.
   #[serde(skip_serializing_if = "Option::is_none")]
   seq: Option<i64>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub enum TestJsonEventPayload {
+  Update(JsonObject),
+  Insert(JsonObject),
+  Delete(JsonObject),
+  Error(String),
+  Ping,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct TestChangeEvent {
+  #[serde(flatten)]
+  pub event: TestJsonEventPayload,
+  pub seq: Option<i64>,
 }
 
 #[cfg(test)]

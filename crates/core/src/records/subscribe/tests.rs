@@ -1,7 +1,13 @@
-use async_channel::TryRecvError;
+use async_channel::{Receiver, TryRecvError};
+use axum::body::Body;
 use axum::extract::{Path, RawQuery, State};
-use futures_util::StreamExt;
+use bytes::Bytes;
+use fallible_iterator::Unwrap;
+use futures_util::{StreamExt, TryFutureExt};
+use http_body_util::BodyExt;
 use serde_json::Value;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_sqlite::params;
 
 use crate::User;
@@ -9,10 +15,14 @@ use crate::admin::user::*;
 use crate::app_state::{AppState, test_state};
 use crate::auth::util::login_with_password;
 use crate::config::proto::RecordApiConfig;
-use crate::records::subscribe::event::{JsonEventPayload, deserialize_event};
-use crate::records::subscribe::handler::{SubscriptionQuery, add_subscription_sse_and_ws_handler};
+use crate::records::subscribe::event::{
+  JsonEventPayload, TestChangeEvent, TestJsonEventPayload, deserialize_event,
+};
+use crate::records::subscribe::handler::{
+  SubscriptionQuery, add_subscription_sse_and_ws_handler, subscribe_sse,
+};
 use crate::records::test_utils::add_record_api_config;
-use crate::records::{PermissionFlag, RecordError};
+use crate::records::{PermissionFlag, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
 async fn setup_world_readable() -> AppState {
@@ -138,6 +148,58 @@ async fn subscribe_to_record_test() {
   // Implicitly await for scheduled cleanups to go through.
   conn
     .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
+    .await
+    .unwrap();
+}
+
+async fn subscribe_to_records(
+  state: AppState,
+  api: RecordApi,
+  record: &str,
+  user: Option<User>,
+  filter: Option<&str>,
+  // ) -> kanal::AsyncReceiver<TestChangeEvent> {
+) -> std::pin::Pin<Box<dyn futures_util::Stream<Item = TestChangeEvent>>> {
+  let filter = filter.map(|f| SubscriptionQuery::parse(f).unwrap().filter.unwrap());
+  let response = subscribe_sse(state, api, record.to_string(), filter, user)
+    .await
+    .unwrap();
+
+  assert_eq!(200, response.status());
+
+  let cnt = Arc::new(AtomicI64::default());
+
+  let stream = response.into_data_stream();
+  return stream
+    .filter_map(move |bytes| {
+      let cnt = cnt.clone();
+      let payload = String::from_utf8_lossy(&bytes.as_ref().unwrap()).to_string();
+
+      return async move {
+        cnt.fetch_add(1, Ordering::SeqCst);
+        if cnt.load(Ordering::SeqCst) == 1 {
+          // Make sure we have an explicit ping as a first message to establish connection.
+          assert!(payload.contains("ping"));
+          return None;
+        }
+
+        // Ignore heartbeats.
+        if let Some((_a, b)) = payload.split_once("data: ") {
+          return Some(serde_json::from_str(b).unwrap());
+        }
+        return None;
+      };
+    })
+    .boxed();
+}
+
+async fn take_test_events(
+  stream: std::pin::Pin<Box<dyn futures_util::Stream<Item = TestChangeEvent>>>,
+  n: usize,
+) -> Vec<TestChangeEvent> {
+  use tokio::time::*;
+
+  return timeout(Duration::from_secs(4), stream.take(n).collect())
     .await
     .unwrap();
 }
@@ -607,22 +669,17 @@ async fn subscription_filter_test() {
   let api = state.lookup_record_api("api_name").unwrap();
 
   {
-    let filter =
-      SubscriptionQuery::parse("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100").unwrap();
-
-    let stream = manager
-      .add_sse_table_subscription(api, None, Some(filter.filter.unwrap()))
-      .await
-      .unwrap();
+    let stream = subscribe_to_records(
+      state.clone(),
+      api.clone(),
+      "*",
+      /*user=*/ None,
+      Some("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100"),
+    )
+    .await;
 
     assert_eq!(1, manager.num_table_subscriptions());
-    // First event is "connection established".
-    assert!(matches!(
-      deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap(),
-      JsonEventPayload::Ping
-    ));
 
-    // This one should be filter out.
     conn
       .execute("INSERT INTO test (id, text) VALUES ($1, 'foo')", params!(1))
       .await
@@ -637,13 +694,15 @@ async fn subscription_filter_test() {
       .await
       .unwrap();
 
-    match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
-      JsonEventPayload::Insert { value: obj } => {
+    let events = take_test_events(stream, 1).await;
+
+    match &events[0].event {
+      TestJsonEventPayload::Insert(obj) => {
         let expected = serde_json::json!({
           "id": 25,
           "text": "foo",
         });
-        assert_eq!(Value::Object(obj), expected);
+        assert_eq!(Value::Object(obj.clone()), expected);
       }
       x => {
         panic!("Expected insert, got: {x:?}");
