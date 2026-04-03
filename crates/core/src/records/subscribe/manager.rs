@@ -1,6 +1,7 @@
 use parking_lot::RwLock;
 use reactivate::Reactive;
 use std::collections::{HashMap, hash_map::Entry};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
 
@@ -89,6 +90,7 @@ impl SubscriptionManager {
         subscription: subscription.clone(),
         record: None,
         payload: ESTABLISHED_EVENT.clone(),
+        seq: subscription.candidate_seq.fetch_add(1, Ordering::SeqCst),
       })
       .await
       .is_err()
@@ -176,6 +178,7 @@ impl SubscriptionManager {
         subscription: subscription.clone(),
         record: None,
         payload: ESTABLISHED_EVENT.clone(),
+        seq: subscription.candidate_seq.fetch_add(1, Ordering::SeqCst),
       })
       .await
       .is_err()

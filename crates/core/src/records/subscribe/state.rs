@@ -15,12 +15,10 @@ use trailbase_schema::json::value_to_flat_json;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
-use crate::records::filter::{
-  Filter, apply_filter_recursively_to_record, qs_filter_to_record_filter,
-};
+use crate::records::filter::{Filter, qs_filter_to_record_filter};
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
 use crate::records::subscribe::hook::{
-  PreupdateHookEvent, RecordAction, install_hook, uninstall_hook, uninstall_hook_rusqlite,
+  PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
 use crate::schema_metadata::ConnectionMetadata;
 
@@ -117,6 +115,8 @@ pub struct Subscription {
   pub filter: Filter,
   /// Channel for sending events to the SSE handler.
   pub sender: async_channel::Sender<EventCandidate>,
+
+  pub candidate_seq: AtomicI64,
 }
 
 // Represents a change event that needs further filtering, e.g. ACLs.
@@ -130,6 +130,7 @@ pub struct EventCandidate {
   pub subscription: Arc<Subscription>,
   pub record: Option<Arc<indexmap::IndexMap<String, rusqlite::types::Value>>>,
   pub payload: Arc<EventPayload>,
+  pub seq: i64,
 }
 
 #[derive(Default)]
@@ -261,20 +262,34 @@ impl PerConnectionState {
     let receiver = install_hook(&conn).to_async();
 
     tokio::spawn(async move {
+      let mut expected = 1;
       loop {
         if receiver.sender_count() == 0 {
           break;
         }
 
         let event = match receiver.recv().await {
-          Ok(event) => event,
+          Ok((cnt, event)) => {
+            if cnt != expected {
+              // QUESTION: There's several ways we could deal with failure. We
+              // probably shouldn't create back pressure on the preupdate_hook and gunk up the
+              // SQLite access. We could try to deliver event loss messages to all receivers but
+              // that may just make the probem worse. We're probably at limit already
+              // if we don't manage to catch up. Should we just disconnect all subscriptions?
+              let mut all_subscriptions = state.subscriptions.write();
+              all_subscriptions.clear();
+              break;
+            }
+            expected += 1;
+
+            event
+          }
           Err(kanal::ReceiveError::Closed) | Err(kanal::ReceiveError::SendClosed) => {
             break;
           }
         };
 
-        let state = state.clone();
-        broker_event(conn.clone(), state, event).await;
+        broker(&conn, &state, event).await;
       }
 
       debug!("Channel closed: terminating subscription broker task.");
@@ -314,6 +329,7 @@ impl PerConnectionState {
       user,
       sender,
       filter: Filter::Passthrough,
+      candidate_seq: AtomicI64::default(),
     });
 
     let install_hook: bool = {
@@ -362,6 +378,7 @@ impl PerConnectionState {
       user,
       sender,
       filter,
+      candidate_seq: AtomicI64::default(),
     });
 
     let install_hook: bool = {
@@ -407,13 +424,13 @@ async fn broker_subscriptions(
       subscription: sub.clone(),
       record: Some(record.clone()),
       payload: event.clone(),
+      seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
     }) {
       match err {
         async_channel::TrySendError::Full(ev) => {
           debug!("Channel full, dropping event: {ev:?}");
         }
         async_channel::TrySendError::Closed(_ev) => {
-          // TODO: Remove subscription.
           state.remove_subscription2(&conn, sub.id.clone());
         }
       }
@@ -425,9 +442,9 @@ async fn broker_subscriptions(
 }
 
 /// Broker event to various subscriptions.
-async fn broker_event(
-  conn: trailbase_sqlite::Connection,
-  state: Arc<PerConnectionState>,
+async fn broker(
+  conn: &trailbase_sqlite::Connection,
+  state: &Arc<PerConnectionState>,
   event: PreupdateHookEvent,
 ) {
   let PreupdateHookEvent {
@@ -447,8 +464,9 @@ async fn broker_event(
 
     per_table_subscriptions.with_upgraded(|lock| {
       lock.remove(&table_name);
+
       if lock.is_empty() {
-        uninstall_hook(&conn);
+        uninstall_hook(conn);
       }
     });
 
@@ -456,10 +474,7 @@ async fn broker_event(
   };
 
   // Check if there are any matching subscriptions and otherwise go back to listening.
-  let Some(mut subscriptions) = per_table_subscriptions
-    .get(&table_name)
-    .map(|r| r.upgradable_read())
-  else {
+  let Some(subscriptions) = per_table_subscriptions.get(&table_name).map(|r| r.read()) else {
     return;
   };
   if subscriptions.table.is_empty() && !subscriptions.record.contains_key(&row_id) {
@@ -487,22 +502,20 @@ async fn broker_event(
       })
       .collect();
 
-    let payload = EventPayload::from(&match action {
+    Arc::new(EventPayload::from(&match action {
       RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
       RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
       RecordAction::Update => JsonEventPayload::Update { value: json_obj },
-    });
-
-    Arc::new(payload)
+    }))
   };
 
   // First broker record subscriptions.
   if let Some(record_subscriptions) = subscriptions.record.get(&row_id) {
-    broker_subscriptions(&state, &conn, record_subscriptions, &record, &event).await
+    broker_subscriptions(state, conn, record_subscriptions, &record, &event).await
   }
 
   // Then broker table subscriptions.
-  broker_subscriptions(&state, &conn, &subscriptions.table, &record, &event).await;
+  broker_subscriptions(state, conn, &subscriptions.table, &record, &event).await;
 }
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);

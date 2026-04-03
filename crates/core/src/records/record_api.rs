@@ -15,7 +15,7 @@ use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::constants::USER_TABLE;
 use crate::records::params::{LazyParams, Params, prefix_colon};
-use crate::records::{Permission, RecordError, record_api};
+use crate::records::{Permission, RecordError};
 
 #[derive(Clone)]
 pub struct RecordApi {
@@ -580,7 +580,7 @@ impl RecordApi {
     conn
       .call_reader({
         let access_query = access_query.clone();
-        let user = user.map(|u| u.clone());
+        let user = user.cloned();
         let record = record.clone();
 
         move |conn| {

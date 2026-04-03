@@ -23,13 +23,14 @@ pub struct PreupdateHookEvent {
   pub record: Vec<Value>,
 }
 
-pub fn install_hook(conn: &Connection) -> kanal::Receiver<PreupdateHookEvent> {
+pub fn install_hook(conn: &Connection) -> kanal::Receiver<(usize, PreupdateHookEvent)> {
   let (sender, receiver) = kanal::bounded(CAPACITY);
 
   conn
     .write_lock()
     .preupdate_hook({
       let conn = conn.clone();
+      let mut cnt = 0;
 
       Some(
         move |action: Action, db: &str, table_name: &str, case: &PreUpdateCase| {
@@ -69,7 +70,9 @@ pub fn install_hook(conn: &Connection) -> kanal::Receiver<PreupdateHookEvent> {
             record,
           };
 
-          match sender.try_send(event) {
+          cnt += 1;
+
+          match sender.try_send((cnt, event)) {
             Ok(true) => {}
             Ok(false) => {
               warn!("Channel full. Failed to forward preupdate event.")
@@ -129,11 +132,13 @@ mod tests {
       .await
       .unwrap();
 
-    let ev0 = receiver.next().unwrap();
+    let (cnt, ev0) = receiver.next().unwrap();
+    assert_eq!(1, cnt);
     assert_eq!("\"test\"", ev0.table_name.escaped_string());
     assert_eq!(Value::Integer(3), ev0.record[0]);
 
-    let ev1 = receiver.next().unwrap();
+    let (cnt, ev1) = receiver.next().unwrap();
+    assert_eq!(2, cnt);
     assert_eq!(Value::Integer(4), ev1.record[0]);
 
     uninstall_hook(&conn);

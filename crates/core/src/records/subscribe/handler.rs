@@ -105,16 +105,24 @@ pub async fn subscribe_sse(
         .await?;
 
       let seq = Arc::new(AtomicI64::default());
+      let expected_candidate_seq = Arc::new(AtomicI64::default());
 
       Ok(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
           let state = state.clone();
           let seq = seq.clone();
+          let expected_candidate_seq = expected_candidate_seq.clone();
 
           // FIXME: The sequence number should only be incremented when event is send and
           // not filtered.
 
           return async move {
+            if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
+              expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
+              let loss_event = Arc::new(EventPayload::from(&JsonEventPayload::EventLoss));
+              return Some(loss_event.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))));
+            }
+
             let Some(ref record) = ev.record else {
               // Established events.
               let s = seq.fetch_add(1, Ordering::SeqCst);
@@ -165,16 +173,21 @@ pub async fn subscribe_sse(
         .await?;
 
       let seq = Arc::new(AtomicI64::default());
+      let expected_candidate_seq = Arc::new(AtomicI64::default());
 
       Ok(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
           let state = state.clone();
           let seq = seq.clone();
-
-          // FIXME: The sequence number should only be incremented when event is send and
-          // not filtered.
+          let expected_candidate_seq = expected_candidate_seq.clone();
 
           return async move {
+            if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
+              expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
+              let loss_event = Arc::new(EventPayload::from(&JsonEventPayload::EventLoss));
+              return Some(loss_event.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))));
+            }
+
             let Some(ref record) = ev.record else {
               // Established events.
               let s = seq.fetch_add(1, Ordering::SeqCst);

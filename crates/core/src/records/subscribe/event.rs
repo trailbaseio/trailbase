@@ -12,6 +12,7 @@ pub enum JsonEventPayload {
   Insert { value: JsonObject },
   Delete { value: JsonObject },
   Error { error: String },
+  EventLoss,
   Ping,
 }
 
@@ -36,6 +37,7 @@ pub enum EventPayload {
   Insert(Option<Box<serde_json::value::RawValue>>),
   Delete(Option<Box<serde_json::value::RawValue>>),
   Error(String),
+  EventLoss,
   Ping,
 }
 
@@ -50,6 +52,7 @@ impl PartialEq for EventPayload {
       (Self::Insert(lhs), Self::Insert(rhs)) => get(lhs) == get(rhs),
       (Self::Delete(lhs), Self::Delete(rhs)) => get(lhs) == get(rhs),
       (Self::Error(lhs), Self::Error(rhs)) => lhs == rhs,
+      (Self::EventLoss, Self::EventLoss) => true,
       (Self::Ping, Self::Ping) => true,
       _ => false,
     };
@@ -75,6 +78,7 @@ impl EventPayload {
           .ok(),
       ),
       JsonEventPayload::Error { error } => EventPayload::Error(error.clone()),
+      JsonEventPayload::EventLoss => EventPayload::EventLoss,
       JsonEventPayload::Ping => EventPayload::Ping,
     };
   }
