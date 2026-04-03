@@ -12,7 +12,6 @@ use crate::app_state::AppState;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
-use crate::records::record_api::SubscriptionAclParams;
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
 use crate::records::subscribe::state::EventCandidate;
 use crate::records::{Permission, RecordError};
@@ -128,29 +127,20 @@ pub async fn subscribe_sse(
               return None;
             }
 
-            // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date version.
+            // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+            // version.
             let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name) else {
               return None;
             };
 
-            let record = record.clone();
-            let user = ev.subscription.user.clone();
-            let conn = api.conn().clone();
-            if let Err(_err) = conn
-              .call_reader(move |conn| {
-                api
-                  .check_record_level_read_access_for_subscriptions(
-                    conn,
-                    SubscriptionAclParams {
-                      params: &record,
-                      user: user.as_ref(),
-                    },
-                  )
-                  .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
-
-                return Ok(());
-              })
+            if api
+              .check_record_level_read_access_for_subscriptions(
+                api.conn(),
+                record,
+                ev.subscription.user.as_ref(),
+              )
               .await
+              .is_err()
             {
               return None;
             }
@@ -197,37 +187,20 @@ pub async fn subscribe_sse(
               return None;
             }
 
-            // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date version.
+            // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+            // version.
             let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name) else {
               return None;
             };
 
-            if let Err(_err) = api
-              .conn()
-              .call_reader({
-                let id = ev.subscription.id.clone();
-                let record = record.clone();
-                let user = ev.subscription.user.clone();
-                let api = api.clone();
-                let state = state.clone();
-
-                move |conn| {
-                  api
-                    .check_record_level_read_access_for_subscriptions(
-                      conn,
-                      SubscriptionAclParams {
-                        params: &record,
-                        user: user.as_ref(),
-                      },
-                    )
-                    .map_err(|err| {
-                      return trailbase_sqlite::Error::Other(err.into());
-                    })?;
-
-                  return Ok(());
-                }
-              })
+            if api
+              .check_record_level_read_access_for_subscriptions(
+                api.conn(),
+                record,
+                ev.subscription.user.as_ref(),
+              )
               .await
+              .is_err()
             {
               // Death sentence for record subscriptions to not have access
               // TODO: We should move this out. We just currently depend on rusqlite::Connection.

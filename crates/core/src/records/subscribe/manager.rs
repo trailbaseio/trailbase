@@ -121,9 +121,9 @@ impl SubscriptionManager {
     //     }
     //     panic!("{:?} got past {:?}", ev.record, ev.subscription.filter);
     //
-    //     // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date version.
-    //     let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name) else {
-    //       return None;
+    //     // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+    // version.     let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name)
+    // else {       return None;
     //     };
     //
     //     let record = record.clone();

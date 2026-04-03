@@ -1,9 +1,5 @@
-use async_channel::{Receiver, TryRecvError};
-use axum::body::Body;
 use axum::extract::{Path, RawQuery, State};
-use bytes::Bytes;
-use fallible_iterator::Unwrap;
-use futures_util::{StreamExt, TryFutureExt};
+use futures_util::StreamExt;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use std::sync::Arc;
@@ -80,7 +76,7 @@ async fn subscribe_to_record_test() {
   //   .await
   //   .unwrap();
 
-  let mut stream = subscribe_to_records(state.clone(), api, "0", None, /*filter=*/ None).await;
+  let mut stream = subscribe_to_records(state.clone(), api, "0", None, /* filter= */ None).await;
 
   assert_eq!(1, manager.num_record_subscriptions());
 
@@ -222,7 +218,7 @@ async fn subscribe_to_table_test() {
     //   .await
     //   .unwrap();
 
-    let mut stream = subscribe_to_records(state.clone(), api, "*", None, /*filter=*/ None).await;
+    let mut stream = subscribe_to_records(state.clone(), api, "*", None, /* filter= */ None).await;
 
     assert_eq!(1, manager.num_table_subscriptions());
     // First event is "connection established".
@@ -503,7 +499,7 @@ async fn test_acl_selective_table_subs() {
       api.clone(),
       "*",
       User::from_auth_token(&state, &user_x_token.auth_token),
-      /*filter=*/ None,
+      /* filter= */ None,
     )
     .await;
     // let user_x_subscription = manager
@@ -535,7 +531,7 @@ async fn test_acl_selective_table_subs() {
       api.clone(),
       "*",
       User::from_auth_token(&state, &user_y_token.auth_token),
-      /*filter=*/ None,
+      /* filter= */ None,
     )
     .await;
 
@@ -636,7 +632,7 @@ async fn subscription_acl_change_owner() {
     api,
     &record_id.to_string(),
     user_x,
-    /*filter=*/ None,
+    /* filter= */ None,
   )
   .await;
   // manager
@@ -712,7 +708,7 @@ async fn subscription_filter_test() {
       state.clone(),
       api.clone(),
       "*",
-      /*user=*/ None,
+      /* user= */ None,
       Some("filter[$and][0][id][$gt]=5&filter[$and][1][id][$lt]=100"),
     )
     .await;

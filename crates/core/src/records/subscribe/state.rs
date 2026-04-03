@@ -18,7 +18,6 @@ use crate::records::RecordError;
 use crate::records::filter::{
   Filter, apply_filter_recursively_to_record, qs_filter_to_record_filter,
 };
-use crate::records::record_api::SubscriptionAclParams;
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook, uninstall_hook_rusqlite,
