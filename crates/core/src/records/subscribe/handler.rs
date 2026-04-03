@@ -99,7 +99,7 @@ pub async fn subscribe_sse(
     "*" => {
       api.check_table_level_access(Permission::Read, user.as_ref())?;
 
-      let receiver = state
+      let (receiver, subscription) = state
         .subscription_manager()
         .add_sse_table_subscription(api, user, filter)
         .await?;
@@ -109,6 +109,7 @@ pub async fn subscribe_sse(
 
       Ok(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+          let subscription = subscription.clone();
           let state = state.clone();
           let seq = seq.clone();
           let expected_candidate_seq = expected_candidate_seq.clone();
@@ -126,7 +127,7 @@ pub async fn subscribe_sse(
               return Some(ev.payload.into_sse_event(Some(s)));
             };
 
-            if let Filter::Record(ref filter) = ev.subscription.filter
+            if let Filter::Record(ref filter) = subscription.filter
               && !apply_filter_recursively_to_record(filter, &record)
             {
               return None;
@@ -134,7 +135,7 @@ pub async fn subscribe_sse(
 
             // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
             // version.
-            let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name) else {
+            let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
               return None;
             };
 
@@ -142,7 +143,7 @@ pub async fn subscribe_sse(
               .check_record_level_read_access_for_subscriptions(
                 api.conn(),
                 record,
-                ev.subscription.user.as_ref(),
+                subscription.user.as_ref(),
               )
               .await
               .is_err()
@@ -164,7 +165,7 @@ pub async fn subscribe_sse(
         .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
         .await?;
 
-      let receiver = state
+      let (receiver, subscription) = state
         .subscription_manager()
         .add_sse_record_subscription(api, record_id, user)
         .await?;
@@ -174,6 +175,7 @@ pub async fn subscribe_sse(
 
       Ok(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+          let subscription = subscription.clone();
           let state = state.clone();
           let seq = seq.clone();
           let expected_candidate_seq = expected_candidate_seq.clone();
@@ -191,7 +193,7 @@ pub async fn subscribe_sse(
               return Some(ev.payload.into_sse_event(Some(s)));
             };
 
-            if let Filter::Record(ref filter) = ev.subscription.filter
+            if let Filter::Record(ref filter) = subscription.filter
               && !apply_filter_recursively_to_record(filter, &record)
             {
               return None;
@@ -199,7 +201,7 @@ pub async fn subscribe_sse(
 
             // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
             // version.
-            let Some(api) = state.lookup_record_api(&ev.subscription.record_api_name) else {
+            let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
               return None;
             };
 
@@ -207,17 +209,18 @@ pub async fn subscribe_sse(
               .check_record_level_read_access_for_subscriptions(
                 api.conn(),
                 record,
-                ev.subscription.user.as_ref(),
+                subscription.user.as_ref(),
               )
               .await
               .is_err()
             {
               // Death sentence for record subscriptions to not have access
-              let foo = state.subscription_manager().get_per_connection_state(&api);
-              foo
+              state
+                .subscription_manager()
+                .get_per_connection_state(&api)
                 .state
                 .lock()
-                .remove_subscription2(ev.subscription.id.clone());
+                .remove_subscription2(subscription.id.clone());
 
               let s = seq.fetch_add(1, Ordering::SeqCst);
               return Some(ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)));

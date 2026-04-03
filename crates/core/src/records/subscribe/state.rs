@@ -1,12 +1,12 @@
-use async_channel::{TrySendError, WeakReceiver};
+use async_channel::WeakReceiver;
 use futures_util::Stream;
 use log::*;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use pin_project_lite::pin_project;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, LazyLock, Weak};
+use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
@@ -123,9 +123,6 @@ pub struct Subscription {
 // channel.
 #[derive(Debug)]
 pub struct EventCandidate {
-  // TODO: We could probably also just keep the relevant data in the handler rather than passing
-  // static subscription metadata over and over again.
-  pub subscription: Arc<Subscription>,
   pub record: Option<Arc<indexmap::IndexMap<String, rusqlite::types::Value>>>,
   pub payload: Arc<EventPayload>,
   pub seq: i64,
@@ -155,7 +152,7 @@ pub struct PerConnectionStateInternal {
   pub connection_metadata: Arc<ConnectionMetadata>,
 
   /// Should be the same as for all `record_apis` above.
-  pub conn: trailbase_sqlite::Connection,
+  pub conn: Arc<trailbase_sqlite::Connection>,
 
   /// Map from table name to row id to list of subscriptions.
   ///
@@ -201,7 +198,7 @@ pub struct PerConnectionState {
 
 impl PerConnectionState {
   fn add_hook(self: &Arc<Self>, api: RecordApi) {
-    let conn = (**api.conn()).clone();
+    let conn = api.conn().clone();
     let state = self.clone();
 
     let receiver = install_hook(&conn).to_async();
@@ -365,7 +362,6 @@ async fn broker_subscriptions(
     // Cloning the event. It's important that we use a try_send here to not block other
     // subscriptions if a subscriber is slow and their channel fills up.
     if let Err(err) = sub.sender.try_send(EventCandidate {
-      subscription: sub.clone(),
       record: Some(record.clone()),
       payload: event.clone(),
       seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
