@@ -117,6 +117,7 @@ pub struct ChangeEvent {
   seq: Option<i64>,
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum TestJsonEventPayload {
   Update(JsonObject),
@@ -134,22 +135,22 @@ pub struct TestChangeEvent {
   pub seq: Option<i64>,
 }
 
-#[cfg(test)]
-pub fn deserialize_event(ev: Arc<EventPayload>) -> Result<JsonEventPayload, serde_json::Error> {
-  return match *ev {
-    EventPayload::Update(ref v) => Ok(JsonEventPayload::Update {
-      value: serde_json::from_str(v.as_ref().map_or("", |v| v.get()))?,
-    }),
-    EventPayload::Insert(ref v) => Ok(JsonEventPayload::Insert {
-      value: serde_json::from_str(v.as_ref().map_or("", |v| v.get()))?,
-    }),
-    EventPayload::Delete(ref v) => Ok(JsonEventPayload::Delete {
-      value: serde_json::from_str(v.as_ref().map_or("", |v| v.get()))?,
-    }),
-    EventPayload::Error(ref err) => Ok(JsonEventPayload::Error { error: err.clone() }),
-    EventPayload::Ping => Ok(JsonEventPayload::Ping),
-  };
-}
+// #[cfg(test)]
+// pub fn deserialize_event(ev: Arc<EventPayload>) -> Result<JsonEventPayload, serde_json::Error> {
+//   return match *ev {
+//     EventPayload::Update(ref v) => Ok(JsonEventPayload::Update {
+//       value: serde_json::from_str(v.as_ref().map_or("", |v| v.get()))?,
+//     }),
+//     EventPayload::Insert(ref v) => Ok(JsonEventPayload::Insert {
+//       value: serde_json::from_str(v.as_ref().map_or("", |v| v.get()))?,
+//     }),
+//     EventPayload::Delete(ref v) => Ok(JsonEventPayload::Delete {
+//       value: serde_json::from_str(v.as_ref().map_or("", |v| v.get()))?,
+//     }),
+//     EventPayload::Error(ref err) => Ok(JsonEventPayload::Error { error: err.clone() }),
+//     EventPayload::Ping => Ok(JsonEventPayload::Ping),
+//   };
+// }
 
 #[cfg(test)]
 mod tests {

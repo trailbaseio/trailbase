@@ -221,12 +221,6 @@ pub async fn subscribe_sse(
                       },
                     )
                     .map_err(|err| {
-                      // Death sentence for record subscriptions to not have access
-
-                      // TODO: We should move this out. We just currently depend on rusqlite::Connection.
-                      let foo = state.subscription_manager().get_per_connection_state(&api);
-                      foo.remove_subscription(conn, id);
-
                       return trailbase_sqlite::Error::Other(err.into());
                     })?;
 
@@ -236,6 +230,10 @@ pub async fn subscribe_sse(
               .await
             {
               // Death sentence for record subscriptions to not have access
+              // TODO: We should move this out. We just currently depend on rusqlite::Connection.
+              let foo = state.subscription_manager().get_per_connection_state(&api);
+              foo.remove_subscription2(&api.conn(), ev.subscription.id.clone());
+
               let s = seq.fetch_add(1, Ordering::SeqCst);
               return Some(ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)));
             }
@@ -466,3 +464,13 @@ static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
     error: "Access denied".into(),
   }))
 });
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn static_sse_event_test() {
+    let _x: Arc<EventPayload> = (*ACCESS_DENIED_EVENT).clone();
+  }
+}
