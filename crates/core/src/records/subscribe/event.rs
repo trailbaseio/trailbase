@@ -11,7 +11,9 @@ pub enum JsonEventPayload {
   Update { value: JsonObject },
   Insert { value: JsonObject },
   Delete { value: JsonObject },
+  // QUESTION: Should we at least add a status to have something programmatic?
   Error { error: String },
+  // QUESTION: If we add (custom) status to error, do we need event loss?
   EventLoss,
   Ping,
 }

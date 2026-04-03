@@ -4,6 +4,7 @@ use http_body_util::BodyExt;
 use serde_json::Value;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use tokio::time::timeout;
 use trailbase_sqlite::params;
 
 use crate::User;
@@ -164,14 +165,19 @@ async fn subscribe_to_records(
   assert_eq!(200, response.status());
 
   let cnt = Arc::new(AtomicI64::default());
-
   let stream = response.into_data_stream();
+
   return stream
+    .take_while(|bytes| std::future::ready(bytes.is_ok()))
     .filter_map(move |bytes| {
       let cnt = cnt.clone();
-      let payload = String::from_utf8_lossy(&bytes.as_ref().unwrap()).to_string();
 
       return async move {
+        let Ok(bytes) = bytes.as_ref() else {
+          return None;
+        };
+        let payload = String::from_utf8_lossy(&bytes).to_string();
+
         cnt.fetch_add(1, Ordering::SeqCst);
         if cnt.load(Ordering::SeqCst) == 1 {
           // Make sure we have an explicit ping as a first message to establish connection.
@@ -685,10 +691,7 @@ async fn subscription_acl_change_owner() {
     }
   }
 
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  drop(stream);
 
   // Make sure the subscription was cleaned up after the access error.
   // assert!(stream.is_closed());

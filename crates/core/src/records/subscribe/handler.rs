@@ -1,7 +1,8 @@
 use axum::extract::{Path, RawQuery, Request, State};
-use axum::response::sse::{KeepAlive, Sse};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
-use futures_util::StreamExt;
+use futures_util::stream;
+use futures_util::{FutureExt, StreamExt};
 use serde::Deserialize;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, LazyLock};
@@ -117,8 +118,11 @@ pub async fn subscribe_sse(
           return async move {
             if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
               expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
-              let loss_event = Arc::new(EventPayload::from(&JsonEventPayload::EventLoss));
-              return Some(loss_event.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))));
+              return Some(
+                EVENT_LOSS_EVENT
+                  .clone()
+                  .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+              );
             }
 
             let Some(ref record) = ev.record else {
@@ -174,62 +178,68 @@ pub async fn subscribe_sse(
       let expected_candidate_seq = Arc::new(AtomicI64::default());
 
       Ok(
-        Sse::new(receiver.filter_map(move |ev: EventCandidate| {
-          let subscription = subscription.clone();
-          let state = state.clone();
-          let seq = seq.clone();
-          let expected_candidate_seq = expected_candidate_seq.clone();
+        Sse::new(
+          receiver
+            .then(move |ev: EventCandidate| {
+              let subscription = subscription.clone();
+              let state = state.clone();
+              let seq = seq.clone();
+              let expected_candidate_seq = expected_candidate_seq.clone();
 
-          return async move {
-            if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
-              expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
-              let loss_event = Arc::new(EventPayload::from(&JsonEventPayload::EventLoss));
-              return Some(loss_event.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))));
-            }
+              return async move {
+                if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
+                  expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
+                  return stream::iter(vec![
+                    EVENT_LOSS_EVENT
+                      .clone()
+                      .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                  ])
+                  .boxed();
+                }
 
-            let Some(ref record) = ev.record else {
-              // Established events.
-              let s = seq.fetch_add(1, Ordering::SeqCst);
-              return Some(ev.payload.into_sse_event(Some(s)));
-            };
+                let Some(ref record) = ev.record else {
+                  // Established events.
+                  let s = seq.fetch_add(1, Ordering::SeqCst);
+                  return stream::iter(vec![ev.payload.into_sse_event(Some(s))]).boxed();
+                };
 
-            if let Filter::Record(ref filter) = subscription.filter
-              && !apply_filter_recursively_to_record(filter, &record)
-            {
-              return None;
-            }
+                if let Filter::Record(ref filter) = subscription.filter
+                  && !apply_filter_recursively_to_record(filter, &record)
+                {
+                  return stream::empty().boxed();
+                }
 
-            // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
-            // version.
-            let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
-              return None;
-            };
+                // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+                // version.
+                let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
+                  return stream::empty().boxed();
+                };
 
-            if api
-              .check_record_level_read_access_for_subscriptions(
-                api.conn(),
-                record,
-                subscription.user.as_ref(),
-              )
-              .await
-              .is_err()
-            {
-              // Death sentence for record subscriptions to not have access
-              state
-                .subscription_manager()
-                .get_per_connection_state(&api)
-                .state
-                .lock()
-                .remove_subscription2(subscription.id.clone());
-
-              let s = seq.fetch_add(1, Ordering::SeqCst);
-              return Some(ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)));
-            }
-
-            let s = seq.fetch_add(1, Ordering::SeqCst);
-            Some(ev.payload.into_sse_event(Some(s)))
-          };
-        }))
+                if api
+                  .check_record_level_read_access_for_subscriptions(
+                    api.conn(),
+                    record,
+                    subscription.user.as_ref(),
+                  )
+                  .await
+                  .is_err()
+                {
+                  // Death sentence for record subscriptions to not have access
+                  let s = seq.fetch_add(1, Ordering::SeqCst);
+                  stream::iter(vec![
+                    ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)),
+                    Err(RecordError::Forbidden),
+                  ])
+                  .boxed()
+                } else {
+                  let s = seq.fetch_add(1, Ordering::SeqCst);
+                  stream::iter(vec![ev.payload.into_sse_event(Some(s))]).boxed()
+                }
+              };
+            })
+            .flatten()
+            .take_while(|event: &Result<SseEvent, RecordError>| std::future::ready(event.is_ok())),
+        )
         .keep_alive(KeepAlive::default())
         .into_response(),
       )
@@ -452,6 +462,8 @@ static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
     error: "Access denied".into(),
   }))
 });
+static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> =
+  LazyLock::new(|| Arc::new(EventPayload::from(&JsonEventPayload::EventLoss)));
 
 #[cfg(test)]
 mod tests {
