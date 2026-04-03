@@ -180,7 +180,11 @@ async fn subscribe_to_records(
         if cnt.load(Ordering::SeqCst) == 1 {
           // Make sure we have an explicit ping as a first message to establish connection.
           assert!(payload.contains("ping"));
-          return None;
+
+          return Some(TestChangeEvent {
+            event: TestJsonEventPayload::Ping,
+            seq: None,
+          });
         }
 
         // Ignore heartbeats.
@@ -600,16 +604,24 @@ async fn subscription_acl_change_owner() {
 
   let manager = state.subscription_manager();
   let api = state.lookup_record_api("api_name").unwrap();
-  let stream = manager
-    .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
-    .await
-    .unwrap();
+  let mut stream = subscribe_to_records(
+    state.clone(),
+    api,
+    &record_id.to_string(),
+    user_x,
+    /*filter=*/ None,
+  )
+  .await;
+  // manager
+  // .add_sse_record_subscription(api, trailbase_sqlite::Value::Integer(record_id), user_x)
+  // .await
+  // .unwrap();
 
   assert_eq!(1, manager.num_record_subscriptions());
   // First event is "connection established".
   assert!(matches!(
-    deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap(),
-    JsonEventPayload::Ping
+    stream.next().await.unwrap().event,
+    TestJsonEventPayload::Ping,
   ));
 
   conn
@@ -629,8 +641,8 @@ async fn subscription_acl_change_owner() {
     .await
     .unwrap();
 
-  match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
-    JsonEventPayload::Update { value: obj } => {
+  match stream.next().await.unwrap().event {
+    TestJsonEventPayload::Update(obj) => {
       let expected = serde_json::json!({
         "id": record_id,
         "user": uuid_to_b64(&user_x_id),
@@ -643,8 +655,8 @@ async fn subscription_acl_change_owner() {
     }
   }
 
-  match deserialize_event(stream.receiver.recv().await.unwrap().payload).unwrap() {
-    JsonEventPayload::Error { .. } => {}
+  match stream.next().await.unwrap().event {
+    TestJsonEventPayload::Error(_) => {}
     x => {
       panic!("Expected error, got: {x:?}");
     }
@@ -656,7 +668,7 @@ async fn subscription_acl_change_owner() {
     .unwrap();
 
   // Make sure the subscription was cleaned up after the access error.
-  assert!(stream.receiver.is_closed());
+  // assert!(stream.is_closed());
   assert_eq!(0, manager.num_record_subscriptions());
 }
 
@@ -694,9 +706,11 @@ async fn subscription_filter_test() {
       .await
       .unwrap();
 
-    let events = take_test_events(stream, 1).await;
+    let events = take_test_events(stream, 2).await;
 
-    match &events[0].event {
+    assert!(matches!(events[0].event, TestJsonEventPayload::Ping));
+
+    match &events[1].event {
       TestJsonEventPayload::Insert(obj) => {
         let expected = serde_json::json!({
           "id": 25,

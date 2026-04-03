@@ -167,7 +167,7 @@ impl PerConnectionState {
   }
 
   // Gets called by the Stream destructor, e.g. when a client disconnects.
-  fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) {
+  pub fn remove_subscription(&self, conn: &rusqlite::Connection, id: SubscriptionId) {
     let mut read_lock = self.subscriptions.upgradable_read();
 
     let remove_subscription_entry_for_table = {

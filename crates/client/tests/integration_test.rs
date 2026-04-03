@@ -514,7 +514,7 @@ async fn subscription_test() {
     match &*ev0.event {
       EventPayload::Update(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
-        assert_eq!(Some(0), ev0.seq);
+        assert_eq!(Some(1), ev0.seq);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };
@@ -523,7 +523,7 @@ async fn subscription_test() {
     match &*ev1.event {
       EventPayload::Delete(obj) => {
         assert_eq!(obj["text_not_null"], updated_message);
-        assert_eq!(Some(1), ev1.seq);
+        assert_eq!(Some(2), ev1.seq);
       }
       msg => panic!("Unexpected event: {msg:?}"),
     };

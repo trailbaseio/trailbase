@@ -3,8 +3,8 @@ use axum::response::sse::{KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use futures_util::StreamExt;
 use serde::Deserialize;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
 use ts_rs::TS;
 
@@ -13,6 +13,7 @@ use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
 use crate::records::record_api::SubscriptionAclParams;
+use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
 use crate::records::subscribe::state::EventCandidate;
 use crate::records::{Permission, RecordError};
 
@@ -201,31 +202,42 @@ pub async fn subscribe_sse(
               return None;
             };
 
-            let record = record.clone();
-            let user = ev.subscription.user.clone();
-            let conn = api.conn().clone();
-            if let Err(_err) = conn
-              .call_reader(move |conn| {
-                api
-                  .check_record_level_read_access_for_subscriptions(
-                    conn,
-                    SubscriptionAclParams {
-                      params: &record,
-                      user: user.as_ref(),
-                    },
-                  )
-                  .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+            if let Err(_err) = api
+              .conn()
+              .call_reader({
+                let id = ev.subscription.id.clone();
+                let record = record.clone();
+                let user = ev.subscription.user.clone();
+                let api = api.clone();
+                let state = state.clone();
 
-                return Ok(());
+                move |conn| {
+                  api
+                    .check_record_level_read_access_for_subscriptions(
+                      conn,
+                      SubscriptionAclParams {
+                        params: &record,
+                        user: user.as_ref(),
+                      },
+                    )
+                    .map_err(|err| {
+                      // Death sentence for record subscriptions to not have access
+
+                      // TODO: We should move this out. We just currently depend on rusqlite::Connection.
+                      let foo = state.subscription_manager().get_per_connection_state(&api);
+                      foo.remove_subscription(conn, id);
+
+                      return trailbase_sqlite::Error::Other(err.into());
+                    })?;
+
+                  return Ok(());
+                }
               })
               .await
             {
               // Death sentence for record subscriptions to not have access
-              // FIXME: Send ACCESS DENIED EVENT
-              // FIXME: super weird that the receiver closes the sender :shrug:
-              ev.subscription.sender.close();
-
-              return None;
+              let s = seq.fetch_add(1, Ordering::SeqCst);
+              return Some(ACCESS_DENIED_EVENT.clone().into_sse_event(Some(s)));
             }
 
             let s = seq.fetch_add(1, Ordering::SeqCst);
@@ -448,3 +460,9 @@ pub async fn subscribe_ws(
     }
   };
 }
+
+static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
+  Arc::new(EventPayload::from(&JsonEventPayload::Error {
+    error: "Access denied".into(),
+  }))
+});
