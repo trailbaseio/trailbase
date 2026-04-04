@@ -6,15 +6,25 @@ use crate::records::RecordError;
 
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[repr(i64)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+pub enum EventErrorStatus {
+  Forbidden,
+  Loss,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct EventError {
+  pub status: EventErrorStatus,
+  pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum JsonEventPayload {
   Update { value: JsonObject },
   Insert { value: JsonObject },
   Delete { value: JsonObject },
-  // QUESTION: Should we at least add a status to have something programmatic?
-  Error { error: String },
-  // QUESTION: If we add (custom) status to error, do we need event loss?
-  EventLoss,
+  Error { value: EventError },
   Ping,
 }
 
@@ -38,8 +48,7 @@ pub enum EventPayload {
   Update(Option<Box<serde_json::value::RawValue>>),
   Insert(Option<Box<serde_json::value::RawValue>>),
   Delete(Option<Box<serde_json::value::RawValue>>),
-  Error(String),
-  EventLoss,
+  Error(Option<Box<serde_json::value::RawValue>>),
   Ping,
 }
 
@@ -53,8 +62,7 @@ impl PartialEq for EventPayload {
       (Self::Update(lhs), Self::Update(rhs)) => get(lhs) == get(rhs),
       (Self::Insert(lhs), Self::Insert(rhs)) => get(lhs) == get(rhs),
       (Self::Delete(lhs), Self::Delete(rhs)) => get(lhs) == get(rhs),
-      (Self::Error(lhs), Self::Error(rhs)) => lhs == rhs,
-      (Self::EventLoss, Self::EventLoss) => true,
+      (Self::Error(lhs), Self::Error(rhs)) => get(lhs) == get(rhs),
       (Self::Ping, Self::Ping) => true,
       _ => false,
     };
@@ -79,8 +87,11 @@ impl EventPayload {
           .map(|v| v.to_owned())
           .ok(),
       ),
-      JsonEventPayload::Error { error } => EventPayload::Error(error.clone()),
-      JsonEventPayload::EventLoss => EventPayload::EventLoss,
+      JsonEventPayload::Error { value } => EventPayload::Error(
+        serde_json::value::to_raw_value(&value)
+          .map(|v| v.to_owned())
+          .ok(),
+      ),
       JsonEventPayload::Ping => EventPayload::Ping,
     };
   }
@@ -129,7 +140,10 @@ pub enum TestJsonEventPayload {
   Update(JsonObject),
   Insert(JsonObject),
   Delete(JsonObject),
-  Error(String),
+  Error {
+    status: EventErrorStatus,
+    message: Option<String>,
+  },
   Ping,
 }
 
@@ -204,25 +218,50 @@ mod tests {
 
   #[test]
   fn serialization_foo_test() {
-    let event = ChangeEvent {
-      event: Arc::new(EventPayload::Delete(Some(
-        serde_json::value::to_raw_value(&json!({
-            "foo": 4,
-        }))
-        .unwrap(),
-      ))),
-      seq: Some(4),
-    };
-
-    let value = serde_json::to_value(&event).unwrap();
-    assert_eq!(
-      serde_json::json!({
-          "Delete": {
+    {
+      let event = ChangeEvent {
+        event: Arc::new(EventPayload::Delete(Some(
+          serde_json::value::to_raw_value(&json!({
               "foo": 4,
-          },
-          "seq": 4,
-      }),
-      value
-    );
+          }))
+          .unwrap(),
+        ))),
+        seq: Some(4),
+      };
+
+      let value = serde_json::to_value(&event).unwrap();
+      assert_eq!(
+        serde_json::json!({
+            "Delete": {
+                "foo": 4,
+            },
+            "seq": 4,
+        }),
+        value
+      );
+    }
+
+    {
+      let event = ChangeEvent {
+        event: Arc::new(EventPayload::Error(Some(
+          serde_json::value::to_raw_value(&json!({
+              "status": EventErrorStatus::Loss,
+          }))
+          .unwrap(),
+        ))),
+        seq: Some(4),
+      };
+
+      let value = serde_json::to_value(&event).unwrap();
+      assert_eq!(
+        serde_json::json!({
+            "Error": {
+                "status": EventErrorStatus::Loss,
+            },
+            "seq": 4,
+        }),
+        value
+      );
+    }
   }
 }

@@ -13,7 +13,9 @@ use crate::app_state::AppState;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
-use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
+use crate::records::subscribe::event::{
+  EventError, EventErrorStatus, EventPayload, JsonEventPayload,
+};
 use crate::records::subscribe::state::{EventCandidate, Subscription};
 use crate::records::{Permission, RecordError};
 
@@ -89,24 +91,23 @@ pub async fn add_subscription_sse_and_ws_handler(
   };
 }
 
-async fn validate_event(
+struct ValidateEventArgs {
   state: AppState,
-  ev: EventCandidate,
   subscription: Arc<Subscription>,
-  seq: Arc<AtomicI64>,
-  expected_candidate_seq: Arc<AtomicI64>,
-) -> Result<Option<Result<SseEvent, RecordError>>, RecordError> {
-  // let subscription = subscription.clone();
-  // let state = state.clone();
-  // let seq = seq.clone();
-  // let expected_candidate_seq = expected_candidate_seq.clone();
+  seq: AtomicI64,
+  expected_candidate_seq: AtomicI64,
+}
 
-  if ev.seq != expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
-    expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
+async fn validate_event(
+  args: Arc<ValidateEventArgs>,
+  ev: EventCandidate,
+) -> Result<Option<Result<SseEvent, RecordError>>, RecordError> {
+  if ev.seq != args.expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
+    args.expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
     return Ok(Some(
       EVENT_LOSS_EVENT
         .clone()
-        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+        .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
     ));
   }
 
@@ -114,33 +115,30 @@ async fn validate_event(
     // Established events.
     return Ok(Some(
       ev.payload
-        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+        .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
     ));
   };
 
-  if let Filter::Record(ref filter) = subscription.filter
-    && !apply_filter_recursively_to_record(filter, &record)
+  let sub: &Subscription = &args.subscription;
+  if let Filter::Record(ref filter) = sub.filter
+    && !apply_filter_recursively_to_record(filter, record)
   {
     return Ok(None);
   }
 
   // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
   // version.
-  let Some(api) = state.lookup_record_api(&subscription.record_api_name) else {
+  let Some(api) = args.state.lookup_record_api(&sub.record_api_name) else {
     return Ok(None);
   };
 
   api
-    .check_record_level_read_access_for_subscriptions(
-      api.conn(),
-      record,
-      subscription.user.as_ref(),
-    )
+    .check_record_level_read_access_for_subscriptions(api.conn(), record, sub.user.as_ref())
     .await?;
 
   return Ok(Some(
     ev.payload
-      .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+      .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
   ));
 }
 
@@ -160,22 +158,18 @@ pub async fn subscribe_sse(
         .add_sse_table_subscription(api, user, filter)
         .await?;
 
-      let seq = Arc::new(AtomicI64::default());
-      let expected_candidate_seq = Arc::new(AtomicI64::default());
+      let args = Arc::new(ValidateEventArgs {
+        state,
+        subscription,
+        seq: AtomicI64::default(),
+        expected_candidate_seq: AtomicI64::default(),
+      });
 
       Ok(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
-          let subscription = subscription.clone();
-          let state = state.clone();
-          let seq = seq.clone();
-          let expected_candidate_seq = expected_candidate_seq.clone();
+          let args = args.clone();
 
-          return async move {
-            match validate_event(state, ev, subscription, seq, expected_candidate_seq).await {
-              Ok(x) => x,
-              Err(_) => None,
-            }
-          };
+          return async move { validate_event(args, ev).await.unwrap_or_default() };
         }))
         .keep_alive(KeepAlive::default())
         .into_response(),
@@ -192,22 +186,21 @@ pub async fn subscribe_sse(
         .add_sse_record_subscription(api, record_id, user)
         .await?;
 
-      let seq = Arc::new(AtomicI64::default());
-      let expected_candidate_seq = Arc::new(AtomicI64::default());
+      let args = Arc::new(ValidateEventArgs {
+        state,
+        subscription,
+        seq: AtomicI64::default(),
+        expected_candidate_seq: AtomicI64::default(),
+      });
 
       Ok(
         Sse::new(
           receiver
             .then(move |ev: EventCandidate| {
-              let subscription = subscription.clone();
-              let state = state.clone();
-              let seq = seq.clone();
-              let expected_candidate_seq = expected_candidate_seq.clone();
+              let args = args.clone();
 
               return async move {
-                match validate_event(state, ev, subscription, seq.clone(), expected_candidate_seq)
-                  .await
-                {
+                match validate_event(args.clone(), ev).await {
                   Ok(None) => stream::empty().boxed(),
                   Ok(Some(x)) => stream::once(std::future::ready(x)).boxed(),
                   Err(_) => {
@@ -216,7 +209,7 @@ pub async fn subscribe_sse(
                       // First send an error event to the user.
                       ACCESS_DENIED_EVENT
                         .clone()
-                        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                        .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
                       // Then terminate the stream via the `take_while` below.
                       Err(RecordError::Forbidden),
                     ])
@@ -447,11 +440,20 @@ pub async fn subscribe_ws(
 
 static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
   Arc::new(EventPayload::from(&JsonEventPayload::Error {
-    error: "Access denied".into(),
+    value: EventError {
+      status: EventErrorStatus::Forbidden,
+      message: Some("Access denied".into()),
+    },
   }))
 });
-static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> =
-  LazyLock::new(|| Arc::new(EventPayload::from(&JsonEventPayload::EventLoss)));
+static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
+  Arc::new(EventPayload::from(&JsonEventPayload::Error {
+    value: EventError {
+      status: EventErrorStatus::Loss,
+      message: None,
+    },
+  }))
+});
 
 #[cfg(test)]
 mod tests {

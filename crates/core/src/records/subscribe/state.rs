@@ -445,14 +445,17 @@ async fn broker(
     }))
   };
 
+  // FIXME: Holding lock across wait points. We could:
+  // * Ignore it
+  // * Use tokio::sync::Mutex
+  // * Use a dedicated thread and just block to avoid accidentally blocking shared worker threads.
+
   // First broker record subscriptions.
   if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
     let dead = broker_subscriptions(record_subscriptions, &record, &event).await;
 
-    for idx in dead.iter().rev() {
-      if let Some(idx) = idx {
-        record_subscriptions.remove(*idx);
-      }
+    for idx in dead.iter().rev().flatten() {
+      record_subscriptions.remove(*idx);
     }
   }
 

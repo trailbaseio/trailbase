@@ -11,7 +11,7 @@ use crate::admin::user::*;
 use crate::app_state::{AppState, test_state};
 use crate::auth::util::login_with_password;
 use crate::config::proto::RecordApiConfig;
-use crate::records::subscribe::event::{TestChangeEvent, TestJsonEventPayload};
+use crate::records::subscribe::event::{EventErrorStatus, TestChangeEvent, TestJsonEventPayload};
 use crate::records::subscribe::handler::{
   SubscriptionQuery, add_subscription_sse_and_ws_handler, subscribe_sse,
 };
@@ -653,7 +653,9 @@ async fn subscription_acl_change_owner() {
   }
 
   match stream.next().await.unwrap().event {
-    TestJsonEventPayload::Error(_) => {}
+    TestJsonEventPayload::Error { status, .. } => {
+      assert_eq!(EventErrorStatus::Forbidden, status);
+    }
     x => {
       panic!("Expected error, got: {x:?}");
     }

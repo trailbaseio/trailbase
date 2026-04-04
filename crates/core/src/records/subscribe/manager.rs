@@ -51,8 +51,8 @@ impl SubscriptionManager {
 
           let id = api.conn().id();
 
-          // TODO: Skip/cleanup subscriptions from existing entries for tables that not longer have a
-          // corresponding API.
+          // TODO: Skip/cleanup subscriptions from existing entries for tables that not longer have
+          // a corresponding API.
           if let Some(existing) = old.remove(&id) {
             let apis = filter_record_apis(id, record_apis);
             let Some(first) = apis.values().nth(0) else {
