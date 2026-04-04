@@ -1,13 +1,14 @@
 use axum::response::sse::Event as SseEvent;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::sync::Arc;
 
 use crate::records::RecordError;
 
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
+#[derive(Debug, Clone, Copy, Deserialize_repr, Serialize_repr, PartialEq)]
 #[repr(i64)]
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub enum EventErrorStatus {
   /// Unknown or unspecified error.
   Unknown = 0,
@@ -153,7 +154,7 @@ mod tests {
   use serde_json::json;
 
   #[test]
-  fn serialization_foo_test() {
+  fn serialization_sse_event_test() {
     {
       let event = ChangeEvent {
         event: Arc::new(EventPayload::from(&JsonEventPayload::Delete {
@@ -185,16 +186,36 @@ mod tests {
         seq: Some(4),
       };
 
-      let value = serde_json::to_value(&event).unwrap();
+      let expected = serde_json::json!({
+          "Error": {
+              "status": EventErrorStatus::Loss,
+              "message": "test",
+          },
+          "seq": 4,
+      });
+
+      assert_eq!(expected, serde_json::to_value(&event).unwrap());
+    }
+
+    {
+      let json = r#"
+            {
+              "Error": {
+                "status": 1,
+                "message": "test"
+              },
+              "seq": 3
+            }
+        "#;
+
+      let test_event = serde_json::from_str::<TestChangeEvent>(json).unwrap();
+      assert_eq!(Some(3), test_event.seq);
       assert_eq!(
-        serde_json::json!({
-            "Error": {
-                "status": EventErrorStatus::Loss,
-                "message": "test",
-            },
-            "seq": 4,
-        }),
-        value
+        TestJsonEventPayload::Error {
+          status: EventErrorStatus::Forbidden,
+          message: Some("test".to_string()),
+        },
+        test_event.event
       );
     }
   }
