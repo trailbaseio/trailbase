@@ -93,11 +93,9 @@ pub async fn add_subscription_sse_and_ws_handler(
 
 struct ValidateEventArgs {
   state: AppState,
-
   // FIXME: We could probably do with a subset of information from the `Subscription` and keep it
   // internal.
   subscription: Arc<Subscription>,
-  seq: AtomicI64,
   expected_candidate_seq: AtomicI64,
 }
 
@@ -142,6 +140,8 @@ pub async fn subscribe_sse(
   filter: Option<ValueOrComposite>,
   user: Option<User>,
 ) -> Result<Response, RecordError> {
+  let seq = Arc::new(AtomicI64::default());
+
   return match record.as_str() {
     "*" => {
       api.check_table_level_access(Permission::Read, user.as_ref())?;
@@ -154,19 +154,19 @@ pub async fn subscribe_sse(
       let args = Arc::new(ValidateEventArgs {
         state,
         subscription,
-        seq: AtomicI64::default(),
         expected_candidate_seq: AtomicI64::default(),
       });
 
       Ok(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+          let seq = seq.clone();
           let args = args.clone();
 
           return async move {
             validate_event(args.clone(), ev)
               .await
               .unwrap_or_default()
-              .map(|ev| ev.into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))))
+              .map(|ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))))
           };
         }))
         .keep_alive(KeepAlive::default())
@@ -187,7 +187,6 @@ pub async fn subscribe_sse(
       let args = Arc::new(ValidateEventArgs {
         state,
         subscription,
-        seq: AtomicI64::default(),
         expected_candidate_seq: AtomicI64::default(),
       });
 
@@ -195,13 +194,14 @@ pub async fn subscribe_sse(
         Sse::new(
           receiver
             .then(move |ev: EventCandidate| {
+              let seq = seq.clone();
               let args = args.clone();
 
               return async move {
                 match validate_event(args.clone(), ev).await {
                   Ok(None) => stream::empty().boxed(),
                   Ok(Some(ev)) => stream::once(std::future::ready(
-                    ev.into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
+                    ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
                   ))
                   .boxed(),
                   Err(_) => {
@@ -210,7 +210,7 @@ pub async fn subscribe_sse(
                       // First send an error event to the user.
                       ACCESS_DENIED_EVENT
                         .clone()
-                        .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
+                        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
                       // Then terminate the stream via the `take_while` below.
                       Err(RecordError::Forbidden),
                     ])
@@ -304,7 +304,6 @@ pub async fn subscribe_ws(
     let args = Arc::new(ValidateEventArgs {
       state,
       subscription,
-      seq: AtomicI64::default(),
       expected_candidate_seq: AtomicI64::default(),
     });
 
@@ -317,6 +316,8 @@ pub async fn subscribe_ws(
         }
         Err(_) => {
           if is_record_subscription {
+            // Death sentence for record subscriptions to not have access
+            let _ = ACCESS_DENIED_EVENT.clone().into_ws_event().map(|ev| sender.send(ev));
             return;
           } else {
             continue;

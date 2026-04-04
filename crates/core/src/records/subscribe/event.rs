@@ -9,8 +9,9 @@ type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 #[repr(i64)]
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub enum EventErrorStatus {
-  Forbidden,
-  Loss,
+  Unknown = 0, 
+  Forbidden = 1,
+  Loss = 2,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
