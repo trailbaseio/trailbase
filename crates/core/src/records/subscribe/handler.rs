@@ -93,6 +93,9 @@ pub async fn add_subscription_sse_and_ws_handler(
 
 struct ValidateEventArgs {
   state: AppState,
+
+  // FIXME: We could probably do with a subset of information from the `Subscription` and keep it
+  // internal.
   subscription: Arc<Subscription>,
   seq: AtomicI64,
   expected_candidate_seq: AtomicI64,
@@ -101,22 +104,15 @@ struct ValidateEventArgs {
 async fn validate_event(
   args: Arc<ValidateEventArgs>,
   ev: EventCandidate,
-) -> Result<Option<Result<SseEvent, RecordError>>, RecordError> {
+) -> Result<Option<Arc<EventPayload>>, RecordError> {
   if ev.seq != args.expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
     args.expected_candidate_seq.store(ev.seq, Ordering::SeqCst);
-    return Ok(Some(
-      EVENT_LOSS_EVENT
-        .clone()
-        .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
-    ));
+    return Ok(Some(EVENT_LOSS_EVENT.clone()));
   }
 
   let Some(ref record) = ev.record else {
     // Established events.
-    return Ok(Some(
-      ev.payload
-        .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
-    ));
+    return Ok(Some(ev.payload));
   };
 
   let sub: &Subscription = &args.subscription;
@@ -136,10 +132,7 @@ async fn validate_event(
     .check_record_level_read_access_for_subscriptions(api.conn(), record, sub.user.as_ref())
     .await?;
 
-  return Ok(Some(
-    ev.payload
-      .into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
-  ));
+  return Ok(Some(ev.payload));
 }
 
 pub async fn subscribe_sse(
@@ -169,7 +162,12 @@ pub async fn subscribe_sse(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
           let args = args.clone();
 
-          return async move { validate_event(args, ev).await.unwrap_or_default() };
+          return async move {
+            validate_event(args.clone(), ev)
+              .await
+              .unwrap_or_default()
+              .map(|ev| ev.into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))))
+          };
         }))
         .keep_alive(KeepAlive::default())
         .into_response(),
@@ -202,7 +200,10 @@ pub async fn subscribe_sse(
               return async move {
                 match validate_event(args.clone(), ev).await {
                   Ok(None) => stream::empty().boxed(),
-                  Ok(Some(x)) => stream::once(std::future::ready(x)).boxed(),
+                  Ok(Some(ev)) => stream::once(std::future::ready(
+                    ev.into_sse_event(Some(args.seq.fetch_add(1, Ordering::SeqCst))),
+                  ))
+                  .boxed(),
                   Err(_) => {
                     // Death sentence for record subscriptions to not have access
                     stream::iter(vec![
@@ -292,14 +293,38 @@ pub async fn subscribe_ws(
   }
 
   async fn broker<S: SinkExt<Message> + std::marker::Unpin>(
+    state: AppState,
+    subscription: Arc<Subscription>,
     // Receive events from SQLite
     receiver: AutoCleanupEventStream,
     // Send messages via WebSocket.
     sender: &mut S,
+    is_record_subscription: bool,
   ) {
+    let args = Arc::new(ValidateEventArgs {
+      state,
+      subscription,
+      seq: AtomicI64::default(),
+      expected_candidate_seq: AtomicI64::default(),
+    });
+
     let mut pinned_receiver = std::pin::pin!(receiver);
     while let Some(ev) = pinned_receiver.next().await {
-      match ev.into_ws_event() {
+      let payload = match validate_event(args.clone(), ev).await {
+        Ok(Some(payload)) => payload,
+        Ok(None) => {
+          continue;
+        }
+        Err(_) => {
+          if is_record_subscription {
+            return;
+          } else {
+            continue;
+          }
+        }
+      };
+
+      match payload.into_ws_event() {
         Ok(msg) => {
           if let Err(_value) = sender.send(msg).await {
             log::debug!("Sending WS event to client failed");
@@ -381,9 +406,9 @@ pub async fn subscribe_ws(
         }
 
         let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
-        let state = state.subscription_manager().get_per_connection_state(&api);
+        let conn_state = state.subscription_manager().get_per_connection_state(&api);
 
-        let Ok(id) = state
+        let Ok(subscription) = conn_state
           .clone()
           .add_table_subscription(api, user, filter, sender)
           .await
@@ -392,9 +417,9 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream::new(receiver, state, id);
+        let receiver = AutoCleanupEventStream::new(receiver, conn_state, subscription.id.clone());
 
-        broker(receiver, &mut ws_sender).await
+        broker(state, subscription, receiver, &mut ws_sender, false).await
       }))
     }
     _ => {
@@ -419,9 +444,9 @@ pub async fn subscribe_ws(
         }
 
         let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
-        let state = state.subscription_manager().get_per_connection_state(&api);
+        let conn_state = state.subscription_manager().get_per_connection_state(&api);
 
-        let Ok(id) = state
+        let Ok(subscription) = conn_state
           .clone()
           .add_record_subscription(api, record_id, user, sender)
           .await
@@ -430,9 +455,9 @@ pub async fn subscribe_ws(
           return;
         };
 
-        let receiver = AutoCleanupEventStream::new(receiver, state, id);
+        let receiver = AutoCleanupEventStream::new(receiver, conn_state, subscription.id.clone());
 
-        broker(receiver, &mut ws_sender).await;
+        broker(state, subscription, receiver, &mut ws_sender, true).await;
       }))
     }
   };
