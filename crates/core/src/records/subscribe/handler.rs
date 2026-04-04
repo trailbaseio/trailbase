@@ -317,7 +317,10 @@ pub async fn subscribe_ws(
         Err(_) => {
           if is_record_subscription {
             // Death sentence for record subscriptions to not have access
-            let _ = ACCESS_DENIED_EVENT.clone().into_ws_event().map(|ev| sender.send(ev));
+            let _ = ACCESS_DENIED_EVENT
+              .clone()
+              .into_ws_event()
+              .map(|ev| sender.send(ev));
             return;
           } else {
             continue;
