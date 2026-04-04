@@ -201,41 +201,46 @@ impl PerConnectionState {
     let conn = api.conn().clone();
     let state = self.clone();
 
-    let receiver = install_hook(&conn).to_async();
+    let receiver = install_hook(&conn);
 
     // Spawn broker task.
-    tokio::spawn(async move {
-      let mut expected = 1;
-      loop {
-        if receiver.sender_count() == 0 {
-          break;
-        }
-
-        let event = match receiver.recv().await {
-          Ok((cnt, event)) => {
-            if cnt != expected {
-              // QUESTION: There's several ways we could deal with failure. We
-              // probably shouldn't create back pressure on the preupdate_hook and gunk up the
-              // SQLite access. We could try to deliver event loss messages to all receivers but
-              // that may just make the problem worse. We're probably at limit already
-              // if we don't manage to catch up. Should we just disconnect all subscriptions?
-              state.state.lock().subscriptions.clear();
-              break;
-            }
-            expected += 1;
-
-            event
-          }
-          Err(kanal::ReceiveError::Closed) | Err(kanal::ReceiveError::SendClosed) => {
+    if let Err(err) = std::thread::Builder::new()
+      .name("subscriptions".to_string())
+      .spawn(move || {
+        let mut expected = 1;
+        loop {
+          if receiver.sender_count() == 0 {
             break;
           }
-        };
 
-        broker(&conn, &state, event).await;
-      }
+          let event = match receiver.recv() {
+            Ok((cnt, event)) => {
+              if cnt != expected {
+                // QUESTION: There's several ways we could deal with failure. We
+                // probably shouldn't create back pressure on the preupdate_hook and gunk up the
+                // SQLite access. We could try to deliver event loss messages to all receivers but
+                // that may just make the problem worse. We're probably at limit already
+                // if we don't manage to catch up. Should we just disconnect all subscriptions?
+                state.state.lock().subscriptions.clear();
+                break;
+              }
+              expected += 1;
 
-      debug!("Channel closed: terminating subscription broker task.");
-    });
+              event
+            }
+            Err(kanal::ReceiveError::Closed) | Err(kanal::ReceiveError::SendClosed) => {
+              break;
+            }
+          };
+
+          broker(&conn, &state, event);
+        }
+
+        debug!("Channel closed: terminating subscription broker task.");
+      })
+    {
+      log::error!("Failed to start subscription broker: {err}");
+    }
   }
 
   pub async fn add_record_subscription(
@@ -353,36 +358,39 @@ impl Drop for PerConnectionState {
   }
 }
 
-async fn broker_subscriptions(
+fn broker_subscriptions(
   subs: &[Arc<Subscription>],
   record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
   event: &Arc<EventPayload>,
-) -> Vec<Option<usize>> {
-  return futures_util::future::join_all(subs.iter().enumerate().map(async move |(idx, sub)| {
-    // Cloning the event. It's important that we use a try_send here to not block other
-    // subscriptions if a subscriber is slow and their channel fills up.
-    if let Err(err) = sub.sender.try_send(EventCandidate {
-      record: Some(record.clone()),
-      payload: event.clone(),
-      seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
-    }) {
-      match err {
-        async_channel::TrySendError::Full(ev) => {
-          debug!("Channel full, dropping event: {ev:?}");
+) -> Vec<usize> {
+  return subs
+    .iter()
+    .enumerate()
+    .filter_map(|(idx, sub)| {
+      // Cloning the event. It's important that we use a try_send here to not block other
+      // subscriptions if a subscriber is slow and their channel fills up.
+      if let Err(err) = sub.sender.try_send(EventCandidate {
+        record: Some(record.clone()),
+        payload: event.clone(),
+        seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
+      }) {
+        match err {
+          async_channel::TrySendError::Full(ev) => {
+            debug!("Channel full, dropping event: {ev:?}");
+          }
+          async_channel::TrySendError::Closed(_ev) => {
+            return Some(idx);
+          }
         }
-        async_channel::TrySendError::Closed(_ev) => {
-          return Some(idx);
-        }
-      }
-    };
+      };
 
-    return None;
-  }))
-  .await;
+      return None;
+    })
+    .collect();
 }
 
 /// Broker event to various subscriptions.
-async fn broker(
+fn broker(
   conn: &trailbase_sqlite::Connection,
   state: &Arc<PerConnectionState>,
   event: PreupdateHookEvent,
@@ -445,26 +453,19 @@ async fn broker(
     }))
   };
 
-  // FIXME: Holding lock across wait points. We could:
-  // * Ignore it
-  // * Use tokio::sync::Mutex
-  // * Use a dedicated thread and just block to avoid accidentally blocking shared worker threads.
-
   // First broker record subscriptions.
   if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
-    let dead = broker_subscriptions(record_subscriptions, &record, &event).await;
+    let dead = broker_subscriptions(record_subscriptions, &record, &event);
 
-    for idx in dead.iter().rev().flatten() {
+    for idx in dead.iter().rev() {
       record_subscriptions.remove(*idx);
     }
   }
 
   // Then broker table subscriptions.
-  let dead = broker_subscriptions(&subscriptions.table, &record, &event).await;
+  let dead = broker_subscriptions(&subscriptions.table, &record, &event);
   for idx in dead.iter().rev() {
-    if let Some(idx) = idx {
-      subscriptions.table.remove(*idx);
-    }
+    subscriptions.table.remove(*idx);
   }
 
   if subscriptions.is_empty() {
