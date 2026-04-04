@@ -39,15 +39,24 @@ class DeleteEvent extends Event {
 }
 
 class ErrorEvent extends Event {
-  final String _error;
+  final int _status;
+  final String? _error;
 
-  ErrorEvent(this._error);
+  static const int statusUnknown = 0;
+  static const int statusForbidden = 1;
+  static const int statusEventLoss = 2;
+
+  ErrorEvent(this._status, this._error);
 
   @override
   Map<String, dynamic>? get value => null;
 
+  int get status {
+    return _status;
+  }
+
   @override
-  String toString() => 'ErrorEvent(${_error})';
+  String toString() => 'ErrorEvent(${_status}, ${_error})';
 }
 
 Future<Stream<Event>> connectSse(
@@ -140,7 +149,10 @@ Event _eventfromJson(Map<String, dynamic> json) {
 
   final error = json['Error'];
   if (error != null) {
-    return ErrorEvent(error as String);
+    return ErrorEvent(
+      (error['status'] as int?) ?? ErrorEvent.statusUnknown,
+      error['message'] as String?,
+    );
   }
 
   throw Exception('Failed to parse event: ${json}');
