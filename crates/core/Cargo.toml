@@ -84,6 +84,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_path_to_error = "0.1.16"
 serde_qs = { workspace = true }
+serde_repr = "0.1.20"
 serde_urlencoded = "0.7.1"
 sha2 = "0.11.0"
 sqlformat = "0.5.0"
