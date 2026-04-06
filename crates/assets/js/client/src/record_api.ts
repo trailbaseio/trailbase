@@ -71,11 +71,34 @@ export type FilterOrComposite = Filter | And | Or;
 
 export type RecordId = string | number;
 
+export const ChangeEventStatusUnknown = 0 as const;
+export const ChangeEventStatusForbidden = 1 as const;
+export const ChangeEventStatusLoss = 2 as const;
+export type ChangeEventStatus =
+  | typeof ChangeEventStatusUnknown
+  | typeof ChangeEventStatusForbidden
+  | typeof ChangeEventStatusLoss;
+
 export type ChangeEvent =
-  | { Insert: object }
-  | { Update: object }
-  | { Delete: object }
-  | { Error: string };
+  | {
+      seq?: number;
+      Insert: object;
+    }
+  | {
+      seq?: number;
+      Update: object;
+    }
+  | {
+      seq?: number;
+      Delete: object;
+    }
+  | {
+      seq?: number;
+      Error: {
+        status: ChangeEventStatus;
+        message?: string;
+      };
+    };
 
 // Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
 // from renaming to `Event_2` to avoid a possible collision with the DOM
@@ -436,7 +459,7 @@ export class RecordApiImpl<
         const messages = decoder.decode(chunk).trimEnd().split("\n\n");
         for (const msg of messages) {
           if (msg.startsWith("data: ")) {
-            controller.enqueue(parseJSON(msg.substring(6)));
+            controller.enqueue(parseChangeEvent(msg));
           }
         }
       },
@@ -554,10 +577,15 @@ function addFiltersToParams(
   }
 }
 
+function parseChangeEvent(message: string): ChangeEvent {
+  return parseJSON(message.substring(6)) as ChangeEvent;
+}
+
 const recordApiBasePath = "/api/records/v1";
 
 export const exportedForTesting = isDev
   ? {
       subscribeWs: (api: RecordApiImpl, id: RecordId) => api.subscribeWs(id),
+      parseChangeEvent,
     }
   : undefined;

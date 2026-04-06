@@ -2,6 +2,12 @@ import { test } from "vitest";
 
 import { FetchError, initClient } from "../src/index";
 import { parseJSON } from "../src/json";
+import {
+  exportedForTesting,
+  ChangeEventStatusForbidden,
+} from "../src/record_api";
+
+const { parseChangeEvent } = exportedForTesting!;
 
 test("error-handling", async ({ expect }) => {
   expect(new FetchError(404, "test", "url").toString()).toEqual(
@@ -26,4 +32,22 @@ test("BigInt JSON parsing", ({ expect }) => {
   const json = `{ "value": ${huge} }`;
   const obj: { value: bigint } = parseJSON(json);
   expect(obj.value, json).not.toBe(huge);
+});
+
+test("ChangeEvent parsing", ({ expect }) => {
+  const json = `{
+          "Error": {
+            "status": 1,
+            "message": "test"
+          },
+          "seq": 3
+         }`;
+
+  expect(parseChangeEvent(`data: ${json}`)).toStrictEqual({
+    seq: 3,
+    Error: {
+      status: ChangeEventStatusForbidden,
+      message: "test",
+    },
+  });
 });
