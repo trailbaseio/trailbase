@@ -145,7 +145,7 @@ jobs:
         run: pnpm install
       # CMake v4 is too new: https://github.com/georust/geos/issues/194
       - name: Downgrade CMake
-        run: pipx install --force cmake==3.31
+        run: pipx install --force cmake==3.31.10
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.TOOLCHAIN_VERSION }}
@@ -179,7 +179,7 @@ jobs:
         run: pnpm install
       # CMake v4 is too new: https://github.com/georust/geos/issues/194
       - name: Downgrade CMake
-        run: pipx install --force cmake==3.31
+        run: pipx install --force cmake==3.31.10
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.TOOLCHAIN_VERSION }}

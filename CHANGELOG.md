@@ -1,3 +1,7 @@
+## v0.25.4
+
+- Fix MacOS release workflows.
+
 ## v0.25.3
 
 - Concurrent `SELECT`s for WASM guests.
