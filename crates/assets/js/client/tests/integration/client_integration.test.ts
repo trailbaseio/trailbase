@@ -491,7 +491,12 @@ test("Subscribe to Record with specific id", async () => {
   const events: Event[] = [];
   for await (const event of eventStream) {
     events.push(event);
+
+    if (events.length === 2) {
+      break;
+    }
   }
+  await eventStream.cancel();
 
   expect(events).toHaveLength(2);
   expect(events[0]["Update"]["text_not_null"]).equals(updatedMessage);
@@ -524,6 +529,7 @@ test("Subscribe to entire table", async () => {
       break;
     }
   }
+  await eventStream.cancel();
 
   expect(events).toHaveLength(3);
   expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
