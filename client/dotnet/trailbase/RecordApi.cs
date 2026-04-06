@@ -113,28 +113,38 @@ public class ListResponse<T> {
 public abstract class Event {
   /// <summary>Get associated record value as JSON object.</summary>
   public abstract JsonNode? Value { get; }
+  /// <summary>Get associated error message.</summary>
+  public long? Seq { get; }
 
-  internal static Event Parse(string message) {
+  /// <summary>InsertEvent constructor.</summary>
+  public Event(long? seq) {
+    this.Seq = seq;
+  }
+
+  /// <summary>Parses JSON into an Event.</summary>
+  public static Event Parse(string message) {
     var obj = (JsonObject?)JsonNode.Parse(message);
     if (obj != null) {
+      var seq = obj["seq"]?.GetValue<long>();
+
       var insert = obj["Insert"];
       if (insert != null) {
-        return new InsertEvent(insert);
+        return new InsertEvent(seq, insert);
       }
 
       var update = obj["Update"];
       if (update != null) {
-        return new UpdateEvent(update);
+        return new UpdateEvent(seq, update);
       }
 
       var delete = obj["Delete"];
       if (delete != null) {
-        return new DeleteEvent(delete);
+        return new DeleteEvent(seq, delete);
       }
 
       var error = obj["Error"];
       if (error != null) {
-        return new ErrorEvent(error.ToString());
+        return new ErrorEvent(seq, (ErrorEvent.ErrorStatus)(error["status"]?.GetValue<int>() ?? 0), error["message"]?.GetValue<string>());
       }
     }
 
@@ -148,7 +158,7 @@ public class InsertEvent : Event {
   public override JsonNode? Value { get; }
 
   /// <summary>InsertEvent constructor.</summary>
-  public InsertEvent(JsonNode? value) {
+  public InsertEvent(long? seq, JsonNode? value) : base(seq) {
     this.Value = value;
   }
 
@@ -162,7 +172,7 @@ public class UpdateEvent : Event {
   public override JsonNode? Value { get; }
 
   /// <summary>UpdateEvent constructor.</summary>
-  public UpdateEvent(JsonNode? value) {
+  public UpdateEvent(long? seq, JsonNode? value) : base(seq) {
     this.Value = value;
   }
 
@@ -176,7 +186,7 @@ public class DeleteEvent : Event {
   public override JsonNode? Value { get; }
 
   /// <summary>DeleteEvent constructor.</summary>
-  public DeleteEvent(JsonNode? value) {
+  public DeleteEvent(long? seq, JsonNode? value) : base(seq) {
     this.Value = value;
   }
 
@@ -186,18 +196,32 @@ public class DeleteEvent : Event {
 
 /// <summary>Error event.</summary>
 public class ErrorEvent : Event {
+  /// <summary>Programmatic error status.</summary>
+  public enum ErrorStatus : int {
+    /// Unknown error status.
+    Unknown = 0,
+    /// Forbidden, i.e. ACL violation.
+    Forbidden = 1,
+    /// Server-side event loss. Independently events can get lost between TrailBase and the client.
+    Loss = 2,
+  }
+
   /// <summary>Get associated record value as JSON object.</summary>
   public override JsonNode? Value { get { return null; } }
+
+  /// <summary>Programmatic status of this error event.</summary>
+  public ErrorStatus Status { get; }
   /// <summary>Get associated error message.</summary>
-  public string ErrorMessage { get; }
+  public string? Message { get; }
 
   /// <summary>ErrorEvent constructor.</summary>
-  public ErrorEvent(string errorMsg) {
-    this.ErrorMessage = errorMsg;
+  public ErrorEvent(long? seq, ErrorStatus status, string? message) : base(seq) {
+    this.Status = status;
+    this.Message = message;
   }
 
   /// <summary>Serialize ErrorEvent.</summary>
-  public override string ToString() => $"ErrorEvent({ErrorMessage})";
+  public override string ToString() => $"ErrorEvent({Status}, {Message})";
 }
 
 [JsonSourceGenerationOptions(WriteIndented = true)]

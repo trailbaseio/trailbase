@@ -110,6 +110,35 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
+  public void EventParseTest() {
+    var errEvent = Event.Parse("""
+    {
+      "Error": {
+        "status": 1,
+        "message": "test"
+      },
+      "seq": 3
+    }
+    """) as ErrorEvent;
+
+    Assert.Equal(ErrorEvent.ErrorStatus.Forbidden, errEvent.Status);
+    Assert.Equal("test", errEvent.Message);
+    Assert.Equal(3, errEvent.Seq);
+
+    var updateEvent = Event.Parse("""
+    {
+      "Update": {
+        "col0": "val0",
+        "col1": 4
+      },
+      "seq": 4
+    }
+    """) as UpdateEvent;
+
+    Assert.Equal(4, updateEvent.Seq);
+  }
+
+  [Fact]
   public async Task AuthTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     var mfaToken = await client.Login("admin@localhost", "secret");
@@ -430,6 +459,10 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     List<Event> events = [];
     await foreach (Event msg in eventStream) {
       events.Add(msg);
+
+      if (events.Count >= 2) {
+        break;
+      }
     }
 
     Assert.Equal(2, events.Count);
