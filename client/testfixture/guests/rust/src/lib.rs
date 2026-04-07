@@ -132,6 +132,18 @@ impl Guest for Endpoints {
 
         return Ok(());
       }),
+      routing::get("/attach_db", async |_req| {
+        let _ = execute("ATTACH DATABASE foo.db AS foo", vec![])
+          .await
+          .map_err(internal)?;
+        return Ok(());
+      }),
+      routing::get("/detach_db", async |_req| {
+        let _ = query("DETACH DATABASE foo", vec![])
+          .await
+          .map_err(internal)?;
+        return Ok(());
+      }),
       // Benchmark runtime performance.
       routing::get("/fibonacci", async |req| {
         let n: usize = req.query_param("n").map_or(40, |p| p.parse().unwrap());
