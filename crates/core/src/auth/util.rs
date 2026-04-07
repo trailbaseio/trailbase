@@ -56,6 +56,7 @@ pub fn validate_and_normalize_email_address(email_address: &str) -> Result<Strin
 fn validate_redirect_impl(
   site: Option<&url::Url>,
   custom_uri_schemes: &[String],
+  redirect_allow_list: &[String],
   redirect: &str,
   dev: bool,
 ) -> Result<(), AuthError> {
@@ -80,6 +81,15 @@ fn validate_redirect_impl(
           return Ok(());
         }
       }
+    }
+
+    // Allow explicitly allow-listed redirect uri.
+    if redirect_allow_list
+      .iter()
+      .find(|allowed| *allowed == redirect)
+      .is_some()
+    {
+      return Ok(());
     }
 
     if dev
@@ -109,6 +119,7 @@ pub(crate) fn validate_redirect<T: AsRef<str>>(
     validate_redirect_impl(
       site.as_ref(),
       &custom_uri_schemes,
+      &[],
       redirect_uri.as_ref(),
       state.dev_mode(),
     )?;
@@ -391,37 +402,69 @@ mod tests {
   #[test]
   fn test_validate_redirect_impl() {
     let empty_site: Option<url::Url> = None;
-    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "", true).is_err());
-    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "/somewhere", false).is_ok());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], &[], "", true).is_err());
+    assert!(validate_redirect_impl(empty_site.as_ref(), &[], &[], "/somewhere", false).is_ok());
     assert!(
       validate_redirect_impl(
         empty_site.as_ref(),
         &["custom".to_string()],
+        &[],
         "custom://somewhere",
         false
       )
       .is_ok()
     );
-    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "http://localhost", false).is_err());
-    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "http://127.0.0.1", false).is_err());
-    assert!(validate_redirect_impl(empty_site.as_ref(), &[], "http://localhost", true).is_ok());
+    assert!(
+      validate_redirect_impl(empty_site.as_ref(), &[], &[], "http://localhost", false).is_err()
+    );
+    assert!(
+      validate_redirect_impl(empty_site.as_ref(), &[], &[], "http://127.0.0.1", false).is_err()
+    );
+    assert!(
+      validate_redirect_impl(empty_site.as_ref(), &[], &[], "http://localhost", true).is_ok()
+    );
 
     let site = Some(url::Url::parse("https://test.org").unwrap());
-    assert!(validate_redirect_impl(site.as_ref(), &[], "/somewhere", false).is_ok());
+    assert!(validate_redirect_impl(site.as_ref(), &[], &[], "/somewhere", false).is_ok());
     assert!(
-      validate_redirect_impl(site.as_ref(), &[], "https://test.org/somewhere", false).is_ok()
+      validate_redirect_impl(site.as_ref(), &[], &[], "https://test.org/somewhere", false).is_ok()
     );
     assert!(
-      validate_redirect_impl(site.as_ref(), &[], "https://other.org/somewhere", false).is_err()
+      validate_redirect_impl(
+        site.as_ref(),
+        &[],
+        &[],
+        "https://other.org/somewhere",
+        false
+      )
+      .is_err()
     );
     assert!(
-      validate_redirect_impl(site.as_ref(), &[], "custom://test.org/somewhere", false).is_err()
+      validate_redirect_impl(
+        site.as_ref(),
+        &[],
+        &[],
+        "custom://test.org/somewhere",
+        false
+      )
+      .is_err()
     );
     assert!(
       validate_redirect_impl(
         site.as_ref(),
         &["custom".to_string()],
+        &[],
         "custom://test.org/somewhere",
+        false
+      )
+      .is_ok()
+    );
+    assert!(
+      validate_redirect_impl(
+        site.as_ref(),
+        &[],
+        &["https://test.org/somewhere".to_string()],
+        "https://test.org/somewhere",
         false
       )
       .is_ok()
