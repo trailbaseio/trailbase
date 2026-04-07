@@ -33,29 +33,49 @@ data class JwtTokenClaims(
 )
 
 @Serializable
-sealed class DbEvent {
-  public class Update(val obj: JsonObject) : DbEvent()
-  public class Insert(val obj: JsonObject) : DbEvent()
-  public class Delete(val obj: JsonObject) : DbEvent()
-  public class Error(val msg: String) : DbEvent()
+sealed class ChangeEvent {
+  public class Update(val seq: Long?, val obj: JsonObject) : ChangeEvent()
+  public class Insert(val seq: Long?, val obj: JsonObject) : ChangeEvent()
+  public class Delete(val seq: Long?, val obj: JsonObject) : ChangeEvent()
+
+  public enum class ErrorStatus(val id: Long) {
+    UNKNOWN(0),
+    FORBIDDEN(1),
+    LOSS(2);
+
+    companion object {
+      private val byId: Map<Long, ErrorStatus> = entries.associateBy { it.id }
+
+      fun fromId(id: Long?): ErrorStatus = byId[id ?: 0] ?: UNKNOWN
+    }
+  }
+  public class Error(val seq: Long?, val status: ErrorStatus, val message: String?) : ChangeEvent()
 
   companion object {
-    fun from(obj: JsonObject): DbEvent? {
+    fun parse(msg: String): ChangeEvent? {
+      val obj: JsonObject = jsonSerializer.decodeFromString(msg)
+      val seq: Long? = obj.get("seq")?.jsonPrimitive?.longOrNull
+
       val update = obj.get("Update")
       if (update != null) {
-        return DbEvent.Update(update.jsonObject)
+        return ChangeEvent.Update(seq, update.jsonObject)
       }
       val insert = obj.get("Insert")
       if (insert != null) {
-        return DbEvent.Insert(insert.jsonObject)
+        return ChangeEvent.Insert(seq, insert.jsonObject)
       }
       val delete = obj.get("Delete")
       if (delete != null) {
-        return DbEvent.Delete(delete.jsonObject)
+        return ChangeEvent.Delete(seq, delete.jsonObject)
       }
       val error = obj.get("Error")
       if (error != null) {
-        return DbEvent.Error("${error}")
+        val errObj = error.jsonObject
+        return ChangeEvent.Error(
+                seq,
+                ErrorStatus.fromId(errObj.get("status")?.jsonPrimitive?.longOrNull),
+                errObj.get("message")?.jsonPrimitive?.contentOrNull,
+        )
       }
 
       return null
@@ -235,7 +255,7 @@ class RecordApi(val name: String, val client: Client) {
     client.fetch("${RECORD_API}/${name}/${id.id()}", Method.delete)
   }
 
-  suspend inline fun <reified T> subscribe(id: RecordId): Flow<DbEvent> {
+  suspend inline fun <reified T> subscribe(id: RecordId): Flow<ChangeEvent> {
     val path = "${RECORD_API}/${name}/subscribe/${id.id()}"
 
     // NOTE: We should probably push this into a Client.sse.
@@ -253,8 +273,7 @@ class RecordApi(val name: String, val client: Client) {
         // event.data?.takeIf { predicate }(predicate)
         val data = ev.data
         if (data != null) {
-          val obj: JsonObject = jsonSerializer.decodeFromString(data)
-          val event = DbEvent.from(obj)
+          val event = ChangeEvent.parse(data)
           if (event != null) {
             emit(event)
           }

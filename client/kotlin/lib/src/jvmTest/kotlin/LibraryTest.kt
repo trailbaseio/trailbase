@@ -130,6 +130,46 @@ class ClientTest {
     assertEquals(2, params.size)
   }
 
+  @Test
+  fun `parse change events`() {
+    val ev0 =
+            ChangeEvent.parse(
+                    """{
+                         "Error": {
+                           "status": 1,
+                           "message": "test"
+                         },
+                         "seq": 3
+                       }"""
+            )
+
+    val errEvent0 = ev0 as ChangeEvent.Error
+    assertEquals(3, errEvent0.seq)
+    assertEquals("test", errEvent0.message)
+    assertEquals(ChangeEvent.ErrorStatus.FORBIDDEN, errEvent0.status)
+
+    val ev1 = ChangeEvent.parse("""{ "Error": { "status": 1 } }""")
+
+    val errEvent1 = ev1 as ChangeEvent.Error
+    assertEquals(null, errEvent1.seq)
+    assertEquals(ChangeEvent.ErrorStatus.FORBIDDEN, errEvent1.status)
+
+    val ev2 =
+            ChangeEvent.parse(
+                    """{
+                         "Update": {
+                           "col0": "val0",
+                           "col1": 4
+                         },
+                         "seq": 4
+                       }"""
+            )
+
+    val updateEvent = ev2 as ChangeEvent.Update
+    assertEquals(4, updateEvent.seq)
+    assertNotNull(updateEvent.obj)
+  }
+
   // WARN: TrailBase binding to localhost:4000 doesn't work. ktor only finds it when bound to
   // 127.0.0.1 or 0.0.0.0, no IPv6?.
   @Test
@@ -301,17 +341,17 @@ class ClientTest {
     val id = api.create(SimpleStrictInsert("kotlin subscription test 0: =?&${now}"))
     api.delete(id)
 
-    val result = mutableListOf<DbEvent>()
+    val result = mutableListOf<ChangeEvent>()
     flow.take(2).toList(result)
 
     assertEquals(2, result.count())
 
     val insert: SimpleStrict =
-            localJsonSerializer.decodeFromJsonElement((result[0] as DbEvent.Insert).obj)
+            localJsonSerializer.decodeFromJsonElement((result[0] as ChangeEvent.Insert).obj)
     assertEquals(insert.id, id.id())
 
     val delete: SimpleStrict =
-            localJsonSerializer.decodeFromJsonElement((result[1] as DbEvent.Delete).obj)
+            localJsonSerializer.decodeFromJsonElement((result[1] as ChangeEvent.Delete).obj)
     assertEquals(delete.id, id.id())
   }
 }
