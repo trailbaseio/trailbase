@@ -250,9 +250,7 @@ pub async fn subscribe_ws(
   use futures_util::SinkExt;
   use std::sync::Arc;
 
-  use crate::records::subscribe::event::EventPayload;
   use crate::records::subscribe::state::AutoCleanupEventStream;
-  use crate::records::subscribe::state::EventCandidate;
 
   let (mut parts, _body) = request.into_parts();
   let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {

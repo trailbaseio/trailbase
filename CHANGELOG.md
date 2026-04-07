@@ -1,3 +1,17 @@
+## v0.26.0
+
+- Overhaul change subscriptions:
+  - Minimize work done on SQLite's pre-update hook.
+  - Push brokering into separate thread and ACL-checking+filtering into handler tasks.
+  - Simplify locking.
+  - Add layered sequence numbers to track both, server-side event losses (e.g. due to back-pressure) and allow clients to detect client-side losses (e.g. due to unreliable network).
+  - Add structured status to error events. This changes the wire-format and is a breaking change. While this only affects errors, users of change subscriptions should update their client.
+    - We did also explore switching from an externally to an internally tagged union format. However, externally tagged is the way to go for change event schemas with something like JSON schema or Avro.
+  - Update all the clients that support change subscriptions, i.e. all but Swift.
+  - Add stress-tests.
+- Fix `ATTACH DATABASE` calls from WASM guests.
+- Update dependencies.
+
 ## v0.25.4
 
 - Fix MacOS release workflows.
