@@ -1,6 +1,22 @@
-from trailbase import Client, CompareOp, FetchException, Filter, RecordId, JSON, JSON_OBJECT
+from trailbase import (
+    EVENT_ERROR_STATUS_FORBIDDEN,
+    ErrorEvent,
+    parseEvent,
+    Client,
+    CompareOp,
+    FetchException,
+    Filter,
+    InsertEvent,
+    UpdateEvent,
+    DeleteEvent,
+    RecordId,
+    JSON,
+    JSON_OBJECT,
+    EVENT,
+)
 
 import httpx
+import json
 import logging
 import mintotp  # type: ignore
 import os
@@ -8,7 +24,7 @@ import pytest
 import subprocess
 
 from time import time, sleep
-from typing import List
+from typing import List, cast
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -283,26 +299,77 @@ def test_expand_foreign_records(trailbase: TrailBaseFixture):
         assert second == offset_comments.records[0]
 
 
+def test_parse_event():
+    err_json: str = """
+    {
+      "Error": {
+        "status": 1,
+        "message": "test"
+      },
+      "seq": 3
+    }
+    """
+
+    err_event = cast(ErrorEvent | None, parseEvent(json.loads(err_json)))
+    assert err_event is not None
+    assert err_event.seq == 3
+    assert err_event.status == EVENT_ERROR_STATUS_FORBIDDEN
+    assert err_event.message == "test"
+
+    update_json: str = """
+    {
+      "Update": {
+        "col0": "val0",
+        "col1": 4
+      },
+      "seq": 4
+    }
+    """
+
+    update_event = cast(UpdateEvent | None, parseEvent(json.loads(update_json)))
+    assert update_event is not None
+    assert update_event.seq == 4
+
+
 def test_subscriptions(trailbase: TrailBaseFixture):
     assert trailbase.isUp()
 
     client = connect()
     api = client.records("simple_strict_table")
 
-    table_subscription = api.subscribe("*")
+    table_subscription = api.subscribe_all()
 
     now = int(time())
-    create_message = f"python client test 0: =?&{now}"
-    api.create({"text_not_null": create_message})
+    create_message = f"python client subscription test 0: =?&{now}"
+    id = api.create({"text_not_null": create_message})
 
-    events: List[dict[str, JSON]] = []
+    update_message = f"python client subscription test 1: =?&{now}"
+    api.update(id, {"text_not_null": update_message})
+
+    api.delete(id)
+
+    events: List[EVENT] = []
     for ev in table_subscription:
         events.append(ev)
-        break
+        if len(events) == 3:
+            break
 
     table_subscription.close()
 
-    assert "Insert" in events[0]
+    ev0 = events[0]
+    assert type(ev0) is InsertEvent
+    assert ev0.seq == 1
+    assert ev0.value["text_not_null"] == create_message
+
+    ev1 = events[1]
+    assert type(ev1) is UpdateEvent
+    assert ev1.seq == 2
+    assert ev1.value["text_not_null"] == update_message
+
+    ev2 = events[2]
+    assert type(ev2) is DeleteEvent
+    assert ev2.seq == 3
+    assert ev2.value["text_not_null"] == update_message
 
 
 logger = logging.getLogger(__name__)
