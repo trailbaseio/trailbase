@@ -100,6 +100,7 @@ pub async fn query(
         })
         .collect::<Result<Vec<_>, _>>()?,
     ),
+    Ok(SqliteResponse::Error(err)) => Err(Error::Other(err)),
     Ok(_) => Err(Error::UnexpectedType),
     Err(err) => Err(Error::Other(err.to_string())),
   };
@@ -137,6 +138,7 @@ pub async fn execute(
 
   return match serde_json::from_slice(&bytes) {
     Ok(SqliteResponse::Execute { rows_affected }) => Ok(rows_affected),
+    Ok(SqliteResponse::Error(err)) => Err(Error::Other(err)),
     Ok(_) => Err(Error::UnexpectedType),
     Err(err) => Err(Error::Other(err.to_string())),
   };

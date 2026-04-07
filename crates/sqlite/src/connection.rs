@@ -515,17 +515,19 @@ impl Connection {
   }
 
   pub fn attach(&self, path: &str, name: &str) -> Result<()> {
+    let query = format!("ATTACH DATABASE '{path}' AS {name} ");
     let lock = self.conns.write();
     for conn in &lock.0 {
-      conn.execute(&format!("ATTACH DATABASE '{path}' AS {name} "), ())?;
+      conn.execute(&query, ())?;
     }
     return Ok(());
   }
 
   pub fn detach(&self, name: &str) -> Result<()> {
+    let query = format!("DETACH DATABASE {name}");
     let lock = self.conns.write();
     for conn in &lock.0 {
-      conn.execute(&format!("DETACH DATABASE {name} "), ())?;
+      conn.execute(&query, ())?;
     }
     return Ok(());
   }

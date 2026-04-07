@@ -51,7 +51,7 @@ async fn handle_sqlite_execute(
     // apply to all internal read and write connections.
     Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
       conn
-        .attach(&unquote_expr(&db_name), &unquote_expr(&expr))
+        .attach(&unquote_expr(&expr), &unquote_expr(&db_name))
         .map_err(sqlite_err)?;
       0
     }
@@ -59,13 +59,20 @@ async fn handle_sqlite_execute(
       conn.detach(&unquote_expr(&name)).map_err(sqlite_err)?;
       0
     }
-    _ => conn
-      .execute(
-        request.query,
-        sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
-      )
-      .await
-      .map_err(sqlite_err)?,
+    _ => {
+      match conn
+        .execute(
+          request.query,
+          sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
+        )
+        .await
+      {
+        Ok(rows_affected) => rows_affected,
+        Err(err) => {
+          return Ok(SqliteResponse::Error(err.to_string()));
+        }
+      }
+    }
   };
 
   Ok(SqliteResponse::Execute { rows_affected })
@@ -75,6 +82,7 @@ async fn handle_sqlite_query(
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
+  // Handles write queries.
   async fn write(
     conn: trailbase_sqlite::Connection,
     request: SqliteRequest,
@@ -88,6 +96,7 @@ async fn handle_sqlite_query(
       .map_err(sqlite_err);
   }
 
+  // Handles read queries.
   async fn read(
     conn: trailbase_sqlite::Connection,
     request: SqliteRequest,
@@ -110,7 +119,7 @@ async fn handle_sqlite_query(
     // apply to all internal read and write connections.
     Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
       conn
-        .attach(&unquote_expr(&db_name), &unquote_expr(&expr))
+        .attach(&unquote_expr(&expr), &unquote_expr(&db_name))
         .map_err(sqlite_err)?;
       Rows::empty()
     }
@@ -118,8 +127,18 @@ async fn handle_sqlite_query(
       conn.detach(&unquote_expr(&name)).map_err(sqlite_err)?;
       Rows::empty()
     }
-    Ok(Some(Stmt::Select(_))) => read(conn, request).await?,
-    _ => write(conn, request).await?,
+    Ok(Some(Stmt::Select(_))) => match read(conn, request).await {
+      Ok(rows) => rows,
+      Err(err) => {
+        return Ok(SqliteResponse::Error(err));
+      }
+    },
+    _ => match write(conn, request).await {
+      Ok(rows) => rows,
+      Err(err) => {
+        return Ok(SqliteResponse::Error(err));
+      }
+    },
   };
 
   let json_rows = rows
@@ -127,7 +146,7 @@ async fn handle_sqlite_query(
     .map(convert_values)
     .collect::<Result<Vec<_>, _>>()?;
 
-  Ok(SqliteResponse::Query { rows: json_rows })
+  return Ok(SqliteResponse::Query { rows: json_rows });
 }
 
 pub(crate) async fn handle_sqlite_request(
@@ -217,3 +236,157 @@ pub fn sqlite_err<E: std::error::Error>(err: E) -> String {
 // fn empty<E>() -> BoxBody<Bytes, E> {
 //   BoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()))
 // }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use trailbase_sqlite::Connection;
+
+  #[tokio::test]
+  async fn handle_sqlite_execute_test() {
+    let conn = Connection::open_in_memory().unwrap();
+
+    let _ = handle_sqlite_execute(
+      conn.clone(),
+      SqliteRequest {
+        query: "CREATE TABLE test (id INTEGER PRIMARY KEY)".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    let response = handle_sqlite_execute(
+      conn.clone(),
+      SqliteRequest {
+        query: "INSERT INTO test (id) VALUES (?1), (?2)".to_string(),
+        params: vec![SqlValue::Integer(2), SqlValue::Integer(3)],
+      },
+    )
+    .await
+    .unwrap();
+
+    let SqliteResponse::Execute { rows_affected } = response else {
+      panic!("expected execute, got: {response:?}");
+    };
+
+    assert_eq!(2, rows_affected);
+
+    // Attach
+    let _ = handle_sqlite_execute(
+      conn.clone(),
+      SqliteRequest {
+        query: "ATTACH DATABASE 'foo.db' AS foo".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Detach
+    let _ = handle_sqlite_execute(
+      conn.clone(),
+      SqliteRequest {
+        query: "DETACH DATABASE foo".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Error
+    let response = handle_sqlite_execute(
+      conn.clone(),
+      SqliteRequest {
+        query: "NOT A VALID QUERY :)".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    let SqliteResponse::Error(err) = response else {
+      panic!("expected error, got: {response:?}");
+    };
+
+    assert!(
+      err
+        .contains("Rusqlite error: near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0")
+    );
+  }
+
+  #[tokio::test]
+  async fn handle_sqlite_query_test() {
+    let conn = Connection::open_in_memory().unwrap();
+
+    // Write.
+    let _ = handle_sqlite_query(
+      conn.clone(),
+      SqliteRequest {
+        query: "CREATE TABLE test (id INTEGER PRIMARY KEY);".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Read
+    let response = handle_sqlite_query(
+      conn.clone(),
+      SqliteRequest {
+        query: "SELECT * FROM test".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    let SqliteResponse::Query { rows } = response else {
+      panic!("expected query, got: {response:?}");
+    };
+
+    assert_eq!(0, rows.len());
+
+    // Attach
+    let _ = handle_sqlite_query(
+      conn.clone(),
+      SqliteRequest {
+        query: "ATTACH DATABASE 'foo.db' AS foo".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Detach
+    let _ = handle_sqlite_query(
+      conn.clone(),
+      SqliteRequest {
+        query: "DETACH DATABASE foo".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Error
+    let response = handle_sqlite_query(
+      conn.clone(),
+      SqliteRequest {
+        query: "NOT A VALID QUERY :)".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    let SqliteResponse::Error(err) = response else {
+      panic!("expected error, got: {response:?}");
+    };
+
+    assert!(
+      err
+        .contains("Rusqlite error: near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0")
+    );
+  }
+}
