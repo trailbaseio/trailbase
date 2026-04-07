@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.0
+
+- Update change `Event`s to contain sequence numbers.
+- Update change `ErrorEvent` to contain programmatic status.
+
 ## 0.9.0
 
 - Add a `Transport` abstraction to allow for custom implementations. This can be used for testing or production use-cases like injecting headers such as `X-Forwarded-For`.

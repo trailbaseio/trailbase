@@ -13,12 +13,8 @@ kotlin {
     macosX64()
     macosArm64()
 
-    js(IR) {
-        browser()
-    }
-    wasmJs {
-        browser()
-    }
+    js(IR) { browser() }
+    wasmJs { browser() }
 
     android {
         namespace = "io.trailbase.client"
@@ -47,7 +43,7 @@ tasks { named<Test>("jvmTest") { useJUnitPlatform() } }
 
 group = "io.trailbase"
 
-version = "0.4.1"
+version = "0.5.0"
 
 mavenPublishing {
     publishToMavenCentral()

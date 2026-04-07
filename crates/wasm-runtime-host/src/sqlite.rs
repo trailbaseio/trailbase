@@ -276,7 +276,7 @@ mod tests {
     let _ = handle_sqlite_execute(
       conn.clone(),
       SqliteRequest {
-        query: "ATTACH DATABASE 'foo.db' AS foo".to_string(),
+        query: "ATTACH DATABASE ':memory:' AS foo".to_string(),
         params: vec![],
       },
     )
@@ -351,7 +351,7 @@ mod tests {
     let _ = handle_sqlite_query(
       conn.clone(),
       SqliteRequest {
-        query: "ATTACH DATABASE 'foo.db' AS foo".to_string(),
+        query: "ATTACH DATABASE ':memory:' AS foo".to_string(),
         params: vec![],
       },
     )
