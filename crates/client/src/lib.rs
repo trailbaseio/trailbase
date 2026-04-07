@@ -14,6 +14,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::borrow::Cow;
 use std::sync::Arc;
 use thiserror::Error;
@@ -106,12 +107,28 @@ impl Pagination {
 
 type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
+#[derive(Debug, Clone, Copy, Deserialize_repr, Serialize_repr, PartialEq)]
+#[repr(i64)]
+pub enum EventErrorStatus {
+  /// Unknown or unspecified error.
+  Unknown = 0,
+  /// Access forbidden.
+  Forbidden = 1,
+  /// Server-side event-loss, e.g. a buffer ran out of capacity. This does not account for
+  /// additional losses that may happen between the TrailBase server and the client. This
+  /// needs to be determined client-side based on event `seq` numbers.
+  Loss = 2,
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum EventPayload {
   Update(JsonObject),
   Insert(JsonObject),
   Delete(JsonObject),
-  Error(String),
+  Error {
+    status: EventErrorStatus,
+    message: Option<String>,
+  },
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -119,6 +136,12 @@ pub struct ChangeEvent {
   #[serde(flatten)]
   pub event: Arc<EventPayload>,
   pub seq: Option<i64>,
+}
+
+impl ChangeEvent {
+  fn from_str(msg: &str) -> Result<ChangeEvent, serde_json::Error> {
+    return serde_json::from_str::<ChangeEvent>(msg);
+  }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -650,9 +673,9 @@ impl RecordApi {
           // QUESTION: Should we instead return a `Stream<Item = Result<ChangeEvent, _>>` to allow
           // for better error handling here.
           if let Ok(event) = event_or {
-            return serde_json::from_str::<ChangeEvent>(&event.data)
+            return ChangeEvent::from_str(&event.data)
               .map_err(|err| {
-                println!("FOO: {err}, {}", event.data);
+                warn!("Failed to parse change event: {}", event.data);
                 return err;
               })
               .ok();
@@ -1185,5 +1208,52 @@ mod tests {
       .await
       .unwrap();
     }
+  }
+
+  #[test]
+  fn parse_change_event_test() {
+    let ev0 = ChangeEvent::from_str(
+      r#"
+        {
+          "Error": {
+            "status": 1,
+            "message": "test"
+          },
+          "seq": 3
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(ev0.seq, Some(3));
+    let EventPayload::Error { status, message } = &*ev0.event else {
+      panic!("expected error payload, got {:?}", ev0.event);
+    };
+
+    assert_eq!(*status, EventErrorStatus::Forbidden);
+    assert_eq!(message.as_deref().unwrap(), "test");
+
+    let ev1 = ChangeEvent::from_str(
+      r#"
+        {
+          "Update": {
+            "col0": "val0",
+            "col1": 4
+          }
+        }"#,
+    )
+    .unwrap();
+
+    assert_eq!(ev1.seq, None);
+    let EventPayload::Update(obj) = &*ev1.event else {
+      panic!("expected update payload, got {:?}", ev1.event);
+    };
+
+    assert_eq!(
+      serde_json::Value::Object(obj.clone()),
+      serde_json::json!({
+          "col0": "val0",
+          "col1": 4,
+      })
+    )
   }
 }
