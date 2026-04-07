@@ -122,7 +122,7 @@ trailbase-build = { workspace = true }
 
 [dev-dependencies]
 anyhow = "^1.0.86"
-axum-test = "19.1.1"
+axum-test = "20.0.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 indoc = "2.0.5"
