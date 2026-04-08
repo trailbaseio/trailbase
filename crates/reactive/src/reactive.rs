@@ -3,12 +3,12 @@ use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-type Observer<T> = dyn FnMut(&T);
+type Observer<T> = Box<dyn FnMut(&T) + Send + Sync>;
 
 #[derive(Default)]
 struct State<T> {
   value: RwLock<T>,
-  observers: Mutex<Vec<Box<Observer<T>>>>,
+  observers: Mutex<Vec<Observer<T>>>,
 }
 
 #[derive(Clone, Default)]
@@ -75,9 +75,9 @@ impl<T> Reactive<T> {
   ///
   /// assert_eq!(15, d.value());
   /// ```
-  pub fn derive<U: Clone + PartialEq + Send + 'static>(
+  pub fn derive<U: Clone + PartialEq + Send + Sync + 'static>(
     &self,
-    f: impl Fn(&T) -> U + Send + 'static,
+    f: impl Fn(&T) -> U + Send + Sync + 'static,
   ) -> Reactive<U>
   where
     T: Clone,
@@ -94,9 +94,9 @@ impl<T> Reactive<T> {
   }
 
   // Unlike Reactive::derive, doesn't require PartialEq.
-  pub fn derive_unchecked<U: Clone + Send + 'static>(
+  pub fn derive_unchecked<U: Clone + Send + Sync + 'static>(
     &self,
-    f: impl Fn(&T) -> U + Send + 'static,
+    f: impl Fn(&T) -> U + Send + Sync + 'static,
   ) -> Reactive<U>
   where
     T: Clone,
@@ -122,7 +122,7 @@ impl<T> Reactive<T> {
   /// let r = Reactive::new(String::from("🦀"));
   /// r.add_observer(|val| println!("{}", val));
   /// ```
-  pub fn add_observer(&self, f: impl FnMut(&T) + 'static) {
+  pub fn add_observer(&self, f: impl FnMut(&T) + Send + Sync + 'static) {
     return self.state.observers.lock().push(Box::new(f));
   }
 
@@ -236,15 +236,15 @@ impl<T> Reactive<T> {
   /// Updates the value inside inplace without creating a new clone/copy and notify
   /// all the observers by calling the added observer functions in the sequence they were added
   /// without checking if the value is changed after applying the provided function.
-  pub(crate) fn update_inplace_unchecked(&self, f: impl FnOnce(&mut T)) {
-    let mut guard = self.state.value.write();
-    let val = guard.deref_mut();
-    f(val);
-
-    for obs in self.state.observers.lock().deref_mut() {
-      obs(val);
-    }
-  }
+  // pub(crate) fn update_inplace_unchecked(&self, f: impl FnOnce(&mut T)) {
+  //   let mut guard = self.state.value.write();
+  //   let val = guard.deref_mut();
+  //   f(val);
+  //
+  //   for obs in self.state.observers.lock().deref_mut() {
+  //     obs(val);
+  //   }
+  // }
 
   /// Notify all the observers of the current value by calling the
   /// added observer functions in the sequence they were added
