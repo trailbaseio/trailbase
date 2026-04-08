@@ -10,6 +10,7 @@ use trailbase_sqlite::{NamedParams, Value};
 use trailbase_sqlvalue::SqlValue;
 
 use crate::records::RecordApi;
+use crate::records::util::named_placeholder;
 use crate::schema_metadata::{self, JsonColumnMetadata, TableMetadata};
 
 #[derive(Debug, Clone, thiserror::Error)]
@@ -176,7 +177,7 @@ impl Params {
         files.extend(json_files);
       }
 
-      named_params.push((prefix_colon(&key).into(), param));
+      named_params.push((named_placeholder(&key).into(), param));
       column_names.push(key);
       column_indexes.push(*index);
     }
@@ -223,7 +224,7 @@ impl Params {
         continue;
       };
 
-      named_params.push((prefix_colon(&key).into(), value.try_into()?));
+      named_params.push((named_placeholder(&key).into(), value.try_into()?));
       column_names.push(key);
       column_indexes.push(*index);
     }
@@ -284,7 +285,7 @@ impl Params {
         ));
       }
 
-      named_params.push((prefix_colon(&key).into(), param));
+      named_params.push((named_placeholder(&key).into(), param));
       column_names.push(key);
       column_indexes.push(*index);
     }
@@ -348,7 +349,7 @@ impl Params {
         ));
       }
 
-      named_params.push((prefix_colon(&key).into(), param));
+      named_params.push((named_placeholder(&key).into(), param));
       column_names.push(key);
       column_indexes.push(*index);
     }
@@ -492,7 +493,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
         }
 
         named_params.push((
-          prefix_colon(&column.name).into(),
+          named_placeholder(&column.name).into(),
           Value::Text(serde_json::to_string(&file_metadata)?),
         ));
         column_names.push(column.name.to_string());
@@ -500,7 +501,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
       }
       "std.FileUploads" => {
         named_params.push((
-          prefix_colon(&column.name).into(),
+          named_placeholder(&column.name).into(),
           Value::Text(serde_json::to_string(&file_metadata)?),
         ));
         column_names.push(column.name.to_string());
@@ -610,14 +611,6 @@ fn extract_params_and_files_from_json(
       Ok((Value::Text(value.to_string()), None))
     }
   };
-}
-
-#[inline]
-pub(crate) fn prefix_colon(s: &str) -> String {
-  let mut new = String::with_capacity(s.len() + 1);
-  new.push(':');
-  new.push_str(s);
-  return new;
 }
 
 #[cfg(test)]

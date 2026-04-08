@@ -6,7 +6,7 @@ FROM
   {% if !column_names.is_empty() -%}
   , (SELECT
     {%- for name in column_names -%}
-      {% if !loop.first %},{% endif %} :{{ name }} AS "{{ name }}"
+      {% if !loop.first %},{% endif %} {{ crate::records::util::named_placeholder(name) }} AS "{{ name }}"
     {%- endfor -%}
   ) AS _REQ_
   {%- endif %}

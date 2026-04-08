@@ -6,7 +6,7 @@ INSERT {{ conflict_clause }} INTO {{ table_name }}
   {%- endfor -%}
   ) VALUES (
   {%- for name in column_names -%}
-    {%- if !loop.first %},{% endif %}:{{ name }}
+    {%- if !loop.first %},{% endif %}{{ crate::records::util::named_placeholder(name) }}
   {%- endfor -%}
 )
 {%- endif -%}

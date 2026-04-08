@@ -15,6 +15,7 @@ pub(crate) mod read_queries;
 pub(crate) mod read_record;
 pub(crate) mod subscribe;
 pub(crate) mod test_utils;
+pub(crate) mod util;
 pub(crate) mod write_queries;
 
 mod error;

@@ -551,10 +551,14 @@ impl QualifiedName {
   }
 
   pub fn migration_filename(&self, prefix: &str) -> String {
+    fn sanitize(s: &str) -> String {
+      return s.replace(|c: char| !c.is_alphanumeric(), "_");
+    }
+
     return if let Some(ref db) = self.database_schema {
-      format!("{prefix}_{db}_{}", self.name)
+      format!("{prefix}_{db}_{}", sanitize(&self.name), db = sanitize(db))
     } else {
-      format!("{prefix}_{}", self.name)
+      format!("{prefix}_{}", sanitize(&self.name))
     };
   }
 }

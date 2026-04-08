@@ -14,7 +14,8 @@ use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::constants::USER_TABLE;
-use crate::records::params::{LazyParams, Params, prefix_colon};
+use crate::records::params::{LazyParams, Params};
+use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
 
 #[derive(Clone)]
@@ -70,7 +71,7 @@ impl RecordApiSchema {
       .iter()
       .map(|meta| {
         (
-          Cow::Owned(prefix_colon(&meta.column.name)),
+          Cow::Owned(named_placeholder(&meta.column.name)),
           trailbase_sqlite::Value::Null,
         )
       })
@@ -729,7 +730,7 @@ struct SubscriptionAclParams<'a> {
 impl<'a> trailbase_sqlite::Params for SubscriptionAclParams<'a> {
   fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> rusqlite::Result<()> {
     for (name, v) in self.params {
-      if let Some(idx) = stmt.parameter_index(&prefix_colon(name))? {
+      if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
         stmt.raw_bind_parameter(idx, v)?;
       };
     }

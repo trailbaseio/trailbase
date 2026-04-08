@@ -425,15 +425,19 @@ mod test {
 
   async fn create_test_record_api(state: &AppState, api_name: &str) {
     let conn = state.conn();
+
+    let table_name = "table 😍";
     conn
       .execute(
         format!(
-          r#"CREATE TABLE 'table' (
+          r#"CREATE TABLE '{table_name}' (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             file         TEXT CHECK(jsonschema('std.FileUpload', file)),
             files        TEXT CHECK(jsonschema('std.FileUploads', files)),
-            -- Add a "keyword" column to ensure escaping is correct
-            [index]      TEXT NOT NULL DEFAULT('')
+            -- Add a "keyword" column to ensure escaping is correct.
+            [index]      TEXT NOT NULL DEFAULT(''),
+            -- A special char column to check more escaping.
+            [test 😍]    TEXT NOT NULL DEFAULT('')
           ) STRICT"#
         ),
         (),
@@ -447,7 +451,7 @@ mod test {
       &state,
       RecordApiConfig {
         name: Some(api_name.to_string()),
-        table_name: Some("table".to_string()),
+        table_name: Some(table_name.to_string()),
         acl_world: [
           PermissionFlag::Create as i32,
           PermissionFlag::Read as i32,
@@ -462,7 +466,6 @@ mod test {
     .unwrap();
   }
 
-  // NOTE: would ideally be in a create_record test instead.
   #[tokio::test]
   async fn test_empty_create_record() {
     let state = test_state(None).await.unwrap();
@@ -509,13 +512,10 @@ mod test {
         Path(API_NAME.to_string()),
         Query(CreateRecordQuery::default()),
         None,
-        Either::Json(
-          json_row_from_value(json!({
-            "index": column_value.to_string(),
-          }))
-          .unwrap()
-          .into(),
-        ),
+        Either::Json(json!({
+          "index": column_value.to_string(),
+          "test 😍": column_value.to_string(),
+        })),
       )
       .await
       .unwrap(),
@@ -540,6 +540,11 @@ mod test {
 
     assert_eq!(
       *map.get("index").unwrap(),
+      serde_json::Value::String(column_value.to_string())
+    );
+
+    assert_eq!(
+      *map.get("test 😍").unwrap(),
       serde_json::Value::String(column_value.to_string())
     );
   }

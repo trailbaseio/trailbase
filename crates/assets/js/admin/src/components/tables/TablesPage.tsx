@@ -250,7 +250,10 @@ function TableSplitView(props: {
   const selectedTable = createMemo(() => {
     const filteredTables = filteredTablesAndViews();
     // useParams returns undefined as a string.
-    const table = params.table === "undefined" ? undefined : params.table;
+    const table =
+      params.table === "undefined"
+        ? undefined
+        : decodeURIComponent(params.table);
     return pickInitiallySelectedTable(filteredTables, table);
   });
 
