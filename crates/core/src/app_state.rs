@@ -1,12 +1,12 @@
 use log::*;
 use object_store::ObjectStore;
-use reactivate::Reactive;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
+use trailbase_reactive::Reactive;
 use trailbase_schema::QualifiedName;
 
 use crate::auth::jwt::JwtHelper;
@@ -161,10 +161,8 @@ impl AppState {
         site_url,
         dev: args.dev,
         demo: args.demo,
-        auth: derive_unchecked(&config, |c| {
-          Arc::new(AuthOptions::from_config(c.auth.clone()))
-        }),
-        jobs: derive_unchecked(&config, move |c| {
+        auth: config.derive_unchecked(|c| Arc::new(AuthOptions::from_config(c.auth.clone()))),
+        jobs: config.derive_unchecked(move |c| {
           debug!("(re-)building jobs from config");
 
           let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
@@ -184,7 +182,7 @@ impl AppState {
             }),
           );
         }),
-        mailer: derive_unchecked(&config, Mailer::new_from_config),
+        mailer: config.derive_unchecked(Mailer::new_from_config),
         config,
         json_schema_registry: args.json_schema_registry,
         conn: (*main_conn).clone(),
@@ -576,12 +574,10 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
       dev: true,
       demo: false,
-      auth: derive_unchecked(&config, |c| {
-        Arc::new(AuthOptions::from_config(c.auth.clone()))
-      }),
-      jobs: derive_unchecked(&config, |_c| Arc::new(JobRegistry::new())),
+      auth: config.derive_unchecked(|c| Arc::new(AuthOptions::from_config(c.auth.clone()))),
+      jobs: config.derive_unchecked(|_c| Arc::new(JobRegistry::new())),
       mailer: mailer.map_or_else(
-        || derive_unchecked(&config, Mailer::new_from_config),
+        || config.derive_unchecked(Mailer::new_from_config),
         |m| Reactive::new(m),
       ),
       config,
@@ -599,24 +595,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       test_cleanup: vec![Box::new(temp_dir)],
     }),
   });
-}
-
-// Unlike Reactive::derive, doesn't require PartialEq.
-pub(crate) fn derive_unchecked<T, U: Clone + Send + 'static>(
-  reactive: &Reactive<T>,
-  f: impl Fn(&T) -> U + Send + 'static,
-) -> Reactive<U>
-where
-  T: Clone,
-{
-  let derived: Reactive<U> = Reactive::new(f(&reactive.value()));
-
-  reactive.add_observer({
-    let derived = derived.clone();
-    move |value| derived.update_unchecked(|_| f(value))
-  });
-
-  return derived;
 }
 
 fn build_record_apis(

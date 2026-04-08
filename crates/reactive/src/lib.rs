@@ -10,14 +10,9 @@
   clippy::needless_continue
 )]
 
-pub mod connection;
-pub mod error;
-pub mod params;
-pub mod rows;
+mod macros;
+mod merge;
+mod reactive;
 
-pub use rusqlite::types::Value;
-
-pub use connection::Connection;
-pub use error::Error;
-pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
-pub use rows::{Row, Rows, ValueType};
+pub use merge::Merge;
+pub use reactive::Reactive;

@@ -1,11 +1,10 @@
 use parking_lot::{Mutex, RwLock};
-use reactivate::Reactive;
 use std::collections::{HashMap, hash_map::Entry};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
+use trailbase_reactive::Reactive;
 
-use crate::app_state::derive_unchecked;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
@@ -31,7 +30,7 @@ pub struct SubscriptionManager {
 
 impl SubscriptionManager {
   pub fn new(record_apis: Reactive<HashMap<String, RecordApi>>) -> Self {
-    let record_apis = derive_unchecked(&record_apis, |apis| apis.values().cloned().collect());
+    let record_apis = record_apis.derive_unchecked(|apis| apis.values().cloned().collect());
     let state = Arc::new(ManagerState {
       record_apis: record_apis.clone(),
       connections: RwLock::new(HashMap::new()),

@@ -75,7 +75,6 @@ prost = { version = "^0.14.1", default-features = false }
 prost-reflect = { version = "^0.16.0", default-features = false, features = ["derive", "text-format"] }
 quick_cache = "0.6.18"
 rand = { workspace = true }
-reactivate = { version = "0.4.2", features = ["threadsafe"] }
 regex = "1.11.0"
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
@@ -105,6 +104,7 @@ trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-qs = { workspace = true }
+trailbase-reactive = { workspace = true }
 trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true }
