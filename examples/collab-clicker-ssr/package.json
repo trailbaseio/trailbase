@@ -13,22 +13,22 @@
   },
   "dependencies": {
     "solid-js": "^1.9.12",
-    "trailbase": "^0.11.0"
+    "trailbase": "^0.11.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.2.2",
     "@types/express": "^5.0.6",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.5.2",
     "compression": "^1.8.1",
-    "eslint": "^10.1.0",
+    "eslint": "^10.2.0",
     "express": "^5.2.1",
     "globals": "^17.4.0",
     "prettier": "^3.8.1",
     "sirv": "^3.0.2",
     "tailwindcss": "^4.2.2",
-    "typescript-eslint": "^8.57.2",
-    "vite": "^8.0.3",
-    "vite-plugin-solid": "^2.11.11"
+    "typescript-eslint": "^8.58.1",
+    "vite": "^8.0.7",
+    "vite-plugin-solid": "^2.11.12"
   }
 }

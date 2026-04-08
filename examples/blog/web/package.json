@@ -13,15 +13,15 @@
     "types": "make --always-make types"
   },
   "dependencies": {
-    "@iconify-json/tabler": "^1.2.32",
+    "@iconify-json/tabler": "^1.2.33",
     "@nanostores/persistent": "^1.3.3",
     "@nanostores/solid": "^1.1.1",
-    "astro": "^6.0.8",
+    "astro": "^6.1.4",
     "astro-icon": "^1.1.5",
     "nanostores": "^1.2.0",
     "solid-icons": "^1.2.0",
     "solid-js": "^1.9.12",
-    "trailbase": "^0.11.0"
+    "trailbase": "^0.11.1"
   },
   "devDependencies": {
     "@astrojs/solid-js": "^6.0.1",
@@ -29,8 +29,8 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.2",
     "@types/dateformat": "^5.0.3",
-    "eslint": "^10.1.0",
-    "eslint-plugin-astro": "^1.6.0",
+    "eslint": "^10.2.0",
+    "eslint-plugin-astro": "^1.7.0",
     "eslint-plugin-better-tailwindcss": "^4.3.2",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
@@ -39,6 +39,6 @@
     "quicktype": "^23.2.6",
     "sharp": "^0.34.5",
     "tailwindcss": "^4.2.2",
-    "typescript-eslint": "^8.57.2"
+    "typescript-eslint": "^8.58.1"
   }
 }

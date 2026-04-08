@@ -42,20 +42,20 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.1.0",
+    "eslint": "^10.2.0",
     "globals": "^17.4.0",
     "http-status": "^2.1.0",
-    "jsdom": "^29.0.1",
-    "nano-spawn": "^2.0.0",
+    "jsdom": "^29.0.2",
+    "nano-spawn": "^2.1.0",
     "oauth2-mock-server": "^8.2.2",
     "otplib": "^13.4.0",
     "prettier": "^3.8.1",
     "tinybench": "^6.0.0",
     "typescript": "^6.0.2",
-    "typescript-eslint": "^8.57.2",
-    "vite": "^8.0.3",
+    "typescript-eslint": "^8.58.1",
+    "vite": "^8.0.7",
     "vite-node": "^6.0.0",
     "vite-plugin-dts": "^4.5.4",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.3"
   }
 }
