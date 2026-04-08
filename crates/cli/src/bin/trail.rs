@@ -250,7 +250,7 @@ async fn async_main(
       let email = Email::new(&state, &cmd.to, cmd.subject, cmd.body)?;
       email.send().await?;
 
-      let c = state.get_config().email;
+      let c = state.get_config().email.clone();
       match (c.smtp_host, c.smtp_port, c.smtp_username, c.smtp_password) {
         (Some(host), Some(port), Some(username), Some(_)) => {
           println!("Sent email using: {username}@{host}:{port}");

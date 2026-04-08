@@ -17,7 +17,7 @@ async fn add_record_api_config(
   state: &AppState,
   api: RecordApiConfig,
 ) -> Result<(), anyhow::Error> {
-  let mut config = state.get_config();
+  let mut config = (*state.get_config()).clone();
   config.record_apis.push(api);
   return Ok(state.validate_and_update_config(config, None).await?);
 }

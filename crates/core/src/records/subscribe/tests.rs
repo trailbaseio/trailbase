@@ -82,7 +82,7 @@ async fn subscribe_to_record_test() {
 
   // Make sure updating config doesn't drop subscriptions.
   state
-    .validate_and_update_config(state.get_config(), None)
+    .validate_and_update_config((*state.get_config()).clone(), None)
     .await
     .unwrap();
 
