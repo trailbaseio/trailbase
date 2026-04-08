@@ -118,8 +118,8 @@ impl Email {
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
 
-    let (server_config, template) =
-      state.access_config(|c| (c.server.clone(), c.email.user_verification_template.clone()));
+    let config = state.get_config();
+    let template = &config.email.user_verification_template;
 
     let subject_template = template
       .as_ref()
@@ -143,13 +143,13 @@ impl Email {
     let subject = env
       .template_from_named_str("subject", subject_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         EMAIL => email_address,
       })?;
     let body = env
       .template_from_named_str("body", body_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         CODE => email_verification_token,
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
@@ -168,8 +168,8 @@ impl Email {
     redirect_uri: Option<&str>,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
-    let (server_config, template) =
-      state.access_config(|c| (c.server.clone(), c.email.change_email_template.clone()));
+    let config = state.get_config();
+    let template = &config.email.change_email_template;
 
     let subject_template = template
       .as_ref()
@@ -193,13 +193,13 @@ impl Email {
     let subject = env
       .template_from_named_str("subject", subject_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         EMAIL => email_address,
       })?;
     let body = env
       .template_from_named_str("body", body_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         CODE => email_verification_token,
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
@@ -217,8 +217,8 @@ impl Email {
     password_reset_token: &str,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
-    let (server_config, template) =
-      state.access_config(|c| (c.server.clone(), c.email.password_reset_template.clone()));
+    let config = state.get_config();
+    let template = &config.email.password_reset_template;
 
     let subject_template = template
       .as_ref()
@@ -237,13 +237,13 @@ impl Email {
     let subject = env
       .template_from_named_str("subject", subject_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         EMAIL => email_address,
       })?;
     let body = env
       .template_from_named_str("body", body_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         CODE => password_reset_token,
         EMAIL => email_address,
         SITE_URL => site_url.origin().ascii_serialization(),
@@ -260,8 +260,8 @@ impl Email {
     redirect_uri: Option<&str>,
   ) -> Result<Self, EmailError> {
     let to: Mailbox = email_address.parse()?;
-    let (server_config, template) =
-      state.access_config(|c| (c.server.clone(), c.email.otp_template.clone()));
+    let config = state.get_config();
+    let template = &config.email.otp_template;
 
     let subject_template = template
       .as_ref()
@@ -277,13 +277,13 @@ impl Email {
     let subject = env
       .template_from_named_str("subject", subject_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         EMAIL => email_address,
       })?;
     let body = env
       .template_from_named_str("body", body_template)?
       .render(context! {
-        APP_NAME => server_config.application_name,
+        APP_NAME => &config.server.application_name,
         CODE => otp_code,
         EMAIL => email_address,
         REDIRECT_URI => redirect_uri,
@@ -294,12 +294,14 @@ impl Email {
 }
 
 fn get_sender(state: &AppState) -> Result<Mailbox, EmailError> {
-  let (sender_address, sender_name) =
-    state.access_config(|c| (c.email.sender_address.clone(), c.email.sender_name.clone()));
+  let config = state.get_config();
+  let address = config
+    .email
+    .sender_address
+    .clone()
+    .unwrap_or_else(|| fallback_sender(&state.site_url()));
 
-  let address = sender_address.unwrap_or_else(|| fallback_sender(&state.site_url()));
-
-  if let Some(ref name) = sender_name {
+  if let Some(ref name) = config.email.sender_name {
     return Ok(format!("{name} <{address}>").parse::<Mailbox>()?);
   }
   return Ok(address.parse::<Mailbox>()?);

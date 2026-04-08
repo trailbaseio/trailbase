@@ -114,12 +114,13 @@ pub(crate) fn validate_redirect<T: AsRef<str>>(
 ) -> Result<Option<T>, AuthError> {
   if let Some(ref redirect_uri) = redirect_uri {
     let site: &Option<url::Url> = &state.site_url();
-    let custom_uri_schemes = state.access_config(|c| c.auth.custom_uri_schemes.clone());
+
+    let config = state.get_config();
 
     validate_redirect_impl(
       site.as_ref(),
-      &custom_uri_schemes,
-      &[],
+      &config.auth.custom_uri_schemes,
+      &config.auth.redirect_uri_allowlist,
       redirect_uri.as_ref(),
       state.dev_mode(),
     )?;

@@ -2,8 +2,9 @@ use paste::paste;
 
 use crate::{Merge, Reactive};
 
-impl<T: Clone + Default + Send + 'static> Merge for &Reactive<T> {
+impl<T: Clone + Default + Send + Sync + 'static> Merge for &Reactive<T> {
   type Output = T;
+
   fn merge(self) -> Reactive<Self::Output> {
     self.clone()
   }
@@ -14,7 +15,7 @@ macro_rules! impl_merge_for_nested_tuple {
     impl < $( [<T $i>], )* > Merge for ( $( [<T $i>], )* )
     where
         $( [<T $i>]: Merge, ) *
-        $( [<T $i>]::Output: Clone + Default + Send + 'static, ) *
+        $( [<T $i>]::Output: Clone + Default + Send + Sync + 'static, ) *
     {
         body!($($i),*);
     }
@@ -37,10 +38,18 @@ macro_rules! body {
                 // eg: (&Reactive<String>, &Reactive<usize>, ...) -> Reactive<(String, usize, ...)>
                 // so if the parent reactive changes, the 'combined' will definitely change.
                 // Therefore 'unchecked' is fine.
-                move |val| combined.update_inplace_unchecked(|c| c.$i = val.clone())
+                //
+                // move |val| combined.update_inplace_unchecked(|c| c.$i = val.clone())
+                move |val: &std::sync::Arc<_>| {
+                  combined.update_unchecked(|c| {
+                    let mut x = c.clone();
+                    x.$i = (**val).clone();
+                    return x;
+                  });
+                }
             }); )*
 
-            combined
+            return combined;
         }
     }};
 }
@@ -55,9 +64,9 @@ impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6);
 impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7);
 impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8);
 impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9);
-impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
-impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
-impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
-impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
-impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
-impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+// impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+// impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+// impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12);
+// impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13);
+// impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14);
+// impl_merge_for_nested_tuple!(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);

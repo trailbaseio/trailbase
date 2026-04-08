@@ -18,7 +18,6 @@ use crate::Reactive;
 /// let r3: Reactive<f64> = Reactive::default();
 ///
 /// let r: Reactive<(usize, String, f64)> = (&r1, &r2, &r3).merge();
-///
 /// ```
 pub trait Merge {
   type Output;

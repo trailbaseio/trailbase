@@ -17,7 +17,7 @@ mod tests {
     acls: Acls,
     access_rules: AccessRules,
   ) -> Result<(), crate::config::ConfigError> {
-    let mut config = state.get_config();
+    let mut config = (*state.get_config()).clone();
 
     config.record_apis.push(RecordApiConfig {
       name: Some(api_name.to_string()),
@@ -46,7 +46,7 @@ mod tests {
     state: &AppState,
     api: RecordApiConfig,
   ) -> Result<(), crate::config::ConfigError> {
-    let mut config = state.get_config();
+    let mut config = (*state.get_config()).clone();
     config.record_apis.push(api);
     return state.validate_and_update_config(config, None).await;
   }

@@ -8,5 +8,6 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
 [dependencies]
+arc-swap = "1.9.1"
 parking_lot.workspace = true
 paste = "1"

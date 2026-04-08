@@ -1,3 +1,5 @@
+use parking_lot::Mutex;
+use std::sync::Arc;
 use trailbase_reactive::{Merge, Reactive};
 
 #[test]
@@ -34,11 +36,11 @@ fn can_update() {
 fn update_only_notifies_observers_when_value_changes() {
   let r: Reactive<String> = Reactive::default();
 
-  let changes: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+  let changes: Arc<Mutex<Vec<String>>> = Default::default();
 
   r.add_observer({
     let changes = changes.clone();
-    move |val| changes.lock().unwrap().push(val.clone())
+    move |val| changes.lock().push((**val).clone())
   });
 
   r.update(|_| String::from("a"));
@@ -48,17 +50,17 @@ fn update_only_notifies_observers_when_value_changes() {
 
   let expected = vec![String::from("a"), String::from("b")];
 
-  assert_eq!(expected, changes.lock().unwrap().clone());
+  assert_eq!(expected, changes.lock().clone());
 }
 
 #[test]
 fn update_unchecked_notifies_observers_without_checking_if_value_changed() {
   let r: Reactive<String> = Reactive::default();
 
-  let changes: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+  let changes: Arc<Mutex<Vec<String>>> = Default::default();
   r.add_observer({
     let changes = changes.clone();
-    move |val| changes.lock().unwrap().push(val.clone())
+    move |val| changes.lock().push((**val).clone())
   });
 
   r.update_unchecked(|_| String::from("a"));
@@ -73,40 +75,17 @@ fn update_unchecked_notifies_observers_without_checking_if_value_changed() {
     String::from("b"),
   ];
 
-  assert_eq!(expected, changes.lock().unwrap().clone());
+  assert_eq!(expected, changes.lock().clone());
 }
-
-// #[test]
-// fn update_inplace_unchecked_notifies_observers_without_checking_if_value_changed() {
-//   let r: Reactive<String> = Reactive::default();
-//
-//   let changes: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
-//
-//   r.add_observer({
-//     let changes = changes.clone();
-//     move |val| changes.lock().unwrap().push(val.clone())
-//   });
-//
-//   r.update_inplace_unchecked(|s| s.push('a'));
-//   r.update_inplace_unchecked(|s| {
-//     s.push('x');
-//     s.pop();
-//   });
-//   r.update_inplace_unchecked(|s| s.push('b'));
-//
-//   let expected = vec![String::from("a"), String::from("a"), String::from("ab")];
-//
-//   assert_eq!(expected, changes.lock().unwrap().clone());
-// }
 
 #[test]
 fn can_add_observers() {
   let r: Reactive<String> = Reactive::default();
 
-  let changes: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+  let changes: Arc<Mutex<Vec<String>>> = Default::default();
   r.add_observer({
     let changes = changes.clone();
-    move |val| changes.lock().unwrap().push(val.clone())
+    move |val| changes.lock().push((**val).clone())
   });
 
   r.update(|_| String::from("a"));
@@ -114,7 +93,7 @@ fn can_add_observers() {
 
   let expected = vec![String::from("a"), String::from("b")];
 
-  assert_eq!(expected, changes.lock().unwrap().clone());
+  assert_eq!(expected, changes.lock().clone());
 }
 
 #[test]
@@ -184,11 +163,11 @@ fn can_merge() {
 fn can_notify() {
   let r: Reactive<String> = Reactive::new(String::from("🦀"));
 
-  let changes: std::sync::Arc<std::sync::Mutex<Vec<String>>> = Default::default();
+  let changes: Arc<Mutex<Vec<String>>> = Default::default();
 
   r.add_observer({
     let changes = changes.clone();
-    move |val| changes.lock().unwrap().push(val.clone())
+    move |val| changes.lock().push((**val).clone())
   });
 
   r.notify();
@@ -197,5 +176,5 @@ fn can_notify() {
 
   let expected = vec![String::from("🦀"), String::from("🦀"), String::from("🦀")];
 
-  assert_eq!(expected, changes.lock().unwrap().clone());
+  assert_eq!(expected, changes.lock().clone());
 }

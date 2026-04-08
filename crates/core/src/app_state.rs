@@ -323,20 +323,15 @@ impl AppState {
     return r;
   }
 
-  pub fn get_config(&self) -> Config {
-    return self.state.config.value();
+  pub fn get_config(&self) -> Arc<Config> {
+    return self.state.config.ptr();
   }
 
   pub fn access_config<F, T>(&self, f: F) -> T
   where
     F: FnOnce(&Config) -> T,
   {
-    let mut result: Option<T> = None;
-    let r = &mut result;
-    self.state.config.with_value(move |c| {
-      let _ = r.insert(f(c));
-    });
-    return result.expect("inserted");
+    return f(&self.state.config.ptr());
   }
 
   pub async fn validate_and_update_config(
