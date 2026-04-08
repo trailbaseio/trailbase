@@ -1,13 +1,14 @@
-use parking_lot::{Mutex, RwLock};
+use arc_swap::ArcSwap;
+use parking_lot::Mutex;
 use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
+use std::ops::DerefMut;
 use std::sync::Arc;
 
-type Observer<T> = Box<dyn FnMut(&T) + Send + Sync>;
+type Observer<T> = Box<dyn FnMut(&Arc<T>) + Send + Sync>;
 
 #[derive(Default)]
 struct State<T> {
-  value: RwLock<T>,
+  value: ArcSwap<T>,
   observers: Mutex<Vec<Observer<T>>>,
 }
 
@@ -28,11 +29,20 @@ impl<T> Reactive<T> {
   pub fn new(value: T) -> Self {
     Self {
       state: Arc::new(State {
-        value: RwLock::new(value),
+        value: ArcSwap::from_pointee(value),
         observers: Default::default(),
       }),
     }
   }
+
+  // pub fn from(value: Arc<T>) -> Self {
+  //   Self {
+  //     state: Arc::new(State {
+  //       value: ArcSwap::from(value),
+  //       observers: Default::default(),
+  //     }),
+  //   }
+  // }
 
   /// Returns a clone/copy of the value inside the reactive
   ///
@@ -47,7 +57,14 @@ impl<T> Reactive<T> {
   where
     T: Clone,
   {
-    return self.state.value.read().clone();
+    return (**self.state.value.load()).clone();
+  }
+
+  pub fn ptr(&self) -> Arc<T>
+  where
+    T: Clone,
+  {
+    return self.state.value.load_full();
   }
 
   /// Perform some action with the reference to the inner value.
@@ -60,7 +77,7 @@ impl<T> Reactive<T> {
   /// r.with_value(|s| println!("{}", s));
   /// ```
   pub fn with_value(&self, f: impl FnOnce(&T)) {
-    f(self.state.value.read().deref());
+    f(&self.state.value.load());
   }
 
   /// derive a new child reactive that changes whenever the parent reactive changes.
@@ -82,7 +99,7 @@ impl<T> Reactive<T> {
   where
     T: Clone,
   {
-    let derived_val = f(self.state.value.read().deref());
+    let derived_val = f(&self.state.value.load());
     let derived: Reactive<U> = Reactive::new(derived_val);
 
     self.add_observer({
@@ -101,7 +118,7 @@ impl<T> Reactive<T> {
   where
     T: Clone,
   {
-    let derived_val = f(self.state.value.read().deref());
+    let derived_val = f(&self.state.value.load());
     let derived: Reactive<U> = Reactive::new(derived_val);
 
     self.add_observer({
@@ -122,7 +139,11 @@ impl<T> Reactive<T> {
   /// let r = Reactive::new(String::from("🦀"));
   /// r.add_observer(|val| println!("{}", val));
   /// ```
-  pub fn add_observer(&self, f: impl FnMut(&T) + Send + Sync + 'static) {
+  pub fn add_observer(&self, mut f: impl FnMut(&T) + Send + Sync + 'static) {
+    return self.state.observers.lock().push(Box::new(move |v| f(v)));
+  }
+
+  pub fn add_observer_ptr(&self, f: impl FnMut(&Arc<T>) + Send + Sync + 'static) {
     return self.state.observers.lock().push(Box::new(f));
   }
 
@@ -184,14 +205,14 @@ impl<T> Reactive<T> {
   where
     T: PartialEq,
   {
-    let mut guard = self.state.value.write();
-    let val = guard.deref_mut();
+    let val = &**self.state.value.load();
     let new_val = f(val);
     if &new_val != val {
-      *val = new_val;
+      let new_val = Arc::new(new_val);
+      self.state.value.store(new_val.clone());
 
       for obs in self.state.observers.lock().deref_mut() {
-        obs(val);
+        obs(&new_val);
       }
     }
   }
@@ -224,25 +245,22 @@ impl<T> Reactive<T> {
   ///
   /// It is also faster than `update` for that reason
   pub fn update_unchecked(&self, f: impl FnOnce(&T) -> T) {
-    let mut guard = self.state.value.write();
-    let val = guard.deref_mut();
-    *val = f(val);
+    let val = &**self.state.value.load();
+    let new_val = Arc::new(f(val));
+    self.state.value.store(new_val.clone());
 
     for obs in self.state.observers.lock().deref_mut() {
-      obs(val);
+      obs(&new_val);
     }
   }
 
-  /// Updates the value inside inplace without creating a new clone/copy and notify
-  /// all the observers by calling the added observer functions in the sequence they were added
-  /// without checking if the value is changed after applying the provided function.
-  // pub(crate) fn update_inplace_unchecked(&self, f: impl FnOnce(&mut T)) {
-  //   let mut guard = self.state.value.write();
-  //   let val = guard.deref_mut();
-  //   f(val);
+  // pub fn update_unchecked_ptr(&self, f: impl FnOnce(&Arc<T>) -> T) {
+  //   let val = self.state.value.load();
+  //   let new_val = Arc::new(f(&val));
+  //   self.state.value.store(new_val.clone());
   //
   //   for obs in self.state.observers.lock().deref_mut() {
-  //     obs(val);
+  //     obs(&new_val);
   //   }
   // }
 
@@ -259,10 +277,9 @@ impl<T> Reactive<T> {
   /// r.notify();
   /// ```
   pub fn notify(&self) {
-    let guard = self.state.value.write();
-    let val = guard.deref();
+    let val = self.state.value.load();
     for obs in self.state.observers.lock().deref_mut() {
-      obs(val);
+      obs(&val);
     }
   }
 }
@@ -270,7 +287,7 @@ impl<T> Reactive<T> {
 impl<T: Debug> Debug for Reactive<T> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_tuple("Reactive")
-      .field(self.state.value.read().deref())
+      .field(&self.state.value.load())
       .finish()
   }
 }

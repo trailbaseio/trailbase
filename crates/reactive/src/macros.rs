@@ -40,14 +40,16 @@ macro_rules! body {
                 // Therefore 'unchecked' is fine.
                 //
                 // move |val| combined.update_inplace_unchecked(|c| c.$i = val.clone())
-                move |val| combined.update_unchecked(|c| {
-                  let mut x = c.clone();
-                  x.$i = val.clone();
-                  return x;
-                })
+                move |val| {
+                  combined.update_unchecked(|c| {
+                    let mut x = c.clone();
+                    x.$i = val.clone();
+                    return x;
+                  });
+                }
             }); )*
 
-            combined
+            return combined;
         }
     }};
 }
