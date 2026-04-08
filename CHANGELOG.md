@@ -1,3 +1,10 @@
+## v0.26.1
+
+- Add an `redirect_uri_allowlist` config option to enable select off-site auth redirects.
+- Fix escaping of migration file names to work for any unicode characters.
+- Fix escaping of named placeholders to work for any unicode characters.
+- Update Rust and JavaScript dependencies.
+
 ## v0.26.0
 
 - Overhaul change subscriptions:
