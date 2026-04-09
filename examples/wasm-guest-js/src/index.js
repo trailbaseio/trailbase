@@ -1,7 +1,7 @@
 import { defineConfig, addPeriodicCallback } from "trailbase-wasm";
 import { HttpHandler, HttpResponse } from "trailbase-wasm/http";
 import { JobHandler } from "trailbase-wasm/job";
-import { query } from "trailbase-wasm/db";
+import { escape, query } from "trailbase-wasm/db";
 
 export default defineConfig({
   httpHandlers: [
@@ -34,7 +34,9 @@ export default defineConfig({
     HttpHandler.get("/count/{table}/", async (req) => {
       const table = req.getPathParam("table");
       if (table) {
-        const rows = await query(`SELECT COUNT(*) FROM ${table}`, []);
+        // NOTE: Table names cannot be parametrized, thus escape the user input
+        // as a safe string literal. Use parameters whenever possible.
+        const rows = await query(`SELECT COUNT(*) FROM ${escape(table)}`, []);
         return `Got ${rows[0][0]} rows\n`;
       }
     }),

@@ -14,12 +14,13 @@ import type { Value } from "./value";
 import { SqlValue } from "@common/SqlValue";
 import {
   fromJsonSqlValue,
+  fromWitValue,
   toJsonSqlValue,
   toWitValue,
-  fromWitValue,
 } from "./value";
 
 export type { Value } from "trailbase:database/sqlite@0.1.0";
+export { escape } from "./value";
 
 export class Transaction {
   constructor() {

@@ -2,7 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use trailbase_wasm::db::{Value, query};
+use trailbase_wasm::db::{Value, escape, query};
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, Request, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::time::{Duration, Timer};
@@ -38,7 +38,9 @@ impl Guest for Endpoints {
           .path_param("table")
           .ok_or_else(|| internal("missing {table}"))?;
 
-        let rows = query(format!("SELECT COUNT(*) FROM {table}"), [])
+        // NOTE: Table names cannot be parametrized, thus escape the user input as a safe
+        // string literal. Use parameters whenever possible.
+        let rows = query(format!("SELECT COUNT(*) FROM {}", escape(table)), [])
           .await
           .map_err(internal)?;
 
