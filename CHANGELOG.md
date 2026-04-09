@@ -1,3 +1,9 @@
+## v0.26.2
+
+- Fork the `reactivate` crate to streamline it and make it lock-free. Previously, accessing the config would require claiming an eclusive lock.
+- Remove unsafe query construction from WASM guest examples and add utilities for escaping safe SQL string literals to the guest runtimes.
+- Fix wiring of new `redirect_uri_allowlist` config option.
+
 ## v0.26.1
 
 - Add an `redirect_uri_allowlist` config option to enable select off-site auth redirects.
