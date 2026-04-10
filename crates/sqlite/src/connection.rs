@@ -19,20 +19,20 @@ pub use crate::rows::{Row, Rows};
 #[macro_export]
 macro_rules! params {
     () => {
-        [] as [$crate::params::ToSqlType]
+        [] as [$crate::to_sql::ToSqlType]
     };
     ($($param:expr),+ $(,)?) => {
-        [$(Into::<$crate::params::ToSqlType>::into($param)),+]
+        [$(Into::<$crate::to_sql::ToSqlType>::into($param)),+]
     };
 }
 
 #[macro_export]
 macro_rules! named_params {
     () => {
-        [] as [(&str, $crate::params::ToSqlType)]
+        [] as [(&str, $crate::to_sql::ToSqlType)]
     };
     ($($param_name:literal: $param_val:expr),+ $(,)?) => {
-        [$(($param_name as &str, Into::<$crate::params::ToSqlType>::into($param_val))),+]
+        [$(($param_name as &str, Into::<$crate::to_sql::ToSqlType>::into($param_val))),+]
     };
 }
 

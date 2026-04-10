@@ -14,10 +14,11 @@ pub mod connection;
 pub mod error;
 pub mod params;
 pub mod rows;
-
-pub use rusqlite::types::Value;
+pub mod to_sql;
+pub mod value;
 
 pub use connection::Connection;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
+pub use value::{Value, ValueRef};
