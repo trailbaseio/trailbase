@@ -120,7 +120,7 @@ pub struct Subscription {
 // Represents a change event that needs further filtering, e.g. ACLs.
 #[derive(Debug)]
 pub struct EventCandidate {
-  pub record: Option<Arc<indexmap::IndexMap<String, rusqlite::types::Value>>>,
+  pub record: Option<Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>>,
   pub payload: Arc<EventPayload>,
   pub seq: i64,
 }
@@ -357,7 +357,7 @@ impl Drop for PerConnectionState {
 
 fn broker_subscriptions(
   subs: &[Arc<Subscription>],
-  record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
+  record: &Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>,
   event: &Arc<EventPayload>,
 ) -> Vec<usize> {
   return subs
@@ -424,7 +424,7 @@ fn broker(
 
   // Join values with column names. We use a map rather than a Vec<(String, Value)> for filter
   // access.
-  let record: Arc<indexmap::IndexMap<String, rusqlite::types::Value>> = Arc::new(
+  let record: Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>> = Arc::new(
     record
       .into_iter()
       .enumerate()

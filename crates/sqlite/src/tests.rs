@@ -1,12 +1,12 @@
 use futures_util::future::join_all;
-use rusqlite::ffi;
 use rusqlite::hooks::PreUpdateCase;
+use rusqlite::{ErrorCode, ffi};
 use serde::Deserialize;
 use std::borrow::Cow;
 
-use crate::connection::{Connection, Database, Error, Options, extract_row_id};
-use crate::{Value, ValueType};
-use rusqlite::ErrorCode;
+use crate::connection::{Connection, Database, Options};
+use crate::sqlite::extract_row_id;
+use crate::{Error, Value, ValueType};
 
 #[tokio::test]
 async fn open_in_memory_test() {
@@ -152,7 +152,7 @@ async fn close_failure_test() {
   let err = conn.close().await.unwrap_err();
   assert!(
     match &err {
-      crate::Error::Close(e) => {
+      crate::Error::Rusqlite(e) => {
         *e == rusqlite::Error::SqliteFailure(
           ffi::Error {
             code: ErrorCode::DatabaseBusy,

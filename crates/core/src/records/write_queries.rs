@@ -168,7 +168,7 @@ pub(crate) async fn run_queries(
     WriteQuery,
     Option<(QualifiedNameEscaped, FileMetadataContents)>,
   )>,
-) -> Result<Vec<rusqlite::types::Value>, RecordError> {
+) -> Result<Vec<trailbase_sqlite::Value>, RecordError> {
   let (queries, all_files): (Vec<_>, Vec<_>) = queries.into_iter().unzip();
 
   let mut queries_with_files = HashMap::<QualifiedNameEscaped, Vec<usize>>::new();
@@ -238,7 +238,7 @@ pub(crate) async fn run_insert_query(
   conflict_resolution: Option<ConflictResolutionStrategy>,
   return_column_name: &str,
   params: Params,
-) -> Result<rusqlite::types::Value, RecordError> {
+) -> Result<trailbase_sqlite::Value, RecordError> {
   let (query, files) =
     WriteQuery::new_insert(table_name, return_column_name, conflict_resolution, params)?;
 
@@ -250,7 +250,7 @@ pub(crate) async fn run_insert_query(
     Some(FileManager::write(objectstore, files).await?)
   };
 
-  let (rowid, return_value): (i64, rusqlite::types::Value) = conn
+  let (rowid, return_value): (i64, trailbase_sqlite::Value) = conn
     .call(move |conn| {
       let result = query.apply(conn)?;
       return Ok((result.rowid, result.pk_value.expect("insert")));

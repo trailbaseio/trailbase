@@ -1,10 +1,9 @@
 use log::*;
 use rusqlite::hooks::{Action, PreUpdateCase};
-use rusqlite::types::Value;
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::{
-  Connection,
-  connection::{extract_record_values, extract_row_id},
+  Connection, Value,
+  sqlite::{extract_record_values, extract_row_id},
 };
 
 #[derive(Debug, Copy, Clone, PartialEq)]

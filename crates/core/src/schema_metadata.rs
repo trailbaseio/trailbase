@@ -61,7 +61,7 @@ pub async fn lookup_and_parse_table_schema(
 pub fn lookup_and_parse_all_table_schemas_sync(
   conn: &rusqlite::Connection,
 ) -> Result<Vec<Table>, SchemaLookupError> {
-  let databases = trailbase_sqlite::connection::list_databases(conn)?;
+  let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
 
   let mut tables: Vec<Table> = vec![];
   for db in databases {
@@ -106,7 +106,7 @@ pub fn lookup_and_parse_all_view_schemas_sync(
   conn: &rusqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
-  let databases = trailbase_sqlite::connection::list_databases(conn)?;
+  let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
 
   let mut views: Vec<View> = vec![];
   for db in databases {

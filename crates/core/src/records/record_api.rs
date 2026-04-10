@@ -568,7 +568,7 @@ impl RecordApi {
   pub(crate) async fn check_record_level_read_access_for_subscriptions(
     &self,
     conn: &trailbase_sqlite::Connection,
-    record: &Arc<indexmap::IndexMap<String, rusqlite::types::Value>>,
+    record: &Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -723,7 +723,7 @@ impl RecordApi {
 }
 
 struct SubscriptionAclParams<'a> {
-  params: &'a indexmap::IndexMap<String, rusqlite::types::Value>,
+  params: &'a indexmap::IndexMap<String, trailbase_sqlite::Value>,
   user: Option<&'a User>,
 }
 
@@ -738,7 +738,7 @@ impl<'a> trailbase_sqlite::Params for SubscriptionAclParams<'a> {
     if let Some(user) = self.user
       && let Some(idx) = stmt.parameter_index(":__user_id")?
     {
-      stmt.raw_bind_parameter(idx, rusqlite::types::Value::Blob(user.uuid.into()))?;
+      stmt.raw_bind_parameter(idx, trailbase_sqlite::Value::Blob(user.uuid.into()))?;
     }
 
     return Ok(());

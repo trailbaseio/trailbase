@@ -1,21 +1,18 @@
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-  #[error("Connection closed error")]
+  #[error("ConnectionClosed")]
   ConnectionClosed,
 
-  /// An error occured while closing the SQLite connection.
-  /// This `Error` variant contains the [`Connection`], which can be used to retry the close
-  /// operation and the underlying [`rusqlite::Error`] that made it impossible to close the
-  /// database.
-  #[error("Close error: {0}")]
-  Close(rusqlite::Error),
-
-  #[error("Rusqlite error: {0}")]
+  // QUESTION: This is leaky. How often do downstream users have to introspect on this
+  // rusqlite::Error. Otherwise, should/could this be more opaue.
+  #[error("Rusqlite: {0}")]
   Rusqlite(#[from] rusqlite::Error),
 
-  #[error("SerdeRusqlite error: {0}")]
-  SerdeRusqlite(#[from] serde_rusqlite::Error),
+  #[error("DeserializeValue: {0}")]
+  DeserializeValue(serde_rusqlite::Error),
 
-  #[error("Other error: {0}")]
+  /// This one is useful for downstream consumers providin a `Connection` builder returning this
+  /// error.
+  #[error("Other: {0}")]
   Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
 }

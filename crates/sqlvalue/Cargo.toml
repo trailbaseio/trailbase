@@ -10,11 +10,11 @@ readme = "../../README.md"
 
 [features]
 default = []
-rusqlite = ["dep:rusqlite"]
+rusqlite = ["dep:trailbase-sqlite"]
 
 [dependencies]
 base64 = { workspace = true }
 serde = { workspace = true }
 thiserror = "2.0.12"
 ts-rs = { workspace = true }
-rusqlite= { workspace = true, optional = true }
+trailbase-sqlite = { workspace = true, optional = true }

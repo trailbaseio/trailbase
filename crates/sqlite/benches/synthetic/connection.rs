@@ -1,7 +1,7 @@
 use crate::error::BenchmarkError;
 use parking_lot::Mutex;
-use rusqlite::types::{FromSql, ToSql, Value};
-use trailbase_sqlite::Connection;
+use rusqlite::types::{FromSql, ToSql};
+use trailbase_sqlite::{Connection, Value};
 
 pub trait AsyncConnection: Send + Sync {
   fn async_query<T: FromSql + Send + 'static>(
@@ -109,8 +109,8 @@ impl ThreadLocalRusqlite {
   #[inline]
   fn call<T>(
     &self,
-    f: impl FnOnce(&mut rusqlite::Connection) -> rusqlite::Result<T>,
-  ) -> rusqlite::Result<T> {
+    f: impl FnOnce(&mut rusqlite::Connection) -> Result<T, rusqlite::Error>,
+  ) -> Result<T, rusqlite::Error> {
     use std::cell::{OnceCell, RefCell};
     thread_local! {
       static CELL : OnceCell<RefCell<(rusqlite::Connection, u64)>> = OnceCell::new();

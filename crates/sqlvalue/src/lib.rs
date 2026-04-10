@@ -75,11 +75,11 @@ impl Default for SqlValue {
 }
 
 #[cfg(feature = "rusqlite")]
-impl TryFrom<SqlValue> for rusqlite::types::Value {
+impl TryFrom<SqlValue> for trailbase_sqlite::Value {
   type Error = DecodeError;
 
   fn try_from(value: SqlValue) -> Result<Self, Self::Error> {
-    use rusqlite::types::Value;
+    use trailbase_sqlite::Value;
 
     return Ok(match value {
       SqlValue::Null => Value::Null,
@@ -98,9 +98,9 @@ impl TryFrom<SqlValue> for rusqlite::types::Value {
 }
 
 #[cfg(feature = "rusqlite")]
-impl From<rusqlite::types::Value> for SqlValue {
-  fn from(value: rusqlite::types::Value) -> Self {
-    use rusqlite::types::Value;
+impl From<trailbase_sqlite::Value> for SqlValue {
+  fn from(value: trailbase_sqlite::Value) -> Self {
+    use trailbase_sqlite::Value;
 
     return match value {
       Value::Null => SqlValue::Null,
@@ -113,9 +113,9 @@ impl From<rusqlite::types::Value> for SqlValue {
 }
 
 #[cfg(feature = "rusqlite")]
-impl From<&rusqlite::types::Value> for SqlValue {
-  fn from(value: &rusqlite::types::Value) -> Self {
-    use rusqlite::types::Value;
+impl From<&trailbase_sqlite::Value> for SqlValue {
+  fn from(value: &trailbase_sqlite::Value) -> Self {
+    use trailbase_sqlite::Value;
 
     return match value {
       Value::Null => SqlValue::Null,

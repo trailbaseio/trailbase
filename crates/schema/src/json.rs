@@ -7,8 +7,8 @@
 /// The flat representation requires a column type and can only be used in the context of
 /// STRICT TABLES.
 use base64::prelude::*;
-use rusqlite::types::Value as SqliteValue;
 use thiserror::Error;
+use trailbase_sqlite::Value as SqliteValue;
 
 use crate::sqlite::ColumnDataType;
 
@@ -200,7 +200,7 @@ pub fn parse_string_to_sqlite_value(
     ColumnDataType::Blob => SqliteValue::Blob(match (value.len(), value) {
       // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
       // would be more explicit rely on CHECK(...) column options.
-      // NOTE: That uuids also parse as url-safe base64, that's why we treat it as a fall-first.
+      // NOTE: That UUIDs also parse as url-safe base64, that's why we treat it as a fall-first.
       (36, v) => uuid::Uuid::parse_str(&v)
         .map(|v| v.into())
         .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
@@ -250,7 +250,7 @@ mod tests {
     let value =
       strict_parse_string_to_sqlite_value(ColumnDataType::Blob, id_string.to_string()).unwrap();
     let blob = match value {
-      rusqlite::types::Value::Blob(ref blob) => blob.clone(),
+      trailbase_sqlite::Value::Blob(ref blob) => blob.clone(),
       _ => panic!("Not a blob"),
     };
 

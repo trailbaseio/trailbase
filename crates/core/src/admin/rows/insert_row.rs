@@ -53,7 +53,7 @@ pub async fn insert_row_handler(
   .await?;
 
   return match rowid_value {
-    rusqlite::types::Value::Integer(rowid) => Ok(Json(InsertRowResponse { row_id: rowid })),
+    trailbase_sqlite::Value::Integer(rowid) => Ok(Json(InsertRowResponse { row_id: rowid })),
     _ => Err(Error::Internal(
       format!("unexpected return type: {rowid_value:?}").into(),
     )),
