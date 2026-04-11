@@ -109,8 +109,8 @@ impl ThreadLocalRusqlite {
   #[inline]
   fn call<T>(
     &self,
-    f: impl FnOnce(&mut rusqlite::Connection) -> rusqlite::Result<T>,
-  ) -> rusqlite::Result<T> {
+    f: impl FnOnce(&mut rusqlite::Connection) -> Result<T, rusqlite::Error>,
+  ) -> Result<T, rusqlite::Error> {
     use std::cell::{OnceCell, RefCell};
     thread_local! {
       static CELL : OnceCell<RefCell<(rusqlite::Connection, u64)>> = OnceCell::new();

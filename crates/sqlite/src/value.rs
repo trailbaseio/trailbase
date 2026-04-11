@@ -109,7 +109,7 @@ impl rusqlite::types::FromSql for Value {
 }
 
 impl rusqlite::types::ToSql for Value {
-  fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+  fn to_sql(&self) -> Result<rusqlite::types::ToSqlOutput<'_>, rusqlite::Error> {
     return Ok(rusqlite::types::ToSqlOutput::Borrowed(
       rusqlite::types::ValueRef::from(self),
     ));
@@ -145,7 +145,7 @@ impl<'a> From<ValueRef<'a>> for rusqlite::types::ValueRef<'a> {
 }
 
 impl<'a> rusqlite::types::ToSql for ValueRef<'a> {
-  fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+  fn to_sql(&self) -> Result<rusqlite::types::ToSqlOutput<'_>, rusqlite::Error> {
     return Ok(rusqlite::types::ToSqlOutput::Borrowed(
       rusqlite::types::ValueRef::from(*self),
     ));

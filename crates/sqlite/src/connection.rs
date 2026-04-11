@@ -2,7 +2,6 @@ use kanal::{Receiver, Sender};
 use log::*;
 use parking_lot::RwLock;
 use rusqlite::fallible_iterator::FallibleIterator;
-use rusqlite::hooks::PreUpdateCase;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
@@ -14,7 +13,6 @@ use crate::error::Error;
 use crate::params::Params;
 use crate::rows::{Column, columns};
 use crate::rows::{Row, Rows};
-use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq, serde::Deserialize)]
 pub struct Database {
@@ -29,9 +27,6 @@ struct ConnectionVec(Vec<rusqlite::Connection>);
 // to intrinsic statement cache. We can ensure this by uniquely assigning one connection to each
 // thread.
 unsafe impl Sync for ConnectionVec {}
-
-/// The result returned on method calls in this crate.
-pub type Result<T> = std::result::Result<T, Error>;
 
 enum Message {
   RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send>),
@@ -65,10 +60,10 @@ pub struct Connection {
 
 impl Connection {
   pub fn new<E>(
-    builder: impl Fn() -> std::result::Result<rusqlite::Connection, E>,
+    builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opt: Option<Options>,
   ) -> std::result::Result<Self, E> {
-    let new_conn = || -> std::result::Result<rusqlite::Connection, E> {
+    let new_conn = || -> Result<rusqlite::Connection, E> {
       let conn = builder()?;
       if let Some(timeout) = opt.as_ref().map(|o| o.busy_timeout) {
         conn.busy_timeout(timeout).expect("busy timeout failed");
@@ -177,7 +172,7 @@ impl Connection {
   /// # Failure
   ///
   /// Will return `Err` if the underlying SQLite open call fails.
-  pub fn open_in_memory() -> Result<Self> {
+  pub fn open_in_memory() -> Result<Self, Error> {
     return Self::new(|| Ok(rusqlite::Connection::open_in_memory()?), None);
   }
 
@@ -222,13 +217,13 @@ impl Connection {
   ///
   /// Will return `Err` if the database connection has been closed.
   #[inline]
-  pub async fn call<F, R>(&self, function: F) -> Result<R>
+  pub async fn call<F, R>(&self, function: F) -> Result<R, Error>
   where
-    F: FnOnce(&mut rusqlite::Connection) -> Result<R> + Send + 'static,
+    F: FnOnce(&mut rusqlite::Connection) -> Result<R, Error> + Send + 'static,
     R: Send + 'static,
   {
     // return call_impl(&self.writer, function).await;
-    let (sender, receiver) = oneshot::channel::<Result<R>>();
+    let (sender, receiver) = oneshot::channel::<Result<R, Error>>();
 
     self
       .writer
@@ -250,12 +245,12 @@ impl Connection {
   }
 
   #[inline]
-  pub async fn call_reader<F, R>(&self, function: F) -> Result<R>
+  pub async fn call_reader<F, R>(&self, function: F) -> Result<R, Error>
   where
-    F: FnOnce(&rusqlite::Connection) -> Result<R> + Send + 'static,
+    F: FnOnce(&rusqlite::Connection) -> Result<R, Error> + Send + 'static,
     R: Send + 'static,
   {
-    let (sender, receiver) = oneshot::channel::<Result<R>>();
+    let (sender, receiver) = oneshot::channel::<Result<R, Error>>();
 
     self
       .reader
@@ -284,7 +279,7 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Rows> {
+  ) -> Result<Rows, Error> {
     return self
       .call_reader(move |conn: &rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
@@ -301,7 +296,7 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Rows> {
+  ) -> Result<Rows, Error> {
     return self
       .call(move |conn: &mut rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
@@ -317,7 +312,7 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Option<Row>> {
+  ) -> Result<Option<Row>, Error> {
     return self
       .read_query_row_f(sql, params, |row| {
         return crate::rows::from_row(row, Arc::new(columns(row.as_ref())));
@@ -326,15 +321,15 @@ impl Connection {
   }
 
   #[inline]
-  pub async fn query_row_f<T, E>(
+  pub async fn query_row_f<T, E: Into<Error>>(
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-    f: impl (FnOnce(&rusqlite::Row<'_>) -> std::result::Result<T, E>) + Send + 'static,
-  ) -> Result<Option<T>>
+    f: impl (FnOnce(&rusqlite::Row<'_>) -> Result<T, E>) + Send + 'static,
+  ) -> Result<Option<T>, Error>
   where
     T: Send + 'static,
-    crate::error::Error: From<E>,
+    Error: From<E>,
   {
     return self
       .call(move |conn: &mut rusqlite::Connection| {
@@ -357,10 +352,10 @@ impl Connection {
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
     f: impl (FnOnce(&rusqlite::Row<'_>) -> std::result::Result<T, E>) + Send + 'static,
-  ) -> Result<Option<T>>
+  ) -> Result<Option<T>, Error>
   where
     T: Send + 'static,
-    crate::error::Error: From<E>,
+    Error: From<E>,
   {
     return self
       .call_reader(move |conn: &rusqlite::Connection| {
@@ -383,9 +378,11 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Option<T>> {
+  ) -> Result<Option<T>, Error> {
     return self
-      .read_query_row_f(sql, params, serde_rusqlite::from_row)
+      .read_query_row_f(sql, params, |row| {
+        serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
+      })
       .await;
   }
 
@@ -393,9 +390,11 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Option<T>> {
+  ) -> Result<Option<T>, Error> {
     return self
-      .query_row_f(sql, params, serde_rusqlite::from_row)
+      .query_row_f(sql, params, |row| {
+        serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
+      })
       .await;
   }
 
@@ -403,7 +402,7 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Vec<T>> {
+  ) -> Result<Vec<T>, Error> {
     return self
       .call_reader(move |conn: &rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
@@ -414,7 +413,7 @@ impl Connection {
 
         let mut values = vec![];
         while let Some(row) = rows.next()? {
-          values.push(serde_rusqlite::from_row(row)?);
+          values.push(serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)?);
         }
         return Ok(values);
       })
@@ -425,7 +424,7 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<Vec<T>> {
+  ) -> Result<Vec<T>, Error> {
     return self
       .call(move |conn: &mut rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
@@ -435,7 +434,7 @@ impl Connection {
 
         let mut values = vec![];
         while let Some(row) = rows.next()? {
-          values.push(serde_rusqlite::from_row(row)?);
+          values.push(serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)?);
         }
         return Ok(values);
       })
@@ -447,7 +446,7 @@ impl Connection {
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
-  ) -> Result<usize> {
+  ) -> Result<usize, Error> {
     return self
       .call(move |conn: &mut rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
@@ -461,7 +460,10 @@ impl Connection {
   }
 
   /// Batch execute SQL statements and return rows of last statement.
-  pub async fn execute_batch(&self, sql: impl AsRef<str> + Send + 'static) -> Result<Option<Rows>> {
+  pub async fn execute_batch(
+    &self,
+    sql: impl AsRef<str> + Send + 'static,
+  ) -> Result<Option<Rows>, Error> {
     return self
       .call(move |conn: &mut rusqlite::Connection| {
         let batch = rusqlite::Batch::new(conn, sql.as_ref());
@@ -494,7 +496,7 @@ impl Connection {
       .await;
   }
 
-  pub fn attach(&self, path: &str, name: &str) -> Result<()> {
+  pub fn attach(&self, path: &str, name: &str) -> Result<(), Error> {
     let query = format!("ATTACH DATABASE '{path}' AS {name} ");
     let lock = self.conns.write();
     for conn in &lock.0 {
@@ -503,7 +505,7 @@ impl Connection {
     return Ok(());
   }
 
-  pub fn detach(&self, name: &str) -> Result<()> {
+  pub fn detach(&self, name: &str) -> Result<(), Error> {
     let query = format!("DETACH DATABASE {name}");
     let lock = self.conns.write();
     for conn in &lock.0 {
@@ -512,8 +514,8 @@ impl Connection {
     return Ok(());
   }
 
-  pub async fn list_databases(&self) -> Result<Vec<Database>> {
-    return self.call_reader(list_databases).await;
+  pub async fn list_databases(&self) -> Result<Vec<Database>, Error> {
+    return self.call_reader(crate::sqlite::list_databases).await;
   }
 
   /// Close the database connection.
@@ -527,7 +529,7 @@ impl Connection {
   /// # Failure
   ///
   /// Will return `Err` if the underlying SQLite close call fails.
-  pub async fn close(self) -> Result<()> {
+  pub async fn close(self) -> Result<(), Error> {
     let _ = self.writer.send(Message::Terminate);
     while self.reader.send(Message::Terminate).is_ok() {
       // Continue to close readers while the channel is alive.
@@ -536,14 +538,17 @@ impl Connection {
     let mut errors = vec![];
     let conns: ConnectionVec = std::mem::take(&mut self.conns.write());
     for conn in conns.0 {
-      if let Err((_, err)) = conn.close() {
+      // NOTE: rusqlite's `Connection::close()` returns itself, to allow users to retry
+      // failed closes. We on the other, may be left in a partially closed state with multiple
+      // connections. Ignorance is bliss.
+      if let Err((_self, err)) = conn.close() {
         errors.push(err);
       };
     }
 
     if !errors.is_empty() {
-      debug!("Closing connection: {errors:?}");
-      return Err(Error::Close(errors.swap_remove(0)));
+      warn!("Closing connection: {errors:?}");
+      return Err(errors.swap_remove(0).into());
     }
 
     return Ok(());
@@ -588,52 +593,6 @@ fn event_loop(id: usize, conns: Arc<RwLock<ConnectionVec>>, receiver: Receiver<M
   }
 }
 
-#[inline]
-pub fn extract_row_id(case: &PreUpdateCase) -> Option<i64> {
-  return match case {
-    PreUpdateCase::Insert(accessor) => Some(accessor.get_new_row_id()),
-    PreUpdateCase::Delete(accessor) => Some(accessor.get_old_row_id()),
-    PreUpdateCase::Update {
-      new_value_accessor: accessor,
-      ..
-    } => Some(accessor.get_new_row_id()),
-    PreUpdateCase::Unknown => None,
-  };
-}
-
-#[inline]
-pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<crate::Value>> {
-  return Some(match case {
-    PreUpdateCase::Insert(accessor) => (0..accessor.get_column_count())
-      .map(|idx| -> Value {
-        accessor
-          .get_new_column_value(idx)
-          .map_or(Value::Null, |v| v.try_into().unwrap_or(Value::Null))
-      })
-      .collect(),
-    PreUpdateCase::Delete(accessor) => (0..accessor.get_column_count())
-      .map(|idx| -> Value {
-        accessor
-          .get_old_column_value(idx)
-          .map_or(Value::Null, |v| v.try_into().unwrap_or(Value::Null))
-      })
-      .collect(),
-    PreUpdateCase::Update {
-      new_value_accessor: accessor,
-      ..
-    } => (0..accessor.get_column_count())
-      .map(|idx| -> Value {
-        accessor
-          .get_new_column_value(idx)
-          .map_or(Value::Null, |v| v.try_into().unwrap_or(Value::Null))
-      })
-      .collect(),
-    PreUpdateCase::Unknown => {
-      return None;
-    }
-  });
-}
-
 pub struct LockGuard<'a> {
   guard: parking_lot::RwLockWriteGuard<'a, ConnectionVec>,
 }
@@ -672,19 +631,4 @@ impl DerefMut for ArcLockGuard {
   }
 }
 
-pub fn list_databases(conn: &rusqlite::Connection) -> Result<Vec<Database>> {
-  let mut stmt = conn.prepare("SELECT seq, name FROM pragma_database_list")?;
-  let mut rows = stmt.raw_query();
-
-  let mut databases: Vec<Database> = vec![];
-  while let Some(row) = rows.next()? {
-    databases.push(serde_rusqlite::from_row(row)?)
-  }
-  return Ok(databases);
-}
-
 static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
-
-#[cfg(test)]
-#[path = "tests.rs"]
-mod tests;

@@ -54,7 +54,7 @@ impl<const N: usize> From<[u8; N]> for ToSqlProxy {
 // Impl for rusqlite.
 impl rusqlite::ToSql for ToSqlProxy {
   #[inline]
-  fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+  fn to_sql(&self) -> Result<rusqlite::types::ToSqlOutput<'_>, rusqlite::Error> {
     Ok(match *self {
       ToSqlProxy::Borrowed(v) => rusqlite::types::ToSqlOutput::Borrowed(v.into()),
       ToSqlProxy::Owned(ref v) => rusqlite::types::ToSqlOutput::Borrowed(v.into()),

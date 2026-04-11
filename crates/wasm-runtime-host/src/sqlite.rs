@@ -310,8 +310,8 @@ mod tests {
     };
 
     assert!(
-      err
-        .contains("Rusqlite error: near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0")
+      err.contains("near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0"),
+      "Got: {err:?}"
     );
   }
 
@@ -385,8 +385,8 @@ mod tests {
     };
 
     assert!(
-      err
-        .contains("Rusqlite error: near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0")
+      err.contains("near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0"),
+      "Got: {err:?}"
     );
   }
 }

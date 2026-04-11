@@ -4,7 +4,8 @@ use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use crate::Value;
+use crate::error::Error;
+use crate::value::Value;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ValueType {
@@ -72,26 +73,29 @@ impl Rows {
     return self.1.get(idx).map(|c| c.name.as_str());
   }
 
-  pub fn column_type(&self, idx: usize) -> std::result::Result<ValueType, rusqlite::Error> {
+  pub fn column_type(&self, idx: usize) -> Result<ValueType, Error> {
     if let Some(c) = self.1.get(idx) {
-      return c.decl_type.ok_or_else(|| {
+      return Ok(c.decl_type.ok_or_else(|| {
         rusqlite::Error::InvalidColumnType(
           idx,
           self.column_name(idx).unwrap_or("?").to_string(),
           types::Type::Null,
         )
-      });
+      })?);
     }
 
-    return Err(rusqlite::Error::InvalidColumnType(
-      idx,
-      self.column_name(idx).unwrap_or("?").to_string(),
-      types::Type::Null,
-    ));
+    return Err(
+      rusqlite::Error::InvalidColumnType(
+        idx,
+        self.column_name(idx).unwrap_or("?").to_string(),
+        types::Type::Null,
+      )
+      .into(),
+    );
   }
 }
 
-pub fn from_rows(mut rows: rusqlite::Rows) -> rusqlite::Result<Rows> {
+pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
   let columns: Arc<Vec<Column>> = Arc::new(rows.as_ref().map_or_else(Vec::new, columns));
 
   let mut result = vec![];
@@ -177,7 +181,7 @@ impl Row {
   }
 }
 
-pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> rusqlite::Result<Row> {
+pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> Result<Row, Error> {
   #[cfg(debug_assertions)]
   if let Some(rc) = Some(columns(row.as_ref()))
     && rc.len() != cols.len()
