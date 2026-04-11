@@ -3,7 +3,6 @@ use log::*;
 use parking_lot::RwLock;
 use rusqlite::fallible_iterator::FallibleIterator;
 use rusqlite::hooks::PreUpdateCase;
-use rusqlite::types::Value;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::ops::{Deref, DerefMut};
@@ -12,29 +11,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::oneshot;
 
 use crate::error::Error;
-pub use crate::params::Params;
+use crate::params::Params;
 use crate::rows::{Column, columns};
-pub use crate::rows::{Row, Rows};
-
-#[macro_export]
-macro_rules! params {
-    () => {
-        [] as [$crate::to_sql::ToSqlType]
-    };
-    ($($param:expr),+ $(,)?) => {
-        [$(Into::<$crate::to_sql::ToSqlType>::into($param)),+]
-    };
-}
-
-#[macro_export]
-macro_rules! named_params {
-    () => {
-        [] as [(&str, $crate::to_sql::ToSqlType)]
-    };
-    ($($param_name:literal: $param_val:expr),+ $(,)?) => {
-        [$(($param_name as &str, Into::<$crate::to_sql::ToSqlType>::into($param_val))),+]
-    };
-}
+use crate::rows::{Row, Rows};
+use crate::value::Value;
 
 #[derive(Clone, Debug, PartialEq, serde::Deserialize)]
 pub struct Database {
@@ -312,7 +292,7 @@ impl Connection {
 
         params.bind(&mut stmt)?;
         let rows = stmt.raw_query();
-        Ok(Rows::from_rows(rows)?)
+        Ok(crate::rows::from_rows(rows)?)
       })
       .await;
   }
@@ -328,7 +308,7 @@ impl Connection {
 
         params.bind(&mut stmt)?;
         let rows = stmt.raw_query();
-        Ok(Rows::from_rows(rows)?)
+        Ok(crate::rows::from_rows(rows)?)
       })
       .await;
   }
@@ -340,7 +320,7 @@ impl Connection {
   ) -> Result<Option<Row>> {
     return self
       .read_query_row_f(sql, params, |row| {
-        return Row::from_row(row, Arc::new(columns(row.as_ref())));
+        return crate::rows::from_row(row, Arc::new(columns(row.as_ref())));
       })
       .await;
   }
@@ -497,9 +477,9 @@ impl Connection {
               if let Some(row) = row {
                 let cols: Arc<Vec<Column>> = Arc::new(columns(row.as_ref()));
 
-                let mut result = vec![Row::from_row(row, cols.clone())?];
+                let mut result = vec![crate::rows::from_row(row, cols.clone())?];
                 while let Some(row) = rows.next()? {
-                  result.push(Row::from_row(row, cols.clone())?);
+                  result.push(crate::rows::from_row(row, cols.clone())?);
                 }
                 return Ok(Some(Rows(result, cols)));
               }
@@ -622,36 +602,30 @@ pub fn extract_row_id(case: &PreUpdateCase) -> Option<i64> {
 }
 
 #[inline]
-pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
+pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<crate::Value>> {
   return Some(match case {
     PreUpdateCase::Insert(accessor) => (0..accessor.get_column_count())
       .map(|idx| -> Value {
         accessor
           .get_new_column_value(idx)
-          .map_or(rusqlite::types::Value::Null, |v| {
-            v.try_into().unwrap_or(rusqlite::types::Value::Null)
-          })
+          .map_or(Value::Null, |v| v.try_into().unwrap_or(Value::Null))
       })
       .collect(),
     PreUpdateCase::Delete(accessor) => (0..accessor.get_column_count())
-      .map(|idx| -> rusqlite::types::Value {
+      .map(|idx| -> Value {
         accessor
           .get_old_column_value(idx)
-          .map_or(rusqlite::types::Value::Null, |v| {
-            v.try_into().unwrap_or(rusqlite::types::Value::Null)
-          })
+          .map_or(Value::Null, |v| v.try_into().unwrap_or(Value::Null))
       })
       .collect(),
     PreUpdateCase::Update {
       new_value_accessor: accessor,
       ..
     } => (0..accessor.get_column_count())
-      .map(|idx| -> rusqlite::types::Value {
+      .map(|idx| -> Value {
         accessor
           .get_new_column_value(idx)
-          .map_or(rusqlite::types::Value::Null, |v| {
-            v.try_into().unwrap_or(rusqlite::types::Value::Null)
-          })
+          .map_or(Value::Null, |v| v.try_into().unwrap_or(Value::Null))
       })
       .collect(),
     PreUpdateCase::Unknown => {

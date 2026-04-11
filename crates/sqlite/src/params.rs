@@ -1,7 +1,7 @@
 use rusqlite::{Statement, types};
 use std::borrow::Cow;
 
-use crate::to_sql::ToSqlType;
+use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
 
 pub trait Params {
@@ -89,7 +89,7 @@ impl<const N: usize> Params for [(&str, Value); N] {
   }
 }
 
-impl<const N: usize> Params for [(&str, ToSqlType); N] {
+impl<const N: usize> Params for [(&str, ToSqlProxy); N] {
   fn bind(self, stmt: &mut Statement<'_>) -> rusqlite::Result<()> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
@@ -119,7 +119,7 @@ impl Params for &[Value] {
   }
 }
 
-impl<const N: usize> Params for [ToSqlType; N] {
+impl<const N: usize> Params for [ToSqlProxy; N] {
   fn bind(self, stmt: &mut Statement<'_>) -> rusqlite::Result<()> {
     for (idx, p) in self.into_iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, p)?;

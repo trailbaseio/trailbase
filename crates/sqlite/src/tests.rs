@@ -1,12 +1,12 @@
 use futures_util::future::join_all;
-use rusqlite::ffi;
 use rusqlite::hooks::PreUpdateCase;
+use rusqlite::{ErrorCode, ffi};
 use serde::Deserialize;
 use std::borrow::Cow;
 
 use crate::connection::{Connection, Database, Error, Options, extract_row_id};
 use crate::{Value, ValueType};
-use rusqlite::ErrorCode;
+use crate::{named_params, params};
 
 #[tokio::test]
 async fn open_in_memory_test() {

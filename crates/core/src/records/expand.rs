@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use rusqlite::types;
 use std::collections::HashMap;
 use thiserror::Error;
 use trailbase_schema::QualifiedName;
@@ -85,7 +84,7 @@ pub(crate) fn row_to_json_expand(
           }
 
           let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
-          if matches!(value, types::Value::Null) {
+          if matches!(value, trailbase_sqlite::Value::Null) {
             return Ok((column.name.clone(), serde_json::Value::Null));
           }
 
@@ -112,7 +111,7 @@ pub(crate) fn row_to_json_expand(
           }
 
           // De-serialize JSON.
-          if let types::Value::Text(str) = value
+          if let trailbase_sqlite::Value::Text(str) = value
             && let Some(ref json) = meta.json
           {
             return match json {
@@ -141,7 +140,7 @@ pub(crate) fn row_to_json_expand(
 
           // De-serialize WKB Geometry.
           #[cfg(any(feature = "geos", feature = "geos-static"))]
-          if let types::Value::Blob(wkb) = value
+          if let trailbase_sqlite::Value::Blob(wkb) = value
             && meta.is_geometry
           {
             let geometry = geos::Geometry::new_from_wkb(wkb)?;

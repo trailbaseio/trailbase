@@ -1,7 +1,7 @@
 use crate::error::BenchmarkError;
 use parking_lot::Mutex;
-use rusqlite::types::{FromSql, ToSql, Value};
-use trailbase_sqlite::Connection;
+use rusqlite::types::{FromSql, ToSql};
+use trailbase_sqlite::{Connection, Value};
 
 pub trait AsyncConnection: Send + Sync {
   fn async_query<T: FromSql + Send + 'static>(

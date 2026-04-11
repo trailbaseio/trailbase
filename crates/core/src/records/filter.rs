@@ -11,7 +11,7 @@ use crate::records::RecordError;
 pub struct ColumnOpValue {
   pub column: String,
   pub op: CompareOp,
-  pub value: rusqlite::types::Value,
+  pub value: trailbase_sqlite::Value,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -26,10 +26,10 @@ pub enum Filter {
   Record(ValueOrComposite),
 }
 
-fn any_qs_value_to_sql(value: trailbase_qs::Value) -> rusqlite::types::Value {
+fn any_qs_value_to_sql(value: trailbase_qs::Value) -> trailbase_sqlite::Value {
   use base64::prelude::*;
-  use rusqlite::types::Value;
   use trailbase_qs::Value as QsValue;
+  use trailbase_sqlite::Value;
 
   return match value {
     QsValue::String(s) => {
@@ -47,10 +47,10 @@ fn any_qs_value_to_sql(value: trailbase_qs::Value) -> rusqlite::types::Value {
 pub(crate) fn qs_value_to_sql_with_constraints(
   column: &Column,
   value: trailbase_qs::Value,
-) -> Result<rusqlite::types::Value, RecordError> {
+) -> Result<trailbase_sqlite::Value, RecordError> {
   use base64::prelude::*;
-  use rusqlite::types::Value;
   use trailbase_qs::Value as QsValue;
+  use trailbase_sqlite::Value;
 
   return match column.data_type {
     ColumnDataType::Any => Ok(any_qs_value_to_sql(value)),
@@ -113,10 +113,10 @@ pub(crate) fn qs_filter_to_record_filter(
 #[inline]
 fn compare_values(
   op: &CompareOp,
-  record_value: &rusqlite::types::Value,
-  filter_value: &rusqlite::types::Value,
+  record_value: &trailbase_sqlite::Value,
+  filter_value: &trailbase_sqlite::Value,
 ) -> bool {
-  use rusqlite::types::Value;
+  use trailbase_sqlite::Value;
 
   return match op {
     CompareOp::Equal => *record_value == *filter_value,
@@ -225,7 +225,7 @@ fn parse_geometries(record: &[u8], filter: &str) -> Option<(geos::Geometry, geos
 
 pub(crate) fn apply_filter_recursively_to_record(
   filter: &ValueOrComposite,
-  record: &indexmap::IndexMap<String, rusqlite::types::Value>,
+  record: &indexmap::IndexMap<String, trailbase_sqlite::Value>,
 ) -> bool {
   return match filter {
     ValueOrComposite::Value(col_op_value) => {
@@ -303,7 +303,7 @@ mod tests {
   use super::*;
 
   use indexmap::IndexMap;
-  use rusqlite::types::Value;
+  use trailbase_sqlite::Value;
 
   #[test]
   fn test_sql_like_to_regex() {

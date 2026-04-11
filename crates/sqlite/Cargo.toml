@@ -33,6 +33,7 @@ tokio = { workspace = true }
 chrono = "0.4.43"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 csv = "1.4.0"
+env_logger.workspace = true
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 glob = "0.3.3"
 itertools = "0.14.0"

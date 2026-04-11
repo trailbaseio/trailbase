@@ -54,6 +54,7 @@ impl From<Vec<u8>> for Value {
   }
 }
 
+// Convert between two value types.
 impl From<Value> for rusqlite::types::Value {
   fn from(value: Value) -> rusqlite::types::Value {
     use rusqlite::types::Value as SqliteValue;
@@ -68,6 +69,7 @@ impl From<Value> for rusqlite::types::Value {
   }
 }
 
+// Convert &Value to rusqlite::types::ValueRef
 impl<'a> From<&'a Value> for rusqlite::types::ValueRef<'a> {
   #[inline]
   fn from(value: &'a Value) -> Self {
@@ -80,6 +82,29 @@ impl<'a> From<&'a Value> for rusqlite::types::ValueRef<'a> {
       Value::Text(ref s) => SqliteValueRef::Text(s.as_bytes()),
       Value::Blob(ref b) => SqliteValueRef::Blob(b),
     }
+  }
+}
+
+impl TryFrom<rusqlite::types::ValueRef<'_>> for Value {
+  type Error = rusqlite::types::FromSqlError;
+
+  #[inline]
+  fn try_from(borrowed: rusqlite::types::ValueRef<'_>) -> Result<Self, Self::Error> {
+    match borrowed {
+      rusqlite::types::ValueRef::Null => Ok(Self::Null),
+      rusqlite::types::ValueRef::Integer(i) => Ok(Self::Integer(i)),
+      rusqlite::types::ValueRef::Real(r) => Ok(Self::Real(r)),
+      rusqlite::types::ValueRef::Text(s) => std::str::from_utf8(s)
+        .map(|s| Self::Text(s.to_string()))
+        .map_err(Self::Error::Utf8Error),
+      rusqlite::types::ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
+    }
+  }
+}
+
+impl rusqlite::types::FromSql for Value {
+  fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+    return value.try_into();
   }
 }
 

@@ -2,7 +2,7 @@ use core::future::Future;
 use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
-use trailbase_sqlite::{Params, Rows};
+use trailbase_sqlite::Params;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
 use wasmtime::component::{HasData, ResourceTable};
@@ -263,8 +263,8 @@ impl self::trailbase::database::sqlite::Host for State {
         .bind(&mut stmt)
         .map_err(|err| TxError::Other(err.to_string()))?;
 
-      let rows =
-        Rows::from_rows(stmt.raw_query()).map_err(|err| TxError::Other(err.to_string()))?;
+      let rows = trailbase_sqlite::rows::from_rows(stmt.raw_query())
+        .map_err(|err| TxError::Other(err.to_string()))?;
 
       let values: Vec<_> = rows
         .into_iter()

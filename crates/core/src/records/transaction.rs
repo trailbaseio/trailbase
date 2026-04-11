@@ -266,11 +266,11 @@ pub async fn record_transactions_handler(
 }
 
 #[inline]
-fn extract_record_id(value: rusqlite::types::Value) -> Result<String, trailbase_sqlite::Error> {
+fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, trailbase_sqlite::Error> {
   return match value {
-    rusqlite::types::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
-    rusqlite::types::Value::Text(text) => Ok(text),
-    rusqlite::types::Value::Integer(i) => Ok(i.to_string()),
+    trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
+    trailbase_sqlite::Value::Text(text) => Ok(text),
+    trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
     _ => Err(trailbase_sqlite::Error::Other(
       "Unexpected data type".into(),
     )),
