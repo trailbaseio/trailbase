@@ -33,7 +33,7 @@ impl AsyncConnection for Connection {
   ) -> Result<T, BenchmarkError> {
     return Ok(
       self
-        .query_row_f(sql.into(), params.into(), |row| row.get::<_, T>(0))
+        .query_row_get(sql.into(), params.into(), 0)
         .await?
         .unwrap(),
     );
@@ -46,7 +46,7 @@ impl AsyncConnection for Connection {
   ) -> Result<T, BenchmarkError> {
     return Ok(
       self
-        .read_query_row_f(sql.into(), params.into(), |row| row.get::<_, T>(0))
+        .read_query_row_get(sql.into(), params.into(), 0)
         .await?
         .unwrap(),
     );

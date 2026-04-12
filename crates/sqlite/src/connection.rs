@@ -151,22 +151,6 @@ impl Connection {
     });
   }
 
-  pub fn from_connection_test_only(conn: rusqlite::Connection) -> Self {
-    use parking_lot::lock_api::RwLock;
-
-    let (shared_write_sender, shared_write_receiver) = kanal::unbounded::<Message>();
-    let conns = Arc::new(RwLock::new(ConnectionVec(vec![conn])));
-    let conns_clone = conns.clone();
-    std::thread::spawn(move || event_loop(0, conns_clone, shared_write_receiver));
-
-    return Self {
-      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
-      reader: shared_write_sender.clone(),
-      writer: shared_write_sender,
-      conns,
-    };
-  }
-
   /// Open a new connection to an in-memory SQLite database.
   ///
   /// # Failure
@@ -238,13 +222,6 @@ impl Connection {
   }
 
   #[inline]
-  pub fn call_and_forget(&self, function: impl FnOnce(&rusqlite::Connection) + Send + 'static) {
-    let _ = self
-      .writer
-      .send(Message::RunMut(Box::new(move |conn| function(conn))));
-  }
-
-  #[inline]
   pub async fn call_reader<F, R>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(&rusqlite::Connection) -> Result<R, Error> + Send + 'static,
@@ -264,16 +241,6 @@ impl Connection {
     receiver.await.map_err(|_| Error::ConnectionClosed)?
   }
 
-  #[inline]
-  pub fn call_reader_and_forget(
-    &self,
-    function: impl FnOnce(&rusqlite::Connection) + Send + 'static,
-  ) {
-    let _ = self
-      .writer
-      .send(Message::RunConst(Box::new(move |conn| function(conn))));
-  }
-
   /// Query SQL statement.
   pub async fn read_query_rows(
     &self,
@@ -287,7 +254,7 @@ impl Connection {
 
         params.bind(&mut stmt)?;
         let rows = stmt.raw_query();
-        Ok(crate::rows::from_rows(rows)?)
+        return crate::rows::from_rows(rows);
       })
       .await;
   }
@@ -303,7 +270,7 @@ impl Connection {
 
         params.bind(&mut stmt)?;
         let rows = stmt.raw_query();
-        Ok(crate::rows::from_rows(rows)?)
+        return crate::rows::from_rows(rows);
       })
       .await;
   }
@@ -321,7 +288,7 @@ impl Connection {
   }
 
   #[inline]
-  pub async fn query_row_f<T, E: Into<Error>>(
+  async fn query_row_f<T, E>(
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
@@ -347,7 +314,28 @@ impl Connection {
   }
 
   #[inline]
-  pub async fn read_query_row_f<T, E>(
+  pub async fn query_row_get<T>(
+    &self,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl Params + Send + 'static,
+    index: usize,
+  ) -> Result<Option<T>, Error>
+  where
+    T: rusqlite::types::FromSql + Send + 'static,
+  {
+    return self
+      .query_row_f(
+        sql,
+        params,
+        move |row: &rusqlite::Row<'_>| -> Result<T, Error> {
+          return Ok(row.get(index)?);
+        },
+      )
+      .await;
+  }
+
+  #[inline]
+  async fn read_query_row_f<T, E>(
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
@@ -371,6 +359,27 @@ impl Connection {
         }
         Ok(None)
       })
+      .await;
+  }
+
+  #[inline]
+  pub async fn read_query_row_get<T>(
+    &self,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl Params + Send + 'static,
+    index: usize,
+  ) -> Result<Option<T>, Error>
+  where
+    T: rusqlite::types::FromSql + Send + 'static,
+  {
+    return self
+      .read_query_row_f(
+        sql,
+        params,
+        move |row: &rusqlite::Row<'_>| -> Result<T, Error> {
+          return Ok(row.get(index)?);
+        },
+      )
       .await;
   }
 

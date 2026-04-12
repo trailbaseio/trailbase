@@ -152,10 +152,10 @@ mod test {
 
   async fn message_exists(conn: &trailbase_sqlite::Connection, id: &[u8; 16]) -> bool {
     let count: i64 = conn
-      .read_query_row_f(
+      .read_query_row_get(
         "SELECT COUNT(*) FROM message WHERE mid = $1",
         params!(*id),
-        |row| row.get(0),
+        0,
       )
       .await
       .unwrap()

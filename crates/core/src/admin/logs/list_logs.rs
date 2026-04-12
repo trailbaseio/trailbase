@@ -59,13 +59,13 @@ pub async fn list_logs_handler(
   };
 
   let total_row_count: i64 = conn
-    .read_query_row_f(
+    .read_query_row_get(
       format!(
         "SELECT COUNT(*) FROM {LOGS_TABLE} AS {TABLE_ALIAS} WHERE {where_clause}",
         where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),
-      |row| row.get(0),
+      0,
     )
     .await?
     .unwrap_or(-1);

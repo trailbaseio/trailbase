@@ -564,6 +564,10 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
+  ///
+  /// QUESTION: Could we structure this in a way that we yield less in case there's no read-access
+  /// rule, e.g. sync and return (yikes):
+  ///   `Result<Option<Box<dyn Future<Output=Result<(), RecordError>>>>, RecordErrorr>`
   #[inline]
   pub(crate) async fn check_record_level_read_access_for_subscriptions(
     &self,

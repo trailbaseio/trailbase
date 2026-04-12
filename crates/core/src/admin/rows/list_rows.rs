@@ -81,9 +81,7 @@ pub async fn list_rows_handler(
       table = qualified_name.escaped_string()
     );
     conn
-      .read_query_row_f(count_query, filter_where_clause.params.clone(), |row| {
-        row.get(0)
-      })
+      .read_query_row_get(count_query, filter_where_clause.params.clone(), 0)
       .await?
       .unwrap_or(-1)
   };
@@ -295,7 +293,7 @@ mod tests {
       .unwrap();
 
     let cnt: i64 = conn
-      .read_query_row_f("SELECT COUNT(*) FROM test_table", (), |row| row.get(0))
+      .read_query_row_get("SELECT COUNT(*) FROM test_table", (), 0)
       .await
       .unwrap()
       .unwrap();

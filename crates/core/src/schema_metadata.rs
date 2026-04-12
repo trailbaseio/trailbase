@@ -36,13 +36,13 @@ pub async fn lookup_and_parse_table_schema(
 ) -> Result<Table, SchemaLookupError> {
   // Then get the actual table.
   let sql: String = conn
-    .read_query_row_f(
+    .read_query_row_get(
       format!(
         "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1",
         db = database.unwrap_or("main")
       ),
       params!(table_name.to_string()),
-      |row| row.get(0),
+      0,
     )
     .await?
     .ok_or_else(|| trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows))?;

@@ -252,10 +252,10 @@ impl PerConnectionState {
 
     let Some(row_id): Option<i64> = api
       .conn()
-      .read_query_row_f(
+      .read_query_row_get(
         format!(r#"SELECT _rowid_ FROM {table_name} WHERE "{pk_column}" = $1"#),
         [record],
-        |row| row.get(0),
+        0,
       )
       .await?
     else {

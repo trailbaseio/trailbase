@@ -316,9 +316,7 @@ async fn test_execute_batch() {
 
   let count = async |table: &str| -> i64 {
     return conn
-      .query_row_f(format!("SELECT COUNT(*) FROM {table}"), (), |row| {
-        row.get(0)
-      })
+      .query_row_get(format!("SELECT COUNT(*) FROM {table}"), (), 0)
       .await
       .unwrap()
       .unwrap();
@@ -443,7 +441,7 @@ async fn test_params() {
     .unwrap();
 
   let count: i64 = conn
-    .read_query_row_f("SELECT COUNT(*) FROM person", (), |row| row.get(0))
+    .read_query_row_get("SELECT COUNT(*) FROM person", (), 0)
     .await
     .unwrap()
     .unwrap();
@@ -466,44 +464,47 @@ async fn test_hooks() {
     row_id: i64,
   }
 
-  let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel::<String>();
-  let c = conn.clone();
+  let (sender, receiver) = kanal::unbounded::<String>();
 
   conn
     .write_lock()
-    .preupdate_hook(Some(
-      move |action: rusqlite::hooks::Action, _db: &str, table_name: &str, case: &PreUpdateCase| {
-        let row_id = extract_row_id(case).unwrap();
-        let state = State {
-          action,
-          table_name: table_name.to_string(),
-          row_id,
-        };
-
-        let sender = sender.clone();
-        c.call_and_forget(move |conn| {
-          match state.action {
-            rusqlite::hooks::Action::SQLITE_INSERT => {
-              let text = conn
-                .query_row(
-                  &format!(
-                    r#"SELECT text FROM "{}" WHERE _rowid_ = $1"#,
-                    state.table_name
-                  ),
-                  [state.row_id],
-                  |row| row.get::<_, String>(0),
-                )
-                .unwrap();
-
-              sender.send(text).unwrap();
-            }
-            _ => {
-              panic!("unexpected action: {:?}", state.action);
-            }
+    .preupdate_hook({
+      let conn = conn.clone();
+      Some(
+        move |action: rusqlite::hooks::Action,
+              _db: &str,
+              table_name: &str,
+              case: &PreUpdateCase| {
+          let row_id = extract_row_id(case).unwrap();
+          let state = State {
+            action,
+            table_name: table_name.to_string(),
+            row_id,
           };
-        });
-      },
-    ))
+
+          if state.action != rusqlite::hooks::Action::SQLITE_INSERT {
+            panic!("unexpected action: {:?}", state.action);
+          }
+
+          let sender = sender.clone();
+          let conn = conn.clone();
+
+          // We can't lock here since the lock is held by the `execute` below triggering
+          // the hook. Thus delay the query until after the `execute` completes.
+          std::thread::spawn(move || {
+            let query = format!("SELECT text FROM '{}' WHERE _rowid_ = $1", state.table_name);
+            sender
+              .send(
+                conn
+                  .write_lock()
+                  .query_row(&query, (state.row_id,), |row| row.get(0))
+                  .unwrap(),
+              )
+              .unwrap();
+          });
+        },
+      )
+    })
     .unwrap();
 
   conn
@@ -511,7 +512,7 @@ async fn test_hooks() {
     .await
     .unwrap();
 
-  let text = receiver.recv().await.unwrap();
+  let text = receiver.recv().unwrap();
   assert_eq!(text, "foo");
 }
 

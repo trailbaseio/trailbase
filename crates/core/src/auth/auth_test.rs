@@ -372,10 +372,10 @@ async fn test_auth_password_login_flow_without_pkce() {
 
   let refresh_token: String = state
     .session_conn()
-    .read_query_row_f(
+    .read_query_row_get(
       format!("SELECT refresh_token FROM {SESSION_TABLE} WHERE user = $1;"),
       (user.uuid.into_bytes().to_vec(),),
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()
@@ -613,10 +613,10 @@ async fn test_auth_change_email_flow() {
 
   let db_email: String = state
     .user_conn()
-    .read_query_row_f(
+    .read_query_row_get(
       format!(r#"SELECT email FROM "{USER_TABLE}" WHERE id = $1"#),
       params!(user.uuid.into_bytes()),
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()
@@ -692,10 +692,10 @@ async fn test_auth_delete_user_flow() {
 
   let user_exists: bool = state
     .user_conn()
-    .read_query_row_f(
+    .read_query_row_get(
       format!(r#"SELECT EXISTS(SELECT * FROM "{USER_TABLE}" WHERE id = $1)"#),
       params!(user.uuid.into_bytes()),
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()
@@ -801,10 +801,10 @@ async fn test_auth_otp_flow() {
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
   return state
     .session_conn()
-    .read_query_row_f(
+    .read_query_row_get(
       format!("SELECT EXISTS(SELECT 1 FROM {SESSION_TABLE} WHERE user = $1)"),
       params!(user_id.into_bytes().to_vec()),
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()

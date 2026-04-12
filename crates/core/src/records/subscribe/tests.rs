@@ -56,12 +56,11 @@ async fn subscribe_to_record_test() {
   let conn = state.conn().clone();
 
   let record_id_raw = 0;
-  let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
   let rowid: i64 = conn
-    .query_row_f(
+    .query_row_get(
       "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
-      [record_id],
-      |row| row.get(0),
+      [trailbase_sqlite::Value::Integer(record_id_raw)],
+      0,
     )
     .await
     .unwrap()
@@ -137,10 +136,7 @@ async fn subscribe_to_record_test() {
   }
 
   // Implicitly await for scheduled cleanups to go through.
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  conn.read_query_row("SELECT 1", ()).await.unwrap();
 }
 
 async fn subscribe_to_records(
@@ -281,10 +277,7 @@ async fn subscribe_to_table_test() {
   }
 
   // Implicitly await for scheduled cleanups to go through.
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  conn.read_query_row("SELECT 1", ()).await.unwrap();
 
   assert_eq!(0, manager.num_table_subscriptions());
 }
@@ -297,10 +290,10 @@ async fn subscription_lifecycle_test() {
   let record_id_raw = 0;
   let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
   let rowid: i64 = conn
-    .query_row_f(
+    .query_row_get(
       "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
       [record_id],
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()
@@ -323,10 +316,7 @@ async fn subscription_lifecycle_test() {
   drop(sse);
 
   // Implicitly await for the cleanup to be scheduled on the sqlite executor.
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  conn.read_query_row("SELECT 1", ()).await.unwrap();
 
   assert_eq!(0, manager.num_record_subscriptions());
 }
@@ -412,13 +402,13 @@ async fn subscription_acl_test() {
   let record_id_raw = 0;
   let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
   let _rowid: i64 = conn
-    .query_row_f(
+    .query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         record_id.clone(),
         trailbase_sqlite::Value::Blob(user_x.to_vec()),
       ],
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()
@@ -565,10 +555,7 @@ async fn test_acl_selective_table_subs() {
   }
 
   // Implicitly await for scheduled cleanups to go through.
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  conn.read_query_row("SELECT 1", ()).await.unwrap();
 
   assert_eq!(0, manager.num_table_subscriptions());
 }
@@ -591,13 +578,13 @@ async fn subscription_acl_change_owner() {
 
   let record_id = 0;
   let _rowid: i64 = conn
-    .query_row_f(
+    .query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         trailbase_sqlite::Value::Integer(record_id),
         trailbase_sqlite::Value::Blob(user_x_id.into()),
       ],
-      |row| row.get(0),
+      0,
     )
     .await
     .unwrap()
@@ -721,10 +708,7 @@ async fn subscription_filter_test() {
   }
 
   // Implicitly await for scheduled cleanups to go through.
-  conn
-    .read_query_row_f("SELECT 1", (), |row| row.get::<_, i64>(0))
-    .await
-    .unwrap();
+  conn.read_query_row("SELECT 1", ()).await.unwrap();
 
   assert_eq!(0, manager.num_table_subscriptions());
 }

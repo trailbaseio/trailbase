@@ -552,7 +552,7 @@ mod tests {
     assert_eq!(
       1,
       conn
-        .query_row_f("SELECT COUNT(*) FROM tx;", (), |row| row.get::<_, i64>(0))
+        .query_row_get::<i64>("SELECT COUNT(*) FROM tx;", (), 0)
         .await
         .unwrap()
         .unwrap()
@@ -585,10 +585,9 @@ mod tests {
 
   #[tokio::test]
   async fn test_custom_sqlite_function() {
-    let conn = rusqlite::Connection::open_in_memory().unwrap();
-    let _sqlite_function_runtime = init_sqlite_function_runtime(&conn).await;
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
 
-    let conn = trailbase_sqlite::Connection::from_connection_test_only(conn);
+    let _sqlite_function_runtime = init_sqlite_function_runtime(&conn.write_lock()).await;
     let runtime = init_runtime(Some(conn.clone()));
 
     {

@@ -222,10 +222,10 @@ pub async fn login_otp_handler(
 
   let Some(user_id) = state
     .session_conn()
-    .query_row_f(
+    .read_query_row_get(
       LOOKUP_OTP_QUERY,
       params!(normalized_email, otp_code.to_string()),
-      |row| row.get::<_, [u8; 16]>(0),
+      0,
     )
     .await?
   else {

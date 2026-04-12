@@ -81,13 +81,13 @@ pub async fn list_users_handler(
     build_filter_where_clause("_ROW_", &table_metadata.column_metadata, filter_params)?;
 
   let total_row_count: i64 = conn
-    .read_query_row_f(
+    .read_query_row_get(
       format!(
         "SELECT COUNT(*) FROM {USER_TABLE} AS _ROW_ WHERE {where_clause}",
         where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),
-      |row| row.get(0),
+      0,
     )
     .await?
     .unwrap_or(-1);

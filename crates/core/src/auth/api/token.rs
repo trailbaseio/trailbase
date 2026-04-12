@@ -67,10 +67,10 @@ pub(crate) async fn auth_code_to_token_handler(
 
   let Some(user_id) = state
     .session_conn()
-    .query_row_f(
+    .read_query_row_get(
       AUTH_CODE_QUERY,
       params!(authorization_code, pkce_code_challenge),
-      |row| row.get::<_, [u8; 16]>(0),
+      0,
     )
     .await?
   else {

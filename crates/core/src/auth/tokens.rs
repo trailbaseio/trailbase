@@ -219,9 +219,7 @@ pub(crate) async fn reauth_with_refresh_token(
 
   let Some(user_id) = state
     .session_conn()
-    .query_row_f(SESSION_QUERY, params!(refresh_token), |row| {
-      row.get::<_, [u8; 16]>(0)
-    })
+    .read_query_row_get::<[u8; 16]>(SESSION_QUERY, params!(refresh_token), 0)
     .await?
   else {
     // Row not found case, typically expected in one of 4 cases:

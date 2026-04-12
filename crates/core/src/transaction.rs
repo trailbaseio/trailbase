@@ -242,7 +242,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_transaction_log() {
-    let mut conn = rusqlite::Connection::open_in_memory().unwrap();
+    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     conn
       .execute_batch(
         r#"
@@ -255,35 +255,45 @@ mod tests {
           INSERT INTO 'table' (id, name, age) VALUES (0, 'Alice', 21), (1, 'Bob', 18);
         "#,
       )
+      .await
       .unwrap();
 
     // Just double checking that rusqlite's query and execute ignore everything but the first
     // statement.
-    let result = conn.query_row(
-      r#"
+    let result = conn
+      .query_row_get::<String>(
+        r#"
           SELECT name FROM 'table' WHERE id = 0;
           SELECT name FROM 'table' WHERE id = 1;
           DROP TABLE 'table';
         "#,
-      (),
-      |row| row.get::<_, String>(0),
-    );
-    assert!(matches!(result, Err(rusqlite::Error::MultipleStatement)));
+        (),
+        0,
+      )
+      .await;
+    assert!(matches!(
+      result,
+      Err(trailbase_sqlite::Error::Rusqlite(
+        rusqlite::Error::MultipleStatement
+      ))
+    ));
 
-    let mut recorder = TransactionRecorder::new(&mut conn).unwrap();
+    let log = {
+      let mut lock = conn.write_lock();
+      let mut recorder = TransactionRecorder::new(&mut lock).unwrap();
 
-    recorder
-      .execute("DELETE FROM 'table' WHERE age < ?1", rusqlite::params!(20))
-      .unwrap();
-    let log = recorder.rollback().unwrap().unwrap();
+      recorder
+        .execute("DELETE FROM 'table' WHERE age < ?1", rusqlite::params!(20))
+        .unwrap();
+      recorder.rollback().unwrap().unwrap()
+    };
 
     assert_eq!(log.log.len(), 1);
     assert_eq!(log.log[0].0, QueryType::Execute);
     assert_eq!(log.log[0].1, "DELETE FROM 'table' WHERE age < 20");
 
-    let conn = trailbase_sqlite::Connection::from_connection_test_only(conn);
     let count: i64 = conn
-      .query_row_f("SELECT COUNT(*) FROM 'table'", (), |row| row.get(0))
+      .read_query_row_get("SELECT COUNT(*) FROM 'table'", (), 0)
       .await
       .unwrap()
       .unwrap();
@@ -292,7 +302,7 @@ mod tests {
     log.commit(&conn).await.unwrap();
 
     let count: i64 = conn
-      .query_row_f("SELECT COUNT(*) FROM 'table'", (), |row| row.get(0))
+      .read_query_row_get("SELECT COUNT(*) FROM 'table'", (), 0)
       .await
       .unwrap()
       .unwrap();

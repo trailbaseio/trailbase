@@ -297,14 +297,14 @@ mod test {
       .unwrap();
 
     let count: i64 = conn
-      .read_query_row_f(
+      .read_query_row_get(
         format!(r#"SELECT COUNT(*) from "{USER_TABLE}" WHERE email = :email"#),
         trailbase_sqlite::named_params! {
           ":email": EMAIL,
           ":unused": "unused",
           ":foo": 42,
         },
-        |row| row.get(0),
+        0,
       )
       .await
       .unwrap()
@@ -1010,9 +1010,7 @@ mod test {
 
     let index: String = state
       .conn()
-      .read_query_row_f(r#"SELECT "index" from "table" WHERE pid = 2"#, (), |row| {
-        row.get(0)
-      })
+      .read_query_row_get(r#"SELECT "index" from "table" WHERE pid = 2"#, (), 0)
       .await
       .unwrap()
       .unwrap();

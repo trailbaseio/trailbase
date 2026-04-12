@@ -304,9 +304,7 @@ pub async fn user_exists(state: &AppState, email: &str) -> bool {
 
   return match state
     .user_conn()
-    .read_query_row_f(QUERY, params!(email.to_string()), |row| {
-      row.get::<_, bool>(0)
-    })
+    .read_query_row_get(QUERY, params!(email.to_string()), 0)
     .await
   {
     Ok(Some(row)) => row,
@@ -324,9 +322,7 @@ pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
 
   return match state
     .user_conn()
-    .read_query_row_f(QUERY, params!(user_id.as_bytes().to_vec()), |row| {
-      row.get::<_, i64>(0)
-    })
+    .read_query_row_get::<i64>(QUERY, params!(user_id.as_bytes().to_vec()), 0)
     .await
   {
     Ok(Some(row)) => row > 0,
