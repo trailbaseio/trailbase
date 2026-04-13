@@ -4,9 +4,10 @@ use std::sync::Arc;
 
 use crate::database::Database;
 use crate::error::Error;
+use crate::from_sql::FromSql;
 use crate::params::Params;
 use crate::rows::{Row, Rows, columns};
-use crate::sqlite::connection::{ConnectionImpl, map_first};
+use crate::sqlite::connection::{ConnectionImpl, get_value, map_first};
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::connection::{ArcLockGuard, LockGuard, Options};
@@ -114,13 +115,13 @@ impl Connection {
     index: usize,
   ) -> Result<Option<T>, Error>
   where
-    T: rusqlite::types::FromSql + Send + 'static,
+    T: FromSql + Send + 'static,
   {
     return self
       .c
       .read_query_rows_f(sql, params, move |rows| {
         return map_first(rows, move |row| {
-          return Ok(row.get(index)?);
+          return get_value(row, index);
         });
       })
       .await;
@@ -174,13 +175,13 @@ impl Connection {
     index: usize,
   ) -> Result<Option<T>, Error>
   where
-    T: rusqlite::types::FromSql + Send + 'static,
+    T: FromSql + Send + 'static,
   {
     return self
       .c
       .write_query_rows_f(sql, params, move |rows| {
         return map_first(rows, move |row| {
-          return Ok(row.get(index)?);
+          return get_value(row, index);
         });
       })
       .await;

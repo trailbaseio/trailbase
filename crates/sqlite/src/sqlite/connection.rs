@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::oneshot;
 
 use crate::error::Error;
+use crate::from_sql::{FromSql, FromSqlError};
 use crate::params::Params;
 
 #[derive(Default)]
@@ -397,6 +398,27 @@ where
     return Ok(Some(f(row)?));
   }
   return Ok(None);
+}
+
+#[inline]
+pub fn get_value<T: FromSql>(row: &rusqlite::Row<'_>, idx: usize) -> Result<T, Error> {
+  let value = row.get_ref(idx)?;
+
+  return FromSql::column_result(value.into()).map_err(|err| {
+    use rusqlite::Error as RError;
+
+    return Error::Rusqlite(match err {
+      FromSqlError::InvalidType => {
+        RError::InvalidColumnType(idx, "<unknown>".into(), value.data_type())
+      }
+      FromSqlError::OutOfRange(i) => RError::IntegralValueOutOfRange(idx, i),
+      FromSqlError::Utf8Error(err) => RError::Utf8Error(idx, err),
+      FromSqlError::Other(err) => RError::FromSqlConversionFailure(idx, value.data_type(), err),
+      FromSqlError::InvalidBlobSize { .. } => {
+        RError::FromSqlConversionFailure(idx, value.data_type(), Box::new(err))
+      }
+    });
+  });
 }
 
 static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);

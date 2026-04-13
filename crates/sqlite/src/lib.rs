@@ -13,11 +13,15 @@
 pub mod connection;
 pub mod database;
 pub mod error;
+pub mod from_sql;
 pub mod params;
 pub mod rows;
 pub mod sqlite;
 pub mod to_sql;
 pub mod value;
+
+#[cfg(debug_assertions)]
+pub mod experimental;
 
 pub use connection::Connection;
 pub use database::Database;
