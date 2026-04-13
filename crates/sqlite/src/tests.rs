@@ -4,9 +4,9 @@ use rusqlite::{ErrorCode, ffi};
 use serde::Deserialize;
 use std::borrow::Cow;
 
-use crate::connection::{Connection, Database, Options};
+use crate::connection::{Connection, Options};
 use crate::sqlite::extract_row_id;
-use crate::{Error, Value, ValueType};
+use crate::{Database, Error, Value, ValueType};
 
 #[tokio::test]
 async fn open_in_memory_test() {
@@ -275,19 +275,28 @@ async fn test_execute_and_query() {
   assert_eq!(person.id, 1);
   assert_eq!(person.name, "baz");
 
-  let rows = conn
-    .execute_batch(
-      r#"
+  let rows = crate::sqlite::batch::execute_batch(
+    &conn,
+    r#"
         CREATE TABLE foo (id INTEGER) STRICT;
         INSERT INTO foo (id) VALUES (17);
         SELECT * FROM foo;
       "#,
-    )
-    .await
-    .unwrap()
-    .unwrap();
+  )
+  .await
+  .unwrap()
+  .unwrap();
   assert_eq!(rows.len(), 1);
   assert_eq!(rows.0.get(0).unwrap().get::<i64>(0), Ok(17));
+
+  // Lastly make sure rusqlite and out Connection consistently execute batches
+  // containing statements returning rows.
+  let query = "
+    SELECT * FROM foo;
+    SELECT * FROM foo;
+  ";
+  conn.write_lock().execute_batch(query).unwrap();
+  conn.execute_batch(query).await.unwrap();
 }
 
 #[tokio::test]

@@ -11,6 +11,7 @@
 )]
 
 pub mod connection;
+pub mod database;
 pub mod error;
 pub mod params;
 pub mod rows;
@@ -19,6 +20,7 @@ pub mod to_sql;
 pub mod value;
 
 pub use connection::Connection;
+pub use database::Database;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};

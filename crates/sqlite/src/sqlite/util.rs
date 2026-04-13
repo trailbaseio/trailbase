@@ -1,6 +1,6 @@
 use rusqlite::hooks::PreUpdateCase;
 
-use crate::connection::Database;
+use crate::database::Database;
 use crate::error::Error;
 use crate::value::Value;
 
