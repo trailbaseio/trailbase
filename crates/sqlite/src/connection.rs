@@ -19,9 +19,13 @@ pub struct Connection {
 }
 
 impl Connection {
-  pub fn new<E>(
+  pub fn new<E>(builder: impl Fn() -> Result<rusqlite::Connection, E>) -> Result<Self, E> {
+    return Self::with_opts(builder, Options::default());
+  }
+
+  pub fn with_opts<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
-    opt: Option<Options>,
+    opt: Options,
   ) -> std::result::Result<Self, E> {
     return Ok(Self {
       c: ConnectionImpl::new(builder, opt)?,
@@ -34,21 +38,25 @@ impl Connection {
   ///
   /// Will return `Err` if the underlying SQLite open call fails.
   pub fn open_in_memory() -> Result<Self, Error> {
-    let conn = Self::new(
+    let conn = Self::with_opts(
       rusqlite::Connection::open_in_memory,
-      Some(Options {
-        n_read_threads: 0,
+      Options {
+        n_read_threads: Some(0),
         ..Default::default()
-      }),
+      },
     )?;
 
-    assert_eq!(1, conn.c.len());
+    assert_eq!(1, conn.threads());
 
     return Ok(conn);
   }
 
   pub fn id(&self) -> usize {
     return self.c.id();
+  }
+
+  pub fn threads(&self) -> usize {
+    return self.c.threads();
   }
 
   pub fn write_lock(&self) -> LockGuard<'_> {

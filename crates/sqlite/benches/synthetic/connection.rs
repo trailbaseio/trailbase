@@ -33,9 +33,10 @@ impl AsyncConnection for Connection {
   ) -> Result<T, BenchmarkError> {
     return Ok(
       self
-        .query_row_get(sql.into(), params.into(), 0)
+        .query_row_get::<Adapter<T>>(sql.into(), params.into(), 0)
         .await?
-        .unwrap(),
+        .unwrap()
+        .0,
     );
   }
 
@@ -46,9 +47,10 @@ impl AsyncConnection for Connection {
   ) -> Result<T, BenchmarkError> {
     return Ok(
       self
-        .read_query_row_get(sql.into(), params.into(), 0)
+        .read_query_row_get::<Adapter<T>>(sql.into(), params.into(), 0)
         .await?
-        .unwrap(),
+        .unwrap()
+        .0,
     );
   }
 
@@ -161,5 +163,16 @@ impl AsyncConnection for ThreadLocalRusqlite {
 
     self.call(move |conn| conn.execute(&sql.into(), p.as_slice()))?;
     return Ok(());
+  }
+}
+
+struct Adapter<T>(T);
+
+impl<T: rusqlite::types::FromSql> trailbase_sqlite::from_sql::FromSql for Adapter<T> {
+  #[inline]
+  fn column_result(
+    value: trailbase_sqlite::ValueRef<'_>,
+  ) -> trailbase_sqlite::from_sql::FromSqlResult<Self> {
+    return Ok(Adapter(T::column_result(value.into()).unwrap()));
   }
 }

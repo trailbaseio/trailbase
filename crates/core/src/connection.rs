@@ -329,7 +329,7 @@ fn init_main_db_impl(
     let json_registry = json_registry.clone();
     let new_db = &mut new_db;
 
-    trailbase_sqlite::Connection::new(
+    trailbase_sqlite::Connection::with_opts(
       move || -> Result<_, ConnectionError> {
         let mut conn =
           trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
@@ -352,14 +352,14 @@ fn init_main_db_impl(
 
         return Ok(conn);
       },
-      Some(trailbase_sqlite::connection::Options {
+      trailbase_sqlite::connection::Options {
         n_read_threads: match (data_dir, std::thread::available_parallelism()) {
-          (None, _) => 0,
-          (Some(_), Ok(n)) => n.get().clamp(2, 4),
-          (Some(_), Err(_)) => 4,
+          (None, _) => Some(0),
+          (Some(_), Ok(n)) => Some(n.get().clamp(2, 4)),
+          (Some(_), Err(_)) => Some(4),
         },
         ..Default::default()
-      }),
+      },
     )?
   };
 
@@ -392,38 +392,32 @@ fn init_main_db_impl(
 pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
   let path = data_dir.map(|d| d.logs_db_path());
 
-  return trailbase_sqlite::Connection::new(
-    || -> Result<_, ConnectionError> {
-      // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
-      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+  return trailbase_sqlite::Connection::new(|| -> Result<_, ConnectionError> {
+    // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
+    let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
 
-      trailbase_extension::register_all_extension_functions(&conn, None)?;
+    trailbase_extension::register_all_extension_functions(&conn, None)?;
 
-      // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
-      conn.pragma_update(None, "secure_delete", "FALSE")?;
+    // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
+    conn.pragma_update(None, "secure_delete", "FALSE")?;
 
-      apply_logs_migrations(&mut conn)?;
-      return Ok(conn);
-    },
-    None,
-  );
+    apply_logs_migrations(&mut conn)?;
+    return Ok(conn);
+  });
 }
 
 pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
   let path = data_dir.map(|d| d.session_db_path());
 
-  return trailbase_sqlite::Connection::new(
-    || -> Result<_, ConnectionError> {
-      // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
-      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+  return trailbase_sqlite::Connection::new(|| -> Result<_, ConnectionError> {
+    // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
+    let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
 
-      trailbase_extension::register_all_extension_functions(&conn, None)?;
+    trailbase_extension::register_all_extension_functions(&conn, None)?;
 
-      apply_session_migrations(&mut conn)?;
-      return Ok(conn);
-    },
-    None,
-  );
+    apply_session_migrations(&mut conn)?;
+    return Ok(conn);
+  });
 }
 
 pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(

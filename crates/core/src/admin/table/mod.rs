@@ -38,16 +38,13 @@ fn get_conn_and_migration_path(
       let json_registry = state.json_schema_registry().clone();
 
       Ok((
-        trailbase_sqlite::Connection::new(
-          move || {
-            // TODO: We should load WASM SQLite functions, since migrations may depend on them.
-            return trailbase_extension::connect_sqlite(
-              Some(db_path.clone()),
-              Some(json_registry.clone()),
-            );
-          },
-          None,
-        )
+        trailbase_sqlite::Connection::new(move || {
+          // TODO: We should load WASM SQLite functions, since migrations may depend on them.
+          return trailbase_extension::connect_sqlite(
+            Some(db_path.clone()),
+            Some(json_registry.clone()),
+          );
+        })
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
         migration_path,
       ))

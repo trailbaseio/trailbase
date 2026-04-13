@@ -25,19 +25,10 @@ enum Message {
   Terminate,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Options {
-  pub busy_timeout: std::time::Duration,
-  pub n_read_threads: usize,
-}
-
-impl Default for Options {
-  fn default() -> Self {
-    return Self {
-      busy_timeout: std::time::Duration::from_secs(5),
-      n_read_threads: 0,
-    };
-  }
+  pub busy_timeout: Option<std::time::Duration>,
+  pub n_read_threads: Option<usize>,
 }
 
 /// A handle to call functions in background thread.
@@ -53,16 +44,16 @@ pub(crate) struct ConnectionImpl {
 impl ConnectionImpl {
   pub fn new<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
-    opt: Option<Options>,
+    opt: Options,
   ) -> Result<Self, E> {
     let Options {
       busy_timeout,
       n_read_threads,
-    } = opt.unwrap_or_default();
+    } = opt;
 
     let new_conn = || -> Result<rusqlite::Connection, E> {
       let conn = builder()?;
-      if !busy_timeout.is_zero() {
+      if let Some(busy_timeout) = busy_timeout {
         conn
           .busy_timeout(busy_timeout)
           .expect("busy timeout failed");
@@ -72,12 +63,12 @@ impl ConnectionImpl {
 
     let write_conn = new_conn()?;
     let path = write_conn.path().map(|p| p.to_string());
-    // Returns empty string for in-memory databases.
-    let in_memory = path
-      .as_ref()
-      .is_none_or(|s| s.is_empty() || s == ":memory:");
+    let in_memory = path.as_ref().is_none_or(|s| {
+      // Returns empty string for in-memory databases.
+      return s.is_empty();
+    });
 
-    let n_read_threads: i64 = match (in_memory, n_read_threads) {
+    let n_read_threads: i64 = match (in_memory, n_read_threads.unwrap_or(0)) {
       (true, _) => {
         // We cannot share an in-memory database across threads, they're all independent.
         0
@@ -156,7 +147,7 @@ impl ConnectionImpl {
     return self.id;
   }
 
-  pub(crate) fn len(&self) -> usize {
+  pub fn threads(&self) -> usize {
     return self.conns.read().0.len();
   }
 

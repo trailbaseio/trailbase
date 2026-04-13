@@ -11,6 +11,7 @@ use crate::{Database, Error, Value, ValueType};
 #[tokio::test]
 async fn open_in_memory_test() {
   let conn = Connection::open_in_memory().unwrap();
+  assert_eq!(1, conn.threads());
   assert!(conn.close().await.is_ok());
 }
 
@@ -61,14 +62,16 @@ async fn close_success_test() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
   let db_path = tmp_dir.path().join("main.sqlite");
 
-  let conn = Connection::new(
+  let conn = Connection::with_opts(
     move || rusqlite::Connection::open(&db_path),
-    Some(Options {
-      n_read_threads: 2,
+    Options {
+      n_read_threads: Some(2),
       ..Default::default()
-    }),
+    },
   )
   .unwrap();
+
+  assert_eq!(2, conn.threads());
 
   conn
     .execute("CREATE TABLE 'test' (id INTEGER PRIMARY KEY)", ())
@@ -584,7 +587,7 @@ fn test_busy() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
   let db_path = tmp_dir.path().join("main.sqlite");
 
-  let conn = Connection::new(
+  let conn = Connection::with_opts(
     move || -> Result<_, rusqlite::Error> {
       let conn = rusqlite::Connection::open(&db_path)?;
 
@@ -603,10 +606,10 @@ fn test_busy() {
 
       return Ok(conn);
     },
-    Some(Options {
-      n_read_threads: 2,
+    Options {
+      n_read_threads: Some(2),
       ..Default::default()
-    }),
+    },
   )
   .unwrap();
 

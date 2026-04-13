@@ -104,10 +104,9 @@ mod tests {
 
   #[tokio::test]
   async fn test_some_sqlite_errors_yield_client_errors() {
-    let conn = trailbase_sqlite::Connection::new(
-      || crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None),
-      None,
-    )
+    let conn = trailbase_sqlite::Connection::new(|| {
+      crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None)
+    })
     .unwrap();
 
     conn
