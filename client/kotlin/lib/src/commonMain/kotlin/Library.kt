@@ -435,16 +435,20 @@ class Client(
                     throwOnError = false
             )
 
-    if (response.status == HttpStatusCode.Forbidden) {
-      val token: MultiFactorAuthToken = response.body()
-      return token
-    } else if (!response.status.isSuccess()) {
-      throw HttpException(response.status.value, response.body())
+    when (response.status) {
+      HttpStatusCode.Forbidden -> {
+        val token: MultiFactorAuthToken = response.body()
+        return token
+      }
+      HttpStatusCode.OK -> {
+        val tokens: Tokens = response.body()
+        tokenState = TokenState.build(tokens)
+        return null
+      }
+      else -> {
+        throw HttpException(response.status.value, response.body())
+      }
     }
-
-    val tokens: Tokens = response.body()
-    tokenState = TokenState.build(tokens)
-    return null
   }
 
   suspend fun loginSecond(token: MultiFactorAuthToken, code: String) {
@@ -539,11 +543,19 @@ private suspend fun refreshTokensImpl(transport: Transport, refreshToken: String
                   /*params=*/ null,
                   Body(refreshToken),
           )
-  if (!response.status.isSuccess()) {
-    throw HttpException(response.status.value, response.body())
-  }
 
-  return TokenState.build(response.body())
+  return when (response.status) {
+    HttpStatusCode.Unauthorized -> {
+      // Refresh token was rejected w/o means to recover. May as well log out.
+      TokenState.build(null)
+    }
+    HttpStatusCode.OK -> {
+      TokenState.build(response.body())
+    }
+    else -> {
+      throw HttpException(response.status.value, response.body())
+    }
+  }
 }
 
 private fun initClient(): HttpClient {
