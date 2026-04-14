@@ -478,34 +478,38 @@ func doRefreshToken(client Transport, headers []Header, refreshToken string) (*T
 		return nil, err
 	}
 
-	if resp.StatusCode >= 400 {
+	switch resp.StatusCode {
+	case 401:
+		// Refresh token was rejected. There's no way to recover. Might as well log out.
+		return NewTokenState(nil)
+	case 200:
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		type RefreshResponse struct {
+			AuthToken string  `json:"auth_token"`
+			CsrfToken *string `json:"csrf_token,omitempty"`
+		}
+		var refreshResp RefreshResponse
+		err = json.Unmarshal(respBody, &refreshResp)
+		if err != nil {
+			return nil, err
+		}
+
+		return NewTokenState(&Tokens{
+			AuthToken:    refreshResp.AuthToken,
+			RefreshToken: &refreshToken,
+			CsrfToken:    refreshResp.CsrfToken,
+		})
+	default:
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return nil, err
 		}
 		return nil, &FetchError{StatusCode: resp.StatusCode, Message: string(respBody), URL: client.BaseUrl().JoinPath(path)}
 	}
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	type RefreshResponse struct {
-		AuthToken string  `json:"auth_token"`
-		CsrfToken *string `json:"csrf_token,omitempty"`
-	}
-	var refreshResp RefreshResponse
-	err = json.Unmarshal(respBody, &refreshResp)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewTokenState(&Tokens{
-		AuthToken:    refreshResp.AuthToken,
-		RefreshToken: &refreshToken,
-		CsrfToken:    refreshResp.CsrfToken,
-	})
 }
 
 func decodeJwtTokenClaims(jwt string) (*JwtTokenClaims, error) {
