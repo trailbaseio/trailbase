@@ -470,7 +470,7 @@ class Client:
     def refresh_auth_tokens(self):
         refreshToken = Client._shouldRefresh(self._tokenState)
         if refreshToken is not None:
-            self._set_token_state(_refreshTokensImpl(self._transport, refreshToken))
+            self._set_token_state(_refresh_tokens_impl(self._transport, refreshToken))
 
     def _set_token_state(self, tokenState: TokenState) -> TokenState:
         self._tokenState = tokenState
@@ -503,7 +503,7 @@ class Client:
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
         if refreshToken is not None:
-            tokenState = self._set_token_state(_refreshTokensImpl(self._transport, refreshToken))
+            tokenState = self._set_token_state(_refresh_tokens_impl(self._transport, refreshToken))
 
         response = self._transport.fetch(
             path, method=method, headers=tokenState.headers, queryParams=queryParams, body=data
@@ -524,7 +524,7 @@ class Client:
         tokenState = self._tokenState
         refreshToken = Client._shouldRefresh(tokenState)
         if refreshToken is not None:
-            tokenState = self._set_token_state(_refreshTokensImpl(self._transport, refreshToken))
+            tokenState = self._set_token_state(_refresh_tokens_impl(self._transport, refreshToken))
 
         return self._transport.stream(
             path,
@@ -733,7 +733,7 @@ class RecordApi:
         return self.subscribe("*")
 
 
-def _refreshTokensImpl(transport: Transport, refreshToken: str) -> TokenState:
+def _refresh_tokens_impl(transport: Transport, refreshToken: str) -> TokenState:
     response = transport.fetch(
         f"{_AUTH_API}/refresh",
         method="POST",
@@ -745,10 +745,14 @@ def _refreshTokensImpl(transport: Transport, refreshToken: str) -> TokenState:
         },
     )
 
-    if response.status_code > 200:
-        raise FetchException(response.status_code, response.text)
-
-    return TokenState.build(Tokens.from_json(response.json()))
+    match response.status_code:
+        case 200:
+            return TokenState.build(Tokens.from_json(response.json()))
+        case 401:
+            # Refresh token was rejected w/o means to recover. May as well log out.
+            return TokenState.build(None)
+        case _:
+            raise FetchException(response.status_code, response.text)
 
 
 _logger = logging.getLogger(__name__)
