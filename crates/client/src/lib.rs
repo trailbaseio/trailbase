@@ -766,8 +766,7 @@ impl ClientState {
   ) -> Result<http::Response<reqwest::Body>, Error> {
     let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
     if let Some(refresh_token) = refresh_token {
-      let new_tokens =
-        ClientState::refresh_tokens_impl(&*self.transport, headers, refresh_token).await?;
+      let new_tokens = refresh_tokens_impl(&*self.transport, headers, refresh_token).await?;
 
       headers = new_tokens.headers.clone();
       *self.tokens.write() = new_tokens;
@@ -794,8 +793,7 @@ impl ClientState {
   ) -> Result<reqwest_websocket::UpgradeResponse, Error> {
     let (mut headers, refresh_token) = self.extract_headers_and_refresh_token_if_exp();
     if let Some(refresh_token) = refresh_token {
-      let new_tokens =
-        ClientState::refresh_tokens_impl(&*self.transport, headers, refresh_token).await?;
+      let new_tokens = refresh_tokens_impl(&*self.transport, headers, refresh_token).await?;
 
       headers = new_tokens.headers.clone();
       *self.tokens.write() = new_tokens;
@@ -830,46 +828,6 @@ impl ClientState {
       return Some((tokens.headers.clone(), refresh_token.clone()));
     }
     return None;
-  }
-
-  async fn refresh_tokens_impl(
-    transport: &(dyn Transport + Send + Sync),
-    headers: HeaderMap,
-    refresh_token: String,
-  ) -> Result<TokenState, Error> {
-    #[derive(Serialize)]
-    struct RefreshRequest<'a> {
-      refresh_token: &'a str,
-    }
-
-    // NOTE: Do not use `ClientState::fetch`, which may do token refreshing to avoid loops.
-    let response = transport
-      .fetch(
-        &format!("/{AUTH_API}/refresh"),
-        headers,
-        Method::POST,
-        Some(
-          serde_json::to_vec(&RefreshRequest {
-            refresh_token: &refresh_token,
-          })
-          .map_err(Error::RecordSerialization)?,
-        ),
-        None,
-      )
-      .await?;
-
-    #[derive(Deserialize)]
-    struct RefreshResponse {
-      auth_token: String,
-      csrf_token: Option<String>,
-    }
-
-    let refresh_response: RefreshResponse = json(response).await?;
-    return Ok(TokenState::build(Some(&Tokens {
-      auth_token: refresh_response.auth_token,
-      refresh_token: Some(refresh_token),
-      csrf_token: refresh_response.csrf_token,
-    })));
   }
 }
 
@@ -933,8 +891,7 @@ impl Client {
       return Ok(());
     };
 
-    let new_tokens =
-      ClientState::refresh_tokens_impl(&*self.state.transport, headers, refresh_token).await?;
+    let new_tokens = refresh_tokens_impl(&*self.state.transport, headers, refresh_token).await?;
 
     *self.state.tokens.write() = new_tokens;
     return Ok(());
@@ -1151,6 +1108,53 @@ fn build_headers(tokens: Option<&Tokens>) -> HeaderMap {
   }
 
   return base;
+}
+
+async fn refresh_tokens_impl(
+  transport: &(dyn Transport + Send + Sync),
+  headers: HeaderMap,
+  refresh_token: String,
+) -> Result<TokenState, Error> {
+  #[derive(Serialize)]
+  struct RefreshRequest<'a> {
+    refresh_token: &'a str,
+  }
+
+  // NOTE: Do not use `ClientState::fetch`, which may do token refreshing to avoid loops.
+  let response = transport
+    .fetch(
+      &format!("/{AUTH_API}/refresh"),
+      headers,
+      Method::POST,
+      Some(
+        serde_json::to_vec(&RefreshRequest {
+          refresh_token: &refresh_token,
+        })
+        .map_err(Error::RecordSerialization)?,
+      ),
+      None,
+    )
+    .await?;
+
+  return match response.status() {
+    StatusCode::OK => {
+      #[derive(Deserialize)]
+      struct RefreshResponse {
+        auth_token: String,
+        csrf_token: Option<String>,
+      }
+
+      let refresh_response: RefreshResponse = json(response).await?;
+
+      Ok(TokenState::build(Some(&Tokens {
+        auth_token: refresh_response.auth_token,
+        refresh_token: Some(refresh_token),
+        csrf_token: refresh_response.csrf_token,
+      })))
+    }
+    StatusCode::UNAUTHORIZED => Ok(TokenState::build(None)),
+    status => Err(Error::HttpStatus(status)),
+  };
 }
 
 fn now() -> u64 {
