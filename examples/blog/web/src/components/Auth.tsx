@@ -1,6 +1,6 @@
-import { Match, Suspense, Switch } from "solid-js";
+import { Match, Switch } from "solid-js";
 import { useStore } from "@nanostores/solid";
-import { TbOutlineUser } from "solid-icons/tb";
+import { TbFillUser } from "solid-icons/tb";
 import type { User } from "trailbase";
 
 import { $client, $user, removeTokens, HOST } from "@/lib/client";
@@ -17,26 +17,22 @@ function UserBadge(props: { user: User | undefined }) {
     return undefined;
   };
 
-  const Fallback = () => (
-    <TbOutlineUser class="inline-block size-6 rounded-full bg-pacamara-secondary p-1 dark:text-white" />
-  );
-
   return (
-    <Suspense fallback={<p>...</p>}>
-      <div class="flex items-center gap-2">
-        <Switch fallback={<Fallback />}>
-          <Match when={avatar()}>
-            <img
-              class="inline-block size-6 rounded-full"
-              src={avatar()!}
-              alt="avatar"
-            />
-          </Match>
-        </Switch>
+    <div class="flex items-center gap-2">
+      <object
+        class="inline-block size-6 rounded-full hover:bg-gray-200"
+        type="image/png"
+        data={avatar()}
+        aria-label="Avatar image"
+      >
+        {/* Fallback */}
+        <div class="size-6 flex items-center justify-center">
+          <TbFillUser size={18} color="#0073aa" />
+        </div>
+      </object>
 
-        <span>{profile()?.profile?.username ?? props.user?.email}</span>
-      </div>
-    </Suspense>
+      <span>{profile()?.profile?.username ?? props.user?.email}</span>
+    </div>
   );
 }
 
