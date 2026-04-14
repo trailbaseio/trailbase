@@ -604,11 +604,12 @@ Future<_TokenState> _refreshTokensImpl(
         'refresh_token': refreshToken,
       }));
 
-  if (response.statusCode != 200) {
-    throw HttpException(response.statusCode, response.body);
-  }
-
-  return _TokenState.build(Tokens.fromJson(jsonDecode(response.body)));
+  return switch (response.statusCode) {
+    200 => _TokenState.build(Tokens.fromJson(jsonDecode(response.body))),
+    // If the refresh token got rejected, there's no way to recover. Might as well log out.
+    401 => _TokenState.build(null),
+    _ => throw HttpException(response.statusCode, response.body),
+  };
 }
 
 Map<String, String> _buildHeaders(Tokens? tokens) {
