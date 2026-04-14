@@ -5,6 +5,3 @@ CREATE TABLE editors (
 
   FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
 ) STRICT;
-
--- Create an "is_editor" query api.
-CREATE VIRTUAL TABLE _is_editor USING define((SELECT EXISTS (SELECT * FROM editors WHERE user = $1) AS is_editor));

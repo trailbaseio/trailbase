@@ -35,7 +35,8 @@ record_apis: [
     name: "articles"
     table_name: "articles"
     autofill_missing_user_id_columns: true
-    acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+    acl_world: [READ]
+    acl_authenticated: [CREATE, UPDATE, DELETE]
     create_access_rule: "(_REQ_.author IS NULL OR _REQ_.author = _USER_.id) AND EXISTS(SELECT * FROM editors WHERE user = _USER_.id)"
     update_access_rule: "_ROW_.author = _USER_.id AND EXISTS(SELECT * FROM editors WHERE user = _USER_.id)"
     delete_access_rule: "_ROW_.author = _USER_.id AND EXISTS(SELECT * FROM editors WHERE user = _USER_.id)"
