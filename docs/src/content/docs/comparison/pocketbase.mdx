@@ -67,9 +67,9 @@ A custom Rust endpoint can be up to 140x faster than a PocketBase JS one.
 
 ### Framework Use
 
-Both PocketBase and TrailBase allow customization using their built-in JS
-runtimes. However, some users may want even more control and built their own
-binaries using only bits and pieces.
+Both PocketBase and TrailBase allow customization using their built-in runtimes.
+However, some users may want even more control and built their own binaries
+using only bits and pieces.
 This is what we refer to as library or framework use. For this use-case
 language preference and prior experience of you and your team will likely matter
 a lot more with PocketBase written in Go and TrailBase in Rust.
@@ -82,30 +82,24 @@ Expect TrailBase to improve significantly in this area.
 
 ### Features
 
-When we look more deeply into the seemingly identical features sets, many and
-constantly evolving differences are starting to surface.
-In lieu of enumerating them all, let's look at some examples.
-
-Auth is an area where PocketBase's maturity clearly shows: while it uses
-simpler session-based auth, as opposed to stateless JWT auth-tokens, it
-supports multi-factor auth and a larger set of social OAuth providers.
-This is an area where TrailBase needs to improve but maybe stateless tokens is
-just what you're after 😅.
-
-Despite being the new kid on the block, TrailBase has a few nifty tricks up its
-sleeve:
+Looking more closely at the breadth of similar features, varioud differences
+emerge.
+In lieu of trying to enumerating all of these constantly evolving differences,
+let's look a some of the nifty tricks that TrailBase has up its sleeve:
 
 - Support for multiple independent SQLite DBs [^6].
 - Language independent bindings via JSON-schema with strict type-safety
-  being enforced from the client all the way to the database[^4].
+  enforced all the way from the client to the database[^4].
 - A WASM runtime, supporting multiple guest languages for custom endpoints and
   up to 140x speed-up[^5].
 - Untethered access to SQLite with all its features and capabilities.
-- A wider set of first-class client libraries beyond JS/TS and Dart, including
-  C#, Python and Rust.
+- First-party client libraries beyond JS/TS and Dart for
+  C#, Kotlin, Swift, Go, Python and Rust.
 - Ships with a simple pre-built auth UI to get you started. You can always
-  graduate to your own.
-- Efficient and stable cursor-based pagination as opposed to `OFFSET`.
+  graduate to your own. In fact, the first-party one is just a WASM component
+  waiting to be forked.
+- Support for geospatial data and `GeoJSON` APIs.
+- Support for stable more and more efficient cursor-based pagination in addition to `OFFSET`.
 - An admin UI that "works" on small mobile screens 😅.
 
 ### Contributing & Licensing
