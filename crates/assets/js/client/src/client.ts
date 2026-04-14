@@ -472,17 +472,17 @@ class ClientImpl implements Client {
     state: TokenState,
     skipCb: boolean = false,
   ): TokenState {
+    if (isExpired(state)) {
+      // This can happen on initial construction, i.e. if a client is constructed
+      // from older, persisted tokens. This will normally fix itself up with the
+      // next refresh unless there's no valid refresh token.
+      console.debug(`auth token expired`);
+    }
+
     this._tokenState = state;
     if (!skipCb) {
       this._authChange?.(this, buildUser(state));
     }
-
-    if (isExpired(state)) {
-      // This can happen on initial construction, i.e. if a client is
-      // constructed from older, persisted tokens.
-      console.debug(`Set token state (expired)`);
-    }
-
     return this._tokenState;
   }
 
@@ -568,17 +568,21 @@ async function refreshTokensImpl(
       headers: jsonContentTypeHeader,
     });
 
-    if (!response.ok) {
-      throw await FetchError.from(
-        response,
-        isDev ? new URL(path, path) : undefined,
-      );
+    switch (response.status) {
+      case 401:
+        // Refresh token was rejected w/o means to recover. May as well log out.
+        return buildTokenState(undefined);
+      case 200:
+        return buildTokenState({
+          ...((await response.json()) as RefreshResponse),
+          refresh_token: refreshToken,
+        });
+      default:
+        throw await FetchError.from(
+          response,
+          isDev ? new URL(path, path) : undefined,
+        );
     }
-
-    return buildTokenState({
-      ...((await response.json()) as RefreshResponse),
-      refresh_token: refreshToken,
-    });
   } catch (err) {
     if (err instanceof TypeError) {
       console.debug(`Connection refused ${err}. TrailBase down or CORS?`);
