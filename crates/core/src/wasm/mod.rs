@@ -241,8 +241,8 @@ pub(crate) async fn install_routes_and_jobs(
             )
           }
           Err(err) => {
-            debug!("`call_incoming_http_handler` returned: {err}");
-            return internal("call");
+            warn!("`Error calling WASM component - call_incoming_http_handler` returned: {err}");
+            return internal("component responded unexpectedly");
           }
         };
       };
