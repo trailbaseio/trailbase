@@ -535,17 +535,25 @@ public class Client {
       queryParams: null
     );
 
-    string json = await response.Content.ReadAsStringAsync();
-    RefreshTokenResponse tokenResponse = JsonSerializer.Deserialize<RefreshTokenResponse>(
-        json,
-        SourceGenerationContext.Default.RefreshTokenResponse
-    )!;
+    switch (response.StatusCode) {
+      case System.Net.HttpStatusCode.Unauthorized:
+        // Refresh token got rejected, there's no way to recover. May as well log out user.
+        return TokenState.build(null);
+      case System.Net.HttpStatusCode.OK:
+        string json = await response.Content.ReadAsStringAsync();
+        RefreshTokenResponse tokenResponse = JsonSerializer.Deserialize<RefreshTokenResponse>(
+            json,
+            SourceGenerationContext.Default.RefreshTokenResponse
+        )!;
 
-    return TokenState.build(new Tokens(
-      tokenResponse.auth_token,
-      refreshToken,
-      tokenResponse.csrf_token
-    ));
+        return TokenState.build(new Tokens(
+          tokenResponse.auth_token,
+          refreshToken,
+          tokenResponse.csrf_token
+        ));
+      default:
+        throw new FetchException(response.StatusCode, await response.Content.ReadAsStringAsync());
+    }
   }
 
   internal async Task<HttpResponseMessage> Fetch(
