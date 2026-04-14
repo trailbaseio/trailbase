@@ -179,16 +179,10 @@ impl Guest for Endpoints {
         return Ok(());
       }),
       routing::get("/test_sqlean", async |_req| {
-        // sqlean: Define a stored procedure, use it, and remove it.
-        let _ = query("SELECT define('sumn', ':n * (:n + 1) / 2')", vec![])
-          .await
-          .unwrap();
-
+        // Call `sumn` stored function defined in migrations.
         let Value::Integer(value) = query("SELECT sumn(5)", vec![]).await.unwrap()[0][0] else {
           return Err(internal("expected int"));
         };
-
-        let _ = query("SELECT undefine('sumn')", vec![]).await.unwrap();
 
         return Ok(format!("{value}"));
       }),

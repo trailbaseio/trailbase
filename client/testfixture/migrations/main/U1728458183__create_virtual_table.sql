@@ -40,10 +40,9 @@ INSERT INTO virtual_spatial_index VALUES
   (28280, -80.844208, -80.841972, 35.225468, 35.227203, uuid_v7()),
   (28282, -80.846382, -80.844193, 35.223972, 35.225655, uuid_v7());
 
--- NOTE: define rejects mutating statements.
--- CREATE VIRTUAL TABLE virtual_spatial_index_writer USING define(
---   (INSERT INTO virtual_spatial_index VALUES ($1, $2, $3, $4, $5, uuid_v7()) RETURNING *));
-
 -- Create a virtual table based on a stored procedure.
 CREATE VIRTUAL TABLE simple_vtable_from_stored_procedure
   USING define((SELECT UNIXEPOCH() AS epoch, $1 AS random_number));
+
+-- Define a `sumn` function. Note that this SELECT is mutating.
+SELECT define('sumn', ':n * (:n + 1) / 2');
