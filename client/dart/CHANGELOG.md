@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.1
+
+- Log out if token refresh fails with an "unauthorized" error (401).
+
 ## 0.10.0
 
 - Update change `Event`s to contain sequence numbers.
