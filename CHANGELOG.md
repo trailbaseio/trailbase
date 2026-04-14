@@ -1,3 +1,14 @@
+## v0.26.3
+
+- Make `trailbase-sqlite`'s abstractions less leaky, i.e. don't depend on `rusqlite`'s internals as much. This is a pre-requisite if we wanted to support other drivers and DBs.
+- Fix and clean-up `trailbase-sqlite`'s execution engine.
+- Update clients across all languages to automatically "log out" on token refresh when a 401 (Unauthorized) error is received.
+- Stricter "read-only" query filtering for WASM guests. Sqlean's `SELECT define()` statements are actually mutating. Maybe it's time to remove `sqlean`. It predates JS and WASM components and may have overstayed its welcome.
+- Allow loading `*.wasm` components from symlinks.
+- Tweak `auth-ui`'s profile page to properly clean-up invalid cookie tokens.
+- Fix a few small issues with the blog example.
+- Update dependencies.
+
 ## v0.26.2
 
 - Fork the `reactivate` crate to streamline it and make it lock-free. Previously, accessing the config would require claiming an eclusive lock.
