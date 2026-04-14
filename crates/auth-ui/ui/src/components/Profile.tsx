@@ -262,9 +262,10 @@ export function Profile() {
         </Match>
 
         <Match when={client()?.user() === undefined}>
+          {/* NOTE: We're double redirecting via logout. This is more robust in case there are some lingering invalid cookies */}
           <a
             class={buttonVariants({ variant: "default" })}
-            href="/_/auth/login"
+            href="/_/auth/logout"
           >
             Login
           </a>
