@@ -321,8 +321,8 @@ public class Client {
       throw ClientError.unauthenticated
     }
 
-    let newTokens = try await Client.doRefreshToken(
-      client: self.transport, headers: headers, refreshToken: refreshToken)
+    let newTokens = try await refreshTokens(
+      transport: self.transport, headers: headers, refreshToken: refreshToken)
 
     self.tokenState.withLock({ (tokens) in
       tokens = newTokens
@@ -336,20 +336,21 @@ public class Client {
     }
 
     let body = try JSONEncoder().encode(Credentials(email: email, password: password))
-    let (httpResponse, data) = try await self.fetch(
+    let (resp, data) = try await self.fetch(
       path: "/\(AUTH_API)/login", method: "POST", body: body, throwOnError: false)
 
-    if httpResponse.statusCode == 403 {
+    switch resp.statusCode {
+    case 403:
+      // Second factor is required.
       return try JSONDecoder().decode(MultiFactorAuthToken.self, from: data)
-    } else if httpResponse.statusCode != 200 {
+    case 200:
+      let tokens = try JSONDecoder().decode(Tokens.self, from: data)
+      let _ = try updateTokens(tokens: tokens)
+      return nil
+    default:
       throw ClientError.invalidStatusCode(
-        code: httpResponse.statusCode, body: String(data: data, encoding: .utf8))
+        code: resp.statusCode, body: String(data: data, encoding: .utf8))
     }
-
-    let tokens = try JSONDecoder().decode(Tokens.self, from: data)
-    let _ = try updateTokens(tokens: tokens)
-
-    return nil
   }
 
   public func loginSecond(mfaToken: MultiFactorAuthToken, totpCode: String) async throws {
@@ -424,8 +425,8 @@ public class Client {
   ) async throws -> (HTTPURLResponse, Data) {
     var (headers, refreshToken) = getHeadersAndRefreshTokenIfExpired()
     if let rt = refreshToken {
-      let newTokens = try await Client.doRefreshToken(
-        client: self.transport, headers: headers, refreshToken: rt)
+      let newTokens = try await refreshTokens(
+        transport: self.transport, headers: headers, refreshToken: rt)
       headers = newTokens.headers
       self.tokenState.withLock({ (tokens) in
         tokens = newTokens
@@ -444,8 +445,8 @@ public class Client {
   ) async throws -> AsyncStream<EventSource.EventType> {
     var (headers, refreshToken) = getHeadersAndRefreshTokenIfExpired()
     if let rt = refreshToken {
-      let newTokens = try await Client.doRefreshToken(
-        client: self.transport, headers: headers, refreshToken: rt)
+      let newTokens = try await refreshTokens(
+        transport: self.transport, headers: headers, refreshToken: rt)
       headers = newTokens.headers
       self.tokenState.withLock({ (tokens) in
         tokens = newTokens
@@ -480,30 +481,6 @@ public class Client {
       }
       return (tokens.headers, nil)
     })
-  }
-
-  private static func doRefreshToken(
-    client: Transport, headers: [(String, String)], refreshToken: String
-  ) async throws -> TokenState {
-    struct RefreshRequest: Encodable {
-      let refresh_token: String
-    }
-    let body = try JSONEncoder().encode(RefreshRequest(refresh_token: refreshToken))
-    let (_, data) = try await client.fetch(
-      path: "/\(AUTH_API)/refresh", headers: headers, method: "POST", body: body)
-
-    struct RefreshResponse: Decodable {
-      let auth_token: String
-      let csrf_token: String?
-    }
-
-    let refreshResponse = try JSONDecoder().decode(RefreshResponse.self, from: data)
-    let tokens = Tokens(
-      auth_token: refreshResponse.auth_token,
-      refresh_token: refreshToken,
-      csrf_token: refreshResponse.csrf_token,
-    )
-    return try TokenState(tokens: tokens)
   }
 }
 
@@ -593,6 +570,39 @@ extension AsyncStream {
         task.cancel()
       }
     }
+  }
+}
+
+private func refreshTokens(
+  transport: Transport, headers: [(String, String)], refreshToken: String
+) async throws -> TokenState {
+  struct RefreshRequest: Encodable {
+    let refresh_token: String
+  }
+  let body = try JSONEncoder().encode(RefreshRequest(refresh_token: refreshToken))
+  let (resp, data) = try await transport.fetch(
+    path: "/\(AUTH_API)/refresh", headers: headers, method: "POST", body: body,
+    throwOnError: false)
+
+  switch resp.statusCode {
+  case 200:
+    struct RefreshResponse: Decodable {
+      let auth_token: String
+      let csrf_token: String?
+    }
+
+    let refreshResponse = try JSONDecoder().decode(RefreshResponse.self, from: data)
+    let tokens = Tokens(
+      auth_token: refreshResponse.auth_token,
+      refresh_token: refreshToken,
+      csrf_token: refreshResponse.csrf_token,
+    )
+    return try TokenState(tokens: tokens)
+  case 401:
+    return try TokenState(tokens: nil)
+  default:
+    throw ClientError.invalidStatusCode(
+      code: resp.statusCode, body: String(data: data, encoding: .utf8))
   }
 }
 
