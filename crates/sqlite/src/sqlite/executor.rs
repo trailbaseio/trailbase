@@ -54,15 +54,18 @@ impl Executor {
       num_threads,
     } = opt;
 
-    let new_conn = || -> Result<rusqlite::Connection, Error> {
+    let new_conn = |read_only: bool| -> Result<rusqlite::Connection, Error> {
       let conn = builder()?;
+      if read_only {
+        conn.pragma_update(None, "query_only", true)?;
+      }
       if let Some(busy_timeout) = busy_timeout {
         conn.busy_timeout(busy_timeout)?;
       }
       return Ok(conn);
     };
 
-    let write_conn = new_conn()?;
+    let write_conn = new_conn(/*read_only=*/ false)?;
     let path = write_conn.path().map(|p| p.to_string());
     let in_memory = path.as_ref().is_none_or(|s| {
       // Returns empty string for in-memory databases.
@@ -99,7 +102,7 @@ impl Executor {
       let mut conns = Vec::with_capacity(num_threads);
       conns.push(write_conn);
       for _ in 0..num_read_threads {
-        conns.push(new_conn()?);
+        conns.push(new_conn(/*read_only=*/ true)?);
       }
       conns.into()
     })));
