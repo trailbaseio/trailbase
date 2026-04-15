@@ -5,8 +5,9 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use const_format::formatcp;
-use rusqlite::params;
+// use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use trailbase_sqlite::{Value, named_params};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -34,48 +35,54 @@ pub async fn update_user_handler(
   State(state): State<AppState>,
   Json(request): Json<UpdateUserRequest>,
 ) -> Result<Response, Error> {
-  if is_admin(&state, &request.id).await {
+  let UpdateUserRequest {
+    id: user_id,
+    email,
+    password,
+    verified,
+  } = request;
+
+  if is_admin(&state, &user_id).await {
     return Err(Error::Precondition(
       "Admins can only be updated using the CLI to prevent abuse".into(),
     ));
   }
 
-  let hashed_password = match &request.password {
-    Some(pw) => Some(hash_password(pw)?),
+  let user_id_bytes: [u8; 16] = user_id.into_bytes();
+  let hashed_password = match password {
+    Some(ref pw) => Some(hash_password(pw)?),
     None => None,
   };
 
-  // TODO: Rather than using a transaction below we could build combined update queries:
-  //   UPDATE <table> SET x = :x, y = :y WHERE id = :id.
-  const UPDATE_EMAIL_QUERY: &str = formatcp!("UPDATE '{USER_TABLE}' SET email = $1 WHERE id = $2");
-  const UPDATE_PW_HASH_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE id = $2");
-  const UPDATE_VERIFIED_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET verified = $1 WHERE id = $2");
+  const UPDATE_QUERY: &str = formatcp!(
+    "
+    UPDATE {USER_TABLE} SET
+      email = COALESCE(:email, prev.email),
+      password_hash = COALESCE(:password_hash, prev.password_hash),
+      verified = COALESCE(:verified, prev.verified)
+    FROM
+      (SELECT email, password_hash, verified FROM {USER_TABLE} WHERE id = :id) AS prev
+    WHERE id = :id
+    "
+  );
 
-  let email = request.email.clone();
-  let verified = request.verified;
-  state
+  return match state
     .user_conn()
-    .call(move |conn| {
-      let tx = conn.transaction()?;
-
-      let user_id_bytes: [u8; 16] = request.id.into_bytes();
-      if let Some(email) = email {
-        tx.execute(UPDATE_EMAIL_QUERY, params![email, user_id_bytes])?;
-      }
-      if let Some(password_hash) = hashed_password {
-        tx.execute(UPDATE_PW_HASH_QUERY, params!(password_hash, user_id_bytes))?;
-      }
-      if let Some(verified) = verified {
-        tx.execute(UPDATE_VERIFIED_QUERY, params!(verified, user_id_bytes))?;
-      }
-
-      tx.commit()?;
-
-      return Ok(());
-    })
-    .await?;
-
-  return Ok((StatusCode::OK, format!("Updated user: {request:?}")).into_response());
+    .execute(
+      UPDATE_QUERY,
+      named_params! {
+          ":id": Value::Blob(user_id_bytes.to_vec()),
+          ":email": email.map_or(Value::Null, Value::Text),
+          ":password_hash": hashed_password.map_or(Value::Null, Value::Text),
+          ":verified": verified.map_or(Value::Null, |v| Value::Integer(if v {1} else {0})),
+      },
+    )
+    .await?
+  {
+    0 => Ok((StatusCode::NOT_FOUND, "race?").into_response()),
+    1 => Ok((StatusCode::OK, "updated").into_response()),
+    _ => {
+      unreachable!("user id must be unique");
+    }
+  };
 }

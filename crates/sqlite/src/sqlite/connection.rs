@@ -74,6 +74,16 @@ impl Connection {
   /// # Failure
   ///
   /// Will return `Err` if the database connection has been closed.
+  ///
+  /// # Notes
+  ///
+  /// This is a "leaky" API, leaking the internals of `rusqlite::Connection`. We cannot easily
+  /// remove this API. Current use-cases include:
+  ///
+  /// * `conn.transaction()` for RecordApis & migrations (from admin via TransactionRecorder and
+  ///   during startup/SIGHUP).
+  /// * Batch log inserts to minimize thread slushing.
+  /// * Backups from scheduler (API could be easily hoisted)
   pub async fn call<F, R>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(&mut rusqlite::Connection) -> Result<R, Error> + Send + 'static,

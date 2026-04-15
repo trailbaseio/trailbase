@@ -288,6 +288,8 @@ struct SessionMigrations;
 mod tests {
   use super::*;
 
+  use trailbase_sqlite::Connection;
+
   #[test]
   fn test_load_sql_migrations() {
     assert!(load_sql_migrations("__non-existent-path__", true).is_err());
@@ -302,41 +304,34 @@ mod tests {
   async fn test_schema_invariants_still_hold_after_migrations() {
     let state = crate::app_state::test_state(None).await.unwrap();
 
-    fn exists(conn: &rusqlite::Connection, name: &str, schema_type: &str) -> bool {
-      return conn
-        .query_one(
-          &format!(
+    async fn exists(conn: &Connection, name: &str, schema_type: &str) -> bool {
+      return conn.read_query_row_get(
+          format!(
             "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = '{schema_type}' AND name = '{name}')"
           ),
           (),
-          |row| row.get(0),
+          0,
         )
-        .unwrap_or_default();
+        .await.unwrap().unwrap();
     }
 
-    fn index_exists(conn: &rusqlite::Connection, name: &str) -> bool {
-      return exists(conn, name, "index");
+    async fn index_exists(conn: &Connection, name: &str) -> bool {
+      return exists(conn, name, "index").await;
     }
 
-    fn trigger_exists(conn: &rusqlite::Connection, name: &str) -> bool {
-      return exists(conn, name, "trigger");
+    async fn trigger_exists(conn: &Connection, name: &str) -> bool {
+      return exists(conn, name, "trigger").await;
     }
 
-    state
-      .conn()
-      .call(|conn| {
-        // QUESTION: Should we push something like this down into startup to assert that
-        // user-provided migrations don't break TB's expectations, e.g. they modified the
-        // `_user` TABLE and forgot to put an index back into place.
-        assert!(index_exists(conn, "__user__email_index"));
-        assert!(index_exists(conn, "__user__provider_ids_index"));
+    let conn = state.conn();
 
-        assert!(trigger_exists(conn, "__user__updated_trigger"));
-        assert!(trigger_exists(conn, "__user_avatar__updated_trigger"));
+    // QUESTION: Should we push something like this down into startup to assert that
+    // user-provided migrations don't break TB's expectations, e.g. they modified the
+    // `_user` TABLE and forgot to put an index back into place.
+    assert!(index_exists(conn, "__user__email_index").await);
+    assert!(index_exists(conn, "__user__provider_ids_index").await);
 
-        return Ok(());
-      })
-      .await
-      .unwrap();
+    assert!(trigger_exists(conn, "__user__updated_trigger").await);
+    assert!(trigger_exists(conn, "__user_avatar__updated_trigger").await);
   }
 }
