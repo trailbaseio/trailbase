@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::database::Database;
 use crate::error::Error;
@@ -16,6 +17,7 @@ pub use crate::sqlite::executor::{ArcLockGuard, LockGuard, Options};
 /// A handle to call functions in background thread.
 #[derive(Clone)]
 pub struct Connection {
+  id: usize,
   exec: Executor,
 }
 
@@ -29,6 +31,7 @@ impl Connection {
     opt: Options,
   ) -> std::result::Result<Self, E> {
     return Ok(Self {
+      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
       exec: Executor::new(builder, opt)?,
     });
   }
@@ -42,7 +45,7 @@ impl Connection {
     let conn = Self::with_opts(
       rusqlite::Connection::open_in_memory,
       Options {
-        n_read_threads: Some(0),
+        num_threads: Some(1),
         ..Default::default()
       },
     )?;
@@ -53,7 +56,7 @@ impl Connection {
   }
 
   pub fn id(&self) -> usize {
-    return self.exec.id();
+    return self.id;
   }
 
   pub fn threads(&self) -> usize {
@@ -84,12 +87,12 @@ impl Connection {
   ///   during startup/SIGHUP).
   /// * Batch log inserts to minimize thread slushing.
   /// * Backups from scheduler (API could be easily hoisted)
-  pub async fn call<F, R>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(&mut rusqlite::Connection) -> Result<R, Error> + Send + 'static,
     R: Send + 'static,
   {
-    return self.exec.call(function).await;
+    return self.exec.call_writer(function).await;
   }
 
   pub async fn call_reader<F, R>(&self, function: F) -> Result<R, Error>
@@ -181,7 +184,7 @@ impl Connection {
     return self.exec.write_query_rows_f(sql, params, from_rows).await;
   }
 
-  pub async fn query_row_get<T>(
+  pub async fn write_query_row_get<T>(
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
@@ -302,3 +305,5 @@ impl PartialEq for Connection {
 }
 
 impl Eq for Connection {}
+
+static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);

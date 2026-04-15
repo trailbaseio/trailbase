@@ -33,7 +33,7 @@ impl AsyncConnection for Connection {
   ) -> Result<T, BenchmarkError> {
     return Ok(
       self
-        .query_row_get::<Adapter<T>>(sql.into(), params.into(), 0)
+        .write_query_row_get::<Adapter<T>>(sql.into(), params.into(), 0)
         .await?
         .unwrap()
         .0,

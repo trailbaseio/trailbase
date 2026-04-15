@@ -37,7 +37,7 @@ pub async fn create_index_handler(
   let create_index_query = index_schema.create_index_statement();
 
   let tx_log = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
       tx.execute(&create_index_query, ())?;

@@ -1,10 +1,9 @@
-use kanal::{Receiver, Sender};
+use flume::{Receiver, Sender};
 use log::*;
 use parking_lot::RwLock;
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::sync::oneshot;
 
 use crate::error::Error;
@@ -18,24 +17,26 @@ struct ConnectionVec(smallvec::SmallVec<[rusqlite::Connection; 32]>);
 // thread.
 unsafe impl Sync for ConnectionVec {}
 
-enum Message {
-  RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send>),
+enum ReaderMessage {
   RunConst(Box<dyn FnOnce(&rusqlite::Connection) + Send>),
   Terminate,
+}
+
+enum WriterMessage {
+  RunMut(Box<dyn FnOnce(&mut rusqlite::Connection) + Send>),
 }
 
 #[derive(Clone, Default)]
 pub struct Options {
   pub busy_timeout: Option<std::time::Duration>,
-  pub n_read_threads: Option<usize>,
+  pub num_threads: Option<usize>,
 }
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
 pub(crate) struct Executor {
-  id: usize,
-  reader: Sender<Message>,
-  writer: Sender<Message>,
+  reader: Sender<ReaderMessage>,
+  writer: Sender<WriterMessage>,
   // NOTE: Is shared across reader and writer worker threads.
   conns: Arc<RwLock<ConnectionVec>>,
 }
@@ -47,7 +48,7 @@ impl Executor {
   ) -> Result<Self, E> {
     let Options {
       busy_timeout,
-      n_read_threads,
+      num_threads,
     } = opt;
 
     let new_conn = || -> Result<rusqlite::Connection, E> {
@@ -67,83 +68,84 @@ impl Executor {
       return s.is_empty();
     });
 
-    let n_read_threads: i64 = match (in_memory, n_read_threads.unwrap_or(0)) {
+    let num_threads: usize = match (in_memory, num_threads.unwrap_or(1)) {
       (true, _) => {
         // We cannot share an in-memory database across threads, they're all independent.
-        0
+        1
       }
-      (false, 1) => {
-        warn!("A single reader thread won't improve performance, falling back to 0.");
-        0
+      (false, 0) => {
+        warn!("Executor needs at least one thread, falling back to 1.");
+        1
       }
       (false, n) => {
         if let Ok(max) = std::thread::available_parallelism()
           && n > max.get()
         {
           warn!(
-            "Num read threads '{n}' exceeds hardware parallelism: {}",
+            "Num threads '{n}' exceeds hardware parallelism: {}",
             max.get()
           );
         }
-        n as i64
+
+        n
       }
     };
 
+    assert!(num_threads > 0);
+
+    let num_read_threads = num_threads - 1;
     let conns = Arc::new(RwLock::new(ConnectionVec({
-      let mut conns = vec![write_conn];
-      for _ in 0..(n_read_threads - 1).max(0) {
+      let mut conns = Vec::with_capacity(num_threads);
+      conns.push(write_conn);
+      for _ in 0..num_read_threads {
         conns.push(new_conn()?);
       }
       conns.into()
     })));
 
-    assert_eq!(n_read_threads.max(1) as usize, conns.read().0.len());
+    assert_eq!(num_threads, conns.read().0.len());
 
-    // Spawn writer.
-    let (shared_write_sender, shared_write_receiver) = kanal::unbounded::<Message>();
-    {
-      let conns = conns.clone();
-      std::thread::Builder::new()
-        .name("tb-sqlite-writer".to_string())
-        .spawn(move || event_loop(0, conns, shared_write_receiver))
-        .expect("startup");
-    }
+    let (shared_write_sender, shared_write_receiver) = flume::unbounded::<WriterMessage>();
+    let (shared_read_sender, shared_read_receiver) = flume::unbounded::<ReaderMessage>();
 
-    // Spawn readers.
-    let shared_read_sender = if n_read_threads > 0 {
-      let (shared_read_sender, shared_read_receiver) = kanal::unbounded::<Message>();
-      for i in 0..n_read_threads {
-        // NOTE: read and writer threads are sharing the first conn, given they're mutually
-        // exclusive.
-        let index = i as usize;
+    // Spawn writer thread.
+    std::thread::Builder::new()
+      .name("tb-sqlite-0 (rw)".to_string())
+      .spawn({
         let shared_read_receiver = shared_read_receiver.clone();
         let conns = conns.clone();
 
-        std::thread::Builder::new()
-          .name(format!("tb-sqlite-reader-{index}"))
-          .spawn(move || event_loop(index, conns, shared_read_receiver))
-          .expect("startup");
-      }
-      shared_read_sender
-    } else {
-      shared_write_sender.clone()
-    };
+        move || writer_event_loop(conns, shared_read_receiver, shared_write_receiver)
+      })
+      .expect("startup");
+
+    // Spawn readers threads.
+    for index in 0..num_read_threads {
+      std::thread::Builder::new()
+        .name(format!("tb-sqlite-{index} (ro)"))
+        .spawn({
+          let shared_read_receiver = shared_read_receiver.clone();
+          let conns = conns.clone();
+
+          move || reader_event_loop(index + 1, conns, shared_read_receiver)
+        })
+        .expect("startup");
+    }
 
     debug!(
-      "Opened SQLite DB '{}' with {n_read_threads} reader threads",
+      "Opened SQLite DB '{}' ({num_threads} threads, in-memory: {in_memory})",
       path.as_deref().unwrap_or("<in-memory>")
     );
 
-    return Ok(Self {
-      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
+    let conn = Self {
       reader: shared_read_sender,
       writer: shared_write_sender,
       conns,
-    });
-  }
+    };
 
-  pub fn id(&self) -> usize {
-    return self.id;
+    assert_eq!(num_threads, conn.threads());
+
+    return Ok(conn);
   }
 
   pub fn threads(&self) -> usize {
@@ -178,7 +180,7 @@ impl Executor {
   }
 
   #[inline]
-  pub async fn call<F, R>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(&mut rusqlite::Connection) -> Result<R, Error> + Send + 'static,
     R: Send + 'static,
@@ -188,7 +190,7 @@ impl Executor {
 
     self
       .writer
-      .send(Message::RunMut(Box::new(move |conn| {
+      .send(WriterMessage::RunMut(Box::new(move |conn| {
         if !sender.is_closed() {
           let _ = sender.send(function(conn));
         }
@@ -208,7 +210,7 @@ impl Executor {
 
     self
       .reader
-      .send(Message::RunConst(Box::new(move |conn| {
+      .send(ReaderMessage::RunConst(Box::new(move |conn| {
         if !sender.is_closed() {
           let _ = sender.send(function(conn));
         }
@@ -229,7 +231,7 @@ impl Executor {
     T: Send + 'static,
   {
     return self
-      .call(move |conn: &mut rusqlite::Connection| {
+      .call_writer(move |conn: &mut rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
 
         params.bind(&mut stmt)?;
@@ -267,7 +269,7 @@ impl Executor {
     params: impl Params + Send + 'static,
   ) -> Result<usize, Error> {
     return self
-      .call(move |conn: &mut rusqlite::Connection| {
+      .call_writer(move |conn: &mut rusqlite::Connection| {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
 
         params.bind(&mut stmt)?;
@@ -279,7 +281,7 @@ impl Executor {
 
   pub async fn execute_batch(&self, sql: impl AsRef<str> + Send + 'static) -> Result<(), Error> {
     self
-      .call(move |conn: &mut rusqlite::Connection| {
+      .call_writer(move |conn: &mut rusqlite::Connection| {
         let mut batch = rusqlite::Batch::new(conn, sql.as_ref());
         while let Some(mut stmt) = batch.next()? {
           // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
@@ -295,9 +297,8 @@ impl Executor {
   }
 
   pub async fn close(self) -> Result<(), Error> {
-    let _ = self.writer.send(Message::Terminate);
-    while self.reader.send(Message::Terminate).is_ok() {
-      // Continue to close readers while the channel is alive.
+    while self.reader.send(ReaderMessage::Terminate).is_ok() {
+      // Continue to close readers (as well as the reader/writer) while the channel is alive.
     }
 
     let mut errors = vec![];
@@ -320,22 +321,67 @@ impl Executor {
   }
 }
 
-fn event_loop(id: usize, conns: Arc<RwLock<ConnectionVec>>, receiver: Receiver<Message>) {
+fn reader_event_loop(
+  idx: usize,
+  conns: Arc<RwLock<ConnectionVec>>,
+  receiver: Receiver<ReaderMessage>,
+) {
   while let Ok(message) = receiver.recv() {
     match message {
-      Message::RunConst(f) => {
+      ReaderMessage::RunConst(f) => {
         let lock = conns.read();
-        f(&lock.0[id])
+        f(&lock.0[idx])
       }
-      Message::RunMut(f) => {
-        let mut lock = conns.write();
-        f(&mut lock.0[0])
-      }
-      Message::Terminate => {
+      ReaderMessage::Terminate => {
         return;
       }
     };
   }
+
+  debug!("reader thread shut down");
+}
+
+fn writer_event_loop(
+  conns: Arc<RwLock<ConnectionVec>>,
+  reader_receiver: Receiver<ReaderMessage>,
+  writer_receiver: Receiver<WriterMessage>,
+) {
+  while flume::Selector::new()
+    .recv(&writer_receiver, |m| {
+      let Ok(m) = m else {
+        return false;
+      };
+
+      return match m {
+        WriterMessage::RunMut(f) => {
+          let mut lock = conns.write();
+          f(&mut lock.0[0]);
+
+          // Continue
+          true
+        }
+      };
+    })
+    .recv(&reader_receiver, |m| {
+      let Ok(m) = m else {
+        return false;
+      };
+
+      return match m {
+        ReaderMessage::Terminate => false,
+        ReaderMessage::RunConst(f) => {
+          let lock = conns.read();
+          f(&lock.0[0]);
+
+          // Continue
+          true
+        }
+      };
+    })
+    .wait()
+  {}
+
+  debug!("writer thread shut down");
 }
 
 pub struct LockGuard<'a> {
@@ -375,5 +421,3 @@ impl DerefMut for ArcLockGuard {
     return &mut self.guard.deref_mut().0[0];
   }
 }
-
-static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);

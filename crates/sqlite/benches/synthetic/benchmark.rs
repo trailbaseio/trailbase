@@ -120,7 +120,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(0),
+          num_threads: Some(1),
           ..Default::default()
         },
       )?);
@@ -132,7 +132,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(2),
+          num_threads: Some(2),
           ..Default::default()
         },
       )?);
@@ -144,7 +144,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(4),
+          num_threads: Some(4),
           ..Default::default()
         },
       )?);
@@ -156,7 +156,7 @@ fn insert_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(8),
+          num_threads: Some(8),
           ..Default::default()
         },
       )?);
@@ -258,7 +258,7 @@ fn read_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(2),
+          num_threads: Some(1),
           ..Default::default()
         },
       )?);
@@ -270,7 +270,7 @@ fn read_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(2),
+          num_threads: Some(2),
           ..Default::default()
         },
       )?);
@@ -282,7 +282,7 @@ fn read_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(4),
+          num_threads: Some(4),
           ..Default::default()
         },
       )?);
@@ -294,7 +294,7 @@ fn read_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(8),
+          num_threads: Some(8),
           ..Default::default()
         },
       )?);
@@ -434,7 +434,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(0),
+          num_threads: Some(1),
           ..Default::default()
         },
       )?);
@@ -446,7 +446,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(2),
+          num_threads: Some(2),
           ..Default::default()
         },
       )?);
@@ -458,7 +458,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(4),
+          num_threads: Some(4),
           ..Default::default()
         },
       )?);
@@ -470,7 +470,7 @@ fn mixed_benchmark_group(c: &mut Criterion) {
       return Ok(Connection::with_opts(
         || rusqlite::Connection::open(&fname),
         Options {
-          n_read_threads: Some(8),
+          num_threads: Some(8),
           ..Default::default()
         },
       )?);

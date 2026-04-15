@@ -20,7 +20,7 @@ path = "benches/join-order/main.rs"
 harness = false
 
 [dependencies]
-kanal = "0.1.1"
+flume = { version = "0.12.0", default-feature = false, features = ["select"] }
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
 rusqlite = { workspace = true }

@@ -159,7 +159,7 @@ mod tests {
     name: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
     let room: [u8; 16] = conn
-      .query_row_get(
+      .write_query_row_get(
         "INSERT INTO room (name) VALUES ($1) RETURNING rid",
         params!(name.to_string()),
         0,
@@ -191,7 +191,7 @@ mod tests {
     message: &str,
   ) -> Result<[u8; 16], anyhow::Error> {
     let id: [u8; 16] = conn
-      .query_row_get(
+      .write_query_row_get(
         "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING mid",
         params!(user, room, message.to_string()),
         0,

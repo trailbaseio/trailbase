@@ -16,7 +16,7 @@ pub async fn execute_batch(
   sql: impl AsRef<str> + Send + 'static,
 ) -> Result<Option<Rows>, Error> {
   return conn
-    .call(move |conn: &mut rusqlite::Connection| {
+    .call_writer(move |conn: &mut rusqlite::Connection| {
       let batch = rusqlite::Batch::new(conn, sql.as_ref());
 
       let mut p = batch.peekable();

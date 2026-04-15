@@ -69,7 +69,7 @@ pub async fn drop_table_handler(
     let unqualified_table_name = unqualified_table_name.clone();
     let entity_type = entity_type.clone();
     conn
-      .call(move |conn| {
+      .call_writer(move |conn| {
         let mut tx = TransactionRecorder::new(conn)?;
 
         let query = format!(

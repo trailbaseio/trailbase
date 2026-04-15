@@ -54,7 +54,7 @@ pub async fn alter_index_handler(
   let unqualified_source_index_name = request.source_schema.name.name.clone();
 
   let tx_log = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
       // Drop old index

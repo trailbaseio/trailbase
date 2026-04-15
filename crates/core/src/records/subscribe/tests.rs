@@ -57,7 +57,7 @@ async fn subscribe_to_record_test() {
 
   let record_id_raw = 0;
   let rowid: i64 = conn
-    .query_row_get(
+    .write_query_row_get(
       "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
       [trailbase_sqlite::Value::Integer(record_id_raw)],
       0,
@@ -290,7 +290,7 @@ async fn subscription_lifecycle_test() {
   let record_id_raw = 0;
   let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
   let rowid: i64 = conn
-    .query_row_get(
+    .write_query_row_get(
       "INSERT INTO test (id, text) VALUES ($1, 'foo') RETURNING _rowid_",
       [record_id],
       0,
@@ -402,7 +402,7 @@ async fn subscription_acl_test() {
   let record_id_raw = 0;
   let record_id = trailbase_sqlite::Value::Integer(record_id_raw);
   let _rowid: i64 = conn
-    .query_row_get(
+    .write_query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         record_id.clone(),
@@ -578,7 +578,7 @@ async fn subscription_acl_change_owner() {
 
   let record_id = 0;
   let _rowid: i64 = conn
-    .query_row_get(
+    .write_query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         trailbase_sqlite::Value::Integer(record_id),

@@ -353,10 +353,10 @@ fn init_main_db_impl(
         return Ok(conn);
       },
       trailbase_sqlite::Options {
-        n_read_threads: match (data_dir, std::thread::available_parallelism()) {
-          (None, _) => Some(0),
+        num_threads: match (data_dir, std::thread::available_parallelism()) {
+          (None, _) => Some(1),
           (Some(_), Ok(n)) => Some(n.get().clamp(2, 4)),
-          (Some(_), Err(_)) => Some(4),
+          (Some(_), Err(_)) => Some(2),
         },
         ..Default::default()
       },

@@ -229,7 +229,7 @@ pub async fn record_transactions_handler(
 
   let ids = if request.transaction.unwrap_or(false) {
     conn
-      .call(
+      .call_writer(
         move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
           let tx = conn.transaction()?;
 
@@ -248,7 +248,7 @@ pub async fn record_transactions_handler(
       .await?
   } else {
     conn
-      .call(
+      .call_writer(
         move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
           let mut ids: Vec<String> = vec![];
           for op in operations {

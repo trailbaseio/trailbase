@@ -318,7 +318,7 @@ impl Server {
             .connection_manager()
             .main_entry()
             .connection
-            .call(|conn: &mut rusqlite::Connection| {
+            .call_writer(|conn: &mut rusqlite::Connection| {
               return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
                 .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
             })

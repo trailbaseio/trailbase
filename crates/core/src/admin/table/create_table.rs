@@ -41,7 +41,7 @@ pub async fn create_table_handler(
   let create_table_query = table_schema.create_table_statement();
 
   let tx_log = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       let mut tx = TransactionRecorder::new(conn)?;
 
       tx.execute(&create_table_query, ())?;

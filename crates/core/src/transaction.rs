@@ -77,7 +77,7 @@ impl TransactionLog {
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 
     let report = conn
-      .call(move |conn| {
+      .call_writer(move |conn| {
         let report = runner
           .run(conn)
           .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
@@ -129,7 +129,7 @@ impl TransactionLog {
     conn: &trailbase_sqlite::Connection,
   ) -> Result<(), trailbase_sqlite::Error> {
     conn
-      .call(|conn: &mut rusqlite::Connection| {
+      .call_writer(|conn: &mut rusqlite::Connection| {
         let tx = conn.transaction()?;
         for (query_type, stmt) in self.log {
           match query_type {
@@ -261,7 +261,7 @@ mod tests {
     // Just double checking that rusqlite's query and execute ignore everything but the first
     // statement.
     let result = conn
-      .query_row_get::<String>(
+      .write_query_row_get::<String>(
         r#"
           SELECT name FROM 'table' WHERE id = 0;
           SELECT name FROM 'table' WHERE id = 1;

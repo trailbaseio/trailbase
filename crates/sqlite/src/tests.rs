@@ -20,7 +20,7 @@ async fn call_success_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call(|conn| {
+    .call_writer(|conn| {
       conn
         .execute(
           "CREATE TABLE person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);",
@@ -38,7 +38,7 @@ async fn call_failure_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call(|conn| conn.execute("Invalid sql", []).map_err(|e| e.into()))
+    .call_writer(|conn| conn.execute("Invalid sql", []).map_err(|e| e.into()))
     .await;
 
   assert!(match result.unwrap_err() {
@@ -65,13 +65,13 @@ async fn close_success_test() {
   let conn = Connection::with_opts(
     move || rusqlite::Connection::open(&db_path),
     Options {
-      n_read_threads: Some(2),
+      num_threads: Some(3),
       ..Default::default()
     },
   )
   .unwrap();
 
-  assert_eq!(2, conn.threads());
+  assert_eq!(3, conn.threads());
 
   conn
     .execute("CREATE TABLE 'test' (id INTEGER PRIMARY KEY)", ())
@@ -116,7 +116,7 @@ async fn close_call_test() {
   assert!(conn.close().await.is_ok());
 
   let result = conn2
-    .call(|conn| conn.execute("SELECT 1;", []).map_err(|e| e.into()))
+    .call_writer(|conn| conn.execute("SELECT 1;", []).map_err(|e| e.into()))
     .await;
 
   assert!(matches!(
@@ -130,7 +130,7 @@ async fn close_failure_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   conn
-    .call(|conn| {
+    .call_writer(|conn| {
       conn
         .execute(
           "CREATE TABLE person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);",
@@ -142,7 +142,7 @@ async fn close_failure_test() {
     .unwrap();
 
   conn
-    .call(|conn| {
+    .call_writer(|conn| {
       // Leak a prepared statement to make the database uncloseable
       // See https://www.sqlite.org/c3ref/close.html for details regarding this behaviour
       let stmt = Box::new(conn.prepare("INSERT INTO person VALUES (1, ?1);").unwrap());
@@ -197,7 +197,7 @@ async fn test_ergonomic_errors() {
   let conn = Connection::open_in_memory().unwrap();
 
   let res = conn
-    .call(|conn| failable_func(conn).map_err(|e| Error::Other(Box::new(e))))
+    .call_writer(|conn| failable_func(conn).map_err(|e| Error::Other(Box::new(e))))
     .await
     .unwrap_err();
 
@@ -213,7 +213,7 @@ async fn test_execute_and_query() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call(|conn| {
+    .call_writer(|conn| {
       conn
         .execute(
           "CREATE TABLE person(id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -328,7 +328,7 @@ async fn test_execute_batch() {
 
   let count = async |table: &str| -> i64 {
     return conn
-      .query_row_get(format!("SELECT COUNT(*) FROM {table}"), (), 0)
+      .write_query_row_get(format!("SELECT COUNT(*) FROM {table}"), (), 0)
       .await
       .unwrap()
       .unwrap();
@@ -402,7 +402,7 @@ async fn test_params() {
   let conn = Connection::open_in_memory().unwrap();
 
   conn
-    .call(|conn| {
+    .call_writer(|conn| {
       conn
         .execute(
           "CREATE TABLE person(id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
@@ -476,7 +476,7 @@ async fn test_hooks() {
     row_id: i64,
   }
 
-  let (sender, receiver) = kanal::unbounded::<String>();
+  let (sender, receiver) = flume::unbounded::<String>();
 
   conn
     .write_lock()
@@ -607,7 +607,7 @@ fn test_busy() {
       return Ok(conn);
     },
     Options {
-      n_read_threads: Some(2),
+      num_threads: Some(3),
       ..Default::default()
     },
   )

@@ -496,7 +496,7 @@ impl RecordApi {
         self
           .state
           .conn
-          .call(move |conn| {
+          .call_writer(move |conn| {
             Ok(Self::check_record_level_access_impl(
               conn,
               &access_query,

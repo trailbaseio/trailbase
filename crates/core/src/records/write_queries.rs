@@ -200,7 +200,7 @@ pub(crate) async fn run_queries(
   };
 
   let result: Vec<WriteQueryResult> = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       let tx = conn.transaction()?;
 
       let rows: Vec<WriteQueryResult> = queries
@@ -251,7 +251,7 @@ pub(crate) async fn run_insert_query(
   };
 
   let (rowid, return_value): (i64, trailbase_sqlite::Value) = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       let result = query.apply(conn)?;
       return Ok((result.rowid, result.pk_value.expect("insert")));
     })
@@ -288,7 +288,7 @@ pub(crate) async fn run_update_query(
   };
 
   let rowid: i64 = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       return Ok(query.apply(conn)?.rowid);
     })
     .await?;
@@ -315,7 +315,7 @@ pub(crate) async fn run_delete_query(
   let query = WriteQuery::new_delete(table_name, pk_column, pk_value)?;
 
   let rowid: i64 = conn
-    .call(move |conn| {
+    .call_writer(move |conn| {
       return Ok(query.apply(conn)?.rowid);
     })
     .await?;

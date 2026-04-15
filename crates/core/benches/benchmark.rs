@@ -60,7 +60,7 @@ async fn add_room(
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
-    .query_row_get(
+    .write_query_row_get(
       "INSERT INTO room (name) VALUES ($1) RETURNING id",
       params!(name.to_string()),
       0,
