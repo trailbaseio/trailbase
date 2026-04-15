@@ -1,4 +1,4 @@
-use rusqlite::{Statement, types};
+use rusqlite::types;
 use std::fmt::Debug;
 use std::ops::Index;
 use std::str::FromStr;
@@ -33,8 +33,8 @@ impl FromStr for ValueType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
-  name: String,
-  decl_type: Option<ValueType>,
+  pub(crate) name: String,
+  pub(crate) decl_type: Option<ValueType>,
 }
 
 #[derive(Debug)]
@@ -74,36 +74,16 @@ impl Rows {
   }
 
   pub fn column_type(&self, idx: usize) -> Result<ValueType, Error> {
-    if let Some(c) = self.1.get(idx) {
-      return Ok(c.decl_type.ok_or_else(|| {
-        rusqlite::Error::InvalidColumnType(
-          idx,
-          self.column_name(idx).unwrap_or("?").to_string(),
-          types::Type::Null,
-        )
-      })?);
-    }
-
-    return Err(
-      rusqlite::Error::InvalidColumnType(
+    return self
+      .1
+      .get(idx)
+      .and_then(|c| c.decl_type)
+      .ok_or_else(|| Error::InvalidColumnType {
         idx,
-        self.column_name(idx).unwrap_or("?").to_string(),
-        types::Type::Null,
-      )
-      .into(),
-    );
+        name: self.column_name(idx).unwrap_or("?").to_string(),
+        decl_type: None,
+      });
   }
-}
-
-pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
-  let columns: Arc<Vec<Column>> = Arc::new(rows.as_ref().map_or_else(Vec::new, columns));
-
-  let mut result = vec![];
-  while let Some(row) = rows.next()? {
-    result.push(self::from_row(row, columns.clone())?);
-  }
-
-  return Ok(Rows(result, columns));
 }
 
 impl Index<usize> for Rows {
@@ -121,17 +101,6 @@ impl IntoIterator for Rows {
   fn into_iter(self) -> Self::IntoIter {
     return self.0.into_iter();
   }
-}
-
-pub(crate) fn columns(stmt: &Statement<'_>) -> Vec<Column> {
-  return stmt
-    .columns()
-    .into_iter()
-    .map(|c| Column {
-      name: c.name().to_string(),
-      decl_type: c.decl_type().and_then(|s| ValueType::from_str(s).ok()),
-    })
-    .collect();
 }
 
 #[derive(Debug)]
@@ -179,25 +148,6 @@ impl Row {
   pub fn column_name(&self, idx: usize) -> Option<&str> {
     return self.1.get(idx).map(|c| c.name.as_str());
   }
-}
-
-pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> Result<Row, Error> {
-  #[cfg(debug_assertions)]
-  if let Some(rc) = Some(columns(row.as_ref()))
-    && rc.len() != cols.len()
-  {
-    // Apparently this can happen during schema manipulations, e.g. when deleting a column
-    // :shrug:. We normalize everything to the same rows schema rather than dealing with
-    // jagged tables.
-    log::warn!("Rows/row column mismatch: {cols:?} vs {rc:?}");
-  }
-
-  // We have to access by index here, since names can be duplicate.
-  let values = (0..cols.len())
-    .map(|idx| row.get(idx).unwrap_or(Value::Null))
-    .collect();
-
-  return Ok(Row(values, cols));
 }
 
 impl Index<usize> for Row {

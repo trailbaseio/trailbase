@@ -352,7 +352,7 @@ fn init_main_db_impl(
 
         return Ok(conn);
       },
-      trailbase_sqlite::connection::Options {
+      trailbase_sqlite::Options {
         n_read_threads: match (data_dir, std::thread::available_parallelism()) {
           (None, _) => Some(0),
           (Some(_), Ok(n)) => Some(n.get().clamp(2, 4)),

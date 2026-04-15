@@ -1,9 +1,10 @@
 use rusqlite::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
 
+use super::util::{columns, from_row};
 use crate::connection::Connection;
 use crate::error::Error;
-use crate::rows::{Column, Rows, columns, from_row};
+use crate::rows::{Column, Rows};
 
 /// Batch execute SQL statements and return rows of last statement.
 ///
@@ -31,7 +32,7 @@ pub async fn execute_batch(
 
               let mut result = vec![from_row(row, cols.clone())?];
               while let Some(row) = rows.next()? {
-                result.push(crate::rows::from_row(row, cols.clone())?);
+                result.push(from_row(row, cols.clone())?);
               }
               return Ok(Some(Rows(result, cols)));
             }

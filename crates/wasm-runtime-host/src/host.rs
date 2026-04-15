@@ -263,7 +263,7 @@ impl self::trailbase::database::sqlite::Host for State {
         .bind(&mut stmt)
         .map_err(|err| TxError::Other(err.to_string()))?;
 
-      let rows = trailbase_sqlite::rows::from_rows(stmt.raw_query())
+      let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
         .map_err(|err| TxError::Other(err.to_string()))?;
 
       let values: Vec<_> = rows

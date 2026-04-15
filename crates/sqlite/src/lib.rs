@@ -10,20 +10,20 @@
   clippy::needless_continue
 )]
 
-pub mod connection;
-pub mod database;
-pub mod error;
+mod connection;
+mod database;
+mod error;
 pub mod from_sql;
-pub mod params;
-pub mod rows;
+mod params;
+mod rows;
 pub mod sqlite;
 pub mod to_sql;
-pub mod value;
+mod value;
 
 #[cfg(debug_assertions)]
-pub mod experimental;
+mod experimental;
 
-pub use connection::Connection;
+pub use connection::{ArcLockGuard, Connection, LockGuard, Options};
 pub use database::Database;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};

@@ -7,7 +7,7 @@ use sqlite3_parser::ast::{Expr, OneSelect, ResultColumn, Select, Stmt};
 use tokio::time::Duration;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::unquote_expr;
-use trailbase_sqlite::{Rows, connection::ArcLockGuard};
+use trailbase_sqlite::{ArcLockGuard, Rows};
 use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;

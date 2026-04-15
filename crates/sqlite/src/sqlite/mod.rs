@@ -1,7 +1,7 @@
-pub mod batch;
-pub mod connection;
-pub mod util;
+mod batch;
+pub(super) mod connection;
+mod executor;
+mod util;
 
-pub use util::extract_record_values;
-pub use util::extract_row_id;
-pub use util::list_databases;
+pub use batch::execute_batch;
+pub use util::{extract_record_values, extract_row_id, from_rows, list_databases};

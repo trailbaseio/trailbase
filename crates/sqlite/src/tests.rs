@@ -278,7 +278,7 @@ async fn test_execute_and_query() {
   assert_eq!(person.id, 1);
   assert_eq!(person.name, "baz");
 
-  let rows = crate::sqlite::batch::execute_batch(
+  let rows = crate::sqlite::execute_batch(
     &conn,
     r#"
         CREATE TABLE foo (id INTEGER) STRICT;

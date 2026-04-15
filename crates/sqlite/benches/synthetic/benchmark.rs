@@ -10,8 +10,7 @@ use rand::RngExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use trailbase_sqlite::Value;
-use trailbase_sqlite::connection::{Connection, Options};
+use trailbase_sqlite::{Connection, Options, Value};
 
 use crate::connection::{AsyncConnection, SharedRusqlite, ThreadLocalRusqlite};
 use crate::error::BenchmarkError;

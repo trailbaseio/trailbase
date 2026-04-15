@@ -75,7 +75,7 @@ tracing-subscriber = { version = "0.3.18", default-features = false, features = 
 trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm"] }
 trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
-trailbase-client = { path = "crates/client", version = "0.8.1" }
+trailbase-client = { path = "crates/client", version = "0.8.0" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
 trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-reactive = { path = "crates/reactive", version = "0.1.0" }

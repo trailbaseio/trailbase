@@ -20,13 +20,13 @@ impl DummyConnection {
 }
 
 #[allow(unused)]
-enum PolymorphicConnection {
+pub enum DummyPolymorphicConnection {
   Sqlite(Connection),
   Dummy(DummyConnection),
 }
 
 #[allow(unused)]
-impl PolymorphicConnection {
+impl DummyPolymorphicConnection {
   pub async fn read_query_row_get<T>(
     &self,
     sql: impl AsRef<str> + Send + 'static,
@@ -41,6 +41,13 @@ impl PolymorphicConnection {
       Self::Dummy(c) => c.read_query_row_get(sql, params, index).await,
     }
   }
+
+  pub fn sqlite_connection(&self) -> Option<&Connection> {
+    match self {
+      Self::Sqlite(conn) => Some(conn),
+      Self::Dummy(_) => None,
+    }
+  }
 }
 
 #[cfg(test)]
@@ -50,7 +57,7 @@ mod tests {
   #[tokio::test]
   async fn polymorphic_test() {
     let conn = Connection::open_in_memory().unwrap();
-    let p = PolymorphicConnection::Sqlite(conn.clone());
+    let p = DummyPolymorphicConnection::Sqlite(conn.clone());
 
     conn
       .execute_batch(
