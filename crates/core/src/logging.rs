@@ -249,10 +249,7 @@ impl SqliteLogLayer {
         // NOTE: awaiting the `conn.call()` is the secret to batching, since we won't read from the
         // channel until the database write is complete.
         let result = conn
-          .call_writer(move |conn| {
-            Self::insert_logs(conn, buffer)?;
-            Ok(())
-          })
+          .call_writer(move |conn| Self::insert_logs(conn, buffer))
           .await;
 
         if let Err(err) = result {

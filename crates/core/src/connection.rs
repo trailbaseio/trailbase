@@ -329,29 +329,32 @@ fn init_main_db_impl(
     let json_registry = json_registry.clone();
     let new_db = &mut new_db;
 
+    let conn_builder = move || -> Result<_, trailbase_sqlite::Error> {
+      let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
+      litegis::register(&conn)?;
+
+      if main_migrations {
+        new_db.fetch_or(
+          apply_main_migrations(&mut conn, migrations_path.as_ref())
+            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
+          Ordering::SeqCst,
+        );
+      }
+
+      #[cfg(feature = "wasm")]
+      for (store, functions) in &runtimes {
+        trailbase_wasm_runtime_host::functions::setup_connection(&conn, store.clone(), functions)
+          .expect("startup");
+      }
+
+      return Ok(conn);
+    };
+
     trailbase_sqlite::Connection::with_opts(
-      move || -> Result<_, ConnectionError> {
-        let mut conn =
-          trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())?;
-
-        #[cfg(any(feature = "geos", feature = "geos-static"))]
-        litegis::register(&conn)?;
-
-        if main_migrations {
-          new_db.fetch_or(
-            apply_main_migrations(&mut conn, migrations_path.as_ref())?,
-            Ordering::SeqCst,
-          );
-        }
-
-        #[cfg(feature = "wasm")]
-        for (store, functions) in &runtimes {
-          trailbase_wasm_runtime_host::functions::setup_connection(&conn, store.clone(), functions)
-            .expect("startup");
-        }
-
-        return Ok(conn);
-      },
+      conn_builder,
       trailbase_sqlite::Options {
         num_threads: match (data_dir, std::thread::available_parallelism()) {
           (None, _) => Some(1),
@@ -389,10 +392,12 @@ fn init_main_db_impl(
   return Ok((conn, new_db.load(Ordering::SeqCst)));
 }
 
-pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+pub(super) fn init_logs_db(
+  data_dir: Option<&DataDir>,
+) -> Result<Connection, trailbase_sqlite::Error> {
   let path = data_dir.map(|d| d.logs_db_path());
 
-  return trailbase_sqlite::Connection::new(|| -> Result<_, ConnectionError> {
+  return trailbase_sqlite::Connection::new(|| -> Result<_, trailbase_sqlite::Error> {
     // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
     let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
 
@@ -401,21 +406,22 @@ pub(super) fn init_logs_db(data_dir: Option<&DataDir>) -> Result<Connection, Con
     // Turn off secure_deletions, i.e. don't wipe the memory with zeros.
     conn.pragma_update(None, "secure_delete", "FALSE")?;
 
-    apply_logs_migrations(&mut conn)?;
+    apply_logs_migrations(&mut conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
     return Ok(conn);
   });
 }
 
-pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, ConnectionError> {
+pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, trailbase_sqlite::Error> {
   let path = data_dir.map(|d| d.session_db_path());
 
-  return trailbase_sqlite::Connection::new(|| -> Result<_, ConnectionError> {
+  return trailbase_sqlite::Connection::new(|| -> Result<_, trailbase_sqlite::Error> {
     // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
     let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
 
     trailbase_extension::register_all_extension_functions(&conn, None)?;
 
-    apply_session_migrations(&mut conn)?;
+    apply_session_migrations(&mut conn)
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
     return Ok(conn);
   });
 }

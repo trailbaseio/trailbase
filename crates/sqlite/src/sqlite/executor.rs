@@ -45,18 +45,19 @@ impl Executor {
   pub fn new<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opt: Options,
-  ) -> Result<Self, E> {
+  ) -> Result<Self, Error>
+  where
+    Error: From<E>,
+  {
     let Options {
       busy_timeout,
       num_threads,
     } = opt;
 
-    let new_conn = || -> Result<rusqlite::Connection, E> {
+    let new_conn = || -> Result<rusqlite::Connection, Error> {
       let conn = builder()?;
       if let Some(busy_timeout) = busy_timeout {
-        conn
-          .busy_timeout(busy_timeout)
-          .expect("busy timeout failed");
+        conn.busy_timeout(busy_timeout)?;
       }
       return Ok(conn);
     };
@@ -117,7 +118,7 @@ impl Executor {
 
         move || writer_event_loop(conns, shared_read_receiver, shared_write_receiver)
       })
-      .expect("startup");
+      .map_err(|err| Error::Other(format!("spawning rw thread failed: {err}").into()))?;
 
     // Spawn readers threads.
     for index in 0..num_read_threads {
@@ -129,7 +130,7 @@ impl Executor {
 
           move || reader_event_loop(index + 1, conns, shared_read_receiver)
         })
-        .expect("startup");
+        .map_err(|err| Error::Other(format!("spawning ro thread {index} failed: {err}").into()))?;
     }
 
     debug!(
@@ -180,13 +181,15 @@ impl Executor {
   }
 
   #[inline]
-  pub async fn call_writer<F, R>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
   where
-    F: FnOnce(&mut rusqlite::Connection) -> Result<R, Error> + Send + 'static,
+    F: FnOnce(&mut rusqlite::Connection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
   {
     // return call_impl(&self.writer, function).await;
-    let (sender, receiver) = oneshot::channel::<Result<R, Error>>();
+    let (sender, receiver) = oneshot::channel::<Result<R, E>>();
 
     self
       .writer
@@ -197,14 +200,16 @@ impl Executor {
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
-    receiver.await.map_err(|_| Error::ConnectionClosed)?
+    return Ok(receiver.await.map_err(|_| Error::ConnectionClosed)??);
   }
 
   #[inline]
-  pub async fn call_reader<F, R>(&self, function: F) -> Result<R, Error>
+  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
   where
-    F: FnOnce(&rusqlite::Connection) -> Result<R, Error> + Send + 'static,
+    F: FnOnce(&rusqlite::Connection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
   {
     let (sender, receiver) = oneshot::channel::<Result<R, Error>>();
 
@@ -212,12 +217,12 @@ impl Executor {
       .reader
       .send(ReaderMessage::RunConst(Box::new(move |conn| {
         if !sender.is_closed() {
-          let _ = sender.send(function(conn));
+          let _ = sender.send(function(conn).map_err(|err| err.into()));
         }
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
-    receiver.await.map_err(|_| Error::ConnectionClosed)?
+    return receiver.await.map_err(|_| Error::ConnectionClosed)?;
   }
 
   #[inline]
@@ -274,23 +279,25 @@ impl Executor {
 
         params.bind(&mut stmt)?;
 
-        return Ok(stmt.raw_execute()?);
+        return stmt.raw_execute();
       })
       .await;
   }
 
   pub async fn execute_batch(&self, sql: impl AsRef<str> + Send + 'static) -> Result<(), Error> {
     self
-      .call_writer(move |conn: &mut rusqlite::Connection| {
-        let mut batch = rusqlite::Batch::new(conn, sql.as_ref());
-        while let Some(mut stmt) = batch.next()? {
-          // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
-          // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
-          // behaves consistently.
-          let _row = stmt.raw_query().next()?;
-        }
-        return Ok(());
-      })
+      .call_writer(
+        move |conn: &mut rusqlite::Connection| -> Result<(), rusqlite::Error> {
+          let mut batch = rusqlite::Batch::new(conn, sql.as_ref());
+          while let Some(mut stmt) = batch.next()? {
+            // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
+            // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
+            // behaves consistently.
+            let _row = stmt.raw_query().next()?;
+          }
+          return Ok(());
+        },
+      )
       .await?;
 
     return Ok(());

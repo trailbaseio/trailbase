@@ -275,7 +275,7 @@ fn build_job(
           return async move {
             conn
               .call_writer(|conn| {
-                return Ok(conn.backup("main", backup_file, /* progress= */ None)?);
+                return conn.backup("main", backup_file, /* progress= */ None);
               })
               .await
               .map_err(|err| {

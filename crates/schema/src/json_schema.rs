@@ -126,7 +126,7 @@ fn build_json_schema_expanded_impl(
                       e.insert(v.clone());
                     }
                     Entry::Occupied(_e) => {
-                      println!("SKIPPING: {k}");
+                      debug!("Skipping {k}, already defined");
                     }
                   };
                 }

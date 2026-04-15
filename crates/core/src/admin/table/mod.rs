@@ -43,9 +43,9 @@ fn get_conn_and_migration_path(
           return trailbase_extension::connect_sqlite(
             Some(db_path.clone()),
             Some(json_registry.clone()),
-          );
-        })
-        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
+          )
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+        })?,
         migration_path,
       ))
     }

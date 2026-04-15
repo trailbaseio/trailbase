@@ -78,11 +78,9 @@ impl TransactionLog {
 
     let report = conn
       .call_writer(move |conn| {
-        let report = runner
+        return runner
           .run(conn)
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
-
-        return Ok(report);
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
       })
       .await
       .map_err(|err| {
@@ -129,22 +127,24 @@ impl TransactionLog {
     conn: &trailbase_sqlite::Connection,
   ) -> Result<(), trailbase_sqlite::Error> {
     conn
-      .call_writer(|conn: &mut rusqlite::Connection| {
-        let tx = conn.transaction()?;
-        for (query_type, stmt) in self.log {
-          match query_type {
-            QueryType::Query => {
-              tx.query_row(&stmt, (), |_row| Ok(()))?;
-            }
-            QueryType::Execute => {
-              tx.execute(&stmt, ())?;
+      .call_writer(
+        |conn: &mut rusqlite::Connection| -> Result<_, rusqlite::Error> {
+          let tx = conn.transaction()?;
+          for (query_type, stmt) in self.log {
+            match query_type {
+              QueryType::Query => {
+                tx.query_row(&stmt, (), |_row| Ok(()))?;
+              }
+              QueryType::Execute => {
+                tx.execute(&stmt, ())?;
+              }
             }
           }
-        }
-        tx.commit()?;
+          tx.commit()?;
 
-        return Ok(());
-      })
+          return Ok(());
+        },
+      )
       .await?;
 
     return Ok(());

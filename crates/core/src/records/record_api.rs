@@ -484,11 +484,7 @@ impl RecordApi {
           .state
           .conn
           .call_reader(move |conn| {
-            Ok(Self::check_record_level_access_impl(
-              conn,
-              &access_query,
-              params,
-            )?)
+            return Self::check_record_level_access_impl(conn, &access_query, params);
           })
           .await
       }
@@ -497,11 +493,7 @@ impl RecordApi {
           .state
           .conn
           .call_writer(move |conn| {
-            Ok(Self::check_record_level_access_impl(
-              conn,
-              &access_query,
-              params,
-            )?)
+            return Self::check_record_level_access_impl(conn, &access_query, params);
           })
           .await
       }

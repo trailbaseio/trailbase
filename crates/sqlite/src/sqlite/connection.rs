@@ -22,14 +22,20 @@ pub struct Connection {
 }
 
 impl Connection {
-  pub fn new<E>(builder: impl Fn() -> Result<rusqlite::Connection, E>) -> Result<Self, E> {
+  pub fn new<E>(builder: impl Fn() -> Result<rusqlite::Connection, E>) -> Result<Self, Error>
+  where
+    Error: From<E>,
+  {
     return Self::with_opts(builder, Options::default());
   }
 
   pub fn with_opts<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opt: Options,
-  ) -> std::result::Result<Self, E> {
+  ) -> Result<Self, Error>
+  where
+    Error: From<E>,
+  {
     return Ok(Self {
       id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
       exec: Executor::new(builder, opt)?,
@@ -87,18 +93,22 @@ impl Connection {
   ///   during startup/SIGHUP).
   /// * Batch log inserts to minimize thread slushing.
   /// * Backups from scheduler (API could be easily hoisted)
-  pub async fn call_writer<F, R>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
   where
-    F: FnOnce(&mut rusqlite::Connection) -> Result<R, Error> + Send + 'static,
+    F: FnOnce(&mut rusqlite::Connection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
   {
     return self.exec.call_writer(function).await;
   }
 
-  pub async fn call_reader<F, R>(&self, function: F) -> Result<R, Error>
+  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
   where
-    F: FnOnce(&rusqlite::Connection) -> Result<R, Error> + Send + 'static,
+    F: FnOnce(&rusqlite::Connection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
   {
     return self.exec.call_reader(function).await;
   }
