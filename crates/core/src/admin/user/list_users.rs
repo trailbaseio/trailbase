@@ -27,6 +27,9 @@ pub struct UserJson {
   // For external oauth providers.
   pub provider_id: i64,
   pub provider_user_id: Option<String>,
+
+  pub created: i64,
+  pub updated: i64,
 }
 
 impl From<DbUser> for UserJson {
@@ -38,6 +41,8 @@ impl From<DbUser> for UserJson {
       admin: value.admin,
       provider_id: value.provider_id,
       provider_user_id: value.provider_user_id,
+      created: value.created,
+      updated: value.updated,
     }
   }
 }

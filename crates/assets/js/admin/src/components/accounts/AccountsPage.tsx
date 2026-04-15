@@ -65,7 +65,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
   return [
     {
       accessorKey: "id",
-      size: 340,
+      size: 350,
       cell: (ctx) => {
         const userId = ctx.row.original.id;
         return (
@@ -104,14 +104,16 @@ function buildColumns(): ColumnDef<UserJson>[] {
     },
     {
       accessorKey: "admin",
+      size: 64,
       cell: (ctx) => (
-        <div class="flex justify-center">
+        <div class="px-2">
           {ctx.row.original.admin ? <TbOutlineCrown size={18} /> : null}
         </div>
       ),
     },
     {
       header: "OAuth",
+      size: 64,
       enableSorting: false,
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
@@ -121,7 +123,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
         return (
           <Switch>
             <Match when={oauthAsset !== undefined}>
-              <div class="flex justify-center pr-4">
+              <div class="px-2">
                 <img class="size-[20px]" src={oauthAsset!} />
               </div>
             </Match>
@@ -129,6 +131,18 @@ function buildColumns(): ColumnDef<UserJson>[] {
             <Match when={providerId > 0n}>{`${providerId}`}</Match>
           </Switch>
         );
+      },
+    },
+    {
+      header: "updated",
+      cell: (ctx) => {
+        return new Date(Number(ctx.row.original.updated) * 1000).toUTCString();
+      },
+    },
+    {
+      header: "created",
+      cell: (ctx) => {
+        return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
       },
     },
   ];
