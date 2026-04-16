@@ -2,9 +2,7 @@ use trailbase_sqlvalue::{Blob, DecodeError, SqlValue};
 use wstd::http::body::IntoBody;
 use wstd::http::{Client, Request};
 
-use crate::wit::trailbase::database::sqlite::{
-  tx_begin, tx_commit, tx_execute, tx_query, tx_rollback,
-};
+use crate::wit::trailbase::database::sqlite::Transaction as WasiTransaction;
 
 pub use crate::wit::trailbase::database::sqlite::{TxError, Value};
 pub use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
@@ -29,27 +27,32 @@ pub fn escape(s: impl AsRef<str>) -> String {
 }
 
 pub struct Transaction {
+  tx: WasiTransaction,
   committed: bool,
 }
 
 impl Transaction {
   pub fn begin() -> Result<Self, TxError> {
-    tx_begin()?;
-    return Ok(Self { committed: false });
+    let tx = WasiTransaction::new();
+    tx.begin()?;
+    return Ok(Self {
+      tx,
+      committed: false,
+    });
   }
 
   pub fn query(&mut self, query: &str, params: &[Value]) -> Result<Vec<Vec<Value>>, TxError> {
-    return tx_query(query, params);
+    return self.tx.query(query, params);
   }
 
   pub fn execute(&mut self, query: &str, params: &[Value]) -> Result<u64, TxError> {
-    return tx_execute(query, params);
+    return self.tx.execute(query, params);
   }
 
   pub fn commit(&mut self) -> Result<(), TxError> {
     if !self.committed {
       self.committed = true;
-      tx_commit()?;
+      self.tx.commit()?;
     }
     return Ok(());
   }
@@ -58,7 +61,7 @@ impl Transaction {
 impl Drop for Transaction {
   fn drop(&mut self) {
     if !self.committed
-      && let Err(err) = tx_rollback()
+      && let Err(err) = self.tx.rollback()
     {
       log::warn!("TX rollback failed: {err}");
     }

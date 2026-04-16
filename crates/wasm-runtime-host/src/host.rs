@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tokio::time::Duration;
 use trailbase_sqlite::Params;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
@@ -42,16 +41,17 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        "trailbase:database/sqlite.tx-begin": async,
-        "trailbase:database/sqlite.tx-commit": async,
-        "trailbase:database/sqlite.tx-rollback": async,
-        "trailbase:database/sqlite.tx-execute": async,
-        "trailbase:database/sqlite.tx-query": async,
-        "trailbase:database/sqlite.[constructor]transaction": async | trappable,
+        "trailbase:database/sqlite.[constructor]transaction": trappable,
+        "trailbase:database/sqlite.[drop]transaction": trappable,
+        "trailbase:database/sqlite.[method]transaction.begin": async | trappable,
+        "trailbase:database/sqlite.[method]transaction.commit": trappable,
+        "trailbase:database/sqlite.[method]transaction.rollback": trappable,
+        "trailbase:database/sqlite.[method]transaction.query": trappable,
+        "trailbase:database/sqlite.[method]transaction.execute": trappable,
         default: async,
     },
     with: {
-        "trailbase:database/sqlite.transaction": self::MyTransaction,
+        "trailbase:database/sqlite.transaction": self::TransactionImpl,
     },
     exports: {
         default: async | store,
@@ -78,22 +78,8 @@ pub struct State {
   pub(crate) hooks: Hooks,
   pub(crate) kv: WasiKeyValueCtx,
 
-  // A mutex of a DB lock.
-  pub(crate) tx: Mutex<Option<crate::sqlite::OwnedTx>>,
-
   // State shared across all runtime instances.
   pub(crate) shared: Arc<SharedState>,
-}
-
-impl Drop for State {
-  fn drop(&mut self) {
-    #[cfg(debug_assertions)]
-    if self.tx.get_mut().is_some() {
-      log::warn!(
-        "pending transaction found during State destruction. Transactions should be committed, rolled back or dropped to unlock the DB."
-      );
-    }
-  }
 }
 
 impl IoView for State {
@@ -172,154 +158,155 @@ impl self::trailbase::database::sqlite::Host for State {
   // async fn query(&mut self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
   //   return Err(TxError::Other("not implemented".into()));
   // }
+}
 
-  async fn tx_begin(&mut self) -> Result<(), TxError> {
-    let Some(conn) = self.shared.conn.clone() else {
-      return Err(TxError::Other("missing conn".into()));
-    };
+type Transaction = self::trailbase::database::sqlite::Transaction;
 
-    let mut lock = self.tx.lock().await;
-    assert!(lock.is_none());
+pub struct TransactionImpl {
+  tx: Option<crate::sqlite::OwnedTx>,
+}
 
-    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
-    *lock = Some(
-      acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000))
-        .await
-        .map_err(|err| TxError::Other(err.to_string()))?,
-    );
-
-    return Ok(());
-  }
-
-  async fn tx_commit(&mut self) -> Result<(), TxError> {
-    let Some(tx) = self.tx.lock().await.take() else {
-      return Err(TxError::Other("no pending tx".to_string()));
-    };
-
-    // NOTE: this is the same as `tx.commit()` just w/o consuming.
-    let lock = tx.borrow_dependent();
-    lock
-      .execute_batch("COMMIT")
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    return Ok(());
-  }
-
-  async fn tx_rollback(&mut self) -> Result<(), TxError> {
-    let Some(tx) = self.tx.lock().await.take() else {
-      return Err(TxError::Other("no pending tx".to_string()));
+impl TransactionImpl {
+  fn rollback_impl(&mut self) -> Result<(), TxError> {
+    let Some(tx) = self.tx.take() else {
+      return Ok(());
     };
 
     // NOTE: this is the same as `tx.rollback()` just w/o consuming.
-    let lock = tx.borrow_dependent();
-    lock
+    tx.borrow_dependent()
       .execute_batch("ROLLBACK")
       .map_err(|err| TxError::Other(err.to_string()))?;
 
     return Ok(());
   }
-
-  async fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
-    let Some(ref tx) = *self.tx.lock().await else {
-      return Err(TxError::Other("No open transaction".to_string()));
-    };
-
-    let lock = tx.borrow_dependent();
-    let mut stmt = lock
-      .prepare(&query)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    params
-      .bind(&mut stmt)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    return Ok(
-      stmt
-        .raw_execute()
-        .map_err(|err| TxError::Other(err.to_string()))? as u64,
-    );
-  }
-
-  async fn tx_query(
-    &mut self,
-    query: String,
-    params: Vec<Value>,
-  ) -> Result<Vec<Vec<Value>>, TxError> {
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
-    let Some(ref tx) = *self.tx.lock().await else {
-      return Err(TxError::Other("No open transaction".to_string()));
-    };
-
-    let lock = tx.borrow_dependent();
-    let mut stmt = lock
-      .prepare(&query)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    params
-      .bind(&mut stmt)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    let values: Vec<_> = rows
-      .into_iter()
-      .map(|trailbase_sqlite::Row(row, _col)| {
-        return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-      })
-      .collect();
-
-    return Ok(values);
-  }
-}
-
-type Transaction = self::trailbase::database::sqlite::Transaction;
-
-pub struct MyTransaction {
-  pub foo: i64,
 }
 
 impl self::trailbase::database::sqlite::HostTransaction for State {
-  async fn new(&mut self) -> Result<Resource<Transaction>, wasmtime::Error> {
-    return Ok(self.table().push(MyTransaction { foo: 5 })?);
+  fn new(&mut self) -> Result<Resource<Transaction>, wasmtime::Error> {
+    return Ok(self.table().push(TransactionImpl { tx: None })?);
   }
 
-  async fn begin(&mut self, _r: Resource<Transaction>) -> Result<(), TxError> {
-    return Err(TxError::Other("not implemented".into()));
-  }
-
-  async fn commit(&mut self, _r: Resource<Transaction>) -> Result<(), TxError> {
-    return Err(TxError::Other("not implemented".into()));
-  }
-
-  async fn rollback(&mut self, _r: Resource<Transaction>) -> Result<(), TxError> {
-    return Err(TxError::Other("not implemented".into()));
-  }
-
-  async fn query(
+  async fn begin(
     &mut self,
-    _r: Resource<Transaction>,
-    _query: String,
-    _params: Vec<Value>,
-  ) -> Result<Vec<Vec<Value>>, TxError> {
-    return Err(TxError::Other("not implemented".into()));
+    r: Resource<Transaction>,
+  ) -> Result<Result<(), TxError>, wasmtime::Error> {
+    let Some(conn) = self.shared.conn.clone() else {
+      return Ok(Err(TxError::Other("missing conn".into())));
+    };
+
+    let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
+    if resource.tx.is_some() {
+      return Ok(Err(TxError::Other("Transaction already begun".into())));
+    }
+
+    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
+    let _ = resource.tx.insert(
+      match acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000)).await {
+        Ok(tx) => tx,
+        Err(err) => {
+          return Ok(Err(TxError::Other(err.to_string())));
+        }
+      },
+    );
+
+    return Ok(Ok(()));
   }
 
-  async fn execute(
+  fn commit(&mut self, r: Resource<Transaction>) -> Result<Result<(), TxError>, wasmtime::Error> {
+    let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
+    let Some(tx) = resource.tx.take() else {
+      return Ok(Err(TxError::Other("no pending tx".to_string())));
+    };
+
+    // NOTE: this is the same as `tx.commit()` just w/o consuming.
+    if let Err(err) = tx.borrow_dependent().execute_batch("COMMIT") {
+      return Ok(Err(TxError::Other(err.to_string())));
+    }
+
+    return Ok(Ok(()));
+  }
+
+  fn rollback(&mut self, r: Resource<Transaction>) -> Result<Result<(), TxError>, wasmtime::Error> {
+    let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
+    return Ok(resource.rollback_impl());
+  }
+
+  fn query(
     &mut self,
-    _r: Resource<Transaction>,
-    _query: String,
-    _params: Vec<Value>,
-  ) -> Result<u64, TxError> {
-    return Err(TxError::Other("not implemented".into()));
+    r: Resource<Transaction>,
+    query: String,
+    params: Vec<Value>,
+  ) -> Result<Result<Vec<Vec<Value>>, TxError>, wasmtime::Error> {
+    let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
+    let Some(ref tx) = resource.tx else {
+      return Ok(Err(TxError::Other("No open transaction".to_string())));
+    };
+
+    let mut stmt = match tx.borrow_dependent().prepare(&query) {
+      Ok(stmt) => stmt,
+      Err(err) => {
+        return Ok(Err(TxError::Other(err.to_string())));
+      }
+    };
+
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+    if let Err(err) = params.bind(&mut stmt) {
+      return Ok(Err(TxError::Other(err.to_string())));
+    }
+
+    let rows = match trailbase_sqlite::sqlite::from_rows(stmt.raw_query()) {
+      Ok(rows) => rows,
+      Err(err) => {
+        return Ok(Err(TxError::Other(err.to_string())));
+      }
+    };
+
+    return Ok(Ok(
+      rows
+        .into_iter()
+        .map(|trailbase_sqlite::Row(row, _col)| {
+          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+        })
+        .collect(),
+    ));
   }
 
-  async fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
-    let x: &MyTransaction = self.resource_table.get(&r)?;
-    println!("value: {}", x.foo);
+  fn execute(
+    &mut self,
+    r: Resource<Transaction>,
+    query: String,
+    params: Vec<Value>,
+  ) -> Result<Result<u64, TxError>, wasmtime::Error> {
+    let resource: &TransactionImpl = self.resource_table.get(&r)?;
+    let Some(ref tx) = resource.tx else {
+      return Ok(Err(TxError::Other("No open transaction".to_string())));
+    };
+
+    let mut stmt = match tx.borrow_dependent().prepare(&query) {
+      Ok(stmt) => stmt,
+      Err(err) => {
+        return Ok(Err(TxError::Other(err.to_string())));
+      }
+    };
+
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+    if let Err(err) = params.bind(&mut stmt) {
+      return Ok(Err(TxError::Other(err.to_string())));
+    }
+
+    return match stmt.raw_execute() {
+      Ok(n) => Ok(Ok(n as u64)),
+      Err(err) => Ok(Err(TxError::Other(err.to_string()))),
+    };
+  }
+
+  fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
+    {
+      // Clean-up.
+      let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
+      let _ = resource.rollback_impl();
+    }
+
     self.resource_table.delete(r)?;
     return Ok(());
   }

@@ -13,7 +13,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
-// use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -223,7 +222,6 @@ impl StoreBuilder<State> for Arc<SharedState> {
         },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
         shared: self.clone(),
-        tx: tokio::sync::Mutex::new(None),
       },
     ));
   }
