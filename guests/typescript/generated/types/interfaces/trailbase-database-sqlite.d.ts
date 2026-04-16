@@ -1,21 +1,4 @@
-declare module "trailbase:database/sqlite@0.1.0" {
-  /**
-   * NOTE: Ideally, we'd use these but they can currently block guests, w/o a
-   * better non-blocking event loop.
-   * @since(version = 0.1.0)
-   * execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
-   * @since(version = 0.1.0)
-   * query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
-   * However, transactions have to be sync.
-   */
-  export function txBegin(): void;
-  export function txCommit(): void;
-  export function txRollback(): void;
-  export function txExecute(query: string, params: Array<Value>): bigint;
-  export function txQuery(
-    query: string,
-    params: Array<Value>,
-  ): Array<Array<Value>>;
+declare module "trailbase:database/sqlite@0.2.0" {
   /**
    * WARNING: Evolving a variant currently breaks the ABI:
    *   https://github.com/WebAssembly/component-model/issues/454
@@ -49,5 +32,15 @@ declare module "trailbase:database/sqlite@0.1.0" {
   export interface ValueReal {
     tag: "real";
     val: number;
+  }
+
+  export class Transaction implements Disposable {
+    constructor();
+    begin(): void;
+    commit(): void;
+    rollback(): void;
+    execute(query: string, params: Array<Value>): bigint;
+    query(query: string, params: Array<Value>): Array<Array<Value>>;
+    [Symbol.dispose](): void;
   }
 }

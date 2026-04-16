@@ -1,4 +1,4 @@
-package trailbase:database@0.1.0;
+package trailbase:database@0.2.0;
 
 interface sqlite {
   // WARNING: Evolving a variant currently breaks the ABI:
@@ -36,6 +36,7 @@ interface sqlite {
   // @since(version = 0.1.0)
   // tx-query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
 
+  @since(version = 0.2.0)
   resource transaction {
     constructor();
     begin: func() -> result<_, tx-error>;

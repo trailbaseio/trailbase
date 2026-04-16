@@ -1,12 +1,6 @@
 import * as JSON from "../json";
 
-import {
-  txBegin,
-  txCommit,
-  txRollback,
-  txExecute,
-  txQuery,
-} from "trailbase:database/sqlite@0.1.0";
+import { Transaction as WasiTransaction } from "trailbase:database/sqlite@0.2.0";
 
 import type { SqliteRequest } from "@common/SqliteRequest";
 import type { Value } from "./value";
@@ -19,29 +13,32 @@ import {
   toWitValue,
 } from "./value";
 
-export type { Value } from "trailbase:database/sqlite@0.1.0";
+export type { Value } from "trailbase:database/sqlite@0.2.0";
 export { escape } from "./value";
 
 export class Transaction {
+  private readonly tx: WasiTransaction;
+
   constructor() {
-    txBegin();
+    this.tx = new WasiTransaction();
+    this.tx.begin();
   }
 
   query(query: string, params: Value[]): Value[][] {
-    return txQuery(query, params.map(toWitValue)).map((row) =>
-      row.map(fromWitValue),
-    );
+    return this.tx
+      .query(query, params.map(toWitValue))
+      .map((row) => row.map(fromWitValue));
   }
 
   execute(query: string, params: Value[]): number {
-    return Number(txExecute(query, params.map(toWitValue)));
+    return Number(this.tx.execute(query, params.map(toWitValue)));
   }
 
   commit(): void {
-    txCommit();
+    this.tx.commit();
   }
   rollback(): void {
-    txRollback();
+    this.tx.rollback();
   }
 }
 
