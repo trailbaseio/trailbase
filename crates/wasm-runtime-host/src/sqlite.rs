@@ -12,6 +12,8 @@ use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
+use crate::host::TxError;
+
 self_cell!(
   pub(crate) struct OwnedTx {
     owner: MutBorrow<ArcLockGuard>,
@@ -21,21 +23,28 @@ self_cell!(
   }
 );
 
-pub(crate) async fn new_tx(conn: trailbase_sqlite::Connection) -> Result<OwnedTx, rusqlite::Error> {
-  for _ in 0..200 {
+pub(crate) async fn acquire_transaction_lock_with_timeout(
+  conn: trailbase_sqlite::Connection,
+  timeout: Duration,
+) -> Result<OwnedTx, TxError> {
+  let try_until = std::time::SystemTime::now() + timeout;
+  loop {
     let Some(lock) = conn.try_write_arc_lock_for(Duration::from_micros(100)) else {
-      tokio::time::sleep(Duration::from_micros(400)).await;
+      // Sleep a little.
+      tokio::time::sleep(Duration::from_micros(200)).await;
+
+      if std::time::SystemTime::now() > try_until {
+        // TODO: needs better error.
+        return Err(TxError::Other("Lock acquisition failed: timeout".into()));
+      }
       continue;
     };
 
     return OwnedTx::try_new(MutBorrow::new(lock), |owner| {
       return owner.borrow_mut().transaction();
-    });
+    })
+    .map_err(|err| TxError::Other(err.to_string()));
   }
-
-  return Err(rusqlite::Error::ToSqlConversionFailure(
-    "Failed to acquire lock".into(),
-  ));
 }
 
 async fn handle_sqlite_execute(

@@ -1,7 +1,7 @@
-use core::future::Future;
-use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::Duration;
 use trailbase_sqlite::Params;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
@@ -10,6 +10,8 @@ use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
 use wasmtime_wasi_io::IoView;
+
+use crate::sqlite::acquire_transaction_lock_with_timeout;
 
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
 wasmtime::component::bindgen!({
@@ -41,13 +43,17 @@ wasmtime::component::bindgen!({
     // to return traps from generated functions.
     imports: {
         "trailbase:database/sqlite.tx-begin": async,
+        "trailbase:database/sqlite.tx-commit": async,
+        "trailbase:database/sqlite.tx-rollback": async,
+        "trailbase:database/sqlite.tx-execute": async,
+        "trailbase:database/sqlite.tx-query": async,
     },
     exports: {
         default: async | store,
     },
 });
 
-use self::trailbase::database::sqlite::{TxError, Value};
+pub use self::trailbase::database::sqlite::{TxError, Value};
 
 /// NOTE: This is needed due to State needing to be Send.
 unsafe impl Send for crate::sqlite::OwnedTx {}
@@ -67,14 +73,17 @@ pub struct State {
   pub(crate) hooks: Hooks,
   pub(crate) kv: WasiKeyValueCtx,
 
+  // A mutex of a DB lock.
+  pub(crate) tx: Mutex<Option<crate::sqlite::OwnedTx>>,
+
+  // State shared across all runtime instances.
   pub(crate) shared: Arc<SharedState>,
-  pub(crate) tx: Arc<Mutex<Option<crate::sqlite::OwnedTx>>>,
 }
 
 impl Drop for State {
   fn drop(&mut self) {
     #[cfg(debug_assertions)]
-    if self.tx.lock().is_some() {
+    if self.tx.get_mut().is_some() {
       log::warn!("pending transaction locking the DB");
     }
   }
@@ -150,133 +159,106 @@ impl HasData for State {
 }
 
 impl self::trailbase::database::sqlite::Host for State {
-  fn tx_begin(&mut self) -> impl Future<Output = Result<(), TxError>> + Send {
-    async fn begin(
-      conn: trailbase_sqlite::Connection,
-      tx: &Mutex<Option<crate::sqlite::OwnedTx>>,
-    ) -> Result<(), TxError> {
-      assert!(tx.lock().is_none());
-
-      *tx.lock() = Some(
-        crate::sqlite::new_tx(conn)
-          .await
-          .map_err(|err| TxError::Other(err.to_string()))?,
-      );
-
-      return Ok(());
-    }
-
-    let tx = self.tx.clone();
-    return async move {
-      let Some(conn) = self.shared.conn.clone() else {
-        return Err(TxError::Other("missing conn".into()));
-      };
-      begin(conn, &tx).await
+  async fn tx_begin(&mut self) -> Result<(), TxError> {
+    let Some(conn) = self.shared.conn.clone() else {
+      return Err(TxError::Other("missing conn".into()));
     };
+
+    let mut lock = self.tx.lock().await;
+    assert!(lock.is_none());
+
+    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
+    *lock = Some(
+      acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000))
+        .await
+        .map_err(|err| TxError::Other(err.to_string()))?,
+    );
+
+    return Ok(());
   }
 
-  fn tx_commit(&mut self) -> Result<(), TxError> {
-    fn commit(tx: &Mutex<Option<crate::sqlite::OwnedTx>>) -> Result<(), TxError> {
-      let Some(tx) = tx.lock().take() else {
-        return Err(TxError::Other("no pending tx".to_string()));
-      };
+  async fn tx_commit(&mut self) -> Result<(), TxError> {
+    let Some(tx) = self.tx.lock().await.take() else {
+      return Err(TxError::Other("no pending tx".to_string()));
+    };
 
-      // NOTE: this is the same as `tx.commit()` just w/o consuming.
-      let lock = tx.borrow_dependent();
-      lock
-        .execute_batch("COMMIT")
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    // NOTE: this is the same as `tx.commit()` just w/o consuming.
+    let lock = tx.borrow_dependent();
+    lock
+      .execute_batch("COMMIT")
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      return Ok(());
-    }
-
-    return commit(&self.tx);
+    return Ok(());
   }
 
-  fn tx_rollback(&mut self) -> Result<(), TxError> {
-    fn rollback(tx: &Mutex<Option<crate::sqlite::OwnedTx>>) -> Result<(), TxError> {
-      let Some(tx) = tx.lock().take() else {
-        return Err(TxError::Other("no pending tx".to_string()));
-      };
+  async fn tx_rollback(&mut self) -> Result<(), TxError> {
+    let Some(tx) = self.tx.lock().await.take() else {
+      return Err(TxError::Other("no pending tx".to_string()));
+    };
 
-      // NOTE: this is the same as `tx.rollback()` just w/o consuming.
-      let lock = tx.borrow_dependent();
-      lock
-        .execute_batch("ROLLBACK")
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    // NOTE: this is the same as `tx.rollback()` just w/o consuming.
+    let lock = tx.borrow_dependent();
+    lock
+      .execute_batch("ROLLBACK")
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      return Ok(());
-    }
-
-    return rollback(&self.tx);
+    return Ok(());
   }
 
-  fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
-    fn execute(
-      tx: &Mutex<Option<crate::sqlite::OwnedTx>>,
-      query: String,
-      params: Vec<Value>,
-    ) -> Result<u64, TxError> {
-      let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+  async fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
-      let Some(ref tx) = *tx.lock() else {
-        return Err(TxError::Other("No open transaction".to_string()));
-      };
+    let Some(ref tx) = *self.tx.lock().await else {
+      return Err(TxError::Other("No open transaction".to_string()));
+    };
 
-      let lock = tx.borrow_dependent();
-      let mut stmt = lock
-        .prepare(&query)
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    let lock = tx.borrow_dependent();
+    let mut stmt = lock
+      .prepare(&query)
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      params
-        .bind(&mut stmt)
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    params
+      .bind(&mut stmt)
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      return Ok(
-        stmt
-          .raw_execute()
-          .map_err(|err| TxError::Other(err.to_string()))? as u64,
-      );
-    }
-
-    return execute(&self.tx, query, params);
+    return Ok(
+      stmt
+        .raw_execute()
+        .map_err(|err| TxError::Other(err.to_string()))? as u64,
+    );
   }
 
-  fn tx_query(&mut self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
-    fn query_fn(
-      tx: &Mutex<Option<crate::sqlite::OwnedTx>>,
-      query: String,
-      params: Vec<Value>,
-    ) -> Result<Vec<Vec<Value>>, TxError> {
-      let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+  async fn tx_query(
+    &mut self,
+    query: String,
+    params: Vec<Value>,
+  ) -> Result<Vec<Vec<Value>>, TxError> {
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
 
-      let Some(ref tx) = *tx.lock() else {
-        return Err(TxError::Other("No open transaction".to_string()));
-      };
+    let Some(ref tx) = *self.tx.lock().await else {
+      return Err(TxError::Other("No open transaction".to_string()));
+    };
 
-      let lock = tx.borrow_dependent();
-      let mut stmt = lock
-        .prepare(&query)
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    let lock = tx.borrow_dependent();
+    let mut stmt = lock
+      .prepare(&query)
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      params
-        .bind(&mut stmt)
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    params
+      .bind(&mut stmt)
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
-        .map_err(|err| TxError::Other(err.to_string()))?;
+    let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-      let values: Vec<_> = rows
-        .into_iter()
-        .map(|trailbase_sqlite::Row(row, _col)| {
-          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-        })
-        .collect();
+    let values: Vec<_> = rows
+      .into_iter()
+      .map(|trailbase_sqlite::Row(row, _col)| {
+        return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+      })
+      .collect();
 
-      return Ok(values);
-    }
-
-    return query_fn(&self.tx, query, params);
+    return Ok(values);
   }
 }
 

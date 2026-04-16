@@ -3,41 +3,50 @@ import { status } from "http-status";
 import { ADDRESS } from "../constants";
 
 test("WASM runtime", async () => {
-  expect(
-    await (await fetch(`http://${ADDRESS}/method`, { method: "GET" })).text(),
-  ).toBe("get");
-  expect(
-    await (await fetch(`http://${ADDRESS}/method`, { method: "POST" })).text(),
-  ).toBe("post");
-  expect(
-    await (
-      await fetch(`http://${ADDRESS}/method`, { method: "DELETE" })
-    ).text(),
-  ).toBe("delete");
+  async function tests() {
+    expect(
+      await (await fetch(`http://${ADDRESS}/method`, { method: "GET" })).text(),
+    ).toBe("get");
+    expect(
+      await (
+        await fetch(`http://${ADDRESS}/method`, { method: "POST" })
+      ).text(),
+    ).toBe("post");
+    expect(
+      await (
+        await fetch(`http://${ADDRESS}/method`, { method: "DELETE" })
+      ).text(),
+    ).toBe("delete");
 
-  const expected = {
-    int: 5,
-    real: 4.2,
-    msg: "foo",
-    obj: {
-      nested: true,
-    },
-  };
+    const expected = {
+      int: 5,
+      real: 4.2,
+      msg: "foo",
+      obj: {
+        nested: true,
+      },
+    };
 
-  const jsonUrl = `http://${ADDRESS}/json`;
-  const json = await (await fetch(jsonUrl)).json();
-  expect(json).toMatchObject(expected);
+    const jsonUrl = `http://${ADDRESS}/json`;
+    const json = await (await fetch(jsonUrl)).json();
+    expect(json).toMatchObject(expected);
 
-  const response = await fetch(
-    `http://${ADDRESS}/fetch?url=${encodeURI(jsonUrl)}`,
+    const response = await fetch(
+      `http://${ADDRESS}/fetch?url=${encodeURI(jsonUrl)}`,
+    );
+    expect(await response.json()).toMatchObject(expected);
+
+    const errResp = await fetch(`http://${ADDRESS}/error`);
+    expect(errResp.status).equals(status.IM_A_TEAPOT);
+
+    // Test that the periodic callback was called.
+    expect((await fetch(`http://${ADDRESS}/await`)).status).equals(status.OK);
+  }
+
+  // Run above tests a few times concurrently.
+  await Promise.all(
+    Array.from({ length: 25 }, async (_v, _i) => await tests()),
   );
-  expect(await response.json()).toMatchObject(expected);
-
-  const errResp = await fetch(`http://${ADDRESS}/error`);
-  expect(errResp.status).equals(status.IM_A_TEAPOT);
-
-  // Test that the periodic callback was called.
-  expect((await fetch(`http://${ADDRESS}/await`)).status).equals(status.OK);
 });
 
 test("WASM runtime DB Query & Execute", async ({ expect }) => {
@@ -56,9 +65,17 @@ test("WASM runtime DB Query & Execute", async ({ expect }) => {
   }
 });
 
+test("WASM runtime DB Transaction", async ({ expect }) => {
+  await Promise.all(
+    Array.from({ length: 25 }, async (_v, _i) => {
+      const response = await fetch(`http://${ADDRESS}/transaction`);
+      expect(response.status).toBe(200);
+    }),
+  );
+});
+
 test("WASM runtime custom SQLite extension functions", async () => {
   // We call the stateful count endpoint 100 times concurrently, sort the result and check it's (0..99).
-
   async function getCount(): Promise<number> {
     const response = await fetch(`http://${ADDRESS}/sqlite_stateful`);
 
@@ -75,19 +92,23 @@ test("WASM runtime custom SQLite extension functions", async () => {
 });
 
 test("WASM runtime calling sqlean", async () => {
-  for (let i = 0; i < 10; i++) {
-    const response = await fetch(`http://${ADDRESS}/test_sqlean`);
-    const value = parseInt((await response.text()).trim());
+  await Promise.all(
+    Array.from({ length: 25 }, async (_v, _i) => {
+      const response = await fetch(`http://${ADDRESS}/test_sqlean`);
+      const value = parseInt((await response.text()).trim());
 
-    expect(value).toEqual(15);
-  }
+      expect(value).toEqual(15);
+    }),
+  );
 });
 
 test("WASM runtime calling sqlite-vec", async () => {
-  for (let i = 0; i < 10; i++) {
-    const response = await fetch(`http://${ADDRESS}/test_sqlite-vec`);
-    const b64Vec = (await response.text()).trim();
+  await Promise.all(
+    Array.from({ length: 25 }, async (_v, _i) => {
+      const response = await fetch(`http://${ADDRESS}/test_sqlite-vec`);
+      const b64Vec = (await response.text()).trim();
 
-    expect(b64Vec).toEqual("AAAAAAAAgD8AAABAAABAQA==");
-  }
+      expect(b64Vec).toEqual("AAAAAAAAgD8AAABAAABAQA==");
+    }),
+  );
 });

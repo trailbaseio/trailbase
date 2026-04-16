@@ -23,10 +23,10 @@ use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::WasiHttpView;
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
-use host::exports::trailbase::component::init_endpoint::Arguments;
+use crate::host::exports::trailbase::component::init_endpoint::Arguments;
 
-pub use host::exports::trailbase::component::init_endpoint::HttpMethodType;
-pub use host::{SharedState, State};
+pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType;
+pub use crate::host::{SharedState, State};
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
 static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
@@ -223,7 +223,7 @@ impl StoreBuilder<State> for Arc<SharedState> {
         },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
         shared: self.clone(),
-        tx: Arc::new(parking_lot::Mutex::new(None)),
+        tx: tokio::sync::Mutex::new(None),
       },
     ));
   }
