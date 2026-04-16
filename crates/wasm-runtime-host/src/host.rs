@@ -5,7 +5,7 @@ use tokio::time::Duration;
 use trailbase_sqlite::Params;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
-use wasmtime::component::{HasData, ResourceTable};
+use wasmtime::component::{HasData, Resource, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
@@ -47,6 +47,11 @@ wasmtime::component::bindgen!({
         "trailbase:database/sqlite.tx-rollback": async,
         "trailbase:database/sqlite.tx-execute": async,
         "trailbase:database/sqlite.tx-query": async,
+        "trailbase:database/sqlite.[constructor]transaction": async | trappable,
+        default: async,
+    },
+    with: {
+        "trailbase:database/sqlite.transaction": self::MyTransaction,
     },
     exports: {
         default: async | store,
@@ -84,7 +89,9 @@ impl Drop for State {
   fn drop(&mut self) {
     #[cfg(debug_assertions)]
     if self.tx.get_mut().is_some() {
-      log::warn!("pending transaction locking the DB");
+      log::warn!(
+        "pending transaction found during State destruction. Transactions should be committed, rolled back or dropped to unlock the DB."
+      );
     }
   }
 }
@@ -159,6 +166,13 @@ impl HasData for State {
 }
 
 impl self::trailbase::database::sqlite::Host for State {
+  // async fn execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
+  //   return Err(TxError::Other("not implemented".into()));
+  // }
+  // async fn query(&mut self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
+  //   return Err(TxError::Other("not implemented".into()));
+  // }
+
   async fn tx_begin(&mut self) -> Result<(), TxError> {
     let Some(conn) = self.shared.conn.clone() else {
       return Err(TxError::Other("missing conn".into()));
@@ -259,6 +273,55 @@ impl self::trailbase::database::sqlite::Host for State {
       .collect();
 
     return Ok(values);
+  }
+}
+
+type Transaction = self::trailbase::database::sqlite::Transaction;
+
+pub struct MyTransaction {
+  pub foo: i64,
+}
+
+impl self::trailbase::database::sqlite::HostTransaction for State {
+  async fn new(&mut self) -> Result<Resource<Transaction>, wasmtime::Error> {
+    return Ok(self.table().push(MyTransaction { foo: 5 })?);
+  }
+
+  async fn begin(&mut self, _r: Resource<Transaction>) -> Result<(), TxError> {
+    return Err(TxError::Other("not implemented".into()));
+  }
+
+  async fn commit(&mut self, _r: Resource<Transaction>) -> Result<(), TxError> {
+    return Err(TxError::Other("not implemented".into()));
+  }
+
+  async fn rollback(&mut self, _r: Resource<Transaction>) -> Result<(), TxError> {
+    return Err(TxError::Other("not implemented".into()));
+  }
+
+  async fn query(
+    &mut self,
+    _r: Resource<Transaction>,
+    _query: String,
+    _params: Vec<Value>,
+  ) -> Result<Vec<Vec<Value>>, TxError> {
+    return Err(TxError::Other("not implemented".into()));
+  }
+
+  async fn execute(
+    &mut self,
+    _r: Resource<Transaction>,
+    _query: String,
+    _params: Vec<Value>,
+  ) -> Result<u64, TxError> {
+    return Err(TxError::Other("not implemented".into()));
+  }
+
+  async fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
+    let x: &MyTransaction = self.resource_table.get(&r)?;
+    println!("value: {}", x.foo);
+    self.resource_table.delete(r)?;
+    return Ok(());
   }
 }
 
