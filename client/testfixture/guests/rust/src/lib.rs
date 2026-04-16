@@ -130,6 +130,9 @@ impl Guest for Endpoints {
 
         tx.commit().map_err(internal)?;
 
+        // Keep one dangling to make sure RAII-cleanup works.
+        let _tx_dangling = Transaction::begin();
+
         return Ok(());
       }),
       routing::get("/attach_db", async |_req| {

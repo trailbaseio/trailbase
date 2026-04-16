@@ -13,7 +13,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
-// use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -23,6 +22,7 @@ use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::WasiHttpView;
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
+use crate::host::TransactionImpl;
 use crate::host::exports::trailbase::component::init_endpoint::Arguments;
 
 pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType;
@@ -222,8 +222,9 @@ impl StoreBuilder<State> for Arc<SharedState> {
           shared: self.clone(),
         },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
+        #[allow(deprecated)]
+        tx: tokio::sync::Mutex::new(TransactionImpl::default()),
         shared: self.clone(),
-        tx: tokio::sync::Mutex::new(None),
       },
     ));
   }

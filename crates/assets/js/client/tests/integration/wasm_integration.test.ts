@@ -69,7 +69,7 @@ test("WASM runtime DB Transaction", async ({ expect }) => {
   await Promise.all(
     Array.from({ length: 25 }, async (_v, _i) => {
       const response = await fetch(`http://${ADDRESS}/transaction`);
-      expect(response.status).toBe(200);
+      expect(response.status, `Got: ${await response.text()}`).toBe(200);
     }),
   );
 });

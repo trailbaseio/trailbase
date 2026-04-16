@@ -1,4 +1,4 @@
-declare module "trailbase:component/sqlite-function-endpoint@0.1.0" {
+declare module "trailbase:component/sqlite-function-endpoint@0.1.1" {
   export function dispatchScalarFunction(args: Arguments): Value;
   /**
    * WARNING: Evolving a variant currently breaks the ABI:

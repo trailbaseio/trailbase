@@ -17,8 +17,8 @@
 /// <reference path="./interfaces/wasi-random-insecure-seed.d.ts" />
 /// <reference path="./interfaces/wasi-random-insecure.d.ts" />
 /// <reference path="./interfaces/wasi-random-random.d.ts" />
-declare module "trailbase:component/interfaces@0.1.0" {
-  export type * as TrailbaseDatabaseSqlite010 from "trailbase:database/sqlite@0.1.0"; // import trailbase:database/sqlite@0.1.0
+declare module "trailbase:component/interfaces@0.1.1" {
+  export type * as TrailbaseDatabaseSqlite011 from "trailbase:database/sqlite@0.1.1"; // import trailbase:database/sqlite@0.1.1
   export type * as WasiClocksMonotonicClock023 from "wasi:clocks/monotonic-clock@0.2.3"; // import wasi:clocks/monotonic-clock@0.2.3
   export type * as WasiClocksWallClock023 from "wasi:clocks/wall-clock@0.2.3"; // import wasi:clocks/wall-clock@0.2.3
   export type * as WasiFilesystemPreopens023 from "wasi:filesystem/preopens@0.2.3"; // import wasi:filesystem/preopens@0.2.3
@@ -35,6 +35,6 @@ declare module "trailbase:component/interfaces@0.1.0" {
   export type * as WasiRandomInsecure023 from "wasi:random/insecure@0.2.3"; // import wasi:random/insecure@0.2.3
   export type * as WasiRandomRandom023 from "wasi:random/random@0.2.3"; // import wasi:random/random@0.2.3
   export * as incomingHandler from "wasi:http/incoming-handler@0.2.3"; // export wasi:http/incoming-handler@0.2.3
-  export * as initEndpoint from "trailbase:component/init-endpoint@0.1.0"; // export trailbase:component/init-endpoint@0.1.0
-  export * as sqliteFunctionEndpoint from "trailbase:component/sqlite-function-endpoint@0.1.0"; // export trailbase:component/sqlite-function-endpoint@0.1.0
+  export * as initEndpoint from "trailbase:component/init-endpoint@0.1.1"; // export trailbase:component/init-endpoint@0.1.1
+  export * as sqliteFunctionEndpoint from "trailbase:component/sqlite-function-endpoint@0.1.1"; // export trailbase:component/sqlite-function-endpoint@0.1.1
 }
