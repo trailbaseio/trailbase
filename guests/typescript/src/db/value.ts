@@ -1,4 +1,4 @@
-import type { Value as WitValue } from "trailbase:database/sqlite@0.2.0";
+import type { Value as WitValue } from "trailbase:database/sqlite@0.1.1";
 import { SqlValue } from "@common/SqlValue";
 import { Blob } from "@common/Blob";
 

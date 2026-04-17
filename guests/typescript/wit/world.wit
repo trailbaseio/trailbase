@@ -1,4 +1,4 @@
-package trailbase:component@0.2.0;
+package trailbase:component@0.1.1;
 
 // Note, everything is from the guest's perspective, i.e.:
 //  * imports are provided by the host
@@ -29,7 +29,7 @@ world interfaces {
 
   // TrailBase's interfaces:
   @since(version = 0.1.0)
-  include trailbase:database/interfaces@0.2.0;
+  include trailbase:database/interfaces@0.1.1;
 
   @since(version = 0.1.0)
   export init-endpoint;

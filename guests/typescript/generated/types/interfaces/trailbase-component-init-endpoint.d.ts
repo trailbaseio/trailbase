@@ -1,4 +1,4 @@
-declare module "trailbase:component/init-endpoint@0.2.0" {
+declare module "trailbase:component/init-endpoint@0.1.1" {
   export function initHttpHandlers(args: Arguments): HttpHandlers;
   export function initJobHandlers(args: Arguments): JobHandlers;
   export function initSqliteFunctions(args: Arguments): SqliteFunctions;

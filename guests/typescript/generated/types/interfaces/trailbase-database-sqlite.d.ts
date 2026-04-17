@@ -1,4 +1,12 @@
-declare module "trailbase:database/sqlite@0.2.0" {
+declare module "trailbase:database/sqlite@0.1.1" {
+  export function txBegin(): void;
+  export function txCommit(): void;
+  export function txRollback(): void;
+  export function txExecute(query: string, params: Array<Value>): bigint;
+  export function txQuery(
+    query: string,
+    params: Array<Value>,
+  ): Array<Array<Value>>;
   /**
    * WARNING: Evolving a variant currently breaks the ABI:
    *   https://github.com/WebAssembly/component-model/issues/454

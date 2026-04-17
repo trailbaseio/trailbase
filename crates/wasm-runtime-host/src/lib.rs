@@ -221,6 +221,8 @@ impl StoreBuilder<State> for Arc<SharedState> {
           shared: self.clone(),
         },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
+        #[allow(deprecated)]
+        tx: tokio::sync::Mutex::new(None),
         shared: self.clone(),
       },
     ));

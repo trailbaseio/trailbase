@@ -1,4 +1,4 @@
-package trailbase:database@0.2.0;
+package trailbase:database@0.1.1;
 
 interface sqlite {
   // WARNING: Evolving a variant currently breaks the ABI:
@@ -23,20 +23,7 @@ interface sqlite {
   // @since(version = 0.1.0)
   // query: func(query: string, params: list<value>) -> future<result<list<list<value>>, tx-error>>;
 
-  // However, transactions have to be sync.
-  // @since(version = 0.1.0)
-  // tx-begin: func() -> result<_, tx-error>;
-  // @since(version = 0.1.0)
-  // tx-commit: func() -> result<_, tx-error>;
-  // @since(version = 0.1.0)
-  // tx-rollback: func() -> result<_, tx-error>;
-
-  // @since(version = 0.1.0)
-  // tx-execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
-  // @since(version = 0.1.0)
-  // tx-query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
-
-  @since(version = 0.2.0)
+  @since(version = 0.1.1)
   resource transaction {
     constructor();
     begin: func() -> result<_, tx-error>;
@@ -45,6 +32,23 @@ interface sqlite {
     execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
     query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
   }
+
+  @since(version = 0.1.0)
+  @deprecated(version = 0.1.1)
+  tx-begin: func() -> result<_, tx-error>;
+  @since(version = 0.1.0)
+  @deprecated(version = 0.1.1)
+  tx-commit: func() -> result<_, tx-error>;
+  @since(version = 0.1.0)
+  @deprecated(version = 0.1.1)
+  tx-rollback: func() -> result<_, tx-error>;
+
+  @since(version = 0.1.0)
+  @deprecated(version = 0.1.1)
+  tx-execute: func(query: string, params: list<value>) -> result<u64, tx-error>;
+  @since(version = 0.1.0)
+  @deprecated(version = 0.1.1)
+  tx-query: func(query: string, params: list<value>) -> result<list<list<value>>, tx-error>;
 }
 
 world interfaces {

@@ -4,12 +4,12 @@ import type {
   HttpHandlers,
   JobHandlers,
   SqliteFunctions,
-} from "trailbase:component/init-endpoint@0.2.0";
+} from "trailbase:component/init-endpoint@0.1.1";
 import type {
   Arguments as SqliteArguments,
   Error as SqliteError,
   dispatchScalarFunction,
-} from "trailbase:component/sqlite-function-endpoint@0.2.0";
+} from "trailbase:component/sqlite-function-endpoint@0.1.1";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
