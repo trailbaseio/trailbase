@@ -47,7 +47,7 @@ pub enum AdminError {
   #[error("WhereClause error: {0}")]
   WhereClause(#[from] crate::listing::WhereClauseError),
   #[error("Transaction error: {0}")]
-  Transaction(#[from] crate::transaction::TransactionError),
+  Transaction(#[from] crate::transaction_recorder::TransactionError),
   #[error("JSON schema error: {0}")]
   JSONSchema(#[from] crate::schema_metadata::JsonSchemaError),
   #[error("Email error: {0}")]

@@ -6,7 +6,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::transaction::TransactionRecorder;
+use crate::transaction_recorder::TransactionRecorder;
 
 #[derive(Clone, Debug, Deserialize, TS)]
 #[ts(export)]

@@ -1,6 +1,7 @@
 mod batch;
 pub(super) mod connection;
 mod executor;
+pub(super) mod transaction;
 mod util;
 
 pub use batch::execute_batch;

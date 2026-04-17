@@ -214,26 +214,29 @@ pub async fn import_users(
     let _ = validate_and_normalize_email_address(&user.email)?;
   }
 
-  const IMPORT_USER_QUERY: &str =
-    formatcp!("INSERT INTO '{USER_TABLE}' (email, password_hash, verified) VALUES (?1, ?2, ?3)");
+  user_conn
+    .transaction(|tx| -> Result<(), trailbase_sqlite::Error> {
+      const IMPORT_USER_QUERY: &str = formatcp!(
+        "INSERT INTO '{USER_TABLE}' (email, password_hash, verified) VALUES (?1, ?2, ?3)"
+      );
 
-  let mut conn = user_conn.write_lock();
-  let tx = conn
-    .transaction()
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+      for user in users {
+        let email = user.email;
+        tx.execute(
+          IMPORT_USER_QUERY,
+          params!(email.clone(), user.password_hash, user.verified),
+        )
+        .map_err(|err| {
+          trailbase_sqlite::Error::Other(format!("Failed to insert '{email}':{err}").into())
+        })?;
+      }
 
-  for user in users {
-    let email = user.email;
-    tx.execute(
-      IMPORT_USER_QUERY,
-      params!(email.clone(), user.password_hash, user.verified),
-    )
-    .map_err(|err| {
-      AuthError::FailedDependency(format!("Failed to insert '{email}':{err}").into())
-    })?;
-  }
+      tx.commit()
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-  tx.commit()
+      return Ok(());
+    })
+    .await
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
   return Ok(());

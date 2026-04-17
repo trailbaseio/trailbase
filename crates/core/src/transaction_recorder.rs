@@ -93,58 +93,28 @@ impl TransactionLog {
     return Ok(report);
   }
 
-  // pub(crate) fn apply_as_migration_rusqlite(
-  //   &self,
-  //   conn: &mut rusqlite::Connection,
-  //   migration_path: impl AsRef<Path>,
-  //   filename_suffix: &str,
-  // ) -> Result<trailbase_refinery::Report, TransactionError> {
-  //   let filename = migrations::new_unique_migration_filename(filename_suffix);
-  //   let stem = Path::new(&filename)
-  //     .file_stem()
-  //     .ok_or_else(|| TransactionError::File(format!("Failed to get stem from: {filename}")))?
-  //     .to_string_lossy()
-  //     .to_string();
-  //   let path = migration_path.as_ref().join(filename);
-  //
-  //   let sql = self.build_sql();
-  //   let migrations = vec![trailbase_refinery::Migration::unapplied(&stem, &sql)?];
-  //   let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
-  //
-  //   let report = runner.run(conn).map_err(|err| {
-  //     error!("Migration aborted with: {err} for {sql}");
-  //     trailbase_sqlite::Error::Other(err.into())
-  //   })?;
-  //
-  //   write_migration_file(path, &sql)?;
-  //
-  //   return Ok(report);
-  // }
-
-  #[allow(unused)]
+  #[cfg(test)]
   pub(crate) async fn commit(
     self,
     conn: &trailbase_sqlite::Connection,
   ) -> Result<(), trailbase_sqlite::Error> {
     conn
-      .call_writer(
-        |conn: &mut rusqlite::Connection| -> Result<_, rusqlite::Error> {
-          let tx = conn.transaction()?;
-          for (query_type, stmt) in self.log {
-            match query_type {
-              QueryType::Query => {
-                tx.query_row(&stmt, (), |_row| Ok(()))?;
-              }
-              QueryType::Execute => {
-                tx.execute(&stmt, ())?;
-              }
+      .transaction(|tx| -> Result<(), trailbase_sqlite::Error> {
+        for (query_type, stmt) in self.log {
+          match query_type {
+            QueryType::Query => {
+              // TODO: Maybe we should have a qurey option returnin nothing :shrug:.
+              tx.query_row_get::<trailbase_sqlite::Value>(stmt, (), 0)?;
+            }
+            QueryType::Execute => {
+              tx.execute(stmt, ())?;
             }
           }
-          tx.commit()?;
+        }
+        tx.commit()?;
 
-          return Ok(());
-        },
-      )
+        return Ok(());
+      })
       .await?;
 
     return Ok(());
