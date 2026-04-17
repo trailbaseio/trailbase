@@ -59,7 +59,7 @@ wasmtime::component::bindgen!({
     },
 });
 
-pub use self::trailbase::database::sqlite::{TxError, Value};
+pub use self::trailbase::database::sqlite::{Transaction, TxError, Value};
 
 /// NOTE: This is needed due to State needing to be Send.
 unsafe impl Send for crate::sqlite::OwnedTx {}
@@ -81,7 +81,7 @@ pub struct State {
 
   // A mutex of a DB lock.
   #[deprecated = "Used by deprecated `tx-*` free functions. Will be removed in favor of the `TransactionImpl` resource."]
-  pub(crate) tx: Mutex<Option<crate::sqlite::OwnedTx>>,
+  pub(crate) tx: Mutex<TransactionImpl>,
 
   // State shared across all runtime instances.
   pub(crate) shared: Arc<SharedState>,
@@ -171,68 +171,37 @@ impl self::trailbase::database::sqlite::Host for State {
 
     #[allow(deprecated)]
     let mut lock = self.tx.lock().await;
-    assert!(lock.is_none());
+    assert!(lock.tx.is_none());
 
     // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
-    *lock = Some(
-      acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000))
-        .await
-        .map_err(|err| TxError::Other(err.to_string()))?,
-    );
+    *lock = TransactionImpl {
+      tx: Some(
+        acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000))
+          .await
+          .map_err(|err| TxError::Other(err.to_string()))?,
+      ),
+    };
 
     return Ok(());
   }
 
   async fn tx_commit(&mut self) -> Result<(), TxError> {
     #[allow(deprecated)]
-    let Some(tx) = self.tx.lock().await.take() else {
-      return Err(TxError::Other("no pending tx".to_string()));
-    };
-
-    // NOTE: this is the same as `tx.commit()` just w/o consuming.
-    tx.borrow_dependent()
-      .execute_batch("COMMIT")
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    return Ok(());
+    let mut lock = self.tx.lock().await;
+    let tx: &mut TransactionImpl = &mut lock;
+    return tx.commit();
   }
 
   async fn tx_rollback(&mut self) -> Result<(), TxError> {
     #[allow(deprecated)]
-    let Some(tx) = self.tx.lock().await.take() else {
-      return Err(TxError::Other("no pending tx".to_string()));
-    };
-
-    // NOTE: this is the same as `tx.rollback()` just w/o consuming.
-    tx.borrow_dependent()
-      .execute_batch("ROLLBACK")
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    return Ok(());
+    let mut lock = self.tx.lock().await;
+    let tx: &mut TransactionImpl = &mut lock;
+    return tx.rollback();
   }
 
   async fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
     #[allow(deprecated)]
-    let Some(ref tx) = *self.tx.lock().await else {
-      return Err(TxError::Other("No open transaction".to_string()));
-    };
-
-    let mut stmt = tx
-      .borrow_dependent()
-      .prepare(&query)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    params
-      .bind(&mut stmt)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    return Ok(
-      stmt
-        .raw_execute()
-        .map_err(|err| TxError::Other(err.to_string()))? as u64,
-    );
+    return self.tx.lock().await.execute(query, params);
   }
 
   async fn tx_query(
@@ -240,44 +209,46 @@ impl self::trailbase::database::sqlite::Host for State {
     query: String,
     params: Vec<Value>,
   ) -> Result<Vec<Vec<Value>>, TxError> {
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
     #[allow(deprecated)]
-    let Some(ref tx) = *self.tx.lock().await else {
-      return Err(TxError::Other("No open transaction".to_string()));
-    };
-
-    let mut stmt = tx
-      .borrow_dependent()
-      .prepare(&query)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    params
-      .bind(&mut stmt)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
-    let values: Vec<_> = rows
-      .into_iter()
-      .map(|trailbase_sqlite::Row(row, _col)| {
-        return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-      })
-      .collect();
-
-    return Ok(values);
+    return self.tx.lock().await.query(query, params);
   }
 }
 
-type Transaction = self::trailbase::database::sqlite::Transaction;
-
+#[derive(Default)]
 pub struct TransactionImpl {
   tx: Option<crate::sqlite::OwnedTx>,
 }
 
 impl TransactionImpl {
-  fn rollback_impl(&mut self) -> Result<(), TxError> {
+  async fn begin(&mut self, conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
+    if self.tx.is_some() {
+      return Err(TxError::Other("Transaction already begun".into()));
+    }
+
+    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
+    let _ = self.tx.insert(
+      acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
+        .await
+        .map_err(|err| TxError::Other(err.to_string()))?,
+    );
+
+    return Ok(());
+  }
+
+  fn commit(&mut self) -> Result<(), TxError> {
+    let Some(tx) = self.tx.take() else {
+      return Err(TxError::Other("no pending tx".to_string()));
+    };
+
+    // NOTE: this is the same as `tx.commit()` just w/o consuming.
+    if let Err(err) = tx.borrow_dependent().execute_batch("COMMIT") {
+      return Err(TxError::Other(err.to_string()));
+    }
+
+    return Ok(());
+  }
+
+  fn rollback(&mut self) -> Result<(), TxError> {
     let Some(tx) = self.tx.take() else {
       return Ok(());
     };
@@ -288,6 +259,55 @@ impl TransactionImpl {
       .map_err(|err| TxError::Other(err.to_string()))?;
 
     return Ok(());
+  }
+
+  fn query(&self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
+    let Some(ref tx) = self.tx else {
+      return Err(TxError::Other("No open transaction".to_string()));
+    };
+
+    let mut stmt = tx
+      .borrow_dependent()
+      .prepare(&query)
+      .map_err(|err| TxError::Other(err.to_string()))?;
+
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+    params
+      .bind(&mut stmt)
+      .map_err(|err| TxError::Other(err.to_string()))?;
+
+    let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
+      .map_err(|err| TxError::Other(err.to_string()))?;
+
+    return Ok(
+      rows
+        .into_iter()
+        .map(|trailbase_sqlite::Row(row, _col)| {
+          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+        })
+        .collect(),
+    );
+  }
+
+  fn execute(&self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
+    let Some(ref tx) = self.tx else {
+      return Err(TxError::Other("No open transaction".to_string()));
+    };
+
+    let mut stmt = tx
+      .borrow_dependent()
+      .prepare(&query)
+      .map_err(|err| TxError::Other(err.to_string()))?;
+
+    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+    params
+      .bind(&mut stmt)
+      .map_err(|err| TxError::Other(err.to_string()))?;
+
+    return stmt
+      .raw_execute()
+      .map_err(|err| TxError::Other(err.to_string()))
+      .map(|n| n as u64);
   }
 }
 
@@ -305,40 +325,17 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
     };
 
     let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    if resource.tx.is_some() {
-      return Ok(Err(TxError::Other("Transaction already begun".into())));
-    }
-
-    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
-    let _ = resource.tx.insert(
-      match acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2)).await {
-        Ok(tx) => tx,
-        Err(err) => {
-          return Ok(Err(TxError::Other(err.to_string())));
-        }
-      },
-    );
-
-    return Ok(Ok(()));
+    return Ok(resource.begin(conn).await);
   }
 
   fn commit(&mut self, r: Resource<Transaction>) -> Result<Result<(), TxError>, wasmtime::Error> {
     let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    let Some(tx) = resource.tx.take() else {
-      return Ok(Err(TxError::Other("no pending tx".to_string())));
-    };
-
-    // NOTE: this is the same as `tx.commit()` just w/o consuming.
-    if let Err(err) = tx.borrow_dependent().execute_batch("COMMIT") {
-      return Ok(Err(TxError::Other(err.to_string())));
-    }
-
-    return Ok(Ok(()));
+    return Ok(resource.commit());
   }
 
   fn rollback(&mut self, r: Resource<Transaction>) -> Result<Result<(), TxError>, wasmtime::Error> {
     let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    return Ok(resource.rollback_impl());
+    return Ok(resource.rollback());
   }
 
   fn query(
@@ -347,38 +344,8 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
     query: String,
     params: Vec<Value>,
   ) -> Result<Result<Vec<Vec<Value>>, TxError>, wasmtime::Error> {
-    let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    let Some(ref tx) = resource.tx else {
-      return Ok(Err(TxError::Other("No open transaction".to_string())));
-    };
-
-    let mut stmt = match tx.borrow_dependent().prepare(&query) {
-      Ok(stmt) => stmt,
-      Err(err) => {
-        return Ok(Err(TxError::Other(err.to_string())));
-      }
-    };
-
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-    if let Err(err) = params.bind(&mut stmt) {
-      return Ok(Err(TxError::Other(err.to_string())));
-    }
-
-    let rows = match trailbase_sqlite::sqlite::from_rows(stmt.raw_query()) {
-      Ok(rows) => rows,
-      Err(err) => {
-        return Ok(Err(TxError::Other(err.to_string())));
-      }
-    };
-
-    return Ok(Ok(
-      rows
-        .into_iter()
-        .map(|trailbase_sqlite::Row(row, _col)| {
-          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-        })
-        .collect(),
-    ));
+    let resource: &TransactionImpl = self.resource_table.get(&r)?;
+    return Ok(resource.query(query, params));
   }
 
   fn execute(
@@ -388,33 +355,14 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
     params: Vec<Value>,
   ) -> Result<Result<u64, TxError>, wasmtime::Error> {
     let resource: &TransactionImpl = self.resource_table.get(&r)?;
-    let Some(ref tx) = resource.tx else {
-      return Ok(Err(TxError::Other("No open transaction".to_string())));
-    };
-
-    let mut stmt = match tx.borrow_dependent().prepare(&query) {
-      Ok(stmt) => stmt,
-      Err(err) => {
-        return Ok(Err(TxError::Other(err.to_string())));
-      }
-    };
-
-    let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-    if let Err(err) = params.bind(&mut stmt) {
-      return Ok(Err(TxError::Other(err.to_string())));
-    }
-
-    return match stmt.raw_execute() {
-      Ok(n) => Ok(Ok(n as u64)),
-      Err(err) => Ok(Err(TxError::Other(err.to_string()))),
-    };
+    return Ok(resource.execute(query, params));
   }
 
   fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
     {
       // Clean-up.
       let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-      let _ = resource.rollback_impl();
+      let _ = resource.rollback();
     }
 
     self.resource_table.delete(r)?;

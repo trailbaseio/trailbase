@@ -22,6 +22,7 @@ use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::WasiHttpView;
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
+use crate::host::TransactionImpl;
 use crate::host::exports::trailbase::component::init_endpoint::Arguments;
 
 pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType;
@@ -222,7 +223,7 @@ impl StoreBuilder<State> for Arc<SharedState> {
         },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
         #[allow(deprecated)]
-        tx: tokio::sync::Mutex::new(None),
+        tx: tokio::sync::Mutex::new(TransactionImpl::default()),
         shared: self.clone(),
       },
     ));
