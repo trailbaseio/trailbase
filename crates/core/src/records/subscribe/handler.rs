@@ -127,7 +127,7 @@ async fn validate_event(
   };
 
   api
-    .check_record_level_read_access_for_subscriptions(api.conn(), record, sub.user.as_ref())
+    .check_record_level_read_access_for_subscriptions(record, sub.user.as_ref())
     .await?;
 
   return Ok(Some(ev.payload));

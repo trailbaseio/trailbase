@@ -43,6 +43,7 @@ mod wasm {
 
   impl KvStore {
     pub(crate) fn new() -> Self {
+      #[allow(clippy::default_constructed_unit_structs)]
       return Self::default();
     }
 

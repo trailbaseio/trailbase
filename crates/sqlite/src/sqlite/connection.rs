@@ -103,15 +103,15 @@ impl Connection {
     return self.exec.call_writer(function).await;
   }
 
-  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
-  where
-    F: FnOnce(&rusqlite::Connection) -> Result<R, E> + Send + 'static,
-    R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
-  {
-    return self.exec.call_reader(function).await;
-  }
+  // pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
+  // where
+  //   F: FnOnce(&rusqlite::Connection) -> Result<R, E> + Send + 'static,
+  //   R: Send + 'static,
+  //   E: Send + 'static,
+  //   Error: From<E>,
+  // {
+  //   return self.exec.call_reader(function).await;
+  // }
 
   /// Query SQL statement.
   pub async fn read_query_rows(
