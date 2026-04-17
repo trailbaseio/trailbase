@@ -44,7 +44,6 @@ declare module "trailbase:database/sqlite@0.1.1" {
 
   export class Transaction implements Disposable {
     constructor();
-    begin(): void;
     commit(): void;
     rollback(): void;
     execute(query: string, params: Array<Value>): bigint;

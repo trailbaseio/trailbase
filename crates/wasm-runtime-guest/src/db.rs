@@ -33,10 +33,8 @@ pub struct Transaction {
 
 impl Transaction {
   pub fn begin() -> Result<Self, TxError> {
-    let tx = WasiTransaction::new();
-    tx.begin()?;
     return Ok(Self {
-      tx,
+      tx: WasiTransaction::new(),
       committed: false,
     });
   }

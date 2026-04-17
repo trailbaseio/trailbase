@@ -26,7 +26,6 @@ interface sqlite {
   @since(version = 0.1.1)
   resource transaction {
     constructor();
-    begin: func() -> result<_, tx-error>;
     commit: func() -> result<_, tx-error>;
     rollback: func() -> result<_, tx-error>;
     execute: func(query: string, params: list<value>) -> result<u64, tx-error>;

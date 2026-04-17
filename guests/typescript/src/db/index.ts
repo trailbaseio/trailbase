@@ -21,7 +21,6 @@ export class Transaction {
 
   constructor() {
     this.tx = new WasiTransaction();
-    this.tx.begin();
   }
 
   query(query: string, params: Value[]): Value[][] {

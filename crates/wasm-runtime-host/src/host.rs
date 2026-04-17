@@ -42,10 +42,9 @@ wasmtime::component::bindgen!({
     // Interactions with `ResourceTable` can possibly trap so enable the ability
     // to return traps from generated functions.
     imports: {
-        "trailbase:database/sqlite.[constructor]transaction": trappable,
-        "trailbase:database/sqlite.[drop]transaction": async | trappable,
-        "trailbase:database/sqlite.[method]transaction.begin": async | trappable,
-        "trailbase:database/sqlite.[method]transaction.commit":async |  trappable,
+        "trailbase:database/sqlite.[constructor]transaction": async | trappable,
+        "trailbase:database/sqlite.[drop]transaction": trappable,
+        "trailbase:database/sqlite.[method]transaction.commit":async | trappable,
         "trailbase:database/sqlite.[method]transaction.rollback": async | trappable,
         "trailbase:database/sqlite.[method]transaction.query": async | trappable,
         "trailbase:database/sqlite.[method]transaction.execute": async | trappable,
@@ -173,9 +172,7 @@ impl self::trailbase::database::sqlite::Host for State {
     #[allow(deprecated)]
     let mut lock = self.tx.lock().await;
 
-    let mut tx = TransactionImpl::default();
-    tx.begin(conn).await?;
-    *lock = tx;
+    *lock = TransactionImpl::new(conn).await?;
 
     return Ok(());
   }
@@ -212,29 +209,23 @@ impl self::trailbase::database::sqlite::Host for State {
 #[derive(Default)]
 pub struct TransactionImpl {
   // NOTE: This is only an `Arc<Mutex<OwnedTx>>` to have a watcher task force-unlock DB if
-  // necessary. W/o the task, this could just be an `OwnedTx`.
+  // necessary. W/o the task, this could just be an `OwnedTx`. The Mutex is an async Mutex to
+  // prevent blocking the watcher task, e.g. if a transaction is blocked on a long-running
+  // `tx.query`.
   tx: Arc<Mutex<Option<crate::sqlite::OwnedTx>>>,
 }
 
 impl TransactionImpl {
-  async fn begin(&mut self, conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
-    // Acquire lock before locking DB for others. There should not be any contention. This lock
-    // isn't shared.
-    let mut lock = self.tx.lock().await;
-    if lock.is_some() {
-      return Err(TxError::Other("Transaction already begun".into()));
-    }
+  async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TxError> {
+    let db_lock = acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
+      .await
+      .map_err(|err| TxError::Other(err.to_string()))?;
 
-    let old_db_lock = lock.replace(
-      acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
-        .await
-        .map_err(|err| TxError::Other(err.to_string()))?,
-    );
-    debug_assert!(old_db_lock.is_none());
+    let tx = Arc::new(Mutex::new(Some(db_lock)));
 
     {
       // Watcher task to unlock stuck transactions.
-      let tx = Arc::downgrade(&self.tx);
+      let tx = Arc::downgrade(&tx);
       tokio::spawn(async move {
         const TIMEOUT: Duration = Duration::from_secs(60);
         tokio::time::sleep(TIMEOUT).await;
@@ -248,7 +239,7 @@ impl TransactionImpl {
       });
     }
 
-    return Ok(());
+    return Ok(Self { tx });
   }
 
   async fn commit(&mut self) -> Result<(), TxError> {
@@ -265,13 +256,10 @@ impl TransactionImpl {
   }
 
   async fn rollback(&mut self) -> Result<(), TxError> {
-    let Some(mut tx) = self.tx.lock().await.take() else {
+    let Some(tx) = self.tx.lock().await.take() else {
       return Ok(());
     };
-    return Self::rollback_impl(&mut tx);
-  }
 
-  fn rollback_impl(tx: &mut crate::sqlite::OwnedTx) -> Result<(), TxError> {
     // NOTE: this is the same as `tx.rollback()` just w/o consuming.
     tx.borrow_dependent()
       .execute_batch("ROLLBACK")
@@ -333,20 +321,12 @@ impl TransactionImpl {
 }
 
 impl self::trailbase::database::sqlite::HostTransaction for State {
-  fn new(&mut self) -> Result<Resource<Transaction>, wasmtime::Error> {
-    return Ok(self.table().push(TransactionImpl::default())?);
-  }
-
-  async fn begin(
-    &mut self,
-    r: Resource<Transaction>,
-  ) -> Result<Result<(), TxError>, wasmtime::Error> {
+  async fn new(&mut self) -> Result<Resource<Transaction>, wasmtime::Error> {
     let Some(conn) = self.shared.conn.clone() else {
-      return Ok(Err(TxError::Other("missing conn".into())));
+      return Err(wasmtime::Error::msg("missing conn"));
     };
 
-    let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    return Ok(resource.begin(conn).await);
+    return Ok(self.table().push(TransactionImpl::new(conn).await?)?);
   }
 
   async fn commit(
@@ -385,7 +365,7 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
     return Ok(resource.execute(query, params).await);
   }
 
-  async fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
+  fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
     // NOTE: Dropping the OwnedTx does all the cleanup of both issuing rollback and
     // releasing the DB lock.
     self.resource_table.delete(r)?;
