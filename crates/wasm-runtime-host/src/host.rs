@@ -201,7 +201,7 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
 
     // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
     let _ = resource.tx.insert(
-      match acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000)).await {
+      match acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2)).await {
         Ok(tx) => tx,
         Err(err) => {
           return Ok(Err(TxError::Other(err.to_string())));
