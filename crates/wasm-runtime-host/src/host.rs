@@ -43,12 +43,12 @@ wasmtime::component::bindgen!({
     // to return traps from generated functions.
     imports: {
         "trailbase:database/sqlite.[constructor]transaction": trappable,
-        "trailbase:database/sqlite.[drop]transaction": trappable,
+        "trailbase:database/sqlite.[drop]transaction": async | trappable,
         "trailbase:database/sqlite.[method]transaction.begin": async | trappable,
-        "trailbase:database/sqlite.[method]transaction.commit": trappable,
-        "trailbase:database/sqlite.[method]transaction.rollback": trappable,
-        "trailbase:database/sqlite.[method]transaction.query": trappable,
-        "trailbase:database/sqlite.[method]transaction.execute": trappable,
+        "trailbase:database/sqlite.[method]transaction.commit":async |  trappable,
+        "trailbase:database/sqlite.[method]transaction.rollback": async | trappable,
+        "trailbase:database/sqlite.[method]transaction.query": async | trappable,
+        "trailbase:database/sqlite.[method]transaction.execute": async | trappable,
         default: async,
     },
     with: {
@@ -169,18 +169,13 @@ impl self::trailbase::database::sqlite::Host for State {
       return Err(TxError::Other("missing conn".into()));
     };
 
+    // Acquire shared lock first, before locking DB.
     #[allow(deprecated)]
     let mut lock = self.tx.lock().await;
-    assert!(lock.tx.is_none());
 
-    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
-    *lock = TransactionImpl {
-      tx: Some(
-        acquire_transaction_lock_with_timeout(conn, Duration::from_millis(1000))
-          .await
-          .map_err(|err| TxError::Other(err.to_string()))?,
-      ),
-    };
+    let mut tx = TransactionImpl::default();
+    tx.begin(conn).await?;
+    *lock = tx;
 
     return Ok(());
   }
@@ -189,19 +184,19 @@ impl self::trailbase::database::sqlite::Host for State {
     #[allow(deprecated)]
     let mut lock = self.tx.lock().await;
     let tx: &mut TransactionImpl = &mut lock;
-    return tx.commit();
+    return tx.commit().await;
   }
 
   async fn tx_rollback(&mut self) -> Result<(), TxError> {
     #[allow(deprecated)]
     let mut lock = self.tx.lock().await;
     let tx: &mut TransactionImpl = &mut lock;
-    return tx.rollback();
+    return tx.rollback().await;
   }
 
   async fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
     #[allow(deprecated)]
-    return self.tx.lock().await.execute(query, params);
+    return self.tx.lock().await.execute(query, params).await;
   }
 
   async fn tx_query(
@@ -210,33 +205,54 @@ impl self::trailbase::database::sqlite::Host for State {
     params: Vec<Value>,
   ) -> Result<Vec<Vec<Value>>, TxError> {
     #[allow(deprecated)]
-    return self.tx.lock().await.query(query, params);
+    return self.tx.lock().await.query(query, params).await;
   }
 }
 
 #[derive(Default)]
 pub struct TransactionImpl {
-  tx: Option<crate::sqlite::OwnedTx>,
+  // NOTE: This is only an `Arc<Mutex<OwnedTx>>` to have a watcher task force-unlock DB if
+  // necessary. W/o the task, this could just be an `OwnedTx`.
+  tx: Arc<Mutex<Option<crate::sqlite::OwnedTx>>>,
 }
 
 impl TransactionImpl {
   async fn begin(&mut self, conn: trailbase_sqlite::Connection) -> Result<(), TxError> {
-    if self.tx.is_some() {
+    // Acquire lock before locking DB for others. There should not be any contention. This lock
+    // isn't shared.
+    let mut lock = self.tx.lock().await;
+    if lock.is_some() {
       return Err(TxError::Other("Transaction already begun".into()));
     }
 
-    // TODO: Spawn a watcher task that unlocks the DB after a certain timeout.
-    let _ = self.tx.insert(
+    let old_db_lock = lock.replace(
       acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
         .await
         .map_err(|err| TxError::Other(err.to_string()))?,
     );
+    debug_assert!(old_db_lock.is_none());
+
+    {
+      // Watcher task to unlock stuck transactions.
+      let tx = Arc::downgrade(&self.tx);
+      tokio::spawn(async move {
+        const TIMEOUT: Duration = Duration::from_secs(60);
+        tokio::time::sleep(TIMEOUT).await;
+        if let Some(tx) = tx.upgrade() {
+          // NOTE: Dropping the OwnedTx does all the cleanup of both issuing rollback and
+          // releasing the DB lock.
+          if tx.lock().await.take().is_some() {
+            log::warn!("Pending WASM transaction lock found. Force-unlocked DB after {TIMEOUT:?}.");
+          }
+        }
+      });
+    }
 
     return Ok(());
   }
 
-  fn commit(&mut self) -> Result<(), TxError> {
-    let Some(tx) = self.tx.take() else {
+  async fn commit(&mut self) -> Result<(), TxError> {
+    let Some(tx) = self.tx.lock().await.take() else {
       return Err(TxError::Other("no pending tx".to_string()));
     };
 
@@ -248,11 +264,14 @@ impl TransactionImpl {
     return Ok(());
   }
 
-  fn rollback(&mut self) -> Result<(), TxError> {
-    let Some(tx) = self.tx.take() else {
+  async fn rollback(&mut self) -> Result<(), TxError> {
+    let Some(mut tx) = self.tx.lock().await.take() else {
       return Ok(());
     };
+    return Self::rollback_impl(&mut tx);
+  }
 
+  fn rollback_impl(tx: &mut crate::sqlite::OwnedTx) -> Result<(), TxError> {
     // NOTE: this is the same as `tx.rollback()` just w/o consuming.
     tx.borrow_dependent()
       .execute_batch("ROLLBACK")
@@ -261,8 +280,9 @@ impl TransactionImpl {
     return Ok(());
   }
 
-  fn query(&self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
-    let Some(ref tx) = self.tx else {
+  async fn query(&self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
+    let lock = self.tx.lock().await;
+    let Some(ref tx) = *lock else {
       return Err(TxError::Other("No open transaction".to_string()));
     };
 
@@ -289,8 +309,9 @@ impl TransactionImpl {
     );
   }
 
-  fn execute(&self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
-    let Some(ref tx) = self.tx else {
+  async fn execute(&self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
+    let lock = self.tx.lock().await;
+    let Some(ref tx) = *lock else {
       return Err(TxError::Other("No open transaction".to_string()));
     };
 
@@ -313,7 +334,7 @@ impl TransactionImpl {
 
 impl self::trailbase::database::sqlite::HostTransaction for State {
   fn new(&mut self) -> Result<Resource<Transaction>, wasmtime::Error> {
-    return Ok(self.table().push(TransactionImpl { tx: None })?);
+    return Ok(self.table().push(TransactionImpl::default())?);
   }
 
   async fn begin(
@@ -328,43 +349,45 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
     return Ok(resource.begin(conn).await);
   }
 
-  fn commit(&mut self, r: Resource<Transaction>) -> Result<Result<(), TxError>, wasmtime::Error> {
+  async fn commit(
+    &mut self,
+    r: Resource<Transaction>,
+  ) -> Result<Result<(), TxError>, wasmtime::Error> {
     let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    return Ok(resource.commit());
+    return Ok(resource.commit().await);
   }
 
-  fn rollback(&mut self, r: Resource<Transaction>) -> Result<Result<(), TxError>, wasmtime::Error> {
+  async fn rollback(
+    &mut self,
+    r: Resource<Transaction>,
+  ) -> Result<Result<(), TxError>, wasmtime::Error> {
     let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-    return Ok(resource.rollback());
+    return Ok(resource.rollback().await);
   }
 
-  fn query(
+  async fn query(
     &mut self,
     r: Resource<Transaction>,
     query: String,
     params: Vec<Value>,
   ) -> Result<Result<Vec<Vec<Value>>, TxError>, wasmtime::Error> {
     let resource: &TransactionImpl = self.resource_table.get(&r)?;
-    return Ok(resource.query(query, params));
+    return Ok(resource.query(query, params).await);
   }
 
-  fn execute(
+  async fn execute(
     &mut self,
     r: Resource<Transaction>,
     query: String,
     params: Vec<Value>,
   ) -> Result<Result<u64, TxError>, wasmtime::Error> {
     let resource: &TransactionImpl = self.resource_table.get(&r)?;
-    return Ok(resource.execute(query, params));
+    return Ok(resource.execute(query, params).await);
   }
 
-  fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
-    {
-      // Clean-up.
-      let resource: &mut TransactionImpl = self.resource_table.get_mut(&r)?;
-      let _ = resource.rollback();
-    }
-
+  async fn drop(&mut self, r: Resource<Transaction>) -> Result<(), wasmtime::Error> {
+    // NOTE: Dropping the OwnedTx does all the cleanup of both issuing rollback and
+    // releasing the DB lock.
     self.resource_table.delete(r)?;
     return Ok(());
   }
