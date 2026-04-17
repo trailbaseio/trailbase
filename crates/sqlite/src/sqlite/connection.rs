@@ -92,8 +92,9 @@ impl Connection {
   ///
   /// * `conn.transaction()` for RecordApis & migrations (from admin via TransactionRecorder and
   ///   during startup/SIGHUP).
-  /// * Batch log inserts to minimize thread slushing.
+  /// * Batch log inserts to minimize thread slushing (no tx required).
   /// * Backups from scheduler (API could be easily hoisted)
+  /// * Install preupdate-hook.
   pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(&mut rusqlite::Connection) -> Result<R, E> + Send + 'static,
