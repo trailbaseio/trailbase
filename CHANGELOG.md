@@ -1,3 +1,14 @@
+## v0.26.4
+
+- Use WASI resources to model WASM transactions more correctly. Also spawn a watcher task that force-unlocks the DB after a deadline for better isolation from user code.
+  - The new APIs are transparent and implemented in a backwards-compatible way, i.e. if you rebuild your WASM guests against future releases of the guest runtimes you'll pick up those changes.
+- Make server limits more configurable: rate limits and body size limits.
+- Add "created" and "last-updated" timestamps to accounts page in admin UI.
+- Switch SQLite execution model from `kanal` to `flume` to allow the writer to lend a hand with reads.
+- Mark read connections as explicitly `query_only`.
+- More work towards untangling from `rusqlite`: remove more uses of leaky abstractions and make error handling generic.
+- Update dependencies.
+
 ## v0.26.3
 
 - Make `trailbase-sqlite`'s abstractions less leaky, i.e. don't depend on `rusqlite`'s internals as much. This is a pre-requisite if we wanted to support other drivers and DBs.
