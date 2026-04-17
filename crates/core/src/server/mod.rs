@@ -37,6 +37,7 @@ use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
+use crate::extract::ip::RealIpKeyExtractor;
 use crate::logging;
 use crate::records;
 
@@ -170,18 +171,21 @@ impl Server {
     // Install an Ip-based rate limiter on auth APIs to avoid abuse.
     //
     // NOTE: If you run into rate-limits and are running behind a reverse proxy, please set the
-    // "x-forwarded-for" header correctly to ensure ip-based rate limitting and request logging
+    // "x-forwarded-for" header correctly to ensure ip-based rate limiting and request logging
     // works correctly.
-    // TODO: we should probably also allow user-configured rate limits on record APIs.
-    let install_auth_rate_limiter = {
+    // NOTE: We're using a closure here because of the awkward typing.
+    let install_auth_rate_limiter = if !opts.dev
+      && let Some(rate_limit) = state.get_config().server.auth_ip_rate_limit
+      && rate_limit > 0
+    {
       let governor_conf = Arc::new(
         GovernorConfigBuilder::default()
           // Quota.
-          .burst_size(if cfg!(debug_assertions) { 50 } else { 5 })
-          // Replenish one after 2 seconds.
-          .per_second(2)
-          .key_extractor(crate::extract::ip::RealIpKeyExtractor)
-          // Set rate limiting headers on reply
+          .burst_size(rate_limit)
+          // Replenish one after 1 seconds.
+          .per_second(1)
+          .key_extractor(RealIpKeyExtractor)
+          // Set rate limiting headers on reply.
           .use_headers()
           // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited
           // GET auth status.
@@ -201,7 +205,11 @@ impl Server {
         }
       });
 
-      move |router: Router<crate::AppState>| router.layer(GovernorLayer::new(governor_conf.clone()))
+      Some(move |router: Router<crate::AppState>| {
+        router.layer(GovernorLayer::new(governor_conf.clone()))
+      })
+    } else {
+      None
     };
 
     Ok(Self {
@@ -209,22 +217,14 @@ impl Server {
       main_router: Self::build_main_router(
         &state,
         &opts,
-        if opts.dev {
-          None
-        } else {
-          Some(&install_auth_rate_limiter)
-        },
+        install_auth_rate_limiter.as_ref(),
         custom_routers,
       )
       .await?,
       admin_router: Self::build_independent_admin_router(
         &state,
         &opts,
-        if opts.dev {
-          None
-        } else {
-          Some(&install_auth_rate_limiter)
-        },
+        install_auth_rate_limiter.as_ref(),
       ),
       tls: Self::load_tls(&opts),
     })
@@ -549,9 +549,16 @@ impl Server {
           .on_request(logging::sqlite_logger_on_request)
           .on_response(logging::sqlite_logger_on_response),
       )
-      // Default is only 2MB Increase to 10MB.
+      // Default request size limit is only 2MB Increase to 10MB by default if no explicit user
+      // limit is provided.
       .layer(DefaultBodyLimit::disable())
-      .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
+      .layer(RequestBodyLimitLayer::new(
+        state
+          .get_config()
+          .server
+          .request_size_limit_bytes
+          .map_or(10 * 1024 * 1024, |limit| limit as usize),
+      ))
       .with_state(state.clone());
   }
 }

@@ -5,6 +5,7 @@ server {
   site_url: "http://localhost.trailbase.io:4000"
   logs_retention_sec: 604800
   enable_record_transactions: true
+  auth_ip_rate_limit: 50
 }
 auth {
   enable_otp_signin: true
