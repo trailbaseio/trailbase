@@ -9,6 +9,7 @@ use crate::from_sql::FromSql;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
 use crate::sqlite::executor::Executor;
+use crate::sqlite::transaction::Transaction;
 use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
 
 // NOTE: We should probably decouple from the impl.
@@ -112,6 +113,29 @@ impl Connection {
   // {
   //   return self.exec.call_reader(function).await;
   // }
+
+  /// Transactions
+  ///
+  /// Note: we us an async API rather than a sync blocking API, e.g.:
+  ///
+  ///    let tx = conn.transaction();
+  ///
+  /// To avoid blocking the calling thread.
+  pub async fn transaction<F, R, E>(&self, function: F) -> Result<R, Error>
+  where
+    F: FnOnce(Transaction) -> Result<R, E> + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
+  {
+    return self
+      .exec
+      .call_writer::<_, R, Error>(move |conn: &mut rusqlite::Connection| {
+        let tx = conn.transaction()?;
+        return Ok(function(Transaction::new(tx))?);
+      })
+      .await;
+  }
 
   /// Query SQL statement.
   pub async fn read_query_rows(

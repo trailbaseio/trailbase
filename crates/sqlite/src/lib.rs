@@ -28,6 +28,7 @@ pub use database::Database;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
+pub use sqlite::transaction::Transaction;
 pub use value::{Value, ValueRef};
 
 #[macro_export]
