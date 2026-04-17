@@ -310,9 +310,9 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
       }
       Constraint::ForeignKey {
         clause,
-        deref_clause,
+        defer_clause,
       } => {
-        let fk = build_foreign_key(None, None, clause, deref_clause);
+        let fk = build_foreign_key(None, None, clause, defer_clause);
 
         ColumnOption::ForeignKey {
           foreign_table: fk.foreign_table,
@@ -678,13 +678,13 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
             TableConstraint::ForeignKey {
               columns,
               clause,
-              deref_clause,
+              defer_clause,
             } => {
               foreign_keys.push(build_foreign_key(
                 constraint.name,
                 Some(columns),
                 clause,
-                deref_clause,
+                defer_clause,
               ));
             }
             TableConstraint::Unique {
@@ -697,7 +697,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
                 conflict_clause: conflict_clause.map(|c| c.into()),
               });
             }
-            TableConstraint::Check(expr) => {
+            TableConstraint::Check(expr, _) => {
               checks.push(Check {
                 name: constraint.name.as_ref().map(unquote_name),
                 expr: expr.to_string(),
@@ -1505,9 +1505,9 @@ fn build_foreign_key(
   name: Option<Name>,
   columns: Option<Vec<IndexedColumn>>,
   clause: ForeignKeyClause,
-  deref_clause: Option<DeferSubclause>,
+  defer_clause: Option<DeferSubclause>,
 ) -> ForeignKey {
-  if let Some(ref clause) = deref_clause {
+  if let Some(ref clause) = defer_clause {
     // TOOD: Parse DEFERRABLE.
     warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
   }
