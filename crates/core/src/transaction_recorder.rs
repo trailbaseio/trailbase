@@ -96,7 +96,7 @@ impl TransactionLog {
           match query_type {
             QueryType::Query => {
               // TODO: Maybe we should have a query option returning nothing :shrug:.
-              tx.query_row_get::<trailbase_sqlite::Value>(stmt, (), 0)?;
+              tx.query_row(stmt, ())?;
             }
             QueryType::Execute => {
               tx.execute(stmt, ())?;
@@ -138,9 +138,7 @@ impl<'a> TransactionRecorder<'a> {
       ));
     };
 
-    self
-      .tx
-      .query_row_get::<trailbase_sqlite::Value>(sql, params, 0)?;
+    self.tx.query_row(sql, params)?;
 
     self.log.push((QueryType::Query, expanded_sql));
 

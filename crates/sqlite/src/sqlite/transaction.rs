@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use crate::error::Error;
-use crate::from_sql::FromSql;
 use crate::params::Params;
-use crate::sqlite::util::get_value;
+use crate::rows::Row;
+use crate::sqlite::util::{columns, from_row};
 
 pub struct Transaction<'a> {
   tx: rusqlite::Transaction<'a>,
@@ -41,20 +43,31 @@ impl<'a> Transaction<'a> {
     return Ok(());
   }
 
-  pub fn query_row_get<T>(
-    &self,
-    sql: impl AsRef<str>,
-    params: impl Params,
-    index: usize,
-  ) -> Result<Option<T>, Error>
-  where
-    T: FromSql + Send + 'static,
-  {
+  // pub fn query_row_get<T>(
+  //   &self,
+  //   sql: impl AsRef<str>,
+  //   params: impl Params,
+  //   index: usize,
+  // ) -> Result<Option<T>, Error>
+  // where
+  //   T: FromSql + Send + 'static,
+  // {
+  //   let mut stmt = self.tx.prepare(sql.as_ref())?;
+  //   params.bind(&mut stmt)?;
+  //
+  //   if let Some(row) = stmt.raw_query().next()? {
+  //     return get_value(row, index);
+  //   }
+  //   return Ok(None);
+  // }
+
+  // Queries the first row and returns it if present, otherwise `None`.
+  pub fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     let mut stmt = self.tx.prepare(sql.as_ref())?;
     params.bind(&mut stmt)?;
 
     if let Some(row) = stmt.raw_query().next()? {
-      return get_value(row, index);
+      return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
     }
     return Ok(None);
   }
