@@ -40,7 +40,7 @@ pub async fn create_index_handler(
     .transaction(move |tx| {
       let mut tx = TransactionRecorder::new(tx);
 
-      tx.execute(&create_index_query, ())?;
+      tx.execute(create_index_query, ())?;
 
       return tx
         .rollback()

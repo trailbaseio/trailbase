@@ -128,13 +128,13 @@ impl<'a> TransactionRecorder<'a> {
   #[allow(unused)]
   pub fn query(
     &mut self,
-    sql: &str,
-    params: impl trailbase_sqlite::Params + Clone,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl trailbase_sqlite::Params + Clone + Send + 'static,
   ) -> Result<(), trailbase_sqlite::Error> {
     // First get the SQL. The other way round there's some validation issues.
-    let Some(expanded_sql) = self.tx.expand_sql(sql, params.clone())? else {
+    let Some(expanded_sql) = self.tx.expand_sql(&sql, params.clone())? else {
       return Err(trailbase_sqlite::Error::Other(
-        format!("failed to get expanded query for: {sql}").into(),
+        format!("failed to get expanded query for: {}", sql.as_ref()).into(),
       ));
     };
 
@@ -147,13 +147,13 @@ impl<'a> TransactionRecorder<'a> {
 
   pub fn execute(
     &mut self,
-    sql: &str,
-    params: impl trailbase_sqlite::Params + Clone,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl trailbase_sqlite::Params + Clone + Send + 'static,
   ) -> Result<usize, trailbase_sqlite::Error> {
     // First get the SQL. The other way round there's some validation issues.
-    let Some(expanded_sql) = self.tx.expand_sql(sql, params.clone())? else {
+    let Some(expanded_sql) = self.tx.expand_sql(&sql, params.clone())? else {
       return Err(trailbase_sqlite::Error::Other(
-        format!("failed to get expanded execute query for: {sql}").into(),
+        format!("failed to get expanded execute query for: {}", sql.as_ref()).into(),
       ));
     };
 

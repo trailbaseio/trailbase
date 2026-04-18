@@ -103,7 +103,7 @@ pub async fn alter_table_handler(
 
           // Create new table
           let sql = ephemeral_table_schema.create_table_statement();
-          tx.execute(&sql, ()).map_err(|err| {
+          tx.execute(sql.clone(), ()).map_err(|err| {
             warn!("Failed creating ephemeral table, likely invalid operations: {sql}\n\t{err}");
             return err;
           })?;
@@ -122,10 +122,10 @@ pub async fn alter_table_handler(
             source_columns = escape_and_join_column_names(&source_columns),
             target_columns = escape_and_join_column_names(&target_columns),
           );
-          tx.execute(&insert_data_query, ())?;
+          tx.execute(insert_data_query, ())?;
 
           tx.execute(
-            &format!("DROP TABLE \"{unqualified_source_table_name}\""),
+            format!("DROP TABLE \"{unqualified_source_table_name}\""),
             (),
           )?;
 
@@ -136,7 +136,7 @@ pub async fn alter_table_handler(
             // rename).
             tx.execute("PRAGMA legacy_alter_table = ON", ())?;
             tx.execute(
-              &format!(
+              format!(
                 "ALTER TABLE \"{unqualified_ephemeral_table_name}\" RENAME TO \"{unqualified_target_name}\""
               ),
               (),

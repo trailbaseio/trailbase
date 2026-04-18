@@ -77,7 +77,7 @@ pub async fn drop_table_handler(
           unqualified_table_name.escaped_string()
         );
         debug!("dropping table: {query}");
-        tx.execute(&query, ())?;
+        tx.execute(query, ())?;
 
         return tx
           .rollback()

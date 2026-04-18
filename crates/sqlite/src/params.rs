@@ -149,6 +149,12 @@ where
   }
 }
 
+// impl<T: Params + Clone> Params for &T {
+//   fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+//     return self.clone().bind(stmt);
+//   }
+// }
+
 impl<const N: usize> Params for [Value; N] {
   fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
     for (idx, v) in self.into_iter().enumerate() {
