@@ -314,15 +314,11 @@ impl Server {
           //
           // TODO: Right now we're only re-applying main migrations.
           let user_migrations_path = state.data_dir().migrations_path();
-          match state
-            .connection_manager()
-            .main_entry()
-            .connection
-            .call_writer(|conn: &mut rusqlite::Connection| {
-              return crate::migrations::apply_main_migrations(conn, Some(user_migrations_path))
-                .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-            })
+          let conn = state.connection_manager().main_entry().connection;
+
+          match crate::migrations::apply_main_migrations2(&conn, Some(user_migrations_path))
             .await
+            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
           {
             Err(err) => {
               // NOTE: it's not clear what the best error behavior here is. Should the server
