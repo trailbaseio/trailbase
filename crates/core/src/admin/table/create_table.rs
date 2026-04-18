@@ -44,7 +44,7 @@ pub async fn create_table_handler(
     .transaction(move |tx| {
       let mut tx = TransactionRecorder::new(tx);
 
-      tx.execute(&create_table_query, ())?;
+      tx.execute(create_table_query, ())?;
 
       return tx
         .rollback()

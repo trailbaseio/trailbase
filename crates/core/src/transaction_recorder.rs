@@ -74,17 +74,11 @@ impl TransactionLog {
     let migrations = vec![trailbase_refinery::Migration::unapplied(&stem, &sql)?];
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 
-    let report = conn
-      .call_writer(move |conn| {
-        return runner
-          .run(conn)
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-      })
-      .await
-      .map_err(|err| {
-        error!("Migration aborted with: {err} for {sql}");
-        err
-      })?;
+    let mut conn = conn.clone();
+    let report = runner.run_async(&mut conn).await.map_err(|err| {
+      error!("Migration aborted with: {err} for {sql}");
+      err
+    })?;
 
     write_migration_file(path, &sql)?;
 
@@ -102,7 +96,7 @@ impl TransactionLog {
           match query_type {
             QueryType::Query => {
               // TODO: Maybe we should have a query option returning nothing :shrug:.
-              tx.query_row_get::<trailbase_sqlite::Value>(stmt, (), 0)?;
+              tx.query_row(stmt, ())?;
             }
             QueryType::Execute => {
               tx.execute(stmt, ())?;
@@ -134,19 +128,17 @@ impl<'a> TransactionRecorder<'a> {
   #[allow(unused)]
   pub fn query(
     &mut self,
-    sql: &str,
-    params: impl trailbase_sqlite::Params + Clone,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl trailbase_sqlite::Params + Clone + Send + 'static,
   ) -> Result<(), trailbase_sqlite::Error> {
     // First get the SQL. The other way round there's some validation issues.
-    let Some(expanded_sql) = self.tx.expand_sql(sql, params.clone())? else {
+    let Some(expanded_sql) = self.tx.expand_sql(&sql, params.clone())? else {
       return Err(trailbase_sqlite::Error::Other(
-        format!("failed to get expanded query for: {sql}").into(),
+        format!("failed to get expanded query for: {}", sql.as_ref()).into(),
       ));
     };
 
-    self
-      .tx
-      .query_row_get::<trailbase_sqlite::Value>(sql, params, 0)?;
+    self.tx.query_row(sql, params)?;
 
     self.log.push((QueryType::Query, expanded_sql));
 
@@ -155,13 +147,13 @@ impl<'a> TransactionRecorder<'a> {
 
   pub fn execute(
     &mut self,
-    sql: &str,
-    params: impl trailbase_sqlite::Params + Clone,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl trailbase_sqlite::Params + Clone + Send + 'static,
   ) -> Result<usize, trailbase_sqlite::Error> {
     // First get the SQL. The other way round there's some validation issues.
-    let Some(expanded_sql) = self.tx.expand_sql(sql, params.clone())? else {
+    let Some(expanded_sql) = self.tx.expand_sql(&sql, params.clone())? else {
       return Err(trailbase_sqlite::Error::Other(
-        format!("failed to get expanded execute query for: {sql}").into(),
+        format!("failed to get expanded execute query for: {}", sql.as_ref()).into(),
       ));
     };
 

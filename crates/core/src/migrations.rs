@@ -63,6 +63,25 @@ pub(crate) fn apply_main_migrations(
   return apply_migrations("main", conn, migrations);
 }
 
+pub(crate) async fn apply_main_migrations2(
+  conn: &trailbase_sqlite::Connection,
+  base_migrations_path: Option<impl AsRef<Path>>,
+) -> Result<bool, RefineryError> {
+  let mut migrations = vec![
+    load_embedded_migrations::<BaseMigrations>(),
+    load_embedded_migrations::<MainMigrations>(),
+  ];
+  if let Some(path) = base_migrations_path {
+    // Ignore when `<traildepot>/migrations/main/` is missing.
+    migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
+
+    // Legacy: all *.sql files in migrations.
+    migrations.push(load_sql_migrations(path, false)?);
+  }
+
+  return apply_migrations2("main", conn, migrations).await;
+}
+
 // Base migrations contains things like file deletions table shared across main and user DBs.
 pub(crate) fn apply_base_migrations(
   conn: &mut rusqlite::Connection,
@@ -109,6 +128,29 @@ pub(crate) fn apply_migrations(
 
   let runner = new_migration_runner(&migrations);
   let report = runner.run(conn).map_err(|err| {
+    error!("Migration error for '{name}' DB: {err}");
+    return err;
+  })?;
+
+  let applied_migrations = report.applied_migrations();
+  log_migrations(name, applied_migrations);
+
+  // If we applied migration v1 we can be sure this is a fresh database.
+  let new_db = applied_migrations.iter().any(|m| m.version() == 1);
+
+  return Ok(new_db);
+}
+
+pub(crate) async fn apply_migrations2(
+  name: &str,
+  conn: &trailbase_sqlite::Connection,
+  migrations: Vec<Vec<Migration>>,
+) -> Result<bool, RefineryError> {
+  let migrations: Vec<Migration> = migrations.into_iter().flatten().sorted().collect();
+
+  let mut conn = conn.clone();
+  let runner = new_migration_runner(&migrations);
+  let report = runner.run_async(&mut conn).await.map_err(|err| {
     error!("Migration error for '{name}' DB: {err}");
     return err;
   })?;

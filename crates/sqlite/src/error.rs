@@ -13,6 +13,9 @@ pub enum Error {
     decl_type: Option<crate::rows::ValueType>,
   },
 
+  #[error("FromSql: {0}")]
+  FromSql(#[from] crate::from_sql::FromSqlError),
+
   // QUESTION: This is leaky. How often do downstream users have to introspect on this
   // rusqlite::Error. Otherwise, should/could this be more opaue.
   #[error("Rusqlite: {0}")]
@@ -21,7 +24,7 @@ pub enum Error {
   #[error("DeserializeValue: {0}")]
   DeserializeValue(serde_rusqlite::Error),
 
-  /// This one is useful for downstream consumers providin a `Connection` builder returning this
+  /// This one is useful for downstream consumers providing a `Connection` builder returning this
   /// error.
   #[error("Other: {0}")]
   Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),

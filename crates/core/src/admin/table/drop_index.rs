@@ -45,7 +45,7 @@ pub async fn drop_index_handler(
 
         let query = format!("DROP INDEX IF EXISTS \"{unqualified_index_name}\"");
         debug!("dropping index: {query}");
-        tx.execute(&query, ())?;
+        tx.execute(query, ())?;
 
         return tx
           .rollback()
