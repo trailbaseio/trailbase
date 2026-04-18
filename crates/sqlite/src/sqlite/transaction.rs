@@ -32,7 +32,7 @@ impl<'a> Transaction<'a> {
     return Ok(stmt.raw_execute()?);
   }
 
-  pub async fn query_row_get<T>(
+  pub fn query_row_get<T>(
     &self,
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,

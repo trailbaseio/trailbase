@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::config::proto::hash_config;
-use crate::transaction::{TransactionLog, TransactionRecorder};
+use crate::transaction_recorder::{TransactionLog, TransactionRecorder};
 
 #[derive(Clone, Debug, Deserialize, TS)]
 pub enum AlterTableOperation {

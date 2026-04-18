@@ -99,24 +99,22 @@ impl TransactionLog {
     conn: &trailbase_sqlite::Connection,
   ) -> Result<(), trailbase_sqlite::Error> {
     conn
-      .call_writer(
-        |conn: &mut rusqlite::Connection| -> Result<_, rusqlite::Error> {
-          let tx = conn.transaction()?;
-          for (query_type, stmt) in self.log {
-            match query_type {
-              QueryType::Query => {
-                tx.query_row(&stmt, (), |_row| Ok(()))?;
-              }
-              QueryType::Execute => {
-                tx.execute(&stmt, ())?;
-              }
+      .transaction(|tx| -> Result<(), trailbase_sqlite::Error> {
+        for (query_type, stmt) in self.log {
+          match query_type {
+            QueryType::Query => {
+              // TODO: Maybe we should have a qurey option returnin nothing :shrug:.
+              tx.query_row_get::<trailbase_sqlite::Value>(stmt, (), 0)?;
+            }
+            QueryType::Execute => {
+              tx.execute(stmt, ())?;
             }
           }
-          tx.commit()?;
+        }
+        tx.commit()?;
 
-          return Ok(());
-        },
-      )
+        return Ok(());
+      })
       .await?;
 
     return Ok(());
