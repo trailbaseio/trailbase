@@ -219,6 +219,21 @@ impl Connection {
     return self.exec.write_query_rows_f(sql, params, from_rows).await;
   }
 
+  pub async fn write_query_row(
+    &self,
+    sql: impl AsRef<str> + Send + 'static,
+    params: impl Params + Send + 'static,
+  ) -> Result<Option<Row>, Error> {
+    return self
+      .exec
+      .write_query_rows_f(sql, params, |rows| {
+        return map_first(rows, |row| {
+          return from_row(row, Arc::new(columns(row.as_ref())));
+        });
+      })
+      .await;
+  }
+
   pub async fn write_query_row_get<T>(
     &self,
     sql: impl AsRef<str> + Send + 'static,

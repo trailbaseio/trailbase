@@ -121,7 +121,54 @@ impl WriteQuery {
     });
   }
 
-  pub fn apply(self, conn: &rusqlite::Connection) -> Result<WriteQueryResult, rusqlite::Error> {
+  async fn apply_async(
+    self,
+    conn: &trailbase_sqlite::Connection,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return match self {
+      Self::Insert {
+        query,
+        named_params,
+      } => {
+        if let Some(row) = conn.write_query_row(query, named_params).await? {
+          Ok(WriteQueryResult {
+            rowid: row.get(0)?,
+            pk_value: Some(row.get(1)?),
+          })
+        } else {
+          Err(rusqlite::Error::QueryReturnedNoRows.into())
+        }
+      }
+      Self::Update {
+        query,
+        named_params,
+      } => {
+        if let Some(rowid) = conn.write_query_row_get(query, named_params, 0).await? {
+          Ok(WriteQueryResult {
+            rowid,
+            pk_value: None,
+          })
+        } else {
+          Err(rusqlite::Error::QueryReturnedNoRows.into())
+        }
+      }
+      Self::Delete { query, pk_value } => {
+        if let Some(rowid) = conn.write_query_row_get(query, [pk_value], 0).await? {
+          Ok(WriteQueryResult {
+            rowid,
+            pk_value: None,
+          })
+        } else {
+          Err(rusqlite::Error::QueryReturnedNoRows.into())
+        }
+      }
+    };
+  }
+
+  pub(super) fn apply(
+    self,
+    conn: &rusqlite::Connection,
+  ) -> Result<WriteQueryResult, rusqlite::Error> {
     return match self {
       Self::Insert {
         query,
@@ -251,12 +298,10 @@ pub(crate) async fn run_insert_query(
     Some(FileManager::write(objectstore, files).await?)
   };
 
-  let (rowid, return_value): (i64, trailbase_sqlite::Value) = conn
-    .call_writer(move |conn| -> Result<_, rusqlite::Error> {
-      let result = query.apply(conn)?;
-      return Ok((result.rowid, result.pk_value.expect("insert")));
-    })
-    .await?;
+  let WriteQueryResult { rowid, pk_value } = query.apply_async(conn).await?;
+  let Some(return_value) = pk_value else {
+    return Err(RecordError::Internal("missing pk".into()));
+  };
 
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
@@ -288,11 +333,7 @@ pub(crate) async fn run_update_query(
     Some(FileManager::write(objectstore, files).await?)
   };
 
-  let rowid: i64 = conn
-    .call_writer(move |conn| -> Result<_, rusqlite::Error> {
-      return Ok(query.apply(conn)?.rowid);
-    })
-    .await?;
+  let WriteQueryResult { rowid, pk_value: _ } = query.apply_async(conn).await?;
 
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
@@ -315,11 +356,7 @@ pub(crate) async fn run_delete_query(
 ) -> Result<i64, RecordError> {
   let query = WriteQuery::new_delete(table_name, pk_column, pk_value)?;
 
-  let rowid: i64 = conn
-    .call_writer(move |conn| -> Result<_, rusqlite::Error> {
-      return Ok(query.apply(conn)?.rowid);
-    })
-    .await?;
+  let WriteQueryResult { rowid, pk_value: _ } = query.apply_async(conn).await?;
 
   if has_file_columns {
     delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
