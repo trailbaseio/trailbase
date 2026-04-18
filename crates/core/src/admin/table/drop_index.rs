@@ -40,8 +40,8 @@ pub async fn drop_index_handler(
   let tx_log = {
     let unqualified_index_name = unqualified_index_name.clone();
     conn
-      .call_writer(move |conn| {
-        let mut tx = TransactionRecorder::new(conn)?;
+      .transaction(move |tx| {
+        let mut tx = TransactionRecorder::new(tx);
 
         let query = format!("DROP INDEX IF EXISTS \"{unqualified_index_name}\"");
         debug!("dropping index: {query}");
