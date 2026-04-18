@@ -8,17 +8,17 @@ use thiserror::Error;
 pub enum AdminError {
   #[error("TrailbaseSqlite error: {0}")]
   TrailbaseSqlite(#[from] trailbase_sqlite::Error),
-  #[error("Rusqlite error: {0}")]
+  #[error("Rusqlite: {0}")]
   Rusqlite(#[from] rusqlite::Error),
-  #[error("Connection error: {0}")]
+  #[error("Connection: {0}")]
   Connection(#[from] crate::connection::ConnectionError),
-  #[error("Rusqlite FromSql error: {0}")]
-  FromSql(#[from] rusqlite::types::FromSqlError),
-  #[error("Deserialization error: {0}")]
+  #[error("FromSql: {0}")]
+  FromSql(#[from] trailbase_sqlite::from_sql::FromSqlError),
+  #[error("Deserialization: {0}")]
   Deserialization(#[from] serde::de::value::Error),
-  #[error("JsonSerialization error: {0}")]
+  #[error("JsonSerialization: {0}")]
   JsonSerialization(#[from] serde_json::Error),
-  #[error("Base64 decoding error: {0}")]
+  #[error("Base64 decoding: {0}")]
   Base64Decode(#[from] base64::DecodeError),
   #[error("Already exists: {0}")]
   AlreadyExists(&'static str),
@@ -26,35 +26,35 @@ pub enum AdminError {
   BadRequest(Box<dyn std::error::Error + Send + Sync>),
   #[error("precondition failed: {0}")]
   Precondition(String),
-  #[error("Internal error: {0}")]
+  #[error("Internal: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
-  #[error("Schema error: {0}")]
+  #[error("Schema: {0}")]
   Schema(#[from] trailbase_schema::sqlite::SchemaError),
-  #[error("Table lookup error: {0}")]
+  #[error("TableLookup: {0}")]
   TableLookup(#[from] crate::schema_metadata::SchemaLookupError),
-  #[error("DB Migration error: {0}")]
+  #[error("DbMigration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
-  #[error("SQL -> Json error: {0}")]
+  #[error("SQL -> Json: {0}")]
   Json(#[from] trailbase_schema::json::JsonError),
-  #[error("Schema error: {0}")]
+  #[error("Schema: {0}")]
   SchemaError(#[from] trailbase_schema::Error),
-  #[error("Json -> SQL Params error: {0}")]
+  #[error("Json -> SQL Params: {0}")]
   Params(#[from] crate::records::params::ParamsError),
-  #[error("Config error: {0}")]
+  #[error("Config: {0}")]
   Config(#[from] crate::config::ConfigError),
-  #[error("Auth error: {0}")]
+  #[error("Auth: {0}")]
   Auth(#[from] crate::auth::AuthError),
-  #[error("WhereClause error: {0}")]
+  #[error("WhereClause: {0}")]
   WhereClause(#[from] crate::listing::WhereClauseError),
-  #[error("Transaction error: {0}")]
+  #[error("Transaction: {0}")]
   Transaction(#[from] crate::transaction_recorder::TransactionError),
-  #[error("JSON schema error: {0}")]
+  #[error("JSON schema: {0}")]
   JSONSchema(#[from] crate::schema_metadata::JsonSchemaError),
-  #[error("Email error: {0}")]
+  #[error("Email: {0}")]
   Email(#[from] crate::email::EmailError),
-  #[error("Record error: {0}")]
+  #[error("Record: {0}")]
   Record(#[from] crate::records::RecordError),
-  #[error("File error: {0}")]
+  #[error("File: {0}")]
   File(#[from] crate::records::files::FileError),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),

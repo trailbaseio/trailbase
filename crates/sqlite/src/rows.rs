@@ -1,10 +1,10 @@
-use rusqlite::types;
 use std::fmt::Debug;
 use std::ops::Index;
 use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::error::Error;
+use crate::from_sql::{FromSql, FromSqlError};
 use crate::value::Value;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -115,12 +115,12 @@ impl Row {
     return Row(split_values, Arc::new(split_columns));
   }
 
-  pub fn get<T>(&self, idx: usize) -> types::FromSqlResult<T>
+  pub fn get<T>(&self, idx: usize) -> Result<T, FromSqlError>
   where
-    T: types::FromSql,
+    T: FromSql,
   {
     let Some(value) = self.0.get(idx) else {
-      return Err(types::FromSqlError::OutOfRange(idx as i64));
+      return Err(FromSqlError::OutOfRange(idx as i64));
     };
     return T::column_result(value.into());
   }
