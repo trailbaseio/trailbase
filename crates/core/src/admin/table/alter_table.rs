@@ -92,10 +92,9 @@ pub async fn alter_table_handler(
     ephemeral_table_schema.name.database_schema = None;
 
     conn
-      .call_writer(
-        move |conn| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
-          let mut tx = TransactionRecorder::new(conn)
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+      .transaction(
+        move |tx| -> Result<Option<TransactionLog>, trailbase_sqlite::Error> {
+          let mut tx = TransactionRecorder::new(tx);
 
           // Defer any foreign key checks until transaction is being committed.
           // NOTE: This is *not* enough for other references, e.g. VIEWs and INDEXes.

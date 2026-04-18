@@ -9,8 +9,6 @@ use crate::migrations;
 
 #[derive(Debug, Error)]
 pub enum TransactionError {
-  #[error("Rusqlite error: {0}")]
-  Rusqlite(#[from] rusqlite::Error),
   #[error("SQLite error: {0}")]
   Sqlite(#[from] trailbase_sqlite::Error),
   #[error("IO error: {0}")]
@@ -103,7 +101,7 @@ impl TransactionLog {
         for (query_type, stmt) in self.log {
           match query_type {
             QueryType::Query => {
-              // TODO: Maybe we should have a qurey option returnin nothing :shrug:.
+              // TODO: Maybe we should have a query option returning nothing :shrug:.
               tx.query_row_get::<trailbase_sqlite::Value>(stmt, (), 0)?;
             }
             QueryType::Execute => {
@@ -123,34 +121,32 @@ impl TransactionLog {
 
 /// A recorder for table migrations, i.e.: create, alter, drop, as opposed to data migrations.
 pub struct TransactionRecorder<'a> {
-  tx: rusqlite::Transaction<'a>,
-
+  tx: trailbase_sqlite::Transaction<'a>,
   log: Vec<(QueryType, String)>,
 }
 
 impl<'a> TransactionRecorder<'a> {
-  pub fn new(conn: &'a mut rusqlite::Connection) -> Result<Self, rusqlite::Error> {
-    let recorder = TransactionRecorder {
-      tx: conn.transaction()?,
-      log: vec![],
-    };
-
-    return Ok(recorder);
+  pub fn new(tx: trailbase_sqlite::Transaction<'a>) -> Self {
+    return Self { tx, log: vec![] };
   }
 
   // Note that we cannot take any sql params for recording purposes.
   #[allow(unused)]
-  pub fn query(&mut self, sql: &str, params: impl rusqlite::Params) -> Result<(), rusqlite::Error> {
-    let mut stmt = self.tx.prepare_cached(sql)?;
-    params.__bind_in(&mut stmt)?;
-    let Some(expanded_sql) = stmt.expanded_sql() else {
-      return Err(rusqlite::Error::ToSqlConversionFailure(
-        "failed to get expanded query".into(),
+  pub fn query(
+    &mut self,
+    sql: &str,
+    params: impl trailbase_sqlite::Params + Clone,
+  ) -> Result<(), trailbase_sqlite::Error> {
+    // First get the SQL. The other way round there's some validation issues.
+    let Some(expanded_sql) = self.tx.expand_sql(sql, params.clone())? else {
+      return Err(trailbase_sqlite::Error::Other(
+        format!("failed to get expanded query for: {sql}").into(),
       ));
     };
 
-    let mut rows = stmt.raw_query();
-    rows.next()?;
+    self
+      .tx
+      .query_row_get::<trailbase_sqlite::Value>(sql, params, 0)?;
 
     self.log.push((QueryType::Query, expanded_sql));
 
@@ -160,20 +156,19 @@ impl<'a> TransactionRecorder<'a> {
   pub fn execute(
     &mut self,
     sql: &str,
-    params: impl rusqlite::Params,
-  ) -> Result<usize, rusqlite::Error> {
-    // let rows_affected = self.tx.execute(sql, params)?;
-    let mut stmt = self.tx.prepare_cached(sql)?;
-    params.__bind_in(&mut stmt)?;
-    let Some(expanded_sql) = stmt.expanded_sql() else {
-      return Err(rusqlite::Error::ToSqlConversionFailure(
-        "failed to get expanded query".into(),
+    params: impl trailbase_sqlite::Params + Clone,
+  ) -> Result<usize, trailbase_sqlite::Error> {
+    // First get the SQL. The other way round there's some validation issues.
+    let Some(expanded_sql) = self.tx.expand_sql(sql, params.clone())? else {
+      return Err(trailbase_sqlite::Error::Other(
+        format!("failed to get expanded execute query for: {sql}").into(),
       ));
     };
 
-    let rows_affected = stmt.raw_execute()?;
+    let rows_affected = self.tx.execute(sql, params)?;
 
     self.log.push((QueryType::Execute, expanded_sql));
+
     return Ok(rows_affected);
   }
 
@@ -248,15 +243,18 @@ mod tests {
       ))
     ));
 
-    let log = {
-      let mut lock = conn.write_lock();
-      let mut recorder = TransactionRecorder::new(&mut lock).unwrap();
+    let log = conn
+      .transaction(|tx| -> Result<_, trailbase_sqlite::Error> {
+        let mut recorder = TransactionRecorder::new(tx);
 
-      recorder
-        .execute("DELETE FROM 'table' WHERE age < ?1", rusqlite::params!(20))
-        .unwrap();
-      recorder.rollback().unwrap().unwrap()
-    };
+        recorder
+          .execute("DELETE FROM 'table' WHERE age < ?1", (20,))
+          .unwrap();
+
+        return Ok(recorder.rollback().unwrap().unwrap());
+      })
+      .await
+      .unwrap();
 
     assert_eq!(log.log.len(), 1);
     assert_eq!(log.log[0].0, QueryType::Execute);
