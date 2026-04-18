@@ -6,7 +6,7 @@ use time::format_description::well_known::Rfc3339;
 use trailbase_sqlite::{Connection, Error, Transaction};
 
 fn query_applied_migrations(
-  transaction: Transaction<'_>,
+  transaction: &Transaction<'_>,
   query: &str,
 ) -> Result<Vec<Migration>, Error> {
   let rows = transaction.query_rows(query, ())?;
@@ -46,7 +46,7 @@ impl AsyncTransaction for Connection {
       .transaction(move |tx| -> Result<_, Error> {
         let mut count = 0;
         for query in queries {
-          tx.execute(query, ())?;
+          tx.execute_batch(query)?;
           count += 1;
         }
 
@@ -67,8 +67,9 @@ impl AsyncQuery<Vec<Migration>> for Connection {
     let query = query.to_string();
     let applied = self
       .transaction(move |tx| -> Result<_, Error> {
-        let applied = query_applied_migrations(tx, &query)?;
-        // tx.rollback()?;
+        let applied = query_applied_migrations(&tx, &query)?;
+        // QUESTION: Does this commit do anything? :shrug:
+        tx.commit()?;
         return Ok(applied);
       })
       .await?;

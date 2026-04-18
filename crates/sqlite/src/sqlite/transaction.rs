@@ -29,6 +29,19 @@ impl<'a> Transaction<'a> {
     return Ok(stmt.raw_execute()?);
   }
 
+  pub fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
+    use rusqlite::fallible_iterator::FallibleIterator;
+
+    let mut batch = rusqlite::Batch::new(&self.tx, sql.as_ref());
+    while let Some(mut stmt) = batch.next()? {
+      // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
+      // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
+      // behaves consistently.
+      let _row = stmt.raw_query().next()?;
+    }
+    return Ok(());
+  }
+
   pub fn query_row_get<T>(
     &self,
     sql: impl AsRef<str>,

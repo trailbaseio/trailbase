@@ -378,8 +378,7 @@ impl RecordApi {
     &self,
     json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   ) {
-    if let Ok(metadata) =
-      crate::connection::build_metadata(&self.state.conn.write_lock(), json_schema_registry)
+    if let Ok(metadata) = crate::connection::build_metadata(&self.state.conn, json_schema_registry)
     {
       *self.state.metadata.write() = Arc::new(metadata);
     }

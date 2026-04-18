@@ -97,7 +97,7 @@ impl ConnectionManager {
       true,
     )?;
 
-    let main_metadata = build_metadata(&main_conn.write_lock(), &json_schema_registry)?;
+    let main_metadata = build_metadata(&main_conn, &json_schema_registry)?;
 
     return Ok((
       Self {
@@ -132,7 +132,7 @@ impl ConnectionManager {
     .unwrap();
     assert!(new_db);
 
-    let main_metadata = build_metadata(&main_conn.write_lock(), &json_schema_registry).unwrap();
+    let main_metadata = build_metadata(&main_conn, &json_schema_registry).unwrap();
 
     return Self {
       state: Arc::new(ConnectionManagerState {
@@ -173,10 +173,7 @@ impl ConnectionManager {
 
         let entry = ConnectionEntry {
           connection: conn.clone(),
-          metadata: Arc::new(build_metadata(
-            &conn.write_lock(),
-            &self.state.json_schema_registry,
-          )?),
+          metadata: Arc::new(build_metadata(&conn, &self.state.json_schema_registry)?),
         };
 
         let _ = placeholder.insert(entry.clone());
@@ -251,7 +248,7 @@ impl ConnectionManager {
     // Main
     {
       let new_metadata = Arc::new(build_metadata(
-        &self.state.main.read().connection.write_lock(),
+        &self.state.main.read().connection,
         &self.state.json_schema_registry,
       )?);
 
@@ -261,7 +258,7 @@ impl ConnectionManager {
     // Others:
     for (key, entry) in self.state.connections.iter() {
       let new_metadata = Arc::new(build_metadata(
-        &entry.connection.write_lock(),
+        &entry.connection,
         &self.state.json_schema_registry,
       )?);
 
@@ -280,6 +277,13 @@ impl ConnectionManager {
 }
 
 pub(crate) fn build_metadata(
+  conn: &trailbase_sqlite::Connection,
+  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+) -> Result<ConnectionMetadata, ConnectionError> {
+  return build_metadata_impl(&conn.write_lock(), json_schema_registry);
+}
+
+pub fn build_metadata_impl(
   conn: &rusqlite::Connection,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
 ) -> Result<ConnectionMetadata, ConnectionError> {

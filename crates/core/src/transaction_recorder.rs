@@ -74,17 +74,11 @@ impl TransactionLog {
     let migrations = vec![trailbase_refinery::Migration::unapplied(&stem, &sql)?];
     let runner = migrations::new_migration_runner(&migrations).set_abort_missing(false);
 
-    let report = conn
-      .call_writer(move |conn| {
-        return runner
-          .run(conn)
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
-      })
-      .await
-      .map_err(|err| {
-        error!("Migration aborted with: {err} for {sql}");
-        err
-      })?;
+    let mut conn = conn.clone();
+    let report = runner.run_async(&mut conn).await.map_err(|err| {
+      error!("Migration aborted with: {err} for {sql}");
+      err
+    })?;
 
     write_migration_file(path, &sql)?;
 
