@@ -203,6 +203,7 @@ pub(crate) async fn run_queries(
     .call_writer(move |conn| -> Result<_, rusqlite::Error> {
       let tx = conn.transaction()?;
 
+      // FIXME: This is the tricky one because apply is used on transaction.
       let rows: Vec<WriteQueryResult> = queries
         .into_iter()
         .map(|query| query.apply(&tx))

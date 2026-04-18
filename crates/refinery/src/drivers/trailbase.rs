@@ -3,33 +3,30 @@ use crate::traits::r#async::{AsyncMigrate, AsyncQuery, AsyncTransaction};
 use async_trait::async_trait;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
-use trailbase_sqlite::{Connection, Error, Transaction};
+use trailbase_sqlite::{Connection, Error};
 
-fn query_applied_migrations(
-  transaction: &Transaction<'_>,
-  query: &str,
-) -> Result<Vec<Migration>, Error> {
-  let rows = transaction.query_rows(query, ())?;
+async fn query_applied_migrations(conn: &Connection, query: &str) -> Result<Vec<Migration>, Error> {
+  let rows = conn.read_query_rows(query.to_string(), ()).await?;
 
-  let mut applied = Vec::new();
-  for row in rows {
-    let version = row.get(0)?;
-    let applied_on: String = row.get(2)?;
-    // Safe to call unwrap, as we stored it in RFC3339 format on the database
-    let applied_on = OffsetDateTime::parse(&applied_on, &Rfc3339).unwrap();
-    let checksum: String = row.get(3)?;
+  return rows
+    .iter()
+    .map(|row| {
+      let version = row.get(0)?;
+      let applied_on: String = row.get(2)?;
+      let applied_on =
+        OffsetDateTime::parse(&applied_on, &Rfc3339).map_err(|err| Error::Other(err.into()))?;
+      let checksum: String = row.get(3)?;
 
-    applied.push(Migration::applied(
-      version,
-      row.get(1)?,
-      applied_on,
-      checksum
-        .parse::<u64>()
-        .expect("checksum must be a valid u64"),
-    ));
-  }
-
-  return Ok(applied);
+      return Ok(Migration::applied(
+        version,
+        row.get(1)?,
+        applied_on,
+        checksum
+          .parse::<u64>()
+          .map_err(|err| Error::Other(err.into()))?,
+      ));
+    })
+    .collect::<Result<Vec<_>, Error>>();
 }
 
 #[async_trait]
@@ -64,17 +61,7 @@ impl AsyncQuery<Vec<Migration>> for Connection {
     &mut self,
     query: &str,
   ) -> Result<Vec<Migration>, <Self as AsyncTransaction>::Error> {
-    let query = query.to_string();
-    let applied = self
-      .transaction(move |tx| -> Result<_, Error> {
-        let applied = query_applied_migrations(&tx, &query)?;
-        // QUESTION: Does this commit do anything? :shrug:
-        tx.commit()?;
-        return Ok(applied);
-      })
-      .await?;
-
-    return Ok(applied);
+    return Ok(query_applied_migrations(self, &query).await?);
   }
 }
 

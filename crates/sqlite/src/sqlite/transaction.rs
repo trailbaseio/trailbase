@@ -1,8 +1,7 @@
 use crate::error::Error;
 use crate::from_sql::FromSql;
 use crate::params::Params;
-use crate::rows::Rows;
-use crate::sqlite::util::{from_rows, get_value};
+use crate::sqlite::util::get_value;
 
 pub struct Transaction<'a> {
   tx: rusqlite::Transaction<'a>,
@@ -60,12 +59,12 @@ impl<'a> Transaction<'a> {
     return Ok(None);
   }
 
-  pub fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
-    let mut stmt = self.tx.prepare(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-
-    return from_rows(stmt.raw_query());
-  }
+  // pub fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+  //   let mut stmt = self.tx.prepare(sql.as_ref())?;
+  //   params.bind(&mut stmt)?;
+  //
+  //   return from_rows(stmt.raw_query());
+  // }
 
   pub fn expand_sql(
     &self,
