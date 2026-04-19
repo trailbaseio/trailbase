@@ -8,7 +8,7 @@ use trailbase_schema::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, NamedParams, Params as _, SyncConnectionTrait, Value};
+use trailbase_sqlite::{Connection, NamedParams, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -487,42 +487,6 @@ impl RecordApi {
     return Err(RecordError::Forbidden);
   }
 
-  // pub fn build_deferred_record_level_access_check<T: SyncConnectionTrait>(
-  //   &self,
-  //   p: Permission,
-  //   record_id: Option<&Value>,
-  //   request_params: Option<&mut LazyParams<'_>>,
-  //   user: Option<&User>,
-  // ) -> Result<DeferredAclCheck<T>, RecordError> {
-  //   // First check table level access and if present check row-level access based on access rule.
-  //   self.check_table_level_access(p, user)?;
-  //
-  //   let Some(access_query) = self.state.cached_access_query(p) else {
-  //     return Ok(Box::new(|_conn| Ok(())));
-  //   };
-  //
-  //   let params = self.build_named_params(p, record_id, request_params, user)?;
-  //
-  //   return Ok(Box::new(move |conn| {
-  //     #[inline]
-  //     fn check(
-  //       conn: &impl trailbase_sqlite::SyncConnectionTrait,
-  //       query: &str,
-  //       named_params: NamedParams,
-  //     ) -> Result<bool, trailbase_sqlite::Error> {
-  //       if let Some(row) = conn.query_row(query, named_params)? {
-  //         return Ok(row.get(0)?);
-  //       }
-  //       return Err(rusqlite::Error::QueryReturnedNoRows.into());
-  //     }
-  //
-  //     return match check(conn, &access_query, params) {
-  //       Ok(allowed) if allowed => Ok(()),
-  //       _ => Err(RecordError::Forbidden),
-  //     };
-  //   }));
-  // }
-
   pub fn record_level_access_check<T: SyncConnectionTrait>(
     &self,
     conn: &T,
@@ -540,20 +504,12 @@ impl RecordApi {
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
 
-    #[inline]
-    fn check(
-      conn: &impl trailbase_sqlite::SyncConnectionTrait,
-      query: &str,
-      named_params: NamedParams,
-    ) -> Result<bool, trailbase_sqlite::Error> {
-      if let Some(row) = conn.query_row(query, named_params)? {
-        return Ok(row.get(0)?);
-      }
-      return Err(rusqlite::Error::QueryReturnedNoRows.into());
-    }
-
-    return match check(conn, &access_query, params) {
-      Ok(allowed) if allowed => Ok(()),
+    return match conn
+      .query_row(access_query, params)
+      .ok()
+      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
+    {
+      Some(allowed) if allowed => Ok(()),
       _ => Err(RecordError::Forbidden),
     };
   }

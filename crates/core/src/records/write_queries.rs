@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
@@ -208,48 +208,6 @@ impl WriteQuery {
       }
     };
   }
-
-  // pub(super) fn apply(
-  //   self,
-  //   conn: &rusqlite::Connection,
-  // ) -> Result<WriteQueryResult, rusqlite::Error> {
-  //   return match self {
-  //     Self::Insert {
-  //       query,
-  //       named_params,
-  //     } => {
-  //       let mut stmt = conn.prepare_cached(query.as_ref())?;
-  //       named_params.bind(&mut stmt)?;
-  //       if let Some(row) = stmt.raw_query().next()? {
-  //         Ok(WriteQueryResult {
-  //           rowid: row.get(0)?,
-  //           pk_value: Some(row.get(1)?),
-  //         })
-  //       } else {
-  //         Err(rusqlite::Error::QueryReturnedNoRows)
-  //       }
-  //     }
-  //     Self::Update {
-  //       query,
-  //       named_params,
-  //     } => {
-  //       let mut stmt = conn.prepare_cached(query.as_ref())?;
-  //       named_params.bind(&mut stmt)?;
-  //       if let Some(row) = stmt.raw_query().next()? {
-  //         Ok(WriteQueryResult {
-  //           rowid: row.get(0)?,
-  //           pk_value: None,
-  //         })
-  //       } else {
-  //         Err(rusqlite::Error::QueryReturnedNoRows)
-  //       }
-  //     }
-  //     Self::Delete { query, pk_value } => Ok(WriteQueryResult {
-  //       rowid: conn.query_row(&query, [pk_value], |row| row.get(0))?,
-  //       pk_value: None,
-  //     }),
-  //   };
-  // }
 }
 
 pub(crate) async fn run_queries(
