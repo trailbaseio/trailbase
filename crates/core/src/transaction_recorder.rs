@@ -4,6 +4,7 @@ use std::{
   path::{Path, PathBuf},
 };
 use thiserror::Error;
+use trailbase_sqlite::SyncConnectionTrait;
 
 use crate::migrations;
 

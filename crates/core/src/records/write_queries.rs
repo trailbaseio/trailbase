@@ -165,16 +165,16 @@ impl WriteQuery {
     };
   }
 
-  pub(super) fn apply_tx(
+  pub(super) fn apply_sync(
     self,
-    tx: &trailbase_sqlite::Transaction,
+    conn: &impl trailbase_sqlite::SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
       Self::Insert {
         query,
         named_params,
       } => {
-        if let Some(row) = tx.query_row(query, named_params)? {
+        if let Some(row) = conn.query_row(query, named_params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.get(1)?),
@@ -187,7 +187,7 @@ impl WriteQuery {
         query,
         named_params,
       } => {
-        if let Some(row) = tx.query_row(query, named_params)? {
+        if let Some(row) = conn.query_row(query, named_params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
@@ -197,7 +197,7 @@ impl WriteQuery {
         }
       }
       Self::Delete { query, pk_value } => {
-        if let Some(row) = tx.query_row(query, [pk_value])? {
+        if let Some(row) = conn.query_row(query, [pk_value])? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
@@ -209,47 +209,47 @@ impl WriteQuery {
     };
   }
 
-  pub(super) fn apply(
-    self,
-    conn: &rusqlite::Connection,
-  ) -> Result<WriteQueryResult, rusqlite::Error> {
-    return match self {
-      Self::Insert {
-        query,
-        named_params,
-      } => {
-        let mut stmt = conn.prepare_cached(query.as_ref())?;
-        named_params.bind(&mut stmt)?;
-        if let Some(row) = stmt.raw_query().next()? {
-          Ok(WriteQueryResult {
-            rowid: row.get(0)?,
-            pk_value: Some(row.get(1)?),
-          })
-        } else {
-          Err(rusqlite::Error::QueryReturnedNoRows)
-        }
-      }
-      Self::Update {
-        query,
-        named_params,
-      } => {
-        let mut stmt = conn.prepare_cached(query.as_ref())?;
-        named_params.bind(&mut stmt)?;
-        if let Some(row) = stmt.raw_query().next()? {
-          Ok(WriteQueryResult {
-            rowid: row.get(0)?,
-            pk_value: None,
-          })
-        } else {
-          Err(rusqlite::Error::QueryReturnedNoRows)
-        }
-      }
-      Self::Delete { query, pk_value } => Ok(WriteQueryResult {
-        rowid: conn.query_row(&query, [pk_value], |row| row.get(0))?,
-        pk_value: None,
-      }),
-    };
-  }
+  // pub(super) fn apply(
+  //   self,
+  //   conn: &rusqlite::Connection,
+  // ) -> Result<WriteQueryResult, rusqlite::Error> {
+  //   return match self {
+  //     Self::Insert {
+  //       query,
+  //       named_params,
+  //     } => {
+  //       let mut stmt = conn.prepare_cached(query.as_ref())?;
+  //       named_params.bind(&mut stmt)?;
+  //       if let Some(row) = stmt.raw_query().next()? {
+  //         Ok(WriteQueryResult {
+  //           rowid: row.get(0)?,
+  //           pk_value: Some(row.get(1)?),
+  //         })
+  //       } else {
+  //         Err(rusqlite::Error::QueryReturnedNoRows)
+  //       }
+  //     }
+  //     Self::Update {
+  //       query,
+  //       named_params,
+  //     } => {
+  //       let mut stmt = conn.prepare_cached(query.as_ref())?;
+  //       named_params.bind(&mut stmt)?;
+  //       if let Some(row) = stmt.raw_query().next()? {
+  //         Ok(WriteQueryResult {
+  //           rowid: row.get(0)?,
+  //           pk_value: None,
+  //         })
+  //       } else {
+  //         Err(rusqlite::Error::QueryReturnedNoRows)
+  //       }
+  //     }
+  //     Self::Delete { query, pk_value } => Ok(WriteQueryResult {
+  //       rowid: conn.query_row(&query, [pk_value], |row| row.get(0))?,
+  //       pk_value: None,
+  //     }),
+  //   };
+  // }
 }
 
 pub(crate) async fn run_queries(
@@ -294,7 +294,7 @@ pub(crate) async fn run_queries(
     .transaction(move |tx| -> Result<_, trailbase_sqlite::Error> {
       let rows: Vec<WriteQueryResult> = queries
         .into_iter()
-        .map(|query| query.apply_tx(&tx))
+        .map(|query| query.apply_sync(&tx))
         .collect::<Result<Vec<_>, _>>()?;
 
       tx.commit()?;

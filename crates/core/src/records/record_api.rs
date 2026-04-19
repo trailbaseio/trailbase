@@ -8,7 +8,7 @@ use trailbase_schema::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Params as _, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -45,8 +45,8 @@ struct RecordApiSchema {
   column_name_to_index: HashMap<String, usize>,
 }
 
-type DeferredAclCheck =
-  Box<dyn (FnOnce(&trailbase_sqlite::Transaction) -> Result<(), RecordError>) + Send>;
+// type DeferredAclCheck<T: SyncConnectionTrait> =
+//   Box<dyn (FnOnce(&T) -> Result<(), RecordError>) + Send>;
 
 impl RecordApiSchema {
   fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
@@ -487,40 +487,75 @@ impl RecordApi {
     return Err(RecordError::Forbidden);
   }
 
-  pub fn build_deferred_record_level_access_check(
+  // pub fn build_deferred_record_level_access_check<T: SyncConnectionTrait>(
+  //   &self,
+  //   p: Permission,
+  //   record_id: Option<&Value>,
+  //   request_params: Option<&mut LazyParams<'_>>,
+  //   user: Option<&User>,
+  // ) -> Result<DeferredAclCheck<T>, RecordError> {
+  //   // First check table level access and if present check row-level access based on access rule.
+  //   self.check_table_level_access(p, user)?;
+  //
+  //   let Some(access_query) = self.state.cached_access_query(p) else {
+  //     return Ok(Box::new(|_conn| Ok(())));
+  //   };
+  //
+  //   let params = self.build_named_params(p, record_id, request_params, user)?;
+  //
+  //   return Ok(Box::new(move |conn| {
+  //     #[inline]
+  //     fn check(
+  //       conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  //       query: &str,
+  //       named_params: NamedParams,
+  //     ) -> Result<bool, trailbase_sqlite::Error> {
+  //       if let Some(row) = conn.query_row(query, named_params)? {
+  //         return Ok(row.get(0)?);
+  //       }
+  //       return Err(rusqlite::Error::QueryReturnedNoRows.into());
+  //     }
+  //
+  //     return match check(conn, &access_query, params) {
+  //       Ok(allowed) if allowed => Ok(()),
+  //       _ => Err(RecordError::Forbidden),
+  //     };
+  //   }));
+  // }
+
+  pub fn record_level_access_check<T: SyncConnectionTrait>(
     &self,
+    conn: &T,
     p: Permission,
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
-  ) -> Result<DeferredAclCheck, RecordError> {
+  ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
     let Some(access_query) = self.state.cached_access_query(p) else {
-      return Ok(Box::new(|_conn| Ok(())));
+      return Ok(());
     };
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
 
-    return Ok(Box::new(move |tx| {
-      #[inline]
-      fn check(
-        tx: &trailbase_sqlite::Transaction,
-        query: &str,
-        named_params: NamedParams,
-      ) -> Result<bool, trailbase_sqlite::Error> {
-        if let Some(row) = tx.query_row(query, named_params)? {
-          return Ok(row.get(0)?);
-        }
-        return Err(rusqlite::Error::QueryReturnedNoRows.into());
+    #[inline]
+    fn check(
+      conn: &impl trailbase_sqlite::SyncConnectionTrait,
+      query: &str,
+      named_params: NamedParams,
+    ) -> Result<bool, trailbase_sqlite::Error> {
+      if let Some(row) = conn.query_row(query, named_params)? {
+        return Ok(row.get(0)?);
       }
+      return Err(rusqlite::Error::QueryReturnedNoRows.into());
+    }
 
-      return match check(tx, &access_query, params) {
-        Ok(allowed) if allowed => Ok(()),
-        _ => Err(RecordError::Forbidden),
-      };
-    }));
+    return match check(conn, &access_query, params) {
+      Ok(allowed) if allowed => Ok(()),
+      _ => Err(RecordError::Forbidden),
+    };
   }
 
   #[inline]
