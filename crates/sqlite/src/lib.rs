@@ -23,12 +23,12 @@ mod value;
 #[cfg(debug_assertions)]
 mod experimental;
 
-pub use connection::{ArcLockGuard, Connection, LockGuard, Options};
+pub use connection::{ArcLockGuard, Connection, LockGuard, Options, SyncConnection};
 pub use database::Database;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
-pub use sqlite::transaction::Transaction;
+pub use sqlite::transaction::{SyncConnectionTrait, Transaction};
 pub use value::{Value, ValueRef};
 
 #[macro_export]

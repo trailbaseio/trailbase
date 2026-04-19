@@ -8,7 +8,7 @@ use trailbase_schema::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -45,7 +45,8 @@ struct RecordApiSchema {
   column_name_to_index: HashMap<String, usize>,
 }
 
-type DeferredAclCheck = Box<dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send>;
+// type DeferredAclCheck<T: SyncConnectionTrait> =
+//   Box<dyn (FnOnce(&T) -> Result<(), RecordError>) + Send>;
 
 impl RecordApiSchema {
   fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
@@ -486,43 +487,31 @@ impl RecordApi {
     return Err(RecordError::Forbidden);
   }
 
-  pub fn build_deferred_record_level_access_check(
+  pub fn record_level_access_check<T: SyncConnectionTrait>(
     &self,
+    conn: &T,
     p: Permission,
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,
     user: Option<&User>,
-  ) -> Result<DeferredAclCheck, RecordError> {
+  ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
     let Some(access_query) = self.state.cached_access_query(p) else {
-      return Ok(Box::new(|_conn| Ok(())));
+      return Ok(());
     };
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
 
-    return Ok(Box::new(move |conn| {
-      #[inline]
-      fn check(
-        conn: &rusqlite::Connection,
-        query: &str,
-        named_params: NamedParams,
-      ) -> Result<bool, rusqlite::Error> {
-        let mut stmt = conn.prepare_cached(query)?;
-        named_params.bind(&mut stmt)?;
-
-        if let Some(row) = stmt.raw_query().next()? {
-          return row.get(0);
-        }
-        return Err(rusqlite::Error::QueryReturnedNoRows);
-      }
-
-      return match check(conn, &access_query, params) {
-        Ok(allowed) if allowed => Ok(()),
-        _ => Err(RecordError::Forbidden),
-      };
-    }));
+    return match conn
+      .query_row(access_query, params)
+      .ok()
+      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
+    {
+      Some(allowed) if allowed => Ok(()),
+      _ => Err(RecordError::Forbidden),
+    };
   }
 
   #[inline]

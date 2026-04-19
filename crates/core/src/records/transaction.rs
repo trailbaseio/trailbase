@@ -1,8 +1,8 @@
 use axum::extract::{Json, State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::QualifiedName;
+use trailbase_sqlite::SyncConnectionTrait;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
@@ -60,202 +60,51 @@ pub async fn record_transactions_handler(
 ) -> Result<Json<TransactionResponse>, RecordError> {
   // NOTE: We may want to make this user-configurable. The cost also heavily depends on whether
   // `request.transaction == true`.
-  if request.operations.len() > 128 {
-    return Err(RecordError::BadRequest("Transactions exceed limit: 128"));
+  match request.operations.len() {
+    0 => {
+      return Ok(Json(TransactionResponse { ids: vec![] }));
+    }
+    n if n > 128 => {
+      return Err(RecordError::BadRequest("Batch size exceeds limit: 128"));
+    }
+    _ => {}
   }
 
-  if request.operations.is_empty() {
-    return Ok(Json(TransactionResponse { ids: vec![] }));
-  }
-
-  type Op = dyn (FnOnce(&rusqlite::Connection) -> Result<Option<String>, RecordError>) + Send;
-
-  let mut db: (String, Option<Arc<trailbase_sqlite::Connection>>) = Default::default();
-  let mut get_api =
-    |state: &AppState, api_name: &str, idx: usize| -> Result<RecordApi, RecordError> {
-      let api = state
-        .lookup_record_api(api_name)
-        .ok_or_else(|| RecordError::ApiNotFound)?;
-      if !api.is_table() {
-        return Err(RecordError::ApiRequiresTable);
-      }
-
-      // Check that all ops reference same DB.
-      let db_name = get_db_name(api.qualified_name());
-      if idx == 0 {
-        db = (db_name.to_string(), Some(api.conn().clone()));
-      } else if db_name != db.0 {
-        return Err(RecordError::BadRequest("ops can only touch same db"));
-      }
-
-      return Ok(api);
+  let Some(first_api) = request.operations.first().and_then(|op| {
+    let api_name = match op {
+      Operation::Create { api_name, .. } => api_name,
+      Operation::Update { api_name, .. } => api_name,
+      Operation::Delete { api_name, .. } => api_name,
     };
 
-  let operations: Vec<Box<Op>> = request
-    .operations
-    .into_iter()
-    .enumerate()
-    .map(|(idx, op)| -> Result<Box<Op>, RecordError> {
-      return match op {
-        Operation::Create { api_name, value } => {
-          let api = get_api(&state, &api_name, idx)?;
-          let mut record = extract_record(value)?;
+    return get_api(&state, api_name).ok();
+  }) else {
+    return Err(RecordError::BadRequest("empty ops?"));
+  };
 
-          if api.insert_autofill_missing_user_id_columns()
-            && let Some(ref user) = user
-          {
-            for column_index in api.user_id_columns() {
-              let col_name = &api.columns()[*column_index].column.name;
-              if !record.contains_key(col_name) {
-                record.insert(
-                  col_name.to_owned(),
-                  serde_json::Value::String(uuid_to_b64(&user.uuid)),
-                );
-              }
-            }
-          }
-
-          let mut lazy_params =
-            LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, None);
-          let acl_check = api.build_deferred_record_level_access_check(
-            Permission::Create,
-            None,
-            Some(&mut lazy_params),
-            user.as_ref(),
-          )?;
-
-          let (query, _files) = WriteQuery::new_insert(
-            api.table_name(),
-            &api.record_pk_column().column.name,
-            api.insert_conflict_resolution_strategy(),
-            lazy_params
-              .consume()
-              .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
-          Ok(Box::new(move |conn| {
-            acl_check(conn)?;
-            let result = query
-              .apply(conn)
-              .map_err(|err| RecordError::Internal(err.into()))?;
-
-            return Ok(Some(
-              extract_record_id(result.pk_value.expect("insert"))
-                .map_err(|err| RecordError::Internal(err.into()))?,
-            ));
-          }))
-        }
-        Operation::Update {
-          api_name,
-          record_id,
-          value,
-        } => {
-          let api = get_api(&state, &api_name, idx)?;
-          let record = extract_record(value)?;
-          let record_id = api.primary_key_to_value(record_id)?;
-          let pk_meta = api.record_pk_column();
-
-          let mut lazy_params = LazyParams::for_update(
-            &api,
-            state.json_schema_registry().clone(),
-            record,
-            None,
-            pk_meta.column.name.clone(),
-            record_id.clone(),
-          );
-
-          let acl_check = api.build_deferred_record_level_access_check(
-            Permission::Update,
-            Some(&record_id),
-            Some(&mut lazy_params),
-            user.as_ref(),
-          )?;
-
-          let (query, _files) = WriteQuery::new_update(
-            api.table_name(),
-            lazy_params
-              .consume()
-              .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
-          Ok(Box::new(move |conn| {
-            acl_check(conn)?;
-            let _ = query
-              .apply(conn)
-              .map_err(|err| RecordError::Internal(err.into()))?;
-
-            return Ok(None);
-          }))
-        }
-        Operation::Delete {
-          api_name,
-          record_id,
-        } => {
-          let api = get_api(&state, &api_name, idx)?;
-          let record_id = api.primary_key_to_value(record_id)?;
-
-          let acl_check = api.build_deferred_record_level_access_check(
-            Permission::Delete,
-            Some(&record_id),
-            None,
-            user.as_ref(),
-          )?;
-
-          let query = WriteQuery::new_delete(
-            api.table_name(),
-            &api.record_pk_column().column.name,
-            record_id,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
-          Ok(Box::new(move |conn| {
-            acl_check(conn)?;
-            let _ = query
-              .apply(conn)
-              .map_err(|err| RecordError::Internal(err.into()))?;
-
-            return Ok(None);
-          }))
-        }
-      };
-    })
-    .collect::<Result<Vec<_>, _>>()?;
-
-  let conn = db
-    .1
-    .ok_or_else(|| RecordError::Internal("missing db".into()))?;
-
+  let conn = first_api.conn().clone();
   let ids = if request.transaction.unwrap_or(false) {
     conn
-      .call_writer(
-        move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let tx = conn.transaction()?;
-
-          let mut ids: Vec<String> = vec![];
-          for op in operations {
-            if let Some(id) = op(&tx).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
-              ids.push(id);
-            }
-          }
+      .transaction({
+        move |tx| -> Result<Vec<String>, trailbase_sqlite::Error> {
+          let ids: Vec<String> =
+            apply_ops(&state, &tx, user.as_ref(), &first_api, request.operations)
+              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
           tx.commit()?;
 
           return Ok(ids);
-        },
-      )
+        }
+      })
       .await?
   } else {
     conn
-      .call_writer(
-        move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let mut ids: Vec<String> = vec![];
-          for op in operations {
-            if let Some(id) = op(conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
-              ids.push(id);
-            }
-          }
+      .call_writer2(
+        move |conn| -> Result<Vec<String>, trailbase_sqlite::Error> {
+          let ids: Vec<String> =
+            apply_ops(&state, &conn, user.as_ref(), &first_api, request.operations)
+              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
           return Ok(ids);
         },
       )
@@ -290,6 +139,163 @@ fn extract_record(
     return Err(RecordError::BadRequest("Not a record"));
   };
   return Ok(record);
+}
+
+fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
+  let api = state
+    .lookup_record_api(api_name)
+    .ok_or_else(|| RecordError::ApiNotFound)?;
+
+  if !api.is_table() {
+    return Err(RecordError::ApiRequiresTable);
+  }
+
+  return Ok(api);
+}
+
+fn apply_ops<T: SyncConnectionTrait>(
+  state: &AppState,
+  conn: &T,
+  user: Option<&User>,
+  api: &RecordApi,
+  ops: Vec<Operation>,
+) -> Result<Vec<String>, RecordError> {
+  let expected_db_name = get_db_name(api.qualified_name());
+
+  let ids: Vec<String> = ops
+    .into_iter()
+    .map(|op| -> Result<Option<String>, RecordError> {
+      return match op {
+        Operation::Create { api_name, value } => {
+          let api = get_api(&state, &api_name)?;
+          if get_db_name(api.qualified_name()) != expected_db_name {
+            return Err(RecordError::BadRequest("DB mismatch"));
+          }
+
+          let mut record = extract_record(value)?;
+
+          if api.insert_autofill_missing_user_id_columns()
+            && let Some(user) = user
+          {
+            for column_index in api.user_id_columns() {
+              let col_name = &api.columns()[*column_index].column.name;
+              if !record.contains_key(col_name) {
+                record.insert(
+                  col_name.to_owned(),
+                  serde_json::Value::String(uuid_to_b64(&user.uuid)),
+                );
+              }
+            }
+          }
+
+          let mut lazy_params =
+            LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, None);
+          api.record_level_access_check(
+            conn,
+            Permission::Create,
+            None,
+            Some(&mut lazy_params),
+            user,
+          )?;
+
+          let (query, _files) = WriteQuery::new_insert(
+            api.table_name(),
+            &api.record_pk_column().column.name,
+            api.insert_conflict_resolution_strategy(),
+            lazy_params
+              .consume()
+              .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+          let result = query
+            .apply_sync(conn)
+            .map_err(|err| RecordError::Internal(err.into()))?;
+
+          Ok(Some(
+            extract_record_id(result.pk_value.expect("insert"))
+              .map_err(|err| RecordError::Internal(err.into()))?,
+          ))
+        }
+        Operation::Update {
+          api_name,
+          record_id,
+          value,
+        } => {
+          let api = get_api(&state, &api_name)?;
+          if get_db_name(api.qualified_name()) != expected_db_name {
+            return Err(RecordError::BadRequest("DB mismatch"));
+          }
+
+          let record = extract_record(value)?;
+          let record_id = api.primary_key_to_value(record_id)?;
+          let pk_meta = api.record_pk_column();
+
+          let mut lazy_params = LazyParams::for_update(
+            &api,
+            state.json_schema_registry().clone(),
+            record,
+            None,
+            pk_meta.column.name.clone(),
+            record_id.clone(),
+          );
+
+          api.record_level_access_check(
+            conn,
+            Permission::Update,
+            Some(&record_id),
+            Some(&mut lazy_params),
+            user,
+          )?;
+
+          let (query, _files) = WriteQuery::new_update(
+            api.table_name(),
+            lazy_params
+              .consume()
+              .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+          let _ = query
+            .apply_sync(conn)
+            .map_err(|err| RecordError::Internal(err.into()))?;
+
+          Ok(None)
+        }
+        Operation::Delete {
+          api_name,
+          record_id,
+        } => {
+          let api = get_api(&state, &api_name)?;
+          if get_db_name(api.qualified_name()) != expected_db_name {
+            return Err(RecordError::BadRequest("DB mismatch"));
+          }
+
+          let record_id = api.primary_key_to_value(record_id)?;
+
+          api.record_level_access_check(conn, Permission::Delete, Some(&record_id), None, user)?;
+
+          let query = WriteQuery::new_delete(
+            api.table_name(),
+            &api.record_pk_column().column.name,
+            record_id,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+          let _ = query
+            .apply_sync(conn)
+            .map_err(|err| RecordError::Internal(err.into()))?;
+
+          Ok(None)
+        }
+      };
+    })
+    .collect::<Result<Vec<_>, _>>()?
+    .into_iter()
+    .flatten()
+    .collect();
+
+  return Ok(ids);
 }
 
 #[cfg(test)]

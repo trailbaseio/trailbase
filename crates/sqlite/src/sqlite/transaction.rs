@@ -5,6 +5,18 @@ use crate::params::Params;
 use crate::rows::Row;
 use crate::sqlite::util::{columns, from_row};
 
+pub trait SyncConnectionTrait {
+  // Queries the first row and returns it if present, otherwise `None`.
+  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error>;
+
+  // pub fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+  //   let mut stmt = self.tx.prepare(sql.as_ref())?;
+  //   params.bind(&mut stmt)?;
+  //
+  //   return from_rows(stmt.raw_query());
+  // }
+}
+
 pub struct Transaction<'a> {
   tx: rusqlite::Transaction<'a>,
 }
@@ -61,24 +73,6 @@ impl<'a> Transaction<'a> {
   //   return Ok(None);
   // }
 
-  // Queries the first row and returns it if present, otherwise `None`.
-  pub fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    let mut stmt = self.tx.prepare(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-
-    if let Some(row) = stmt.raw_query().next()? {
-      return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
-    }
-    return Ok(None);
-  }
-
-  // pub fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
-  //   let mut stmt = self.tx.prepare(sql.as_ref())?;
-  //   params.bind(&mut stmt)?;
-  //
-  //   return from_rows(stmt.raw_query());
-  // }
-
   pub fn expand_sql(
     &self,
     sql: impl AsRef<str>,
@@ -87,5 +81,18 @@ impl<'a> Transaction<'a> {
     let mut stmt = self.tx.prepare(sql.as_ref())?;
     params.bind(&mut stmt)?;
     return Ok(stmt.expanded_sql());
+  }
+}
+
+impl<'a> SyncConnectionTrait for Transaction<'a> {
+  // Queries the first row and returns it if present, otherwise `None`.
+  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+    let mut stmt = self.tx.prepare(sql.as_ref())?;
+    params.bind(&mut stmt)?;
+
+    if let Some(row) = stmt.raw_query().next()? {
+      return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
+    }
+    return Ok(None);
   }
 }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_sqlite::{Connection, NamedParams, Params as _, Value};
+use trailbase_sqlite::{Connection, NamedParams, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::error::RecordError;
@@ -165,45 +165,47 @@ impl WriteQuery {
     };
   }
 
-  pub(super) fn apply(
+  pub(super) fn apply_sync(
     self,
-    conn: &rusqlite::Connection,
-  ) -> Result<WriteQueryResult, rusqlite::Error> {
+    conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
       Self::Insert {
         query,
         named_params,
       } => {
-        let mut stmt = conn.prepare_cached(query.as_ref())?;
-        named_params.bind(&mut stmt)?;
-        if let Some(row) = stmt.raw_query().next()? {
+        if let Some(row) = conn.query_row(query, named_params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.get(1)?),
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows)
+          Err(rusqlite::Error::QueryReturnedNoRows.into())
         }
       }
       Self::Update {
         query,
         named_params,
       } => {
-        let mut stmt = conn.prepare_cached(query.as_ref())?;
-        named_params.bind(&mut stmt)?;
-        if let Some(row) = stmt.raw_query().next()? {
+        if let Some(row) = conn.query_row(query, named_params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows)
+          Err(rusqlite::Error::QueryReturnedNoRows.into())
         }
       }
-      Self::Delete { query, pk_value } => Ok(WriteQueryResult {
-        rowid: conn.query_row(&query, [pk_value], |row| row.get(0))?,
-        pk_value: None,
-      }),
+      Self::Delete { query, pk_value } => {
+        if let Some(row) = conn.query_row(query, [pk_value])? {
+          Ok(WriteQueryResult {
+            rowid: row.get(0)?,
+            pk_value: None,
+          })
+        } else {
+          Err(rusqlite::Error::QueryReturnedNoRows.into())
+        }
+      }
     };
   }
 }
@@ -247,13 +249,10 @@ pub(crate) async fn run_queries(
   };
 
   let result: Vec<WriteQueryResult> = conn
-    .call_writer(move |conn| -> Result<_, rusqlite::Error> {
-      let tx = conn.transaction()?;
-
-      // FIXME: This is the tricky one because apply is used on transaction.
+    .transaction(move |tx| -> Result<_, trailbase_sqlite::Error> {
       let rows: Vec<WriteQueryResult> = queries
         .into_iter()
-        .map(|query| query.apply(&tx))
+        .map(|query| query.apply_sync(&tx))
         .collect::<Result<Vec<_>, _>>()?;
 
       tx.commit()?;

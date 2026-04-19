@@ -9,11 +9,27 @@ use crate::from_sql::FromSql;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
 use crate::sqlite::executor::Executor;
-use crate::sqlite::transaction::Transaction;
+use crate::sqlite::transaction::{SyncConnectionTrait, Transaction};
 use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockGuard, Options};
+
+pub struct SyncConnection<'a> {
+  conn: &'a mut rusqlite::Connection,
+}
+
+impl<'a> SyncConnectionTrait for SyncConnection<'a> {
+  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+    let mut stmt = self.conn.prepare_cached(sql.as_ref())?;
+    params.bind(&mut stmt)?;
+
+    if let Some(row) = stmt.raw_query().next()? {
+      return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
+    }
+    return Ok(None);
+  }
+}
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
@@ -103,6 +119,21 @@ impl Connection {
     Error: From<E>,
   {
     return self.exec.call_writer(function).await;
+  }
+
+  pub async fn call_writer2<F, R, E>(&self, function: F) -> Result<R, Error>
+  where
+    F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
+  {
+    return self
+      .exec
+      .call_writer(|conn| {
+        return function(SyncConnection { conn });
+      })
+      .await;
   }
 
   // pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
