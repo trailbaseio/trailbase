@@ -60,16 +60,91 @@ pub async fn record_transactions_handler(
 ) -> Result<Json<TransactionResponse>, RecordError> {
   // NOTE: We may want to make this user-configurable. The cost also heavily depends on whether
   // `request.transaction == true`.
-  if request.operations.len() > 128 {
-    return Err(RecordError::BadRequest("Transactions exceed limit: 128"));
+  match request.operations.len() {
+    0 => {
+      return Ok(Json(TransactionResponse { ids: vec![] }));
+    }
+    n if n > 128 => {
+      return Err(RecordError::BadRequest("Batch size exceeds limit: 128"));
+    }
+    _ => {}
   }
 
-  if request.operations.is_empty() {
-    return Ok(Json(TransactionResponse { ids: vec![] }));
-  }
+  let (conn, operations) = build_deferred_ops(&state, user.as_ref(), request.operations)?;
 
-  type Op = dyn (FnOnce(&rusqlite::Connection) -> Result<Option<String>, RecordError>) + Send;
+  let ids = if request.transaction.unwrap_or(false) {
+    conn
+      .transaction(move |tx| -> Result<Vec<String>, trailbase_sqlite::Error> {
+        let mut ids: Vec<String> = vec![];
+        for op in operations {
+          if let Some(id) = op(&tx).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
+            ids.push(id);
+          }
+        }
 
+        tx.commit()?;
+
+        return Ok(ids);
+      })
+      .await?
+  } else {
+    // FIXME:
+    return Err(RecordError::Internal("not implemented".into()));
+
+    // conn
+    //   .transaction(
+    //     move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
+    //       let mut ids: Vec<String> = vec![];
+    //       for op in operations {
+    //         if let Some(id) = op(conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
+    //           ids.push(id);
+    //         }
+    //       }
+    //       return Ok(ids);
+    //     },
+    //   )
+    //   .await?
+  };
+
+  return Ok(Json(TransactionResponse { ids }));
+}
+
+#[inline]
+fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, trailbase_sqlite::Error> {
+  return match value {
+    trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
+    trailbase_sqlite::Value::Text(text) => Ok(text),
+    trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
+    _ => Err(trailbase_sqlite::Error::Other(
+      "Unexpected data type".into(),
+    )),
+  };
+}
+
+#[inline]
+fn get_db_name(name: &QualifiedName) -> &str {
+  return name.database_schema.as_deref().unwrap_or("main");
+}
+
+#[inline]
+fn extract_record(
+  value: serde_json::Value,
+) -> Result<serde_json::Map<String, serde_json::Value>, RecordError> {
+  let serde_json::Value::Object(record) = value else {
+    return Err(RecordError::BadRequest("Not a record"));
+  };
+  return Ok(record);
+}
+
+// type Op = dyn (FnOnce(&rusqlite::Connection) -> Result<Option<String>, RecordError>) + Send;
+type Op =
+  dyn (FnOnce(&trailbase_sqlite::Transaction) -> Result<Option<String>, RecordError>) + Send;
+
+fn build_deferred_ops(
+  state: &AppState,
+  user: Option<&User>,
+  ops: Vec<Operation>,
+) -> Result<(Arc<trailbase_sqlite::Connection>, Vec<Box<Op>>), RecordError> {
   let mut db: (String, Option<Arc<trailbase_sqlite::Connection>>) = Default::default();
   let mut get_api =
     |state: &AppState, api_name: &str, idx: usize| -> Result<RecordApi, RecordError> {
@@ -91,8 +166,7 @@ pub async fn record_transactions_handler(
       return Ok(api);
     };
 
-  let operations: Vec<Box<Op>> = request
-    .operations
+  let deferred_ops = ops
     .into_iter()
     .enumerate()
     .map(|(idx, op)| -> Result<Box<Op>, RecordError> {
@@ -102,7 +176,7 @@ pub async fn record_transactions_handler(
           let mut record = extract_record(value)?;
 
           if api.insert_autofill_missing_user_id_columns()
-            && let Some(ref user) = user
+            && let Some(user) = user
           {
             for column_index in api.user_id_columns() {
               let col_name = &api.columns()[*column_index].column.name;
@@ -121,7 +195,7 @@ pub async fn record_transactions_handler(
             Permission::Create,
             None,
             Some(&mut lazy_params),
-            user.as_ref(),
+            user,
           )?;
 
           let (query, _files) = WriteQuery::new_insert(
@@ -134,10 +208,11 @@ pub async fn record_transactions_handler(
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(Box::new(move |conn| {
-            acl_check(conn)?;
+          Ok(Box::new(move |tx| {
+            acl_check(tx)?;
+
             let result = query
-              .apply(conn)
+              .apply_tx(tx)
               .map_err(|err| RecordError::Internal(err.into()))?;
 
             return Ok(Some(
@@ -169,7 +244,7 @@ pub async fn record_transactions_handler(
             Permission::Update,
             Some(&record_id),
             Some(&mut lazy_params),
-            user.as_ref(),
+            user,
           )?;
 
           let (query, _files) = WriteQuery::new_update(
@@ -180,10 +255,11 @@ pub async fn record_transactions_handler(
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(Box::new(move |conn| {
-            acl_check(conn)?;
+          Ok(Box::new(move |tx| {
+            acl_check(tx)?;
+
             let _ = query
-              .apply(conn)
+              .apply_tx(tx)
               .map_err(|err| RecordError::Internal(err.into()))?;
 
             return Ok(None);
@@ -200,7 +276,7 @@ pub async fn record_transactions_handler(
             Permission::Delete,
             Some(&record_id),
             None,
-            user.as_ref(),
+            user,
           )?;
 
           let query = WriteQuery::new_delete(
@@ -210,10 +286,11 @@ pub async fn record_transactions_handler(
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(Box::new(move |conn| {
-            acl_check(conn)?;
+          Ok(Box::new(move |tx| {
+            acl_check(tx)?;
+
             let _ = query
-              .apply(conn)
+              .apply_tx(tx)
               .map_err(|err| RecordError::Internal(err.into()))?;
 
             return Ok(None);
@@ -223,73 +300,11 @@ pub async fn record_transactions_handler(
     })
     .collect::<Result<Vec<_>, _>>()?;
 
-  let conn = db
-    .1
-    .ok_or_else(|| RecordError::Internal("missing db".into()))?;
+  if let Some(conn) = db.1 {
+    return Ok((conn, deferred_ops));
+  }
 
-  let ids = if request.transaction.unwrap_or(false) {
-    conn
-      .call_writer(
-        move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let tx = conn.transaction()?;
-
-          let mut ids: Vec<String> = vec![];
-          for op in operations {
-            if let Some(id) = op(&tx).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
-              ids.push(id);
-            }
-          }
-
-          tx.commit()?;
-
-          return Ok(ids);
-        },
-      )
-      .await?
-  } else {
-    conn
-      .call_writer(
-        move |conn: &mut rusqlite::Connection| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let mut ids: Vec<String> = vec![];
-          for op in operations {
-            if let Some(id) = op(conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()))? {
-              ids.push(id);
-            }
-          }
-          return Ok(ids);
-        },
-      )
-      .await?
-  };
-
-  return Ok(Json(TransactionResponse { ids }));
-}
-
-#[inline]
-fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, trailbase_sqlite::Error> {
-  return match value {
-    trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
-    trailbase_sqlite::Value::Text(text) => Ok(text),
-    trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
-    _ => Err(trailbase_sqlite::Error::Other(
-      "Unexpected data type".into(),
-    )),
-  };
-}
-
-#[inline]
-fn get_db_name(name: &QualifiedName) -> &str {
-  return name.database_schema.as_deref().unwrap_or("main");
-}
-
-#[inline]
-fn extract_record(
-  value: serde_json::Value,
-) -> Result<serde_json::Map<String, serde_json::Value>, RecordError> {
-  let serde_json::Value::Object(record) = value else {
-    return Err(RecordError::BadRequest("Not a record"));
-  };
-  return Ok(record);
+  return Err(RecordError::BadRequest("empty ops?"));
 }
 
 #[cfg(test)]

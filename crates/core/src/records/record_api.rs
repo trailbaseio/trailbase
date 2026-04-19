@@ -45,7 +45,8 @@ struct RecordApiSchema {
   column_name_to_index: HashMap<String, usize>,
 }
 
-type DeferredAclCheck = Box<dyn (FnOnce(&rusqlite::Connection) -> Result<(), RecordError>) + Send>;
+type DeferredAclCheck =
+  Box<dyn (FnOnce(&trailbase_sqlite::Transaction) -> Result<(), RecordError>) + Send>;
 
 impl RecordApiSchema {
   fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
@@ -502,23 +503,20 @@ impl RecordApi {
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
 
-    return Ok(Box::new(move |conn| {
+    return Ok(Box::new(move |tx| {
       #[inline]
       fn check(
-        conn: &rusqlite::Connection,
+        tx: &trailbase_sqlite::Transaction,
         query: &str,
         named_params: NamedParams,
-      ) -> Result<bool, rusqlite::Error> {
-        let mut stmt = conn.prepare_cached(query)?;
-        named_params.bind(&mut stmt)?;
-
-        if let Some(row) = stmt.raw_query().next()? {
-          return row.get(0);
+      ) -> Result<bool, trailbase_sqlite::Error> {
+        if let Some(row) = tx.query_row(query, named_params)? {
+          return Ok(row.get(0)?);
         }
-        return Err(rusqlite::Error::QueryReturnedNoRows);
+        return Err(rusqlite::Error::QueryReturnedNoRows.into());
       }
 
-      return match check(conn, &access_query, params) {
+      return match check(tx, &access_query, params) {
         Ok(allowed) if allowed => Ok(()),
         _ => Err(RecordError::Forbidden),
       };
