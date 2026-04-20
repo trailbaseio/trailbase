@@ -61,3 +61,15 @@ impl<'a> rusqlite::ToSql for ToSqlProxy<'a> {
     })
   }
 }
+
+impl<'a> TryFrom<ToSqlProxy<'a>> for Value {
+  // QUESTION: Should this be a FromSqlError?
+  type Error = crate::Error;
+
+  fn try_from(value: ToSqlProxy<'a>) -> Result<Self, Self::Error> {
+    match value {
+      ToSqlProxy::Borrowed(v) => Ok(v.try_into()?),
+      ToSqlProxy::Owned(v) => Ok(v),
+    }
+  }
+}
