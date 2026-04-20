@@ -1,26 +1,36 @@
-use rusqlite::{Statement, types};
 use std::borrow::Cow;
 
+use crate::error::Error;
+// use crate::statement::Statement;
 use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
-// use crate::statement::Statement;
+
+// pub trait Params2 {
+//   fn bind<S: Statement>(self, stmt: S) -> Result<(), Error>;
+// }
+//
+// impl Params2 for () {
+//   fn bind<S: Statement>(self, _stmt: S) -> Result<(), Error> {
+//     Ok(())
+//   }
+// }
 
 pub trait Params {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error>;
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error>;
 }
 
 pub type NamedParams = Vec<(Cow<'static, str>, Value)>;
-pub type NamedParamRef<'a> = (Cow<'static, str>, types::ToSqlOutput<'a>);
+pub type NamedParamRef<'a> = (Cow<'static, str>, ToSqlProxy<'a>);
 pub type NamedParamsRef<'a> = &'a [NamedParamRef<'a>];
 
 impl Params for () {
-  fn bind(self, _stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, _stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     Ok(())
   }
 }
 
 impl Params for Vec<(String, Value)> {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       if let Some(idx) = stmt.parameter_index(&name)? {
         stmt.raw_bind_parameter(idx, rusqlite::types::Value::from(v))?;
@@ -31,7 +41,7 @@ impl Params for Vec<(String, Value)> {
 }
 
 impl Params for NamedParams {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(&name)? else {
         continue;
@@ -43,7 +53,7 @@ impl Params for NamedParams {
 }
 
 impl Params for Vec<(&str, Value)> {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
         continue;
@@ -55,7 +65,7 @@ impl Params for Vec<(&str, Value)> {
 }
 
 impl Params for &[(&str, Value)] {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
         continue;
@@ -67,7 +77,7 @@ impl Params for &[(&str, Value)] {
 }
 
 impl Params for NamedParamsRef<'_> {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
         continue;
@@ -79,7 +89,7 @@ impl Params for NamedParamsRef<'_> {
 }
 
 impl<const N: usize> Params for [(&str, Value); N] {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
         continue;
@@ -91,7 +101,7 @@ impl<const N: usize> Params for [(&str, Value); N] {
 }
 
 impl<'a, const N: usize> Params for [(&str, ToSqlProxy<'a>); N] {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
         continue;
@@ -103,7 +113,7 @@ impl<'a, const N: usize> Params for [(&str, ToSqlProxy<'a>); N] {
 }
 
 impl Params for Vec<Value> {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (idx, v) in self.into_iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, rusqlite::types::Value::from(v))?;
     }
@@ -112,7 +122,7 @@ impl Params for Vec<Value> {
 }
 
 impl Params for &[Value] {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (idx, v) in self.iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, v)?;
     }
@@ -121,7 +131,7 @@ impl Params for &[Value] {
 }
 
 impl<'a, const N: usize> Params for [ToSqlProxy<'a>; N] {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (idx, p) in self.into_iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, p)?;
     }
@@ -133,7 +143,7 @@ impl<T, const N: usize> Params for &[T; N]
 where
   T: rusqlite::ToSql + Send + Sync,
 {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (idx, p) in self.iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, p)?;
     }
@@ -145,19 +155,19 @@ impl<T> Params for (T,)
 where
   T: rusqlite::ToSql + Send + Sync,
 {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
-    return stmt.raw_bind_parameter(1, self.0);
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
+    return Ok(stmt.raw_bind_parameter(1, self.0)?);
   }
 }
 
 // impl<T: Params + Clone> Params for &T {
-//   fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+//   fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), rusqlite::Error> {
 //     return self.clone().bind(stmt);
 //   }
 // }
 
 impl<const N: usize> Params for [Value; N] {
-  fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
+  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), Error> {
     for (idx, v) in self.into_iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, rusqlite::types::Value::from(v))?;
     }

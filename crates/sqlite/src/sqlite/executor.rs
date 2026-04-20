@@ -277,12 +277,12 @@ impl Executor {
     params: impl Params + Send + 'static,
   ) -> Result<usize, Error> {
     return self
-      .call_writer(move |conn: &mut rusqlite::Connection| {
+      .call_writer(move |conn: &mut rusqlite::Connection| -> Result<_, Error> {
         let mut stmt = conn.prepare_cached(sql.as_ref())?;
 
         params.bind(&mut stmt)?;
 
-        return stmt.raw_execute();
+        return Ok(stmt.raw_execute()?);
       })
       .await;
   }
