@@ -61,7 +61,7 @@ impl AsyncQuery<Vec<Migration>> for Connection {
     &mut self,
     query: &str,
   ) -> Result<Vec<Migration>, <Self as AsyncTransaction>::Error> {
-    return Ok(query_applied_migrations(self, &query).await?);
+    return query_applied_migrations(self, query).await;
   }
 }
 

@@ -167,7 +167,7 @@ fn apply_ops<T: SyncConnectionTrait>(
     .map(|op| -> Result<Option<String>, RecordError> {
       return match op {
         Operation::Create { api_name, value } => {
-          let api = get_api(&state, &api_name)?;
+          let api = get_api(state, &api_name)?;
           if get_db_name(api.qualified_name()) != expected_db_name {
             return Err(RecordError::BadRequest("DB mismatch"));
           }
@@ -222,7 +222,7 @@ fn apply_ops<T: SyncConnectionTrait>(
           record_id,
           value,
         } => {
-          let api = get_api(&state, &api_name)?;
+          let api = get_api(state, &api_name)?;
           if get_db_name(api.qualified_name()) != expected_db_name {
             return Err(RecordError::BadRequest("DB mismatch"));
           }
@@ -266,7 +266,7 @@ fn apply_ops<T: SyncConnectionTrait>(
           api_name,
           record_id,
         } => {
-          let api = get_api(&state, &api_name)?;
+          let api = get_api(state, &api_name)?;
           if get_db_name(api.qualified_name()) != expected_db_name {
             return Err(RecordError::BadRequest("DB mismatch"));
           }
