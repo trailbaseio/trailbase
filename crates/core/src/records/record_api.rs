@@ -675,17 +675,20 @@ struct SubscriptionAclParams {
 }
 
 impl trailbase_sqlite::Params for SubscriptionAclParams {
-  fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> rusqlite::Result<()> {
+  fn bind<S: trailbase_sqlite::Statement>(
+    self,
+    stmt: &mut S,
+  ) -> Result<(), trailbase_sqlite::Error> {
     for (name, v) in self.params.iter() {
       if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
-        stmt.raw_bind_parameter(idx, v)?;
+        stmt.bind_parameter(idx, v.into())?;
       };
     }
 
     if let Some(user) = self.user
       && let Some(idx) = stmt.parameter_index(":__user_id")?
     {
-      stmt.raw_bind_parameter(idx, trailbase_sqlite::Value::Blob(user.uuid.into()))?;
+      stmt.bind_parameter(idx, trailbase_sqlite::Value::Blob(user.uuid.into()).into())?;
     }
 
     return Ok(());

@@ -17,6 +17,7 @@ pub mod from_sql;
 mod params;
 mod rows;
 pub mod sqlite;
+mod statement;
 pub mod to_sql;
 mod value;
 
@@ -29,6 +30,7 @@ pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
 pub use sqlite::transaction::{SyncConnectionTrait, Transaction};
+pub use statement::Statement;
 pub use value::{Value, ValueRef};
 
 #[macro_export]
