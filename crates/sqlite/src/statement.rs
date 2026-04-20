@@ -17,3 +17,15 @@ impl<'a> Statement for rusqlite::Statement<'a> {
     return Ok(self.parameter_index(name)?);
   }
 }
+
+impl<'a> Statement for rusqlite::CachedStatement<'a> {
+  #[inline]
+  fn bind_parameter(&mut self, one_based_index: usize, param: ToSqlProxy) -> Result<(), Error> {
+    return Ok(self.raw_bind_parameter(one_based_index, param)?);
+  }
+
+  #[inline]
+  fn parameter_index(&self, name: &str) -> Result<Option<usize>, Error> {
+    return Ok(rusqlite::Statement::parameter_index(self, name)?);
+  }
+}

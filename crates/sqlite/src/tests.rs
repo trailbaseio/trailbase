@@ -252,7 +252,7 @@ async fn test_execute_and_query() {
     .unwrap();
 
   let row = conn
-    .read_query_row("SELECT name FROM person WHERE id = $1", &[1])
+    .read_query_row("SELECT name FROM person WHERE id = $1", (1,))
     .await
     .unwrap()
     .unwrap();
@@ -266,7 +266,7 @@ async fn test_execute_and_query() {
   }
 
   let person = conn
-    .read_query_value::<Person>("SELECT * FROM person WHERE id = $1", &[1])
+    .read_query_value::<Person>("SELECT * FROM person WHERE id = $1", (1,))
     .await
     .unwrap()
     .unwrap();
