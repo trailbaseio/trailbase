@@ -3,6 +3,7 @@ use std::borrow::Cow;
 
 use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
+// use crate::statement::Statement;
 
 pub trait Params {
   fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error>;
@@ -89,7 +90,7 @@ impl<const N: usize> Params for [(&str, Value); N] {
   }
 }
 
-impl<const N: usize> Params for [(&str, ToSqlProxy); N] {
+impl<'a, const N: usize> Params for [(&str, ToSqlProxy<'a>); N] {
   fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
     for (name, v) in self {
       let Some(idx) = stmt.parameter_index(name)? else {
@@ -119,7 +120,7 @@ impl Params for &[Value] {
   }
 }
 
-impl<const N: usize> Params for [ToSqlProxy; N] {
+impl<'a, const N: usize> Params for [ToSqlProxy<'a>; N] {
   fn bind(self, stmt: &mut Statement<'_>) -> Result<(), rusqlite::Error> {
     for (idx, p) in self.into_iter().enumerate() {
       stmt.raw_bind_parameter(idx + 1, p)?;
