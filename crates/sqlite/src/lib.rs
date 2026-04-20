@@ -17,6 +17,7 @@ pub mod from_sql;
 mod params;
 mod rows;
 pub mod sqlite;
+mod statement;
 pub mod to_sql;
 mod value;
 
