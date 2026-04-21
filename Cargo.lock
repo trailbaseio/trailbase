@@ -6701,6 +6701,7 @@ dependencies = [
  "ed25519-dalek",
  "env_logger",
  "fallible-iterator",
+ "flume",
  "form_urlencoded",
  "futures-util",
  "geos",
