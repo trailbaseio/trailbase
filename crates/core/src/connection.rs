@@ -337,6 +337,9 @@ fn init_main_db_impl(
       let mut conn = trailbase_extension::connect_sqlite(main_path.clone(), json_registry.clone())
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
+      // The default is just 16.
+      conn.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
+
       #[cfg(any(feature = "geos", feature = "geos-static"))]
       litegis::register(&conn)?;
 
@@ -378,6 +381,9 @@ fn init_main_db_impl(
       // FIXME: Right now this will fail if user migrations depend on custom WASM SQLite functions.
       let mut secondary =
         trailbase_extension::connect_sqlite(Some(path.clone()), json_registry.clone())?;
+
+      // The default is just 16.
+      secondary.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
 
       #[cfg(any(feature = "geos", feature = "geos-static"))]
       litegis::register(&secondary)?;
@@ -448,6 +454,9 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 
   // Initial optimize.
   conn.pragma_update(None, "optimize", "0x10002")?;
+
+  // The default is just 16.
+  conn.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
 
   // Rusqlite's default is 5s.
   conn.busy_timeout(std::time::Duration::from_millis(5000))?;
@@ -522,3 +531,5 @@ fn setup_file_deletion_triggers_sync(
 
   return Ok(());
 }
+
+const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 256;
