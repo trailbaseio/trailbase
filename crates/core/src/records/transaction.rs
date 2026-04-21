@@ -99,7 +99,7 @@ pub async fn record_transactions_handler(
       .await?
   } else {
     conn
-      .call_writer2(
+      .call_writer(
         move |conn| -> Result<Vec<String>, trailbase_sqlite::Error> {
           let ids: Vec<String> =
             apply_ops(&state, &conn, user.as_ref(), &first_api, request.operations)

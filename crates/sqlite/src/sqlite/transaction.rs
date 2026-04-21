@@ -9,6 +9,9 @@ pub trait SyncConnectionTrait {
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error>;
 
+  // Executes the query and returns number of affected rows.
+  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error>;
+
   // pub fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
   //   let mut stmt = self.tx.prepare(sql.as_ref())?;
   //   params.bind(&mut stmt)?;
@@ -34,12 +37,6 @@ impl<'a> Transaction<'a> {
   pub fn rollback(self) -> Result<(), Error> {
     self.tx.rollback()?;
     return Ok(());
-  }
-
-  pub fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    let mut stmt = self.tx.prepare_cached(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-    return Ok(stmt.raw_execute()?);
   }
 
   pub fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
@@ -94,5 +91,11 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
       return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
     }
     return Ok(None);
+  }
+
+  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+    let mut stmt = self.tx.prepare_cached(sql.as_ref())?;
+    params.bind(&mut stmt)?;
+    return Ok(stmt.raw_execute()?);
   }
 }

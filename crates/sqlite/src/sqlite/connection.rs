@@ -29,13 +29,19 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
     }
     return Ok(None);
   }
+
+  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+    let mut stmt = self.conn.prepare_cached(sql.as_ref())?;
+    params.bind(&mut stmt)?;
+    return Ok(stmt.raw_execute()?);
+  }
 }
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
 pub struct Connection {
   id: usize,
-  exec: Executor,
+  pub(crate) exec: Executor,
 }
 
 impl Connection {
@@ -94,34 +100,12 @@ impl Connection {
     return self.exec.try_write_arc_lock_for(duration);
   }
 
-  /// Call a function in background thread and get the result
-  /// asynchronously.
+  /// Call a function on the writer thread and channel the result back asynchronously.
   ///
   /// # Failure
   ///
   /// Will return `Err` if the database connection has been closed.
-  ///
-  /// # Notes
-  ///
-  /// This is a "leaky" API, leaking the internals of `rusqlite::Connection`. We cannot easily
-  /// remove this API. Current use-cases include:
-  ///
-  /// * `conn.transaction()` for RecordApis & migrations (from admin via TransactionRecorder and
-  ///   during startup/SIGHUP).
-  /// * Batch log inserts to minimize thread slushing (no tx required).
-  /// * Backups from scheduler (API could be easily hoisted)
-  /// * Install preupdate-hook.
   pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
-  where
-    F: FnOnce(&mut rusqlite::Connection) -> Result<R, E> + Send + 'static,
-    R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
-  {
-    return self.exec.call_writer(function).await;
-  }
-
-  pub async fn call_writer2<F, R, E>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,

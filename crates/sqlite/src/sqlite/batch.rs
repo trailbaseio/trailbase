@@ -16,6 +16,7 @@ pub async fn execute_batch(
   sql: impl AsRef<str> + Send + 'static,
 ) -> Result<Option<Rows>, Error> {
   return conn
+    .exec
     .call_writer(
       move |conn: &mut rusqlite::Connection| -> Result<Option<Rows>, Error> {
         let batch = rusqlite::Batch::new(conn, sql.as_ref());
