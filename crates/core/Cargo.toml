@@ -61,7 +61,6 @@ init-tracing-opentelemetry = { version = "0.36.0", features = ["tracing_subscrib
 itertools = "0.14.0"
 jsonschema = { version = "0.46.0", default-features = false }
 jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
-kanal = "0.1.1"
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
 litegis = { workspace = true, optional = true }
