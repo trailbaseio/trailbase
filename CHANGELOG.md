@@ -1,3 +1,17 @@
+## v0.26.5
+
+- Remove most leaky abstractions from `trailbase_sqlite::Connection`:
+  - Introduce an async `Connection::transaction()` API to remove many `.call_reader()` calls.
+  - Add a `SyncConnection` for the remaining batch uses of `.call_reader()`.
+  - Add a dedicated backup API.
+  - Add a first-party Statement abstraction to allow binding parameters to other clients.
+  - Clean-up a few more overlooked uses and narrow `ToSqlProxy`'s lifetimes.
+- Add a new `refinery` driver using above async `transaction()` API.
+- Use new APIs in `TransactionRecorder` used for migrations.
+- Increase statement cache size.
+- Minor: replace `kanal` with `flume` everywhere.
+- Update dependencies.
+
 ## v0.26.4
 
 - Use WASI resources to model WASM transactions more correctly. Also spawn a watcher task that force-unlocks the DB after a deadline for better isolation from user code.
