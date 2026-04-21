@@ -237,6 +237,8 @@ async fn test_record_apis() {
     }
   }
 
+  tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
   let logs_count: i64 = logs_conn
     .read_query_row_get("SELECT COUNT(*) FROM _logs", (), 0)
     .await

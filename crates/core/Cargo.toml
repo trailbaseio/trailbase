@@ -49,6 +49,7 @@ const_format = "0.2.35"
 cron = "0.16.0"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
+flume = { workspace = true }
 form_urlencoded = "1.2.1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 geos = { version = "11.0.0", default-features = false, features = ["geo", "json"], optional = true }

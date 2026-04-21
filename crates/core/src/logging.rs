@@ -2,6 +2,7 @@ use axum::body::Body;
 use axum::http::{Request, header};
 use axum::response::Response;
 use const_format::formatcp;
+use flume::TrySendError;
 use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
@@ -218,7 +219,7 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
 }
 
 pub struct SqliteLogLayer {
-  sender: kanal::Sender<Box<LogFieldStorage>>,
+  sender: flume::Sender<LogFieldStorage>,
 
   #[allow(unused)]
   json_stdout: bool,
@@ -226,41 +227,46 @@ pub struct SqliteLogLayer {
 
 impl SqliteLogLayer {
   pub fn new(state: &AppState, json_stdout: bool) -> Self {
-    // NOTE: We're boxing the channel contents to lower the growth rate of back-stopped unbound
-    // channels. The underlying container doesn't seem to every shrink :/.
-    //
-    // TODO: We could consider a bounded receiver to create back-pressure?
-    let (sender, receiver) = kanal::unbounded();
-
     let conn = state.logs_conn().clone();
+
+    // NOTE: If anything here becomes a performance bottleneck we could switch to a dedicated
+    // lock-free single thread writer. We also may not want to support sinks other than SQLite.
+    // TODO: We could consider a bounded receiver to create back-pressure?
+    let (sender, receiver) = flume::unbounded();
+
     tokio::spawn(async move {
-      let receiver = receiver.as_async();
+      #[inline]
+      fn new_buffer() -> Vec<LogFieldStorage> {
+        return Vec::with_capacity(1024);
+      }
 
-      let mut n: usize = 1;
-      loop {
-        let Ok(first) = receiver.recv().await else {
-          log::info!("Logs channel closed");
-          return;
-        };
-        let mut buffer = Vec::with_capacity((1.2 * (n as f64)).ceil() as usize);
+      let mut buffer = new_buffer();
+      while let Ok(first) = receiver.recv_async().await {
         buffer.push(first);
-        n = receiver.drain_into(&mut buffer).unwrap_or(0) + 1;
+        buffer.extend(receiver.try_iter());
+        let len = buffer.len();
 
-        // NOTE: awaiting the `conn.call()` is the secret to batching, since we won't read from the
-        // channel until the database write is complete.
-        let result = conn
-          .call_writer(move |conn| Self::insert_logs(conn, buffer))
-          .await;
+        buffer = conn
+          .call_writer(move |conn| -> Result<_, trailbase_sqlite::Error> {
+            insert_logs(&conn, &mut buffer)?;
+            return Ok(buffer);
+          })
+          .await
+          .unwrap_or_else(|err| {
+            log::warn!("Failed to write to logs DB: {err}");
+            return new_buffer();
+          });
 
-        if let Err(err) = result {
-          log::warn!("Failed to send logs: {err}");
-        }
+        debug_assert!(buffer.is_empty());
+        debug_assert!(buffer.capacity() >= 1024);
 
-        // Rate limit wake ups letting us batch more writes
-        if n < 256 {
+        // Didn't write so many logs this go-around, let's take a nap and batch some more.
+        if len < 256 {
           tokio::time::sleep(tokio::time::Duration::from_micros(500)).await;
         }
       }
+
+      log::error!("Logs writer shut down.");
     });
 
     return SqliteLogLayer {
@@ -284,66 +290,63 @@ impl SqliteLogLayer {
       });
     }
 
-    match self.sender.try_send(Box::new(storage)) {
-      Ok(success) => {
-        // NOTE: Should always succeed for unbound channel.
-        if !success {
-          panic!("Failed to send logs");
-        }
+    match self.sender.try_send(storage) {
+      Ok(()) => {}
+      Err(TrySendError::Full(_)) => {
+        log::warn!("Back-pressure. Dropping log.");
       }
-      Err(err) => {
-        panic!("Sending logs failed: {err}");
+      Err(TrySendError::Disconnected(_)) => {
+        panic!("Log writer dead?");
       }
     };
   }
+}
 
-  #[allow(clippy::vec_box)]
-  fn insert_logs(
-    conn: &rusqlite::Connection,
-    logs: Vec<Box<LogFieldStorage>>,
-  ) -> Result<(), rusqlite::Error> {
-    const QUERY: &str = formatcp!(
-      "\
+fn insert_logs(
+  conn: &rusqlite::Connection,
+  buffer: &mut Vec<LogFieldStorage>,
+) -> Result<(), rusqlite::Error> {
+  const QUERY: &str = formatcp!(
+    "\
         INSERT INTO \
           _logs (created, status, method, url, latency, client_ip, referer, user_agent, user_id) \
         VALUES \
           ($1, $2, $3, $4, $5, $6, $7, $8, $9) \
       "
-    );
+  );
 
-    let mut stmt = conn.prepare_cached(QUERY)?;
+  let mut stmt = conn.prepare_cached(QUERY)?;
 
-    for log in logs {
-      #[cfg(test)]
-      if !log.fields.is_empty() {
-        log::warn!("Dangling fields: {:?}", log.fields);
-      }
-
-      stmt.execute((
-        as_seconds_f64(
-          log
-            .timestamp
-            .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
-        ),
-        log.status,
-        log.method.as_str(),
-        log.uri,
-        log.latency_ms,
-        // client_ip is defined as NOT NULL in the schema :/.
-        log.client_ip.unwrap_or_default(),
-        log.referer,
-        log.user_agent,
-        if log.user_id > 0 {
-          rusqlite::types::Value::Blob(Uuid::from_u128(log.user_id).into())
-        } else {
-          rusqlite::types::Value::Null
-        },
-        // TODO: we're not (yet) writing extra JSON data to the data field.
-      ))?;
+  for log in buffer.drain(..) {
+    #[cfg(debug_assertions)]
+    if !log.fields.is_empty() {
+      log::info!("Dangling log fields: {:?}", log.fields);
     }
 
-    return Ok(());
+    stmt.execute((
+      as_seconds_f64(
+        log
+          .timestamp
+          .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
+      ),
+      log.status,
+      log.method.as_str(),
+      log.uri,
+      log.latency_ms,
+      // client_ip is defined as NOT NULL in the schema :/.
+      log.client_ip.unwrap_or_default(),
+      log.referer,
+      log.user_agent,
+      if log.user_id > 0 {
+        rusqlite::types::Value::Blob(Uuid::from_u128(log.user_id).into())
+      } else {
+        rusqlite::types::Value::Null
+      },
+      // TODO: we're not (yet) writing extra JSON data to the data field.
+    ))?;
   }
+
+  return Ok(());
 }
 
 impl<S> Layer<S> for SqliteLogLayer

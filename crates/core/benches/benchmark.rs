@@ -240,6 +240,7 @@ fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, 
 
 fn benchmark_group(c: &mut Criterion) {
   let runtime = tokio::runtime::Builder::new_multi_thread()
+    .worker_threads(8)
     .enable_all()
     .build()
     .unwrap();
