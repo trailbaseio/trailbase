@@ -37,7 +37,7 @@ impl<'a> Transaction<'a> {
   }
 
   pub fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    let mut stmt = self.tx.prepare(sql.as_ref())?;
+    let mut stmt = self.tx.prepare_cached(sql.as_ref())?;
     params.bind(&mut stmt)?;
     return Ok(stmt.raw_execute()?);
   }
@@ -87,7 +87,7 @@ impl<'a> Transaction<'a> {
 impl<'a> SyncConnectionTrait for Transaction<'a> {
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    let mut stmt = self.tx.prepare(sql.as_ref())?;
+    let mut stmt = self.tx.prepare_cached(sql.as_ref())?;
     params.bind(&mut stmt)?;
 
     if let Some(row) = stmt.raw_query().next()? {
