@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 use crate::connection::{Connection, Options};
 use crate::sqlite::extract_row_id;
-use crate::{Database, Error, Value, ValueType};
+use crate::{Database, Error, SyncConnectionTrait, Value, ValueType};
 
 #[tokio::test]
 async fn open_in_memory_test() {
@@ -23,7 +23,7 @@ async fn call_success_test() {
     .call_writer(|conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);",
-        [],
+        (),
       );
     })
     .await;
@@ -36,7 +36,7 @@ async fn call_failure_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call_writer(|conn| conn.execute("Invalid sql", []))
+    .call_writer(|conn| conn.execute("Invalid sql", ()))
     .await;
 
   assert!(match result.unwrap_err() {
@@ -114,7 +114,7 @@ async fn close_call_test() {
   assert!(conn.close().await.is_ok());
 
   let result = conn2
-    .call_writer(|conn| conn.execute("SELECT 1;", []))
+    .call_writer(|conn| conn.execute("SELECT 1;", ()))
     .await;
 
   assert!(matches!(
@@ -131,13 +131,14 @@ async fn close_failure_test() {
     .call_writer(|conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);",
-        [],
+        (),
       );
     })
     .await
     .unwrap();
 
   conn
+    .exec
     .call_writer(|conn| {
       // Leak a prepared statement to make the database uncloseable
       // See https://www.sqlite.org/c3ref/close.html for details regarding this behaviour
@@ -194,6 +195,7 @@ async fn test_ergonomic_errors() {
   let conn = Connection::open_in_memory().unwrap();
 
   let res = conn
+    .exec
     .call_writer(|conn| failable_func(conn).map_err(|e| Error::Other(Box::new(e))))
     .await
     .unwrap_err();
@@ -213,7 +215,7 @@ async fn test_execute_and_query() {
     .call_writer(|conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
-        [],
+        (),
       );
     })
     .await;
@@ -400,7 +402,7 @@ async fn test_params() {
     .call_writer(|conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
-        [],
+        (),
       );
     })
     .await

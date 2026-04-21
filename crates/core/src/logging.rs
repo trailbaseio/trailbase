@@ -11,6 +11,7 @@ use tracing::Level;
 use tracing::field::Field;
 use tracing::span::{Attributes, Id, Record, Span};
 use tracing_subscriber::layer::{Context, Layer};
+use trailbase_sqlite::SyncConnectionTrait;
 use uuid::Uuid;
 
 use crate::AppState;
@@ -303,9 +304,11 @@ impl SqliteLogLayer {
 }
 
 fn insert_logs(
-  conn: &rusqlite::Connection,
+  conn: &trailbase_sqlite::SyncConnection,
   buffer: &mut Vec<LogFieldStorage>,
-) -> Result<(), rusqlite::Error> {
+) -> Result<(), trailbase_sqlite::Error> {
+  use trailbase_sqlite::Value;
+
   const QUERY: &str = formatcp!(
     "\
         INSERT INTO \
@@ -315,35 +318,36 @@ fn insert_logs(
       "
   );
 
-  let mut stmt = conn.prepare_cached(QUERY)?;
-
   for log in buffer.drain(..) {
     #[cfg(debug_assertions)]
     if !log.fields.is_empty() {
       log::info!("Dangling log fields: {:?}", log.fields);
     }
 
-    stmt.execute((
-      as_seconds_f64(
-        log
-          .timestamp
-          .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
+    conn.execute(
+      QUERY,
+      trailbase_sqlite::params!(
+        as_seconds_f64(
+          log
+            .timestamp
+            .signed_duration_since(chrono::DateTime::UNIX_EPOCH),
+        ),
+        log.status,
+        log.method.as_str(),
+        log.uri,
+        log.latency_ms,
+        // client_ip is defined as NOT NULL in the schema :/.
+        log.client_ip.unwrap_or_default(),
+        log.referer,
+        log.user_agent,
+        if log.user_id > 0 {
+          Value::Blob(Uuid::from_u128(log.user_id).into())
+        } else {
+          Value::Null
+        },
+        // TODO: we're not (yet) writing extra JSON data to the data field.
       ),
-      log.status,
-      log.method.as_str(),
-      log.uri,
-      log.latency_ms,
-      // client_ip is defined as NOT NULL in the schema :/.
-      log.client_ip.unwrap_or_default(),
-      log.referer,
-      log.user_agent,
-      if log.user_id > 0 {
-        rusqlite::types::Value::Blob(Uuid::from_u128(log.user_id).into())
-      } else {
-        rusqlite::types::Value::Null
-      },
-      // TODO: we're not (yet) writing extra JSON data to the data field.
-    ))?;
+    )?;
   }
 
   return Ok(());
