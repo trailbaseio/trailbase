@@ -554,7 +554,7 @@ mod tests {
     // night).
     let registry = JobRegistry::new();
 
-    let (sender, receiver) = async_channel::unbounded::<()>();
+    let (sender, receiver) = flume::unbounded::<()>();
 
     //               sec  min   hour   day of month   month   day of week  year
     let expression = "*    *     *         *            *         *         *";
@@ -566,7 +566,7 @@ mod tests {
         build_callback(move || {
           let sender = sender.clone();
           return async move {
-            sender.send(()).await.unwrap();
+            sender.send_async(()).await.unwrap();
             Err("result")
           };
         }),
@@ -575,7 +575,7 @@ mod tests {
 
     job.start();
 
-    receiver.recv().await.unwrap();
+    receiver.recv_async().await.unwrap();
 
     let jobs = registry.jobs.lock();
     let first = jobs.keys().next().unwrap();

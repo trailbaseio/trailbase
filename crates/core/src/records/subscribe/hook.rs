@@ -22,8 +22,8 @@ pub struct PreupdateHookEvent {
   pub record: Vec<Value>,
 }
 
-pub fn install_hook(conn: &Connection) -> kanal::Receiver<(usize, PreupdateHookEvent)> {
-  let (sender, receiver) = kanal::bounded(CAPACITY);
+pub fn install_hook(conn: &Connection) -> flume::Receiver<(usize, PreupdateHookEvent)> {
+  let (sender, receiver) = flume::bounded(CAPACITY);
 
   conn
     .write_lock()
@@ -72,11 +72,11 @@ pub fn install_hook(conn: &Connection) -> kanal::Receiver<(usize, PreupdateHookE
           cnt += 1;
 
           match sender.try_send((cnt, event)) {
-            Ok(true) => {}
-            Ok(false) => {
-              warn!("Channel full. Failed to forward preupdate event.")
+            Ok(()) => {}
+            Err(flume::TrySendError::Full(_)) => {
+              warn!("Channel full. Failed to forward preupdate event.");
             }
-            Err(kanal::SendError::Closed) | Err(kanal::SendError::ReceiveClosed) => {
+            Err(flume::TrySendError::Disconnected(_)) => {
               // QUESTION: Should it self-uninstall? This may be racy if a new hook
               // is being installed while one is already installed. In principle this
               // should not happen.
@@ -120,7 +120,7 @@ mod tests {
       .await
       .unwrap();
 
-    let mut receiver = install_hook(&conn);
+    let receiver = install_hook(&conn);
 
     conn
       .execute_batch(
@@ -131,12 +131,12 @@ mod tests {
       .await
       .unwrap();
 
-    let (cnt, ev0) = receiver.next().unwrap();
+    let (cnt, ev0) = receiver.recv_async().await.unwrap();
     assert_eq!(1, cnt);
     assert_eq!("\"test\"", ev0.table_name.escaped_string());
     assert_eq!(Value::Integer(3), ev0.record[0]);
 
-    let (cnt, ev1) = receiver.next().unwrap();
+    let (cnt, ev1) = receiver.recv_async().await.unwrap();
     assert_eq!(2, cnt);
     assert_eq!(Value::Integer(4), ev1.record[0]);
 

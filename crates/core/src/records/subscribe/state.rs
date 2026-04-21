@@ -225,7 +225,7 @@ impl PerConnectionState {
 
               event
             }
-            Err(kanal::ReceiveError::Closed) | Err(kanal::ReceiveError::SendClosed) => {
+            Err(flume::RecvError::Disconnected) => {
               break;
             }
           };
