@@ -270,20 +270,10 @@ fn build_job(
         },
         callback: build_callback(move || {
           let conn = main_conn.clone();
-          let backup_file = backup_file.clone();
-
+          let path = backup_file.clone();
           return async move {
-            conn
-              .call_writer(|conn| {
-                return conn.backup("main", backup_file, /* progress= */ None);
-              })
-              .await
-              .map_err(|err| {
-                error!("Backup failed: {err}");
-                err
-              })?;
-
-            Ok::<(), trailbase_sqlite::Error>(())
+            conn.backup(path).await?;
+            return Ok::<(), trailbase_sqlite::Error>(());
           };
         }),
       }
