@@ -1,6 +1,9 @@
 use fallible_iterator::FallibleIterator;
 use log::*;
+use parking_lot::RwLock;
+use std::sync::Arc;
 use thiserror::Error;
+use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::{Table, View};
 use trailbase_sqlite::params;
@@ -25,8 +28,26 @@ pub enum SchemaLookupError {
   Missing,
   #[error("Sql parse error: {0}")]
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
+  #[error("Json Schema: {0}")]
+  JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
   #[error("Other error: {0}")]
   Other(Box<dyn std::error::Error + Send + Sync>),
+}
+
+pub(crate) fn build_metadata(
+  conn: &trailbase_sqlite::Connection,
+  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+) -> Result<ConnectionMetadata, SchemaLookupError> {
+  let conn = conn.write_lock();
+  let tables = lookup_and_parse_all_table_schemas_sync(&conn)?;
+  let views = lookup_and_parse_all_view_schemas_sync(&conn, &tables)?;
+
+  return build_connection_metadata_and_install_file_deletion_triggers_sync(
+    &conn,
+    tables,
+    views,
+    json_schema_registry,
+  );
 }
 
 pub async fn lookup_and_parse_table_schema(
@@ -58,7 +79,75 @@ pub async fn lookup_and_parse_table_schema(
   return Ok(table);
 }
 
-pub fn lookup_and_parse_all_table_schemas_sync(
+/// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
+/// deletion triggers.
+///
+/// Tying the construction of schema metadata and the (re-)installing of file deletion triggers so
+/// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
+/// column is added, we need to rebuild the metadata and update or install missing triggers.
+fn build_connection_metadata_and_install_file_deletion_triggers_sync(
+  conn: &rusqlite::Connection,
+  tables: Vec<Table>,
+  views: Vec<View>,
+  registry: &RwLock<JsonSchemaRegistry>,
+) -> Result<ConnectionMetadata, SchemaLookupError> {
+  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
+
+  setup_file_deletion_triggers_sync(conn, &metadata)?;
+
+  return Ok(metadata);
+}
+
+// Install file column triggers. This ain't pretty, this might be better on construction and
+// schema changes.
+fn setup_file_deletion_triggers_sync(
+  conn: &rusqlite::Connection,
+  metadata: &ConnectionMetadata,
+) -> Result<(), trailbase_sqlite::Error> {
+  for metadata in metadata.tables.values() {
+    for column_meta in &metadata.column_metadata {
+      if !column_meta.is_file {
+        continue;
+      }
+
+      let table_name = &metadata.schema.name;
+      let unqualified_name = &metadata.schema.name.name;
+      let db = metadata
+        .schema
+        .name
+        .database_schema
+        .as_deref()
+        .unwrap_or("main");
+
+      let column_name = &column_meta.column.name;
+
+      conn.execute_batch(&format!(
+          "\
+          DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger'; \
+          CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger' AFTER UPDATE ON {table_name} \
+            WHEN OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\" \
+            BEGIN \
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+            END; \
+          \
+          DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__delete_trigger'; \
+          CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__delete_trigger' AFTER DELETE ON {table_name} \
+            WHEN OLD.\"{column_name}\" IS NOT NULL \
+            BEGIN \
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+            END; \
+          ",
+          table_name = table_name.escaped_string(),
+        ))?;
+    }
+  }
+
+  return Ok(());
+}
+
+fn lookup_and_parse_all_table_schemas_sync(
   conn: &rusqlite::Connection,
 ) -> Result<Vec<Table>, SchemaLookupError> {
   let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
@@ -88,21 +177,7 @@ pub fn lookup_and_parse_all_table_schemas_sync(
   return Ok(tables);
 }
 
-fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupError> {
-  let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
-  match parser.next()? {
-    None => Err(SchemaLookupError::Missing),
-    Some(cmd) => {
-      use sqlite3_parser::ast::Cmd;
-      match cmd {
-        Cmd::Stmt(stmt) => Ok(View::from(stmt, tables)?),
-        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => Err(SchemaLookupError::Missing),
-      }
-    }
-  }
-}
-
-pub fn lookup_and_parse_all_view_schemas_sync(
+fn lookup_and_parse_all_view_schemas_sync(
   conn: &rusqlite::Connection,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
@@ -131,6 +206,20 @@ pub fn lookup_and_parse_all_view_schemas_sync(
   }
 
   return Ok(views);
+}
+
+fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupError> {
+  let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
+  match parser.next()? {
+    None => Err(SchemaLookupError::Missing),
+    Some(cmd) => {
+      use sqlite3_parser::ast::Cmd;
+      match cmd {
+        Cmd::Stmt(stmt) => Ok(View::from(stmt, tables)?),
+        Cmd::Explain(_) | Cmd::ExplainQueryPlan(_) => Err(SchemaLookupError::Missing),
+      }
+    }
+  }
 }
 
 #[cfg(test)]
