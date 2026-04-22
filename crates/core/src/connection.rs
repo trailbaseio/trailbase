@@ -351,6 +351,7 @@ fn init_main_db_impl(
         );
       }
 
+      // Install SQLite extension methods/functions registered by WASM components.
       #[cfg(feature = "wasm")]
       for (store, functions) in &runtimes {
         trailbase_wasm_runtime_host::functions::setup_connection(&conn, store.clone(), functions)

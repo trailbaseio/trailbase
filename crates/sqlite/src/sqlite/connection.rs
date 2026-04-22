@@ -92,10 +92,21 @@ impl Connection {
     return self.exec.threads();
   }
 
+  /// Acquire write lock on the connections.
+  ///
+  /// NOTE: This should not be used for installing extension methods, since only the writer
+  /// connection would be affected.
+  /// NOTE: Current use cases:
+  ///   * Sync building of schema metadata.
+  ///   * Installing pre-update hooks
   pub fn write_lock(&self) -> LockGuard<'_> {
     return self.exec.write_lock();
   }
 
+  /// Acquire a ref-counted write lock on the connections.
+  ///
+  /// NOTE: Current use cases:
+  ///   * Transactions from WASM.
   pub fn try_write_arc_lock_for(&self, duration: tokio::time::Duration) -> Option<ArcLockGuard> {
     return self.exec.try_write_arc_lock_for(duration);
   }
@@ -339,7 +350,7 @@ impl Connection {
         let mut retries = 0;
 
         loop {
-          match backup.step(/*num_pages=*/ 128)? {
+          match backup.step(/* num_pages= */ 128)? {
             StepResult::Done => {
               return Ok(());
             }

@@ -585,9 +585,26 @@ mod tests {
 
   #[tokio::test]
   async fn test_custom_sqlite_function() {
-    let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
+    let conn = parking_lot::Mutex::new(rusqlite::Connection::open_in_memory().ok());
 
-    let _sqlite_function_runtime = init_sqlite_function_runtime(&conn.write_lock()).await;
+    let _sqlite_function_runtime = {
+      let lock = conn.lock();
+      init_sqlite_function_runtime(lock.as_ref().unwrap()).await
+    };
+
+    let conn = trailbase_sqlite::Connection::with_opts(
+      move || -> Result<_, rusqlite::Error> {
+        // Consume the rusqlite connection, only works for one thread.
+        let mut lock = conn.lock();
+        return Ok(lock.take().unwrap());
+      },
+      trailbase_sqlite::Options {
+        num_threads: Some(1),
+        ..Default::default()
+      },
+    )
+    .unwrap();
+
     let runtime = init_runtime(Some(conn.clone()));
 
     {
@@ -648,8 +665,9 @@ mod tests {
   }
 
   async fn response_to_i64(resp: Response<UnsyncBoxBody<Bytes, ErrorCode>>) -> i64 {
-    assert_eq!(resp.status(), StatusCode::OK, "{resp:?}");
-    let body: Bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    let (head, body) = resp.into_parts();
+    let body: Bytes = body.collect().await.unwrap().to_bytes();
+    assert_eq!(head.status, StatusCode::OK, "{body:?}");
     return String::from_utf8_lossy(&body).trim().parse().unwrap();
   }
 }
