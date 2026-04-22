@@ -1,5 +1,5 @@
 use log::*;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use quick_cache::sync::GuardResult;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -15,7 +15,7 @@ use crate::data_dir::DataDir;
 use crate::migrations::{
   apply_base_migrations, apply_logs_migrations, apply_main_migrations, apply_session_migrations,
 };
-use crate::schema_metadata::build_metadata;
+use crate::schema_metadata::{build_metadata_async, build_metadata_sync};
 use crate::wasm::{SqliteFunctions, SqliteStore};
 
 #[derive(Debug, Error)]
@@ -30,6 +30,8 @@ pub enum ConnectionError {
   TbSqlite(#[from] trailbase_sqlite::Error),
   #[error("Migration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
+  #[error("MissingMetadata")]
+  MissingMetadata,
   #[error("Other: {0}")]
   Other(String),
 }
@@ -87,15 +89,13 @@ impl ConnectionManager {
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   ) -> Result<(Self, bool), ConnectionError> {
-    let (main_conn, new_db) = init_main_db_impl(
+    let (main_conn, main_metadata, new_db) = init_main_db_impl(
       Some(&data_dir),
       Some(json_schema_registry.clone()),
       vec![],
       sqlite_function_runtimes.clone(),
       true,
     )?;
-
-    let main_metadata = build_metadata(&main_conn, &json_schema_registry)?;
 
     return Ok((
       Self {
@@ -120,7 +120,7 @@ impl ConnectionManager {
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   ) -> Self {
-    let (main_conn, new_db) = init_main_db_impl(
+    let (main_conn, main_metadata, new_db) = init_main_db_impl(
       None,
       Some(json_schema_registry.clone()),
       vec![],
@@ -129,8 +129,6 @@ impl ConnectionManager {
     )
     .unwrap();
     assert!(new_db);
-
-    let main_metadata = build_metadata(&main_conn, &json_schema_registry).unwrap();
 
     return Self {
       state: Arc::new(ConnectionManagerState {
@@ -167,15 +165,8 @@ impl ConnectionManager {
     return match self.state.connections.get_value_or_guard(&key, None) {
       GuardResult::Value(entry) => Ok(entry.clone()),
       GuardResult::Guard(placeholder) => {
-        let conn = self.build(main, Some(&key.attached_databases))?;
-
-        let entry = ConnectionEntry {
-          connection: conn.clone(),
-          metadata: Arc::new(build_metadata(&conn, &self.state.json_schema_registry)?),
-        };
-
+        let entry = self.build(main, Some(&key.attached_databases))?;
         let _ = placeholder.insert(entry.clone());
-
         Ok(entry)
       }
       GuardResult::Timeout => {
@@ -203,10 +194,10 @@ impl ConnectionManager {
     &self,
     mut main: bool,
     attached_databases: Option<&BTreeSet<String>>,
-  ) -> Result<Arc<Connection>, ConnectionError> {
+  ) -> Result<ConnectionEntry, ConnectionError> {
     #[cfg(test)]
     if main && attached_databases.is_none() {
-      return Ok(self.state.main.read().connection.clone());
+      return Ok(self.state.main.read().clone());
     }
 
     let attach = if let Some(attached_databases) = attached_databases {
@@ -230,7 +221,7 @@ impl ConnectionManager {
       vec![]
     };
 
-    let (conn, _new_db) = init_main_db_impl(
+    let (conn, metadata, _new_db) = init_main_db_impl(
       Some(&self.state.data_dir),
       Some(self.state.json_schema_registry.clone()),
       attach,
@@ -238,27 +229,28 @@ impl ConnectionManager {
       main,
     )?;
 
-    return Ok(Arc::new(conn));
+    return Ok(ConnectionEntry {
+      connection: Arc::new(conn),
+      metadata: Arc::new(metadata),
+    });
   }
 
   // Updates connection metadata for cached connections.
   pub(crate) async fn rebuild_metadata(&self) -> Result<(), ConnectionError> {
     // Main
     {
-      let new_metadata = Arc::new(build_metadata(
-        &self.state.main.read().connection,
-        &self.state.json_schema_registry,
-      )?);
+      let new_metadata = Arc::new({
+        let conn = self.state.main.read().connection.clone();
+        build_metadata_async(&conn, &self.state.json_schema_registry).await?
+      });
 
       self.state.main.write().metadata = new_metadata;
     }
 
     // Others:
     for (key, entry) in self.state.connections.iter() {
-      let new_metadata = Arc::new(build_metadata(
-        &entry.connection,
-        &self.state.json_schema_registry,
-      )?);
+      let new_metadata =
+        Arc::new(build_metadata_async(&entry.connection, &self.state.json_schema_registry).await?);
 
       let _ = self.state.connections.replace(
         key,
@@ -283,7 +275,7 @@ pub fn init_main_db(
   json_registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
   attached_databases: Vec<AttachedDatabase>,
   runtimes: Vec<(SqliteStore, SqliteFunctions)>,
-) -> Result<(Connection, bool), ConnectionError> {
+) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
   if attached_databases.len() > 124 {
     return Err(ConnectionError::Other("Too many databases".into()));
@@ -298,14 +290,34 @@ fn init_main_db_impl(
   attach: Vec<AttachedDatabase>,
   runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   main_migrations: bool,
-) -> Result<(Connection, bool), ConnectionError> {
+) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
+  for AttachedDatabase { schema_name, path } in &attach {
+    debug!("Attaching '{schema_name}': {path:?}, {migrations_path:?}");
+
+    if let Some(ref migrations_path) = migrations_path {
+      // NOTE: that migrations may also depend on extension functions.
+      // FIXME: Right now this will fail if user migrations depend on custom WASM SQLite functions.
+      let mut secondary =
+        trailbase_extension::connect_sqlite(Some(path.clone()), json_registry.clone())?;
+
+      // The default is just 16.
+      secondary.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
+
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
+      litegis::register(&secondary)?;
+
+      apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;
+    }
+  }
+
+  let metadata: Arc<Mutex<Option<ConnectionMetadata>>> = Arc::new(Mutex::new(None));
   let mut new_db = AtomicBool::new(false);
+
   let conn = {
-    let migrations_path = migrations_path.clone();
-    let json_registry = json_registry.clone();
+    let metadata = metadata.clone();
     let new_db = &mut new_db;
 
     let conn_builder = move || -> Result<_, trailbase_sqlite::Error> {
@@ -326,11 +338,37 @@ fn init_main_db_impl(
         );
       }
 
+      for AttachedDatabase { schema_name, path } in &attach {
+        conn.execute(
+          &format!(
+            "ATTACH DATABASE '{path}' AS {schema_name} ",
+            path = path.to_string_lossy()
+          ),
+          (),
+        )?;
+      }
+
       // Install SQLite extension methods/functions registered by WASM components.
       #[cfg(feature = "wasm")]
       for (store, functions) in &runtimes {
         trailbase_wasm_runtime_host::functions::setup_connection(&conn, store.clone(), functions)
           .expect("startup");
+      }
+
+      // Build connection metadata
+      {
+        let mut lock = metadata.lock();
+        if lock.is_none() {
+          let json_registry = json_registry.as_ref().map_or_else(
+            || Arc::new(RwLock::new(JsonSchemaRegistry::default())),
+            |r| r.clone(),
+          );
+
+          let _ = lock.insert(
+            build_metadata_sync(&conn, &json_registry)
+              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
+          );
+        }
       }
 
       return Ok(conn);
@@ -349,33 +387,19 @@ fn init_main_db_impl(
     )?
   };
 
-  for AttachedDatabase { schema_name, path } in attach {
-    debug!("Attaching '{schema_name}': {path:?}, {migrations_path:?}");
-
-    if let Some(ref migrations_path) = migrations_path {
-      // NOTE: that migrations may also depend on extension functions.
-      // FIXME: Right now this will fail if user migrations depend on custom WASM SQLite functions.
-      let mut secondary =
-        trailbase_extension::connect_sqlite(Some(path.clone()), json_registry.clone())?;
-
-      // The default is just 16.
-      secondary.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
-
-      #[cfg(any(feature = "geos", feature = "geos-static"))]
-      litegis::register(&secondary)?;
-
-      apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;
-    }
-
-    conn.attach(&path.to_string_lossy(), &schema_name)?;
-  }
-
   // NOTE: We could consider larger memory maps and caches for the main database.
   // Should be driven by benchmarks.
   // conn.pragma_update(None, "mmap_size", 268435456)?;
   // conn.pragma_update(None, "cache_size", -32768)?; // 32MB
 
-  return Ok((conn, new_db.load(Ordering::SeqCst)));
+  return Ok((
+    conn,
+    metadata
+      .lock()
+      .take()
+      .ok_or_else(|| ConnectionError::MissingMetadata)?,
+    new_db.load(Ordering::SeqCst),
+  ));
 }
 
 pub(super) fn init_logs_db(

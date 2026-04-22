@@ -7,6 +7,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
+use crate::connection::ConnectionEntry;
 use crate::constants::SQLITE_SCHEMA_TABLE;
 
 // TODO: Rudimentary unparsed trigger representation, since sqlparser didn't currently support
@@ -54,7 +55,9 @@ pub async fn list_tables_handler(
     log::warn!("Not showing all DBs.")
   }
 
-  let conn = state
+  let ConnectionEntry {
+    connection: conn, ..
+  } = state
     .connection_manager()
     .build(true, Some(&db_names.into_iter().take(124).collect()))?;
   let databases = conn.list_databases().await?;

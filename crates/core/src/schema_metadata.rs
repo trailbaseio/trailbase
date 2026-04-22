@@ -36,23 +36,6 @@ pub enum SchemaLookupError {
   Other(Box<dyn std::error::Error + Send + Sync>),
 }
 
-pub(crate) fn build_metadata(
-  conn: &trailbase_sqlite::Connection,
-  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let conn = conn.write_lock();
-  let tables = lookup_and_parse_all_table_schemas_sync(&*conn)?;
-  let views = lookup_and_parse_all_view_schemas_sync(&*conn, &tables)?;
-
-  return build_connection_metadata_and_install_file_deletion_triggers_sync(
-    &*conn,
-    tables,
-    views,
-    json_schema_registry,
-  );
-}
-
-#[allow(unused)]
 pub(crate) fn build_metadata_sync(
   conn: &impl trailbase_sqlite::SyncConnectionTrait,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
@@ -72,15 +55,14 @@ pub(crate) async fn build_metadata_async(
   conn: &trailbase_sqlite::Connection,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let conn = conn.write_lock();
-  let tables = lookup_and_parse_all_table_schemas_sync(&*conn)?;
-  let views = lookup_and_parse_all_view_schemas_sync(&*conn, &tables)?;
-
-  return build_connection_metadata_and_install_file_deletion_triggers_sync(
-    &*conn,
-    tables,
-    views,
-    json_schema_registry,
+  let json_schema_registry = json_schema_registry.clone();
+  return Ok(
+    conn
+      .call_writer(move |conn| {
+        build_metadata_sync(&conn, &json_schema_registry)
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
+      })
+      .await?,
   );
 }
 

@@ -76,7 +76,6 @@ impl Connection {
   /// NOTE: This should not be used for installing extension methods, since only the writer
   /// connection would be affected.
   /// NOTE: Current use cases:
-  ///   * Sync building of schema metadata.
   ///   * Installing pre-update hooks
   pub fn write_lock(&self) -> LockGuard<'_> {
     return self.exec.write_lock();

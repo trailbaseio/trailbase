@@ -139,7 +139,7 @@ async fn async_main(
       println!("Created empty migration file: {path:?}");
     }
     SubCommands::Admin { cmd } => {
-      let (conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
+      let (conn, _metadata, _new) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
 
       match cmd {
         Some(AdminSubCommands::List) => {
@@ -175,7 +175,7 @@ async fn async_main(
       };
     }
     SubCommands::User { cmd } => {
-      let (user_conn, _) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
+      let (user_conn, _metadata, _new) = api::init_main_db(Some(&data_dir), None, vec![], vec![])?;
       let session_conn = api::init_session_db(Some(&data_dir))?;
 
       match cmd {

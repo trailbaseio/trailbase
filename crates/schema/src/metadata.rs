@@ -328,7 +328,7 @@ impl<'a> TableOrViewMetadata<'a> {
 /// Contains schema metadata for a bunch of TABLEs and VIEWs, which may belong to different
 /// databases, e.g. all the TABLEs and VIEWs attached to a connection. Each can be uniquely
 /// identified by their fully qualified name.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct ConnectionMetadata {
   pub tables: HashMap<QualifiedName, TableMetadata>,
   pub views: HashMap<QualifiedName, ViewMetadata>,

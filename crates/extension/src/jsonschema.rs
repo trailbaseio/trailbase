@@ -41,7 +41,7 @@ impl Schema {
   }
 }
 
-// #[derive(Default)]
+#[derive(Default)]
 pub struct JsonSchemaRegistry {
   schemas: HashMap<String, Schema>,
 }
