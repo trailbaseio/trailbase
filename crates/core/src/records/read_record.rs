@@ -1280,6 +1280,8 @@ mod test {
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[tokio::test]
   async fn test_geometry_columns_and_geojson() {
+    use geos::Geom;
+
     let state = test_state(None).await.unwrap();
 
     let name = "with_geo".to_string();
@@ -1317,9 +1319,11 @@ mod test {
     .await
     .unwrap();
 
-    let coords = geos::CoordSeq::new_from_vec(&[&[12.4924, 41.8902]]).unwrap();
-    let geometry = geos::Geometry::create_point(coords).unwrap();
-    let json_geometry: geos::geojson::Geometry = geometry.try_into().unwrap();
+    let json_geometry: geos::geojson::Geometry = {
+      let coords = geos::CoordSeq::new_from_vec(&[&[12.4924, 41.8902]]).unwrap();
+      let geometry = geos::Geometry::create_point(coords).unwrap();
+      geometry.try_into().unwrap()
+    };
 
     let record = json!({
       "id": 1,

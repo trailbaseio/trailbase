@@ -27,7 +27,7 @@ import type {
 } from "@tanstack/solid-table";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
-import { geojsonToWKT } from "@terraformer/wkt";
+import { Parser } from "@tiledb-inc/wkx";
 import { urlSafeBase64Decode } from "trailbase";
 
 import { Header } from "@/components/Header";
@@ -78,7 +78,6 @@ import {
   UploadedFiles,
 } from "@/components/tables/Files";
 
-import { parseWkb } from "@/lib/wkb";
 import { createConfigQuery } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
@@ -164,8 +163,8 @@ function renderCell(
           );
         }
         case "Geometry": {
-          const geometry = parseWkb(urlSafeBase64Decode(blob.Base64UrlSafe));
-          return geojsonToWKT(geometry);
+          const bytes = urlSafeBase64Decode(blob.Base64UrlSafe);
+          return Parser.parseWkb(new DataView(bytes.buffer)).toEwkt();
         }
       }
 

@@ -59,3 +59,62 @@ pub async fn insert_row_handler(
     )),
   };
 }
+
+#[cfg(test)]
+mod tests {
+  use axum::Json;
+  use axum::extract::{Path, State};
+  use trailbase_sqlvalue::Blob;
+
+  use super::*;
+  use crate::app_state::*;
+
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
+  #[tokio::test]
+  async fn admin_insert_geometry_test() {
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    conn
+      .execute_batch(
+        "
+         CREATE TABLE IF NOT EXISTS geom_table (
+             id       INTEGER PRIMARY KEY,
+             geom     BLOB CHECK(ST_IsValid(geom))
+         ) STRICT;
+        ",
+      )
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    let wkb_geometry: Vec<u8> = {
+      use geos::Geom;
+
+      let coords = geos::CoordSeq::new_from_vec(&[&[12.4924, 41.8902]]).unwrap();
+      let geometry = geos::Geometry::create_point(coords).unwrap();
+      geometry.to_wkb().unwrap()
+    };
+
+    let request = InsertRowRequest {
+      row: indexmap::IndexMap::from([
+        ("id".to_string(), SqlValue::Integer(3)),
+        (
+          "geom".to_string(),
+          SqlValue::Blob(Blob::Array(wkb_geometry)),
+        ),
+      ]),
+    };
+
+    let Json(response) = insert_row_handler(
+      State(state.clone()),
+      Path("geom_table".into()),
+      Json(request),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(3, response.row_id);
+  }
+}

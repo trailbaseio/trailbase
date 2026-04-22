@@ -309,7 +309,7 @@ fn init_main_db_impl(
       #[cfg(any(feature = "geos", feature = "geos-static"))]
       litegis::register(&secondary)?;
 
-      apply_base_migrations(&mut secondary, Some(migrations_path), &schema_name)?;
+      apply_base_migrations(&mut secondary, Some(migrations_path), schema_name)?;
     }
   }
 
