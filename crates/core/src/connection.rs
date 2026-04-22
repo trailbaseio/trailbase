@@ -242,7 +242,7 @@ impl ConnectionManager {
   }
 
   // Updates connection metadata for cached connections.
-  pub(crate) fn rebuild_metadata(&self) -> Result<(), ConnectionError> {
+  pub(crate) async fn rebuild_metadata(&self) -> Result<(), ConnectionError> {
     // Main
     {
       let new_metadata = Arc::new(build_metadata(

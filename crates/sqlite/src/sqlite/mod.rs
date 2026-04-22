@@ -1,6 +1,7 @@
 mod batch;
 pub(super) mod connection;
 mod executor;
+pub(super) mod sync;
 pub(super) mod transaction;
 mod util;
 

@@ -268,14 +268,14 @@ impl AppState {
   pub async fn rebuild_connection_metadata(
     &self,
   ) -> Result<(), crate::connection::ConnectionError> {
-    self.state.connection_manager.rebuild_metadata()?;
+    self.state.connection_manager.rebuild_metadata().await?;
 
     // Rebuild connection metadata in RecordApis.
-    self.state.record_apis.with_value(|apis| {
-      for (_name, api) in apis.iter() {
-        api.rebuild_connection_metadata(&self.state.json_schema_registry);
-      }
-    });
+    for api in self.state.record_apis.ptr().values() {
+      api
+        .rebuild_connection_metadata(&self.state.json_schema_registry)
+        .await?;
+    }
 
     // We typically rebuild the schema representations when the DB schemas change, which in turn
     // can invalidate the config, e.g. an API may reference a deleted table. Let's make sure to

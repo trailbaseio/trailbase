@@ -2,6 +2,7 @@ use rusqlite::hooks::PreUpdateCase;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use crate::SyncConnectionTrait;
 use crate::database::Database;
 use crate::error::Error;
 use crate::from_sql::{FromSql, FromSqlError};
@@ -131,14 +132,16 @@ pub fn extract_record_values(case: &PreUpdateCase) -> Option<Vec<Value>> {
   });
 }
 
-pub fn list_databases(conn: &rusqlite::Connection) -> Result<Vec<Database>, Error> {
-  let mut stmt = conn.prepare("SELECT seq, name FROM pragma_database_list")?;
-  let mut rows = stmt.raw_query();
+pub fn list_databases(conn: &impl SyncConnectionTrait) -> Result<Vec<Database>, Error> {
+  let rows = conn.query_rows("SELECT seq, name FROM pragma_database_list", ())?;
 
-  let mut databases: Vec<Database> = vec![];
-  while let Some(row) = rows.next()? {
-    databases.push(serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)?)
-  }
-
-  return Ok(databases);
+  return rows
+    .iter()
+    .map(|row| {
+      return Ok(Database {
+        seq: row.get(0)?,
+        name: row.get(1)?,
+      });
+    })
+    .collect::<Result<Vec<_>, _>>();
 }

@@ -375,15 +375,14 @@ impl RecordApi {
     return self.state.metadata.read().clone();
   }
 
-  pub(crate) fn rebuild_connection_metadata(
+  pub(crate) async fn rebuild_connection_metadata(
     &self,
     json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  ) {
-    if let Ok(metadata) =
-      crate::schema_metadata::build_metadata(&self.state.conn, json_schema_registry)
-    {
-      *self.state.metadata.write() = Arc::new(metadata);
-    }
+  ) -> Result<(), crate::connection::ConnectionError> {
+    let metadata =
+      crate::schema_metadata::build_metadata_async(&self.state.conn, json_schema_registry).await?;
+    *self.state.metadata.write() = Arc::new(metadata);
+    return Ok(());
   }
 
   #[inline]

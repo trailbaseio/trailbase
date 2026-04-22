@@ -21,7 +21,9 @@ pub enum SchemaLookupError {
   #[error("Rusqlite error: {0}")]
   Rusqlite(#[from] rusqlite::Error),
   #[error("Rusqlite error: {0}")]
-  FromSql(#[from] rusqlite::types::FromSqlError),
+  FromSql2(#[from] rusqlite::types::FromSqlError),
+  #[error("Rusqlite error: {0}")]
+  FromSql(#[from] trailbase_sqlite::from_sql::FromSqlError),
   #[error("Schema error: {0}")]
   Schema(#[from] trailbase_schema::sqlite::SchemaError),
   #[error("Missing")]
@@ -39,11 +41,43 @@ pub(crate) fn build_metadata(
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let conn = conn.write_lock();
-  let tables = lookup_and_parse_all_table_schemas_sync(&conn)?;
-  let views = lookup_and_parse_all_view_schemas_sync(&conn, &tables)?;
+  let tables = lookup_and_parse_all_table_schemas_sync(&*conn)?;
+  let views = lookup_and_parse_all_view_schemas_sync(&*conn, &tables)?;
 
   return build_connection_metadata_and_install_file_deletion_triggers_sync(
-    &conn,
+    &*conn,
+    tables,
+    views,
+    json_schema_registry,
+  );
+}
+
+#[allow(unused)]
+pub(crate) fn build_metadata_sync(
+  conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+) -> Result<ConnectionMetadata, SchemaLookupError> {
+  let tables = lookup_and_parse_all_table_schemas_sync(conn)?;
+  let views = lookup_and_parse_all_view_schemas_sync(conn, &tables)?;
+
+  return build_connection_metadata_and_install_file_deletion_triggers_sync(
+    conn,
+    tables,
+    views,
+    json_schema_registry,
+  );
+}
+
+pub(crate) async fn build_metadata_async(
+  conn: &trailbase_sqlite::Connection,
+  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+) -> Result<ConnectionMetadata, SchemaLookupError> {
+  let conn = conn.write_lock();
+  let tables = lookup_and_parse_all_table_schemas_sync(&*conn)?;
+  let views = lookup_and_parse_all_view_schemas_sync(&*conn, &tables)?;
+
+  return build_connection_metadata_and_install_file_deletion_triggers_sync(
+    &*conn,
     tables,
     views,
     json_schema_registry,
@@ -59,7 +93,7 @@ pub async fn lookup_and_parse_table_schema(
   let sql: String = conn
     .read_query_row_get(
       format!(
-        "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1",
+        "SELECT sql FROM '{db}'.{SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1",
         db = database.unwrap_or("main")
       ),
       params!(table_name.to_string()),
@@ -86,7 +120,7 @@ pub async fn lookup_and_parse_table_schema(
 /// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
 /// column is added, we need to rebuild the metadata and update or install missing triggers.
 fn build_connection_metadata_and_install_file_deletion_triggers_sync(
-  conn: &rusqlite::Connection,
+  conn: &impl trailbase_sqlite::SyncConnectionTrait,
   tables: Vec<Table>,
   views: Vec<View>,
   registry: &RwLock<JsonSchemaRegistry>,
@@ -101,7 +135,7 @@ fn build_connection_metadata_and_install_file_deletion_triggers_sync(
 // Install file column triggers. This ain't pretty, this might be better on construction and
 // schema changes.
 fn setup_file_deletion_triggers_sync(
-  conn: &rusqlite::Connection,
+  conn: &impl trailbase_sqlite::SyncConnectionTrait,
   metadata: &ConnectionMetadata,
 ) -> Result<(), trailbase_sqlite::Error> {
   for metadata in metadata.tables.values() {
@@ -121,7 +155,7 @@ fn setup_file_deletion_triggers_sync(
 
       let column_name = &column_meta.column.name;
 
-      conn.execute_batch(&format!(
+      conn.execute_batch(format!(
           "\
           DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger'; \
           CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger' AFTER UPDATE ON {table_name} \
@@ -148,20 +182,18 @@ fn setup_file_deletion_triggers_sync(
 }
 
 fn lookup_and_parse_all_table_schemas_sync(
-  conn: &rusqlite::Connection,
+  conn: &impl trailbase_sqlite::SyncConnectionTrait,
 ) -> Result<Vec<Table>, SchemaLookupError> {
   let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
 
   let mut tables: Vec<Table> = vec![];
   for db in databases {
-    // Then get the actual tables.
-    let mut stmt = conn.prepare(&format!(
-      "SELECT sql FROM {db}.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
+    let query = format!(
+      "SELECT sql FROM '{db}'.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
       db = db.name
-    ))?;
-    let mut rows = stmt.raw_query();
+    );
 
-    while let Some(row) = rows.next()? {
+    for row in conn.query_rows(&query, ())? {
       let sql: String = row.get(0)?;
       let Some(stmt) = parse_into_statement(&sql)? else {
         return Err(SchemaLookupError::Missing);
@@ -178,7 +210,7 @@ fn lookup_and_parse_all_table_schemas_sync(
 }
 
 fn lookup_and_parse_all_view_schemas_sync(
-  conn: &rusqlite::Connection,
+  conn: &impl trailbase_sqlite::SyncConnectionTrait,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
   let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
@@ -186,12 +218,12 @@ fn lookup_and_parse_all_view_schemas_sync(
   let mut views: Vec<View> = vec![];
   for db in databases {
     // Then get the actual views.
-    let mut stmt = conn.prepare(&format!(
-      "SELECT sql FROM {SQLITE_SCHEMA_TABLE} WHERE type = 'view'"
-    ))?;
-    let mut rows = stmt.raw_query();
+    let query = format!(
+      "SELECT sql FROM '{db}'.{SQLITE_SCHEMA_TABLE} WHERE type = 'view'",
+      db = db.name
+    );
 
-    while let Some(row) = rows.next()? {
+    for row in conn.query_rows(&query, ())? {
       let sql: String = row.get(0)?;
       match sqlite3_parse_view(&sql, tables) {
         Ok(mut view) => {

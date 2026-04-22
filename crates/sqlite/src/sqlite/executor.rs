@@ -1,7 +1,6 @@
 use flume::{Receiver, Sender};
 use log::*;
 use parking_lot::RwLock;
-use rusqlite::fallible_iterator::FallibleIterator;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::sync::oneshot;
@@ -269,41 +268,6 @@ impl Executor {
         return f(stmt.raw_query());
       })
       .await;
-  }
-
-  pub async fn execute(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<usize, Error> {
-    return self
-      .call_writer(move |conn: &mut rusqlite::Connection| -> Result<_, Error> {
-        let mut stmt = conn.prepare_cached(sql.as_ref())?;
-
-        params.bind(&mut stmt)?;
-
-        return Ok(stmt.raw_execute()?);
-      })
-      .await;
-  }
-
-  pub async fn execute_batch(&self, sql: impl AsRef<str> + Send + 'static) -> Result<(), Error> {
-    self
-      .call_writer(
-        move |conn: &mut rusqlite::Connection| -> Result<(), rusqlite::Error> {
-          let mut batch = rusqlite::Batch::new(conn, sql.as_ref());
-          while let Some(mut stmt) = batch.next()? {
-            // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
-            // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
-            // behaves consistently.
-            let _row = stmt.raw_query().next()?;
-          }
-          return Ok(());
-        },
-      )
-      .await?;
-
-    return Ok(());
   }
 
   pub async fn close(self) -> Result<(), Error> {

@@ -3,7 +3,7 @@ use crate::traits::r#async::{AsyncMigrate, AsyncQuery, AsyncTransaction};
 use async_trait::async_trait;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
-use trailbase_sqlite::{Connection, Error};
+use trailbase_sqlite::{Connection, Error, SyncConnectionTrait};
 
 async fn query_applied_migrations(conn: &Connection, query: &str) -> Result<Vec<Migration>, Error> {
   let rows = conn.read_query_rows(query.to_string(), ()).await?;

@@ -9,33 +9,12 @@ use crate::from_sql::FromSql;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
 use crate::sqlite::executor::Executor;
-use crate::sqlite::transaction::{SyncConnectionTrait, Transaction};
+use crate::sqlite::sync::{SyncConnection, SyncConnectionTrait};
+use crate::sqlite::transaction::Transaction;
 use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockGuard, Options};
-
-pub struct SyncConnection<'a> {
-  conn: &'a mut rusqlite::Connection,
-}
-
-impl<'a> SyncConnectionTrait for SyncConnection<'a> {
-  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    let mut stmt = self.conn.prepare_cached(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-
-    if let Some(row) = stmt.raw_query().next()? {
-      return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
-    }
-    return Ok(None);
-  }
-
-  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    let mut stmt = self.conn.prepare_cached(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-    return Ok(stmt.raw_execute()?);
-  }
-}
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
@@ -116,6 +95,10 @@ impl Connection {
   /// # Failure
   ///
   /// Will return `Err` if the database connection has been closed.
+  ///
+  /// NOTE: use-cases:
+  ///  * RecordAPI non-transaction batch inserts.
+  ///  * Log-writer batch insertions (could use a different driver :shrug:).
   pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
   where
     F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
@@ -315,12 +298,22 @@ impl Connection {
     sql: impl AsRef<str> + Send + 'static,
     params: impl Params + Send + 'static,
   ) -> Result<usize, Error> {
-    return self.exec.execute(sql, params).await;
+    return self
+      .exec
+      .call_writer(move |conn: &mut rusqlite::Connection| {
+        return SyncConnectionTrait::execute(conn, sql, params);
+      })
+      .await;
   }
 
   /// Batch execute provided SQL statementsi in batch.
   pub async fn execute_batch(&self, sql: impl AsRef<str> + Send + 'static) -> Result<(), Error> {
-    return self.exec.execute_batch(sql).await;
+    return self
+      .exec
+      .call_writer(move |conn: &mut rusqlite::Connection| {
+        return SyncConnectionTrait::execute_batch(conn, sql);
+      })
+      .await;
   }
 
   pub fn attach(&self, path: &str, name: &str) -> Result<(), Error> {
