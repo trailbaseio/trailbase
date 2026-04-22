@@ -1,3 +1,13 @@
+## v0.26.6
+
+- Admin UI improvements:
+  - Allow using WKT-formatted geometries in row insert/update forms.
+  - Early client-side validation of RecordAPI names.
+  - Show toast close button on small screens w/o hover.
+- Add `execute_batch()` to `SyncConnectionTrait` for downstream schema metadata building code.
+- Remove more use-cases of leaky `Connection::write_lock()` abstraction.
+- Update dependencies.
+
 ## v0.26.5
 
 - Remove most leaky abstractions from `trailbase_sqlite::Connection`:
