@@ -514,17 +514,7 @@ function AddApiDialog(props: {
   setApi: (api: RecordApiConfig) => void;
 }) {
   const [open, setOpen] = createSignal(false);
-  const [name, setName] = createSignal<string>(props.defaultApiName);
-
-  const confirm = () => {
-    const n = name();
-    if (n !== "") {
-      props.setApi(
-        newRecordApiDefault({ tableName: props.tableName, apiName: name() }),
-      );
-      setOpen(false);
-    }
-  };
+  let name: HTMLInputElement | undefined;
 
   return (
     <Dialog
@@ -538,36 +528,45 @@ function AddApiDialog(props: {
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add New API</DialogTitle>
+          <DialogTitle>New API</DialogTitle>
         </DialogHeader>
 
-        <TextField class="flex items-center gap-2">
-          <TextFieldLabel class="w-[100px]">API Name</TextFieldLabel>
+        <form
+          class="flex flex-col gap-4"
+          method="dialog"
+          onSubmit={(e: SubmitEvent) => {
+            e.preventDefault();
 
-          <TextFieldInput
-            type={"text"}
-            value={name()}
-            placeholder={"API Name"}
-            onKeyUp={(e: KeyboardEvent) => {
-              if (e.key === "Enter") {
-                confirm();
-              }
-            }}
-            onInput={(e: Event) => {
-              setName((e.target as HTMLInputElement).value);
-            }}
-          />
-        </TextField>
+            const n = name?.value;
+            if (n) {
+              props.setApi(
+                newRecordApiDefault({ tableName: props.tableName, apiName: n }),
+              );
+              setOpen(false);
+            }
+          }}
+        >
+          <TextField class="flex items-center gap-2">
+            <TextFieldLabel class="w-[100px]">API Name</TextFieldLabel>
 
-        <DialogFooter>
-          <div class="flex w-full justify-between gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Abort
-            </Button>
+            <TextFieldInput
+              ref={name}
+              type={"text"}
+              placeholder={"API Name"}
+              pattern="[a-zA-Z0-9_]+"
+            />
+          </TextField>
 
-            <Button onClick={confirm}>Add</Button>
-          </div>
-        </DialogFooter>
+          <DialogFooter>
+            <div class="flex w-full justify-between gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Abort
+              </Button>
+
+              <Button type="submit">Add</Button>
+            </div>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
@@ -619,6 +618,7 @@ export function RecordApiSettingsForm(props: {
               api,
               mode: Mode.Create,
             });
+            props.markDirty(true);
           }}
         />
 
@@ -626,7 +626,12 @@ export function RecordApiSettingsForm(props: {
           multiple={false}
           placeholder="Select API..."
           value={(() => {
-            const name = api()?.api.name;
+            const current = api();
+            const name = current?.api.name;
+            if (current == undefined || !name) {
+              return undefined;
+            }
+
             for (const api of existingApis()) {
               if (api.name === name) {
                 return name;
@@ -679,6 +684,7 @@ export function RecordApiSettingsForm(props: {
               } else {
                 // API removed, either working copy discarded or existing deleted.
                 setApi(undefined);
+                props.markDirty(false);
               }
             }}
             {...props}
@@ -738,7 +744,6 @@ function IndividualRecordApiSettingsForm(props: {
             variant: "success",
           });
           props.reset(value);
-          props.markDirty(false);
         } catch (err) {
           showToast({
             title: `${isCreate ? "Creation" : "Update"} Error`,

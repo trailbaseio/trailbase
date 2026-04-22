@@ -18,6 +18,7 @@ interface SafeSheetProps {
 
 interface LocalProps {
   open?: Signal<boolean>;
+  message?: string;
   children: (sheet: SafeSheetProps) => JSXElement;
 }
 
@@ -58,6 +59,7 @@ export function SafeSheet(props: SafeProps) {
     >
       <ConfirmCloseDialog
         back={() => setDialogOpen(false)}
+        message={props.message}
         confirm={() => {
           setDirty(false);
           setDialogOpen(false);
@@ -82,9 +84,9 @@ export function ConfirmCloseDialog(props: {
 }) {
   return (
     <DialogContent>
-      <DialogTitle>Confirmation</DialogTitle>
+      <DialogTitle>Pending Changes</DialogTitle>
 
-      <p>{props.message ?? "Are you sure?"}</p>
+      <p>{props.message ?? DEFAULT_MESSAGE}</p>
 
       <DialogFooter>
         <div class="flex w-full justify-between">
@@ -93,7 +95,7 @@ export function ConfirmCloseDialog(props: {
           </Button>
 
           <Button variant="destructive" onClick={props.confirm}>
-            Discard
+            Proceed
           </Button>
         </div>
       </DialogFooter>
@@ -109,3 +111,6 @@ export function SheetContainer(props: { children: JSXElement }) {
     </div>
   );
 }
+
+const DEFAULT_MESSAGE =
+  "There are pending changes. Do you want to proceed and discard these changes?";
