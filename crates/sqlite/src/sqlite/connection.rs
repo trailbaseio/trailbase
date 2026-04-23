@@ -320,7 +320,7 @@ impl Connection {
       .await;
   }
 
-  pub fn attach(&self, path: &str, name: &str) -> Result<(), Error> {
+  pub async fn attach(&self, path: &str, name: &str) -> Result<(), Error> {
     let query = format!("ATTACH DATABASE '{path}' AS {name} ");
     return self.exec.map(move |conn| {
       conn.execute(&query, ())?;
@@ -328,7 +328,7 @@ impl Connection {
     });
   }
 
-  pub fn detach(&self, name: &str) -> Result<(), Error> {
+  pub async fn detach(&self, name: &str) -> Result<(), Error> {
     let query = format!("DETACH DATABASE {name}");
     return self.exec.map(move |conn| {
       conn.execute(&query, ())?;

@@ -67,11 +67,15 @@ async fn handle_sqlite_execute(
     Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
       conn
         .attach(&unquote_expr(&expr), &unquote_expr(&db_name))
+        .await
         .map_err(sqlite_err)?;
       0
     }
     Ok(Some(Stmt::Detach(name))) => {
-      conn.detach(&unquote_expr(&name)).map_err(sqlite_err)?;
+      conn
+        .detach(&unquote_expr(&name))
+        .await
+        .map_err(sqlite_err)?;
       0
     }
     _ => {
@@ -135,11 +139,15 @@ async fn handle_sqlite_query(
     Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
       conn
         .attach(&unquote_expr(&expr), &unquote_expr(&db_name))
+        .await
         .map_err(sqlite_err)?;
       Rows::empty()
     }
     Ok(Some(Stmt::Detach(name))) => {
-      conn.detach(&unquote_expr(&name)).map_err(sqlite_err)?;
+      conn
+        .detach(&unquote_expr(&name))
+        .await
+        .map_err(sqlite_err)?;
       Rows::empty()
     }
     Ok(Some(Stmt::Select(select))) if is_readonly_select(&select) => {
