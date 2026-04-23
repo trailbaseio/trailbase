@@ -3,6 +3,9 @@ pub enum Error {
   #[error("ConnectionClosed")]
   ConnectionClosed,
 
+  #[error("NotSupported")]
+  NotSupported,
+
   /// Error when the value of a particular column is requested, but the type
   /// of the result in that column cannot be converted to the requested
   /// Rust type.

@@ -14,6 +14,7 @@ mod connection;
 mod database;
 mod error;
 pub mod from_sql;
+mod generic;
 mod params;
 mod rows;
 pub mod sqlite;
