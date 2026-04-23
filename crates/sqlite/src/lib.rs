@@ -24,9 +24,6 @@ mod value;
 #[cfg(feature = "pg")]
 mod pg;
 
-#[cfg(debug_assertions)]
-mod experimental;
-
 pub use connection::{
   ArcLockGuard, Connection, LockError, LockGuard, Options, SyncConnection, SyncConnectionTrait,
 };
