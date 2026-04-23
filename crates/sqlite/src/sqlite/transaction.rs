@@ -4,14 +4,10 @@ use crate::rows::{Row, Rows};
 use crate::sqlite::sync::SyncConnectionTrait;
 
 pub struct Transaction<'a> {
-  tx: rusqlite::Transaction<'a>,
+  pub(crate) tx: rusqlite::Transaction<'a>,
 }
 
 impl<'a> Transaction<'a> {
-  pub fn new(tx: rusqlite::Transaction<'a>) -> Self {
-    return Self { tx };
-  }
-
   pub fn commit(self) -> Result<(), Error> {
     self.tx.commit()?;
     return Ok(());

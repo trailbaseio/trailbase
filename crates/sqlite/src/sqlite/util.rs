@@ -55,7 +55,7 @@ pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
   return Ok(Rows(result, columns));
 }
 
-pub(super) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> Result<Row, Error> {
+pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> Result<Row, Error> {
   #[cfg(debug_assertions)]
   if let Some(rc) = Some(columns(row.as_ref()))
     && rc.len() != cols.len()
@@ -75,7 +75,7 @@ pub(super) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> Result<Ro
 }
 
 #[inline]
-pub(super) fn columns(stmt: &rusqlite::Statement<'_>) -> Vec<Column> {
+pub(crate) fn columns(stmt: &rusqlite::Statement<'_>) -> Vec<Column> {
   return stmt
     .columns()
     .into_iter()

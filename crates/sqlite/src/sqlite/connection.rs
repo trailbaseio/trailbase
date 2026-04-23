@@ -118,16 +118,6 @@ impl Connection {
       .await;
   }
 
-  // pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
-  // where
-  //   F: FnOnce(&rusqlite::Connection) -> Result<R, E> + Send + 'static,
-  //   R: Send + 'static,
-  //   E: Send + 'static,
-  //   Error: From<E>,
-  // {
-  //   return self.exec.call_reader(function).await;
-  // }
-
   /// Transactions
   ///
   /// Note: we us an async API rather than a sync blocking API, e.g.:
@@ -146,7 +136,7 @@ impl Connection {
       .exec
       .call_writer::<_, R, Error>(move |conn: &mut rusqlite::Connection| {
         let tx = conn.transaction()?;
-        return Ok(function(Transaction::new(tx))?);
+        return Ok(function(Transaction { tx })?);
       })
       .await;
   }
