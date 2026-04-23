@@ -1,7 +1,6 @@
 use flume::{Receiver, Sender};
 use log::*;
-use parking_lot::Mutex;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::error::Error;
@@ -88,7 +87,7 @@ enum Message {
 #[derive(Clone)]
 pub(crate) struct Executor {
   sender: Sender<Message>,
-  conns: Vec<Weak<Mutex<postgres::Client>>>,
+  threads: Vec<Sender<Message>>,
 }
 
 impl Drop for Executor {
@@ -133,28 +132,30 @@ impl Executor {
 
     assert!(num_threads > 0);
 
-    let (sender, receiver) = flume::unbounded::<Message>();
-    let conns = (0..num_threads)
-      .map(|index| -> Result<Weak<Mutex<postgres::Client>>, Error> {
-        let receiver = receiver.clone();
+    let (shared_sender, shared_receiver) = flume::unbounded::<Message>();
+    let threads = (0..num_threads)
+      .map(|index| -> Result<Sender<Message>, Error> {
+        let shared_receiver = shared_receiver.clone();
         let conn_builder = conn_builder.clone();
 
-        let (s, r) = flume::bounded::<Result<Weak<Mutex<postgres::Client>>, Error>>(1);
+        let (s, r) = flume::bounded::<Result<Sender<Message>, Error>>(1);
 
         std::thread::Builder::new()
           .name(format!("tb-pg-{index}"))
           .spawn(move || -> () {
+            let (sender, receiver) = flume::unbounded::<Message>();
             let conn = match conn_builder() {
-              Ok(conn) => Arc::new(Mutex::new(conn)),
+              Ok(conn) => {
+                s.send(Ok(sender)).expect("unreachable");
+                conn
+              }
               Err(err) => {
-                s.send(Err(err)).unwrap();
+                s.send(Err(err)).expect("unreachable");
                 return;
               }
             };
 
-            s.send(Ok(Arc::downgrade(&conn))).unwrap();
-
-            event_loop(index, conn, receiver);
+            event_loop(index, conn, shared_receiver, receiver);
           })
           .map_err(|err| Error::Other(format!("spawning thread {index} failed: {err}").into()))?;
 
@@ -166,26 +167,32 @@ impl Executor {
 
     debug!("Opened Postgres DB ({num_threads} threads",);
 
-    return Ok(Self { sender, conns });
+    return Ok(Self {
+      sender: shared_sender,
+      threads,
+    });
   }
 
   pub fn threads(&self) -> usize {
-    return self.conns.len();
+    return self.threads.len();
   }
 
-  // FIXME: We cannot run blocking postgres flavor on caller's tokio runtime. We should probably
-  // use tokio_rusqlite :shrug:.
   #[inline]
-  pub(crate) fn map(
+  pub(crate) async fn map(
     &self,
-    f: impl Fn(&mut postgres::Client) -> Result<(), Error> + Send + 'static,
+    f: impl Fn(&mut postgres::Client) -> Result<(), Error> + Sync + Send + 'static,
   ) -> Result<(), Error> {
-    for conn in &self.conns {
-      if let Some(arc) = conn.upgrade() {
-        let mut lock = arc.lock();
-        f(&mut lock)?;
-      }
+    let function = Arc::new(f);
+    for sender in &self.threads {
+      let function = function.clone();
+      self
+        .sender
+        .send(Message::RunMut(Box::new(move |conn| {
+          let _ = function(conn);
+        })))
+        .map_err(|_| Error::ConnectionClosed)?;
     }
+
     return Ok(());
   }
 
@@ -257,22 +264,28 @@ impl Executor {
   }
 }
 
-fn event_loop(index: usize, conn: Arc<Mutex<postgres::Client>>, receiver: Receiver<Message>) {
-  while let Ok(message) = receiver.recv() {
+fn event_loop(
+  index: usize,
+  mut conn: postgres::Client,
+  shared_receiver: Receiver<Message>,
+  solo_receiver: Receiver<Message>,
+) {
+  while let Ok(message) = flume::Selector::new()
+    .recv(&shared_receiver, |m| m)
+    .recv(&solo_receiver, |m| m)
+    .wait()
+  {
     match message {
-      Message::RunMut(f) => {
-        let mut lock = conn.lock();
-        f(&mut lock)
-      }
+      Message::RunMut(f) => f(&mut conn),
       Message::Terminate => {
-        let client = Arc::into_inner(conn).expect("ref count should be 1");
-        let _ = client.into_inner().close();
-        return;
+        break;
       }
     };
   }
 
-  debug!("pg worker thread {index} shut down");
+  let r = conn.close();
+
+  debug!("pg worker thread {index} shut down: {r:?}");
 }
 
 #[cfg(test)]
@@ -331,5 +344,14 @@ mod tests {
       .unwrap();
 
     assert!(count > 0);
+
+    exec
+      .map(|client| -> Result<(), Error> {
+        client.query("SELECT COUNT(*) FROM test_table", &[])?;
+
+        return Ok(());
+      })
+      .await
+      .unwrap();
   }
 }

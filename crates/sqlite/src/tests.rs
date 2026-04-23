@@ -554,7 +554,7 @@ async fn test_attach() {
     .await
     .unwrap();
 
-  conn.attach(":memory:", "bar").unwrap();
+  conn.attach(":memory:", "bar").await.unwrap();
 
   let databases = conn.list_databases().await.unwrap();
   assert_eq!(databases.len(), 3);
@@ -566,8 +566,8 @@ async fn test_attach() {
     }
   );
 
-  conn.detach("bar").unwrap();
-  conn.detach("foo").unwrap();
+  conn.detach("bar").await.unwrap();
+  conn.detach("foo").await.unwrap();
 
   let databases = conn.list_databases().await.unwrap();
   assert_eq!(databases.len(), 1);
