@@ -25,7 +25,7 @@ mod value;
 mod experimental;
 
 pub use connection::{
-  ArcLockGuard, Connection, LockGuard, Options, SyncConnection, SyncConnectionTrait,
+  ArcLockGuard, Connection, LockError, LockGuard, Options, SyncConnection, SyncConnectionTrait,
 };
 pub use database::Database;
 pub use error::Error;

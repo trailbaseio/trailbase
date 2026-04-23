@@ -183,7 +183,7 @@ impl PerConnectionStateInternal {
     if subscriptions.is_empty() {
       self.subscriptions.remove(&id.table_name);
       if self.subscriptions.is_empty() {
-        uninstall_hook(&self.conn);
+        let _ = uninstall_hook(&self.conn);
       }
     }
   }
@@ -194,14 +194,14 @@ pub struct PerConnectionState {
 }
 
 impl PerConnectionState {
-  fn add_hook(self: &Arc<Self>, api: RecordApi) {
+  fn add_hook(self: &Arc<Self>, api: RecordApi) -> Result<(), RecordError> {
     let conn = api.conn().clone();
     let state = self.clone();
 
-    let receiver = install_hook(&conn);
+    let receiver = install_hook(&conn)?;
 
     // Spawn broker task.
-    if let Err(err) = std::thread::Builder::new()
+    let _join_handle = std::thread::Builder::new()
       .name("subscriptions".to_string())
       .spawn(move || {
         let mut expected = 1;
@@ -235,9 +235,9 @@ impl PerConnectionState {
 
         debug!("Channel closed: terminating subscription broker task.");
       })
-    {
-      log::error!("Failed to start subscription broker: {err}");
-    }
+      .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok(());
   }
 
   pub async fn add_record_subscription(
@@ -276,15 +276,17 @@ impl PerConnectionState {
       candidate_seq: AtomicI64::default(),
     });
 
-    let install_hook: bool = {
-      let mut lock = self.state.lock();
-      let empty = lock.subscriptions.is_empty();
-
-      let subscriptions = lock
+    let should_install_hook: bool = {
+      let mut empty = false;
+      self
+        .state
+        .lock()
         .subscriptions
         .entry(qualified_name.clone())
-        .or_default();
-      subscriptions
+        .or_insert_with(|| {
+          empty = true;
+          return Default::default();
+        })
         .record
         .entry(row_id)
         .or_default()
@@ -293,8 +295,8 @@ impl PerConnectionState {
       empty
     };
 
-    if install_hook {
-      self.add_hook(api.clone());
+    if should_install_hook {
+      self.add_hook(api.clone())?;
     }
 
     return Ok(subscription_entry);
@@ -342,7 +344,7 @@ impl PerConnectionState {
     };
 
     if install_hook {
-      self.add_hook(api.clone());
+      self.add_hook(api.clone())?;
     }
 
     return Ok(subscription_entry);
@@ -351,7 +353,7 @@ impl PerConnectionState {
 
 impl Drop for PerConnectionState {
   fn drop(&mut self) {
-    uninstall_hook(&self.state.lock().conn);
+    let _ = uninstall_hook(&self.state.lock().conn);
   }
 }
 
@@ -409,7 +411,7 @@ fn broker(
 
     state.subscriptions.remove(&table_name);
     if state.subscriptions.is_empty() {
-      uninstall_hook(conn);
+      let _ = uninstall_hook(conn);
     }
     return;
   };
@@ -466,7 +468,7 @@ fn broker(
   }
 
   if subscriptions.is_empty() {
-    uninstall_hook(conn);
+    let _ = uninstall_hook(conn);
   }
 }
 

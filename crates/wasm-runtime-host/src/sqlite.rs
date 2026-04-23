@@ -7,12 +7,10 @@ use sqlite3_parser::ast::{Expr, OneSelect, ResultColumn, Select, Stmt};
 use tokio::time::Duration;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::unquote_expr;
-use trailbase_sqlite::{ArcLockGuard, Rows};
+use trailbase_sqlite::{ArcLockGuard, LockError, Rows};
 use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
-
-use crate::host::TxError;
 
 self_cell!(
   pub(crate) struct OwnedTx {
@@ -26,24 +24,32 @@ self_cell!(
 pub(crate) async fn acquire_transaction_lock_with_timeout(
   conn: trailbase_sqlite::Connection,
   timeout: Duration,
-) -> Result<OwnedTx, TxError> {
+) -> Result<OwnedTx, LockError> {
   let try_until = std::time::SystemTime::now() + timeout;
   loop {
-    let Some(lock) = conn.try_write_arc_lock_for(Duration::from_micros(100)) else {
-      // Sleep a little.
-      tokio::time::sleep(Duration::from_micros(200)).await;
-
-      if std::time::SystemTime::now() > try_until {
-        // TODO: needs better error.
-        return Err(TxError::Other("Lock acquisition failed: timeout".into()));
+    match conn.try_write_arc_lock_for(Duration::from_micros(50)) {
+      Ok(lock) => {
+        return OwnedTx::try_new(MutBorrow::new(lock), |owner| {
+          return owner.borrow_mut().transaction();
+        })
+        .map_err(|err| {
+          log::error!("{err}");
+          return LockError::NotSupported;
+        });
       }
-      continue;
-    };
+      Err(LockError::Timeout) => {
+        // Sleep a little.
+        tokio::time::sleep(Duration::from_micros(200)).await;
 
-    return OwnedTx::try_new(MutBorrow::new(lock), |owner| {
-      return owner.borrow_mut().transaction();
-    })
-    .map_err(|err| TxError::Other(err.to_string()));
+        if std::time::SystemTime::now() > try_until {
+          return Err(LockError::Timeout);
+        }
+        continue;
+      }
+      Err(LockError::NotSupported) => {
+        return Err(LockError::NotSupported);
+      }
+    }
   }
 }
 

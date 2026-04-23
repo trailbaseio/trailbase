@@ -14,7 +14,7 @@ use crate::sqlite::transaction::Transaction;
 use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
 
 // NOTE: We should probably decouple from the impl.
-pub use crate::sqlite::executor::{ArcLockGuard, LockGuard, Options};
+pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard, Options};
 
 /// A handle to call functions in background thread.
 #[derive(Clone)]
@@ -77,7 +77,8 @@ impl Connection {
   /// connection would be affected.
   /// NOTE: Current use cases:
   ///   * Installing pre-update hooks
-  pub fn write_lock(&self) -> LockGuard<'_> {
+  #[inline]
+  pub fn write_lock(&self) -> Result<LockGuard<'_>, LockError> {
     return self.exec.write_lock();
   }
 
@@ -85,7 +86,11 @@ impl Connection {
   ///
   /// NOTE: Current use cases:
   ///   * Transactions from WASM.
-  pub fn try_write_arc_lock_for(&self, duration: tokio::time::Duration) -> Option<ArcLockGuard> {
+  #[inline]
+  pub fn try_write_arc_lock_for(
+    &self,
+    duration: tokio::time::Duration,
+  ) -> Result<ArcLockGuard, LockError> {
     return self.exec.try_write_arc_lock_for(duration);
   }
 

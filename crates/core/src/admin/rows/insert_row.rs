@@ -62,17 +62,12 @@ pub async fn insert_row_handler(
 
 #[cfg(test)]
 mod tests {
-  use axum::Json;
-  use axum::extract::{Path, State};
-  use trailbase_sqlvalue::Blob;
-
-  use super::*;
-  use crate::app_state::*;
-
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[tokio::test]
   async fn admin_insert_geometry_test() {
-    let state = test_state(None).await.unwrap();
+    use super::*;
+
+    let state = crate::app_state::test_state(None).await.unwrap();
     let conn = state.conn();
 
     conn
@@ -102,7 +97,7 @@ mod tests {
         ("id".to_string(), SqlValue::Integer(3)),
         (
           "geom".to_string(),
-          SqlValue::Blob(Blob::Array(wkb_geometry)),
+          SqlValue::Blob(trailbase_sqlvalue::Blob::Array(wkb_geometry)),
         ),
       ]),
     };

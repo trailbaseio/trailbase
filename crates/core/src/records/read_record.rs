@@ -1280,8 +1280,6 @@ mod test {
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[tokio::test]
   async fn test_geometry_columns_and_geojson() {
-    use geos::Geom;
-
     let state = test_state(None).await.unwrap();
 
     let name = "with_geo".to_string();

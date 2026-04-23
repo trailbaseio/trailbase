@@ -11,8 +11,6 @@ use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
-use crate::sqlite::acquire_transaction_lock_with_timeout;
-
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
 wasmtime::component::bindgen!({
     world: "trailbase:component/interfaces",
@@ -217,9 +215,10 @@ pub struct TransactionImpl {
 
 impl TransactionImpl {
   async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TxError> {
-    let db_lock = acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
-      .await
-      .map_err(|err| TxError::Other(err.to_string()))?;
+    let db_lock =
+      crate::sqlite::acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
+        .await
+        .map_err(|err| TxError::Other(err.to_string()))?;
 
     let tx = Arc::new(Mutex::new(Some(db_lock)));
 

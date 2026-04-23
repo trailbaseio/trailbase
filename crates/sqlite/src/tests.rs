@@ -295,7 +295,7 @@ async fn test_execute_and_query() {
     SELECT * FROM foo;
     SELECT * FROM foo;
   ";
-  conn.write_lock().execute_batch(query).unwrap();
+  conn.write_lock().unwrap().execute_batch(query).unwrap();
   conn.execute_batch(query).await.unwrap();
 }
 
@@ -369,7 +369,7 @@ async fn test_identity() {
 #[test]
 fn test_locking() {
   let conn = Connection::open_in_memory().unwrap();
-  let mut lock = conn.write_lock();
+  let mut lock = conn.write_lock().unwrap();
 
   let tx = lock.transaction().unwrap();
   tx.execute_batch(
@@ -475,6 +475,7 @@ async fn test_hooks() {
 
   conn
     .write_lock()
+    .unwrap()
     .preupdate_hook({
       let conn = conn.clone();
       Some(
@@ -504,6 +505,7 @@ async fn test_hooks() {
               .send(
                 conn
                   .write_lock()
+                  .unwrap()
                   .query_row(&query, (state.row_id,), |row| row.get(0))
                   .unwrap(),
               )

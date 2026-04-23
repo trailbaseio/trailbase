@@ -6,6 +6,8 @@ use trailbase_sqlite::{
   sqlite::{extract_record_values, extract_row_id},
 };
 
+use crate::records::RecordError;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum RecordAction {
   Delete,
@@ -22,11 +24,27 @@ pub struct PreupdateHookEvent {
   pub record: Vec<Value>,
 }
 
-pub fn install_hook(conn: &Connection) -> flume::Receiver<(usize, PreupdateHookEvent)> {
-  let (sender, receiver) = flume::bounded(CAPACITY);
-
-  conn
+pub fn uninstall_hook(conn: &Connection) -> Result<(), RecordError> {
+  let lock = conn
     .write_lock()
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+  return lock.preupdate_hook(NO_HOOK).map_err(|err| {
+    // If we were able to install a hook, we should also be able to uninstall it.
+    log::error!("Failed to uninstall SQLite preupdate hook: {err}");
+    RecordError::Internal(err.into())
+  });
+}
+
+pub fn install_hook(
+  conn: &Connection,
+) -> Result<flume::Receiver<(usize, PreupdateHookEvent)>, RecordError> {
+  let (sender, receiver) = flume::bounded(CAPACITY);
+  let lock = conn
+    .write_lock()
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+  lock
     .preupdate_hook({
       let conn = conn.clone();
       let mut cnt = 0;
@@ -80,23 +98,15 @@ pub fn install_hook(conn: &Connection) -> flume::Receiver<(usize, PreupdateHookE
               // QUESTION: Should it self-uninstall? This may be racy if a new hook
               // is being installed while one is already installed. In principle this
               // should not happen.
-              uninstall_hook(&conn);
+              let _ = uninstall_hook(&conn);
             }
           };
         },
       )
     })
-    .expect("");
+    .map_err(|err| RecordError::Internal(err.into()))?;
 
-  return receiver;
-}
-
-pub fn uninstall_hook(conn: &Connection) {
-  uninstall_hook_rusqlite(&conn.write_lock());
-}
-
-pub fn uninstall_hook_rusqlite(conn: &rusqlite::Connection) {
-  conn.preupdate_hook(NO_HOOK).expect("");
+  return Ok(receiver);
 }
 
 const CAPACITY: usize = 16 * 1024;
@@ -120,7 +130,7 @@ mod tests {
       .await
       .unwrap();
 
-    let receiver = install_hook(&conn);
+    let receiver = install_hook(&conn).unwrap();
 
     conn
       .execute_batch(
@@ -140,7 +150,7 @@ mod tests {
     assert_eq!(2, cnt);
     assert_eq!(Value::Integer(4), ev1.record[0]);
 
-    uninstall_hook(&conn);
+    uninstall_hook(&conn).unwrap();
 
     assert_eq!(0, receiver.sender_count());
   }

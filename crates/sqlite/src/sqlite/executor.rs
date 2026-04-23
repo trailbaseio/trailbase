@@ -1,15 +1,15 @@
 use flume::{Receiver, Sender};
 use log::*;
 use parking_lot::RwLock;
-use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tokio::sync::oneshot;
 
 use crate::error::Error;
 use crate::params::Params;
+pub use crate::sqlite::lock::{ArcLockGuard, LockError, LockGuard};
 
 #[derive(Default)]
-struct ConnectionVec(smallvec::SmallVec<[rusqlite::Connection; 32]>);
+pub(super) struct ConnectionVec(pub(super) smallvec::SmallVec<[rusqlite::Connection; 32]>);
 
 // NOTE: We must never access the same connection concurrently even as immutable &Connection, due
 // to intrinsic statement cache. We can ensure this by uniquely assigning one connection to each
@@ -156,18 +156,23 @@ impl Executor {
   }
 
   #[inline]
-  pub fn write_lock(&self) -> LockGuard<'_> {
-    return LockGuard {
+  pub fn write_lock(&self) -> Result<LockGuard<'_>, LockError> {
+    return Ok(LockGuard {
       guard: self.conns.write(),
-    };
+    });
   }
 
   #[inline]
-  pub fn try_write_arc_lock_for(&self, duration: tokio::time::Duration) -> Option<ArcLockGuard> {
-    return self
-      .conns
-      .try_write_arc_for(duration)
-      .map(|guard| ArcLockGuard { guard });
+  pub fn try_write_arc_lock_for(
+    &self,
+    duration: tokio::time::Duration,
+  ) -> Result<ArcLockGuard, LockError> {
+    return Ok(ArcLockGuard {
+      guard: self
+        .conns
+        .try_write_arc_for(duration)
+        .ok_or(LockError::Timeout)?,
+    });
   }
 
   #[inline]
@@ -356,42 +361,4 @@ fn writer_event_loop(
   {}
 
   debug!("writer thread shut down");
-}
-
-pub struct LockGuard<'a> {
-  guard: parking_lot::RwLockWriteGuard<'a, ConnectionVec>,
-}
-
-impl Deref for LockGuard<'_> {
-  type Target = rusqlite::Connection;
-  #[inline]
-  fn deref(&self) -> &rusqlite::Connection {
-    return &self.guard.deref().0[0];
-  }
-}
-
-impl DerefMut for LockGuard<'_> {
-  #[inline]
-  fn deref_mut(&mut self) -> &mut rusqlite::Connection {
-    return &mut self.guard.deref_mut().0[0];
-  }
-}
-
-pub struct ArcLockGuard {
-  guard: parking_lot::ArcRwLockWriteGuard<parking_lot::RawRwLock, ConnectionVec>,
-}
-
-impl Deref for ArcLockGuard {
-  type Target = rusqlite::Connection;
-  #[inline]
-  fn deref(&self) -> &rusqlite::Connection {
-    return &self.guard.deref().0[0];
-  }
-}
-
-impl DerefMut for ArcLockGuard {
-  #[inline]
-  fn deref_mut(&mut self) -> &mut rusqlite::Connection {
-    return &mut self.guard.deref_mut().0[0];
-  }
 }
