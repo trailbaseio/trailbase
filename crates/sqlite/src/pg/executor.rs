@@ -1,7 +1,7 @@
 use flume::{Receiver, Sender};
 use log::*;
 use parking_lot::Mutex;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::sync::oneshot;
 
 use crate::error::Error;
@@ -62,6 +62,11 @@ impl postgres::types::ToSql for Value {
   where
     Self: Sized,
   {
+    if *ty.kind() != postgres::types::Kind::Simple {
+      return false;
+    }
+
+    // TODO: further validate based on `ty.oid()`?.
     return true;
   }
 
@@ -79,10 +84,11 @@ enum Message {
 }
 
 /// A handle to call functions in background thread.
+#[allow(unused)]
 #[derive(Clone)]
 pub(crate) struct Executor {
   sender: Sender<Message>,
-  conns: smallvec::SmallVec<[Arc<Mutex<Option<postgres::Client>>>; 32]>,
+  conns: Vec<Weak<Mutex<postgres::Client>>>,
 }
 
 impl Drop for Executor {
@@ -91,9 +97,10 @@ impl Drop for Executor {
   }
 }
 
+#[allow(unused)]
 impl Executor {
   pub fn new<E>(
-    builder: impl Fn() -> Result<postgres::Client, E>,
+    builder: impl Fn() -> Result<postgres::Client, E> + Sync + Send + 'static,
     opt: Options,
   ) -> Result<Self, Error>
   where
@@ -101,9 +108,9 @@ impl Executor {
   {
     let Options { num_threads } = opt;
 
-    let new_conn = || -> Result<postgres::Client, Error> {
+    let conn_builder = Arc::new(move || -> Result<postgres::Client, Error> {
       return Ok(builder()?);
-    };
+    });
 
     let num_threads: usize = match num_threads.unwrap_or(1) {
       0 => {
@@ -126,49 +133,58 @@ impl Executor {
 
     assert!(num_threads > 0);
 
-    let conns = (0..num_threads)
-      .map(|_| -> Result<_, Error> {
-        return Ok(Arc::new(Mutex::new(Some(new_conn()?))));
-      })
-      .collect::<Result<Vec<_>, _>>()?;
-
-    // Spawn readers threads.
     let (sender, receiver) = flume::unbounded::<Message>();
-    for (index, conn) in conns.iter().enumerate() {
-      std::thread::Builder::new()
-        .name(format!("tb-sqlite-{index} (ro)"))
-        .spawn({
-          let receiver = receiver.clone();
-          let conn = conn.clone();
+    let conns = (0..num_threads)
+      .map(|index| -> Result<Weak<Mutex<postgres::Client>>, Error> {
+        let receiver = receiver.clone();
+        let conn_builder = conn_builder.clone();
 
-          move || event_loop(index, conn, receiver)
-        })
-        .map_err(|err| Error::Other(format!("spawning ro thread {index} failed: {err}").into()))?;
-    }
+        let (s, r) = flume::bounded::<Result<Weak<Mutex<postgres::Client>>, Error>>(1);
+
+        std::thread::Builder::new()
+          .name(format!("tb-pg-{index}"))
+          .spawn(move || -> () {
+            let conn = match conn_builder() {
+              Ok(conn) => Arc::new(Mutex::new(conn)),
+              Err(err) => {
+                s.send(Err(err)).unwrap();
+                return;
+              }
+            };
+
+            s.send(Ok(Arc::downgrade(&conn))).unwrap();
+
+            event_loop(index, conn, receiver);
+          })
+          .map_err(|err| Error::Other(format!("spawning thread {index} failed: {err}").into()))?;
+
+        return r
+          .recv()
+          .map_err(|err| Error::Other(format!("recv failed: {err}").into()))?;
+      })
+      .collect::<Result<Vec<_>, Error>>()?;
 
     debug!("Opened Postgres DB ({num_threads} threads",);
 
-    return Ok(Self {
-      sender,
-      conns: conns.into(),
-    });
+    return Ok(Self { sender, conns });
   }
 
   pub fn threads(&self) -> usize {
     return self.conns.len();
   }
 
+  // FIXME: We cannot run blocking postgres flavor on caller's tokio runtime. We should probably
+  // use tokio_rusqlite :shrug:.
   #[inline]
   pub(crate) fn map(
     &self,
     f: impl Fn(&mut postgres::Client) -> Result<(), Error> + Send + 'static,
   ) -> Result<(), Error> {
     for conn in &self.conns {
-      let mut lock = conn.lock();
-      let Some(conn) = &mut *lock else {
-        break;
-      };
-      f(conn)?;
+      if let Some(arc) = conn.upgrade() {
+        let mut lock = arc.lock();
+        f(&mut lock)?;
+      }
     }
     return Ok(());
   }
@@ -237,28 +253,20 @@ impl Executor {
     while self.sender.send(Message::Terminate).is_ok() {
       // Continue to close readers (as well as the reader/writer) while the channel is alive.
     }
-    for conn in std::mem::take(&mut self.conns) {
-      conn.lock().take().map(|c| c.close());
-    }
     return Ok(());
   }
 }
 
-fn event_loop(
-  index: usize,
-  conn: Arc<Mutex<Option<postgres::Client>>>,
-  receiver: Receiver<Message>,
-) {
+fn event_loop(index: usize, conn: Arc<Mutex<postgres::Client>>, receiver: Receiver<Message>) {
   while let Ok(message) = receiver.recv() {
-    let mut lock = conn.lock();
-    let Some(conn) = &mut *lock else {
-      break;
-    };
-
     match message {
-      Message::RunMut(f) => f(conn),
+      Message::RunMut(f) => {
+        let mut lock = conn.lock();
+        f(&mut lock)
+      }
       Message::Terminate => {
-        // NOTE: Connection will be closed by drop.
+        let client = Arc::into_inner(conn).expect("ref count should be 1");
+        let _ = client.into_inner().close();
         return;
       }
     };
@@ -309,7 +317,7 @@ mod tests {
 
     let count = exec
       .query_rows_f(
-        "SELECT COUNT(*) FROM test_table WHERE data = ?1",
+        "SELECT COUNT(*) FROM test_table WHERE data = $1",
         ("a".to_string(),),
         |mut row_iter| -> Result<i64, Error> {
           while let Some(row) = row_iter.next()? {
