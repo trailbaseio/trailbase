@@ -195,7 +195,6 @@ impl Executor {
     E: Send + 'static,
     Error: From<E>,
   {
-    // return call_impl(&self.writer, function).await;
     let (sender, receiver) = oneshot::channel::<Result<R, E>>();
 
     self

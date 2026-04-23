@@ -21,6 +21,9 @@ mod statement;
 pub mod to_sql;
 mod value;
 
+#[cfg(feature = "pg")]
+mod pg;
+
 #[cfg(debug_assertions)]
 mod experimental;
 
