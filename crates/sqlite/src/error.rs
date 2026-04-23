@@ -21,6 +21,12 @@ pub enum Error {
   #[error("Rusqlite: {0}")]
   Rusqlite(#[from] rusqlite::Error),
 
+  // QUESTION: This is leaky. How often do downstream users have to introspect on this
+  // rusqlite::Error. Otherwise, should/could this be more opaue.
+  #[cfg(feature = "pg")]
+  #[error("Posgres: {0}")]
+  Postgres(#[from] postgres::Error),
+
   #[error("DeserializeValue: {0}")]
   DeserializeValue(serde_rusqlite::Error),
 

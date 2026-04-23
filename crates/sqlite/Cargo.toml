@@ -19,10 +19,16 @@ name = "join-order"
 path = "benches/join-order/main.rs"
 harness = false
 
+[features]
+default = ["pg"]
+pg = ["dep:postgres", "dep:bytes"]
+
 [dependencies]
+bytes = { version = "1.11.1", optional = true }
 flume = { workspace = true }
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
+postgres = { version = "0.19.12", optional = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_rusqlite = { workspace = true }
