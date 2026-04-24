@@ -151,13 +151,36 @@ impl std::fmt::Display for VersionInfo {
 
 #[must_use]
 fn get_output(cmd: &str, args: &[&str]) -> Option<String> {
-  let output = Command::new(cmd).args(args).output().ok()?;
-  let mut stdout = output.status.success().then_some(output.stdout)?;
-  // Remove trailing newlines.
-  while stdout.last().copied() == Some(b'\n') {
-    stdout.pop();
-  }
-  return String::from_utf8(stdout).ok();
+  let output = match Command::new(cmd).args(args).output() {
+    Err(err) => {
+      // This may happen if the `cmd` is not installed, i.e. git in our case.
+      log::info!(
+        "Failed to run '{cmd} {args}'': {err}",
+        args = args.join(" ")
+      );
+      return None;
+    }
+    Ok(output) if !output.status.success() => {
+      // This indicates that the respective command was found but is unhappy, e.g. a
+      // version incompatibility with the command-line interface.
+      log::warn!(
+        "Exit {status} by '{cmd} {args}': {stdout}\n{stderr}",
+        args = args.join(" "),
+        status = output.status,
+        stdout = String::from_utf8_lossy(&output.stdout),
+        stderr = String::from_utf8_lossy(&output.stderr),
+      );
+      return None;
+    }
+    Ok(output) => output,
+  };
+
+  let Ok(stdout) = String::from_utf8(output.stdout) else {
+    log::warn!("Invalid output of '{cmd} {args}'", args = args.join(" "));
+    return None;
+  };
+
+  return Some(stdout.trim().to_string());
 }
 
 #[must_use]

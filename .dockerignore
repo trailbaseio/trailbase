@@ -19,11 +19,10 @@ examples/
 Dockerfile*
 .docker*
 
-# Include parts of the .git/ folder needed to bake version info into the
-# binary.
+# Include the .git/ folder needed to bake version info into the binary but skip
+# all `.git*` files.
 .git*
 !.git/
-.git/modules
 
 .hooks/
 .cargo/

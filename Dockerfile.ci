@@ -32,6 +32,9 @@ ENV CI=TRUE
 RUN rustup default ${RUST_TOOLCHAIN_VERSION}
 RUN rustup target add ${RUST_TARGET}
 
+# Otherwise git's sanity checks will prevent us from backing the version.
+RUN git config --global --add safe.directory ${WORKSPACE}
+
 WORKDIR ${WORKSPACE}
 
 # vim: ft=dockerfile

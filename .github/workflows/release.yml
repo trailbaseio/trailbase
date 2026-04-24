@@ -15,7 +15,7 @@ jobs:
   changelog:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Get release notes from changelog
         id: release_notes
         run: |
@@ -37,12 +37,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUST_TARGET: x86_64-unknown-linux-musl
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_linux.zip
       DOCKER_WORKSPACE: /workspace
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -70,28 +76,35 @@ jobs:
             -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
             -e PNPM_OFFLINE=FALSE \
             builder:latest \
-            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail"
 
       - name: Package Artifacts
         run: |
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_linux.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_x86_64_linux.zip
+          files: ${{ env.ARCHIVE_NAME }}
 
   release-aarch64-linux-musl:
     needs: changelog
     runs-on: ubuntu-24.04-arm
     env:
       RUST_TARGET: aarch64-unknown-linux-musl
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_arm64_linux.zip
       DOCKER_WORKSPACE: /workspace
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -119,26 +132,33 @@ jobs:
             -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
             -e PNPM_OFFLINE=FALSE \
             builder:latest \
-            /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail"
 
       - name: Package Artifacts
         run: |
-          zip -r -j trailbase_${{  github.ref_name }}_arm64_linux.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_arm64_linux.zip
+          files: ${{ env.ARCHIVE_NAME }}
 
   release-aarch64-apple-darwin:
     needs: changelog
     runs-on: macos-15
     env:
       RUST_TARGET: aarch64-apple-darwin
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - name: Install Dependencies
         run: brew update && brew install protobuf pnpm
       - name: PNPM install
@@ -155,24 +175,32 @@ jobs:
         run: |
           env && \
             cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+
       - name: Package Artifacts
         run: |
-          zip -r -j trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip
+          files: ${{ env.ARCHIVE_NAME }}
 
   release-x86_64-apple-darwin:
     needs: changelog
     runs-on: macos-15
     env:
       RUST_TARGET: x86_64-apple-darwin
+      BINARY_PATH: target/$RUST_TARGET/release/trail
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - name: Install Dependencies
         run: brew update && brew install protobuf pnpm
       - name: PNPM install
@@ -189,24 +217,32 @@ jobs:
         run: |
           env && \
             cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+
       - name: Package Artifacts
         run: |
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip target/${{ env.RUST_TARGET }}/release/trail CHANGELOG.md LICENSE
+          ${{ env.BINARY_PATH }} --version && \
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
+          files: ${{ env.ARCHIVE_NAME }}
 
   release-x86_64-windows:
     needs: changelog
     runs-on: windows-latest
     env:
       RUST_TARGET: x86_64-pc-windows-msvc
+      BINARY_PATH: target/x86_64-pc-windows-msvc/release/trail.exe
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_windows.zip
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - uses: MinoruSekine/setup-scoop@v4.0.1
         with:
           buckets: extras
@@ -224,24 +260,32 @@ jobs:
         run: |
           env && \
             cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+
       - name: Package Artifacts
         run: |
-          zip -r -j trailbase_${{  github.ref_name }}_x86_64_windows.zip target/${{ env.RUST_TARGET }}/release/trail.exe CHANGELOG.md LICENSE
+          ${{ env.BINARY_PATH }} --version &&
+            zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_x86_64_windows.zip
+          files: ${{ env.ARCHIVE_NAME }}
 
   release-wasm-auth-ui:
     needs: changelog
     runs-on: ubuntu-latest
     env:
       RUST_TARGET: wasm32-wasip2
+      BINARY_PATH: target/$RUST_TARGET/release/auth_ui_component.wasm
+      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - name: Install Dependencies
         run: |
           sudo apt-get update && \
@@ -263,11 +307,12 @@ jobs:
         run: |
           env && cd crates/auth-ui && \
             cargo build --target ${{ env.RUST_TARGET }} --release
+
       - name: Package Artifacts
         run: |
-          zip -r -j trailbase_${{  github.ref_name }}_wasm_auth_ui.zip target/${{ env.RUST_TARGET }}/release/auth_ui_component.wasm CHANGELOG.md LICENSE
+          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
       - name: Release binaries
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
-          files: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
+          files: ${{ env.ARCHIVE_NAME }}

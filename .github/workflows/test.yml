@@ -12,8 +12,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - run: df -h
-      - name: Free Disk Space (Ubuntu)
+      - name: Monitor Disk Space (Start)
+        run: df -h
+      - name: Free Disk Space
         uses: jlumbroso/free-disk-space@main
         with:
           # this might remove tools that are actually needed,
@@ -28,10 +29,15 @@ jobs:
           large-packages: false
           docker-images: true
           swap-storage: true
-      - run: df -h
-      - uses: actions/checkout@v3
+      - name: Monitor Disk Space (Post Cleanup)
+        run: df -h
+      - uses: actions/checkout@v6
         with:
-          submodules: 'true'
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
       - name: Install Dependencies
         run: |
           sudo apt-get update && \
@@ -75,7 +81,12 @@ jobs:
       # - uses: swift-actions/setup-swift@v2
       #   with:
       #     swift-version: "6.1"
-      - uses: pre-commit/action@v3.0.1
+      - name: "Build & Run Tests"
+        uses: pre-commit/action@v3.0.1
+        env:
+          RUST_BACKTRACE: 1
         with:
           extra_args: "--all-files --verbose"
-      - run: df -h
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
