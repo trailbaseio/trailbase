@@ -26,12 +26,15 @@ build:
 #
 # Version specifier lives in `lib/build.gradle.kts`.
 #
+# Artifacts are browsable on: https://repo.maven.apache.org/maven2/io/trailbase/
+#
 # NOTE: Only publishes, requires subsequent manual release on maven central.
-publish:
-	./gradlew publishToMavenCentral
-
 release:
-	./gradlew publishKotlinMultiplatformPublicationToMavenCentralRepository
+	./gradlew publishAllPublicationsToMavenCentralRepository
+
+# Only releases non-multi-platform JVM artifacts.
+# release:
+# 	./gradlew publishToMavenCentral
 
 format:
 	./gradlew spotlessApply
