@@ -27,7 +27,6 @@ import type {
 } from "@tanstack/solid-table";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
-import { Parser } from "@tiledb-inc/wkx";
 import { urlSafeBase64Decode } from "trailbase";
 
 import { Header } from "@/components/Header";
@@ -79,6 +78,7 @@ import {
 } from "@/components/tables/Files";
 
 import { createConfigQuery } from "@/lib/api/config";
+import { wkbToWkt } from "@/lib/geometry";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
 import { urlSafeBase64ToUuid, toHex, safeParseInt } from "@/lib/utils";
@@ -163,8 +163,7 @@ function renderCell(
           );
         }
         case "Geometry": {
-          const bytes = urlSafeBase64Decode(blob.Base64UrlSafe);
-          return Parser.parseWkb(new DataView(bytes.buffer)).toEwkt();
+          return wkbToWkt(urlSafeBase64Decode(blob.Base64UrlSafe));
         }
       }
 

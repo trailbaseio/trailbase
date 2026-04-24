@@ -1,6 +1,5 @@
-import { children, createSignal, For, Show, JSX } from "solid-js";
+import { children, createSignal, For, Show, JSX, createEffect } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
-import { Parser } from "@tiledb-inc/wkx";
 import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
 
 import type { Column } from "@bindings/Column";
@@ -26,6 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+import { wkbToWkt, wktToWkb } from "@/lib/geometry";
 import type { Record } from "@/lib/record";
 import { updateRow, insertRow } from "@/lib/api/row";
 import {
@@ -120,7 +120,7 @@ function transform(schema: Table, record: Record): Record {
     if (isGeometry) {
       const value = record[column.name];
       if (value !== undefined && value !== "Null" && "Text" in value) {
-        const geometry = Parser.parseWkt(value.Text);
+        const geometry = wktToWkb(value.Text);
         record[column.name] = {
           Blob: {
             Base64UrlSafe: urlSafeBase64Encode(
@@ -422,11 +422,26 @@ function buildSqlRealFormField(opts: SqlFormFieldOptions) {
 // TODO: Right now we don't have a good way of distinguishing between
 // empty string and a non-empty default value. We'd need some other UI
 // element. An empty-input field is ambiguous.
-function buildSqlTextFormField(opts: SqlFormFieldOptions) {
+function buildSqlTextFormField(
+  opts: SqlFormFieldOptions & {
+    isGeometry: boolean;
+  },
+) {
   return function builder(field: () => FieldApiT<SqlValue | undefined>) {
     const { initialValue, initiallyDisabled } = initialState(field(), opts);
 
     const [disabled, setDisabled] = createSignal<boolean>(initiallyDisabled);
+
+    const getValue = () => {
+      const sqlValue = field().state.value;
+      if (opts.isGeometry) {
+        const blob = getBlob(sqlValue);
+        if (blob !== undefined) {
+          return wkbToWkt(urlSafeBase64Decode(blob));
+        }
+      }
+      return getText(sqlValue);
+    };
 
     return (
       <TextField class="w-full">
@@ -436,7 +451,7 @@ function buildSqlTextFormField(opts: SqlFormFieldOptions) {
           <TextFieldInput
             disabled={disabled()}
             type={"text"}
-            value={getText(field().state.value) ?? ""}
+            value={getValue() ?? ""}
             placeholder={opts.placeholder(initialValue, disabled())}
             onBlur={field().handleBlur}
             onInput={(e: Event) => {
@@ -740,8 +755,7 @@ function buildSqlValueFormField(opts: {
         const blob = initial.Blob;
         if ("Base64UrlSafe" in blob) {
           try {
-            const bytes = urlSafeBase64Decode(blob.Base64UrlSafe);
-            return Parser.parseWkb(new DataView(bytes.buffer)).toEwkt();
+            return wkbToWkt(urlSafeBase64Decode(blob.Base64UrlSafe));
           } catch {
             // Fall-through
           }
@@ -777,15 +791,20 @@ function buildSqlValueFormField(opts: {
         nullable,
         hasDefault: defaultValue !== undefined,
         placeholder,
+        isGeometry: isGeometry,
         disabled: opts.isUpdate && isPk,
       });
     case "Blob": {
       if (isGeometry) {
+        // We get a geometry blob value but want to display text, e.g. on-edit
+        // we don't want to encode to base64. We then convert the text back to
+        // blob only on submit :/.
         return buildSqlTextFormField({
           label: <Label name={name} type={type} notNull={notNull} />,
           nullable,
           hasDefault: defaultValue !== undefined,
           placeholder,
+          isGeometry: isGeometry,
           disabled: opts.isUpdate && isPk,
         });
       }
@@ -886,7 +905,7 @@ function validateUpdateSqlValueFormField({
   if ("Text" in value) {
     if (isGeometry) {
       try {
-        Parser.parseWkt(value.Text);
+        wktToWkb(value.Text);
       } catch {
         return "Not a valid WKT geometry";
       }
@@ -959,7 +978,7 @@ function validateInsertSqlValueFormField({
   if ("Text" in value) {
     if (isGeometry) {
       try {
-        Parser.parseWkt(value.Text);
+        wktToWkb(value.Text);
       } catch {
         return "Not a valid WKT geometry";
       }
