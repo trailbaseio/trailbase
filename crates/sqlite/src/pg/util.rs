@@ -5,6 +5,28 @@ use crate::error::Error;
 use crate::rows::{Column, Row, Rows};
 use crate::value::Value;
 
+// #[inline]
+// pub fn get_value<T: FromSql>(row: &postgres::Row, idx: usize) -> Result<T, Error> {
+//     postgres::types::Json
+//   let value = row.get(idx)?;
+//
+//   return FromSql::column_result(value.into()).map_err(|err| {
+//     use rusqlite::Error as RError;
+//
+//     return Error::Rusqlite(match err {
+//       FromSqlError::InvalidType => {
+//         RError::InvalidColumnType(idx, "<unknown>".into(), value.data_type())
+//       }
+//       FromSqlError::OutOfRange(i) => RError::IntegralValueOutOfRange(idx, i),
+//       FromSqlError::Utf8Error(err) => RError::Utf8Error(idx, err),
+//       FromSqlError::Other(err) => RError::FromSqlConversionFailure(idx, value.data_type(), err),
+//       FromSqlError::InvalidBlobSize { .. } => {
+//         RError::FromSqlConversionFailure(idx, value.data_type(), Box::new(err))
+//       }
+//     });
+//   });
+// }
+
 #[inline]
 pub(crate) fn map_first<T>(
   mut rows: postgres::RowIter<'_>,

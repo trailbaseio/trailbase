@@ -3,6 +3,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use postgres::fallible_iterator::FallibleIterator;
+
 use crate::database::Database;
 use crate::error::Error;
 use crate::from_sql::FromSql;
@@ -150,7 +152,7 @@ impl Connection {
   ) -> Result<Rows, Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, sqlite_from_rows).await,
-      Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
+      Executor::Pg(_) => self.write_query_rows(sql, params).await,
     };
   }
 
@@ -169,15 +171,7 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(ref exec) => {
-        exec
-          .query_rows_f(sql, params, |rows| {
-            return pg_map_first(rows, |row| {
-              return pg_from_row(&row, Arc::new(pg_columns(&row)));
-            });
-          })
-          .await
-      }
+      Executor::Pg(_) => self.write_query_row(sql, params).await,
     };
   }
 
@@ -249,7 +243,7 @@ impl Connection {
   ) -> Result<Rows, Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.write_query_rows_f(sql, params, sqlite_from_rows).await,
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
     };
   }
 
@@ -268,7 +262,15 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .query_rows_f(sql, params, |rows| {
+            return pg_map_first(rows, |row| {
+              return pg_from_row(&row, Arc::new(pg_columns(&row)));
+            });
+          })
+          .await
+      }
     };
   }
 
@@ -291,7 +293,17 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .query_rows_f(sql, params, |rows| {
+            return pg_map_first(rows, |row| {
+              // TODO: : Need to implement postgres::types::FromSql for FromSql.
+              // return row.try_get::<'_, usize, T>(index).ok();
+              return Err(Error::NotSupported);
+            });
+          })
+          .await
+      }
     };
   }
 
@@ -310,7 +322,16 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .query_rows_f(sql, params, |row_iter| {
+            return pg_map_first(row_iter, |row| {
+              // TODO: : Need to implement postgres::types::FromSql for FromSql.
+              return Err(Error::NotSupported);
+            });
+          })
+          .await
+      }
     };
   }
 
@@ -329,7 +350,19 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .query_rows_f(sql, params, |row_iter| {
+            return row_iter
+              .iterator()
+              .map(|row| {
+                // TODO: : Need to implement postgres::types::FromSql for FromSql.
+                return Err(Error::NotSupported);
+              })
+              .collect();
+          })
+          .await
+      }
     };
   }
 
@@ -346,7 +379,13 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .call(move |client| {
+            return SyncConnectionTrait::execute(client, sql, params);
+          })
+          .await
+      }
     };
   }
 
@@ -359,7 +398,13 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .call(move |client| {
+            return SyncConnectionTrait::execute_batch(client, sql);
+          })
+          .await
+      }
     };
   }
 
