@@ -1,7 +1,7 @@
 use crate::error::Error;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
-use crate::sqlite::sync::SyncConnectionTrait;
+use crate::traits::SyncConnection as SyncConnectionTrait;
 
 impl SyncConnectionTrait for postgres::Client {
   // Queries the first row and returns it if present, otherwise `None`.

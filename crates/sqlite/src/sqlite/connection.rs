@@ -9,9 +9,10 @@ use crate::from_sql::FromSql;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
 use crate::sqlite::executor::Executor;
-use crate::sqlite::sync::{SyncConnection, SyncConnectionTrait};
+use crate::sqlite::sync::SyncConnection;
 use crate::sqlite::transaction::Transaction;
 use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
+use crate::traits::SyncConnection as SyncConnectionTrait;
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard, Options};
