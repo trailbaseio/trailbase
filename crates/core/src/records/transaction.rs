@@ -2,7 +2,7 @@ use axum::extract::{Json, State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::QualifiedName;
-use trailbase_sqlite::SyncConnectionTrait;
+use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
@@ -153,7 +153,7 @@ fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
   return Ok(api);
 }
 
-fn apply_ops<T: SyncConnectionTrait>(
+fn apply_ops<T: SyncConnection>(
   state: &AppState,
   conn: &T,
   user: Option<&User>,

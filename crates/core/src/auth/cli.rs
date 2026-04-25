@@ -1,6 +1,7 @@
 use base64::prelude::*;
 use const_format::formatcp;
-use trailbase_sqlite::{Connection, SyncConnectionTrait, params};
+use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
+use trailbase_sqlite::{Connection, params};
 use uuid::Uuid;
 
 use crate::DataDir;

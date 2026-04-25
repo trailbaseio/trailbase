@@ -20,6 +20,7 @@ mod rows;
 pub mod sqlite;
 mod statement;
 pub mod to_sql;
+pub mod traits;
 mod value;
 
 #[cfg(feature = "pg")]

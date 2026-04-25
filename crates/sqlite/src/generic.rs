@@ -8,10 +8,19 @@ use crate::error::Error;
 use crate::from_sql::FromSql;
 use crate::params::Params;
 use crate::pg::executor::Executor as PgExecutor;
+use crate::pg::util::{
+  columns as pg_columns, from_row as pg_from_row, from_rows as pg_from_rows,
+  map_first as pg_map_first,
+};
 use crate::rows::{Row, Rows};
 use crate::sqlite::executor::Executor as SqliteExecutor;
-use crate::sqlite::sync::SyncConnectionTrait;
-use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
+use crate::sqlite::util::{
+  columns as sqlite_columns, from_row as sqlite_from_row, from_rows as sqlite_from_rows, get_value,
+  map_first as sqlite_map_first,
+};
+use crate::traits::{
+  SyncConnection as SyncConnectionTrait, SyncTransaction as SyncTransactionTrait,
+};
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard, Options};
@@ -123,7 +132,14 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .call::<_, R, Error>(move |conn: &mut postgres::Client| {
+            let tx = conn.transaction()?;
+            return Ok(function(Transaction::Pg(tx))?);
+          })
+          .await
+      }
     };
   }
 
@@ -133,8 +149,8 @@ impl Connection {
     params: impl Params + Send + 'static,
   ) -> Result<Rows, Error> {
     return match self.exec {
-      Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, from_rows).await,
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, sqlite_from_rows).await,
+      Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
     };
   }
 
@@ -147,13 +163,21 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         exec
           .read_query_rows_f(sql, params, |rows| {
-            return map_first(rows, |row| {
-              return from_row(row, Arc::new(columns(row.as_ref())));
+            return sqlite_map_first(rows, |row| {
+              return sqlite_from_row(row, Arc::new(sqlite_columns(row.as_ref())));
             });
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(ref exec) => {
+        exec
+          .query_rows_f(sql, params, |rows| {
+            return pg_map_first(rows, |row| {
+              return pg_from_row(&row, Arc::new(pg_columns(&row)));
+            });
+          })
+          .await
+      }
     };
   }
 
@@ -170,13 +194,13 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         exec
           .read_query_rows_f(sql, params, move |rows| {
-            return map_first(rows, move |row| {
+            return sqlite_map_first(rows, move |row| {
               return get_value(row, index);
             });
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => self.write_query_row_get(sql, params, index).await,
     };
   }
 
@@ -189,13 +213,13 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         exec
           .read_query_rows_f(sql, params, |rows| {
-            return map_first(rows, move |row| {
+            return sqlite_map_first(rows, move |row| {
               serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
             });
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => self.write_query_value(sql, params).await,
     };
   }
 
@@ -214,7 +238,7 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => self.write_query_values(sql, params).await,
     };
   }
 
@@ -224,7 +248,7 @@ impl Connection {
     params: impl Params + Send + 'static,
   ) -> Result<Rows, Error> {
     return match self.exec {
-      Executor::Sqlite(ref exec) => exec.write_query_rows_f(sql, params, from_rows).await,
+      Executor::Sqlite(ref exec) => exec.write_query_rows_f(sql, params, sqlite_from_rows).await,
       Executor::Pg(_) => Err(Error::NotSupported),
     };
   }
@@ -238,8 +262,8 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         exec
           .write_query_rows_f(sql, params, |rows| {
-            return map_first(rows, |row| {
-              return from_row(row, Arc::new(columns(row.as_ref())));
+            return sqlite_map_first(rows, |row| {
+              return sqlite_from_row(row, Arc::new(sqlite_columns(row.as_ref())));
             });
           })
           .await
@@ -261,7 +285,7 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         exec
           .write_query_rows_f(sql, params, move |rows| {
-            return map_first(rows, move |row| {
+            return sqlite_map_first(rows, move |row| {
               return get_value(row, index);
             });
           })
@@ -280,7 +304,7 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         exec
           .write_query_rows_f(sql, params, |rows| {
-            return map_first(rows, |row| {
+            return sqlite_map_first(rows, |row| {
               serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
             });
           })
@@ -485,26 +509,57 @@ pub enum Transaction<'a> {
 }
 
 #[allow(unused)]
-impl<'a> Transaction<'a> {
-  pub fn commit(self) -> Result<(), Error> {
+impl<'a> SyncConnectionTrait for Transaction<'a> {
+  #[inline]
+  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+    return match self {
+      Self::Sqlite(tx) => SyncConnectionTrait::query_row(&**tx, sql, params),
+      Self::Pg(client) => Err(Error::NotSupported),
+    };
+  }
+
+  #[inline]
+  fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+    return match self {
+      Self::Sqlite(tx) => SyncConnectionTrait::query_rows(&**tx, sql, params),
+      Self::Pg(client) => Err(Error::NotSupported),
+    };
+  }
+
+  #[inline]
+  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+    return match self {
+      Self::Sqlite(tx) => SyncConnectionTrait::execute(&**tx, sql, params),
+      Self::Pg(client) => Err(Error::NotSupported),
+    };
+  }
+
+  #[inline]
+  fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
+    return match self {
+      Self::Sqlite(tx) => SyncConnectionTrait::execute_batch(&**tx, sql),
+      Self::Pg(client) => Err(Error::NotSupported),
+    };
+  }
+}
+
+#[allow(unused)]
+impl<'a> SyncTransactionTrait for Transaction<'a> {
+  fn commit(self) -> Result<(), Error> {
     return match self {
       Self::Sqlite(tx) => crate::sqlite::transaction::Transaction { tx }.commit(),
       Self::Pg(_tx) => Err(Error::NotSupported),
     };
   }
 
-  pub fn rollback(self) -> Result<(), Error> {
+  fn rollback(self) -> Result<(), Error> {
     return match self {
       Self::Sqlite(tx) => crate::sqlite::transaction::Transaction { tx }.rollback(),
       Self::Pg(_tx) => Err(Error::NotSupported),
     };
   }
 
-  pub fn expand_sql(
-    &self,
-    sql: impl AsRef<str>,
-    params: impl Params,
-  ) -> Result<Option<String>, Error> {
+  fn expand_sql(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<String>, Error> {
     return match self {
       Self::Sqlite(tx) => {
         let mut stmt = tx.prepare(sql.as_ref())?;

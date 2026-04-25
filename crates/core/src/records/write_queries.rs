@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
+use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_sqlite::{Connection, NamedParams, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
