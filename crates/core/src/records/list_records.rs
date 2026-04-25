@@ -54,9 +54,19 @@ impl Serialize for ListOrGeoJSONResponse {
   }
 }
 
+/// Query parameters supported by list API, e.g. `?geojson=true`.
 #[derive(Debug, Default, Deserialize)]
 pub struct ListRecordsQuery {
+  /// If true, return GeoJSON FeatureCollection.
+  ///
+  /// Default: false.
   pub geojson: Option<String>,
+  /// If true, return cursor if possible. Not all collections and PKs are cursorable.
+  /// This may be useful for GeoJSON implementations that do not support `foreign_members`
+  /// (https://tools.ietf.org/html/rfc7946#section-6).
+  ///
+  /// Default: false.
+  pub skip_cursor: Option<bool>,
 }
 
 /// Lists records matching the given filters
@@ -291,7 +301,7 @@ pub async fn list_records_handler(
     })));
   }
 
-  let cursor: Option<String> = if supports_cursor {
+  let cursor: Option<String> = if !query.skip_cursor.unwrap_or(false) && supports_cursor {
     // The SQL query template returns thw row id as the last column.
     let value = &last_row[last_row.len() - 1];
     let Value::Integer(rowid) = value else {
@@ -378,13 +388,25 @@ fn build_feature_collection(
   total_count: Option<usize>,
   records: Vec<serde_json::Value>,
 ) -> Result<geos::geojson::FeatureCollection, RecordError> {
-  let mut foreign_members = serde_json::Map::<String, serde_json::Value>::new();
-  if let Some(cursor) = cursor {
-    foreign_members.insert("cursor".to_string(), serde_json::Value::String(cursor));
-  }
-  if let Some(total_count) = total_count {
-    foreign_members.insert("total_count".to_string(), serde_json::json!(total_count));
-  }
+  type JsonMap = serde_json::Map<String, serde_json::Value>;
+  let foreign_members = match (cursor, total_count) {
+    (Some(c), None) => Some(JsonMap::from_iter([(
+      "cursor".to_string(),
+      serde_json::Value::String(c),
+    )])),
+    (None, Some(tc)) => Some(JsonMap::from_iter([(
+      "total_count".to_string(),
+      serde_json::Value::Number(tc.into()),
+    )])),
+    (Some(c), Some(tc)) => Some(JsonMap::from_iter([
+      ("cursor".to_string(), serde_json::Value::String(c)),
+      (
+        "total_count".to_string(),
+        serde_json::Value::Number(tc.into()),
+      ),
+    ])),
+    (None, None) => None,
+  };
 
   let features = records
     .into_iter()
@@ -418,7 +440,7 @@ fn build_feature_collection(
   return Ok(geos::geojson::FeatureCollection {
     bbox: None,
     features,
-    foreign_members: Some(foreign_members),
+    foreign_members,
   });
 }
 
@@ -1321,6 +1343,7 @@ mod tests {
         Path(name.to_string()),
         Query(ListRecordsQuery {
           geojson: Some("geom".to_string()),
+          ..Default::default()
         }),
         RawQuery(None),
         None,
@@ -1342,6 +1365,7 @@ mod tests {
         Path(name.to_string()),
         Query(ListRecordsQuery {
           geojson: Some("geom".to_string()),
+          ..Default::default()
         }),
         RawQuery(Some(format!(
           "filter[geom][@within]={polygon}",
@@ -1371,6 +1395,7 @@ mod tests {
         Path(name.to_string()),
         Query(ListRecordsQuery {
           geojson: Some("geom".to_string()),
+          ..Default::default()
         }),
         RawQuery(Some(format!(
           "filter[geom][@contains]={point}",
