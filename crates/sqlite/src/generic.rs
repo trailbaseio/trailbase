@@ -78,6 +78,8 @@ impl Connection {
   pub fn write_lock(&self) -> Result<LockGuard<'_>, LockError> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.write_lock(),
+      // Expected: while locking is less of a problem for PG, running sync postgres on a
+      // tokio task will make the runtime panic.
       Executor::Pg(_) => Err(LockError::NotSupported),
     };
   }
@@ -89,6 +91,8 @@ impl Connection {
   ) -> Result<ArcLockGuard, LockError> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.try_write_arc_lock_for(duration),
+      // Expected: while locking is less of a problem for PG, running sync postgres on a
+      // tokio task will make the runtime panic.
       Executor::Pg(_) => Err(LockError::NotSupported),
     };
   }
@@ -326,8 +330,7 @@ impl Connection {
         exec
           .query_rows_f(sql, params, |row_iter| {
             return pg_map_first(row_iter, |row| {
-              // TODO: : Need to implement postgres::types::FromSql for FromSql.
-              return Err(Error::NotSupported);
+              return pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
             });
           })
           .await
@@ -356,8 +359,8 @@ impl Connection {
             return row_iter
               .iterator()
               .map(|row| {
-                // TODO: : Need to implement postgres::types::FromSql for FromSql.
-                return Err(Error::NotSupported);
+                let row = row.map_err(|err| Error::Other(err.into()))?;
+                return pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
               })
               .collect();
           })
@@ -417,7 +420,10 @@ impl Connection {
           return Ok(());
         })
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => {
+        // TBD
+        return Err(Error::NotSupported);
+      }
     };
   }
 
@@ -430,7 +436,10 @@ impl Connection {
           return Ok(());
         })
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => {
+        // TBD
+        return Err(Error::NotSupported);
+      }
     };
   }
 
@@ -477,7 +486,10 @@ impl Connection {
   pub async fn list_databases(&self) -> Result<Vec<Database>, Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.call_reader(crate::sqlite::util::list_databases).await,
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => {
+        // TBD
+        return Err(Error::NotSupported);
+      }
     };
   }
 
@@ -559,7 +571,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
   fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::query_row(&**tx, sql, params),
-      Self::Pg(client) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncConnectionTrait::query_row(tx, sql, params),
     };
   }
 
@@ -567,7 +579,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
   fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::query_rows(&**tx, sql, params),
-      Self::Pg(client) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncConnectionTrait::query_rows(tx, sql, params),
     };
   }
 
@@ -575,7 +587,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
   fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::execute(&**tx, sql, params),
-      Self::Pg(client) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncConnectionTrait::execute(tx, sql, params),
     };
   }
 
@@ -583,7 +595,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
   fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::execute_batch(&**tx, sql),
-      Self::Pg(client) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncConnectionTrait::execute_batch(tx, sql),
     };
   }
 }
@@ -593,14 +605,14 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
   fn commit(self) -> Result<(), Error> {
     return match self {
       Self::Sqlite(tx) => crate::sqlite::transaction::Transaction { tx }.commit(),
-      Self::Pg(_tx) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncTransactionTrait::commit(tx),
     };
   }
 
   fn rollback(self) -> Result<(), Error> {
     return match self {
       Self::Sqlite(tx) => crate::sqlite::transaction::Transaction { tx }.rollback(),
-      Self::Pg(_tx) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncTransactionTrait::rollback(tx),
     };
   }
 
@@ -611,7 +623,7 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
         params.bind(&mut stmt)?;
         return Ok(stmt.expanded_sql());
       }
-      Self::Pg(_tx) => Err(Error::NotSupported),
+      Self::Pg(tx) => SyncTransactionTrait::expand_sql(tx, sql, params),
     };
   }
 }

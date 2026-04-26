@@ -2,30 +2,48 @@ use postgres::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
 
 use crate::error::Error;
+use crate::params::Params;
 use crate::rows::{Column, Row, Rows};
+use crate::statement::Statement;
+use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
 
-// #[inline]
-// pub fn get_value<T: FromSql>(row: &postgres::Row, idx: usize) -> Result<T, Error> {
-//     postgres::types::Json
-//   let value = row.get(idx)?;
-//
-//   return FromSql::column_result(value.into()).map_err(|err| {
-//     use rusqlite::Error as RError;
-//
-//     return Error::Rusqlite(match err {
-//       FromSqlError::InvalidType => {
-//         RError::InvalidColumnType(idx, "<unknown>".into(), value.data_type())
-//       }
-//       FromSqlError::OutOfRange(i) => RError::IntegralValueOutOfRange(idx, i),
-//       FromSqlError::Utf8Error(err) => RError::Utf8Error(idx, err),
-//       FromSqlError::Other(err) => RError::FromSqlConversionFailure(idx, value.data_type(), err),
-//       FromSqlError::InvalidBlobSize { .. } => {
-//         RError::FromSqlConversionFailure(idx, value.data_type(), Box::new(err))
-//       }
-//     });
-//   });
-// }
+#[derive(Debug)]
+pub struct PgStatement<'a> {
+  #[allow(unused)]
+  sql: &'a str,
+  // TODO: Can we use ToSqlProxy here?
+  params: &'a mut Vec<(usize, Value)>,
+}
+
+impl<'a> Statement for PgStatement<'a> {
+  fn bind_parameter(&mut self, one_based_index: usize, param: ToSqlProxy<'_>) -> Result<(), Error> {
+    self.params.push((one_based_index, param.try_into()?));
+    return Ok(());
+  }
+
+  fn parameter_index(&self, _name: &str) -> Result<Option<usize>, Error> {
+    return Err(Error::Other("not implemented: parse `self.sql`".into()));
+  }
+}
+
+#[inline]
+pub(crate) fn bind(sql: &str, params: impl Params) -> Result<Vec<Value>, Error> {
+  let mut bound: Vec<(usize, Value)> = vec![];
+  let mut stmt = PgStatement {
+    sql: sql.as_ref(),
+    params: &mut bound,
+  };
+  params.bind(&mut stmt)?;
+
+  bound.sort_by(|a, b| {
+    return a.0.cmp(&b.0);
+  });
+
+  // TODO: Do we need further validation, e.g. that indexes are consecutive?
+
+  return Ok(bound.into_iter().map(|p| p.1).collect());
+}
 
 #[inline]
 pub(crate) fn map_first<T>(

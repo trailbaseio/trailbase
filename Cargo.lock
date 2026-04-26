@@ -4257,6 +4257,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pgrow2serde"
+version = "0.1.0"
+source = "git+https://github.com/deknowny/pgrow2serde#9e58ff689bbd3df92c2c9bd8704490fd40394936"
+dependencies = [
+ "serde",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "phf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7019,6 +7028,7 @@ dependencies = [
  "itertools 0.14.0",
  "log",
  "parking_lot",
+ "pgrow2serde",
  "postgres",
  "rand 0.10.1",
  "rusqlite",
