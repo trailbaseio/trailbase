@@ -5,28 +5,8 @@ use tokio::sync::oneshot;
 
 use crate::error::Error;
 use crate::params::Params;
-use crate::statement::Statement;
-use crate::to_sql::ToSqlProxy;
+use crate::pg::util::bind;
 use crate::value::Value;
-
-#[derive(Debug)]
-pub struct PgStatement<'a> {
-  #[allow(unused)]
-  sql: &'a str,
-  // TODO: Can we use ToSqlProxy here?
-  params: &'a mut Vec<(usize, Value)>,
-}
-
-impl<'a> Statement for PgStatement<'a> {
-  fn bind_parameter(&mut self, one_based_index: usize, param: ToSqlProxy<'_>) -> Result<(), Error> {
-    self.params.push((one_based_index, param.try_into()?));
-    return Ok(());
-  }
-
-  fn parameter_index(&self, _name: &str) -> Result<Option<usize>, Error> {
-    return Err(Error::Other("not implemented: parse `self.sql`".into()));
-  }
-}
 
 #[derive(Clone, Default)]
 pub struct Options {
@@ -186,23 +166,7 @@ impl Executor {
   {
     return self
       .call(move |conn: &mut postgres::Client| {
-        let params: Vec<Value> = {
-          let mut bound: Vec<(usize, Value)> = vec![];
-          let mut stmt = PgStatement {
-            sql: sql.as_ref(),
-            params: &mut bound,
-          };
-          params.bind(&mut stmt)?;
-
-          bound.sort_by(|a, b| {
-            return a.0.cmp(&b.0);
-          });
-
-          // TODO: Do we need further validation, e.g. that indexes are consecutive?
-
-          bound.into_iter().map(|p| p.1).collect()
-        };
-
+        let params: Vec<Value> = bind(sql.as_ref(), params)?;
         return f(conn.query_raw(sql.as_ref(), &params)?);
       })
       .await;
