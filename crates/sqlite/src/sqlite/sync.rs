@@ -11,61 +11,92 @@ pub struct SyncConnection<'a> {
 }
 
 impl<'a> SyncConnectionTrait for SyncConnection<'a> {
-  #[inline]
-  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    return SyncConnectionTrait::query_row(self.conn, sql, params);
+  fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+    return query_row(self.conn, sql, params);
   }
 
-  #[inline]
-  fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
-    return SyncConnectionTrait::query_rows(self.conn, sql, params);
+  fn query_rows(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+    return query_rows(self.conn, sql, params);
   }
 
-  #[inline]
-  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    return SyncConnectionTrait::execute(self.conn, sql, params);
+  fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+    return execute(self.conn, sql, params);
   }
 
-  #[inline]
-  fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
-    return SyncConnectionTrait::execute_batch(self.conn, sql);
+  fn execute_batch(&mut self, sql: impl AsRef<str>) -> Result<(), Error> {
+    return execute_batch(self.conn, sql);
   }
 }
 
 impl SyncConnectionTrait for rusqlite::Connection {
   // Queries the first row and returns it if present, otherwise `None`.
-  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    let mut stmt = self.prepare_cached(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-
-    if let Some(row) = stmt.raw_query().next()? {
-      return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
-    }
-    return Ok(None);
+  fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+    return query_row(self, sql, params);
   }
 
-  fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
-    let mut stmt = self.prepare_cached(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-    return from_rows(stmt.raw_query());
+  fn query_rows(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+    return query_rows(self, sql, params);
   }
 
-  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    let mut stmt = self.prepare_cached(sql.as_ref())?;
-    params.bind(&mut stmt)?;
-    return Ok(stmt.raw_execute()?);
+  fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+    return execute(self, sql, params);
   }
 
-  fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
-    use rusqlite::fallible_iterator::FallibleIterator;
-
-    let mut batch = rusqlite::Batch::new(self, sql.as_ref());
-    while let Some(mut stmt) = batch.next()? {
-      // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
-      // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
-      // behaves consistently.
-      let _row = stmt.raw_query().next()?;
-    }
-    return Ok(());
+  fn execute_batch(&mut self, sql: impl AsRef<str>) -> Result<(), Error> {
+    return execute_batch(self, sql);
   }
+}
+
+#[inline]
+pub(super) fn query_row(
+  conn: &rusqlite::Connection,
+  sql: impl AsRef<str>,
+  params: impl Params,
+) -> Result<Option<Row>, Error> {
+  let mut stmt = conn.prepare_cached(sql.as_ref())?;
+  params.bind(&mut stmt)?;
+
+  if let Some(row) = stmt.raw_query().next()? {
+    return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
+  }
+  return Ok(None);
+}
+
+#[inline]
+pub(super) fn query_rows(
+  conn: &rusqlite::Connection,
+  sql: impl AsRef<str>,
+  params: impl Params,
+) -> Result<Rows, Error> {
+  let mut stmt = conn.prepare_cached(sql.as_ref())?;
+  params.bind(&mut stmt)?;
+  return from_rows(stmt.raw_query());
+}
+
+#[inline]
+pub(super) fn execute(
+  conn: &rusqlite::Connection,
+  sql: impl AsRef<str>,
+  params: impl Params,
+) -> Result<usize, Error> {
+  let mut stmt = conn.prepare_cached(sql.as_ref())?;
+  params.bind(&mut stmt)?;
+  return Ok(stmt.raw_execute()?);
+}
+
+#[inline]
+pub(super) fn execute_batch(
+  conn: &rusqlite::Connection,
+  sql: impl AsRef<str>,
+) -> Result<(), Error> {
+  use rusqlite::fallible_iterator::FallibleIterator;
+
+  let mut batch = rusqlite::Batch::new(conn, sql.as_ref());
+  while let Some(mut stmt) = batch.next()? {
+    // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
+    // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
+    // behaves consistently.
+    let _row = stmt.raw_query().next()?;
+  }
+  return Ok(());
 }

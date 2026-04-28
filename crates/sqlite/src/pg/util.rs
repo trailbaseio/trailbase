@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::error::Error;
 use crate::params::Params;
-use crate::rows::{Column, Row, Rows};
+use crate::rows::{Column, Row, Rows, ValueType};
 use crate::statement::Statement;
 use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
@@ -31,7 +31,7 @@ impl<'a> Statement for PgStatement<'a> {
 pub(crate) fn bind(sql: &str, params: impl Params) -> Result<Vec<Value>, Error> {
   let mut bound: Vec<(usize, Value)> = vec![];
   let mut stmt = PgStatement {
-    sql: sql.as_ref(),
+    sql,
     params: &mut bound,
   };
   params.bind(&mut stmt)?;
@@ -97,10 +97,14 @@ pub(crate) fn from_row(row: &postgres::Row, cols: Arc<Vec<Column>>) -> Result<Ro
 pub(crate) fn columns(row: &postgres::Row) -> Vec<Column> {
   return row
     .columns()
-    .into_iter()
+    .iter()
     .map(|c| Column {
       name: c.name().to_string(),
-      decl_type: match c.type_() {
+      decl_type: match c.type_().name() {
+        "int8" | "int4" => Some(ValueType::Integer),
+        "float8" | "float4" => Some(ValueType::Real),
+        "text" | "varchar" => Some(ValueType::Text),
+        "bytea" => Some(ValueType::Blob),
         _ => None,
       },
     })

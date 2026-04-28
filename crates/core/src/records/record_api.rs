@@ -489,7 +489,7 @@ impl RecordApi {
 
   pub fn record_level_access_check<T: SyncConnectionTrait>(
     &self,
-    conn: &T,
+    conn: &mut T,
     p: Permission,
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_>>,

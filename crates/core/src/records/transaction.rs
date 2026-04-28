@@ -86,10 +86,15 @@ pub async fn record_transactions_handler(
   let ids = if request.transaction.unwrap_or(false) {
     conn
       .transaction({
-        move |tx| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let ids: Vec<String> =
-            apply_ops(&state, &tx, user.as_ref(), &first_api, request.operations)
-              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+        move |mut tx| -> Result<Vec<String>, trailbase_sqlite::Error> {
+          let ids: Vec<String> = apply_ops(
+            &state,
+            &mut tx,
+            user.as_ref(),
+            &first_api,
+            request.operations,
+          )
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
           tx.commit()?;
 
@@ -100,10 +105,15 @@ pub async fn record_transactions_handler(
   } else {
     conn
       .call_writer(
-        move |conn| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let ids: Vec<String> =
-            apply_ops(&state, &conn, user.as_ref(), &first_api, request.operations)
-              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+        move |mut conn| -> Result<Vec<String>, trailbase_sqlite::Error> {
+          let ids: Vec<String> = apply_ops(
+            &state,
+            &mut conn,
+            user.as_ref(),
+            &first_api,
+            request.operations,
+          )
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
           return Ok(ids);
         },
@@ -155,7 +165,7 @@ fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
 
 fn apply_ops<T: SyncConnection>(
   state: &AppState,
-  conn: &T,
+  conn: &mut T,
   user: Option<&User>,
   api: &RecordApi,
   ops: Vec<Operation>,

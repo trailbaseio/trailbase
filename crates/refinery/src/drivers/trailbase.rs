@@ -41,7 +41,7 @@ impl AsyncTransaction for Connection {
     let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
 
     return self
-      .transaction(move |tx| -> Result<_, Error> {
+      .transaction(move |mut tx| -> Result<_, Error> {
         let mut count = 0;
         for query in queries {
           tx.execute_batch(query)?;

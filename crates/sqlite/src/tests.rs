@@ -20,7 +20,7 @@ async fn call_success_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call_writer(|conn| {
+    .call_writer(|mut conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);",
         (),
@@ -36,7 +36,7 @@ async fn call_failure_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call_writer(|conn| conn.execute("Invalid sql", ()))
+    .call_writer(|mut conn| conn.execute("Invalid sql", ()))
     .await;
 
   assert!(match result.unwrap_err() {
@@ -114,7 +114,7 @@ async fn close_call_test() {
   assert!(conn.close().await.is_ok());
 
   let result = conn2
-    .call_writer(|conn| conn.execute("SELECT 1;", ()))
+    .call_writer(|mut conn| conn.execute("SELECT 1;", ()))
     .await;
 
   assert!(matches!(
@@ -128,7 +128,7 @@ async fn close_failure_test() {
   let conn = Connection::open_in_memory().unwrap();
 
   conn
-    .call_writer(|conn| {
+    .call_writer(|mut conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);",
         (),
@@ -212,7 +212,7 @@ async fn test_execute_and_query() {
   let conn = Connection::open_in_memory().unwrap();
 
   let result = conn
-    .call_writer(|conn| {
+    .call_writer(|mut conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
         (),
@@ -371,7 +371,7 @@ fn test_locking() {
   let conn = Connection::open_in_memory().unwrap();
   let mut lock = conn.write_lock().unwrap();
 
-  let tx = lock.transaction().unwrap();
+  let mut tx = lock.transaction().unwrap();
   tx.execute_batch(
     r#"
       CREATE TABLE 'table' (id INTEGER PRIMARY KEY, name TEXT);
@@ -399,7 +399,7 @@ async fn test_params() {
   let conn = Connection::open_in_memory().unwrap();
 
   conn
-    .call_writer(|conn| {
+    .call_writer(|mut conn| {
       return conn.execute(
         "CREATE TABLE person(id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
         (),

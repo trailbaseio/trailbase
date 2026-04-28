@@ -49,16 +49,27 @@ impl<'a> postgres::types::FromSql<'a> for Value {
     ty: &postgres::types::Type,
     raw: &'a [u8],
   ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-    return Err("foo".into());
+    return match ty.name() {
+      "int8" => Ok(Value::Integer(i64::from_sql(ty, raw)?)),
+      "int4" => Ok(Value::Integer(i32::from_sql(ty, raw)? as i64)),
+      "float8" => Ok(Value::Real(f64::from_sql(ty, raw)?)),
+      "float4" => Ok(Value::Real(f32::from_sql(ty, raw)? as f64)),
+      "text" | "varchar" => Ok(Value::Text(String::from_sql(ty, raw)?)),
+      "bytea" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?)),
+      _ => Err(format!("Unsupported type: {ty}").into()),
+    };
   }
 
   fn from_sql_null(
-    ty: &postgres::types::Type,
+    _ty: &postgres::types::Type,
   ) -> Result<Self, Box<dyn std::error::Error + Sync + Send>> {
-    return Err("foo".into());
+    return Ok(Value::Null);
   }
 
   fn accepts(ty: &postgres::types::Type) -> bool {
-    return false;
+    return matches!(
+      ty.name(),
+      "int8" | "int4" | "float8" | "float4" | "text" | "varchar" | "bytea"
+    );
   }
 }

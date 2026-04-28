@@ -37,7 +37,7 @@ pub enum SchemaLookupError {
 }
 
 pub(crate) fn build_metadata_sync(
-  conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let tables = lookup_and_parse_all_table_schemas_sync(conn)?;
@@ -58,8 +58,8 @@ pub(crate) async fn build_metadata_async(
   let json_schema_registry = json_schema_registry.clone();
   return Ok(
     conn
-      .call_writer(move |conn| {
-        build_metadata_sync(&conn, &json_schema_registry)
+      .call_writer(move |mut conn| {
+        build_metadata_sync(&mut conn, &json_schema_registry)
           .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
       })
       .await?,
@@ -102,7 +102,7 @@ pub async fn lookup_and_parse_table_schema(
 /// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
 /// column is added, we need to rebuild the metadata and update or install missing triggers.
 fn build_connection_metadata_and_install_file_deletion_triggers_sync(
-  conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   tables: Vec<Table>,
   views: Vec<View>,
   registry: &RwLock<JsonSchemaRegistry>,
@@ -117,7 +117,7 @@ fn build_connection_metadata_and_install_file_deletion_triggers_sync(
 // Install file column triggers. This ain't pretty, this might be better on construction and
 // schema changes.
 fn setup_file_deletion_triggers_sync(
-  conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   metadata: &ConnectionMetadata,
 ) -> Result<(), trailbase_sqlite::Error> {
   for metadata in metadata.tables.values() {
@@ -164,9 +164,9 @@ fn setup_file_deletion_triggers_sync(
 }
 
 fn lookup_and_parse_all_table_schemas_sync(
-  conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
 ) -> Result<Vec<Table>, SchemaLookupError> {
-  let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
+  let databases = list_databases(conn)?;
 
   let mut tables: Vec<Table> = vec![];
   for db in databases {
@@ -192,10 +192,10 @@ fn lookup_and_parse_all_table_schemas_sync(
 }
 
 fn lookup_and_parse_all_view_schemas_sync(
-  conn: &impl trailbase_sqlite::SyncConnectionTrait,
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
-  let databases = trailbase_sqlite::sqlite::list_databases(conn)?;
+  let databases = list_databases(conn)?;
 
   let mut views: Vec<View> = vec![];
   for db in databases {
@@ -234,6 +234,22 @@ fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupE
       }
     }
   }
+}
+
+fn list_databases(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+) -> Result<Vec<trailbase_sqlite::Database>, trailbase_sqlite::Error> {
+  let rows = conn.query_rows("SELECT seq, name FROM pragma_database_list", ())?;
+
+  return rows
+    .iter()
+    .map(|row| {
+      return Ok(trailbase_sqlite::Database {
+        seq: row.get(0)?,
+        name: row.get(1)?,
+      });
+    })
+    .collect::<Result<Vec<_>, _>>();
 }
 
 #[cfg(test)]

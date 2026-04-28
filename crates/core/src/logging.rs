@@ -248,8 +248,8 @@ impl SqliteLogLayer {
         let len = buffer.len();
 
         buffer = conn
-          .call_writer(move |conn| -> Result<_, trailbase_sqlite::Error> {
-            insert_logs(&conn, &mut buffer)?;
+          .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
+            insert_logs(&mut conn, &mut buffer)?;
             return Ok(buffer);
           })
           .await
@@ -304,7 +304,7 @@ impl SqliteLogLayer {
 }
 
 fn insert_logs(
-  conn: &trailbase_sqlite::SyncConnection,
+  conn: &mut trailbase_sqlite::SyncConnection,
   buffer: &mut Vec<LogFieldStorage>,
 ) -> Result<(), trailbase_sqlite::Error> {
   use trailbase_sqlite::Value;

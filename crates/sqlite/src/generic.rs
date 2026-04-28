@@ -528,7 +528,7 @@ pub enum SyncConnection<'a> {
 
 impl<'a> SyncConnectionTrait for SyncConnection<'a> {
   #[inline]
-  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+  fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::query_row(*conn, sql, params),
       Self::Pg(client) => SyncConnectionTrait::query_row(*client, sql, params),
@@ -536,7 +536,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
   }
 
   #[inline]
-  fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+  fn query_rows(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::query_rows(*conn, sql, params),
       Self::Pg(client) => SyncConnectionTrait::query_rows(*client, sql, params),
@@ -544,7 +544,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
   }
 
   #[inline]
-  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+  fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::execute(*conn, sql, params),
       Self::Pg(client) => SyncConnectionTrait::execute(*client, sql, params),
@@ -552,7 +552,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
   }
 
   #[inline]
-  fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
+  fn execute_batch(&mut self, sql: impl AsRef<str>) -> Result<(), Error> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::execute_batch(*conn, sql),
       Self::Pg(client) => SyncConnectionTrait::execute_batch(*client, sql),
@@ -568,33 +568,33 @@ pub enum Transaction<'a> {
 #[allow(unused)]
 impl<'a> SyncConnectionTrait for Transaction<'a> {
   #[inline]
-  fn query_row(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
+  fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return match self {
-      Self::Sqlite(tx) => SyncConnectionTrait::query_row(&**tx, sql, params),
+      Self::Sqlite(tx) => SyncConnectionTrait::query_row(tx, sql, params),
       Self::Pg(tx) => SyncConnectionTrait::query_row(tx, sql, params),
     };
   }
 
   #[inline]
-  fn query_rows(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
+  fn query_rows(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
     return match self {
-      Self::Sqlite(tx) => SyncConnectionTrait::query_rows(&**tx, sql, params),
+      Self::Sqlite(tx) => SyncConnectionTrait::query_rows(tx, sql, params),
       Self::Pg(tx) => SyncConnectionTrait::query_rows(tx, sql, params),
     };
   }
 
   #[inline]
-  fn execute(&self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
+  fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
     return match self {
-      Self::Sqlite(tx) => SyncConnectionTrait::execute(&**tx, sql, params),
+      Self::Sqlite(tx) => SyncConnectionTrait::execute(tx, sql, params),
       Self::Pg(tx) => SyncConnectionTrait::execute(tx, sql, params),
     };
   }
 
   #[inline]
-  fn execute_batch(&self, sql: impl AsRef<str>) -> Result<(), Error> {
+  fn execute_batch(&mut self, sql: impl AsRef<str>) -> Result<(), Error> {
     return match self {
-      Self::Sqlite(tx) => SyncConnectionTrait::execute_batch(&**tx, sql),
+      Self::Sqlite(tx) => SyncConnectionTrait::execute_batch(tx, sql),
       Self::Pg(tx) => SyncConnectionTrait::execute_batch(tx, sql),
     };
   }

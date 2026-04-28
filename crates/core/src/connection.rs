@@ -343,7 +343,7 @@ fn init_main_db_impl(
         let mut lock = metadata.lock();
         if lock.is_none() {
           let _ = lock.insert(
-            build_metadata_sync(&conn, &json_registry)
+            build_metadata_sync(&mut conn, &json_registry)
               .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
           );
         }
