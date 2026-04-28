@@ -25,10 +25,10 @@ use crate::traits::{
 };
 
 // NOTE: We should probably decouple from the impl.
-pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard, Options};
+pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
 
 #[derive(Clone)]
-enum Executor {
+pub enum Executor {
   Sqlite(SqliteExecutor),
   Pg(PgExecutor),
 }
@@ -43,23 +43,13 @@ pub struct Connection {
 
 #[allow(unused)]
 impl Connection {
-  pub fn new<E>(builder: impl Fn() -> Result<rusqlite::Connection, E>) -> Result<Self, Error>
-  where
-    Error: From<E>,
-  {
-    return Self::with_opts(builder, Options::default());
-  }
-
-  pub fn with_opts<E>(
-    builder: impl Fn() -> Result<rusqlite::Connection, E>,
-    opt: Options,
-  ) -> Result<Self, Error>
+  pub fn new<E>(builder: impl Fn() -> Result<Executor, E>) -> Result<Self, Error>
   where
     Error: From<E>,
   {
     return Ok(Self {
       id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
-      exec: Executor::Sqlite(SqliteExecutor::new(builder, opt)?),
+      exec: builder()?,
     });
   }
 
@@ -629,3 +619,62 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
 }
 
 static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use postgres::{Client, NoTls};
+
+  fn build_executor() -> Result<crate::pg::executor::Executor, Error> {
+    return crate::pg::executor::Executor::new(
+      || {
+        return Client::configure()
+          .host("localhost")
+          .port(5432)
+          .user("postgres")
+          .password("example")
+          .connect(NoTls);
+      },
+      crate::pg::executor::Options {
+        num_threads: Some(2),
+      },
+    );
+  }
+
+  #[tokio::test]
+  async fn generic_pg_poc_test() {
+    let conn = Connection::new(|| -> Result<_, Error> {
+      return Ok(Executor::Pg(build_executor()?));
+    })
+    .unwrap();
+
+    assert_eq!(2, conn.threads());
+
+    conn
+      .call_writer(|mut client| {
+        return client.execute_batch(
+          "
+            CREATE TABLE IF NOT EXISTS test_table_poc_generic(
+              id     SERIAL PRIMARY KEY,
+              data   TEXT NOT NULL
+            );
+
+            INSERT INTO test_table_poc_generic (data) VALUES ('a'), ('b');
+          ",
+        );
+      })
+      .await
+      .unwrap();
+
+    let row = conn
+      .read_query_row(
+        "SELECT COUNT(*) FROM test_table_poc_generic WHERE data = $1",
+        ("a".to_string(),),
+      )
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert!(row.get::<i64>(0).unwrap() > 0, "{row:?}");
+  }
+}
