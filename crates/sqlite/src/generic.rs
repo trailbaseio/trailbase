@@ -44,29 +44,36 @@ pub struct Connection {
 
 #[allow(unused)]
 impl Connection {
-  pub fn new<E>(builder: impl Fn() -> Result<Executor, E>) -> Result<Self, Error>
+  pub fn new(exec: Executor) -> Self {
+    return Self {
+      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
+      exec,
+    };
+  }
+
+  pub fn new_sqlite<E>(
+    builder: impl Fn() -> Result<rusqlite::Connection, E>,
+    opts: crate::sqlite::executor::Options,
+  ) -> Result<Self, Error>
   where
     Error: From<E>,
   {
-    return Ok(Self {
-      id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
-      exec: builder()?,
-    });
+    return Ok(Self::new(Executor::Sqlite(
+      crate::sqlite::executor::Executor::new(builder, opts.clone())?,
+    )));
   }
 
   pub fn open_in_memory() -> Result<Self, Error> {
-    return Self::new(|| -> Result<_, Error> {
-      let exec = crate::sqlite::executor::Executor::new(
-        rusqlite::Connection::open_in_memory,
-        crate::sqlite::executor::Options {
-          num_threads: Some(1),
-          ..Default::default()
-        },
-      )?;
-      assert_eq!(1, exec.threads());
+    let inst = Self::new_sqlite(
+      rusqlite::Connection::open_in_memory,
+      crate::sqlite::executor::Options {
+        num_threads: Some(1),
+        ..Default::default()
+      },
+    )?;
+    assert_eq!(1, inst.threads());
 
-      return Ok(Executor::Sqlite(exec));
-    });
+    return Ok(inst);
   }
 
   pub fn id(&self) -> usize {
