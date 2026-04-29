@@ -10,11 +10,9 @@
   clippy::needless_continue
 )]
 
-mod connection;
 mod database;
 mod error;
 pub mod from_sql;
-mod generic;
 mod params;
 mod rows;
 pub mod sqlite;
@@ -24,17 +22,31 @@ pub mod traits;
 mod value;
 
 #[cfg(feature = "pg")]
+mod generic;
+#[cfg(feature = "pg")]
 mod pg;
 
-pub use connection::{
-  ArcLockGuard, Connection, LockError, LockGuard, Options, SyncConnection, SyncConnectionTrait,
-};
+#[cfg(not(feature = "generic"))]
+mod connection_imports {
+  pub use super::sqlite::connection::{ArcLockGuard, Connection, LockError, LockGuard, Options};
+  pub use super::sqlite::sync::SyncConnection;
+}
+
+#[cfg(feature = "generic")]
+mod connection_imports {
+  pub use super::generic::{Connection, SyncConnection};
+  pub use super::sqlite::connection::{ArcLockGuard, LockError, LockGuard, Options};
+}
+
+pub use connection_imports::*;
+
 pub use database::Database;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
 pub use sqlite::transaction::Transaction;
 pub use statement::Statement;
+pub use traits::SyncConnection as SyncConnectionTrait;
 pub use value::{Value, ValueRef};
 
 #[macro_export]

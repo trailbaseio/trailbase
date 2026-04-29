@@ -4,7 +4,7 @@ use rusqlite::{ErrorCode, ffi};
 use serde::Deserialize;
 use std::borrow::Cow;
 
-use crate::connection::{Connection, Options};
+use crate::sqlite::connection::{Connection, Options};
 use crate::sqlite::extract_row_id;
 use crate::{Database, Error, SyncConnectionTrait, Value, ValueType};
 

@@ -2,9 +2,9 @@ use rusqlite::fallible_iterator::FallibleIterator;
 use std::sync::Arc;
 
 use super::util::{columns, from_row};
-use crate::connection::Connection;
 use crate::error::Error;
 use crate::rows::{Column, Rows};
+use crate::sqlite::connection::Connection;
 
 /// Batch execute SQL statements and return rows of last statement.
 ///

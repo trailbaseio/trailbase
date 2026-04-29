@@ -21,6 +21,7 @@ harness = false
 
 [features]
 default = ["pg"]
+generic = ["pg"]
 pg = ["dep:postgres", "dep:bytes", "dep:pgrow2serde", "dep:regex"]
 
 [dependencies]

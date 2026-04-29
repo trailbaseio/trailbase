@@ -54,6 +54,21 @@ impl Connection {
     });
   }
 
+  pub fn open_in_memory() -> Result<Self, Error> {
+    return Self::new(|| -> Result<_, Error> {
+      let exec = crate::sqlite::executor::Executor::new(
+        rusqlite::Connection::open_in_memory,
+        crate::sqlite::executor::Options {
+          num_threads: Some(1),
+          ..Default::default()
+        },
+      )?;
+      assert_eq!(1, exec.threads());
+
+      return Ok(Executor::Sqlite(exec));
+    });
+  }
+
   pub fn id(&self) -> usize {
     return self.id;
   }
