@@ -4,18 +4,16 @@ use postgres::fallible_iterator::FallibleIterator;
 
 use crate::error::Error;
 use crate::params::Params;
-use crate::pg::util::bind;
-use crate::pg::util::{columns, from_row, from_rows};
+use crate::pg::util::{PgStatement, columns, from_row, from_rows};
 use crate::rows::{Row, Rows};
 use crate::traits::SyncConnection as SyncConnectionTrait;
 use crate::traits::SyncTransaction as SyncTransactionTrait;
-use crate::value::Value;
 
 impl SyncConnectionTrait for postgres::Client {
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    let params: Vec<Value> = bind(sql.as_ref(), params)?;
-    let mut row_iter = self.query_raw(sql.as_ref(), &params)?;
+    let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+    let mut row_iter = self.query_raw(&sql, &params)?;
 
     if let Some(row) = row_iter.next()? {
       return Ok(Some(from_row(&row, Arc::new(columns(&row)))?));
@@ -25,16 +23,14 @@ impl SyncConnectionTrait for postgres::Client {
   }
 
   fn query_rows(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
-    let params: Vec<Value> = bind(sql.as_ref(), params)?;
-    let row_iter = self.query_raw(sql.as_ref(), &params)?;
+    let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+    let row_iter = self.query_raw(&sql, &params)?;
     return from_rows(row_iter);
   }
 
   fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    let params: Vec<Value> = bind(sql.as_ref(), params)?;
-    // let param_refs: Vec<&(dyn postgres::types::ToSql + Sync)> = params.iter().collect();
-    // return Ok(self.execute(sql.as_ref(), &param_refs)? as usize);
-    let row_iter = self.query_raw(sql.as_ref(), params)?;
+    let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+    let row_iter = self.query_raw(&sql, params)?;
     return Ok(row_iter.rows_affected().unwrap_or_default() as usize);
   }
 
@@ -46,8 +42,8 @@ impl SyncConnectionTrait for postgres::Client {
 impl<'a> SyncConnectionTrait for postgres::Transaction<'a> {
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
-    let params: Vec<Value> = bind(sql.as_ref(), params)?;
-    let mut row_iter = self.query_raw(sql.as_ref(), &params)?;
+    let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+    let mut row_iter = self.query_raw(&sql, &params)?;
 
     if let Some(row) = row_iter.next()? {
       return Ok(Some(from_row(&row, Arc::new(columns(&row)))?));
@@ -57,14 +53,14 @@ impl<'a> SyncConnectionTrait for postgres::Transaction<'a> {
   }
 
   fn query_rows(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Rows, Error> {
-    let params: Vec<Value> = bind(sql.as_ref(), params)?;
-    let row_iter = self.query_raw(sql.as_ref(), &params)?;
+    let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+    let row_iter = self.query_raw(&sql, &params)?;
     return from_rows(row_iter);
   }
 
   fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
-    let params: Vec<Value> = bind(sql.as_ref(), params)?;
-    let row_iter = self.query_raw(sql.as_ref(), params)?;
+    let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+    let row_iter = self.query_raw(&sql, params)?;
     return Ok(row_iter.rows_affected().unwrap_or_default() as usize);
   }
 

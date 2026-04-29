@@ -21,18 +21,18 @@ harness = false
 
 [features]
 default = ["pg"]
-pg = ["dep:postgres", "dep:bytes", "dep:pgrow2serde"]
+pg = ["dep:postgres", "dep:bytes", "dep:pgrow2serde", "dep:regex"]
 
 [dependencies]
 bytes = { version = "1.11.1", optional = true }
 flume = { workspace = true }
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
+pgrow2serde = { git = "https://github.com/deknowny/pgrow2serde", optional = true }
 postgres = { version = "0.19.12", optional = true, features = ["with-serde_json-1"] }
+regex = { version = "1.12.3", optional = true}
 rusqlite = { workspace = true }
 serde = { workspace = true }
-# serde-pgrow = { version = "0.3.6", optional = true }
-pgrow2serde = { git = "https://github.com/deknowny/pgrow2serde", optional = true }
 serde_rusqlite = { workspace = true }
 smallvec = { version = "1.15.1", features = ["const_generics"] }
 thiserror = "2.0.12"

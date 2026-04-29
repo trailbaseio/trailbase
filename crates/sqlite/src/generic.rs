@@ -668,7 +668,7 @@ mod tests {
 
     let row = conn
       .read_query_row(
-        "SELECT COUNT(*) FROM test_table_poc_generic WHERE data = $1",
+        "SELECT COUNT(*) FROM test_table_poc_generic WHERE data = ?1",
         ("a".to_string(),),
       )
       .await

@@ -5,8 +5,7 @@ use tokio::sync::oneshot;
 
 use crate::error::Error;
 use crate::params::Params;
-use crate::pg::util::bind;
-use crate::value::Value;
+use crate::pg::util::PgStatement;
 
 #[derive(Clone, Default)]
 pub struct Options {
@@ -166,8 +165,8 @@ impl Executor {
   {
     return self
       .call(move |conn: &mut postgres::Client| {
-        let params: Vec<Value> = bind(sql.as_ref(), params)?;
-        return f(conn.query_raw(sql.as_ref(), &params)?);
+        let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+        return f(conn.query_raw(&sql, &params)?);
       })
       .await;
   }
@@ -211,11 +210,12 @@ fn event_loop(
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::named_params;
+
   use postgres::{Client, NoTls, fallible_iterator::FallibleIterator};
 
-  #[tokio::test]
-  async fn pg_poc_test() {
-    let exec = Executor::new(
+  fn build_executor() -> Result<Executor, Error> {
+    return Executor::new(
       || {
         return Client::configure()
           .host("localhost")
@@ -227,9 +227,12 @@ mod tests {
       Options {
         num_threads: Some(2),
       },
-    )
-    .unwrap();
+    );
+  }
 
+  #[tokio::test]
+  async fn pg_poc_test() {
+    let exec = build_executor().unwrap();
     assert_eq!(2, exec.threads());
 
     exec
@@ -271,6 +274,40 @@ mod tests {
 
         return Ok(());
       })
+      .await
+      .unwrap();
+  }
+
+  #[tokio::test]
+  async fn pg_poc_named_parameter_test() {
+    let exec = build_executor().unwrap();
+    assert_eq!(2, exec.threads());
+
+    exec
+      .call(|client| {
+        return client.execute(
+          "
+            CREATE TABLE IF NOT EXISTS test_table_poc_named_params(
+              id     SERIAL PRIMARY KEY,
+              data   TEXT NOT NULL
+            );
+          ",
+          &[],
+        );
+      })
+      .await
+      .unwrap();
+
+    exec
+      .query_rows_f(
+        "
+          INSERT INTO test_table_poc_named_params (data) VALUES (:param);
+        ",
+        named_params! {":param": "value"},
+        |_rows| -> Result<(), Error> {
+          return Ok(());
+        },
+      )
       .await
       .unwrap();
   }

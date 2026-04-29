@@ -1,5 +1,7 @@
 use postgres::fallible_iterator::FallibleIterator;
-use std::sync::Arc;
+use regex::Regex;
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock};
 
 use crate::error::Error;
 use crate::params::Params;
@@ -9,11 +11,64 @@ use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
 
 #[derive(Debug)]
-pub struct PgStatement<'a> {
+pub(crate) struct PgStatement<'a> {
   #[allow(unused)]
   sql: &'a str,
-  // TODO: Can we use ToSqlProxy here?
-  params: &'a mut Vec<(usize, Value)>,
+
+  // TODO: Could we use ToSqlProxy here to reduce copies?
+  params: Vec<(usize, Value)>,
+  placeholders: HashMap<String, usize>,
+}
+
+impl<'a> PgStatement<'a> {
+  pub fn new(sql: &'a str) -> Result<Self, Error> {
+    static NAMED_RE: LazyLock<Regex> =
+      LazyLock::new(|| Regex::new(r"(?<named>:[[:alpha:]][[:alnum:]]*)").expect("startup"));
+
+    let mut placeholders: HashMap<String, usize> = Default::default();
+    for (idx, cap) in NAMED_RE.captures_iter(sql).enumerate() {
+      let named_params = &cap["named"];
+      placeholders.insert(named_params.to_string(), idx + 1);
+    }
+
+    return Ok(Self {
+      sql,
+      params: vec![],
+      placeholders,
+    });
+  }
+
+  pub fn bind(mut self, params: impl Params) -> Result<(String, Vec<Value>), Error> {
+    params.bind(&mut self)?;
+
+    let Self {
+      sql,
+      placeholders,
+      mut params,
+    } = self;
+
+    // TODO: Do we need further validation, e.g. that indexes are consecutive, that they're
+    // matching the SQL...?
+    let bound_params = {
+      params.sort_by(|a, b| {
+        return a.0.cmp(&b.0);
+      });
+      params.into_iter().map(|p| p.1).collect()
+    };
+
+    // Also support "?1" placeholders like sqlite (PG only supports $1).
+    static RE: LazyLock<Regex> =
+      LazyLock::new(|| Regex::new(r"[?](?<index>\d+)").expect("startup"));
+
+    let mut sql = RE.replace_all(sql, "$$$index").to_string();
+
+    // TODO: We should probably do this along the initial parse when we find the placeholders.
+    for (name, idx) in placeholders {
+      sql = sql.replace(&name, &format!("${idx}"));
+    }
+
+    return Ok((sql, bound_params));
+  }
 }
 
 impl<'a> Statement for PgStatement<'a> {
@@ -22,27 +77,14 @@ impl<'a> Statement for PgStatement<'a> {
     return Ok(());
   }
 
-  fn parameter_index(&self, _name: &str) -> Result<Option<usize>, Error> {
-    return Err(Error::Other("not implemented: parse `self.sql`".into()));
+  /// Will return Err if `name` is invalid. Will return Ok(None) if the name
+  /// is valid but not a bound parameter of this statement.
+  fn parameter_index(&self, name: &str) -> Result<Option<usize>, Error> {
+    if &name[0..1] != ":" || name[1..].chars().any(|c| !c.is_ascii_alphanumeric()) {
+      return Err(Error::Other(format!("invalid param name: {name}").into()));
+    }
+    return Ok(self.placeholders.get(name).cloned());
   }
-}
-
-#[inline]
-pub(crate) fn bind(sql: &str, params: impl Params) -> Result<Vec<Value>, Error> {
-  let mut bound: Vec<(usize, Value)> = vec![];
-  let mut stmt = PgStatement {
-    sql,
-    params: &mut bound,
-  };
-  params.bind(&mut stmt)?;
-
-  bound.sort_by(|a, b| {
-    return a.0.cmp(&b.0);
-  });
-
-  // TODO: Do we need further validation, e.g. that indexes are consecutive?
-
-  return Ok(bound.into_iter().map(|p| p.1).collect());
 }
 
 #[inline]
@@ -109,4 +151,33 @@ pub(crate) fn columns(row: &postgres::Row) -> Vec<Column> {
       },
     })
     .collect();
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::named_params;
+
+  use super::*;
+
+  #[test]
+  fn pg_statement_test() {
+    let (sql, params) = PgStatement::new("INSERT INTO 'table' (col) VALUES (?1), (?1)")
+      .unwrap()
+      .bind(("foo",))
+      .unwrap();
+
+    assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($1)", sql);
+    assert_eq!(Value::Text("foo".to_string()), *params.first().unwrap());
+
+    let (sql, params) = PgStatement::new("INSERT INTO 'table' (col) VALUES (:p0), (:p1)")
+      .unwrap()
+      .bind(named_params! {":p0": "p0", ":p1": "p1"})
+      .unwrap();
+
+    assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($2)", sql);
+    assert_eq!(
+      vec![Value::Text("p0".to_string()), Value::Text("p1".to_string())],
+      params,
+    );
+  }
 }
