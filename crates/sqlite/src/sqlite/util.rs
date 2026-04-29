@@ -145,3 +145,40 @@ pub(crate) fn list_databases(conn: &rusqlite::Connection) -> Result<Vec<Database
 
   return Ok(dbs);
 }
+
+pub(crate) fn backup(
+  src: &rusqlite::Connection,
+  dst: &mut rusqlite::Connection,
+) -> Result<(), Error> {
+  use rusqlite::backup::{Backup, StepResult};
+
+  let backup = Backup::new(src, dst)?;
+  let mut retries = 0;
+
+  loop {
+    match backup.step(/* num_pages= */ 128)? {
+      StepResult::Done => {
+        return Ok(());
+      }
+      StepResult::More => {
+        retries = 0;
+        // Just continue.
+      }
+      StepResult::Locked | StepResult::Busy => {
+        retries += 1;
+        if retries > 100 {
+          return Err(Error::Other("Backup failed".into()));
+        }
+
+        // Retry.
+        std::thread::sleep(std::time::Duration::from_micros(100));
+      }
+      r => {
+        // Non-exhaustive enum.
+        return Err(Error::Other(
+          format!("unexpected backup step result {r:?}").into(),
+        ));
+      }
+    }
+  }
+}

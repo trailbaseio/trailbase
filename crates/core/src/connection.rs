@@ -409,16 +409,19 @@ pub(super) fn init_logs_db(
 pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, trailbase_sqlite::Error> {
   let path = data_dir.map(|d| d.session_db_path());
 
-  return trailbase_sqlite::Connection::new(|| -> Result<_, trailbase_sqlite::Error> {
-    // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
-    let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
+  return trailbase_sqlite::Connection::with_opts(
+    || -> Result<_, trailbase_sqlite::Error> {
+      // NOTE: The logs db needs the trailbase extensions for the maxminddb geoip lookup.
+      let mut conn = connect_rusqlite_without_default_extensions_and_schemas(path.clone())?;
 
-    trailbase_extension::register_all_extension_functions(&conn, None)?;
+      trailbase_extension::register_all_extension_functions(&conn, None)?;
 
-    apply_session_migrations(&mut conn)
-      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
-    return Ok(conn);
-  });
+      apply_session_migrations(&mut conn)
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+      return Ok(conn);
+    },
+    Default::default(),
+  );
 }
 
 pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(

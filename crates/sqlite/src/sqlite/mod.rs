@@ -1,4 +1,4 @@
-mod batch;
+pub(super) mod batch;
 pub(super) mod connection;
 pub(super) mod executor;
 mod lock;

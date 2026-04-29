@@ -51,7 +51,8 @@ impl Connection {
     };
   }
 
-  pub fn new_sqlite<E>(
+  /// TODO: Should be renamed. Default to sqlite for POC.
+  pub fn with_opts<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opts: crate::sqlite::executor::Options,
   ) -> Result<Self, Error>
@@ -64,7 +65,7 @@ impl Connection {
   }
 
   pub fn open_in_memory() -> Result<Self, Error> {
-    let inst = Self::new_sqlite(
+    let inst = Self::with_opts(
       rusqlite::Connection::open_in_memory,
       crate::sqlite::executor::Options {
         num_threads: Some(1),
@@ -429,12 +430,12 @@ impl Connection {
         let query = format!("ATTACH DATABASE '{path}' AS {name} ");
         exec.map(move |conn| {
           conn.execute(&query, ())?;
-          return Ok(());
+          Ok(())
         })
       }
       Executor::Pg(_) => {
         // TBD
-        return Err(Error::NotSupported);
+        Err(Error::NotSupported)
       }
     };
   }
@@ -445,55 +446,29 @@ impl Connection {
         let query = format!("DETACH DATABASE {name}");
         exec.map(move |conn| {
           conn.execute(&query, ())?;
-          return Ok(());
+          Ok(())
         })
       }
       Executor::Pg(_) => {
         // TBD
-        return Err(Error::NotSupported);
+        Err(Error::NotSupported)
       }
     };
   }
 
-  // pub async fn backup(&self, path: impl AsRef<std::path::Path>) -> Result<(), Error> {
-  //   let mut dst = rusqlite::Connection::open(path)?;
-  //   return self
-  //     .exec
-  //     .call_reader(move |src_conn| -> Result<(), Error> {
-  //       use rusqlite::backup::{Backup, StepResult};
-  //
-  //       let backup = Backup::new(src_conn, &mut dst)?;
-  //       let mut retries = 0;
-  //
-  //       loop {
-  //         match backup.step(/* num_pages= */ 128)? {
-  //           StepResult::Done => {
-  //             return Ok(());
-  //           }
-  //           StepResult::More => {
-  //             retries = 0;
-  //             // Just continue.
-  //           }
-  //           StepResult::Locked | StepResult::Busy => {
-  //             retries += 1;
-  //             if retries > 100 {
-  //               return Err(Error::Other("Backup failed".into()));
-  //             }
-  //
-  //             // Retry.
-  //             std::thread::sleep(std::time::Duration::from_micros(100));
-  //           }
-  //           r => {
-  //             // Non-exhaustive enum.
-  //             return Err(Error::Other(
-  //               format!("unexpected backup step result {r:?}").into(),
-  //             ));
-  //           }
-  //         }
-  //       }
-  //     })
-  //     .await;
-  // }
+  pub async fn backup(&self, path: impl AsRef<std::path::Path>) -> Result<(), Error> {
+    return match self.exec {
+      Executor::Sqlite(ref exec) => {
+        let mut dst = rusqlite::Connection::open(path)?;
+        exec
+          .call_reader(move |src_conn| -> Result<(), Error> {
+            return crate::sqlite::util::backup(src_conn, &mut dst);
+          })
+          .await
+      }
+      Executor::Pg(_) => Err(Error::NotSupported),
+    };
+  }
 
   pub async fn list_databases(&self) -> Result<Vec<Database>, Error> {
     return match self.exec {
@@ -640,6 +615,16 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
   }
 }
 
+pub async fn execute_batch(
+  conn: &Connection,
+  sql: impl AsRef<str> + Send + 'static,
+) -> Result<Option<Rows>, Error> {
+  return match conn.exec {
+    Executor::Sqlite(ref exec) => crate::sqlite::batch::execute_batch_impl(exec, sql).await,
+    Executor::Pg(_) => Err(Error::NotSupported),
+  };
+}
+
 static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
@@ -665,10 +650,7 @@ mod tests {
 
   #[tokio::test]
   async fn generic_pg_poc_test() {
-    let conn = Connection::new(|| -> Result<_, Error> {
-      return Ok(Executor::Pg(build_executor()?));
-    })
-    .unwrap();
+    let conn = Connection::new(Executor::Pg(build_executor().unwrap()));
 
     assert_eq!(2, conn.threads());
 

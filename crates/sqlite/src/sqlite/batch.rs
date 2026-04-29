@@ -5,6 +5,7 @@ use super::util::{columns, from_row};
 use crate::error::Error;
 use crate::rows::{Column, Rows};
 use crate::sqlite::connection::Connection;
+use crate::sqlite::executor::Executor;
 
 /// Batch execute SQL statements and return rows of last statement.
 ///
@@ -15,8 +16,14 @@ pub async fn execute_batch(
   conn: &Connection,
   sql: impl AsRef<str> + Send + 'static,
 ) -> Result<Option<Rows>, Error> {
-  return conn
-    .exec
+  return execute_batch_impl(&conn.exec, sql).await;
+}
+
+pub(crate) async fn execute_batch_impl(
+  exec: &Executor,
+  sql: impl AsRef<str> + Send + 'static,
+) -> Result<Option<Rows>, Error> {
+  return exec
     .call_writer(
       move |conn: &mut rusqlite::Connection| -> Result<Option<Rows>, Error> {
         let batch = rusqlite::Batch::new(conn, sql.as_ref());

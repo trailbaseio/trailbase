@@ -218,12 +218,15 @@ mod tests {
 
   #[tokio::test]
   async fn test_aggregate_rate_computation() {
-    let conn = trailbase_sqlite::Connection::new(move || -> Result<_, trailbase_sqlite::Error> {
-      let mut conn_sync =
-        crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None).unwrap();
-      apply_logs_migrations(&mut conn_sync).unwrap();
-      return Ok(conn_sync);
-    })
+    let conn = trailbase_sqlite::Connection::with_opts(
+      move || -> Result<_, trailbase_sqlite::Error> {
+        let mut conn_sync =
+          crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None).unwrap();
+        apply_logs_migrations(&mut conn_sync).unwrap();
+        return Ok(conn_sync);
+      },
+      Default::default(),
+    )
     .unwrap();
 
     let interval_seconds = 600;

@@ -28,13 +28,15 @@ mod pg;
 
 #[cfg(not(feature = "generic"))]
 mod connection_imports {
+  pub use super::sqlite::batch::execute_batch;
   pub use super::sqlite::connection::{ArcLockGuard, Connection, LockError, LockGuard, Options};
   pub use super::sqlite::sync::SyncConnection;
+  pub use super::sqlite::transaction::Transaction;
 }
 
 #[cfg(feature = "generic")]
 mod connection_imports {
-  pub use super::generic::{Connection, SyncConnection};
+  pub use super::generic::{Connection, SyncConnection, Transaction, execute_batch};
   pub use super::sqlite::connection::{ArcLockGuard, LockError, LockGuard, Options};
 }
 
@@ -44,7 +46,6 @@ pub use database::Database;
 pub use error::Error;
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
-pub use sqlite::transaction::Transaction;
 pub use statement::Statement;
 pub use traits::SyncConnection as SyncConnectionTrait;
 pub use value::{Value, ValueRef};

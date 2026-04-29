@@ -332,37 +332,7 @@ impl Connection {
     return self
       .exec
       .call_reader(move |src_conn| -> Result<(), Error> {
-        use rusqlite::backup::{Backup, StepResult};
-
-        let backup = Backup::new(src_conn, &mut dst)?;
-        let mut retries = 0;
-
-        loop {
-          match backup.step(/* num_pages= */ 128)? {
-            StepResult::Done => {
-              return Ok(());
-            }
-            StepResult::More => {
-              retries = 0;
-              // Just continue.
-            }
-            StepResult::Locked | StepResult::Busy => {
-              retries += 1;
-              if retries > 100 {
-                return Err(Error::Other("Backup failed".into()));
-              }
-
-              // Retry.
-              std::thread::sleep(std::time::Duration::from_micros(100));
-            }
-            r => {
-              // Non-exhaustive enum.
-              return Err(Error::Other(
-                format!("unexpected backup step result {r:?}").into(),
-              ));
-            }
-          }
-        }
+        return crate::sqlite::util::backup(src_conn, &mut dst);
       })
       .await;
   }

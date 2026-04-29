@@ -80,7 +80,7 @@ pub async fn query_handler(
       .as_ref(),
   )?;
 
-  let batched_rows_result = trailbase_sqlite::sqlite::execute_batch(&conn, request.query).await;
+  let batched_rows_result = trailbase_sqlite::execute_batch(&conn, request.query).await;
 
   // In the fallback case we always need to invalidate the cache.
   if must_invalidate_schema_cache {
