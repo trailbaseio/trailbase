@@ -37,7 +37,7 @@ pub struct Column {
   pub(crate) decl_type: Option<ValueType>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Rows(pub(crate) Vec<Row>, pub(crate) Arc<Vec<Column>>);
 
 impl Rows {

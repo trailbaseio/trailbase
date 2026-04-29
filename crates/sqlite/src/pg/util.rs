@@ -60,16 +60,16 @@ where
 }
 
 pub fn from_rows(mut row_iter: postgres::RowIter) -> Result<Rows, Error> {
-  let mut result = vec![];
+  let Some(first_row) = row_iter.next()? else {
+    return Ok(Rows::default());
+  };
+
+  let columns: Arc<Vec<Column>> = Arc::new(columns(&first_row));
+
+  let mut result = vec![self::from_row(&first_row, columns.clone())?];
   while let Some(row) = row_iter.next()? {
-    // FIXME: Should be shared.
-    let columns: Arc<Vec<Column>> = Arc::new(columns(&row));
     result.push(self::from_row(&row, columns.clone())?);
   }
-
-  let columns = result
-    .first()
-    .map_or_else(|| Arc::new(Vec::new()), |row| row.1.clone());
 
   return Ok(Rows(result, columns));
 }

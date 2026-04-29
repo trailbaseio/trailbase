@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use postgres::fallible_iterator::FallibleIterator;
 
+use crate::Value;
 use crate::database::Database;
 use crate::error::Error;
 use crate::from_sql::FromSql;
@@ -291,9 +292,8 @@ impl Connection {
         exec
           .query_rows_f(sql, params, |rows| {
             return pg_map_first(rows, |row| {
-              // TODO: : Need to implement postgres::types::FromSql for FromSql.
-              // return row.try_get::<'_, usize, T>(index).ok();
-              return Err(Error::NotSupported);
+              let value = row.try_get::<'_, usize, Value>(0)?;
+              return Ok(T::column_result((&value).into())?);
             });
           })
           .await
@@ -675,6 +675,19 @@ mod tests {
       .unwrap()
       .unwrap();
 
-    assert!(row.get::<i64>(0).unwrap() > 0, "{row:?}");
+    let count0: i64 = row.get(0).unwrap();
+    assert!(count0 > 0, "{row:?}");
+
+    let count1: i64 = conn
+      .read_query_row_get(
+        "SELECT COUNT(*) FROM test_table_poc_generic WHERE data = $1",
+        ("a".to_string(),),
+        0,
+      )
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!(count0, count1);
   }
 }
