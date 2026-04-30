@@ -10,9 +10,11 @@
   clippy::needless_continue
 )]
 
+mod async_reactive;
 mod macros;
 mod merge;
 mod reactive;
 
+pub use async_reactive::AsyncReactive;
 pub use merge::Merge;
 pub use reactive::{DeriveInput, Reactive};

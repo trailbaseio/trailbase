@@ -3,7 +3,7 @@ use std::collections::{HashMap, hash_map::Entry};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
-use trailbase_reactive::Reactive;
+use trailbase_reactive::AsyncReactive;
 
 use crate::auth::User;
 use crate::records::RecordApi;
@@ -17,7 +17,7 @@ use crate::records::subscribe::state::{
 /// Internal, shareable state of the cloneable SubscriptionManager.
 struct ManagerState {
   /// Record API configurations.
-  record_apis: Reactive<Vec<RecordApi>>,
+  record_apis: AsyncReactive<HashMap<String, RecordApi>>,
 
   /// Manages subscriptions for different connections based on `conn.id()`.
   connections: RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>,
@@ -29,8 +29,7 @@ pub struct SubscriptionManager {
 }
 
 impl SubscriptionManager {
-  pub fn new(record_apis: Reactive<HashMap<String, RecordApi>>) -> Self {
-    let record_apis = record_apis.derive_unchecked(|apis| apis.values().cloned().collect());
+  pub fn new(record_apis: AsyncReactive<HashMap<String, RecordApi>>) -> Self {
     let state = Arc::new(ManagerState {
       record_apis: record_apis.clone(),
       connections: RwLock::new(HashMap::new()),
@@ -43,7 +42,7 @@ impl SubscriptionManager {
 
         let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
 
-        for api in record_apis.iter() {
+        for (_name, api) in record_apis.iter() {
           if !api.enable_subscriptions() {
             continue;
           }
@@ -81,7 +80,7 @@ impl SubscriptionManager {
     filter: Option<ValueOrComposite>,
   ) -> Result<(AutoCleanupEventStream, Arc<Subscription>), RecordError> {
     let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
-    let state = self.get_per_connection_state(&api);
+    let state = self.get_per_connection_state(&api).await;
 
     let subscription = state
       .clone()
@@ -114,7 +113,7 @@ impl SubscriptionManager {
     user: Option<User>,
   ) -> Result<(AutoCleanupEventStream, Arc<Subscription>), RecordError> {
     let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
-    let state = self.get_per_connection_state(&api);
+    let state = self.get_per_connection_state(&api).await;
 
     let subscription = state
       .clone()
@@ -140,12 +139,14 @@ impl SubscriptionManager {
     ));
   }
 
-  pub fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
+  pub async fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
     let id: usize = api.conn().id();
     let mut lock = self.state.connections.upgradable_read();
     if let Some(state) = lock.get(&id) {
       return state.clone();
     }
+
+    let record_apis = self.state.record_apis.ptr().await;
 
     return lock.with_upgraded(|m| {
       return match m.entry(id) {
@@ -154,7 +155,7 @@ impl SubscriptionManager {
           let state = Arc::new(PerConnectionState {
             state: Mutex::new(PerConnectionStateInternal {
               connection_metadata: api.connection_metadata().clone(),
-              record_apis: filter_record_apis(id, &self.state.record_apis.value()),
+              record_apis: filter_record_apis(id, &record_apis),
               conn: api.conn().clone(),
               subscriptions: Default::default(),
             }),
@@ -190,10 +191,13 @@ impl SubscriptionManager {
   }
 }
 
-fn filter_record_apis(conn_id: usize, record_apis: &[RecordApi]) -> HashMap<String, RecordApi> {
+fn filter_record_apis(
+  conn_id: usize,
+  record_apis: &HashMap<String, RecordApi>,
+) -> HashMap<String, RecordApi> {
   return record_apis
     .iter()
-    .flat_map(|api| {
+    .flat_map(|(_name, api)| {
       if !api.enable_subscriptions() {
         return None;
       }

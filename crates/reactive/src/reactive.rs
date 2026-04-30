@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use std::ops::DerefMut;
 use std::sync::Arc;
 
+use crate::async_reactive::AsyncReactive;
+
 pub struct DeriveInput<'a, T, D> {
   /// Previous value of `this` Reactive. Can be None on first initialization.
   pub prev: Option<&'a Arc<T>>,
@@ -18,9 +20,17 @@ struct State<T> {
   observers: Mutex<Vec<Observer<T>>>,
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct Reactive<T> {
   state: Arc<State<T>>,
+}
+
+impl<T> Clone for Reactive<T> {
+  fn clone(&self) -> Self {
+    return Self {
+      state: self.state.clone(),
+    };
+  }
 }
 
 impl<T> Reactive<T> {
@@ -51,11 +61,8 @@ impl<T> Reactive<T> {
     return (**self.state.value.read()).clone();
   }
 
-  /// Returns a copy of the intenral pointer.
-  pub fn ptr(&self) -> Arc<T>
-  where
-    T: Clone,
-  {
+  /// Returns a copy of the internal pointer.
+  pub fn ptr(&self) -> Arc<T> {
     return self.state.value.read().clone();
   }
 
@@ -68,13 +75,10 @@ impl<T> Reactive<T> {
   /// (achieved by adding an observer function to the parent reactive behind the scenes)
   ///
   /// TODO: API should use DeriveInput.
-  pub fn derive<U: Clone + PartialEq + Send + Sync + 'static>(
+  pub fn derive<U: PartialEq + Send + Sync + 'static>(
     &self,
     f: impl Fn(&T) -> U + Send + Sync + 'static,
-  ) -> Reactive<U>
-  where
-    T: Clone,
-  {
+  ) -> Reactive<U> {
     // NOTE: This is racy. Time passes between derived initialization and registration of
     // observer, i.e. updates may get lost, thus the derived value representing a stale value until
     // next update.
@@ -94,8 +98,7 @@ impl<T> Reactive<T> {
   /// TODO: API should use DeriveInput.
   pub fn derive_unchecked<U>(&self, f: impl (Fn(&T) -> U) + Send + Sync + 'static) -> Reactive<U>
   where
-    T: Clone,
-    U: Clone + Send + Sync + 'static,
+    U: Send + Sync + 'static,
   {
     // NOTE: This is racy. Time passes between derived initialization and registration of
     // observer, i.e. updates may get lost, thus the derived value representing a stale value until
@@ -115,47 +118,47 @@ impl<T> Reactive<T> {
   }
 
   /// Will update the value eventually.
-  ///
-  /// TODO: API should use DeriveInput.
-  pub async fn derive_unchecked_async<U, F>(
+  pub fn derive_unchecked_async<U, F>(
     &self,
     f: impl (Fn(DeriveInput<'_, U, T>) -> F) + Send + Sync + 'static,
-  ) -> Reactive<U>
+  ) -> AsyncReactive<U>
   where
-    T: Clone + Send + Sync + 'static,
+    T: Send + Sync + 'static,
     F: futures_util::Future<Output = U> + Send + Sync + 'static,
-    U: Clone + Send + Sync + 'static,
+    U: Default + Send + Sync + 'static,
   {
     // NOTE: This is racy. Time passes between derived initialization and registration of
     // observer, i.e. updates may get lost, thus the derived value representing a stale value until
     // next update.
-    let val: Arc<T> = self.state.value.read().clone();
-    let derived_val = f(DeriveInput {
-      prev: None,
-      dep: &val,
-    })
-    .await;
-    let derived: Reactive<U> = Reactive::new(derived_val);
+    let f = Arc::new(f);
+    let derived: AsyncReactive<U> = AsyncReactive::new({
+      let val: Arc<T> = self.state.value.read().clone();
+      let f = f.clone();
+      async move || {
+        return f(DeriveInput {
+          prev: None,
+          dep: &val,
+        })
+        .await;
+      }
+    });
 
     self.add_observer({
       let derived = derived.clone();
-      let f = Arc::new(f);
 
       move |value: &Arc<T>| {
-        println!("OBS TRIGGERED");
         let value = value.clone();
         let derived = derived.clone();
         let f = f.clone();
 
-        derived.update_unchecked_async(move |old: &Arc<U>| {
-          println!("UPDATE");
-          let old = old.clone();
+        derived.update_unchecked(move |old: Arc<U>| {
           return Box::pin(async move {
-            return (*f)(DeriveInput {
+            let old = old.clone();
+            (*f)(DeriveInput {
               prev: Some(&old),
               dep: &value,
             })
-            .await;
+            .await
           });
         });
       }
@@ -254,33 +257,6 @@ impl<T> Reactive<T> {
     });
   }
 
-  /// Eventually updates the reactive.
-  ///
-  /// NOTE: We're deliberately holding a lock across await points for consistency but delegate to a
-  /// background thread to avoid deadlocks for small runtime worker pools.
-  pub fn update_unchecked_async<F>(&self, f: impl (FnOnce(&Arc<T>) -> F) + Send + Sync + 'static)
-  where
-    T: Send + Sync + 'static,
-    F: futures_util::Future<Output = T> + Send + Sync + 'static,
-  {
-    let state = self.state.clone();
-    println!("HERE");
-
-    let h = tokio::runtime::Handle::current();
-
-    #[allow(clippy::await_holding_lock)]
-    let _ = h.spawn(async move {
-      println!("WTF");
-      // WARN: We're holding a lock here across `.await` points.
-      let mut lock = state.value.write();
-      *lock = Arc::new(f(&lock).await);
-
-      for obs in state.observers.lock().deref_mut() {
-        obs(&lock);
-      }
-    });
-  }
-
   // pub fn update_unchecked_ptr(&self, f: impl FnOnce(&Arc<T>) -> T) {
   //   let val = self.state.value.load();
   //   let new_val = Arc::new(f(&val));
@@ -316,5 +292,25 @@ impl<T: Debug> Debug for Reactive<T> {
     f.debug_tuple("Reactive")
       .field(&self.state.value.read())
       .finish()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn derive_async_reactive_test() {
+    let base = Reactive::new(0);
+
+    let derived = base.derive_unchecked_async(|input| {
+      let dep: i32 = **input.dep;
+      return Box::pin(async move { dep + 1 });
+    });
+
+    assert_eq!(1, *derived.ptr().await);
+
+    base.set(5);
+    assert_eq!(6, *derived.ptr().await);
   }
 }
