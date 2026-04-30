@@ -52,7 +52,10 @@ pub async fn list_rows_handler(
   let ConnectionEntry {
     connection: conn,
     metadata,
-  } = state.connection_manager().get_entry_for_qn(&table_name)?;
+  } = state
+    .connection_manager()
+    .get_entry_for_qn(&table_name)
+    .await?;
 
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(Error::Precondition(format!(

@@ -59,7 +59,8 @@ pub async fn list_tables_handler(
     connection: conn, ..
   } = state
     .connection_manager()
-    .build(true, Some(&db_names.into_iter().take(124).collect()))?;
+    .build(true, Some(&db_names.into_iter().take(124).collect()))
+    .await?;
   let databases = conn.list_databases().await?;
 
   let schemas = {

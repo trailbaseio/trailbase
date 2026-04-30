@@ -196,8 +196,8 @@ fn filter_record_apis(
   record_apis: &HashMap<String, RecordApi>,
 ) -> HashMap<String, RecordApi> {
   return record_apis
-    .iter()
-    .flat_map(|(_name, api)| {
+    .values()
+    .flat_map(|api| {
       if !api.enable_subscriptions() {
         return None;
       }

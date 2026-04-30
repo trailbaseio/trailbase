@@ -148,7 +148,7 @@ impl ConnectionManager {
     return self.state.main.read().clone();
   }
 
-  pub fn get_entry(
+  pub async fn get_entry(
     &self,
     main: bool,
     attached_databases: Option<BTreeSet<String>>,
@@ -165,7 +165,7 @@ impl ConnectionManager {
     return match self.state.connections.get_value_or_guard(&key, None) {
       GuardResult::Value(entry) => Ok(entry.clone()),
       GuardResult::Guard(placeholder) => {
-        let entry = self.build(main, Some(&key.attached_databases))?;
+        let entry = self.build(main, Some(&key.attached_databases)).await?;
         let _ = placeholder.insert(entry.clone());
         Ok(entry)
       }
@@ -175,7 +175,7 @@ impl ConnectionManager {
     };
   }
 
-  pub fn get_entry_for_qn(
+  pub async fn get_entry_for_qn(
     &self,
     name: &trailbase_schema::QualifiedName,
   ) -> Result<ConnectionEntry, ConnectionError> {
@@ -184,13 +184,13 @@ impl ConnectionManager {
     {
       // QUESTION: Should we disallow access to "logs", "auth", etc? Currently, this is not
       // exposed to WASM, i.e. there's no sanctioned way to interact with this.
-      return self.get_entry(false, Some([db.to_string()].into()));
+      return self.get_entry(false, Some([db.to_string()].into())).await;
     }
 
     return Ok(self.main_entry());
   }
 
-  pub(crate) fn build(
+  pub(crate) async fn build(
     &self,
     mut main: bool,
     attached_databases: Option<&BTreeSet<String>>,

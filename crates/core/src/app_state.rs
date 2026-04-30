@@ -284,10 +284,12 @@ impl AppState {
     // happened rendering the current config invalid. Unlike a config update, it's too late to
     // reject anything.
     let config = self.get_config();
-    validate_config(&self.state.connection_manager, &config).map_err(|err| {
-      log::error!("Schema change invalidated config: {err}");
-      return crate::schema_metadata::SchemaLookupError::Other(err.into());
-    })?;
+    validate_config(&self.state.connection_manager, &config)
+      .await
+      .map_err(|err| {
+        log::error!("Schema change invalidated config: {err}");
+        return crate::schema_metadata::SchemaLookupError::Other(err.into());
+      })?;
 
     return Ok(());
   }
@@ -337,7 +339,7 @@ impl AppState {
     hash: Option<String>,
   ) -> Result<(), ConfigError> {
     let connection_manager = self.connection_manager();
-    validate_config(&connection_manager, &config)?;
+    validate_config(&connection_manager, &config).await?;
 
     match hash {
       Some(hash) => {
@@ -376,7 +378,7 @@ impl AppState {
     }
 
     // Write new config to the file system.
-    write_config_and_vault_textproto(self.data_dir(), &connection_manager, &new_config)?;
+    write_config_and_vault_textproto(self.data_dir(), &connection_manager, &new_config).await?;
 
     let _wait_for_snapshot_update = self.state.record_apis.ptr().await;
 
@@ -603,16 +605,14 @@ async fn build_record_apis(
     let configs: Arc<Vec<RecordApiConfig>> = dep.clone();
     let prev = prev.cloned();
 
-    return Box::pin(async move {
-      // Re-use existing connection when possible to keep subscriptions alive.
-      //
-      // WARN: We need to be very careful to how we rebuild RecordAPIs, since long-lived
-      // subscriptions may be tied to specific connections. So we need to keep connection alive
-      // whenever possible, e.g. an ACL changing for one API isn't a good reason to drop
-      // subscriptions on all APIs.
-      let get_conn = async |api_name: &str,
-                            attached_databases: &[String]|
-             -> Result<_, ConnectionError> {
+    // Re-use existing connection when possible to keep subscriptions alive.
+    //
+    // WARN: We need to be very careful to how we rebuild RecordAPIs, since long-lived
+    // subscriptions may be tied to specific connections. So we need to keep connection alive
+    // whenever possible, e.g. an ACL changing for one API isn't a good reason to drop
+    // subscriptions on all APIs.
+    let get_conn =
+      async move |api_name: &str, attached_databases: &[String]| -> Result<_, ConnectionError> {
         if let Some((_, candidate)) =
           prev
             .as_ref()
@@ -633,12 +633,15 @@ async fn build_record_apis(
         } = if attached_databases.is_empty() {
           connection_manager.main_entry()
         } else {
-          connection_manager.get_entry(true, Some(attached_databases.iter().cloned().collect()))?
+          connection_manager
+            .get_entry(true, Some(attached_databases.iter().cloned().collect()))
+            .await?
         };
 
         return Ok((conn, metadata));
       };
 
+    return Box::pin(async move {
       let mut next: HashMap<String, RecordApi> = HashMap::new();
 
       for config in configs.iter() {

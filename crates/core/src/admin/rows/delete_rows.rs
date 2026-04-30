@@ -46,7 +46,10 @@ pub(crate) async fn delete_row(
   let ConnectionEntry {
     connection: conn,
     metadata,
-  } = state.connection_manager().get_entry_for_qn(table_name)?;
+  } = state
+    .connection_manager()
+    .get_entry_for_qn(table_name)
+    .await?;
 
   let Some(table_metadata) = metadata.get_table(table_name) else {
     return Err(Error::Precondition(format!(

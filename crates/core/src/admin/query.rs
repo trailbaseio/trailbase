@@ -72,13 +72,16 @@ pub async fn query_handler(
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
   let ConnectionEntry {
     connection: conn, ..
-  } = state.connection_manager().build(
-    true,
-    request
-      .attached_databases
-      .map(|v| v.into_iter().collect())
-      .as_ref(),
-  )?;
+  } = state
+    .connection_manager()
+    .build(
+      true,
+      request
+        .attached_databases
+        .map(|v| v.into_iter().collect())
+        .as_ref(),
+    )
+    .await?;
 
   let batched_rows_result = trailbase_sqlite::execute_batch(&conn, request.query).await;
 

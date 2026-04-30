@@ -403,8 +403,9 @@ fn build_job(
                 let conn = match db_name.as_str() {
                   "main" => connection_manager.main_entry().connection,
                   name => {
-                    let Ok(entry) =
-                      connection_manager.get_entry(false, Some([name.to_string()].into()))
+                    let Ok(entry) = connection_manager
+                      .get_entry(false, Some([name.to_string()].into()))
+                      .await
                     else {
                       continue;
                     };

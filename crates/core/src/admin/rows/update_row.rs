@@ -37,7 +37,10 @@ pub async fn update_row_handler(
   let ConnectionEntry {
     connection: conn,
     metadata,
-  } = state.connection_manager().get_entry_for_qn(&table_name)?;
+  } = state
+    .connection_manager()
+    .get_entry_for_qn(&table_name)
+    .await?;
 
   let Some(table_metadata) = metadata.get_table(&table_name) else {
     return Err(Error::Precondition(format!(

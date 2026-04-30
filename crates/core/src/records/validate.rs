@@ -21,7 +21,7 @@ fn validate_record_api_name(name: &str) -> Result<(), ConfigError> {
   Ok(())
 }
 
-pub(crate) fn validate_record_api_config(
+pub(crate) async fn validate_record_api_config(
   connection_manager: &ConnectionManager,
   api_config: &proto::RecordApiConfig,
   databases: &[proto::DatabaseConfig],
@@ -69,12 +69,12 @@ pub(crate) fn validate_record_api_config(
     entity: Entity::Unknown,
   };
 
-  let ConnectionEntry { metadata, .. } =
-    connection_manager
-      .get_entry_for_qn(&table_name)
-      .map_err(|err| {
-        return invalid_prefixed(&prefix, err);
-      })?;
+  let ConnectionEntry { metadata, .. } = connection_manager
+    .get_entry_for_qn(&table_name)
+    .await
+    .map_err(|err| {
+      return invalid_prefixed(&prefix, err);
+    })?;
 
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(invalid_prefixed(&prefix, "not found."));

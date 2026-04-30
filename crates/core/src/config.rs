@@ -424,7 +424,7 @@ pub async fn load_or_init_config_textproto(
         warn!("`config.textproto` not found, initializing new default.");
 
         let config = proto::Config::new_with_custom_defaults();
-        write_config_and_vault_textproto(data_dir, connection_manager, &config)?;
+        write_config_and_vault_textproto(data_dir, connection_manager, &config).await?;
         config
       }
       Err(err) => {
@@ -436,7 +436,7 @@ pub async fn load_or_init_config_textproto(
     merge_vault_and_env(config, vault)?
   };
 
-  validate_config(connection_manager, &merged_config)?;
+  validate_config(connection_manager, &merged_config).await?;
 
   return Ok(merged_config);
 }
@@ -452,12 +452,12 @@ fn split_config(config: &proto::Config) -> Result<(proto::Config, proto::Vault),
   return Ok((stripped_config, new_vault));
 }
 
-pub fn write_config_and_vault_textproto(
+pub async fn write_config_and_vault_textproto(
   data_dir: &DataDir,
   connection_manager: &ConnectionManager,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
-  validate_config(connection_manager, config)?;
+  validate_config(connection_manager, config).await?;
 
   let (stripped_config, vault) = split_config(config)?;
 
@@ -493,7 +493,7 @@ fn validate_application_name(name: &str) -> Result<(), ConfigError> {
   Ok(())
 }
 
-pub fn validate_config(
+pub async fn validate_config(
   connection_manager: &ConnectionManager,
   config: &proto::Config,
 ) -> Result<(), ConfigError> {
@@ -541,7 +541,7 @@ pub fn validate_config(
   // table, however it's not valid to have conflicting api names.
   let mut api_names = HashSet::<String>::new();
   for api in &config.record_apis {
-    let api_name = validate_record_api_config(connection_manager, api, &config.databases)?;
+    let api_name = validate_record_api_config(connection_manager, api, &config.databases).await?;
 
     if !api_names.insert(api_name.clone()) {
       return ierr(format!(
@@ -817,7 +817,9 @@ mod test {
     let state = test_state(None).await.unwrap();
 
     let config = Config::new_with_custom_defaults();
-    validate_config(&state.connection_manager(), &config).unwrap();
+    validate_config(&state.connection_manager(), &config)
+      .await
+      .unwrap();
   }
 
   fn test_config_merging() {
