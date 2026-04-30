@@ -51,7 +51,7 @@ ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 flume = { workspace = true }
 form_urlencoded = "1.2.1"
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+futures-util = { workspace = true }
 geos = { version = "11.0.0", default-features = false, features = ["geo", "json"], optional = true }
 http-body-util = "0.1.3"
 hyper = "1.6.0"

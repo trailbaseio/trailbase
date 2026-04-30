@@ -15,4 +15,4 @@ mod merge;
 mod reactive;
 
 pub use merge::Merge;
-pub use reactive::Reactive;
+pub use reactive::{DeriveInput, Reactive};

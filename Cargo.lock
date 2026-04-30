@@ -6964,9 +6964,10 @@ dependencies = [
 name = "trailbase-reactive"
 version = "0.1.0"
 dependencies = [
- "arc-swap",
+ "futures-util",
  "parking_lot",
  "paste",
+ "tokio",
 ]
 
 [[package]]

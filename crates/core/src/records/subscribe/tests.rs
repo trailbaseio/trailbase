@@ -47,6 +47,11 @@ async fn setup_world_readable() -> AppState {
   .await
   .unwrap();
 
+  // FIXME: Remove
+  println!("SLEEP BEFORE");
+  tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+  println!("SLEEP AFTER");
+
   return state;
 }
 

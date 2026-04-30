@@ -118,7 +118,8 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     jwt,
     object_store,
     wasm_tokio_runtime: args.wasm_tokio_runtime,
-  });
+  })
+  .await;
 
   if new_db {
     let num_admins: i64 = app_state
