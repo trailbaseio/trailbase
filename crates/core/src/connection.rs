@@ -309,6 +309,26 @@ struct InitDbOptions<'a> {
   num_threads: Option<usize>,
 }
 
+#[cfg(feature = "pg")]
+async fn init_db<'a>(
+  opts: InitDbOptions<'a>,
+) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
+  let opts = trailbase_sqlite::generic::PgOptions {
+    host: Some("localhost".to_string()),
+    port: Some(5432),
+    user: Some("postgres".to_string()),
+    password: Some("example".to_string()),
+    num_threads: Some(2),
+  };
+
+  let conn = trailbase_sqlite::Connection::pg_with_opts(opts)?;
+
+  // FIXME: Apply migrations.
+
+  return Ok((conn, Default::default(), true));
+}
+
+#[cfg(not(feature = "pg"))]
 async fn init_db<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {

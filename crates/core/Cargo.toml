@@ -28,6 +28,7 @@ default = []
 otel = ["dep:axum-tracing-opentelemetry", "dep:init-tracing-opentelemetry"]
 geos = ["dep:litegis", "dep:geos"]
 geos-static = ["litegis/static", "dep:geos"]
+pg = ["trailbase-sqlite/generic"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 # Enable axum's "ws" feature: https://doc.rust-lang.org/cargo/reference/features.html#dependency-features
 ws = ["axum/ws"]
