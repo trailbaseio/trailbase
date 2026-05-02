@@ -29,6 +29,15 @@ use crate::r#type::ConnectionType;
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
 
+#[derive(Clone, Default)]
+pub struct PgOptions {
+  pub host: Option<String>,
+  pub port: Option<u16>,
+  pub user: Option<String>,
+  pub password: Option<String>,
+  pub num_threads: Option<usize>,
+}
+
 #[derive(Clone)]
 enum Executor {
   Sqlite(Arc<SqliteExecutor>),
@@ -76,6 +85,33 @@ impl Connection {
     assert_eq!(1, inst.threads());
 
     return Ok(inst);
+  }
+
+  pub fn pg_with_opts(opts: PgOptions) -> Result<Self, Error> {
+    use postgres::{Client, NoTls};
+
+    let num_threads = opts.num_threads.clone();
+
+    return Ok(Self::new(Executor::Pg(crate::pg::executor::Executor::new(
+      move || -> Result<Client, Error> {
+        let mut conf = Client::configure();
+        if let Some(ref host) = opts.host {
+          conf.host(&host);
+        }
+        if let Some(ref port) = opts.port {
+          conf.port(*port);
+        }
+        if let Some(ref user) = opts.user {
+          conf.user(&user);
+        }
+        if let Some(ref pw) = opts.password {
+          conf.password(&pw);
+        }
+
+        return Ok(conf.connect(NoTls)?);
+      },
+      crate::pg::executor::Options { num_threads },
+    )?)));
   }
 
   pub fn id(&self) -> usize {

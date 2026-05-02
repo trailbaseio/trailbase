@@ -309,6 +309,34 @@ struct InitDbOptions<'a> {
   num_threads: Option<usize>,
 }
 
+#[cfg(feature = "pg")]
+async fn init_db<'a>(
+  opts: InitDbOptions<'a>,
+) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
+  // TODO: Use `state.pg_uri`.
+  let conn = trailbase_sqlite::Connection::pg_with_opts(trailbase_sqlite::generic::PgOptions {
+    host: Some("127.0.0.1".to_string()),
+    port: Some(5432),
+    user: Some("postgres".to_string()),
+    password: Some("example".to_string()),
+    num_threads: Some(2),
+  })?;
+
+  // Apply migrations.
+  //
+  // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
+  let init_schema = if opts.is_main_db {
+    apply_main_migrations(&conn, opts.migration_path)
+      .await
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?
+  } else {
+    false
+  };
+
+  return Ok((conn, Default::default(), init_schema));
+}
+
+#[cfg(not(feature = "pg"))]
 async fn init_db<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {

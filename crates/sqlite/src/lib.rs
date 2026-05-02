@@ -23,7 +23,7 @@ mod r#type;
 mod value;
 
 #[cfg(feature = "pg")]
-mod generic;
+pub mod generic;
 #[cfg(feature = "pg")]
 mod pg;
 
