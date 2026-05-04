@@ -24,3 +24,5 @@ walkdir = "2.3.1"
 [dev-dependencies]
 temp-dir = "0.2.0"
 tempfile = "3.1.0"
+tokio = { workspace = true }
+futures-util = { workspace = true }

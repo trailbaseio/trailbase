@@ -4,7 +4,6 @@ use quick_cache::sync::GuardResult;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::metadata::ConnectionMetadata;
@@ -324,30 +323,13 @@ async fn init_main_db_impl(
   let main_path = data_dir.map(|d| d.main_db_path());
   let migrations_path = data_dir.map(|d| d.migrations_path());
 
-  let mut new_db = AtomicBool::new(false);
-
   let conn = trailbase_sqlite::Connection::with_opts(
     {
-      let new_db = &mut new_db;
       let json_registry = json_registry.clone();
-      let migrations_path = migrations_path.clone();
       let runtimes = runtimes.clone();
 
       move || -> Result<rusqlite::Connection, ConnectionError> {
-        let mut conn = build_connection(main_path.clone(), json_registry.clone(), &runtimes)?;
-
-        // Apply migrations.
-        //
-        // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-        if main_migrations {
-          new_db.fetch_or(
-            apply_main_migrations(&mut conn, migrations_path.as_ref())
-              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
-            Ordering::SeqCst,
-          );
-        }
-
-        return Ok(conn);
+        return build_connection(main_path.clone(), json_registry.clone(), &runtimes);
       }
     },
     trailbase_sqlite::Options {
@@ -366,6 +348,16 @@ async fn init_main_db_impl(
       Err(sql_err) => sql_err.into(),
     };
   })?;
+
+  // Apply migrations.
+  //
+  // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
+  let mut new_db = false;
+  if main_migrations {
+    new_db = apply_main_migrations(&conn, migrations_path.as_ref())
+      .await
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+  }
 
   for AttachedDatabase { schema_name, path } in &attach {
     debug!("Attaching '{schema_name}': {path:?}, {migrations_path:?}");
@@ -386,7 +378,7 @@ async fn init_main_db_impl(
   // Lastly, after attaching all DBs, build connection metadata.
   let metadata = build_metadata(&conn, &json_registry).await?;
 
-  return Ok((conn, metadata, new_db.load(Ordering::SeqCst)));
+  return Ok((conn, metadata, new_db));
 }
 
 pub(super) fn init_logs_db(

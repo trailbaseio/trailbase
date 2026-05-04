@@ -45,25 +45,7 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
 ///
 /// Returns true, if V1 was applied, i.e. DB is initialized for the first time,
 /// otherwise false.
-pub(crate) fn apply_main_migrations(
-  conn: &mut rusqlite::Connection,
-  base_migrations_path: Option<impl AsRef<Path>>,
-) -> Result<bool, RefineryError> {
-  let mut migrations = vec![
-    load_embedded_migrations::<BaseMigrations>(),
-    load_embedded_migrations::<MainMigrations>(),
-  ];
-  if let Some(path) = base_migrations_path {
-    // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
-
-    // Legacy: all *.sql files in migrations.
-    migrations.push(load_sql_migrations(path, false)?);
-  }
-  return apply_migrations("main", conn, migrations);
-}
-
-pub(crate) async fn apply_main_migrations2(
+pub(crate) async fn apply_main_migrations(
   conn: &trailbase_sqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
 ) -> Result<bool, RefineryError> {
@@ -79,7 +61,7 @@ pub(crate) async fn apply_main_migrations2(
     migrations.push(load_sql_migrations(path, false)?);
   }
 
-  return apply_migrations2("main", conn, migrations).await;
+  return apply_migrations_async("main", conn, migrations).await;
 }
 
 // Base migrations contains things like file deletions table shared across main and user DBs.
@@ -141,7 +123,7 @@ pub(crate) fn apply_migrations(
   return Ok(new_db);
 }
 
-pub(crate) async fn apply_migrations2(
+pub(crate) async fn apply_migrations_async(
   name: &str,
   conn: &trailbase_sqlite::Connection,
   migrations: Vec<Vec<Migration>>,

@@ -6988,6 +6988,7 @@ dependencies = [
  "async-trait",
  "cfg-if",
  "futures",
+ "futures-util",
  "log",
  "regex",
  "rusqlite",
@@ -6996,6 +6997,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "time",
+ "tokio",
  "trailbase-sqlite",
  "walkdir",
 ]

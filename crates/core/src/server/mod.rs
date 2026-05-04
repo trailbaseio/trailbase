@@ -316,7 +316,7 @@ impl Server {
           let user_migrations_path = state.data_dir().migrations_path();
           let conn = state.connection_manager().main_entry().connection;
 
-          match crate::migrations::apply_main_migrations2(&conn, Some(user_migrations_path))
+          match crate::migrations::apply_main_migrations(&conn, Some(user_migrations_path))
             .await
             .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
           {

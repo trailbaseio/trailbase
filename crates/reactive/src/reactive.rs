@@ -124,7 +124,7 @@ impl<T> Reactive<T> {
   ) -> AsyncReactive<U>
   where
     T: Send + Sync + 'static,
-    F: futures_util::Future<Output = U> + Send + Sync + 'static,
+    F: futures_util::Future<Output = U> + Send + 'static,
     U: Default + Send + Sync + 'static,
   {
     // NOTE: This is racy. Time passes between derived initialization and registration of

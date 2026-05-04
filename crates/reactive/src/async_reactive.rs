@@ -25,6 +25,7 @@ impl<T> Clone for AsyncReactive<T> {
 }
 
 // NOTE: This is currently a best effort implementation replicating of Reactive's API but async.
+// NOTE: T has to be sync to allow concurent reads via RwLock.
 impl<T: Default + Send + Sync + 'static> AsyncReactive<T> {
   /// Constructs a new `Reactive<T>`
   pub fn new<F, Fut>(f: F) -> Self

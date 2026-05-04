@@ -67,3 +67,23 @@ impl AsyncQuery<Vec<Migration>> for Connection {
 }
 
 impl AsyncMigrate for Connection {}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn test<T>(_fut: impl futures_util::Future<Output = T> + Send) {}
+
+  #[tokio::test]
+  async fn trailbase_refinery_test() {
+    let mut conn = Connection::open_in_memory().unwrap();
+
+    let runner = crate::Runner::new(&vec![]);
+    runner.run_async(&mut conn).await.unwrap();
+
+    test(Box::pin(async move {
+      let runner = crate::Runner::new(&vec![]);
+      return runner.run_async(&mut conn).await;
+    }));
+  }
+}
