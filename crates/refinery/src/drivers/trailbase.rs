@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
-use trailbase_sqlite::{Connection, Error};
+use trailbase_sqlite::{Connection, ConnectionType, Error};
 
 async fn query_applied_migrations(conn: &Connection, query: &str) -> Result<Vec<Migration>, Error> {
   let rows = conn.read_query_rows(query.to_string(), ()).await?;
@@ -66,7 +66,34 @@ impl AsyncQuery<Vec<Migration>> for Connection {
   }
 }
 
-impl AsyncMigrate for Connection {}
+impl AsyncMigrate for Connection {
+  fn assert_migrations_table_query(&self, migration_table_name: &str) -> String {
+    const ASSERT_SQLITE_MIGRATION_TABLE_QUERY: &str = "\
+        CREATE TABLE IF NOT EXISTS %MIGRATION_TABLE_NAME%(\
+          version INT PRIMARY KEY,
+          name TEXT,
+          applied_on TEXT,
+          checksum TEXT
+        ) STRICT;";
+
+    const ASSERT_PG_MIGRATION_TABLE_QUERY: &str = "\
+        CREATE TABLE IF NOT EXISTS %MIGRATION_TABLE_NAME%(\
+          version INT PRIMARY KEY,
+          name TEXT,
+          applied_on TEXT,
+          checksum TEXT
+        );";
+
+    return match self.connection_type() {
+      ConnectionType::Sqlite => {
+        ASSERT_SQLITE_MIGRATION_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name)
+      }
+      ConnectionType::Pg => {
+        ASSERT_PG_MIGRATION_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name)
+      }
+    };
+  }
+}
 
 #[cfg(test)]
 mod tests {

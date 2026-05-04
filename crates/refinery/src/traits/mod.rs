@@ -110,7 +110,7 @@ pub(crate) const ASSERT_MIGRATIONS_TABLE_QUERY: &str =
              name TEXT,
              applied_on TEXT,
              checksum TEXT
-   ) STRICT;";
+   );";
 
 pub(crate) const GET_APPLIED_MIGRATIONS_QUERY: &str = "SELECT version, name, applied_on, checksum \
     FROM %MIGRATION_TABLE_NAME% ORDER BY version ASC;";

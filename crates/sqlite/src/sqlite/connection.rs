@@ -13,6 +13,7 @@ use crate::sqlite::sync::SyncConnection;
 use crate::sqlite::transaction::Transaction;
 use crate::sqlite::util::{columns, from_row, from_rows, get_value, map_first};
 use crate::traits::SyncConnection as SyncConnectionTrait;
+use crate::r#type::ConnectionType;
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard, Options};
@@ -70,6 +71,10 @@ impl Connection {
 
   pub fn threads(&self) -> usize {
     return self.exec.threads();
+  }
+
+  pub fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Sqlite;
   }
 
   /// Acquire write lock on the connections.

@@ -24,6 +24,7 @@ use crate::sqlite::util::{
 use crate::traits::{
   SyncConnection as SyncConnectionTrait, SyncTransaction as SyncTransactionTrait,
 };
+use crate::r#type::ConnectionType;
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
@@ -85,6 +86,13 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.threads(),
       Executor::Pg(ref exec) => exec.threads(),
+    };
+  }
+
+  pub fn connection_type(&self) -> ConnectionType {
+    return match self.exec {
+      Executor::Sqlite(_) => ConnectionType::Sqlite,
+      Executor::Pg(_) => ConnectionType::Pg,
     };
   }
 
