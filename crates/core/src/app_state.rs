@@ -61,6 +61,10 @@ struct InternalState {
 
   #[cfg(test)]
   #[allow(unused)]
+  pg_uri: Option<String>,
+
+  #[cfg(test)]
+  #[allow(unused)]
   test_cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
 }
 
@@ -200,6 +204,8 @@ impl AppState {
           .map(|rt| Arc::new(RwLock::new(rt)))
           .collect(),
         wasm_runtimes_builder,
+        #[cfg(test)]
+        pg_uri: None,
         #[cfg(test)]
         test_cleanup: vec![],
       }),
@@ -517,6 +523,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
+  // Start PgLite.
+  let db = pglite_oxide::PgliteServer::temporary_tcp()?;
+  let pg_uri = db.connection_uri();
+  println!("PG URI: {pg_uri:?}");
+
   let TestStateOptions {
     config,
     mailer,
@@ -591,7 +602,8 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       object_store,
       wasm_runtimes: vec![],
       wasm_runtimes_builder: Box::new(|| Ok(vec![])),
-      test_cleanup: vec![Box::new(temp_dir)],
+      pg_uri: Some(pg_uri),
+      test_cleanup: vec![Box::new(db), Box::new(temp_dir)],
     }),
   });
 }
