@@ -85,7 +85,18 @@ impl Query<Vec<Migration>> for RqlConnection {
   }
 }
 
-impl Migrate for RqlConnection {}
+impl Migrate for RqlConnection {
+  fn assert_migrations_table_query(&self, migration_table_name: &str) -> String {
+    const ASSERT_MIGRATIONS_TABLE_QUERY: &str = "CREATE TABLE IF NOT EXISTS %MIGRATION_TABLE_NAME%(
+             version INT PRIMARY KEY,
+             name TEXT,
+             applied_on TEXT,
+             checksum TEXT
+   ) STRICT;";
+
+    return ASSERT_MIGRATIONS_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name);
+  }
+}
 
 #[cfg(test)]
 mod tests {

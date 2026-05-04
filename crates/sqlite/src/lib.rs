@@ -19,6 +19,7 @@ pub mod sqlite;
 mod statement;
 pub mod to_sql;
 pub mod traits;
+mod r#type;
 mod value;
 
 #[cfg(feature = "pg")]
@@ -32,12 +33,14 @@ mod connection_imports {
   pub use super::sqlite::connection::{ArcLockGuard, Connection, LockError, LockGuard, Options};
   pub use super::sqlite::sync::SyncConnection;
   pub use super::sqlite::transaction::Transaction;
+  pub use super::r#type::ConnectionType;
 }
 
 #[cfg(feature = "generic")]
 mod connection_imports {
   pub use super::generic::{Connection, SyncConnection, Transaction, execute_batch};
   pub use super::sqlite::connection::{ArcLockGuard, LockError, LockGuard, Options};
+  pub use super::r#type::ConnectionType;
 }
 
 pub use connection_imports::*;

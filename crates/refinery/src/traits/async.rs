@@ -122,8 +122,8 @@ where
 {
   // Needed cause some database vendors like Mssql have a non sql standard way of checking the
   // migrations table
-  fn assert_migrations_table_query(migration_table_name: &str) -> String {
-    ASSERT_MIGRATIONS_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name)
+  fn assert_migrations_table_query(&self, migration_table_name: &str) -> String {
+    return ASSERT_MIGRATIONS_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name);
   }
 
   async fn get_last_applied_migration(
@@ -162,7 +162,12 @@ where
     migration_table_name: &str,
   ) -> Result<Report, Error> {
     self
-      .execute([Self::assert_migrations_table_query(migration_table_name).as_str()].into_iter())
+      .execute(
+        [self
+          .assert_migrations_table_query(migration_table_name)
+          .as_str()]
+        .into_iter(),
+      )
       .await
       .migration_err("error asserting migrations table", None)?;
 
