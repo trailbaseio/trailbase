@@ -330,7 +330,7 @@ async fn init_db<'a>(
       num_threads: Some(1),
     }
   } else {
-    log::warn!("External Postgres required");
+    panic!("External Postgres required");
 
     trailbase_sqlite::generic::PgOptions {
       connection: trailbase_sqlite::generic::PgConnection::Host {
@@ -342,6 +342,18 @@ async fn init_db<'a>(
       num_threads: Some(2),
     }
   })?;
+
+  conn
+    .read_query_rows(
+      "
+      SELECT table_schema,table_name
+      FROM information_schema.tables
+      ORDER BY table_schema,table_name;
+    ",
+      (),
+    )
+    .await
+    .unwrap();
 
   // Apply migrations.
   //
