@@ -1,3 +1,10 @@
+## v0.26.9
+
+- Enable custom WASM SQLite extension functions in multi-DB migrations.
+- Apply migrations asynchronously to further untangle DB implementation from execution model.
+- Improve error handling and simplify bespoke initialization order of DB connection.
+- Update dependencies.
+
 ## v0.26.8
 
 - Add two new SQL connection types: a postgres one and a polymorphic one with runtime dispatch.
