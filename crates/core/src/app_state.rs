@@ -523,9 +523,38 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
-  // Start PgLite.
-  let db = pglite_oxide::PgliteServer::temporary_tcp()?;
-  let pg_uri = db.connection_uri();
+  let use_pglite = false;
+  let (pg_uri, db) = if use_pglite {
+    // Start PgLite.
+    let tcp = false;
+    if tcp {
+      let db = pglite_oxide::PgliteServer::builder()
+        .fresh_temporary()
+        // .temporary()
+        .start()?;
+
+      (Some(db.connection_uri()), Some(db))
+    } else {
+      // NOTE: `db.connection_uri()` returns rubish for UDS.
+      let sock = temp_dir.path().join(".s.PGSQL.5432");
+
+      let db = pglite_oxide::PgliteServer::builder()
+        .fresh_temporary()
+        // .temporary()
+        .unix(&sock)
+        .start()?;
+
+      let pg_uri = format!(
+        "postgresql://postgres@/template1?host={}",
+        temp_dir.path().to_string_lossy()
+      );
+
+      (Some(pg_uri), Some(db))
+    }
+  } else {
+    (None, None)
+  };
+
   println!("PG URI: {pg_uri:?}");
 
   let TestStateOptions {
@@ -545,8 +574,13 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let logs_conn = crate::connection::init_logs_db(None)?;
   let session_conn = crate::connection::init_session_db(None)?;
 
-  let connection_manager =
-    ConnectionManager::new_for_test(data_dir.clone(), json_schema_registry.clone(), vec![]).await;
+  let connection_manager = ConnectionManager::new_for_test(
+    data_dir.clone(),
+    json_schema_registry.clone(),
+    vec![],
+    pg_uri.clone(),
+  )
+  .await;
 
   let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
     info!("Use S3 Storage for tests");
@@ -602,7 +636,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
       object_store,
       wasm_runtimes: vec![],
       wasm_runtimes_builder: Box::new(|| Ok(vec![])),
-      pg_uri: Some(pg_uri),
+      pg_uri,
       test_cleanup: vec![Box::new(db), Box::new(temp_dir)],
     }),
   });

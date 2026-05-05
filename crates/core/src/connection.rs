@@ -1,4 +1,3 @@
-use log::*;
 use parking_lot::RwLock;
 use quick_cache::sync::GuardResult;
 use std::collections::BTreeSet;
@@ -81,6 +80,7 @@ struct ConnectionManagerState {
   // Properties for caching connections:
   main: RwLock<ConnectionEntry>,
   connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
+  pg_uri: Option<String>,
 }
 
 // A manager for multi-DB SQLite connections.
@@ -96,6 +96,7 @@ pub struct Options {
   pub data_dir: DataDir,
   pub json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+  pub pg_uri: Option<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -115,6 +116,7 @@ impl ConnectionManager {
       runtimes: &opts.sqlite_function_runtimes,
       attach: vec![],
       num_threads: None,
+      pg_uri: opts.pg_uri.clone(),
     })
     .await?;
 
@@ -122,6 +124,7 @@ impl ConnectionManager {
       data_dir,
       json_schema_registry,
       sqlite_function_runtimes,
+      pg_uri,
     } = opts;
 
     return Ok((
@@ -135,6 +138,7 @@ impl ConnectionManager {
             metadata: Arc::new(main_metadata),
           }),
           connections: quick_cache::sync::Cache::new(256),
+          pg_uri,
         }),
       },
       new_db,
@@ -146,6 +150,7 @@ impl ConnectionManager {
     data_dir: DataDir,
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+    pg_uri: Option<String>,
   ) -> Self {
     let (main_conn, main_metadata, new_db) = init_db(InitDbOptions {
       data_path: None,
@@ -155,6 +160,7 @@ impl ConnectionManager {
       runtimes: &sqlite_function_runtimes,
       attach: vec![],
       num_threads: None,
+      pg_uri: pg_uri.clone(),
     })
     .await
     .unwrap();
@@ -171,6 +177,7 @@ impl ConnectionManager {
           metadata: Arc::new(main_metadata),
         }),
         connections: quick_cache::sync::Cache::new(256),
+        pg_uri,
       }),
     };
   }
@@ -259,6 +266,7 @@ impl ConnectionManager {
       runtimes: &self.state.sqlite_function_runtimes,
       attach,
       num_threads: opts.num_threads,
+      pg_uri: self.state.pg_uri.clone(),
     })
     .await?;
 
@@ -307,6 +315,8 @@ struct InitDbOptions<'a> {
   runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
   attach: Vec<AttachedDatabase>,
   num_threads: Option<usize>,
+
+  pg_uri: Option<String>,
 }
 
 #[cfg(feature = "pg")]
@@ -314,13 +324,41 @@ async fn init_db<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   // TODO: Use `state.pg_uri`.
-  let conn = trailbase_sqlite::Connection::pg_with_opts(trailbase_sqlite::generic::PgOptions {
-    host: Some("127.0.0.1".to_string()),
-    port: Some(5432),
-    user: Some("postgres".to_string()),
-    password: Some("example".to_string()),
-    num_threads: Some(2),
+  let conn = trailbase_sqlite::Connection::pg_with_opts(if let Some(uri) = opts.pg_uri {
+    trailbase_sqlite::generic::PgOptions {
+      connection: trailbase_sqlite::generic::PgConnection::Uri(uri),
+      num_threads: Some(1),
+    }
+  } else {
+    let host = trailbase_sqlite::generic::PgConnection::Host {
+      host: Some("127.0.0.1".to_string()),
+      port: Some(5432),
+      user: Some("postgres".to_string()),
+      password: Some("example".to_string()),
+    };
+    log::warn!("External Postgres required: {host:?}");
+
+    trailbase_sqlite::generic::PgOptions {
+      connection: host,
+      num_threads: Some(2),
+    }
   })?;
+
+  // TODO: Remove sanity check.
+  conn.read_query_rows("SELECT 5", ()).await.unwrap();
+
+  // WARNING: This makes the connection drop out. Either a permissions thing or with pglite.
+  // conn
+  //   .read_query_rows(
+  //     "
+  //       SELECT table_schema,table_name
+  //         FROM information_schema.tables
+  //         ORDER BY table_schema,table_name;
+  //     ",
+  //     (),
+  //   )
+  //   .await
+  //   .unwrap();
 
   // Apply migrations.
   //
@@ -417,7 +455,7 @@ async fn init_db<'a>(
   };
 
   for AttachedDatabase { schema_name, path } in &opts.attach {
-    debug!(
+    log::debug!(
       "Attaching '{schema_name}': {path:?}, {:?}",
       opts.migration_path
     );
@@ -519,3 +557,27 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 }
 
 const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 256;
+
+#[cfg(all(test, feature = "pg"))]
+mod tests {
+  use pglite_oxide::PgliteServer;
+  use trailbase_sqlite::Connection;
+
+  #[tokio::test]
+  async fn generic_connection_w_pg_test() {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    let conn = Connection::pg_with_opts(trailbase_sqlite::generic::PgOptions {
+      connection: trailbase_sqlite::generic::PgConnection::Uri(pg_uri),
+      num_threads: Some(1),
+    })
+    .unwrap();
+
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, conn.threads());
+
+    conn.read_query_rows("SELECT 5", ()).await.unwrap();
+  }
+}

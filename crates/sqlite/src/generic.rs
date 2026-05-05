@@ -29,12 +29,20 @@ use crate::r#type::ConnectionType;
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug)]
+pub enum PgConnection {
+  Uri(String),
+  Host {
+    host: Option<String>,
+    port: Option<u16>,
+    user: Option<String>,
+    password: Option<String>,
+  },
+}
+
+#[derive(Clone, Debug)]
 pub struct PgOptions {
-  pub host: Option<String>,
-  pub port: Option<u16>,
-  pub user: Option<String>,
-  pub password: Option<String>,
+  pub connection: PgConnection,
   pub num_threads: Option<usize>,
 }
 
@@ -90,28 +98,40 @@ impl Connection {
   pub fn pg_with_opts(opts: PgOptions) -> Result<Self, Error> {
     use postgres::{Client, NoTls};
 
-    let num_threads = opts.num_threads.clone();
+    return Ok(Self::new(Executor::Pg(Arc::new(
+      crate::pg::executor::Executor::new(
+        move || -> Result<Client, Error> {
+          return match &opts.connection {
+            PgConnection::Uri(uri) => Ok(Client::connect(uri, NoTls)?),
+            PgConnection::Host {
+              host,
+              port,
+              user,
+              password,
+            } => {
+              let mut conf = Client::configure();
+              if let Some(host) = host {
+                conf.host(host);
+              }
+              if let Some(port) = port {
+                conf.port(*port);
+              }
+              if let Some(user) = user {
+                conf.user(user);
+              }
+              if let Some(pw) = password {
+                conf.password(pw);
+              }
 
-    return Ok(Self::new(Executor::Pg(crate::pg::executor::Executor::new(
-      move || -> Result<Client, Error> {
-        let mut conf = Client::configure();
-        if let Some(ref host) = opts.host {
-          conf.host(&host);
-        }
-        if let Some(ref port) = opts.port {
-          conf.port(*port);
-        }
-        if let Some(ref user) = opts.user {
-          conf.user(&user);
-        }
-        if let Some(ref pw) = opts.password {
-          conf.password(&pw);
-        }
-
-        return Ok(conf.connect(NoTls)?);
-      },
-      crate::pg::executor::Options { num_threads },
-    )?)));
+              Ok(conf.connect(NoTls)?)
+            }
+          };
+        },
+        crate::pg::executor::Options {
+          num_threads: opts.num_threads,
+        },
+      )?,
+    ))));
   }
 
   pub fn id(&self) -> usize {
@@ -214,7 +234,7 @@ impl Connection {
   ) -> Result<Rows, Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, sqlite_from_rows).await,
-      Executor::Pg(_) => self.write_query_rows(sql, params).await,
+      Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
     };
   }
 
@@ -678,30 +698,36 @@ static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use pglite_oxide::PgliteServer;
   use postgres::{Client, NoTls};
 
-  fn build_executor() -> Result<crate::pg::executor::Executor, Error> {
-    return crate::pg::executor::Executor::new(
-      || {
-        return Client::configure()
-          .host("localhost")
-          .port(5432)
-          .user("postgres")
-          .password("example")
-          .connect(NoTls);
-      },
-      crate::pg::executor::Options {
-        num_threads: Some(2),
-      },
-    );
+  use super::*;
+  use crate::pg::executor::Executor as PgExecutor;
+
+  fn build_executor() -> Result<(PgliteServer, PgExecutor), Error> {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    return Ok((
+      db,
+      PgExecutor::new(
+        move || Client::connect(&pg_uri, NoTls),
+        crate::pg::executor::Options {
+          // IMPORTANT: PgLite only handles a single concurrent connection.
+          num_threads: Some(1),
+        },
+      )?,
+    ));
   }
 
   #[tokio::test]
   async fn generic_pg_poc_test() {
-    let conn = Connection::new(Executor::Pg(Arc::new(build_executor().unwrap())));
+    let (_db, exec) = build_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
-    assert_eq!(2, conn.threads());
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, conn.threads());
 
     conn
       .call_writer(|mut client| {
@@ -742,5 +768,25 @@ mod tests {
       .unwrap();
 
     assert_eq!(count0, count1);
+  }
+
+  #[tokio::test]
+  async fn generic_connection_w_pg_test() {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    let conn = Connection::pg_with_opts(PgOptions {
+      connection: PgConnection::Uri(pg_uri),
+      num_threads: Some(1),
+    })
+    .unwrap();
+
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, conn.threads());
+
+    let rows = conn.read_query_rows("SELECT 5", ()).await.unwrap();
+    let n: i64 = rows.get(0).unwrap().get(0).unwrap();
+    assert_eq!(5, n);
   }
 }

@@ -7167,6 +7167,7 @@ dependencies = [
  "itertools 0.14.0",
  "log",
  "parking_lot",
+ "pglite-oxide",
  "pgrow2serde",
  "postgres",
  "rand 0.10.1",
