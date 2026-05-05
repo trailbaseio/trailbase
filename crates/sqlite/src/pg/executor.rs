@@ -207,31 +207,42 @@ fn event_loop(
 
 #[cfg(test)]
 mod tests {
+  use pglite_oxide::PgliteServer;
+  use postgres::{Client, NoTls, fallible_iterator::FallibleIterator};
+
   use super::*;
   use crate::named_params;
 
-  use postgres::{Client, NoTls, fallible_iterator::FallibleIterator};
+  fn build_executor() -> Result<(PgliteServer, Executor), Error> {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
 
-  fn build_executor() -> Result<Executor, Error> {
-    return Executor::new(
-      || {
-        return Client::configure()
-          .host("localhost")
-          .port(5432)
-          .user("postgres")
-          .password("example")
-          .connect(NoTls);
-      },
-      Options {
-        num_threads: Some(2),
-      },
-    );
+    return Ok((
+      db,
+      Executor::new(
+        || {
+          return Client::configure()
+            .host("localhost")
+            .port(5432)
+            .user("postgres")
+            .password("example")
+            .connect(NoTls);
+        },
+        Options {
+          // IMPORTANT: PgLite only handles a single concurrent connection.
+          num_threads: Some(1),
+        },
+      )?,
+    ));
   }
 
   #[tokio::test]
   async fn pg_poc_test() {
-    let exec = build_executor().unwrap();
-    assert_eq!(2, exec.threads());
+    let (_db, exec) = build_executor().unwrap();
+
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, exec.threads());
 
     exec
       .call(|client| {
@@ -278,8 +289,10 @@ mod tests {
 
   #[tokio::test]
   async fn pg_poc_named_parameter_test() {
-    let exec = build_executor().unwrap();
-    assert_eq!(2, exec.threads());
+    let (_db, exec) = build_executor().unwrap();
+
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, exec.threads());
 
     exec
       .call(|client| {

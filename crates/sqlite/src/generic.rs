@@ -29,12 +29,20 @@ use crate::r#type::ConnectionType;
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
+pub enum PgConnection {
+  Uri(String),
+  Host {
+    host: Option<String>,
+    port: Option<u16>,
+    user: Option<String>,
+    password: Option<String>,
+  },
+}
+
+#[derive(Clone)]
 pub struct PgOptions {
-  pub host: Option<String>,
-  pub port: Option<u16>,
-  pub user: Option<String>,
-  pub password: Option<String>,
+  pub connection: PgConnection,
   pub num_threads: Option<usize>,
 }
 
@@ -90,28 +98,42 @@ impl Connection {
   pub fn pg_with_opts(opts: PgOptions) -> Result<Self, Error> {
     use postgres::{Client, NoTls};
 
-    let num_threads = opts.num_threads.clone();
+    return Ok(Self::new(Executor::Pg(Arc::new(
+      crate::pg::executor::Executor::new(
+        move || -> Result<Client, Error> {
+          match &opts.connection {
+            PgConnection::Uri(uri) => {
+              return Ok(Client::connect(uri, NoTls)?);
+            }
+            PgConnection::Host {
+              host,
+              port,
+              user,
+              password,
+            } => {
+              let mut conf = Client::configure();
+              if let Some(host) = host {
+                conf.host(host);
+              }
+              if let Some(port) = port {
+                conf.port(*port);
+              }
+              if let Some(user) = user {
+                conf.user(user);
+              }
+              if let Some(pw) = password {
+                conf.password(pw);
+              }
 
-    return Ok(Self::new(Executor::Pg(crate::pg::executor::Executor::new(
-      move || -> Result<Client, Error> {
-        let mut conf = Client::configure();
-        if let Some(ref host) = opts.host {
-          conf.host(&host);
-        }
-        if let Some(ref port) = opts.port {
-          conf.port(*port);
-        }
-        if let Some(ref user) = opts.user {
-          conf.user(&user);
-        }
-        if let Some(ref pw) = opts.password {
-          conf.password(&pw);
-        }
-
-        return Ok(conf.connect(NoTls)?);
-      },
-      crate::pg::executor::Options { num_threads },
-    )?)));
+              return Ok(conf.connect(NoTls)?);
+            }
+          }
+        },
+        crate::pg::executor::Options {
+          num_threads: opts.num_threads,
+        },
+      )?,
+    ))));
   }
 
   pub fn id(&self) -> usize {
@@ -678,30 +700,39 @@ static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use pglite_oxide::PgliteServer;
   use postgres::{Client, NoTls};
 
-  fn build_executor() -> Result<crate::pg::executor::Executor, Error> {
-    return crate::pg::executor::Executor::new(
-      || {
-        return Client::configure()
-          .host("localhost")
-          .port(5432)
-          .user("postgres")
-          .password("example")
-          .connect(NoTls);
-      },
-      crate::pg::executor::Options {
-        num_threads: Some(2),
-      },
-    );
+  use super::*;
+  use crate::pg::executor::Executor as PgExecutor;
+
+  fn build_executor() -> Result<(PgliteServer, PgExecutor), Error> {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    return Ok((
+      db,
+      PgExecutor::new(
+        move || {
+          let conn = Client::connect(&pg_uri, NoTls);
+          return conn;
+        },
+        crate::pg::executor::Options {
+          // IMPORTANT: PgLite only handles a single concurrent connection.
+          num_threads: Some(1),
+        },
+      )?,
+    ));
   }
 
   #[tokio::test]
   async fn generic_pg_poc_test() {
-    let conn = Connection::new(Executor::Pg(Arc::new(build_executor().unwrap())));
+    let (_db, exec) = build_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
-    assert_eq!(2, conn.threads());
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, conn.threads());
 
     conn
       .call_writer(|mut client| {

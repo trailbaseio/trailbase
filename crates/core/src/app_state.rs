@@ -545,8 +545,13 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let logs_conn = crate::connection::init_logs_db(None)?;
   let session_conn = crate::connection::init_session_db(None)?;
 
-  let connection_manager =
-    ConnectionManager::new_for_test(data_dir.clone(), json_schema_registry.clone(), vec![]).await;
+  let connection_manager = ConnectionManager::new_for_test(
+    data_dir.clone(),
+    json_schema_registry.clone(),
+    vec![],
+    Some(pg_uri.clone()),
+  )
+  .await;
 
   let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
     info!("Use S3 Storage for tests");
