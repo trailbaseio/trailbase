@@ -79,11 +79,11 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   .await
   .map_err(|err| InitError::ScriptError(err.to_string()))?;
 
-  let (connection_manager, new_db) = ConnectionManager::new(
-    args.data_dir.clone(),
-    json_schema_registry.clone(),
-    sync_wasm_runtimes,
-  )
+  let (connection_manager, new_db) = ConnectionManager::new(crate::connection::Options {
+    data_dir: args.data_dir.clone(),
+    json_schema_registry: json_schema_registry.clone(),
+    sqlite_function_runtimes: sync_wasm_runtimes,
+  })
   .await?;
 
   // Read config or write default one. Ensures config is validated.

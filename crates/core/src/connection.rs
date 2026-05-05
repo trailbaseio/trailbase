@@ -92,20 +92,29 @@ pub struct ConnectionManager {
   state: Arc<ConnectionManagerState>,
 }
 
+pub struct Options {
+  pub data_dir: DataDir,
+  pub json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+}
+
 impl ConnectionManager {
-  pub(crate) async fn new(
-    data_dir: DataDir,
-    json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-    sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
-  ) -> Result<(Self, bool), ConnectionError> {
-    let (main_conn, main_metadata, new_db) = init_main_db_impl(
-      Some(&data_dir),
-      json_schema_registry.clone(),
-      vec![],
-      sqlite_function_runtimes.clone(),
-      true,
-    )
+  pub(crate) async fn new(opts: Options) -> Result<(Self, bool), ConnectionError> {
+    let (main_conn, main_metadata, new_db) = init_db(InitDbOptions {
+      data_path: Some(&opts.data_dir.main_db_path()),
+      migration_path: Some(&opts.data_dir.migrations_path()),
+      is_main_db: true,
+      json_registry: &opts.json_schema_registry,
+      runtimes: &opts.sqlite_function_runtimes,
+      attach: vec![],
+    })
     .await?;
+
+    let Options {
+      data_dir,
+      json_schema_registry,
+      sqlite_function_runtimes,
+    } = opts;
 
     return Ok((
       Self {
@@ -130,15 +139,17 @@ impl ConnectionManager {
     json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   ) -> Self {
-    let (main_conn, main_metadata, new_db) = init_main_db_impl(
-      None,
-      json_schema_registry.clone(),
-      vec![],
-      sqlite_function_runtimes.clone(),
-      true,
-    )
+    let (main_conn, main_metadata, new_db) = init_db(InitDbOptions {
+      data_path: None,
+      migration_path: None,
+      is_main_db: true,
+      json_registry: &json_schema_registry,
+      runtimes: &sqlite_function_runtimes,
+      attach: vec![],
+    })
     .await
     .unwrap();
+
     assert!(new_db);
 
     return Self {
@@ -232,13 +243,14 @@ impl ConnectionManager {
       vec![]
     };
 
-    let (conn, metadata, _new_db) = init_main_db_impl(
-      Some(&self.state.data_dir),
-      self.state.json_schema_registry.clone(),
+    let (conn, metadata, _new_db) = init_db(InitDbOptions {
+      data_path: Some(&self.state.data_dir.main_db_path()),
+      migration_path: Some(&self.state.data_dir.migrations_path()),
+      is_main_db: main,
+      json_registry: &self.state.json_schema_registry,
+      runtimes: &self.state.sqlite_function_runtimes,
       attach,
-      self.state.sqlite_function_runtimes.clone(),
-      main,
-    )
+    })
     .await?;
 
     return Ok(ConnectionEntry {
@@ -278,14 +290,19 @@ impl ConnectionManager {
   }
 }
 
-async fn init_main_db_impl(
-  data_dir: Option<&DataDir>,
-  json_registry: Arc<RwLock<JsonSchemaRegistry>>,
+struct InitDbOptions<'a> {
+  data_path: Option<&'a PathBuf>,
+  migration_path: Option<&'a PathBuf>,
+  is_main_db: bool,
+  json_registry: &'a Arc<RwLock<JsonSchemaRegistry>>,
+  runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
   attach: Vec<AttachedDatabase>,
-  runtimes: Vec<(SqliteStore, SqliteFunctions)>,
-  main_migrations: bool,
+}
+
+async fn init_db<'a>(
+  opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
-  if attach.len() > 124 {
+  if opts.attach.len() > 124 {
     return Err(ConnectionError::InvalidSetting("Too many databases"));
   }
 
@@ -296,7 +313,7 @@ async fn init_main_db_impl(
   ) -> Result<rusqlite::Connection, ConnectionError> {
     let conn = trailbase_extension::connect_sqlite(db_path, Some(json_registry))?;
 
-    // Apply custom connection settings, e.g. pragmas and client settings.
+    // Apply custom connection settings, e.g. PRAGMAs and client settings.
     {
       // The default is just 16.
       conn.set_prepared_statement_cache_capacity(PREPARED_STATEMENT_CACHE_CAPACITY);
@@ -320,20 +337,18 @@ async fn init_main_db_impl(
     return Ok(conn);
   }
 
-  let main_path = data_dir.map(|d| d.main_db_path());
-  let migrations_path = data_dir.map(|d| d.migrations_path());
-
   let conn = trailbase_sqlite::Connection::with_opts(
     {
-      let json_registry = json_registry.clone();
-      let runtimes = runtimes.clone();
+      let data_path = opts.data_path.cloned();
+      let json_registry = opts.json_registry.clone();
+      let runtimes = opts.runtimes.clone();
 
       move || -> Result<rusqlite::Connection, ConnectionError> {
-        return build_connection(main_path.clone(), json_registry.clone(), &runtimes);
+        return build_connection(data_path.clone(), json_registry.clone(), &runtimes);
       }
     },
     trailbase_sqlite::Options {
-      num_threads: match (data_dir, std::thread::available_parallelism()) {
+      num_threads: match (opts.data_path, std::thread::available_parallelism()) {
         (None, _) => Some(1),
         (Some(_), Ok(n)) => Some(n.get().clamp(2, 4)),
         (Some(_), Err(_)) => Some(2),
@@ -352,19 +367,27 @@ async fn init_main_db_impl(
   // Apply migrations.
   //
   // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-  let mut new_db = false;
-  if main_migrations {
-    new_db = apply_main_migrations(&conn, migrations_path.as_ref())
+  let init_schema = if opts.is_main_db {
+    apply_main_migrations(&conn, opts.migration_path)
       .await
-      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
-  }
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?
+  } else {
+    false
+  };
 
-  for AttachedDatabase { schema_name, path } in &attach {
-    debug!("Attaching '{schema_name}': {path:?}, {migrations_path:?}");
+  for AttachedDatabase { schema_name, path } in &opts.attach {
+    debug!(
+      "Attaching '{schema_name}': {path:?}, {:?}",
+      opts.migration_path
+    );
 
     // Before attaching secondary DBs, we must ensure their schemas are up-to-date.
-    if let Some(ref migrations_path) = migrations_path {
-      let mut secondary = build_connection(Some(path.clone()), json_registry.clone(), &runtimes)?;
+    if let Some(ref migrations_path) = opts.migration_path {
+      let mut secondary = build_connection(
+        Some(path.clone()),
+        opts.json_registry.clone(),
+        opts.runtimes,
+      )?;
 
       // Apply migrations.
       //
@@ -376,9 +399,9 @@ async fn init_main_db_impl(
   }
 
   // Lastly, after attaching all DBs, build connection metadata.
-  let metadata = build_metadata(&conn, &json_registry).await?;
+  let metadata = build_metadata(&conn, opts.json_registry).await?;
 
-  return Ok((conn, metadata, new_db));
+  return Ok((conn, metadata, init_schema));
 }
 
 pub(super) fn init_logs_db(
