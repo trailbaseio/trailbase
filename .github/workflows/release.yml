@@ -57,7 +57,6 @@ jobs:
           version: 10
       - name: PNPM install
         run: pnpm install
-
       - name: Build a Builder Image
         run: |
           docker build -f Dockerfile.ci \
@@ -113,7 +112,6 @@ jobs:
           version: 10
       - name: PNPM install
         run: pnpm install
-
       - name: Build a Builder Image
         run: |
           docker build -f Dockerfile.ci \
@@ -162,7 +160,7 @@ jobs:
       - name: Install Dependencies
         run: brew update && brew install protobuf pnpm
       - name: PNPM install
-        run: pnpm install
+        run: pnpm install --dangerously-allow-all-builds
       # CMake v4 is too new: https://github.com/georust/geos/issues/194
       - name: Downgrade CMake
         run: pipx install --force cmake==3.31.10
@@ -204,7 +202,7 @@ jobs:
       - name: Install Dependencies
         run: brew update && brew install protobuf pnpm
       - name: PNPM install
-        run: pnpm install
+        run: pnpm install --dangerously-allow-all-builds
       # CMake v4 is too new: https://github.com/georust/geos/issues/194
       - name: Downgrade CMake
         run: pipx install --force cmake==3.31.10
@@ -249,7 +247,7 @@ jobs:
           apps: nodejs pnpm protobuf zip
       - name: PNPM install
         shell: bash
-        run: pnpm install
+        run: pnpm install --dangerously-allow-all-builds
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: ${{ env.TOOLCHAIN_VERSION }}
