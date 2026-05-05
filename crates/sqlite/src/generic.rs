@@ -101,10 +101,8 @@ impl Connection {
     return Ok(Self::new(Executor::Pg(Arc::new(
       crate::pg::executor::Executor::new(
         move || -> Result<Client, Error> {
-          match &opts.connection {
-            PgConnection::Uri(uri) => {
-              return Ok(Client::connect(uri, NoTls)?);
-            }
+          return match &opts.connection {
+            PgConnection::Uri(uri) => Ok(Client::connect(uri, NoTls)?),
             PgConnection::Host {
               host,
               port,
@@ -125,9 +123,9 @@ impl Connection {
                 conf.password(pw);
               }
 
-              return Ok(conf.connect(NoTls)?);
+              Ok(conf.connect(NoTls)?)
             }
-          }
+          };
         },
         crate::pg::executor::Options {
           num_threads: opts.num_threads,
@@ -236,7 +234,7 @@ impl Connection {
   ) -> Result<Rows, Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, sqlite_from_rows).await,
-      Executor::Pg(_) => self.write_query_rows(sql, params).await,
+      Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
     };
   }
 
@@ -714,10 +712,7 @@ mod tests {
     return Ok((
       db,
       PgExecutor::new(
-        move || {
-          let conn = Client::connect(&pg_uri, NoTls);
-          return conn;
-        },
+        move || Client::connect(&pg_uri, NoTls),
         crate::pg::executor::Options {
           // IMPORTANT: PgLite only handles a single concurrent connection.
           num_threads: Some(1),
@@ -773,5 +768,25 @@ mod tests {
       .unwrap();
 
     assert_eq!(count0, count1);
+  }
+
+  #[tokio::test]
+  async fn generic_connection_w_pg_test() {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    let conn = Connection::pg_with_opts(PgOptions {
+      connection: PgConnection::Uri(pg_uri),
+      num_threads: Some(1),
+    })
+    .unwrap();
+
+    // IMPORTANT: PgLite only handles a single concurrent connection.
+    assert_eq!(1, conn.threads());
+
+    let rows = conn.read_query_rows("SELECT 5", ()).await.unwrap();
+    let n: i64 = rows.get(0).unwrap().get(0).unwrap();
+    assert_eq!(5, n);
   }
 }

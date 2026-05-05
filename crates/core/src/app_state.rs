@@ -524,11 +524,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
   // Start PgLite.
-  let tcp = true;
+  let tcp = false;
   let (pg_uri, db) = if tcp {
     let db = pglite_oxide::PgliteServer::builder()
-      // .fresh_temporary()
-      .temporary()
+      .fresh_temporary()
+      // .temporary()
       .start()?;
 
     (db.connection_uri(), db)
