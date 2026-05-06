@@ -330,15 +330,16 @@ async fn init_db<'a>(
       num_threads: Some(1),
     }
   } else {
-    panic!("External Postgres required");
+    let host = trailbase_sqlite::generic::PgConnection::Host {
+      host: Some("127.0.0.1".to_string()),
+      port: Some(5432),
+      user: Some("postgres".to_string()),
+      password: Some("example".to_string()),
+    };
+    log::warn!("External Postgres required: {host:?}");
 
     trailbase_sqlite::generic::PgOptions {
-      connection: trailbase_sqlite::generic::PgConnection::Host {
-        host: Some("127.0.0.1".to_string()),
-        port: Some(5432),
-        user: Some("postgres".to_string()),
-        password: Some("example".to_string()),
-      },
+      connection: host,
       num_threads: Some(2),
     }
   })?;

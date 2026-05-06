@@ -29,7 +29,7 @@ use crate::r#type::ConnectionType;
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum PgConnection {
   Uri(String),
   Host {
@@ -40,7 +40,7 @@ pub enum PgConnection {
   },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PgOptions {
   pub connection: PgConnection,
   pub num_threads: Option<usize>,
