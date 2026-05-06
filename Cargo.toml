@@ -72,6 +72,7 @@ serde_rusqlite = { path = "vendor/serde_rusqlite" }
 sqlite-vec = { path = "vendor/sqlite-vec/bindings/rust", default-features = false }
 sqlite3-parser = "0.16.0"
 tokio = { version = "^1.38.0", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-rustls = { version = "0.26.1", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
 trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm"] }

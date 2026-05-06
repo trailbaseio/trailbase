@@ -90,7 +90,7 @@ sqlformat = "0.5.0"
 sqlite3-parser = { workspace = true }
 thiserror = "2.0.12"
 tokio = { workspace = true }
-tokio-rustls = { version = "0.26.1", default-features = false }
+tokio-rustls = { workspace = true }
 totp-rs = { version = "5.7.0", features = ["gen_secret", "qr", "otpauth"] }
 tower = "0.5.0"
 tower-cookies = "0.11.0"

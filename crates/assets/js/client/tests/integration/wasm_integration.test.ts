@@ -49,6 +49,13 @@ test("WASM runtime", async () => {
   );
 });
 
+test("WASM runtime outgoing TLS/HTTPS", async ({ expect }) => {
+  const response = await fetch(
+    `http://${ADDRESS}/fetch?url=${encodeURI("https://example.com")}`,
+  );
+  expect(response.ok);
+});
+
 test("WASM runtime DB Query & Execute", async ({ expect }) => {
   const responses = await Promise.all(
     Array.from({ length: 25 }, async (_v, _i) => {

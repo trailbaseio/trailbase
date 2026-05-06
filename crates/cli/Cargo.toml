@@ -35,6 +35,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite-vec = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 trailbase = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }

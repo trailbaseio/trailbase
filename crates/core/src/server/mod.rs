@@ -692,6 +692,13 @@ pub async fn serve(
   admin_router: Option<(String, Router)>,
   tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  // Make sure TLS provider is installed (both for incoming and outgoing traffic, including traffic
+  // from WASM components).
+  if tokio_rustls::rustls::crypto::CryptoProvider::get_default().is_none() {
+    info!("No process-wide TLS provider found. Falling back to `aws_lc_rs`.");
+    let _ = tokio_rustls::rustls::crypto::aws_lc_rs::default_provider().install_default();
+  }
+
   let has_tls = tls.is_some();
   let addr = main_router.0.clone();
   let admin_addr = admin_router
@@ -747,9 +754,6 @@ async fn start_listen(
         serve::TlsListener {
           listener: tcp_listener,
           acceptor: TlsAcceptor::from(Arc::new({
-            tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
-              .install_default()
-              .expect("Failed to install rustls crypto");
             ServerConfig::builder()
               .with_no_client_auth()
               .with_single_cert(vec![cert], key)

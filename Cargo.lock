@@ -6881,6 +6881,7 @@ dependencies = [
  "serde_json",
  "sqlite-vec",
  "tokio",
+ "tokio-rustls",
  "trailbase",
  "trailbase-build",
  "trailbase-extension",

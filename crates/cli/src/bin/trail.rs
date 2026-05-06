@@ -398,6 +398,13 @@ fn to_user_reference(user: String) -> api::cli::UserReference {
 }
 
 fn main() -> Result<(), BoxError> {
+  // Install the process-wide rustls crypto provider. Since rustls 0.23.39 there is no more
+  // implicit default. W/o this any TLS traffic incoming and outgoing (e.g. via WASM components)
+  // would panic.
+  tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+    .install_default()
+    .expect("Failed to install rustls crypto");
+
   let args = CommandLineArgs::parse();
 
   init_logger(if let Some(SubCommands::Run(ref cmd)) = args.cmd {
