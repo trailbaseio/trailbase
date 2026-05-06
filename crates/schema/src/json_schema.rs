@@ -146,6 +146,7 @@ fn build_json_schema_expanded_impl(
           // STRICT table or the column is declared NOT NULL, SQLite allows NULL values in a
           // PRIMARY KEY column
           // source: https://www.sqlite.org/lang_createtable.html
+          #[allow(clippy::collapsible_match)]
           if *is_primary {
             if col.data_type == ColumnDataType::Integer {
               nullable = false;

@@ -317,12 +317,12 @@ fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), Con
         ast::QualifiedName {
           name: ast::Name(name),
           ..
-        } if name.as_ref() == "_REQ_FIELDS_" => {
-          if !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) {
-            return Err(invalid(format!(
-              "Expected literal string on LHS of `IN _REQ_FIELDS_`, got: {lhs:?}"
-            )));
-          }
+        } if name.as_ref() == "_REQ_FIELDS_"
+          && !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) =>
+        {
+          return Err(invalid(format!(
+            "Expected literal string on LHS of `IN _REQ_FIELDS_`, got: {lhs:?}"
+          )));
         }
         _ => {}
       };
