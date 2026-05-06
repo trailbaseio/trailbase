@@ -1,3 +1,18 @@
+## v0.27.0
+
+- Cleanup release: remove the Sqlean's `define()` extensions for stored procedures. Breaking for users of Sqlean.
+  - Read queries modify connection state, therefore doesn't work with `query_only` pragma and has elevated scheduling requirements.
+  - Doesn't allow anything that isn't possible with `VIEW` + WASM SQLite extensions.
+  - Is another source on SQLite lock-in. We're currently working to loosening the coupling .
+- Other major changes since the previous major release are mostly around DB coupling and execution model.
+  - There is a proof-of-concept Postgres driver now but it would still be a long way to hook it up:
+    - different SQL dialects,
+    - schema extraction missing,
+    - dependencies on SQLite extensions for `CHECK()`, migrations, etc.,
+    - change notifications for RecordApi subscriptions would need to work very differently,
+    - more fun surprises...?
+- Lift Rust MVRV (1.93) and Rust toolchain (1.95) versions.
+
 ## v0.26.9
 
 - Enable custom WASM SQLite extension functions in multi-DB migrations.
