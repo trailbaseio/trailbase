@@ -16,7 +16,7 @@ use trailbase_sqlite::{Connection, params};
 
 use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
-use crate::connection::ConnectionManager;
+use crate::connection::{BuildOptions, ConnectionManager};
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, LOGS_RETENTION_DEFAULT, OTP_CODE_TABLE, SESSION_TABLE,
 };
@@ -404,7 +404,11 @@ fn build_job(
                   "main" => connection_manager.main_entry().connection,
                   name => {
                     let Ok(entry) = connection_manager
-                      .get_entry(false, Some([name.to_string()].into()))
+                      .get_entry(BuildOptions {
+                        is_main: false,
+                        attached_databases: Some([name.to_string()].into()),
+                        num_threads: Some(1),
+                      })
                       .await
                     else {
                       continue;

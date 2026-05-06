@@ -15,7 +15,7 @@ use crate::config::proto::{
   Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
 };
 use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
-use crate::connection::{ConnectionEntry, ConnectionError, ConnectionManager};
+use crate::connection::{BuildOptions, ConnectionEntry, ConnectionError, ConnectionManager};
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::records::RecordApi;
@@ -634,7 +634,11 @@ async fn build_record_apis(
           connection_manager.main_entry()
         } else {
           connection_manager
-            .get_entry(true, Some(attached_databases.iter().cloned().collect()))
+            .get_entry(BuildOptions {
+              is_main: true,
+              attached_databases: Some(attached_databases.iter().cloned().collect()),
+              ..Default::default()
+            })
             .await?
         };
 

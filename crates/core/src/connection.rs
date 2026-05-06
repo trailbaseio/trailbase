@@ -98,6 +98,13 @@ pub struct Options {
   pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct BuildOptions {
+  pub is_main: bool,
+  pub attached_databases: Option<BTreeSet<String>>,
+  pub num_threads: Option<usize>,
+}
+
 impl ConnectionManager {
   pub(crate) async fn new(opts: Options) -> Result<(Self, bool), ConnectionError> {
     let (main_conn, main_metadata, new_db) = init_db(InitDbOptions {
@@ -107,6 +114,7 @@ impl ConnectionManager {
       json_registry: &opts.json_schema_registry,
       runtimes: &opts.sqlite_function_runtimes,
       attach: vec![],
+      num_threads: None,
     })
     .await?;
 
@@ -146,6 +154,7 @@ impl ConnectionManager {
       json_registry: &json_schema_registry,
       runtimes: &sqlite_function_runtimes,
       attach: vec![],
+      num_threads: None,
     })
     .await
     .unwrap();
@@ -170,24 +179,20 @@ impl ConnectionManager {
     return self.state.main.read().clone();
   }
 
-  pub async fn get_entry(
-    &self,
-    main: bool,
-    attached_databases: Option<BTreeSet<String>>,
-  ) -> Result<ConnectionEntry, ConnectionError> {
-    if main && attached_databases.is_none() {
+  pub async fn get_entry(&self, opts: BuildOptions) -> Result<ConnectionEntry, ConnectionError> {
+    if opts.is_main && opts.attached_databases.is_none() {
       return Ok(self.state.main.read().clone());
     }
 
     let key = ConnectionKey {
-      main,
-      attached_databases: attached_databases.unwrap_or_default(),
+      main: opts.is_main,
+      attached_databases: opts.attached_databases.clone().unwrap_or_default(),
     };
 
     return match self.state.connections.get_value_or_guard(&key, None) {
       GuardResult::Value(entry) => Ok(entry.clone()),
       GuardResult::Guard(placeholder) => {
-        let entry = self.build(main, Some(&key.attached_databases)).await?;
+        let entry = self.build(opts).await?;
         let _ = placeholder.insert(entry.clone());
         Ok(entry)
       }
@@ -206,23 +211,26 @@ impl ConnectionManager {
     {
       // QUESTION: Should we disallow access to "logs", "auth", etc? Currently, this is not
       // exposed to WASM, i.e. there's no sanctioned way to interact with this.
-      return self.get_entry(false, Some([db.to_string()].into())).await;
+      return self
+        .get_entry(BuildOptions {
+          is_main: false,
+          attached_databases: Some([db.to_string()].into()),
+          ..Default::default()
+        })
+        .await;
     }
 
     return Ok(self.main_entry());
   }
 
-  pub(crate) async fn build(
-    &self,
-    mut main: bool,
-    attached_databases: Option<&BTreeSet<String>>,
-  ) -> Result<ConnectionEntry, ConnectionError> {
+  pub(crate) async fn build(&self, opts: BuildOptions) -> Result<ConnectionEntry, ConnectionError> {
     #[cfg(test)]
-    if main && attached_databases.is_none() {
+    if opts.is_main && opts.attached_databases.is_none() {
       return Ok(self.state.main.read().clone());
     }
 
-    let attach = if let Some(attached_databases) = attached_databases {
+    let mut is_main = opts.is_main;
+    let attach = if let Some(attached_databases) = opts.attached_databases {
       // SQLite supports only up to 125 DBs per connection: https://sqlite.org/limits.html.
       if attached_databases.len() > 124 {
         return Err(ConnectionError::InvalidSetting("Too many databases"));
@@ -234,7 +242,7 @@ impl ConnectionManager {
           if name != "main" {
             Some(AttachedDatabase::from_data_dir(&self.state.data_dir, name))
           } else {
-            main = true;
+            is_main = true;
             None
           }
         })
@@ -246,10 +254,11 @@ impl ConnectionManager {
     let (conn, metadata, _new_db) = init_db(InitDbOptions {
       data_path: Some(&self.state.data_dir.main_db_path()),
       migration_path: Some(&self.state.data_dir.migrations_path()),
-      is_main_db: main,
+      is_main_db: is_main,
       json_registry: &self.state.json_schema_registry,
       runtimes: &self.state.sqlite_function_runtimes,
       attach,
+      num_threads: opts.num_threads,
     })
     .await?;
 
@@ -297,6 +306,7 @@ struct InitDbOptions<'a> {
   json_registry: &'a Arc<RwLock<JsonSchemaRegistry>>,
   runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
   attach: Vec<AttachedDatabase>,
+  num_threads: Option<usize>,
 }
 
 async fn init_db<'a>(
@@ -348,11 +358,14 @@ async fn init_db<'a>(
       }
     },
     trailbase_sqlite::Options {
-      num_threads: match (opts.data_path, std::thread::available_parallelism()) {
-        (None, _) => Some(1),
-        (Some(_), Ok(n)) => Some(n.get().clamp(2, 4)),
-        (Some(_), Err(_)) => Some(2),
-      },
+      num_threads: Some(opts.num_threads.unwrap_or_else(|| {
+        // Fallback if not explicitly set.
+        match (opts.data_path, std::thread::available_parallelism()) {
+          (None, _) => 1,
+          (Some(_), Ok(n)) => n.get().clamp(2, 4),
+          (Some(_), Err(_)) => 2,
+        }
+      })),
       ..Default::default()
     },
   )
