@@ -49,10 +49,15 @@ pub(crate) async fn apply_main_migrations(
   conn: &trailbase_sqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
 ) -> Result<bool, RefineryError> {
-  let mut migrations = vec![
-    load_embedded_migrations::<BaseMigrations>(),
-    load_embedded_migrations::<MainMigrations>(),
-  ];
+  let mut migrations = if cfg!(feature = "pg") {
+    vec![load_embedded_migrations::<PgMainMigrations>()]
+  } else {
+    vec![
+      load_embedded_migrations::<BaseMigrations>(),
+      load_embedded_migrations::<MainMigrations>(),
+    ]
+  };
+
   if let Some(path) = base_migrations_path {
     // Ignore when `<traildepot>/migrations/main/` is missing.
     migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
@@ -299,6 +304,10 @@ struct BaseMigrations;
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/main"]
 struct MainMigrations;
+
+#[derive(Clone, rust_embed::RustEmbed)]
+#[folder = "migrations/pg_main"]
+struct PgMainMigrations;
 
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/logs"]
