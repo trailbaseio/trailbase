@@ -55,6 +55,8 @@ pub async fn list_tables_handler(
     log::warn!("Not showing all DBs.")
   }
 
+  // TODO: This is an expensive operation. Building a new connection will spawn threads and stop
+  // them. Not a problem inherently but could be avoided.
   let ConnectionEntry {
     connection: conn, ..
   } = state

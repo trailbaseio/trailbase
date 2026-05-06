@@ -70,6 +70,8 @@ pub async fn query_handler(
   }
 
   // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
+  //
+  // TODO: This is quite expensive, spawning ~4 threads. We may want to pass options to `build()`.
   let ConnectionEntry {
     connection: conn, ..
   } = state
