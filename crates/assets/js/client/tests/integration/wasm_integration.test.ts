@@ -91,17 +91,6 @@ test("WASM runtime custom SQLite extension functions", async () => {
   expect(counts).toEqual(Array.from({ length: N }, (_v, i) => i));
 });
 
-test("WASM runtime calling sqlean", async () => {
-  await Promise.all(
-    Array.from({ length: 25 }, async (_v, _i) => {
-      const response = await fetch(`http://${ADDRESS}/test_sqlean`);
-      const value = parseInt((await response.text()).trim());
-
-      expect(value).toEqual(15);
-    }),
-  );
-});
-
 test("WASM runtime calling sqlite-vec", async () => {
   await Promise.all(
     Array.from({ length: 25 }, async (_v, _i) => {

@@ -83,7 +83,6 @@ trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-reactive = { path = "crates/reactive", version = "0.1.0" }
 trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
 trailbase-schema = { path = "crates/schema", version = "0.1.0" }
-trailbase-sqlean = { path = "crates/sqlean", version = "0.0.3" }
 trailbase-sqlite = { path = "crates/sqlite", version = "0.3.0", default-features = false }
 trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }

@@ -56,9 +56,7 @@ impl Executor {
     let new_conn = |read_only: bool| -> Result<rusqlite::Connection, Error> {
       let conn = builder()?;
       if read_only {
-        // FIXME: We should re-enable this when removing Sqlean. This currently breaks Sqlean's
-        // `define()`, which mutates the connection state even on reads.
-        // conn.pragma_update(None, "query_only", true)?;
+        conn.pragma_update(None, "query_only", true)?;
       }
       if let Some(busy_timeout) = busy_timeout {
         conn.busy_timeout(busy_timeout)?;

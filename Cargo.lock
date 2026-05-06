@@ -709,8 +709,6 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
- "log",
- "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
@@ -6886,7 +6884,6 @@ dependencies = [
  "trailbase",
  "trailbase-build",
  "trailbase-extension",
- "trailbase-sqlean",
  "trailbase-sqlite",
  "trailbase-wasm-runtime-host",
  "url",
@@ -7020,16 +7017,6 @@ dependencies = [
  "trailbase-sqlite",
  "ts-rs",
  "uuid",
-]
-
-[[package]]
-name = "trailbase-sqlean"
-version = "0.0.3"
-dependencies = [
- "bindgen",
- "cc",
- "libsqlite3-sys",
- "rusqlite",
 ]
 
 [[package]]

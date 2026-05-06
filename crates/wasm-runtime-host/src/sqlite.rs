@@ -3,7 +3,7 @@ use http::Uri;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use rusqlite::Transaction;
 use self_cell::{MutBorrow, self_cell};
-use sqlite3_parser::ast::{Expr, OneSelect, ResultColumn, Select, Stmt};
+use sqlite3_parser::ast::{OneSelect, Select, Stmt};
 use tokio::time::Duration;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::unquote_expr;
@@ -262,22 +262,22 @@ pub fn sqlite_err<E: std::error::Error>(err: E) -> String {
 fn is_readonly_select(select: &Select) -> bool {
   fn is_readonly_one_select(select: &OneSelect) -> bool {
     return match select {
-      OneSelect::Select { columns, .. } => {
-        for column in columns {
-          if let ResultColumn::Expr(Expr::FunctionCall { name, .. }, _) = column {
-            // Filter out SQLean's "define" which is clearly mutating and will
-            // leave connections in an inconsistent state.
-            //
-            // QUESTION: Should we do more, e.g. error and reject the query? It's likely not
-            // enough to just relegate this to the write connection.
-            match name.0.as_bytes() {
-              b"define" | b"undefine" | b"define_free" => {
-                return false;
-              }
-              _ => {}
-            }
-          }
-        }
+      OneSelect::Select { .. } => {
+        // for column in columns {
+        //   if let ResultColumn::Expr(Expr::FunctionCall { name, .. }, _) = column {
+        //     // Filter out SQLean's "define" which is clearly mutating and will
+        //     // leave connections in an inconsistent state.
+        //     //
+        //     // QUESTION: Should we do more, e.g. error and reject the query? It's likely not
+        //     // enough to just relegate this to the write connection.
+        //     match name.0.as_bytes() {
+        //       b"define" | b"undefine" | b"define_free" => {
+        //         return false;
+        //       }
+        //       _ => {}
+        //     }
+        //   }
+        // }
 
         return true;
       }
@@ -474,8 +474,5 @@ mod tests {
   #[test]
   fn readonly_select_filter_test() {
     assert!(is_readonly_select(&parse_select("SELECT * FROM test;")));
-
-    let select = parse_select("SELECT define('sumn', ':n * (:n + 1) / 2');");
-    assert!(!is_readonly_select(&select), "{select:?}");
   }
 }

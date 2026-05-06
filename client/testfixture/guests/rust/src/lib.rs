@@ -181,14 +181,6 @@ impl Guest for Endpoints {
         }
         return Ok(());
       }),
-      routing::get("/test_sqlean", async |_req| {
-        // Call `sumn` stored function defined in migrations.
-        let Value::Integer(value) = query("SELECT sumn(5)", vec![]).await.unwrap()[0][0] else {
-          return Err(internal("expected int"));
-        };
-
-        return Ok(format!("{value}"));
-      }),
       routing::get("/test_sqlite-vec", async |_req| {
         let Value::Blob(ref vec) = query("SELECT vec_f32('[0, 1, 2, 3]')", vec![])
           .await
