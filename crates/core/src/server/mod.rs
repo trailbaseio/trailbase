@@ -692,6 +692,18 @@ pub async fn serve(
   admin_router: Option<(String, Router)>,
   tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+  // Install the process-level rustls CryptoProvider unconditionally. Since
+  // rustls 0.23.39 there is no implicit default; any rustls client (e.g.
+  // outbound HTTPS from a WASM guest via wasi:http) panics with
+  // "Could not automatically determine the process-level CryptoProvider"
+  // unless `install_default()` has been called first. Previously this was
+  // done only inside the TLS-server branch of `start_listen`, so any
+  // deployment terminating TLS at an external reverse-proxy (HTTP plain
+  // upstream) and exercising HTTPS from the WASM runtime panicked at the
+  // first outbound request. Returning Err here just means the provider
+  // is already installed (e.g. from tests), which is fine.
+  let _ = tokio_rustls::rustls::crypto::aws_lc_rs::default_provider().install_default();
+
   let has_tls = tls.is_some();
   let addr = main_router.0.clone();
   let admin_addr = admin_router
@@ -746,15 +758,13 @@ async fn start_listen(
       serve::serve(
         serve::TlsListener {
           listener: tcp_listener,
-          acceptor: TlsAcceptor::from(Arc::new({
-            tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
-              .install_default()
-              .expect("Failed to install rustls crypto");
+          acceptor: TlsAcceptor::from(Arc::new(
+            // Provider has been installed unconditionally in `serve()` above.
             ServerConfig::builder()
               .with_no_client_auth()
               .with_single_cert(vec![cert], key)
-              .expect("Failed to build server config")
-          })),
+              .expect("Failed to build server config"),
+          )),
         },
         router.into_make_service_with_connect_info::<SocketAddr>(),
       )
