@@ -1,11 +1,17 @@
+CREATE OR REPLACE FUNCTION UNIXEPOCH() RETURNS INTEGER AS $$
+  BEGIN
+    RETURN EXTRACT(EPOCH FROM CURRENT_TIMESTAMP);
+  END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE IF NOT EXISTS _user (
   -- We only check `is_uuid` rather than `is_uuid_v4` to preserve user
   -- previously created as uuiv7.
-  id                               BLOB PRIMARY KEY NOT NULL DEFAULT (uuidv4()),
+  id                               UUID PRIMARY KEY NOT NULL DEFAULT (uuidv4()),
   email                            TEXT NOT NULL,
   password_hash                    TEXT DEFAULT '' NOT NULL,
-  verified                         INTEGER DEFAULT FALSE NOT NULL,
-  admin                            INTEGER DEFAULT FALSE NOT NULL,
+  verified                         INTEGER DEFAULT 0 NOT NULL,
+  admin                            INTEGER DEFAULT 0 NOT NULL,
 
   -- TOTP secret for authenticator.
   totp_secret                      TEXT,
@@ -26,22 +32,30 @@ CREATE TABLE IF NOT EXISTS _user (
 CREATE UNIQUE INDEX __user__email_index ON _user (email);
 CREATE UNIQUE INDEX __user__provider_ids_index ON _user (provider_id, provider_user_id);
 
-CREATE TRIGGER __user__updated_trigger AFTER UPDATE ON _user FOR EACH ROW
+CREATE OR REPLACE FUNCTION __user__updated_function() RETURNS TRIGGER AS $$
   BEGIN
     UPDATE _user SET updated = UNIXEPOCH() WHERE id = OLD.id;
   END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER __user__updated_trigger AFTER UPDATE ON _user
+  FOR EACH ROW EXECUTE FUNCTION __user__updated_function();
 
 
 --
 -- User avatar table
 --
-CREATE TABLE _user_avatar (
-  user                         BLOB PRIMARY KEY NOT NULL REFERENCES _user(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS _user_avatar (
+  "user"                       UUID PRIMARY KEY NOT NULL REFERENCES _user(id) ON DELETE CASCADE,
   file                         TEXT NOT NULL,
   updated                      INTEGER DEFAULT (UNIXEPOCH()) NOT NULL
-) STRICT;
+);
 
-CREATE TRIGGER __user_avatar__updated_trigger AFTER UPDATE ON _user_avatar FOR EACH ROW
+CREATE OR REPLACE FUNCTION __user_avatar__updated_function() RETURNS TRIGGER AS $$
   BEGIN
     UPDATE _user_avatar SET updated = UNIXEPOCH() WHERE user = OLD.user;
   END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER __user_avatar__updated_trigger AFTER UPDATE ON _user_avatar
+  FOR EACH ROW EXECUTE FUNCTION __user_avatar__updated_function();
