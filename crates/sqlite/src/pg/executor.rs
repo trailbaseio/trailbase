@@ -312,9 +312,9 @@ mod tests {
     exec
       .query_rows_f(
         "
-          INSERT INTO test_table_poc_named_params (data) VALUES (:param);
+          INSERT INTO test_table_poc_named_params (data) VALUES (:named_param);
         ",
-        named_params! {":param": "value"},
+        named_params! {":named_param": "value"},
         |_rows| -> Result<(), Error> {
           return Ok(());
         },
