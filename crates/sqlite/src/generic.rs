@@ -407,7 +407,8 @@ impl Connection {
         exec
           .query_rows_f(sql, params, |row_iter| {
             return pg_map_first(row_iter, |row| {
-              return pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
+              // TODO: Coming from here, I guess.
+              return trailbase_pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
             });
           })
           .await
@@ -437,7 +438,8 @@ impl Connection {
               .iterator()
               .map(|row| {
                 let row = row.map_err(|err| Error::Other(err.into()))?;
-                return pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
+                return trailbase_pgrow2serde::from_row(&row)
+                  .map_err(|err| Error::Other(err.into()));
               })
               .collect();
           })
@@ -700,8 +702,10 @@ static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 mod tests {
   use pglite_oxide::PgliteServer;
   use postgres::{Client, NoTls};
+  use serde::Deserialize;
 
   use super::*;
+  use crate::params;
   use crate::pg::executor::Executor as PgExecutor;
 
   fn build_executor() -> Result<(PgliteServer, PgExecutor), Error> {
@@ -768,6 +772,17 @@ mod tests {
       .unwrap();
 
     assert_eq!(count0, count1);
+
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          "UPDATE test_table_poc_generic SET data = 'c' WHERE data = $1",
+          params!("a"),
+        )
+        .await
+        .unwrap()
+    );
   }
 
   #[tokio::test]
@@ -788,5 +803,41 @@ mod tests {
     let rows = conn.read_query_rows("SELECT 5", ()).await.unwrap();
     let n: i64 = rows.get(0).unwrap().get(0).unwrap();
     assert_eq!(5, n);
+
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct Data {
+      bytes: [u8; 4],
+      vec: Vec<u8>,
+      text: String,
+      text_null: Option<String>,
+      flag: bool,
+      int_null: Option<i64>,
+      bool_from_int: bool,
+    }
+    let query = "
+      SELECT
+        CAST('\x05' AS bytea) AS bytes,
+        CAST('\x03' AS bytea) AS vec,
+        'foo' AS text,
+        NULL AS text_null,
+        false AS flag,
+        CAST(0 AS INT8) AS int_null,
+        1 AS bool_from_int
+      ;";
+
+    let data: Data = conn.read_query_value(query, ()).await.unwrap().unwrap();
+
+    assert_eq!(
+      Data {
+        bytes: [5, 0, 0, 0],
+        vec: vec![3],
+        text: "foo".to_string(),
+        text_null: None,
+        flag: false,
+        int_null: Some(0),
+        bool_from_int: true,
+      },
+      data
+    );
   }
 }

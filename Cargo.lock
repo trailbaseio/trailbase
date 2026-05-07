@@ -3481,7 +3481,7 @@ dependencies = [
  "bitflags",
  "libc",
  "plain",
- "redox_syscall 0.7.4",
+ "redox_syscall 0.7.5",
 ]
 
 [[package]]
@@ -4340,15 +4340,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pgrow2serde"
-version = "0.1.0"
-source = "git+https://github.com/deknowny/pgrow2serde#9e58ff689bbd3df92c2c9bd8704490fd40394936"
-dependencies = [
- "serde",
- "tokio-postgres",
-]
-
-[[package]]
 name = "phf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5124,9 +5115,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.7.4"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f450ad9c3b1da563fb6948a8e0fb0fb9269711c9c73d9ea1de5058c79c8d643a"
+checksum = "4666a1a60d8412eab19d94f6d13dcc9cea0a5ef4fdf6a5db306537413c661b1b"
 dependencies = [
  "bitflags",
 ]
@@ -7078,6 +7069,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-pgrow2serde"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "trailbase-qs"
 version = "0.1.1"
 dependencies = [
@@ -7168,7 +7168,6 @@ dependencies = [
  "log",
  "parking_lot",
  "pglite-oxide",
- "pgrow2serde",
  "postgres",
  "rand 0.10.1",
  "regex",
@@ -7179,6 +7178,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "trailbase-pgrow2serde",
  "uuid",
 ]
 

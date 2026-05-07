@@ -22,6 +22,8 @@ default-members = [
 ]
 exclude = [
   "crates/extension-so",
+  # Fork of pgrow2serde depends on external PG setup.
+  "vendor/pgrow2serde",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -80,6 +82,7 @@ trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.8.0" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
+trailbase-pgrow2serde = { path = "vendor/pgrow2serde" }
 trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-reactive = { path = "crates/reactive", version = "0.1.0" }
 trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
