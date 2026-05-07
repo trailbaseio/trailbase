@@ -218,7 +218,7 @@ mod tests {
 
     let user_x_token = login_with_password(&state, email, password).await.unwrap();
 
-    const QUERY: &str = formatcp!("SELECT * FROM '{USER_TABLE}' WHERE email = $1");
+    const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
 
     let db_user = state
       .user_conn()

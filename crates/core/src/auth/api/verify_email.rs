@@ -118,15 +118,15 @@ pub(crate) async fn verify_email_handler(
 
   const UPDATE_CODE_QUERY: &str = formatcp!(
     "\
-      UPDATE '{USER_TABLE}' \
+      UPDATE \"{USER_TABLE}\" \
       SET verified = TRUE \
-      WHERE email = $2 \
+      WHERE email = $1 \
     "
   );
 
   let rows_affected = state
     .user_conn()
-    .execute(UPDATE_CODE_QUERY, params!(claims.email))
+    .execute(UPDATE_CODE_QUERY, params!(claims.email.clone()))
     .await?;
 
   return match rows_affected {

@@ -233,7 +233,7 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
-  const USER_QUERY: &str = formatcp!("SELECT * FROM '{USER_TABLE}' WHERE id = $1");
+  const USER_QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
 
   let Some(db_user) = state
     .user_conn()

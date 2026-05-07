@@ -46,7 +46,7 @@ pub async fn change_password(
   let hashed_password = hash_password(password)?;
 
   const UPDATE_PASSWORD_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET password_hash = $1 WHERE id = $2 RETURNING id");
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET password_hash = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
     .write_query_value(UPDATE_PASSWORD_QUERY, params!(hashed_password, db_user.id))
@@ -63,7 +63,7 @@ pub async fn change_email(
   let db_user = user.lookup_user(user_conn).await?;
 
   const UPDATE_EMAIL_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET email = $1 WHERE id = $2 RETURNING id");
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET email = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
     .write_query_value(UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id))
@@ -77,7 +77,7 @@ pub async fn add_user(
   password: &str,
 ) -> Result<Uuid, AuthError> {
   const ADD_USER_QUERY: &str = formatcp!(
-    "INSERT INTO '{USER_TABLE}' (email, password_hash, verified) VALUES (?1, ?2, ?3) RETURNING *"
+    r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES (?1, ?2, ?3) RETURNING *"#
   );
 
   let normalized_email = validate_and_normalize_email_address(email)?;
@@ -103,7 +103,7 @@ pub async fn delete_user(
 ) -> Result<(), AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  const DELETE_QUERY: &str = formatcp!("DELETE FROM '{USER_TABLE}' WHERE id = $1");
+  const DELETE_QUERY: &str = formatcp!(r#"DELETE FROM "{USER_TABLE}" WHERE id = $1"#);
 
   let rows_affected = user_conn.execute(DELETE_QUERY, params!(db_user.id)).await?;
   if rows_affected > 0 {
@@ -121,7 +121,7 @@ pub async fn set_verified(
   let db_user = user.lookup_user(user_conn).await?;
 
   const SET_VERIFIED_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET verified = $1 WHERE id = $2 RETURNING id");
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET verified = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
     .write_query_value(SET_VERIFIED_QUERY, params!(verified, db_user.id))
@@ -172,7 +172,7 @@ pub async fn promote_user_to_admin(
   let db_user = user.lookup_user(user_conn).await?;
 
   const PROMOTE_ADMIN_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET admin = TRUE WHERE id = $1 RETURNING id");
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET admin = TRUE WHERE id = $1 RETURNING id"#);
 
   return user_conn
     .write_query_value(PROMOTE_ADMIN_QUERY, params!(db_user.id))
@@ -187,7 +187,7 @@ pub async fn demote_admin_to_user(
   let db_user = user.lookup_user(user_conn).await?;
 
   const DEMOTE_ADMIN_QUERY: &str =
-    formatcp!("UPDATE '{USER_TABLE}' SET admin = FALSE WHERE id = $1 RETURNING id");
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET admin = FALSE WHERE id = $1 RETURNING id"#);
 
   return user_conn
     .write_query_value(DEMOTE_ADMIN_QUERY, params!(db_user.id))
@@ -218,7 +218,7 @@ pub async fn import_users(
   user_conn
     .transaction(|mut tx| -> Result<(), trailbase_sqlite::Error> {
       const IMPORT_USER_QUERY: &str = formatcp!(
-        "INSERT INTO '{USER_TABLE}' (email, password_hash, verified) VALUES (?1, ?2, ?3)"
+        r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES (?1, ?2, ?3)"#
       );
 
       for user in users {

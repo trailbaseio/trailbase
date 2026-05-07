@@ -174,7 +174,7 @@ pub async fn change_email_confirm_handler(
 
   const QUERY: &str = formatcp!(
     "\
-      UPDATE '{USER_TABLE}' \
+      UPDATE \"{USER_TABLE}\" \
       SET \
         email = $1, \
         verified = TRUE \

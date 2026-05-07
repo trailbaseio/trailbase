@@ -314,7 +314,7 @@ async fn create_user_for_external_provider(
 
   const QUERY: &str = formatcp!(
     "\
-      INSERT INTO '{USER_TABLE}' ( \
+      INSERT INTO \"{USER_TABLE}\" ( \
         provider_id, provider_user_id, verified, email, provider_avatar_url \
       ) VALUES ( \
         :provider_id, :provider_user_id, :verified, :email, :avatar \
@@ -345,7 +345,7 @@ async fn user_by_provider_id(
   provider_user_id: String,
 ) -> Result<Option<DbUser>, AuthError> {
   const QUERY: &str =
-    formatcp!("SELECT * FROM '{USER_TABLE}' WHERE provider_id = $1 AND provider_user_id = $2");
+    formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE provider_id = $1 AND provider_user_id = $2"#);
 
   return Ok(
     conn
