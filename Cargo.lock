@@ -4340,14 +4340,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pgrow2serde"
-version = "0.1.0"
-dependencies = [
- "serde",
- "tokio-postgres",
-]
-
-[[package]]
 name = "phf"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7077,6 +7069,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-pgrow2serde"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "trailbase-qs"
 version = "0.1.1"
 dependencies = [
@@ -7167,7 +7168,6 @@ dependencies = [
  "log",
  "parking_lot",
  "pglite-oxide",
- "pgrow2serde",
  "postgres",
  "rand 0.10.1",
  "regex",
@@ -7178,6 +7178,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "trailbase-pgrow2serde",
  "uuid",
 ]
 

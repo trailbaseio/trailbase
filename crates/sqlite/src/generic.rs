@@ -408,7 +408,7 @@ impl Connection {
           .query_rows_f(sql, params, |row_iter| {
             return pg_map_first(row_iter, |row| {
               // TODO: Coming from here, I guess.
-              return pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
+              return trailbase_pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
             });
           })
           .await
@@ -438,7 +438,8 @@ impl Connection {
               .iterator()
               .map(|row| {
                 let row = row.map_err(|err| Error::Other(err.into()))?;
-                return pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
+                return trailbase_pgrow2serde::from_row(&row)
+                  .map_err(|err| Error::Other(err.into()));
               })
               .collect();
           })
@@ -704,6 +705,7 @@ mod tests {
   use serde::Deserialize;
 
   use super::*;
+  use crate::params;
   use crate::pg::executor::Executor as PgExecutor;
 
   fn build_executor() -> Result<(PgliteServer, PgExecutor), Error> {
@@ -770,6 +772,17 @@ mod tests {
       .unwrap();
 
     assert_eq!(count0, count1);
+
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          "UPDATE test_table_poc_generic SET data = 'c' WHERE data = $1",
+          params!("a"),
+        )
+        .await
+        .unwrap()
+    );
   }
 
   #[tokio::test]
@@ -799,6 +812,7 @@ mod tests {
       text_null: Option<String>,
       flag: bool,
       int_null: Option<i64>,
+      bool_from_int: bool,
     }
     let query = "
       SELECT
@@ -807,7 +821,9 @@ mod tests {
         'foo' AS text,
         NULL AS text_null,
         false AS flag,
-        CAST(0 AS INT8) AS int_null;";
+        CAST(0 AS INT8) AS int_null,
+        1 AS bool_from_int
+      ;";
 
     let data: Data = conn.read_query_value(query, ()).await.unwrap().unwrap();
 
@@ -819,6 +835,7 @@ mod tests {
         text_null: None,
         flag: false,
         int_null: Some(0),
+        bool_from_int: true,
       },
       data
     );
