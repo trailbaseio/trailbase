@@ -21,7 +21,7 @@ pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard, Options};
 #[derive(Clone)]
 pub struct Connection {
   id: usize,
-  pub(crate) exec: Executor,
+  pub(crate) exec: Arc<Executor>,
 }
 
 impl Connection {
@@ -41,7 +41,7 @@ impl Connection {
   {
     return Ok(Self {
       id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
-      exec: Executor::new(builder, opt)?,
+      exec: Arc::new(Executor::new(builder, opt)?),
     });
   }
 
@@ -346,17 +346,11 @@ impl Connection {
 
   /// Close the database connection.
   ///
-  /// This is functionally equivalent to the `Drop` implementation for `Connection`. It consumes
-  /// the `Connection`, but on error returns it to the caller for retry purposes.
-  ///
-  /// If successful, any following `close` operations performed on `Connection` copies will succeed
-  /// immediately.
-  ///
-  /// # Failure
-  ///
-  /// Will return `Err` if the underlying SQLite close call fails.
+  /// WARN: that since connections are clonable, closing one connection may affect others.
+  /// Alternatively just drop the connection and the underlying connection will be cleaned
+  /// up when all references have been dropped.
   pub async fn close(self) -> Result<(), Error> {
-    return self.exec.close().await;
+    return self.exec.close_impl();
   }
 }
 

@@ -18,8 +18,6 @@ enum Message {
 }
 
 /// A handle to call functions in background thread.
-#[allow(unused)]
-#[derive(Clone)]
 pub(crate) struct Executor {
   sender: Sender<Message>,
   threads: Vec<Sender<Message>>,
@@ -171,14 +169,14 @@ impl Executor {
       .await;
   }
 
-  pub fn close(mut self) -> Result<(), Error> {
-    return self.close_impl();
-  }
-
-  fn close_impl(&mut self) -> Result<(), Error> {
+  pub(crate) fn close_impl(&self) -> Result<(), Error> {
     while self.sender.send(Message::Terminate).is_ok() {
       // Continue to close readers (as well as the reader/writer) while the channel is alive.
     }
+
+    // TODO: Unlike for SQLite the connection closing happens on the executor threads and we don't
+    // currently forward any errors, thus this will seemingly always "succeed".
+
     return Ok(());
   }
 }

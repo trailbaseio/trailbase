@@ -11,7 +11,8 @@ pub use crate::sqlite::lock::{ArcLockGuard, LockError, LockGuard};
 #[derive(Default)]
 pub(super) struct ConnectionVec(pub(super) smallvec::SmallVec<[rusqlite::Connection; 32]>);
 
-// NOTE: We must never access the same connection concurrently even as immutable &Connection, due
+// Unsafe `Sync` implementation to allow concurrent read access via RwLock.
+// WARN: We must never access the same connection concurrently even as immutable &Connection, due
 // to intrinsic statement cache. We can ensure this by uniquely assigning one connection to each
 // thread.
 unsafe impl Sync for ConnectionVec {}
@@ -32,12 +33,18 @@ pub struct Options {
 }
 
 /// A handle to call functions in background thread.
-#[derive(Clone)]
 pub(crate) struct Executor {
   reader: Sender<ReaderMessage>,
   writer: Sender<WriterMessage>,
   // NOTE: Is shared across reader and writer worker threads.
+  // NOTE: Only needs to be an to get parking_lot's owned ArcLocks.
   conns: Arc<RwLock<ConnectionVec>>,
+}
+
+impl Drop for Executor {
+  fn drop(&mut self) {
+    let _ = self.close_impl();
+  }
 }
 
 impl Executor {
@@ -274,7 +281,7 @@ impl Executor {
       .await;
   }
 
-  pub async fn close(self) -> Result<(), Error> {
+  pub(crate) fn close_impl(&self) -> Result<(), Error> {
     while self.reader.send(ReaderMessage::Terminate).is_ok() {
       // Continue to close readers (as well as the reader/writer) while the channel is alive.
     }

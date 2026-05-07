@@ -30,8 +30,8 @@ pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
 
 #[derive(Clone)]
 enum Executor {
-  Sqlite(SqliteExecutor),
-  Pg(PgExecutor),
+  Sqlite(Arc<SqliteExecutor>),
+  Pg(Arc<PgExecutor>),
 }
 
 /// A handle to call functions in background thread.
@@ -59,9 +59,9 @@ impl Connection {
   where
     Error: From<E>,
   {
-    return Ok(Self::new(Executor::Sqlite(
+    return Ok(Self::new(Executor::Sqlite(Arc::new(
       crate::sqlite::executor::Executor::new(builder, opts.clone())?,
-    )));
+    ))));
   }
 
   pub fn open_in_memory() -> Result<Self, Error> {
@@ -480,10 +480,15 @@ impl Connection {
     };
   }
 
+  /// Close the database connection.
+  ///
+  /// WARN: that since connections are clonable, closing one connection may affect others.
+  /// Alternatively just drop the connection and the underlying connection will be cleaned
+  /// up when all references have been dropped.
   pub async fn close(self) -> Result<(), Error> {
     return match self.exec {
-      Executor::Sqlite(exec) => exec.close().await,
-      Executor::Pg(exec) => exec.close(),
+      Executor::Sqlite(exec) => exec.close_impl(),
+      Executor::Pg(exec) => exec.close_impl(),
     };
   }
 }
@@ -650,7 +655,7 @@ mod tests {
 
   #[tokio::test]
   async fn generic_pg_poc_test() {
-    let conn = Connection::new(Executor::Pg(build_executor().unwrap()));
+    let conn = Connection::new(Executor::Pg(Arc::new(build_executor().unwrap())));
 
     assert_eq!(2, conn.threads());
 
