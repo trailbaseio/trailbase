@@ -165,7 +165,13 @@ impl ConnectionManager {
     .await
     .unwrap();
 
-    assert!(new_db);
+    if !new_db {
+      if cfg!(feature = "pg") {
+        log::warn!("Re-using existing DB for test :/. Should only happen for shared external DBs.");
+      } else {
+        panic!("Expected 'fresh' DB for test");
+      }
+    }
 
     return Self {
       state: Arc::new(ConnectionManagerState {
@@ -370,6 +376,15 @@ async fn init_db<'a>(
   } else {
     false
   };
+
+  // TODO: Remove sanity check.
+  conn
+    .read_query_rows(
+      r#"SELECT EXISTS(SELECT 1 FROM "_user" WHERE email = 'foo')"#,
+      (),
+    )
+    .await
+    .unwrap();
 
   return Ok((conn, Default::default(), init_schema));
 }

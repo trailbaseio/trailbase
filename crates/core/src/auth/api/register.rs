@@ -101,8 +101,8 @@ pub async fn register_user_handler(
   let hashed_password = hash_password(&request.password)?;
 
   const INSERT_USER_QUERY: &str = formatcp!(
-    " \
-      INSERT INTO '{USER_TABLE}' \
+    "\
+      INSERT INTO \"{USER_TABLE}\" \
         (email, password_hash) \
       VALUES \
         (:email, :password_hash) \
@@ -122,7 +122,7 @@ pub async fn register_user_handler(
     .await
     .map_err(|_err| {
       #[cfg(debug_assertions)]
-      log::debug!("Failed to register new user {normalized_email}: {_err}");
+      log::info!("Failed to register new user {normalized_email}: {_err:?}");
 
       // The insert will fail if the user is already registered
       AuthError::Conflict
