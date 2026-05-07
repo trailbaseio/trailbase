@@ -694,9 +694,14 @@ pub async fn serve(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   // Make sure TLS provider is installed (both for incoming and outgoing traffic, including traffic
   // from WASM components).
-  if tokio_rustls::rustls::crypto::CryptoProvider::get_default().is_none() {
+  use tokio_rustls::rustls::crypto;
+  if crypto::CryptoProvider::get_default().is_none() {
     info!("No process-wide TLS provider found. Falling back to `aws_lc_rs`.");
-    let _ = tokio_rustls::rustls::crypto::aws_lc_rs::default_provider().install_default();
+    if let Err(_provider) = crypto::aws_lc_rs::default_provider().install_default() {
+      // QUESTION: Should this be a panic or is this still acceptable for users who don't
+      // need TLS (neither to serve nor for WASM components).
+      error!("Installing fallback TLS provider failed.");
+    }
   }
 
   let has_tls = tls.is_some();

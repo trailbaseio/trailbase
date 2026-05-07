@@ -8,4 +8,5 @@ publish = false
 axum = "^0.8.1"
 env_logger = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = { workspace = true }
 trailbase = { workspace = true }

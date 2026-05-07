@@ -31,6 +31,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
       .default_filter_or("info,trailbase_refinery=warn,tracing::span=warn,swc_ecma_codegen=off"),
   );
 
+  // Install the process-wide rustls crypto provider. Since rustls 0.23.39 there is no more
+  // implicit default. W/o this any TLS traffic incoming and outgoing (e.g. via WASM components)
+  // would panic.
+  tokio_rustls::rustls::crypto::aws_lc_rs::default_provider()
+    .install_default()
+    .expect("Failed to install rustls crypto");
+
   let Server {
     state,
     main_router,

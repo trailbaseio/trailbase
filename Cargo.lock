@@ -1654,6 +1654,7 @@ dependencies = [
  "axum",
  "env_logger",
  "tokio",
+ "tokio-rustls",
  "trailbase",
 ]
 
