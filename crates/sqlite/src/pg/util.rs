@@ -23,11 +23,11 @@ pub(crate) struct PgStatement<'a> {
 impl<'a> PgStatement<'a> {
   pub fn new(sql: &'a str) -> Result<Self, Error> {
     static NAMED_RE: LazyLock<Regex> =
-      LazyLock::new(|| Regex::new(r"(?<named>:[[:alpha:]][[:alnum:]]*)").expect("startup"));
+      LazyLock::new(|| Regex::new(r"(?<nparam>:[[:alpha:]][[:word:]]*)").expect("startup"));
 
     let mut placeholders: HashMap<String, usize> = Default::default();
     for (idx, cap) in NAMED_RE.captures_iter(sql).enumerate() {
-      let named_params = &cap["named"];
+      let named_params = &cap["nparam"];
       placeholders.insert(named_params.to_string(), idx + 1);
     }
 
@@ -80,10 +80,14 @@ impl<'a> Statement for PgStatement<'a> {
   /// Will return Err if `name` is invalid. Will return Ok(None) if the name
   /// is valid but not a bound parameter of this statement.
   fn parameter_index(&self, name: &str) -> Result<Option<usize>, Error> {
-    if &name[0..1] != ":" || name[1..].chars().any(|c| !c.is_ascii_alphanumeric()) {
-      return Err(Error::Other(format!("invalid param name: {name}").into()));
+    if &name[0..1] == ":"
+      || name[1..]
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+      return Ok(self.placeholders.get(name).cloned());
     }
-    return Ok(self.placeholders.get(name).cloned());
+    return Err(Error::Other(format!("invalid param name: {name}").into()));
   }
 }
 
