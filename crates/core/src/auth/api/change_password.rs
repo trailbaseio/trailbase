@@ -107,7 +107,7 @@ pub async fn change_password_handler(
 
   const QUERY: &str = formatcp!(
     "\
-      UPDATE '{USER_TABLE}' \
+      UPDATE \"{USER_TABLE}\" \
       SET password_hash = :new_password_hash \
       WHERE id = :user_id AND password_hash = :old_password_hash \
     "

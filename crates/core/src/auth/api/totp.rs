@@ -110,7 +110,8 @@ pub async fn register_totp_confirm_handler(
     return Err(AuthError::BadRequest("invalid totp code"));
   }
 
-  const UPDATE_QUERY: &str = formatcp!("UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2");
+  const UPDATE_QUERY: &str =
+    formatcp!(r#"UPDATE \"{USER_TABLE}\" SET totp_secret = $1 WHERE id = $2"#);
 
   let user_id_bytes = user.uuid.into_bytes().to_vec();
   let secret = totp.get_secret_base32();
@@ -158,7 +159,7 @@ pub async fn unregister_totp_handler(
 
   if totp.check_current(&request.totp).unwrap_or(false) {
     const UPDATE_QUERY: &str =
-      formatcp!("UPDATE '{USER_TABLE}' SET totp_secret = $1 WHERE id = $2");
+      formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
 
     let user_id_bytes = user.uuid.into_bytes().to_vec();
     state

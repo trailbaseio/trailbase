@@ -20,7 +20,6 @@ pub struct CreateUserRequest {
   pub email: String,
   pub password: String,
   pub verified: bool,
-
   pub admin: bool,
 }
 
@@ -50,7 +49,7 @@ pub async fn create_user_handler(
 
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
-      INSERT INTO '{USER_TABLE}' \
+      INSERT INTO \"{USER_TABLE}\" \
         (email, password_hash, verified, admin) \
       VALUES \
         (:email, :password_hash, :verified, :admin) \
@@ -114,7 +113,8 @@ pub(crate) async fn create_user_for_test(
       admin: false,
     }),
   )
-  .await?;
+  .await
+  .unwrap();
 
   return Ok(response.id);
 }

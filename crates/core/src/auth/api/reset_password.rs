@@ -156,7 +156,7 @@ pub async fn reset_password_update_handler(
   let hashed_password = hash_password(&request.password)?;
   const UPDATE_PASSWORD_QUERY: &str = formatcp!(
     "\
-      UPDATE '{USER_TABLE}' \
+      UPDATE \"{USER_TABLE}\" \
       SET password_hash = $1 \
       WHERE email = $2 \
     "

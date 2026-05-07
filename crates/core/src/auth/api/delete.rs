@@ -26,7 +26,7 @@ pub(crate) async fn delete_handler(
 ) -> Result<Response, AuthError> {
   let _ = delete_all_sessions_for_user(state.session_conn(), user.uuid).await;
 
-  const QUERY: &str = formatcp!("DELETE FROM '{USER_TABLE}' WHERE id = $1");
+  const QUERY: &str = formatcp!(r#"DELETE FROM "{USER_TABLE}" WHERE id = $1"#);
 
   state
     .user_conn()
