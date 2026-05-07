@@ -22,6 +22,8 @@ default-members = [
 ]
 exclude = [
   "crates/extension-so",
+  # Fork of pgrow2serde depends on external PG setup.
+  "vendor/pgrow2serde",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -61,6 +63,7 @@ libsqlite3-sys = { version = "0.37.0", default-features = false, features = ["bu
 litegis = { version = "0.0.6", default-features = false }
 minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }
+pgrow2serde = { path = "vendor/pgrow2serde" }
 rand = "^0.10.0"
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
 rusqlite = { version = "0.39.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
