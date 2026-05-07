@@ -16,3 +16,7 @@ packages:
   - 'examples/wasm-guest-js'
   - 'examples/wasm-guest-ts'
   - 'guests/typescript'
+allowBuilds:
+  esbuild: true
+  protobufjs: true
+  sharp: true
