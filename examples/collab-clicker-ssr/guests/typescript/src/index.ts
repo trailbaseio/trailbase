@@ -54,9 +54,10 @@ async function ssr(req: HttpRequest): Promise<string> {
   return html;
 }
 
-export default defineConfig({
-  httpHandlers: [
-    HttpHandler.get("/clicked", clicked),
-    HttpHandler.get("/", ssr),
-  ],
-});
+export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
+  defineConfig({
+    httpHandlers: [
+      HttpHandler.get("/clicked", clicked),
+      HttpHandler.get("/", ssr),
+    ],
+  });

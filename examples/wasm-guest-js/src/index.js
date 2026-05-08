@@ -3,46 +3,49 @@ import { HttpHandler, HttpResponse } from "trailbase-wasm/http";
 import { JobHandler } from "trailbase-wasm/job";
 import { escape, query } from "trailbase-wasm/db";
 
-export default defineConfig({
-  httpHandlers: [
-    HttpHandler.get("/fibonacci", (req) => {
-      const n = req.getQueryParam("n");
-      return fibonacci(n ? parseInt(n) : 40).toString();
-    }),
-    HttpHandler.get("/json", jsonHandler),
-    HttpHandler.post("/json", jsonHandler),
-    HttpHandler.get("/a", (req) => {
-      const n = req.getQueryParam("n");
-      return "a".repeat(n ? parseInt(n) : 5000);
-    }),
-    HttpHandler.get("/interval", () => {
-      let i = 0;
-      addPeriodicCallback(250, (cancel) => {
-        console.log(`callback #${i}`);
-        i += 1;
-        if (i >= 10) {
-          cancel();
+export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
+  defineConfig({
+    httpHandlers: [
+      HttpHandler.get("/fibonacci", (req) => {
+        const n = req.getQueryParam("n");
+        return fibonacci(n ? parseInt(n) : 40).toString();
+      }),
+      HttpHandler.get("/json", jsonHandler),
+      HttpHandler.post("/json", jsonHandler),
+      HttpHandler.get("/a", (req) => {
+        const n = req.getQueryParam("n");
+        return "a".repeat(n ? parseInt(n) : 5000);
+      }),
+      HttpHandler.get("/interval", () => {
+        let i = 0;
+        addPeriodicCallback(250, (cancel) => {
+          console.log(`callback #${i}`);
+          i += 1;
+          if (i >= 10) {
+            cancel();
+          }
+        });
+      }),
+      HttpHandler.get("/sleep", async (req) => {
+        const param = req.getQueryParam("ms");
+        const ms = param ? parseInt(param) : 500;
+        await sleep(ms);
+        return `slept: ${ms}ms`;
+      }),
+      HttpHandler.get("/count/{table}/", async (req) => {
+        const table = req.getPathParam("table");
+        if (table) {
+          // NOTE: Table names cannot be parametrized, thus escape the user input
+          // as a safe string literal. Use parameters whenever possible.
+          const rows = await query(`SELECT COUNT(*) FROM ${escape(table)}`, []);
+          return `Got ${rows[0][0]} rows\n`;
         }
-      });
-    }),
-    HttpHandler.get("/sleep", async (req) => {
-      const param = req.getQueryParam("ms");
-      const ms = param ? parseInt(param) : 500;
-      await sleep(ms);
-      return `slept: ${ms}ms`;
-    }),
-    HttpHandler.get("/count/{table}/", async (req) => {
-      const table = req.getPathParam("table");
-      if (table) {
-        // NOTE: Table names cannot be parametrized, thus escape the user input
-        // as a safe string literal. Use parameters whenever possible.
-        const rows = await query(`SELECT COUNT(*) FROM ${escape(table)}`, []);
-        return `Got ${rows[0][0]} rows\n`;
-      }
-    }),
-  ],
-  jobHandlers: [JobHandler.minutely("myjob", () => console.log("Hello Job!"))],
-});
+      }),
+    ],
+    jobHandlers: [
+      JobHandler.minutely("myjob", () => console.log("Hello Job!")),
+    ],
+  });
 
 function jsonHandler(req) {
   return HttpResponse.json(

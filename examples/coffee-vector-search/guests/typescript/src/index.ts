@@ -22,6 +22,7 @@ async function searchHandler(req: HttpRequest): Promise<HttpResponse> {
   return HttpResponse.json(rows);
 }
 
-export default defineConfig({
-  httpHandlers: [HttpHandler.get("/search", searchHandler)],
-});
+export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
+  defineConfig({
+    httpHandlers: [HttpHandler.get("/search", searchHandler)],
+  });

@@ -5,12 +5,13 @@ export default defineConfig({
     outDir: "./dist",
     minify: false,
     lib: {
-      entry: "./src/component.js",
+      entry: "./src/index.js",
       fileName: "index",
       formats: ["es"],
     },
     rollupOptions: {
-      external: (source) => source.startsWith("wasi:") || source.startsWith("trailbase:"),
+      preserveEntrySignatures: 'strict',
+      external: /(wasi|trailbase):.*/,
     },
   },
 })

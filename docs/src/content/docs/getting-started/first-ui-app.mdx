@@ -86,13 +86,80 @@ initializing the previously skipped `coffee.embedding` for all records.
 
 ## Custom Endpoints
 
+We can use WASM components to declare custom HTTP API routes among other things.
 Any time you start `trail run`[^3], WebAssembly components, i.e. `.wasm` files,
-under `traildepot/wasm` will be compiled and initialized.
+under `traildepot/wasm` will be loaded (compiled from WASM IR to native) and
+initialized.
+So let's get started.
 
-We can use this to declare custom HTTP API routes among other things.
-Let's have a quick look at `examples/coffee-vector-search/guests`,
-which define a `/search` API route using vector search, which we'll later need
-to find coffees most closely matching our desired coffee:
+### Project Setup
+
+First we need to set up the project in which the code for our endpoints lives
+and which ultimately compiles into a `.wasm` component:
+
+export const tsSetup = `
+mkdir endpoint
+cd endpoint
+
+# Init a node ESM project:
+npm init -y
+npm pkg set type="module";
+
+# Install dependencies:
+npm install -D vite typescript ts-node eslint prettier @types/node @bytecodealliance/jco
+npm install trailbase-wasm
+
+# Init TypeScript:
+npx tsc --init
+touch index.ts
+
+# Init Vite:
+echo "import { defineConfig } from 'vite'
+
+export default defineConfig({
+  build: {
+    lib: {
+      entry: './index.ts',
+      formats: ['es'],
+      fileName: 'index',
+    },
+    rollupOptions: {
+      preserveEntrySignatures: 'strict',
+      external: /(wasi|trailbase):.*/,
+    },
+  },
+})" > vite.config.ts
+
+# Build empty 'index.ts' to check everything works:
+npx vite build
+`;
+
+export const rustSetup = `
+cargo init --lib endpoint
+cd endpoint
+cargo add trailbase-wasm
+
+echo '
+[lib]
+crate-type = ["cdylib"]
+' >> Cargo.toml
+`;
+
+<Tabs>
+  <TabItem label="TypeScript">
+    <Code code={tsSetup} lang="bash" />
+  </TabItem>
+
+  <TabItem label="Rust">
+    <Code code={rustSetup} lang="bash" />
+  </TabItem>
+</Tabs>
+
+### Implementation
+
+With the project set up, we can define the actual endpoint to find our desired
+coffee.
+Alternatively, you can peek in `examples/coffee-vector-search/guests` to see the result.
 
 import handlerTsCode from "@root/examples/coffee-vector-search/guests/typescript/src/index.ts?raw";
 import handlerRustCode from "@root/examples/coffee-vector-search/guests/rust/src/lib.rs?raw";
@@ -117,8 +184,52 @@ import handlerRustCode from "@root/examples/coffee-vector-search/guests/rust/src
   </TabItem>
 </Tabs>
 
-While `trail run` is up, we can test the public `/search` endpoint simply by
-running:
+### Building
+
+Lastly, we need to build the `.wasm` component that we can copy into
+`<traildepot>/wasm/` for the `trail` binary to pick up:
+
+export const tsBuild = `
+# Build a JavaScript library from our TypeScript endpoint:
+npx run vite build
+
+# Build the WASM component:
+npx jco componentize dist/index.js -w node_modules/trailbase-wasm/wit -o dist/component.wasm
+
+# Copy it to our <traildepot>/wasm
+mkdir -p <traildepot>/wasm
+cp dist/component.wasm <traildepot>/wasm/
+`;
+
+export const rustBuild=`
+cargo build --target wasm32-wasip2  --release
+
+# Copy it to our <traildepot>/wasm
+mkdir -p <traildepot>/wasm
+cp target/wasm32-wasip2/release/endpoint.wasm <traildepot>/wasm/
+`;
+
+<Tabs>
+  <TabItem label="TypeScript">
+    <Code
+      code={tsBuild}
+      lang="bash"
+    />
+  </TabItem>
+
+  <TabItem label="Rust">
+    <Code
+      code="TODO"
+      lang="bash"
+    />
+  </TabItem>
+</Tabs>
+
+That's it, we're done with the custom server-side endpoint using vector search
+to find the best coffee.
+
+With component in our `<traildepot>/wasm` folder and `trail run` up, we can
+test the public `/search` endpoint:
 
 ```bash
 $ curl "http://localhost:4000/search?aroma=8&flavor=8&acidity=8&sweetness=8"
@@ -129,20 +240,18 @@ $ curl "http://localhost:4000/search?aroma=8&flavor=8&acidity=8&sweetness=8"
 ]
 ```
 
-That's it, we're done with the server side. This is enough to build a simple
-search UI.
-With little code and a few commands we've ingested CSV data and built a custom
-HTTP endpoint using vector search.
-If you're not interested in a UI, the same approach setup could be used to
-identify relevant documents for AI applications.
-
 ## A simple Web UI
 
-After setting up our database, vector search and APIs, we should probably use
-them for good measure. For example, we could build a mobile app, have an LLM
-answer coffee prompts, or build a small web UI.
-Here we'll do the latter. It's quick and also lets us touch more generally on
-bundling and deploying web applications with TrailBase.
+After setting up our database, vector search and API, we're mostly done with
+the TrailBase-specific parts.
+Just for good measure, we're also building a simple web UI to consume our API
+and tie everything neatly together.
+It's quick and lets us touch more generally on bundling and deploying web
+applications with TrailBase.
+The consumer could equally be a mobile app, some other backend or something
+entirely different.
+
+### Implementation
 
 Note that this is not a web dev tutorial. The specifics of the UI aren't the
 focus. We chose React as a well-known option and kept the implementation to
@@ -169,7 +278,7 @@ We can start a dev-server with the UI from above and hot-reload running:
 $ npm install && npm dev
 ```
 
-## Deployment: Putting Everything Together
+### Deployment: Putting Everything Together
 
 Whether you've followed along or skipped to here, we can now put everything
 together.
