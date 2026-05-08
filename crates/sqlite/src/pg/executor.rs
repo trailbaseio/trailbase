@@ -206,40 +206,45 @@ fn event_loop(
 }
 
 #[cfg(test)]
+pub fn build_pg_test_executor() -> Result<(pglite_oxide::PgliteServer, Executor), Error> {
+  use postgres::{Client, NoTls};
+
+  let tmp_dir = tempfile::TempDir::new().unwrap();
+  let sock = tmp_dir.path().join(".s.PGSQL.5432");
+
+  let db = pglite_oxide::PgliteServer::builder()
+    .fresh_temporary()
+    .unix(&sock)
+    .start()
+    .map_err(|err| Error::Other(err.into()))?;
+
+  let pg_uri = format!(
+    "postgresql://postgres@/template1?host={}",
+    tmp_dir.path().to_string_lossy()
+  );
+
+  return Ok((
+    db,
+    Executor::new(
+      move || Client::connect(&pg_uri, NoTls),
+      Options {
+        // IMPORTANT: PgLite only handles a single concurrent connection.
+        num_threads: Some(1),
+      },
+    )?,
+  ));
+}
+
+#[cfg(test)]
 mod tests {
-  use pglite_oxide::PgliteServer;
-  use postgres::{Client, NoTls, fallible_iterator::FallibleIterator};
+  use postgres::fallible_iterator::FallibleIterator;
 
   use super::*;
   use crate::named_params;
 
-  fn build_executor() -> Result<(PgliteServer, Executor), Error> {
-    let db = PgliteServer::temporary_tcp().unwrap();
-    let pg_uri = db.connection_uri();
-    println!("Started PgLite: {pg_uri}");
-
-    return Ok((
-      db,
-      Executor::new(
-        || {
-          return Client::configure()
-            .host("localhost")
-            .port(5432)
-            .user("postgres")
-            .password("example")
-            .connect(NoTls);
-        },
-        Options {
-          // IMPORTANT: PgLite only handles a single concurrent connection.
-          num_threads: Some(1),
-        },
-      )?,
-    ));
-  }
-
   #[tokio::test]
   async fn pg_poc_test() {
-    let (_db, exec) = build_executor().unwrap();
+    let (_db, exec) = build_pg_test_executor().unwrap();
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
     assert_eq!(1, exec.threads());
@@ -289,7 +294,7 @@ mod tests {
 
   #[tokio::test]
   async fn pg_poc_named_parameter_test() {
-    let (_db, exec) = build_executor().unwrap();
+    let (_db, exec) = build_pg_test_executor().unwrap();
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
     assert_eq!(1, exec.threads());

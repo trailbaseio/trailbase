@@ -701,33 +701,15 @@ static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 mod tests {
   use pglite_oxide::PgliteServer;
-  use postgres::{Client, NoTls};
   use serde::Deserialize;
 
   use super::*;
-  use crate::pg::executor::Executor as PgExecutor;
+  use crate::pg::executor::build_pg_test_executor;
   use crate::{named_params, params};
-
-  fn build_executor() -> Result<(PgliteServer, PgExecutor), Error> {
-    let db = PgliteServer::temporary_tcp().unwrap();
-    let pg_uri = db.connection_uri();
-    println!("Started PgLite: {pg_uri}");
-
-    return Ok((
-      db,
-      PgExecutor::new(
-        move || Client::connect(&pg_uri, NoTls),
-        crate::pg::executor::Options {
-          // IMPORTANT: PgLite only handles a single concurrent connection.
-          num_threads: Some(1),
-        },
-      )?,
-    ));
-  }
 
   #[tokio::test]
   async fn generic_pg_poc_test() {
-    let (_db, exec) = build_executor().unwrap();
+    let (_db, exec) = build_pg_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
@@ -878,7 +860,7 @@ mod tests {
 
   #[tokio::test]
   async fn pg_lite_test() {
-    let (_db, exec) = build_executor().unwrap();
+    let (_db, exec) = build_pg_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     let uuid0: [u8; 16] = conn
