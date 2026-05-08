@@ -81,7 +81,11 @@ pub(super) fn execute(
 ) -> Result<usize, Error> {
   let mut stmt = conn.prepare_cached(sql.as_ref())?;
   params.bind(&mut stmt)?;
-  return Ok(stmt.raw_execute()?);
+
+  return match stmt.raw_execute() {
+    Err(rusqlite::Error::ExecuteReturnedResults) => Err(Error::ExecuteReturnedResults),
+    r => Ok(r?),
+  };
 }
 
 #[inline]
@@ -96,7 +100,13 @@ pub(super) fn execute_batch(
     // NOTE: We must use `raw_query` instead of `raw_execute`, otherwise queries
     // returning rows (e.g. SELECT) will return an error. Rusqlite's batch_execute
     // behaves consistently.
-    let _row = stmt.raw_query().next()?;
+    match stmt.raw_query().next() {
+      Err(rusqlite::Error::ExecuteReturnedResults) => return Err(Error::ExecuteReturnedResults),
+      Err(err) => {
+        return Err(err.into());
+      }
+      Ok(_) => {}
+    };
   }
   return Ok(());
 }

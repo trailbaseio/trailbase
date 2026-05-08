@@ -783,6 +783,15 @@ mod tests {
         .await
         .unwrap()
     );
+
+    // Make sure queries returning rows fail.
+    assert!(matches!(
+      conn.execute("SELECT 5;", ()).await,
+      Err(Error::ExecuteReturnedResults)
+    ));
+
+    // Batch succeeds (consistent with rusqlite's execute_batch).
+    conn.execute_batch("SELECT 5;").await.unwrap();
   }
 
   #[tokio::test]
@@ -851,17 +860,20 @@ mod tests {
       .await
       .unwrap();
 
-    conn
-      .execute(
-        r#"INSERT INTO foo ("bool", "uuid", "text") VALUES (:b, :u, :t)"#,
-        named_params! {
-            ":b": true,
-            ":u": [0u8; 16],
-            ":t": "test",
-        },
-      )
-      .await
-      .unwrap();
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          r#"INSERT INTO foo ("bool", "uuid", "text") VALUES (:b, :u, :t)"#,
+          named_params! {
+              ":b": true,
+              ":u": [0u8; 16],
+              ":t": "test",
+          },
+        )
+        .await
+        .unwrap()
+    );
   }
 
   #[tokio::test]
