@@ -322,6 +322,7 @@ struct InitDbOptions<'a> {
   attach: Vec<AttachedDatabase>,
   num_threads: Option<usize>,
 
+  #[allow(unused)]
   pg_uri: Option<String>,
 }
 

@@ -883,5 +883,6 @@ mod tests {
 
     // FIXME: Currently, pglite-oxide RNG doesn't work.
     // assert_ne!(uuid0, uuid1);
+    assert_eq!(uuid0, uuid1);
   }
 }
