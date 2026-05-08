@@ -557,27 +557,3 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 }
 
 const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 256;
-
-#[cfg(all(test, feature = "pg"))]
-mod tests {
-  use pglite_oxide::PgliteServer;
-  use trailbase_sqlite::Connection;
-
-  #[tokio::test]
-  async fn generic_connection_w_pg_test() {
-    let db = PgliteServer::temporary_tcp().unwrap();
-    let pg_uri = db.connection_uri();
-    println!("Started PgLite: {pg_uri}");
-
-    let conn = Connection::pg_with_opts(trailbase_sqlite::generic::PgOptions {
-      connection: trailbase_sqlite::generic::PgConnection::Uri(pg_uri),
-      num_threads: Some(1),
-    })
-    .unwrap();
-
-    // IMPORTANT: PgLite only handles a single concurrent connection.
-    assert_eq!(1, conn.threads());
-
-    conn.read_query_rows("SELECT 5", ()).await.unwrap();
-  }
-}

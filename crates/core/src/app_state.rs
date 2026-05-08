@@ -523,7 +523,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
-  let use_pglite = false;
+  let use_pglite = true;
   let (pg_uri, db) = if use_pglite {
     // Start PgLite.
     let tcp = false;
