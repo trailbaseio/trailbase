@@ -644,3 +644,18 @@ fn test_busy() {
     }
   });
 }
+
+#[tokio::test]
+async fn test_execute_returning_rows() {
+  let conn = Connection::open_in_memory().unwrap();
+
+  assert!(matches!(
+    conn.execute("SELECT 4;", ()).await,
+    Err(Error::ExecuteReturnedResults)
+  ));
+
+  // Make sure rusqlite and trailabse_sqlite consistently succeed for `execute_batch()`.
+  conn.execute_batch("SELECT 4;").await.unwrap();
+  let c = rusqlite::Connection::open_in_memory().unwrap();
+  c.execute_batch("SELECT 4;").unwrap();
+}

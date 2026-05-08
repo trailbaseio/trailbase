@@ -16,6 +16,9 @@ pub enum Error {
     decl_type: Option<crate::rows::ValueType>,
   },
 
+  #[error("ExecuteReturnedResults")]
+  ExecuteReturnedResults,
+
   #[error("FromSql: {0}")]
   FromSql(#[from] crate::from_sql::FromSqlError),
 

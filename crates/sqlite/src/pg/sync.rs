@@ -31,7 +31,10 @@ impl SyncConnectionTrait for postgres::Client {
   fn execute(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<usize, Error> {
     let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
     let mut row_iter = self.query_raw(&sql, params)?;
-    row_iter.next()?;
+    // Actually execute query.
+    if row_iter.next()?.is_some() {
+      return Err(Error::ExecuteReturnedResults);
+    }
     return Ok(row_iter.rows_affected().unwrap_or_default() as usize);
   }
 
