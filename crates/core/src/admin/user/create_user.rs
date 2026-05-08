@@ -20,7 +20,6 @@ pub struct CreateUserRequest {
   pub email: String,
   pub password: String,
   pub verified: bool,
-
   pub admin: bool,
 }
 
@@ -114,7 +113,8 @@ pub(crate) async fn create_user_for_test(
       admin: false,
     }),
   )
-  .await?;
+  .await
+  .unwrap();
 
   return Ok(response.id);
 }

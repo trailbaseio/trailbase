@@ -99,11 +99,11 @@ mod tests {
           ) STRICT;
 
           CREATE TABLE room_members (
-            user         BLOB NOT NULL,
+            "user"       BLOB NOT NULL,
             room         BLOB NOT NULL,
 
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
+            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
       )
@@ -115,14 +115,14 @@ mod tests {
       .execute_batch(
         r#"
           CREATE TABLE room (
-            rid          BYTEA PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            rid          UUID PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
             name         TEXT
           );
 
           CREATE TABLE message (
-            mid          BYTEA PRIMARY KEY NOT NULL DEFAULT (gen_random_uuid()),
-            _owner       BYTEA NOT NULL,
-            room         BYTEA NOT NULL,
+            mid          UUID PRIMARY KEY NOT NULL DEFAULT (gen_random_uuid()),
+            _owner       UUID NOT NULL,
+            room         UUID NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
 
             -- Dummy column with a name requiring escaping.
@@ -135,11 +135,11 @@ mod tests {
           );
 
           CREATE TABLE room_members (
-            user         BYTEA NOT NULL,
-            room         BYTEA NOT NULL,
+            "user"       UUID NOT NULL,
+            room         UUID NOT NULL,
 
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
+            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
           );
         "#,
       )
@@ -177,11 +177,11 @@ mod tests {
           ) STRICT;
 
           CREATE TABLE room_members (
-            user         BLOB NOT NULL,
+            "user"       BLOB NOT NULL,
             room         BLOB NOT NULL,
 
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
+            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
         "#,
       )
@@ -193,14 +193,14 @@ mod tests {
       .execute_batch(
         r#"
           CREATE TABLE room (
-            rid          BYTEA PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            rid          UUID PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
             name         TEXT
           );
 
           CREATE TABLE message (
             mid          INT8 PRIMARY KEY,
-            _owner       BYTEA NOT NULL,
-            room         BYTEA NOT NULL,
+            _owner       UUID NOT NULL,
+            room         UUID NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
 
             -- on user delete, tombstone it.
@@ -210,11 +210,11 @@ mod tests {
           );
 
           CREATE TABLE room_members (
-            user         BYTEA NOT NULL,
-            room         BYTEA NOT NULL,
+            "user"       UUID NOT NULL,
+            room         UUID NOT NULL,
 
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
+            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
           );
         "#,
       )
@@ -248,7 +248,7 @@ mod tests {
   ) -> Result<(), trailbase_sqlite::Error> {
     conn
       .execute(
-        "INSERT INTO room_members (user, room) VALUES ($1, $2)",
+        "INSERT INTO room_members (\"user\", room) VALUES ($1, $2)",
         params!(user, room),
       )
       .await?;

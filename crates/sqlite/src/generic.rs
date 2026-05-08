@@ -863,4 +863,25 @@ mod tests {
       .await
       .unwrap();
   }
+
+  #[tokio::test]
+  async fn pg_lite_test() {
+    let (_db, exec) = build_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    let uuid0: [u8; 16] = conn
+      .read_query_value("SELECT gen_random_uuid()", ())
+      .await
+      .unwrap()
+      .unwrap();
+
+    let uuid1: [u8; 16] = conn
+      .read_query_value("SELECT gen_random_uuid()", ())
+      .await
+      .unwrap()
+      .unwrap();
+
+    // FIXME: Currently, pglite-oxide RNG doesn't work.
+    // assert_ne!(uuid0, uuid1);
+  }
 }
