@@ -330,7 +330,6 @@ struct InitDbOptions<'a> {
 async fn init_db<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
-  // TODO: Use `state.pg_uri`.
   let conn = trailbase_sqlite::Connection::pg_with_opts(if let Some(uri) = opts.pg_uri {
     trailbase_sqlite::generic::PgOptions {
       connection: trailbase_sqlite::generic::PgConnection::Uri(uri),
@@ -350,22 +349,6 @@ async fn init_db<'a>(
       num_threads: Some(2),
     }
   })?;
-
-  // TODO: Remove sanity check.
-  conn.read_query_rows("SELECT 5", ()).await.unwrap();
-
-  // WARNING: This makes the connection drop out. Either a permissions thing or with pglite.
-  // conn
-  //   .read_query_rows(
-  //     "
-  //       SELECT table_schema,table_name
-  //         FROM information_schema.tables
-  //         ORDER BY table_schema,table_name;
-  //     ",
-  //     (),
-  //   )
-  //   .await
-  //   .unwrap();
 
   // Apply migrations.
   //

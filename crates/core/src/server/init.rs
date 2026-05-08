@@ -83,7 +83,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     data_dir: args.data_dir.clone(),
     json_schema_registry: json_schema_registry.clone(),
     sqlite_function_runtimes: sync_wasm_runtimes,
-    // TODO: Wire up
+    // TODO: Wire up from config, if/when PG is supported.
     pg_uri: None,
   })
   .await?;

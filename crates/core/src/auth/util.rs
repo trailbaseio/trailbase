@@ -300,16 +300,14 @@ pub async fn get_user_by_id(
 }
 
 pub async fn user_exists(state: &AppState, email: &str) -> bool {
-  const QUERY: &str =
-    formatcp!(r#"SELECT CAST(EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1) AS INTEGER)"#);
-  // formatcp!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
+  const QUERY: &str = formatcp!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
 
   return match state
     .user_conn()
-    .read_query_row_get(QUERY, params!(email.to_string()), 0)
+    .read_query_row_get::<bool>(QUERY, params!(email.to_string()), 0)
     .await
   {
-    Ok(Some(row)) => row,
+    Ok(Some(exists)) => exists,
     Ok(None) => false,
     Err(err) => {
       debug_assert!(false, "USER EXISTS query failed: {err}");
