@@ -12,7 +12,13 @@ impl postgres::types::ToSql for Value {
     match self {
       Value::Null => return Ok(postgres::types::IsNull::Yes),
       Value::Integer(v) => {
-        v.to_sql(ty, out)?;
+        match ty.name() {
+          "bool" => (*v > 0).to_sql(ty, out)?,
+          "char" => i8::try_from(*v)?.to_sql(ty, out)?,
+          "int2" => i16::try_from(*v)?.to_sql(ty, out)?,
+          "int4" => i32::try_from(*v)?.to_sql(ty, out)?,
+          _ => v.to_sql(ty, out)?,
+        };
       }
       Value::Real(v) => {
         v.to_sql(ty, out)?;

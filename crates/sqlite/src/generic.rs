@@ -705,8 +705,8 @@ mod tests {
   use serde::Deserialize;
 
   use super::*;
-  use crate::params;
   use crate::pg::executor::Executor as PgExecutor;
+  use crate::{named_params, params};
 
   fn build_executor() -> Result<(PgliteServer, PgExecutor), Error> {
     let db = PgliteServer::temporary_tcp().unwrap();
@@ -839,5 +839,28 @@ mod tests {
       },
       data
     );
+
+    conn
+      .execute_batch(
+        "CREATE TABLE foo (
+        \"bool\" BOOLEAN,
+        \"uuid\" UUID,
+        \"text\" TEXT
+    );",
+      )
+      .await
+      .unwrap();
+
+    conn
+      .execute(
+        r#"INSERT INTO foo ("bool", "uuid", "text") VALUES (:b, :u, :t)"#,
+        named_params! {
+            ":b": true,
+            ":u": [0u8; 16],
+            ":t": "test",
+        },
+      )
+      .await
+      .unwrap();
   }
 }
