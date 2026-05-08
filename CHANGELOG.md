@@ -1,3 +1,17 @@
+## v0.27.2
+
+- Mainline many Postgres related changes and wiring. This is mostly a no-op, since everything is behind a cargo feature flag. When enabled, this is far from being ready and many tests are failing, especially tests requiring schema metadata.
+  - Add a runtime `ConnectionType` to polymorphic connection allowing refinery's `version_history` schema to apply conditionally.
+  - Alternate psql-compatible "base" migrations.
+  - Support named PG parameters with underscores.
+  - Fork `pgrow2serde` and add support for more types: arrays (e.g. `[u8; 16]`), UUID, ... .
+  - Wire up `pglite-oxide` for testing. Pretty promising but still new and issues to be worked out (e.g. error handling, broken RNG).
+  - Support a wider set of `FromSql`/`ToSql` conversions for `trailbase_sqlite::Value`.
+  - Hoist `ExecuteReturnedResults` error and fix `execute()` for PG.
+- Fix connection clean-up.
+- Overhaul custom-endpoint/UI tutorial.
+- Update dependencies.
+
 ## v0.27.1
 
 - Consistently initialize rustls TLS binaries at the binary root. Previously, outgoing HTTPS traffic may have caused panics when not properly initialized. Thanks @jimmydjabali 🙏.
