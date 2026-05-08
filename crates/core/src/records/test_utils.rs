@@ -73,6 +73,7 @@ mod tests {
 
   pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
+    #[cfg(not(feature = "pg"))]
     state
       .conn()
       .execute_batch(
@@ -89,11 +90,11 @@ mod tests {
             data         TEXT NOT NULL DEFAULT 'empty',
 
             -- Dummy column with a name requiring escaping.
-            'table'      INTEGER NOT NULL DEFAULT 0,
+            "table"      INTEGER NOT NULL DEFAULT 0,
 
-            -- on user delete, toombstone it.
+            -- on user delete, tombstone it.
             FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chatroom delete, delete message
+            -- On chat room delete, delete message
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
           ) STRICT;
 
@@ -108,6 +109,42 @@ mod tests {
       )
       .await?;
 
+    #[cfg(feature = "pg")]
+    state
+      .conn()
+      .execute_batch(
+        r#"
+          CREATE TABLE room (
+            rid          BYTEA PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            name         TEXT
+          );
+
+          CREATE TABLE message (
+            mid          BYTEA PRIMARY KEY NOT NULL DEFAULT (gen_random_uuid()),
+            _owner       BYTEA NOT NULL,
+            room         BYTEA NOT NULL,
+            data         TEXT NOT NULL DEFAULT 'empty',
+
+            -- Dummy column with a name requiring escaping.
+            "table"      INT8 NOT NULL DEFAULT 0,
+
+            -- on user delete, tombstone it.
+            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
+            -- On chat room delete, delete message
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
+          );
+
+          CREATE TABLE room_members (
+            user         BYTEA NOT NULL,
+            room         BYTEA NOT NULL,
+
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
+            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
+          );
+        "#,
+      )
+      .await?;
+
     state.rebuild_connection_metadata().await.unwrap();
 
     return Ok(());
@@ -117,6 +154,7 @@ mod tests {
     state: &AppState,
   ) -> Result<(), anyhow::Error> {
     // Create a messages, chat room and members tables.
+    #[cfg(not(feature = "pg"))]
     state
       .conn()
       .execute_batch(
@@ -132,9 +170,9 @@ mod tests {
             room         BLOB NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
 
-            -- on user delete, toombstone it.
+            -- on user delete, tombstone it.
             FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chatroom delete, delete message
+            -- On chat room delete, delete message
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
           ) STRICT;
 
@@ -145,6 +183,39 @@ mod tests {
             FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
             FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
           ) STRICT;
+        "#,
+      )
+      .await?;
+
+    #[cfg(feature = "pg")]
+    state
+      .conn()
+      .execute_batch(
+        r#"
+          CREATE TABLE room (
+            rid          BYTEA PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            name         TEXT
+          );
+
+          CREATE TABLE message (
+            mid          INT8 PRIMARY KEY,
+            _owner       BYTEA NOT NULL,
+            room         BYTEA NOT NULL,
+            data         TEXT NOT NULL DEFAULT 'empty',
+
+            -- on user delete, tombstone it.
+            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
+            -- On chat room delete, delete message
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
+          );
+
+          CREATE TABLE room_members (
+            user         BYTEA NOT NULL,
+            room         BYTEA NOT NULL,
+
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
+            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
+          );
         "#,
       )
       .await?;
@@ -207,6 +278,14 @@ mod tests {
       serde_json::Value::Object(map) => Ok(map),
       _ => Err(anyhow::anyhow!("Not an object: {value:?}")),
     };
+  }
+
+  pub fn conditionally_transform_query(sql: impl AsRef<str>) -> String {
+    #[cfg(feature = "pg")]
+    return sql.as_ref().replace("STRICT", "");
+
+    #[cfg(not(feature = "pg"))]
+    return sql.as_ref().to_string();
   }
 }
 

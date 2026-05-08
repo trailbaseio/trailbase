@@ -108,7 +108,7 @@ mod test {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         r#"
           CREATE TABLE "update" (
             "id"      INTEGER PRIMARY KEY,
@@ -117,7 +117,7 @@ mod test {
             "text"    TEXT
           ) STRICT;
         "#,
-      )
+      ))
       .await
       .unwrap();
 
@@ -346,7 +346,7 @@ mod test {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         r#"
           CREATE TABLE test (
             "user"    BLOB PRIMARY KEY REFERENCES _user(id),
@@ -355,7 +355,7 @@ mod test {
 
           INSERT INTO test (user, data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
         "#,
-      )
+      ))
       .await
       .unwrap();
 
