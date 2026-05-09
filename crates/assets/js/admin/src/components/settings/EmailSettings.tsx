@@ -99,39 +99,35 @@ function EmailTemplate(props: {
         name={`${props.fieldName}.body`}
         validators={unsetOrNotEmptyValidator()}
       >
-        {buildOptionalTextAreaFormField(
-          {
-            label: textLabel("Body"),
-            placeholder: props.bodyPlaceholder,
-            info: (
-              <p>
-                Valid parameters:
-                <For each={props.availableTemplateParams}>
-                  {(label, index) => (
-                    <Switch>
-                      <Match when={index() === 0}>
-                        <Parameter label={label} />
-                      </Match>
+        {buildOptionalTextAreaFormField({
+          label: textLabel("Body"),
+          placeholder: props.bodyPlaceholder,
+          info: (
+            <p>
+              Valid parameters:
+              <For each={props.availableTemplateParams}>
+                {(label, index) => (
+                  <Switch>
+                    <Match when={index() === 0}>
+                      <Parameter label={label} />
+                    </Match>
 
-                      <Match
-                        when={
-                          index() >= props.availableTemplateParams.length - 1
-                        }
-                      >
-                        and <Parameter label={label} />
-                      </Match>
+                    <Match
+                      when={index() >= props.availableTemplateParams.length - 1}
+                    >
+                      and <Parameter label={label} />
+                    </Match>
 
-                      <Match when={true}>
-                        , <Parameter label={label} />
-                      </Match>
-                    </Switch>
-                  )}
-                </For>
-              </p>
-            ),
-          },
-          10,
-        )}
+                    <Match when={true}>
+                      , <Parameter label={label} />
+                    </Match>
+                  </Switch>
+                )}
+              </For>
+            </p>
+          ),
+          rows: 10,
+        })}
       </props.form.Field>
     </div>
   );

@@ -220,22 +220,25 @@ export function buildOptionalSecretFormField(
   };
 }
 
-export function buildOptionalTextAreaFormField(
-  opts: Omit<TextFieldOptions, "type">,
+type TextAreaOptions = Omit<TextFieldOptions, "type"> & {
+  class?: string;
   // Height in number of lines of the text area.
-  rows?: number,
-) {
+  rows?: number;
+};
+
+export function buildOptionalTextAreaFormField(opts: TextAreaOptions) {
   return function builder(field: () => FieldApiT<string | undefined>) {
     return (
       <TextField class="w-full">
         <div
-          class={cn("grid items-center", gapStyle)}
+          class={cn("grid w-full items-center", gapStyle)}
           style={{ "grid-template-columns": "auto 1fr" }}
         >
           <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
           <TextFieldTextArea
-            rows={rows}
+            class={opts.class}
+            rows={opts.rows}
             placeholder={opts.placeholder}
             disabled={opts?.disabled ?? false}
             value={field().state.value}

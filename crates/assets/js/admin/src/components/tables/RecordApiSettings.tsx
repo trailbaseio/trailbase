@@ -54,7 +54,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   buildTextFormField,
-  buildOptionalTextFormField,
+  buildOptionalTextAreaFormField,
 } from "@/components/FormFields";
 
 import {
@@ -176,13 +176,13 @@ interface AccessRule {
 const tableAccessRules: AccessRule[] = [
   {
     field: "readAccessRule",
-    label: "Read Access:",
+    label: "Read Access",
     description:
       'Row- and request-level read access (_user_, _row_, _req_): If the table has an "owner"\'s column containing binary user ids, access could be rstricted to the owner by setting \'_row_.owner = _user_\' here. Or if the table as a foreign key to a "group" and a relationship defined in a "membership" table: \'(SELECT 1 FROM membership WHERE group = _row_.group AND user = _user_)\'',
   },
   {
     field: "createAccessRule",
-    label: "Create Access:",
+    label: "Create Access",
     description:
       "Request-level create access validation base on _USER_, _REQ_:",
   },
@@ -1159,10 +1159,10 @@ function IndividualRecordApiSettingsForm(props: {
                           onChangeAsyncDebounceMs: 500,
                         }}
                       >
-                        {buildOptionalTextFormField({
-                          label: () => (
-                            <div class="w-[112px]">{item.label}</div>
-                          ),
+                        {buildOptionalTextAreaFormField({
+                          class: "font-mono whitespace-nowrap overflow-y-auto",
+                          label: () => <div class="w-[60px]">{item.label}</div>,
+                          rows: 5,
                         })}
                       </form.Field>
                     );
