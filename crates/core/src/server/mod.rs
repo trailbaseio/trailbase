@@ -652,39 +652,61 @@ async fn shutdown_signal() {
   #[cfg(not(unix))]
   let terminate = std::future::pending::<()>();
 
-  async fn timer() {
-    use tokio::time::*;
+  fn start_shutdown_timer(handle: tokio::runtime::Handle) {
+    std::thread::spawn(move || {
+      let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("We're shutting down and failed to start the watch timer - might as well panic.");
 
-    const SECONDS: usize = 10;
+      rt.block_on(async {
+        use tokio::time::*;
 
-    for remaining in (0..SECONDS).rev() {
-      tokio::select! {
-        _ = sleep(Duration::from_secs(1)) => {}
-        _ = signal::ctrl_c() => {
-            println!("Got Ctrl+C. Shutting down");
-            std::process::exit(1);
+        log::debug!(
+          "Shutdown watchdog started. Pending tasks: {}",
+          handle.metrics().num_alive_tasks()
+        );
+
+        const SECONDS: usize = 10;
+
+        for remaining in (0..SECONDS).rev() {
+          tokio::select! {
+            _ = sleep(Duration::from_secs(1)) => {}
+            _ = signal::ctrl_c() => {
+                println!("Got another Ctrl+C => force shutdown");
+                std::process::exit(1);
+            }
+          };
+
+          if remaining > 0 {
+            println!(
+              "Waiting {SECONDS}s for graceful shutdown (pending: {}): {remaining}s remaining.",
+              handle.metrics().num_alive_tasks()
+            );
+          } else {
+            println!("Graceful shutdown failed. Shutting down");
+            std::process::exit(0);
+          }
         }
-      };
-
-      if remaining > 0 {
-        println!("Waiting {SECONDS}s for graceful shutdown: {remaining}s remaining.");
-      } else {
-        println!("Graceful shutdown failed. Shutting down");
-        std::process::exit(0);
-      }
-    }
+      })
+    });
   }
 
+  let rt = tokio::runtime::Handle::current();
+
+  // We're spawning a timer. We *must* not await it. Otherwise we're holding up the shut-down.
   tokio::select! {
       _ = ctrl_c => {
       println!("Received Ctrl+C. Shutting down gracefully.");
-      tokio::spawn(timer());
+      start_shutdown_timer(rt);
     },
       _ = terminate => {
       println!("Received termination. Shutting down gracefully.");
-      tokio::spawn(timer());
+      start_shutdown_timer(rt);
     },
-  }
+  };
+
+  // Ready to shut down.
 }
 
 pub async fn serve(

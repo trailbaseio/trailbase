@@ -142,9 +142,7 @@ impl Executor {
     self
       .sender
       .send(Message::RunMut(Box::new(move |conn| {
-        if !sender.is_closed() {
-          let _ = sender.send(function(conn));
-        }
+        let _ = sender.send(function(conn));
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
