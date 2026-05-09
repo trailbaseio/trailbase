@@ -51,16 +51,24 @@ pub async fn list_rows_handler(
   let qualified_name = QualifiedName::parse(&table_name)?;
   let ConnectionEntry {
     connection: conn,
-    metadata,
+    metadata: _metadata,
   } = state
     .connection_manager()
     .get_entry_for_qn(&qualified_name)
     .await?;
 
+  // Build fresh metadata rather than relying on cache.
+  let metadata =
+    crate::schema_metadata::build_metadata(&conn, state.json_schema_registry()).await?;
   let Some(table_or_view) = metadata.get_table_or_view(&qualified_name) else {
     return Err(Error::Precondition(format!(
       "Table or view '{table_name:?}' not found"
     )));
+  };
+
+  // Check that cached metadata wasn't stale.
+  if _metadata.get_table_or_view(&qualified_name).is_none() {
+    warn!("'{table_name:?}' missing in cached metadata");
   };
 
   // Where clause contains column filters and cursor depending on what's present in the url query
