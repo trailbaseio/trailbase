@@ -1,4 +1,4 @@
-import { children, createSignal, For, Show, JSX, createEffect } from "solid-js";
+import { children, createSignal, For, Show, JSX } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
 

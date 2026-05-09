@@ -112,6 +112,7 @@ import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
+import { createWritableMemo } from "@solid-primitives/memo";
 
 export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
 
@@ -985,7 +986,7 @@ export function TablePane(props: {
   const selectedSchema = () => props.selectedTable[0];
   const isTable = () => tableType(selectedSchema()) === "table";
 
-  // IMPORTANT: We need to memo the search params to treat absence and defaults
+  // IMPORTANT: We need to memo the downstream search params use to treat absence and defaults
   // consistently, otherwise `undefined`->`default` may invalidate the cursors.
   const [searchParams, setSearchParams] = useSearchParams<SearchParams>();
   const filter = createMemo(() => searchParams.filter);
@@ -1012,7 +1013,13 @@ export function TablePane(props: {
     });
   };
 
-  const [sorting, setSortingImpl] = createSignal<SortingState>([]);
+  const [sorting, setSortingImpl] = createWritableMemo<SortingState>(() => {
+    // TODO: Represent sorting state in `searchParams`, e.g. `?order=+col1,-col2`.
+    // Meanwhile this needs it's own reset.
+    const _ = [selectedSchema()];
+
+    return [];
+  });
   const setSorting = (s: Updater<SortingState>) => {
     // Reset pagination.
     setSearchParams({
