@@ -23,9 +23,10 @@ mod r#type;
 mod value;
 
 #[cfg(feature = "pg")]
-pub mod generic;
-#[cfg(feature = "pg")]
 mod pg;
+
+#[cfg(feature = "generic")]
+pub mod generic;
 
 #[cfg(not(feature = "generic"))]
 mod connection_imports {

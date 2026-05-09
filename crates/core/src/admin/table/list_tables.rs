@@ -65,40 +65,42 @@ pub async fn list_tables_handler(
       ..Default::default()
     })
     .await?;
+
   let databases = conn.list_databases().await?;
 
-  let schemas = {
-    let mut schemas: Vec<SqliteSchema> = vec![];
-    for db in databases {
-      // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we parse
-      // "view"s.
-      let schema = &db.name;
-      let rows = conn
+  let mut schemas: Vec<SqliteSchema> = vec![];
+  for db in databases {
+    let table_and_view_list = conn
       .read_query_values::<SqliteSchema>(
-        format!("SELECT type, name, tbl_name, sql, '{schema}' AS db_schema FROM '{schema}'.'{SQLITE_SCHEMA_TABLE}' ORDER BY type"), ()
+        // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we
+        // parse "view"s.
+        format!(
+          r#"
+               SELECT type, name, tbl_name, sql, "{db}" AS db_schema
+                 FROM "{db}"."{SQLITE_SCHEMA_TABLE}"
+                 ORDER BY type;
+            "#,
+          db = db.name
+        ),
+        (),
       )
       .await?;
 
-      schemas.extend(rows);
-    }
-    schemas
-  };
+    schemas.extend(table_and_view_list);
+  }
 
   let mut response = ListSchemasResponse::default();
-
   for schema in schemas {
-    let name = &schema.name;
-
-    let db_schema = || -> Option<String> {
-      match schema.db_schema.as_str() {
-        "" | "main" => None,
-        db => Some(db.to_string()),
-      }
+    let db_schema: Option<String> = match schema.db_schema.as_str() {
+      "" | "main" => None,
+      db => Some(db.to_string()),
     };
 
     match schema.r#type.as_str() {
       "table" => {
         let table_name = &schema.name;
+        // if table
+
         let Some(sql) = schema.sql else {
           warn!("Missing sql for table: {table_name}");
           continue;
@@ -110,7 +112,7 @@ pub async fn list_tables_handler(
           response.tables.push((
             {
               let mut table: Table = create_table_statement.try_into()?;
-              table.name.database_schema = db_schema();
+              table.name.database_schema = db_schema;
               table
             },
             sql,
@@ -121,7 +123,7 @@ pub async fn list_tables_handler(
         let index_name = &schema.name;
         let Some(sql) = schema.sql else {
           // Auto-indexes are expected to not have `.sql`.
-          if !name.starts_with("sqlite_autoindex") {
+          if !index_name.starts_with("sqlite_autoindex") {
             warn!("Missing sql for index: {index_name}");
           }
           continue;
@@ -133,7 +135,7 @@ pub async fn list_tables_handler(
           response.indexes.push((
             {
               let mut index: TableIndex = create_index_statement.try_into()?;
-              index.name.database_schema = db_schema();
+              index.name.database_schema = db_schema;
               index
             },
             sql,
@@ -164,7 +166,7 @@ pub async fn list_tables_handler(
           response.views.push((
             {
               let mut view = View::from(create_view_statement, &tables)?;
-              view.name.database_schema = db_schema();
+              view.name.database_schema = db_schema;
               view
             },
             sql,
@@ -182,14 +184,14 @@ pub async fn list_tables_handler(
           TableTrigger {
             name: QualifiedName {
               name: schema.name,
-              database_schema: db_schema(),
+              database_schema: db_schema,
             },
             table_name: schema.tbl_name,
           },
           sql,
         ));
       }
-      x => warn!("Unknown schema type: {name} : {x}"),
+      ty => warn!("Unknown schema type for '{}': {ty}", schema.name),
     }
   }
 

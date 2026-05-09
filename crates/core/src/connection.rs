@@ -556,3 +556,15 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 }
 
 const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 256;
+
+#[cfg(test)]
+mod tests {
+  #[test]
+  fn test_db_connetion_type() {
+    // Assert that we're not using th the polymorphic connection in non-pg mode. The below
+    // constructor only exists on sqlite flavor.
+
+    #[cfg(not(feature = "pg"))]
+    trailbase_sqlite::Connection::new(|| rusqlite::Connection::open_in_memory()).unwrap();
+  }
+}

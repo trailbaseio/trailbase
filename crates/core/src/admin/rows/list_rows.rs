@@ -48,21 +48,20 @@ pub async fn list_rows_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let table_name = QualifiedName::parse(&table_name)?;
+  let qualified_name = QualifiedName::parse(&table_name)?;
   let ConnectionEntry {
     connection: conn,
     metadata,
   } = state
     .connection_manager()
-    .get_entry_for_qn(&table_name)
+    .get_entry_for_qn(&qualified_name)
     .await?;
 
-  let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
+  let Some(table_or_view) = metadata.get_table_or_view(&qualified_name) else {
     return Err(Error::Precondition(format!(
       "Table or view '{table_name:?}' not found"
     )));
   };
-  let qualified_name = table_or_view.qualified_name();
 
   // Where clause contains column filters and cursor depending on what's present in the url query
   // string.
@@ -80,8 +79,8 @@ pub async fn list_rows_handler(
   let total_row_count: i64 = {
     let where_clause = &filter_where_clause.clause;
     let count_query = format!(
-      "SELECT COUNT(*) FROM {table} AS _ROW_ WHERE {where_clause}",
-      table = qualified_name.escaped_string()
+      "SELECT COUNT(*) FROM {fq_name} AS _ROW_ WHERE {where_clause}",
+      fq_name = qualified_name.escaped_string()
     );
     conn
       .read_query_row_get(count_query, filter_where_clause.params.clone(), 0)
@@ -96,7 +95,7 @@ pub async fn list_rows_handler(
   };
   let (rows, columns) = fetch_rows(
     &conn,
-    qualified_name,
+    &qualified_name,
     filter_where_clause,
     &order,
     Pagination {

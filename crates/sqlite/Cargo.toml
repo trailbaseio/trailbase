@@ -20,7 +20,7 @@ path = "benches/join-order/main.rs"
 harness = false
 
 [features]
-default = ["generic"]
+default = []
 generic = ["pg"]
 pg = ["dep:postgres", "dep:bytes", "dep:trailbase-pgrow2serde", "dep:regex"]
 
