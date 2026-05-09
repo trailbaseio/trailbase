@@ -863,20 +863,22 @@ mod tests {
     let (_db, exec) = build_pg_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
-    let uuid0: [u8; 16] = conn
-      .read_query_value("SELECT gen_random_uuid()", ())
-      .await
-      .unwrap()
-      .unwrap();
+    {
+      // Make sure `pglite-oxide`'s RNG works correctly.
+      // https://github.com/f0rr0/pglite-oxide/issues/29
+      let uuid0: [u8; 16] = conn
+        .read_query_value("SELECT gen_random_uuid()", ())
+        .await
+        .unwrap()
+        .unwrap();
 
-    let uuid1: [u8; 16] = conn
-      .read_query_value("SELECT gen_random_uuid()", ())
-      .await
-      .unwrap()
-      .unwrap();
+      let uuid1: [u8; 16] = conn
+        .read_query_value("SELECT gen_random_uuid()", ())
+        .await
+        .unwrap()
+        .unwrap();
 
-    // FIXME: Currently, pglite-oxide RNG doesn't work.
-    // assert_ne!(uuid0, uuid1);
-    assert_eq!(uuid0, uuid1);
+      assert_ne!(uuid0, uuid1);
+    }
   }
 }

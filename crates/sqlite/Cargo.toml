@@ -47,7 +47,7 @@ env_logger.workspace = true
 futures-util = { workspace = true }
 glob = "0.3.3"
 itertools = "0.14.0"
-pglite-oxide = { version ="0.4.1" }
+pglite-oxide = "0.5.0"
 rand = { workspace = true }
 tempfile = "3.19.1"
 uuid = { workspace = true }

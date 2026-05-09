@@ -128,7 +128,7 @@ axum-test = "20.0.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 indoc = "2.0.5"
-pglite-oxide = "0.4.1"
+pglite-oxide = "0.5.0"
 quoted_printable = "0.5.1"
 rcgen = "0.14.1"
 schemars = "1.0.0"
