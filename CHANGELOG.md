@@ -1,3 +1,11 @@
+## v0.27.3
+
+- Fix reset of sort/ordering state in admin table explorer when changing active schema.
+- Support a truly arbitrary number of databases in admin list tables API.
+- Stop using cached metadata for table explorer API.
+- Make shutdown watchdog more informative and robust, i.e. don't rely on runtime being shut down.
+- Update dependencies.
+
 ## v0.27.2
 
 - Mainline many Postgres related changes and wiring. This is mostly a no-op, since everything is behind a cargo feature flag. When enabled, this is far from being ready and many tests are failing, especially tests requiring schema metadata.
