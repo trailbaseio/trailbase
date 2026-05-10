@@ -88,19 +88,25 @@ export type ChangeErrorEvent = {
   };
 };
 
+export type ChangeInsertEvent = {
+  seq?: number;
+  Insert: object;
+};
+
+export type ChangeUpdateEvent = {
+  seq?: number;
+  Update: object;
+};
+
+export type ChangeDeleteEvent = {
+  seq?: number;
+  Delete: object;
+};
+
 export type ChangeEvent =
-  | {
-      seq?: number;
-      Insert: object;
-    }
-  | {
-      seq?: number;
-      Update: object;
-    }
-  | {
-      seq?: number;
-      Delete: object;
-    }
+  | ChangeInsertEvent
+  | ChangeUpdateEvent
+  | ChangeDeleteEvent
   | ChangeErrorEvent;
 
 // Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
@@ -526,22 +532,35 @@ export class RecordApiImpl<
       }
     }
 
+    const protocol = () => {
+      const p = this.client.base?.protocol;
+      // NOTE: The protocol contains the trailing ":".
+      switch (p) {
+        case "https:":
+          return "wss";
+        case "http:":
+          return "ws";
+        default:
+          throw Error(`Unexpected protocol: ${p}`);
+      }
+    };
+
+    const url = `${protocol()}://${this.client.base?.host ?? ""}${recordApiBasePath}/${this.name}/subscribe/${id}?${params}`;
+
     return new Promise<ReadableStream<ChangeEvent>>((resolve, reject) => {
-      const host = this.client.base?.host ?? "";
-      const protocol = this.client.base?.protocol === "https" ? "wss" : "ws";
-      const url = `${protocol}://${host}${recordApiBasePath}/${this.name}/subscribe/${id}?${params}`;
-
-      const socket = new WebSocket(url);
-
       const timeout = setTimeout(() => {
         reject("WS connection timeout");
       }, 5000);
 
+      let socket: WebSocket | undefined;
       const readable = new ReadableStream({
         start: (controller) => {
-          socket.addEventListener("open", (_openEvent) => {
+          // The `WebSocket` impl connects via HTTP(S) and `UPGRADE`s the connection.
+          const s = (socket = new WebSocket(url));
+
+          s.addEventListener("open", (_openEvent) => {
             // Initialize connection and authenticate.
-            socket.send(
+            s.send(
               JSON.stringify({
                 Init: {
                   auth_token: this.client.tokens()?.auth_token ?? null,
@@ -553,16 +572,16 @@ export class RecordApiImpl<
             resolve(readable);
           });
 
-          socket.addEventListener("close", () => {
+          s.addEventListener("close", () => {
             controller.close();
           });
 
-          socket.addEventListener("error", (err) => {
+          s.addEventListener("error", (err) => {
             controller.error(err);
           });
 
           // Listen for messages
-          socket.addEventListener("message", (event) => {
+          s.addEventListener("message", (event) => {
             if (typeof event.data !== "string") {
               new Error("expected JSON string");
             }
@@ -570,7 +589,7 @@ export class RecordApiImpl<
           });
         },
         cancel: () => {
-          socket.close();
+          socket?.close();
         },
       });
     });

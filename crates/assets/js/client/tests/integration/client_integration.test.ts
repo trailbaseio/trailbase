@@ -13,41 +13,25 @@ import {
   initClient,
   urlSafeBase64Encode,
 } from "../../src/index";
-import type { Client, Event, RecordApiImpl } from "../../src/index";
-import { exportedForTesting as recordExportForTesting } from "../../src/record_api";
+import type {
+  ChangeDeleteEvent,
+  ChangeInsertEvent,
+  ChangeUpdateEvent,
+  Client,
+  Event,
+} from "../../src/index";
 
-import { ADDRESS, USE_WS } from "../constants";
+import { ADDRESS } from "../constants";
+import {
+  SimpleStrict,
+  SimpleSubsetView,
+  SimpleCompleteView,
+  NewSimpleStrict,
+} from "../simple_strict";
 
 const { base64Encode } = indexExportForTesting!;
-const { subscribeWs } = recordExportForTesting!;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-type SimpleStrict = {
-  id: string;
-
-  text_null?: string;
-  text_default: string;
-  text_not_null: string;
-
-  int_null?: bigint;
-  int_default: bigint;
-  int_not_null: bigint;
-
-  // Add or generate missing fields.
-};
-
-type NewSimpleStrict = Partial<SimpleStrict>;
-
-type SimpleCompleteView = SimpleStrict;
-
-type SimpleSubsetView = {
-  id: string;
-
-  t_null?: string;
-  t_default?: string;
-  t_not_null: string;
-};
 
 async function connect(): Promise<Client> {
   const client = initClient(`http://${ADDRESS}`);
@@ -499,8 +483,16 @@ test("Subscribe to Record with specific id", async () => {
   await eventStream.cancel();
 
   expect(events).toHaveLength(2);
-  expect(events[0]["Update"]["text_not_null"]).equals(updatedMessage);
-  expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
+  expect(
+    ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(updatedMessage);
+  expect(
+    ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(updatedMessage);
 });
 
 test("Subscribe to entire table", async () => {
@@ -532,45 +524,22 @@ test("Subscribe to entire table", async () => {
   await eventStream.cancel();
 
   expect(events).toHaveLength(3);
-  expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
-  expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
-  expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
+  expect(
+    ((events[0] as ChangeInsertEvent)["Insert"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(createMessage);
+  expect(
+    ((events[1] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(updatedMessage);
+  expect(
+    ((events[2] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(updatedMessage);
 });
-
-if (USE_WS) {
-  test("Subscribe to entire table via WebSocket", async () => {
-    const client = await connect();
-    const api = client.records<NewSimpleStrict>("simple_strict_table");
-
-    const eventStream = await subscribeWs(api as RecordApiImpl, "*");
-
-    const now = new Date().getTime();
-    const createMessage = `ts client ws realtime test 0: =?&${now}`;
-    const id = (await api.create({
-      text_not_null: createMessage,
-    })) as string;
-
-    const updatedMessage = `ts client ws updated realtime test 0: ${now}`;
-    const updatedValue: Partial<SimpleStrict> = {
-      text_not_null: updatedMessage,
-    };
-    await api.update(id, updatedValue);
-    await api.delete(id);
-
-    const events: Event[] = [];
-    for await (const event of eventStream) {
-      events.push(event);
-      if (events.length === 3) {
-        break;
-      }
-    }
-
-    expect(events).toHaveLength(3);
-    expect(events[0]["Insert"]["text_not_null"]).equals(createMessage);
-    expect(events[1]["Update"]["text_not_null"]).equals(updatedMessage);
-    expect(events[2]["Delete"]["text_not_null"]).equals(updatedMessage);
-  });
-}
 
 test("Subscribe to table with record filters", async () => {
   const client = await connect();
@@ -611,8 +580,16 @@ test("Subscribe to table with record filters", async () => {
 
   // We should have skipped the creation.
   expect(events).toHaveLength(2);
-  expect(events[0]["Update"]["text_not_null"]).equals(updatedMessage);
-  expect(events[1]["Delete"]["text_not_null"]).equals(updatedMessage);
+  expect(
+    ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(updatedMessage);
+  expect(
+    ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
+      "text_not_null"
+    ],
+  ).equals(updatedMessage);
 });
 
 type FileUpload = {
