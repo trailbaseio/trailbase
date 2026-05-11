@@ -65,7 +65,7 @@ impl JsonColumnMetadata {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ColumnMetadata {
   /// The original table or view index. May be different from column index in a RecordApi after
   /// filtering out excluded columns.
@@ -83,7 +83,7 @@ pub struct ColumnMetadata {
 /// A data class describing a sqlite Table and additional meta data useful for TrailBase.
 ///
 /// An example of TrailBase idiosyncrasies are UUIDv7 columns, which are a bespoke concept.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TableMetadata {
   pub schema: Table,
 

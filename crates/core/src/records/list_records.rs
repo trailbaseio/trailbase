@@ -591,9 +591,13 @@ mod tests {
 
       conn
         .execute(
-          r#"CREATE TABLE "other" (
+          conditionally_transform_query(
+            r#"
+            CREATE TABLE "other" (
               "index" INTEGER PRIMARY KEY
-            ) STRICT"#,
+            ) STRICT
+            "#,
+          ),
           (),
         )
         .await
@@ -601,11 +605,15 @@ mod tests {
 
       conn
         .execute(
-          r#"CREATE TABLE "table" (
+          conditionally_transform_query(
+            r#"
+          CREATE TABLE "table" (
               tid     INTEGER PRIMARY KEY,
               "drop"  TEXT,
               "index" INTEGER REFERENCES "other"("index")
-            ) STRICT"#,
+            ) STRICT
+          "#,
+          ),
           (),
         )
         .await
@@ -696,14 +704,16 @@ mod tests {
     state
       .conn()
       .execute_batch(
+                conditionally_transform_query(
         r#"
         CREATE TABLE 'table' (
           id INTEGER PRIMARY KEY,
           'index' TEXT NOT NULL DEFAULT '',
           nullable INTEGER
         ) STRICT;
+
         INSERT INTO 'table' (id, 'index', nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
-      "#,
+        "#),
       )
       .await
       .unwrap();
@@ -1197,7 +1207,7 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         r#"
           CREATE TABLE data (
             id       INTEGER PRIMARY KEY,
@@ -1215,7 +1225,7 @@ mod tests {
             FROM data AS d
             WHERE d.flag > 0;
         "#,
-      )
+      ))
       .await
       .unwrap();
 
@@ -1305,7 +1315,7 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(format!(
+      .execute_batch(conditionally_transform_query(format!(
         r#"
         CREATE TABLE {name} (
           id            INTEGER PRIMARY KEY,
@@ -1319,7 +1329,7 @@ mod tests {
           ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
           (21, 'null',         NULL);
       "#
-      ))
+      )))
       .await
       .unwrap();
 

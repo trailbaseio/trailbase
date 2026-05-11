@@ -555,8 +555,6 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     (None, None)
   };
 
-  println!("PG URI: {pg_uri:?}");
-
   let TestStateOptions {
     config,
     mailer,

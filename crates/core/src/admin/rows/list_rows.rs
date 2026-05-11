@@ -258,19 +258,24 @@ mod tests {
   use trailbase_sqlvalue::Blob;
 
   use super::*;
-  use crate::{admin::rows::list_rows::Pagination, app_state::*, listing::WhereClause};
+  use crate::admin::rows::list_rows::Pagination;
+  use crate::app_state::*;
+  use crate::listing::WhereClause;
+  use crate::test_utils::*;
 
   #[tokio::test]
   async fn test_fetch_rows() {
     let pattern = serde_json::from_str(
-      r#"{
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string"
-            }
+      r#"
+      {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
           }
-        }"#,
+        }
+      }
+      "#,
     )
     .unwrap();
 
@@ -288,17 +293,18 @@ mod tests {
     let conn = state.conn();
 
     conn
-      .execute_batch(
-        r#"CREATE TABLE test_table (
-            text    TEXT NOT NULL,
-            number  INTEGER,
-            blob    BLOB NOT NULL,
-            json    TEXT CHECK(jsonschema('foo', json))
-          ) STRICT;
+      .execute_batch(conditionally_transform_query(
+        r#"
+        CREATE TABLE test_table (
+          text    TEXT NOT NULL,
+          number  INTEGER,
+          blob    BLOB NOT NULL,
+          json    TEXT CHECK(jsonschema('foo', json))
+        ) STRICT;
 
-          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, X'FACE', '{"name": "alice"}');
-          "#,
-      )
+        INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, X'FACE', '{"name": "alice"}');
+        "#,
+      ))
       .await
       .unwrap();
 

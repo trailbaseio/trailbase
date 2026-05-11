@@ -60,7 +60,7 @@ impl<'a> postgres::types::FromSql<'a> for Value {
       "int8" => Ok(Value::Integer(i64::from_sql(ty, raw)?)),
       "float4" => Ok(Value::Real(f32::from_sql(ty, raw)? as f64)),
       "float8" => Ok(Value::Real(f64::from_sql(ty, raw)?)),
-      "text" | "varchar" => Ok(Value::Text(String::from_sql(ty, raw)?)),
+      "text" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?)),
       "bytea" | "uuid" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?)),
       _ => Err(format!("Unsupported type: {ty}").into()),
     };
@@ -94,6 +94,7 @@ fn accepts_impl(ty: &postgres::types::Type) -> bool {
       | "float8"
       | "float4"
       | "text"
+      | "name"
       | "varchar"
       | "bytea"
       | "uuid"

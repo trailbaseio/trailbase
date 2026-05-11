@@ -1,0 +1,15 @@
+[package]
+name = "trailbase-pg-schema"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = "2.0.12"
+tokio = { workspace = true }
+trailbase-schema = { workspace = true }
+trailbase-sqlite = { workspace = true, features = ["generic"] }
+
+[dev-dependencies]
+pglite-oxide = "0.5.0"
+tempfile = "3.19.1"

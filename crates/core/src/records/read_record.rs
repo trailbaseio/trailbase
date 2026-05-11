@@ -429,17 +429,19 @@ mod test {
     let table_name = "table 😍";
     conn
       .execute(
-        format!(
-          r#"CREATE TABLE '{table_name}' (
+        conditionally_transform_query(format!(
+          r#"
+          CREATE TABLE "{table_name}" (
             id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
             file         TEXT CHECK(jsonschema('std.FileUpload', file)),
             files        TEXT CHECK(jsonschema('std.FileUploads', files)),
             -- Add a "keyword" column to ensure escaping is correct.
-            [index]      TEXT NOT NULL DEFAULT(''),
+            "index"      TEXT NOT NULL DEFAULT(''),
             -- A special char column to check more escaping.
-            [test 😍]    TEXT NOT NULL DEFAULT('')
-          ) STRICT"#
-        ),
+            "test 😍"    TEXT NOT NULL DEFAULT('')
+          ) STRICT
+          "#
+        )),
         (),
       )
       .await
@@ -930,13 +932,15 @@ mod test {
     state
       .conn()
       .execute(
-        format!(
-          r#"CREATE TABLE 'table' (
+        conditionally_transform_query(format!(
+          r#"
+          CREATE TABLE "table" (
             pid          INTEGER PRIMARY KEY,
-            [drop]       TEXT NOT NULL,
-            [index]      TEXT NOT NULL DEFAULT('')
-          ) STRICT"#
-        ),
+            "drop"       TEXT NOT NULL,
+            "index"      TEXT NOT NULL DEFAULT('')
+          ) STRICT
+          "#
+        )),
         (),
       )
       .await
@@ -1025,13 +1029,15 @@ mod test {
     let conn = state.conn();
     conn
       .execute(
-        format!(
-          r#"CREATE TABLE '{TABLE_NAME}' (
+        conditionally_transform_query(format!(
+          r#"
+          CREATE TABLE "{TABLE_NAME}" (
              id           INTEGER PRIMARY KEY NOT NULL,
              col0         TEXT NOT NULL DEFAULT(''),
              col1         TEXT NOT NULL DEFAULT('')
-           ) STRICT"#
-        ),
+          ) STRICT
+          "#
+        )),
         (),
       )
       .await
@@ -1100,7 +1106,7 @@ mod test {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         r#"
           CREATE TABLE parent (
             id           INTEGER PRIMARY KEY NOT NULL,
@@ -1116,7 +1122,7 @@ mod test {
 
           CREATE VIEW child_view AS SELECT * FROM child;
        "#,
-      )
+      ))
       .await
       .unwrap();
 
@@ -1215,12 +1221,14 @@ mod test {
     state
       .conn()
       .execute(
-        format!(
-          r#"CREATE TABLE '{name}' (
+        conditionally_transform_query(format!(
+          r#"
+          CREATE TABLE "{name}" (
             id           INTEGER PRIMARY KEY,
             list         TEXT NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
-          ) STRICT"#
-        ),
+          ) STRICT
+          "#
+        )),
         (),
       )
       .await
@@ -1286,12 +1294,14 @@ mod test {
     state
       .conn()
       .execute(
-        format!(
-          r#"CREATE TABLE '{name}' (
+        conditionally_transform_query(format!(
+          r#"
+          CREATE TABLE "{name}" (
             id           INTEGER PRIMARY KEY,
             geo          BLOB CHECK(ST_IsValid(geo))
-          ) STRICT"#
-        ),
+          ) STRICT
+          "#
+        )),
         (),
       )
       .await
