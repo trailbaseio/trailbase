@@ -8100,6 +8100,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-pg-schema"
+version = "0.0.1"
+dependencies = [
+ "pglite-oxide",
+ "serde",
+ "tempfile",
+ "tokio",
+ "trailbase-schema",
+ "trailbase-sqlite",
+]
+
+[[package]]
 name = "trailbase-pgrow2serde"
 version = "0.1.0"
 dependencies = [
