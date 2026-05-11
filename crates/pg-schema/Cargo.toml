@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 serde = { workspace = true }
+thiserror = "2.0.12"
 tokio = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true, features = ["generic"] }
