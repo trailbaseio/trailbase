@@ -1,0 +1,33 @@
+name: 'Setup Client Environments'
+description: 'Sets up the client build/test environment on Ubuntu'
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+    - name: Install Poetry and Python Dependencies
+      shell: bash
+      run: |
+        pipx install --python python3.13 "poetry==2.1.3" && poetry -C client/python install
+
+    - name: Set up Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: stable
+        flutter-version: 3.35.4
+
+    - name: Setup .NET SDK
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.x'
+
+    # - name: Setup Go
+    #   uses: actions/setup-go@v5
+    #   with:
+    #     go-version: "1.24.x"
+    # Swift 6.1 is preinstalled and swift-action sporadically fails on
+    # gpg issues: https://github.com/swift-actions/setup-swift/issues/694
+    # - uses: swift-actions/setup-swift@v2
+    #   with:
+    #     swift-version: "6.1"

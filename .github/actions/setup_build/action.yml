@@ -1,0 +1,41 @@
+name: 'Setup Build'
+description: 'Sets up the build/test environment on Ubuntu'
+# inputs:
+#   who-to-greet:  # id of input
+#     description: 'Who to greet'
+#     required: true
+#     default: 'World'
+# outputs:
+#   random-number:
+#     description: "Random number"
+#     value: ${{ steps.random-number-generator.outputs.random-number }}
+runs:
+  using: "composite"
+  steps:
+    - name: Inspect Checkout
+      shell: bash
+      run: git describe --tags
+
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        sudo apt-get update && \
+          sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libgeos-dev
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 22
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+    - name: PNPM install dependencies
+      shell: bash
+      run: |
+        pnpm install
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: 1.95.0
+        components: rustfmt, clippy
+        default: true

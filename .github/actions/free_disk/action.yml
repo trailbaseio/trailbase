@@ -1,0 +1,28 @@
+name: 'Free Disk'
+description: 'Frees up space on GitHub runners'
+runs:
+  using: "composite"
+  steps:
+    - name: Monitor Disk Space (Start)
+      shell: bash
+      run: df -h
+
+    - name: Free Disk Space
+      uses: jlumbroso/free-disk-space@main
+      with:
+        # this might remove tools that are actually needed,
+        # if set to "true" but frees about 6 GB
+        tool-cache: false
+
+        # all of these default to true, but feel free to set to
+        # "false" if necessary for your workflow
+        android: true
+        dotnet: false
+        haskell: true
+        large-packages: false
+        docker-images: true
+        swap-storage: true
+
+    - name: Monitor Disk Space (Post Cleanup)
+      shell: bash
+      run: df -h

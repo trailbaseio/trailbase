@@ -12,75 +12,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Monitor Disk Space (Start)
-        run: df -h
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # this might remove tools that are actually needed,
-          # if set to "true" but frees about 6 GB
-          tool-cache: false
-
-          # all of these default to true, but feel free to set to
-          # "false" if necessary for your workflow
-          android: true
-          dotnet: false
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: true
-      - name: Monitor Disk Space (Post Cleanup)
-        run: df -h
       - uses: actions/checkout@v6
         with:
           submodules: 'recursive'
           # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
           fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update && \
-            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev libgeos-dev
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.13'
-      - name: Install Poetry and Python Dependencies
-        run: |
-          pipx install --python python3.13 "poetry==2.1.3" && poetry -C client/python install
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - name: PNPM install
-        run: |
-          pnpm i
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: 3.35.4
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.x'
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: 1.95.0
-          components: rustfmt, clippy
-          default: true
-      # - name: Setup Go
-      #   uses: actions/setup-go@v5
-      #   with:
-      #     go-version: "1.24.x"
-      # Swift 6.1 is preinstalled and swift-action sporadically fails on
-      # gpg issues: https://github.com/swift-actions/setup-swift/issues/694
-      # - uses: swift-actions/setup-swift@v2
-      #   with:
-      #     swift-version: "6.1"
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+      - id: setup_clients
+        uses: ./.github/actions/setup_clients
+
       - name: "Build & Run Tests"
         uses: pre-commit/action@v3.0.1
         env:
