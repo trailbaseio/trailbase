@@ -1,20 +1,23 @@
 import { expect, test } from "vitest";
 import { status } from "http-status";
-import { ADDRESS } from "../constants";
+
+import { serverAddress } from "../setup";
 
 test("WASM runtime", async () => {
   async function tests() {
     expect(
-      await (await fetch(`http://${ADDRESS}/method`, { method: "GET" })).text(),
+      await (
+        await fetch(`http://${serverAddress()}/method`, { method: "GET" })
+      ).text(),
     ).toBe("get");
     expect(
       await (
-        await fetch(`http://${ADDRESS}/method`, { method: "POST" })
+        await fetch(`http://${serverAddress()}/method`, { method: "POST" })
       ).text(),
     ).toBe("post");
     expect(
       await (
-        await fetch(`http://${ADDRESS}/method`, { method: "DELETE" })
+        await fetch(`http://${serverAddress()}/method`, { method: "DELETE" })
       ).text(),
     ).toBe("delete");
 
@@ -27,20 +30,22 @@ test("WASM runtime", async () => {
       },
     };
 
-    const jsonUrl = `http://${ADDRESS}/json`;
+    const jsonUrl = `http://${serverAddress()}/json`;
     const json = await (await fetch(jsonUrl)).json();
     expect(json).toMatchObject(expected);
 
     const response = await fetch(
-      `http://${ADDRESS}/fetch?url=${encodeURI(jsonUrl)}`,
+      `http://${serverAddress()}/fetch?url=${encodeURI(jsonUrl)}`,
     );
     expect(await response.json()).toMatchObject(expected);
 
-    const errResp = await fetch(`http://${ADDRESS}/error`);
+    const errResp = await fetch(`http://${serverAddress()}/error`);
     expect(errResp.status).equals(status.IM_A_TEAPOT);
 
     // Test that the periodic callback was called.
-    expect((await fetch(`http://${ADDRESS}/await`)).status).equals(status.OK);
+    expect((await fetch(`http://${serverAddress()}/await`)).status).equals(
+      status.OK,
+    );
   }
 
   // Run above tests a few times concurrently.
@@ -51,7 +56,7 @@ test("WASM runtime", async () => {
 
 test("WASM runtime outgoing TLS/HTTPS", async ({ expect }) => {
   const response = await fetch(
-    `http://${ADDRESS}/fetch?url=${encodeURI("https://example.com")}`,
+    `http://${serverAddress()}/fetch?url=${encodeURI("https://example.com")}`,
   );
   expect(response.ok);
 });
@@ -59,8 +64,8 @@ test("WASM runtime outgoing TLS/HTTPS", async ({ expect }) => {
 test("WASM runtime DB Query & Execute", async ({ expect }) => {
   const responses = await Promise.all(
     Array.from({ length: 25 }, async (_v, _i) => {
-      // const response = await fetch(`http://${ADDRESS}/js/addDeletePost`);
-      const response = await fetch(`http://${ADDRESS}/addDeletePost`);
+      // const response = await fetch(`http://${serverAddress()}/js/addDeletePost`);
+      const response = await fetch(`http://${serverAddress()}/addDeletePost`);
 
       return await response.text();
     }),
@@ -75,7 +80,7 @@ test("WASM runtime DB Query & Execute", async ({ expect }) => {
 test("WASM runtime DB Transaction", async ({ expect }) => {
   await Promise.all(
     Array.from({ length: 25 }, async (_v, _i) => {
-      const response = await fetch(`http://${ADDRESS}/transaction`);
+      const response = await fetch(`http://${serverAddress()}/transaction`);
       expect(response.status, `Got: ${await response.text()}`).toBe(200);
     }),
   );
@@ -84,7 +89,7 @@ test("WASM runtime DB Transaction", async ({ expect }) => {
 test("WASM runtime custom SQLite extension functions", async () => {
   // We call the stateful count endpoint 100 times concurrently, sort the result and check it's (0..99).
   async function getCount(): Promise<number> {
-    const response = await fetch(`http://${ADDRESS}/sqlite_stateful`);
+    const response = await fetch(`http://${serverAddress()}/sqlite_stateful`);
 
     return parseInt((await response.text()).trim());
   }
@@ -101,7 +106,7 @@ test("WASM runtime custom SQLite extension functions", async () => {
 test("WASM runtime calling sqlite-vec", async () => {
   await Promise.all(
     Array.from({ length: 25 }, async (_v, _i) => {
-      const response = await fetch(`http://${ADDRESS}/test_sqlite-vec`);
+      const response = await fetch(`http://${serverAddress()}/test_sqlite-vec`);
       const b64Vec = (await response.text()).trim();
 
       expect(b64Vec).toEqual("AAAAAAAAgD8AAABAAABAQA==");

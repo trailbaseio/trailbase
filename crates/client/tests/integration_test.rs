@@ -45,7 +45,13 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
     let depot_path = "client/testfixture";
 
     let _output = std::process::Command::new("cargo")
-      .args(&["build"])
+      .args(&[
+        "build",
+        #[cfg(feature = "ws")]
+        {
+          "--features=ws"
+        },
+      ])
       .current_dir(&command_cwd)
       .output()?;
 
@@ -101,7 +107,7 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
     let client = reqwest::Client::new();
     let url = format!("{site}/api/healthcheck", site = site());
 
-    for _ in 0..100 {
+    for _ in 0..200 {
       if let Some(child) = &mut child
         && let Ok(Some(status)) = child.try_wait()
       {

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { OAuth2Server } from "oauth2-mock-server";
-import { ADDRESS, PORT } from "../constants";
+
+import { serverAddress, serverPort } from "../setup";
 
 type OpenIdConfig = {
   issuer: string;
@@ -11,7 +12,8 @@ type OpenIdConfig = {
 
 // NOTE: Having this server test live alongside the client is a bit odd.
 test("OIDC", async () => {
-  if (PORT === 4000) {
+  if (serverPort() === 4000) {
+    console.info("Skipping OIDC setup for tests with external TB instances.");
     return;
   }
 
@@ -42,7 +44,7 @@ test("OIDC", async () => {
 
   const redirectUri = "/_/auth/expected";
   const login = await fetch(
-    `http://${ADDRESS}/api/auth/v1/oauth/oidc0/login?redirect_uri=${redirectUri}`,
+    `http://${serverAddress()}/api/auth/v1/oauth/oidc0/login?redirect_uri=${redirectUri}`,
     {
       redirect: "manual",
     },

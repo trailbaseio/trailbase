@@ -7,13 +7,13 @@ import type { ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import spawn from "nano-spawn";
 
-import { ADDRESS, PORT, USE_WS } from "./constants";
+import { serverAddress, serverPort, useWebSocket } from "./setup";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
-  if (PORT === 4000) {
-    // Rely on externally bootstrapped instance.
+  if (serverPort() === 4000) {
+    console.info("Skipping server-startup, relying on external instance.");
     return { subprocess: null };
   }
 
@@ -27,7 +27,7 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
     throw new Error(root);
   }
 
-  const features = USE_WS ? ["--features=ws"] : [];
+  const features = useWebSocket() ? ["--features=ws"] : [];
   await spawn("cargo", ["build", ...features], { cwd: root });
 
   const args = [
@@ -35,9 +35,9 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
     ...features,
     "--",
     "--data-dir=client/testfixture",
-    `--public-url=http://${ADDRESS}`,
+    `--public-url=http://${serverAddress()}`,
     "run",
-    `--address=${ADDRESS}`,
+    `--address=${serverAddress()}`,
     "--runtime-threads=1",
   ];
 
@@ -55,7 +55,7 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
     }
 
     try {
-      const response = await fetch(`http://${ADDRESS}/api/healthcheck`);
+      const response = await fetch(`http://${serverAddress()}/api/healthcheck`);
       if (response.ok) {
         return { subprocess: child };
       }
@@ -106,7 +106,7 @@ try {
     const ctx = await createVitest("test", {
       watch: false,
       environment: "node",
-      include: nodeEnvTests(USE_WS),
+      include: nodeEnvTests(useWebSocket()),
     });
 
     await ctx.start();

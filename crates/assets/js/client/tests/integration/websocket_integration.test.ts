@@ -1,27 +1,18 @@
-/* eslint-disable @typescript-eslint/no-unused-expressions */
 import { expect, test } from "vitest";
 
-import { initClient } from "../../src/index";
 import type {
   ChangeDeleteEvent,
   ChangeInsertEvent,
   ChangeUpdateEvent,
-  Client,
   Event,
   RecordApiImpl,
 } from "../../src/index";
 import { exportedForTesting as recordExportForTesting } from "../../src/record_api";
 
-import { ADDRESS } from "../constants";
+import { connect } from "../setup";
 import { SimpleStrict, NewSimpleStrict } from "../simple_strict";
 
 const { subscribeWs } = recordExportForTesting!;
-
-async function connect(): Promise<Client> {
-  const client = initClient(`http://${ADDRESS}`);
-  await client.login("admin@localhost", "secret");
-  return client;
-}
 
 test("Subscribe to entire table via WebSocket", async () => {
   const client = await connect();

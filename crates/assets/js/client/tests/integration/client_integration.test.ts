@@ -21,7 +21,7 @@ import type {
   Event,
 } from "../../src/index";
 
-import { ADDRESS } from "../constants";
+import { serverAddress, connect } from "../setup";
 import {
   SimpleStrict,
   SimpleSubsetView,
@@ -32,12 +32,6 @@ import {
 const { base64Encode } = indexExportForTesting!;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-async function connect(): Promise<Client> {
-  const client = initClient(`http://${ADDRESS}`);
-  await client.login("admin@localhost", "secret");
-  return client;
-}
 
 // WARN: this test is not hermetic. I requires an appropriate TrailBase instance to be running.
 test("Auth integration tests", async () => {
@@ -71,7 +65,7 @@ test("Auth integration tests", async () => {
 });
 
 test("Multi-factor auth integration tests", async () => {
-  const client = initClient(`http://${ADDRESS}`);
+  const client = initClient(`http://${serverAddress()}`);
   const mfaToken = await client.login("alice@trailbase.io", "secret");
   expect(mfaToken).not.toBeUndefined();
 
@@ -370,7 +364,7 @@ test("API Errors", async () => {
     new FetchError(
       status.NOT_FOUND,
       "Not Found",
-      new URL(`http://${ADDRESS}/nonexistent/api/path`),
+      new URL(`http://${serverAddress()}/nonexistent/api/path`),
     ),
   );
 
@@ -382,7 +376,9 @@ test("API Errors", async () => {
     new FetchError(
       status.METHOD_NOT_ALLOWED,
       "Method Not Allowed",
-      new URL(`http://${ADDRESS}/api/records/v1/non-existent/${nonExistentId}`),
+      new URL(
+        `http://${serverAddress()}/api/records/v1/non-existent/${nonExistentId}`,
+      ),
     ),
   );
 
@@ -394,7 +390,7 @@ test("API Errors", async () => {
       // Custom error reply by RecordError's IntoResponse impl.
       "Invalid id",
       new URL(
-        `http://${ADDRESS}/api/records/v1/simple_strict_table/${invalidId}`,
+        `http://${serverAddress()}/api/records/v1/simple_strict_table/${invalidId}`,
       ),
     ),
   );
@@ -404,7 +400,7 @@ test("API Errors", async () => {
       status.NOT_FOUND,
       "Not Found",
       new URL(
-        `http://${ADDRESS}/api/records/v1/simple_strict_table/${nonExistentId}`,
+        `http://${serverAddress()}/api/records/v1/simple_strict_table/${nonExistentId}`,
       ),
     ),
   );
@@ -669,27 +665,27 @@ async function testBase64FileUploads(
 
   // Test file download endpoints to verify actual file content
   const singleFileResponse = await fetch(
-    `http://${ADDRESS}${filePath(apiName, recordId, "single_file")}`,
+    `http://${serverAddress()}${filePath(apiName, recordId, "single_file")}`,
   );
   expect(await singleFileResponse.bytes()).toEqual(testBytes1);
 
   const singleFilesResponse = await fetch(
-    `http://${ADDRESS}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
+    `http://${serverAddress()}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
   );
   expect(await singleFilesResponse.bytes()).toEqual(testBytes1);
 
   const multiFile1Response = await fetch(
-    `http://${ADDRESS}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
+    `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
   );
   expect(await multiFile1Response.bytes()).toEqual(testBytes2);
 
   const multiFile2Response = await fetch(
-    `http://${ADDRESS}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
+    `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
   );
   expect(await multiFile2Response.bytes()).toEqual(testBytes3);
 
   const notFoundResponse = await fetch(
-    `http://${ADDRESS}${filesPath(apiName, recordId, "multiple_files", "non-existent-filename")}`,
+    `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", "non-existent-filename")}`,
   );
   expect(notFoundResponse.status).toEqual(status.NOT_FOUND);
 
