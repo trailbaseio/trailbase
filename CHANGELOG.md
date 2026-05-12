@@ -1,3 +1,10 @@
+## v0.27.4
+
+- Better support for multi-line RecordApi access rules in admin UI by use of `<textarea>`, monospace fonts & some minor layout tweaks.
+- Fix stale UI proto definitions and add a `pre-commit` codegen task to avoid this in the future.
+- Add better CI coverage for WebSocket builds and non-default cargo features.
+- Update dependencies.
+
 ## v0.27.3
 
 - Fix reset of sort/ordering state in admin table explorer when changing active schema.
