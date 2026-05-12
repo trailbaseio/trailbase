@@ -27,6 +27,7 @@ auth {
       user_api_url: "http://localhost:9088/userinfo"
     }
   }]
+  redirect_uri_allowlist: ["https://allowlisted.example.com"]
 }
 jobs {}
 databases: [{

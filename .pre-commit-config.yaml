@@ -76,6 +76,15 @@ repos:
       # NOTE: We're relying on pnpm workspaces instead.
       pass_filenames: false
 
+    # Re-generate proto code.
+    - id: pnpm_proto
+      name: PNPM re-gen proto definitions
+      entry: pnpm -r proto
+      language: system
+      types_or: [proto]
+      # NOTE: We're relying on pnpm workspaces instead.
+      pass_filenames: false
+
     - id: build_website
       name: Build Website
       entry: sh -c 'pnpm i --frozen-lockfile --prefer-offline && pnpm -C docs build'
