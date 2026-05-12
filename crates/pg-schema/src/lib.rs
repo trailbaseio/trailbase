@@ -35,10 +35,55 @@ struct ColumnInformationSchema {
   column_name: String,
   ordinal_position: i32,
   // Is "NO" or "YES" :/.
-  is_nullable: String,
   data_type: String,
+  is_nullable: String,
   column_default: Option<String>,
+  primary_key: Option<String>,
+  foreign_key: Option<String>,
+  unique_constraint: Option<String>,
+  check_constraint: Option<String>,
 }
+
+const QUERY_COLUMNS_WITH_CONSTRAINTS: &str = "
+SELECT
+    c.table_catalog,
+    c.table_schema,
+    c.table_name,
+    c.column_name,
+    c.ordinal_position,
+    c.data_type,
+    c.is_nullable,
+    c.column_default,
+    MAX(CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN tc.constraint_name END) AS primary_key,
+    MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN tc.constraint_name END) AS foreign_key,
+    MAX(CASE WHEN tc.constraint_type = 'UNIQUE' THEN tc.constraint_name END) AS unique_constraint,
+    MAX(CASE WHEN tc.constraint_type = 'CHECK' THEN tc.constraint_name END) AS check_constraint
+FROM information_schema.columns c
+LEFT JOIN information_schema.key_column_usage kcu
+    ON c.table_schema = kcu.table_schema
+    AND c.table_name = kcu.table_name
+    AND c.column_name = kcu.column_name
+LEFT JOIN information_schema.table_constraints tc
+    ON kcu.constraint_name = tc.constraint_name
+    AND kcu.table_schema = tc.table_schema
+    AND kcu.table_name = tc.table_name
+WHERE
+    c.table_schema NOT IN ('pg_catalog', 'information_schema')
+    AND c.table_name = $1
+GROUP BY
+    c.table_catalog,
+    c.table_schema,
+    c.table_name,
+    c.column_name,
+    c.ordinal_position,
+    c.data_type,
+    c.is_nullable,
+    c.column_default
+ORDER BY
+    -- c.table_schema,
+    -- c.table_name,
+    c.ordinal_position;
+";
 
 async fn get_columns(
   conn: &Connection,
@@ -47,12 +92,7 @@ async fn get_columns(
   return Ok(
     conn
       .read_query_values(
-        "
-          SELECT * \
-            FROM information_schema.columns \
-            WHERE table_name = $1 \
-            ORDER BY ordinal_position; \
-        ",
+        QUERY_COLUMNS_WITH_CONSTRAINTS,
         params!(table_name.to_string()),
       )
       .await?,
@@ -104,6 +144,7 @@ mod tests {
 
         CREATE TABLE table1 (
           id     INTEGER PRIMARY KEY,
+          fk     INTEGER REFERENCES table0(id),
           a      TEXT DEFAULT ('foo'),
           b      INT8 NOT NULL DEFAULT (5)
         );
@@ -131,6 +172,10 @@ mod tests {
         is_nullable: "NO".to_string(),
         data_type: "integer".to_string(),
         column_default: None,
+        primary_key: Some("table0_pkey".to_string()),
+        foreign_key: None,
+        unique_constraint: None,
+        check_constraint: None,
       },]
     );
 
@@ -149,26 +194,52 @@ mod tests {
           is_nullable: "NO".to_string(),
           data_type: "integer".to_string(),
           column_default: None,
+          primary_key: Some("table1_pkey".to_string()),
+          foreign_key: None,
+          unique_constraint: None,
+          check_constraint: None,
+        },
+        ColumnInformationSchema {
+          table_catalog: "template1".to_string(),
+          table_schema: "public".to_string(),
+          table_name: "table1".to_string(),
+          column_name: "fk".to_string(),
+          ordinal_position: 2,
+          is_nullable: "YES".to_string(),
+          data_type: "integer".to_string(),
+          column_default: None,
+          primary_key: None,
+          foreign_key: Some("table1_fk_fkey".to_string()),
+          unique_constraint: None,
+          check_constraint: None,
         },
         ColumnInformationSchema {
           table_catalog: "template1".to_string(),
           table_schema: "public".to_string(),
           table_name: "table1".to_string(),
           column_name: "a".to_string(),
-          ordinal_position: 2,
+          ordinal_position: 3,
           is_nullable: "YES".to_string(),
           data_type: "text".to_string(),
           column_default: Some("'foo'::text".to_string()),
+          primary_key: None,
+          foreign_key: None,
+          unique_constraint: None,
+          check_constraint: None,
         },
         ColumnInformationSchema {
           table_catalog: "template1".to_string(),
           table_schema: "public".to_string(),
           table_name: "table1".to_string(),
           column_name: "b".to_string(),
-          ordinal_position: 3,
+          ordinal_position: 4,
           is_nullable: "NO".to_string(),
           data_type: "bigint".to_string(),
           column_default: Some("5".to_string()),
+          primary_key: None,
+          foreign_key: None,
+          unique_constraint: None,
+          check_constraint: None,
         },
       ]
     );
