@@ -266,6 +266,29 @@ impl Params {
         continue;
       };
 
+      // For file upload columns in Update/`PATCH` requests: if the client echoes back the stored
+      // FileUpload/FileUploads format (no 'data' field), skip the column entirely rather
+      // than returning an error. This preserves the existing file without modification,
+      // which is the expected behavior when a client round-trips a record through the API.
+      if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
+        match (schema_name.as_str(), &value) {
+          ("std.FileUpload", serde_json::Value::Object(map)) if !map.contains_key("data") => {
+            continue;
+          }
+          ("std.FileUploads", serde_json::Value::Array(items))
+            if items
+              .iter()
+              .all(|v| matches!(v, serde_json::Value::Object(m) if !m.contains_key("data"))) =>
+          {
+            // QUESTION: Right now one can update/preserve a `std.FileUploads` column
+            // as a whole. It may be worth to allow patching (adding, removing,
+            // updating) individual files.
+            continue;
+          }
+          _ => {}
+        };
+      }
+
       let (param, json_files) = extract_params_and_files_from_json(
         json_schema_registry,
         column,
@@ -889,6 +912,103 @@ mod tests {
           "blob": [65,66,67,68],
           "text": "test",
         }),
+      );
+    }
+  }
+
+  #[tokio::test]
+  async fn test_for_update_skips_stored_file_upload() {
+    let table: Table = parse_into_statement(
+      "
+      CREATE TABLE records (
+        id      INTEGER PRIMARY KEY,
+        name    TEXT NOT NULL,
+        avatar  TEXT CHECK(jsonschema('std.FileUpload', avatar))
+      ) STRICT;
+      ",
+    )
+    .unwrap()
+    .unwrap()
+    .try_into()
+    .unwrap();
+
+    let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
+
+    let id: i64 = 5;
+
+    // Test: stored FileUpload format in PATCH body (no 'data' field) should be skipped.
+    // This happens when TanStack DB or any client reads a record and echoes back the stored
+    // file reference in a PATCH request without intending to upload a new file.
+    {
+      let value = json!({
+        "name": "Alice",
+        "avatar": {
+          "filename": "avatar_abc123.jpg",
+          "original_filename": "avatar.jpg",
+          "content_type": "image/jpeg",
+          "mime_type": "image/jpeg"
+        }
+      });
+
+      let params = Params::for_update(
+        &metadata,
+        &registry,
+        json_row_from_value(value).unwrap(),
+        None,
+        "id".to_string(),
+        Value::Integer(id),
+      )
+      .unwrap();
+
+      let Params::Update {
+        named_params: _,
+        column_names,
+        ..
+      } = params
+      else {
+        panic!("Expected Update params");
+      };
+
+      // Avatar file-column should be skipped, i.e. be absent in the UPDATE clause.
+      assert_eq!(
+        vec!["name"],
+        column_names,
+        "Stored FileUpload should be skipped in PATCH, but column_names = {column_names:?}"
+      );
+    }
+
+    // Test: FileUploadInput with 'data' field should NOT be skipped.
+    {
+      let png_data = BASE64_URL_SAFE.encode([137u8, 80, 78, 71]);
+      let value_with_new_file = json!({
+        "name": "Bob",
+        "avatar": {
+          "filename": "new_avatar.jpg",
+          "content_type": "image/jpeg",
+          "data": png_data
+        }
+      });
+
+      let params_with_file = Params::for_update(
+        &metadata,
+        &registry,
+        json_row_from_value(value_with_new_file).unwrap(),
+        None,
+        "id".to_string(),
+        Value::Integer(id),
+      )
+      .unwrap();
+
+      let Params::Update { column_names, .. } = params_with_file else {
+        panic!("Expected Update params");
+      };
+
+      // Avatar should be present when there IS a 'data' field (new upload).
+      assert_eq!(
+        vec!["avatar", "name"],
+        column_names,
+        "New FileUploadInput with data field must be included, but column_names = {column_names:?}"
       );
     }
   }
