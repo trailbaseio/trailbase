@@ -10,6 +10,9 @@ pub mod metadata;
 pub mod records;
 pub mod util;
 
+#[cfg(test)]
+pub mod test_utils;
+
 mod admin;
 mod auth;
 mod connection;

@@ -353,7 +353,7 @@ mod test {
             "data"    TEXT NOT NULL
           ) STRICT;
 
-          INSERT INTO test (user, data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
+          INSERT INTO test ("user", data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
         "#,
       ))
       .await

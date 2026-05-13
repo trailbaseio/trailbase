@@ -59,7 +59,7 @@ mod tests {
     state
       .user_conn()
       .execute(
-        format!("DELETE FROM '{USER_TABLE}' WHERE id = $1"),
+        format!("DELETE FROM \"{USER_TABLE}\" WHERE id = $1"),
         params!(*user.uuid().as_bytes()),
       )
       .await

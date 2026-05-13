@@ -323,14 +323,14 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         r#"
           CREATE TABLE test (
             id      INTEGER PRIMARY KEY,
             value   INTEGER
           ) STRICT;
         "#,
-      )
+      ))
       .await
       .unwrap();
 

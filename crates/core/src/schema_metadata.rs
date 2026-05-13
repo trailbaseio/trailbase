@@ -75,10 +75,12 @@ pub async fn lookup_and_parse_table_schema(
   database: Option<&str>,
 ) -> Result<Table, SchemaLookupError> {
   // Then get the actual table.
+  //
+  // FIXME: for PG.
   let sql: String = conn
     .read_query_row_get(
       format!(
-        "SELECT sql FROM '{db}'.{SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1",
+        "SELECT sql FROM \"{db}\".{SQLITE_SCHEMA_TABLE} WHERE type = 'table' AND name = $1",
         db = database.unwrap_or("main")
       ),
       params!(table_name.to_string()),
@@ -140,18 +142,24 @@ fn setup_file_deletion_triggers(
 
       let column_name = &column_meta.column.name;
 
+      #[cfg(feature = "pg")]
+      {
+        log::warn!("Skipping file triggers for PG column: '{table_name}'::'{column_name}'");
+        continue;
+      }
+
       conn.execute_batch(format!(
           "\
-          DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger'; \
-          CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__update_trigger' AFTER UPDATE ON {table_name} \
+          DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\"; \
+          CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\" AFTER UPDATE ON {table_name} \
             WHEN OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\" \
             BEGIN \
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
                 ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
             END; \
           \
-          DROP TRIGGER IF EXISTS '{db}'.'__{unqualified_name}__{column_name}__delete_trigger'; \
-          CREATE TRIGGER IF NOT EXISTS '{db}'.'__{unqualified_name}__{column_name}__delete_trigger' AFTER DELETE ON {table_name} \
+          DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\"; \
+          CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\" AFTER DELETE ON {table_name} \
             WHEN OLD.\"{column_name}\" IS NOT NULL \
             BEGIN \
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
@@ -174,7 +182,7 @@ fn lookup_and_parse_all_table_schemas(
   let mut tables: Vec<Table> = vec![];
   for db in databases {
     let query = format!(
-      "SELECT sql FROM '{db}'.{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
+      "SELECT sql FROM \"{db}\".{SQLITE_SCHEMA_TABLE} WHERE type = 'table'",
       db = db.name
     );
 
@@ -204,7 +212,7 @@ fn lookup_and_parse_all_view_schemas(
   for db in databases {
     // Then get the actual views.
     let query = format!(
-      "SELECT sql FROM '{db}'.{SQLITE_SCHEMA_TABLE} WHERE type = 'view'",
+      "SELECT sql FROM \"{db}\".{SQLITE_SCHEMA_TABLE} WHERE type = 'view'",
       db = db.name
     );
 
@@ -269,6 +277,7 @@ mod tests {
   use crate::records::list_records::{ListOrGeoJSONResponse, list_records_handler};
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::add_record_api_config;
+  use crate::test_utils::*;
 
   #[tokio::test]
   async fn test_column_nullability() {
@@ -276,7 +285,7 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         "
             CREATE TABLE test (
                 id  INTEGER PRIMARY KEY,
@@ -287,7 +296,7 @@ mod tests {
 
             INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
         ",
-      )
+      ))
       .await
       .unwrap();
 
@@ -350,7 +359,7 @@ mod tests {
       } = state.connection_manager().main_entry();
 
       conn
-        .execute_batch(format!(
+        .execute_batch(conditionally_transform_query(format!(
           "
             CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT;
 
@@ -361,7 +370,7 @@ mod tests {
             ) STRICT;
           ",
           table_name = table_name.escaped_string(),
-        ))
+        )))
         .await
         .unwrap();
 
@@ -608,7 +617,7 @@ mod tests {
       .connection_manager()
       .main_entry()
       .connection
-      .execute_batch(format!(
+      .execute_batch(conditionally_transform_query(format!(
         r#"
         CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT;
         INSERT INTO foreign_table0 (id) VALUES (1);
@@ -625,7 +634,7 @@ mod tests {
 
         INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);
         "#
-      ))
+      )))
       .await
       .unwrap();
 
