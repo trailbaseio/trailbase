@@ -92,9 +92,11 @@ pub(crate) async fn run_get_file_query(
       let json: String = row
         .get(0)
         .map_err(|err| RecordError::Internal(err.into()))?;
+
       let file_upload: FileUpload =
         serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?;
-      Ok(file_upload)
+
+      return Ok(file_upload);
     }
     _ => Err(RecordError::BadRequest("Not a file")),
   };

@@ -2,6 +2,8 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 use const_format::formatcp;
 use std::sync::LazyLock;
+use trailbase_schema::metadata::{ColumnMetadata, TableMetadata};
+use trailbase_schema::sqlite::{Column, ColumnOption, Table};
 use trailbase_schema::{FileUploadInput, QualifiedName};
 
 use crate::app_state::AppState;
@@ -30,23 +32,11 @@ pub async fn get_avatar_handler(
     return Err(AuthError::BadRequest("Invalid user id"));
   };
 
-  let ConnectionEntry {
-    connection: conn,
-    metadata,
-  } = state.connection_manager().main_entry();
-
-  let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
-    return Err(AuthError::Internal("missing table".into()));
-  };
-
-  let Some(file_column_meta) = table_metadata.column_by_name("file") else {
-    return Err(AuthError::Internal("missing column".into()));
-  };
-
+  let conn = state.user_conn();
   let file_upload = run_get_file_query(
-    &conn,
+    conn,
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
-    file_column_meta,
+    &AVATAR_TABLE_FILE_COLUMN,
     "user",
     trailbase_sqlite::Value::Blob(user_id.into()),
   )
@@ -72,14 +62,17 @@ pub async fn create_avatar_handler(
   user: User,
   either_request: Either<serde_json::Value>,
 ) -> Result<(), AuthError> {
-  let ConnectionEntry {
-    connection: conn,
-    metadata,
-  } = state.connection_manager().main_entry();
+  let conn = state.user_conn();
 
-  let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
-    return Err(AuthError::Internal("missing table".into()));
-  };
+  #[cfg(all(not(feature = "pg"), debug_assertions))]
+  {
+    let ConnectionEntry { metadata, .. } = state.connection_manager().main_entry();
+    let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
+      return Err(AuthError::Internal("missing table".into()));
+    };
+
+    assert_eq!(table_metadata.schema, AVATAR_TABLE_METADATA.schema);
+  }
 
   let files: Vec<FileUploadInput> = match either_request {
     Either::Multipart(_value, files) => files,
@@ -98,7 +91,7 @@ pub async fn create_avatar_handler(
   )]);
 
   let lazy_params = LazyParams::for_insert(
-    table_metadata,
+    &*AVATAR_TABLE_METADATA,
     state.json_schema_registry().clone(),
     record,
     Some(files),
@@ -108,7 +101,7 @@ pub async fn create_avatar_handler(
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
 
   let _user_id_value = run_insert_query(
-    &conn,
+    conn,
     state.objectstore(),
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     Some(ConflictResolutionStrategy::Replace),
@@ -141,9 +134,87 @@ pub async fn delete_avatar_handler(
   return Ok(());
 }
 
+static AVATAR_TABLE_FILE_COLUMN: LazyLock<ColumnMetadata> = LazyLock::new(|| ColumnMetadata {
+  index: 1,
+  column: Column {
+    name: String::from("file"),
+    type_name: String::from("TEXT"),
+    data_type: trailbase_schema::sqlite::ColumnDataType::Text,
+    affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Text,
+    options: vec![
+      ColumnOption::Check(
+        "jsonschema ('std.FileUpload', file, 'image/png, image/jpeg')".to_string(),
+      ),
+      ColumnOption::NotNull,
+    ],
+  },
+  json: Some(trailbase_schema::metadata::JsonColumnMetadata::SchemaName(
+    String::from("std.FileUpload"),
+  )),
+  is_file: true,
+  is_geometry: false,
+});
+
 static AVATAR_TABLE_NAME: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedName {
   name: AVATAR_TABLE.to_string(),
-  database_schema: None,
+  database_schema: Some(if cfg!(feature = "pg") {
+    "main".to_string()
+  } else {
+    "public".to_string()
+  }),
+});
+
+// NOTE: We need TableMetadata to re-use the more generic RecordApi utilities for reading and
+// writing file columns. We could get this from the schema registry, however the avatar table
+// schema is always the same(as opposed to various RecordApi tables), so we may as well
+// make it static. Moreover, this helps with the PG work in the interim.
+static AVATAR_TABLE_METADATA: LazyLock<TableMetadata> = LazyLock::new(|| {
+  let schema = Table {
+    name: AVATAR_TABLE_NAME.clone(),
+    strict: true,
+    columns: vec![
+      Column {
+        name: String::from("user"),
+        type_name: String::from("BLOB"),
+        data_type: trailbase_schema::sqlite::ColumnDataType::Blob,
+        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Blob,
+        options: vec![
+          ColumnOption::Unique {
+            is_primary: true,
+            conflict_clause: None,
+          },
+          ColumnOption::NotNull,
+          ColumnOption::ForeignKey {
+            foreign_table: "_user".to_string(),
+            referred_columns: vec!["id".to_string()],
+            on_delete: Some(trailbase_schema::sqlite::ReferentialAction::Cascade),
+            on_update: None,
+          },
+        ],
+      },
+      AVATAR_TABLE_FILE_COLUMN.column.clone(),
+      Column {
+        name: String::from("updated"),
+        type_name: String::from("INTEGER"),
+        data_type: trailbase_schema::sqlite::ColumnDataType::Integer,
+        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
+        options: vec![
+          ColumnOption::Default("(UNIXEPOCH ())".to_string()),
+          ColumnOption::NotNull,
+        ],
+      },
+    ],
+    foreign_keys: vec![],
+    unique: vec![],
+    checks: vec![],
+    virtual_table: false,
+    temporary: false,
+  };
+
+  let json_schema_registry =
+    trailbase_schema::registry::build_json_schema_registry(vec![]).expect("static");
+
+  return TableMetadata::new(&json_schema_registry, schema.clone(), &[schema]).expect("static");
 });
 
 #[cfg(test)]
@@ -231,10 +302,10 @@ mod tests {
       get_avatar_handler(State(state.clone()), Path(id_to_b64(&db_user.id)))
         .await
         .err();
-    assert!(matches!(
-      missing_profile_response,
-      Some(AuthError::NotFound)
-    ));
+    assert!(
+      matches!(missing_profile_response, Some(AuthError::NotFound)),
+      "{missing_profile_response:?}"
+    );
 
     const PNG0: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0b";
     const PNG1: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0c";
