@@ -185,10 +185,6 @@ export function InsertUpdateRowForm(props: {
     }
   });
 
-  form.createField(() => ({
-    name: "row.test",
-  }));
-
   return (
     <SheetContainer>
       <SheetHeader>

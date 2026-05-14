@@ -7,7 +7,6 @@ import sitemap from "@astrojs/sitemap";
 import solid from "@astrojs/solid-js";
 import starlight from "@astrojs/starlight";
 import starlightLinksValidator from "starlight-links-validator";
-import tailwindcss from "@tailwindcss/vite";
 
 import config from "./src/config";
 
@@ -140,15 +139,11 @@ export default defineConfig({
         },
         {
           label: "Comparisons",
-          autogenerate: {
-            directory: "comparison",
-          },
+          items: [{ autogenerate: { directory: "comparison" } }],
         },
         {
           label: "Reference",
-          autogenerate: {
-            directory: "reference",
-          },
+          items: [{ autogenerate: { directory: "reference" } }],
         },
         // Add the generated sidebar group to the sidebar.
         ...openAPISidebarGroups,
@@ -162,8 +157,8 @@ export default defineConfig({
   ],
   vite: {
     plugins: [
-      // @ts-ignore
-      tailwindcss(),
+      // Need to use PostCSS for now: https://github.com/withastro/astro/issues/16542
+      // tailwindcss(),
     ],
   },
 });
