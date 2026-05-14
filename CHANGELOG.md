@@ -1,3 +1,11 @@
+## v0.27.5
+
+- Updating a file columns with prior read resulsts is a no-op even when no explicit data is passed - thanks @royalcala 🙏.
+  - We may want to be stricter here in the future, i.e. match DB contents vs input.
+  - We may want support sub-setting operations for lists of files.
+- Main-line some early PG schema consumer.
+- Update Rust and JavaScript dependencies (+switch from vite to postcss tailwind plugin).
+
 ## v0.27.4
 
 - Better support for multi-line RecordApi access rules in admin UI by use of `<textarea>`, monospace fonts & some minor layout tweaks.
