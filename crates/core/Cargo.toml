@@ -28,7 +28,7 @@ default = []
 otel = ["dep:axum-tracing-opentelemetry", "dep:init-tracing-opentelemetry"]
 geos = ["dep:litegis", "dep:geos"]
 geos-static = ["litegis/static", "dep:geos"]
-pg = ["trailbase-sqlite/generic"]
+pg = ["dep:trailbase-pg-schema", "trailbase-sqlite/generic"]
 wasm = ["dep:trailbase-wasm-runtime-host"]
 # Enable axum's "ws" feature: https://doc.rust-lang.org/cargo/reference/features.html#dependency-features
 ws = ["axum/ws"]
@@ -104,6 +104,7 @@ tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
+trailbase-pg-schema = { workspace = true, optional = true }
 trailbase-qs = { workspace = true }
 trailbase-reactive = { workspace = true }
 trailbase-refinery = { workspace = true }

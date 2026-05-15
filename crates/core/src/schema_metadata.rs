@@ -30,6 +30,9 @@ pub enum SchemaLookupError {
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
   #[error("JsonSchemaError: {0}")]
   JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
+  #[cfg(feature = "pg")]
+  #[error("PgSchema: {0}")]
+  PgSchema(#[from] trailbase_pg_schema::Error),
 }
 
 pub(crate) async fn build_metadata(
@@ -75,8 +78,6 @@ pub async fn lookup_and_parse_table_schema(
   database: Option<&str>,
 ) -> Result<Table, SchemaLookupError> {
   // Then get the actual table.
-  //
-  // FIXME: for PG.
   let sql: String = conn
     .read_query_row_get(
       format!(
@@ -174,6 +175,16 @@ fn setup_file_deletion_triggers(
   return Ok(());
 }
 
+#[cfg(feature = "pg")]
+fn lookup_and_parse_all_table_schemas(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+) -> Result<Vec<Table>, SchemaLookupError> {
+  let tables = trailbase_pg_schema::build_all_table_schemas(conn)?;
+  log::info!("PG Tables: {tables:?}");
+  return Ok(tables);
+}
+
+#[cfg(not(feature = "pg"))]
 fn lookup_and_parse_all_table_schemas(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
 ) -> Result<Vec<Table>, SchemaLookupError> {
@@ -202,6 +213,16 @@ fn lookup_and_parse_all_table_schemas(
   return Ok(tables);
 }
 
+#[cfg(feature = "pg")]
+fn lookup_and_parse_all_view_schemas(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  tables: &[Table],
+) -> Result<Vec<View>, SchemaLookupError> {
+  log::warn!("FIXME: PG VIEW SCHEMAS NOT IMPLEMENTED");
+  return Ok(vec![]);
+}
+
+#[cfg(not(feature = "pg"))]
 fn lookup_and_parse_all_view_schemas(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   tables: &[Table],
@@ -307,7 +328,11 @@ mod tests {
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
-        database_schema: None,
+        database_schema: if cfg!(feature = "pg") {
+          Some("public".to_string())
+        } else {
+          None
+        },
       })
       .unwrap();
 

@@ -8,17 +8,19 @@ use trailbase_sqlite::{Connection, params};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-  #[error("DB: {0}")]
+  #[error("Db: {0}")]
   Db(#[from] trailbase_sqlite::Error),
+  #[error("FromSql: {0}")]
+  FromSql(#[from] trailbase_sqlite::from_sql::FromSqlError),
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-struct TableInformationSchema {
-  table_catalog: String,
-  table_schema: String,
-  table_name: String,
-  table_type: Option<String>,
-  is_typed: String,
+pub struct TableInformationSchema {
+  pub table_catalog: String,
+  pub table_schema: String,
+  pub table_name: String,
+  pub table_type: Option<String>,
+  pub is_typed: String,
 }
 
 const QUERY_TABLES_WITH_TABLE_CONSTRAINTS: &str = "
@@ -50,11 +52,31 @@ ORDER BY
 ";
 
 #[allow(unused)]
-async fn get_tables(conn: &Connection) -> Result<Vec<TableInformationSchema>, Error> {
+async fn get_tables_async(conn: &Connection) -> Result<Vec<TableInformationSchema>, Error> {
   return Ok(
     conn
       .read_query_values(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())
       .await?,
+  );
+}
+#[allow(unused)]
+fn get_tables(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+) -> Result<Vec<TableInformationSchema>, Error> {
+  return Ok(
+    conn
+      .query_rows(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())?
+      .into_iter()
+      .map(|row| {
+        return Ok(TableInformationSchema {
+          table_catalog: row.get(0)?,
+          table_schema: row.get(1)?,
+          table_name: row.get(2)?,
+          table_type: row.get(3)?,
+          is_typed: row.get(4)?,
+        });
+      })
+      .collect::<Result<_, Error>>()?,
   );
 }
 
@@ -120,24 +142,40 @@ ORDER BY
     c.ordinal_position;
 ";
 
-#[allow(unused)]
-async fn get_columns(
-  conn: &Connection,
+fn get_columns(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   table_name: &str,
 ) -> Result<Vec<ColumnInformationSchema>, Error> {
   return Ok(
     conn
-      .read_query_values(
+      .query_rows(
         QUERY_COLUMNS_WITH_CONSTRAINTS,
         params!(table_name.to_string()),
-      )
-      .await?,
+      )?
+      .into_iter()
+      .map(|row| {
+        return Ok(ColumnInformationSchema {
+          table_catalog: row.get(0)?,
+          table_schema: row.get(1)?,
+          table_name: row.get(2)?,
+          column_name: row.get(3)?,
+          ordinal_position: row.get(4)?,
+          data_type: row.get(5)?,
+          is_nullable: row.get(6)?,
+          column_default: row.get(7)?,
+          is_generated: row.get(8)?,
+          primary_key: row.get(9)?,
+          foreign_key: row.get(10)?,
+          unique_constraint: row.get(11)?,
+          check_constraint: row.get(12)?,
+        });
+      })
+      .collect::<Result<_, Error>>()?,
   );
 }
 
-#[allow(unused)]
-async fn build_table_schema(
-  conn: &Connection,
+pub fn build_table_schema(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   table: TableInformationSchema,
 ) -> Result<Table, Error> {
   let TableInformationSchema {
@@ -148,7 +186,7 @@ async fn build_table_schema(
     is_typed,
   } = table;
 
-  let columns = get_columns(conn, &table_name).await?;
+  let columns = get_columns(conn, &table_name)?;
 
   // let foreign_keys: Vec<_> = columns
   //   .iter()
@@ -258,13 +296,47 @@ async fn build_table_schema(
   });
 }
 
+pub fn build_all_table_schemas(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+) -> Result<Vec<Table>, Error> {
+  let tables = get_tables(conn)?;
+
+  return tables
+    .into_iter()
+    .map(|table| build_table_schema(conn, table))
+    .collect::<Result<Vec<Table>, Error>>();
+}
+
 #[cfg(test)]
 mod tests {
   use trailbase_sqlite::Connection;
 
   use super::*;
 
-  pub async fn test_connection() -> (pglite_oxide::PgliteServer, Connection) {
+  async fn get_columns_async(
+    conn: &Connection,
+    table_name: &str,
+  ) -> Result<Vec<ColumnInformationSchema>, Error> {
+    return Ok(
+      conn
+        .call_writer({
+          let table_name = table_name.to_string();
+          move |mut conn| {
+            get_columns(&mut conn, &table_name)
+              .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
+          }
+        })
+        .await
+        .map_err(|err| {
+          return match trailbase_sqlite::unpack_other_error::<Error>(err) {
+            Ok(err) => err,
+            Err(sql_err) => sql_err.into(),
+          };
+        })?,
+    );
+  }
+
+  async fn test_connection() -> (pglite_oxide::PgliteServer, Connection) {
     let temp_dir = tempfile::TempDir::new().unwrap();
 
     // NOTE: `db.connection_uri()` returns rubbish for UDS.
@@ -293,7 +365,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn postgres_schema_test() {
+  async fn postgres_column_schema_test() {
     let (_db, conn) = test_connection().await;
 
     conn
@@ -312,12 +384,12 @@ mod tests {
       .await
       .unwrap();
 
-    let tables = get_tables(&conn).await.unwrap();
+    let tables = get_tables_async(&conn).await.unwrap();
 
     assert!(tables.iter().any(|t| t.table_name == "table0"));
     assert!(tables.iter().any(|t| t.table_name == "table1"));
 
-    let columns0 = get_columns(&conn, "table0").await.unwrap();
+    let columns0 = get_columns_async(&conn, "table0").await.unwrap();
     assert!(columns0.len() > 0);
 
     assert_eq!(
@@ -339,7 +411,7 @@ mod tests {
       },]
     );
 
-    let columns1 = get_columns(&conn, "table1").await.unwrap();
+    let columns1 = get_columns_async(&conn, "table1").await.unwrap();
     assert!(columns1.len() > 0);
 
     assert_eq!(
@@ -409,5 +481,36 @@ mod tests {
     );
 
     println!("COLUMNS1: {columns1:?}\n");
+  }
+
+  #[tokio::test]
+  async fn postgres_table_schema_test() {
+    let (_db, conn) = test_connection().await;
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE table0 (id INTEGER PRIMARY KEY NOT NULL);
+
+        CREATE TABLE table1 (
+          id     INTEGER PRIMARY KEY,
+          fk     INTEGER REFERENCES table0(id),
+          a      TEXT DEFAULT ('foo'),
+          b      INT8 NOT NULL DEFAULT (5)
+        );
+      ",
+      )
+      .await
+      .unwrap();
+
+    let table_schemas: Vec<Table> = conn
+      .call_writer(|mut conn| {
+        return build_all_table_schemas(&mut conn)
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(2, table_schemas.len());
   }
 }

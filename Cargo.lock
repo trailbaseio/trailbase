@@ -7972,6 +7972,7 @@ dependencies = [
  "trailbase-assets",
  "trailbase-build",
  "trailbase-extension",
+ "trailbase-pg-schema",
  "trailbase-qs",
  "trailbase-reactive",
  "trailbase-refinery",
@@ -8093,6 +8094,19 @@ dependencies = [
  "thiserror 2.0.18",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "trailbase-pg-schema"
+version = "0.0.1"
+dependencies = [
+ "pglite-oxide",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "trailbase-schema",
+ "trailbase-sqlite",
 ]
 
 [[package]]
