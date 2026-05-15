@@ -9,7 +9,6 @@ use trailbase_schema::{FileUploadInput, QualifiedName};
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
 use crate::config::proto::ConflictResolutionStrategy;
-use crate::connection::ConnectionEntry;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
@@ -66,7 +65,8 @@ pub async fn create_avatar_handler(
 
   #[cfg(all(not(feature = "pg"), debug_assertions))]
   {
-    let ConnectionEntry { metadata, .. } = state.connection_manager().main_entry();
+    let crate::connection::ConnectionEntry { metadata, .. } =
+      state.connection_manager().main_entry();
     let Some(table_metadata) = metadata.get_table(&AVATAR_TABLE_NAME) else {
       return Err(AuthError::Internal("missing table".into()));
     };

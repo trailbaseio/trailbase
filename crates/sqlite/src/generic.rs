@@ -881,4 +881,53 @@ mod tests {
       assert_ne!(uuid0, uuid1);
     }
   }
+
+  #[tokio::test]
+  async fn pg_uuids_test() {
+    let (_db, exec) = build_pg_test_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE table_w_uuid (
+          \"user\"    UUID PRIMARY KEY NOT NULL,
+          \"data\"    TEXT
+        );
+        ",
+      )
+      .await
+      .unwrap();
+
+    const INSERT: &str = "INSERT INTO table_w_uuid (\"user\") VALUES ($1);";
+    conn
+      .execute(
+        INSERT,
+        (Value::Blob(uuid::Uuid::new_v4().into_bytes().into()),),
+      )
+      .await
+      .unwrap();
+
+    // We could support TEXT UUIDs in Value's ToSql impl, but we don't.
+    assert!(
+      conn
+        .execute(INSERT, params!(uuid::Uuid::new_v4().to_string()))
+        .await
+        .is_err()
+    );
+
+    // NOTE: `tid`s in PG re a tuple of (block number, row number).
+    let _ctid: i64 = conn
+      .write_query_row_get(
+        "INSERT INTO table_w_uuid (\"user\", data) VALUES (:user, :data) RETURNING ctid, \"user\"",
+        named_params! {
+            ":user": uuid::Uuid::new_v4().into_bytes().to_vec(),
+            ":data": "test",
+        },
+        0,
+      )
+      .await
+      .unwrap()
+      .unwrap();
+  }
 }

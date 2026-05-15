@@ -12,6 +12,7 @@ use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, Params};
 
+#[derive(Debug)]
 pub enum WriteQuery {
   Insert {
     query: String,
@@ -49,16 +50,29 @@ impl WriteQuery {
       return Err(RecordError::Internal("not an insert".into()));
     };
 
-    let conflict_clause = match conflict_resolution {
-      Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
-      Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
-      Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
-      Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
-      Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
-      _ => "",
+    #[cfg(not(feature = "pg"))]
+    let (conflict_clause, returning) = {
+      (
+        match conflict_resolution {
+          Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
+          Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
+          Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
+          Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
+          Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
+          _ => "",
+        },
+        &["_rowid_", return_column_name],
+      )
     };
 
-    let returning = &["_rowid_", return_column_name];
+    #[cfg(feature = "pg")]
+    let (conflict_clause, returning) = {
+      (
+        // FIXME: PG requires trailing `ON CONFLICT` clauses.
+        "",
+        &["ctid", return_column_name],
+      )
+    };
 
     let query = CreateRecordQueryTemplate {
       table_name,

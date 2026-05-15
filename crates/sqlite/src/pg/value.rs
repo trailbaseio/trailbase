@@ -62,6 +62,16 @@ impl<'a> postgres::types::FromSql<'a> for Value {
       "float8" => Ok(Value::Real(f64::from_sql(ty, raw)?)),
       "text" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?)),
       "bytea" | "uuid" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?)),
+      "tid" => {
+        // NOTE: `tid`s in PG are a tuple like:
+        //   struct Tid { pub block: u32, pub offset: u16, }
+        if raw.len() != 6 {
+          return Err("TIDs are expected to be 6 bytes".into());
+        }
+        Ok(Value::Integer(i64::from_be_bytes([
+          raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], 0, 0,
+        ])))
+      }
       _ => Err(format!("Unsupported type: {ty}").into()),
     };
   }
@@ -73,7 +83,11 @@ impl<'a> postgres::types::FromSql<'a> for Value {
   }
 
   fn accepts(ty: &postgres::types::Type) -> bool {
-    return accepts_impl(ty);
+    return match ty.name() {
+      // PG's `TID`s are an internal tuple of (block, offset) and are RO, i.e. cannot be written.
+      "tid" => true,
+      _ => accepts_impl(ty),
+    };
   }
 }
 
