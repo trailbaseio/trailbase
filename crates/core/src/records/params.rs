@@ -159,6 +159,7 @@ impl Params {
         json,
         is_file: _,
         is_geometry,
+        is_uuid_blob: _,
       }) = accessor.column_by_name(&key)
       else {
         continue;
@@ -219,6 +220,7 @@ impl Params {
         json: _,
         is_file: _,
         is_geometry: _,
+        is_uuid_blob: _,
       }) = accessor.column_by_name(&key)
       else {
         continue;
@@ -261,6 +263,7 @@ impl Params {
         json,
         is_file: _,
         is_geometry,
+        is_uuid_blob: _,
       }) = accessor.column_by_name(&key)
       else {
         continue;
@@ -359,6 +362,7 @@ impl Params {
         json: _,
         is_file: _,
         is_geometry: _,
+        is_uuid_blob: _,
       }) = accessor.column_by_name(&key)
       else {
         continue;
@@ -498,6 +502,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
       json,
       is_file: _,
       is_geometry: _,
+      is_uuid_blob: _,
     }) = accessor.column_by_name(field_name)
     else {
       continue;

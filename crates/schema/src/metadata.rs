@@ -78,6 +78,11 @@ pub struct ColumnMetadata {
   pub is_file: bool,
   /// Whether the column has an ST_Valid geometry check constaint.
   pub is_geometry: bool,
+  /// Whether the column is a BLOB explicitly tagged as a UUID via
+  /// `CHECK(is_uuid[_v7|_v4](...))` — either directly or transitively via a
+  /// FK to such a column. Used by list endpoint to opt-in to dashed UUID
+  /// formatting when `ServerConfig.list_uuid_format_dashed` is set.
+  pub is_uuid_blob: bool,
 }
 
 /// A data class describing a sqlite Table and additional meta data useful for TrailBase.
@@ -117,6 +122,7 @@ impl TableMetadata {
           is_file: is_file_column(&json_metadata),
           json: json_metadata,
           is_geometry: is_geometry_column(c),
+          is_uuid_blob: is_uuid_blob_column(c, tables),
           column: c.clone(),
         });
       })
@@ -203,6 +209,7 @@ impl ViewMetadata {
           is_file: is_file_column(&json_metadata),
           json: json_metadata,
           is_geometry: is_geometry_column(&c),
+          is_uuid_blob: is_uuid_blob_column(&c, tables),
           column: c,
         });
       })
@@ -538,63 +545,74 @@ fn is_suitable_record_pk_column<T: Borrow<Table>>(column: &Column, tables: &[T])
       // https://www.sqlite.org/lang_createtable.html#rowid.
       true
     }
-    ColumnDataType::Blob => {
-      lazy_static! {
-        static ref UUID_CHECK_RE: Regex =
-          Regex::new(r"^is_uuid(|_v7|_v4)\s*\(").expect("infallible");
-      }
-
-      for opts in &column.options {
-        match opts {
-          // Check the column itself is a UUID column.
-          ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => return true,
-          // Or that a referenced column is a UUID column.
-          ColumnOption::ForeignKey {
-            foreign_table,
-            referred_columns,
-            ..
-          } => {
-            let referred_column = {
-              if referred_columns.len() != 1 {
-                return false;
-              }
-              &referred_columns[0]
-            };
-
-            // NOTE: Foreign keys cannot cross database boundaries, we can therefore compare by
-            // unqualified name.
-            let Some(referred_table) = tables
-              .iter()
-              .find(|t| (*t).borrow().name.name == *foreign_table)
-            else {
-              warn!("Failed to get foreign key schema for {foreign_table}");
-              return false;
-            };
-
-            let Some(foreign_column) = referred_table
-              .borrow()
-              .columns
-              .iter()
-              .find(|c| c.name == *referred_column)
-            else {
-              return false;
-            };
-
-            for opt in &foreign_column.options {
-              match opt {
-                ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => return true,
-                _ => {}
-              }
-            }
-          }
-          _ => {}
-        }
-      }
-
-      false
-    }
+    ColumnDataType::Blob => is_uuid_blob_column(column, tables),
     _ => false,
   };
+}
+
+/// Returns true if `column` is a BLOB column tagged as a UUID — either directly
+/// via `CHECK(is_uuid[_v7|_v4](...))` or transitively via a foreign key to such
+/// a column. Same predicate that gates UUIDv7/v4 primary key acceptance in
+/// `is_suitable_record_pk_column`, factored out so list endpoint formatting
+/// can identify UUID columns without depending on PK semantics.
+pub fn is_uuid_blob_column<T: Borrow<Table>>(column: &Column, tables: &[T]) -> bool {
+  if column.data_type != ColumnDataType::Blob {
+    return false;
+  }
+
+  lazy_static! {
+    static ref UUID_CHECK_RE: Regex =
+      Regex::new(r"^is_uuid(|_v7|_v4)\s*\(").expect("infallible");
+  }
+
+  for opts in &column.options {
+    match opts {
+      // Check the column itself is a UUID column.
+      ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => return true,
+      // Or that a referenced column is a UUID column.
+      ColumnOption::ForeignKey {
+        foreign_table,
+        referred_columns,
+        ..
+      } => {
+        let referred_column = {
+          if referred_columns.len() != 1 {
+            return false;
+          }
+          &referred_columns[0]
+        };
+
+        // NOTE: Foreign keys cannot cross database boundaries, we can therefore compare by
+        // unqualified name.
+        let Some(referred_table) = tables
+          .iter()
+          .find(|t| (*t).borrow().name.name == *foreign_table)
+        else {
+          warn!("Failed to get foreign key schema for {foreign_table}");
+          return false;
+        };
+
+        let Some(foreign_column) = referred_table
+          .borrow()
+          .columns
+          .iter()
+          .find(|c| c.name == *referred_column)
+        else {
+          return false;
+        };
+
+        for opt in &foreign_column.options {
+          match opt {
+            ColumnOption::Check(expr) if UUID_CHECK_RE.is_match(expr) => return true,
+            _ => {}
+          }
+        }
+      }
+      _ => {}
+    }
+  }
+
+  false
 }
 
 /// Finds suitable Integer or UUIDv7/UUIDv4 primary key columns, if present.

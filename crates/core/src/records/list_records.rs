@@ -314,7 +314,7 @@ pub async fn list_records_handler(
     None
   };
 
-  let records = if expanded_tables.is_empty() {
+  let mut records = if expanded_tables.is_empty() {
     rows
       .into_iter()
       .map(|row| row_to_json_expand(api.columns(), &row, column_filter, api.expand()))
@@ -355,6 +355,15 @@ pub async fn list_records_handler(
       })
       .collect::<Result<Vec<_>, RecordError>>()?
   };
+
+  // Post-process: when `ServerConfig.list_uuid_format_dashed` is set, rewrite
+  // BLOB columns that are tagged as UUID (CHECK(is_uuid[_v7|_v4](...))) from
+  // their default base64url representation to canonical dashed UUID. Scoped
+  // to list responses only — read/create/update/subscribe stay on base64url.
+  // Opaque BLOBs (no UUID check) are left untouched.
+  if state.access_config(|c| c.server.list_uuid_format_dashed.unwrap_or(false)) {
+    rewrite_uuid_blobs_to_dashed(&mut records, api.columns(), &expanded_tables);
+  }
 
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   if let Some(meta) = geojson_geometry_column {
@@ -501,6 +510,87 @@ struct ListRecordQueryTemplate<'a> {
 
 // Ephemeral key for encrypting cursors, i.e. cursors cannot be re-used across TB restarts.
 static EPHEMERAL_CURSOR_KEY: LazyLock<KeyType> = LazyLock::new(generate_random_key);
+
+/// Rewrite UUID-tagged BLOB columns in list records from url-safe base64 to
+/// canonical dashed UUID. The flag is opt-in via
+/// `ServerConfig.list_uuid_format_dashed`. We post-process the JSON because
+/// the generic flat-json encoder (`value_to_flat_json`) is column-agnostic;
+/// doing it here keeps the change scoped to list responses without altering
+/// other endpoints or the schema crate's encoding contract.
+fn rewrite_uuid_blobs_to_dashed(
+  records: &mut [serde_json::Value],
+  columns: &[trailbase_schema::metadata::ColumnMetadata],
+  expanded_tables: &[ExpandedTable<'_>],
+) {
+  for record in records.iter_mut() {
+    rewrite_record(record, columns);
+
+    // For expanded FK columns, the foreign row is nested under
+    // `<column_name>.data`. Walk those nested objects too.
+    let serde_json::Value::Object(obj) = record else {
+      continue;
+    };
+    for expanded in expanded_tables {
+      let Some(serde_json::Value::Object(fk_obj)) = obj.get_mut(&expanded.local_column_name) else {
+        continue;
+      };
+      if let Some(data) = fk_obj.get_mut("data") {
+        rewrite_record(data, &expanded.metadata.column_metadata);
+      }
+    }
+  }
+}
+
+fn rewrite_record(
+  record: &mut serde_json::Value,
+  columns: &[trailbase_schema::metadata::ColumnMetadata],
+) {
+  let serde_json::Value::Object(obj) = record else {
+    return;
+  };
+  for meta in columns {
+    if !meta.is_uuid_blob {
+      continue;
+    }
+    let Some(value) = obj.get_mut(&meta.column.name) else {
+      continue;
+    };
+    if let Some(rewritten) = uuid_blob_value_to_dashed(value) {
+      *value = rewritten;
+    }
+  }
+}
+
+/// Convert a JSON value that holds a base64url-encoded 16-byte UUID BLOB into
+/// its canonical dashed string form. Returns None if the value isn't a 24-char
+/// base64url string decoding to exactly 16 bytes (e.g. expand FK with
+/// `{id: "...", data: {...}}` wrapping).
+fn uuid_blob_value_to_dashed(value: &serde_json::Value) -> Option<serde_json::Value> {
+  match value {
+    serde_json::Value::String(s) => {
+      let bytes = BASE64_URL_SAFE.decode(s).ok()?;
+      if bytes.len() != 16 {
+        return None;
+      }
+      let mut arr = [0u8; 16];
+      arr.copy_from_slice(&bytes);
+      Some(serde_json::Value::String(
+        uuid::Uuid::from_bytes(arr).hyphenated().to_string(),
+      ))
+    }
+    serde_json::Value::Object(obj) => {
+      // FK column with `expand` not requested: `{id: "<b64>"}`. With expand:
+      // `{id: "<b64>", data: {...}}`. Only the `id` key needs rewriting; the
+      // nested `data` is handled by the caller via its own column metadata.
+      let id = obj.get("id")?;
+      let rewritten = uuid_blob_value_to_dashed(id)?;
+      let mut out = obj.clone();
+      out.insert("id".to_string(), rewritten);
+      Some(serde_json::Value::Object(out))
+    }
+    _ => None,
+  }
+}
 
 #[cfg(test)]
 mod tests {

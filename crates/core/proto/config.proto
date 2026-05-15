@@ -150,6 +150,21 @@ message ServerConfig {
   /// Note that login endpoints have additional fixed rate limits
   /// on a per credentials level.
   optional uint32 auth_ip_rate_limit = 16;
+
+  /// When true, list endpoints (`GET /api/records/v1/{api}`) emit BLOB
+  /// columns explicitly tagged with `CHECK(is_uuid[_v7|_v4](...))` as
+  /// canonical dashed UUIDs (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
+  /// instead of url-safe base64. Round-trips through the existing input
+  /// parser (`strict_parse_string_to_sqlite_value` already accepts dashed
+  /// UUIDs in path params, body fields, query filters and cursors), so
+  /// `update(id, read(id))` keeps working symmetrically.
+  ///
+  /// Scope is intentionally limited to list responses — read/create/
+  /// update/subscribe responses are unchanged, and non-UUID BLOB columns
+  /// (hashes, keys) keep their base64 encoding regardless of this flag.
+  ///
+  /// Default: false (back-compat).
+  optional bool list_uuid_format_dashed = 17;
 }
 
 enum SystemJobId {
