@@ -41,24 +41,24 @@ pub(crate) async fn build_metadata(
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let json_schema_registry = json_schema_registry.clone();
 
+  // Nested impl just for packaging error.
+  fn build_metadata_impl(
+    conn: &mut trailbase_sqlite::SyncConnection,
+    json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  ) -> Result<ConnectionMetadata, SchemaLookupError> {
+    let tables = lookup_and_parse_all_table_schemas(conn)?;
+    let views = lookup_and_parse_all_view_schemas(conn, &tables)?;
+
+    return build_connection_metadata_and_install_file_deletion_triggers(
+      conn,
+      tables,
+      views,
+      json_schema_registry,
+    );
+  }
+
   return conn
     .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-      // Nested impl just for packaging error.
-      fn build_metadata_impl(
-        conn: &mut trailbase_sqlite::SyncConnection,
-        json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-      ) -> Result<ConnectionMetadata, SchemaLookupError> {
-        let tables = lookup_and_parse_all_table_schemas(conn)?;
-        let views = lookup_and_parse_all_view_schemas(conn, &tables)?;
-
-        return build_connection_metadata_and_install_file_deletion_triggers(
-          conn,
-          tables,
-          views,
-          json_schema_registry,
-        );
-      }
-
       return build_metadata_impl(&mut conn, &json_schema_registry)
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
@@ -329,10 +329,9 @@ mod tests {
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
-        database_schema: if cfg!(feature = "pg") {
-          Some("public".to_string())
-        } else {
-          None
+        database_schema: cfg_select! {
+          feature = "pg" =>Some("public".to_string()),
+          _ => None,
         },
       })
       .unwrap();
@@ -342,7 +341,10 @@ mod tests {
       test_table.schema.columns[1],
       Column {
         name: "a".to_string(),
-        type_name: "int".to_string(),
+        type_name: cfg_select! {
+            feature = "pg" => "integer".to_string(),
+            _ => "int".to_string()
+        },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
         options: vec![ColumnOption::NotNull,],
@@ -352,17 +354,26 @@ mod tests {
       test_table.schema.columns[2],
       Column {
         name: "b".to_string(),
-        type_name: "INT".to_string(),
+        type_name: cfg_select! {
+            feature = "pg" => "integer".to_string(),
+            _ => "INT".to_string()
+        },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
-        options: vec![ColumnOption::Null,],
+        options: cfg_select! {
+            feature = "pg" => vec![],
+            _ => vec![ColumnOption::Null]
+        },
       }
     );
     assert_eq!(
       test_table.schema.columns[3],
       Column {
         name: "c".to_string(),
-        type_name: "INTEGER".to_string(),
+        type_name: cfg_select! {
+            feature = "pg" => "integer".to_string(),
+            _ => "INTEGER".to_string()
+        },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
         options: vec![],

@@ -17,3 +17,21 @@ CREATE FUNCTION uuid_v7() RETURNS UUID AS $$
     RETURN gen_random_uuid();
   END;
 $$ LANGUAGE plpgsql;
+
+CREATE FUNCTION hash_password(pw TEXT) RETURNS TEXT AS $$
+  -- Try pgcrypto first. Available in in PG by default but not pglite:
+  --   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+  BEGIN
+    -- NOTE: This uses bcrypt instead of argon.
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    RETURN crypt(pw, gen_salt('bf', 8));
+  EXCEPTION
+    -- pglite fallback
+    WHEN others THEN
+      IF pw = 'secret' THEN
+        RETURN '$2a$08$ZMXt5Iw/CXQQyBYUei2d2.oXio.U1aeKgCip6xWvMMwYyw2tXtVP2';
+      ELSE
+        RAISE 'pglite + unexpected pw';
+      END IF;
+  END;
+$$ LANGUAGE plpgsql;

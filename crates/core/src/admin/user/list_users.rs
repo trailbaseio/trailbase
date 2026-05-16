@@ -14,7 +14,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::connection::ConnectionEntry;
-use crate::constants::USER_TABLE;
+use crate::constants::USER_TABLE_FQ;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 
 #[derive(Debug, Serialize, TS)]
@@ -77,8 +77,13 @@ pub async fn list_users_handler(
       return Error::BadRequest(format!("Invalid query '{err}': {raw_url_query:?}").into());
     })?;
 
-  let Some(table_metadata) = metadata.get_table(&QualifiedName::parse(USER_TABLE)?) else {
-    return Err(Error::Precondition(format!("Table {USER_TABLE} not found")));
+  let Some(table_metadata) = metadata.get_table(&USER_TABLE_FQ) else {
+    // QUESTION: Should this actually be an internal error? Hardly a user failure.
+    log::debug!("User table not found: {metadata:?}");
+    return Err(Error::Precondition(format!(
+      "Table {} not found",
+      USER_TABLE_FQ.escaped_string()
+    )));
   };
   // Where clause contains column filters and offset depending on what's present in the url query
   // string.
@@ -88,7 +93,8 @@ pub async fn list_users_handler(
   let total_row_count: i64 = conn
     .read_query_row_get(
       format!(
-        "SELECT COUNT(*) FROM {USER_TABLE} AS _ROW_ WHERE {where_clause}",
+        "SELECT COUNT(*) FROM {fq_table_name} AS _ROW_ WHERE {where_clause}",
+        fq_table_name = USER_TABLE_FQ.escaped_string(),
         where_clause = filter_where_clause.clause
       ),
       filter_where_clause.params.clone(),
@@ -99,7 +105,13 @@ pub async fn list_users_handler(
 
   lazy_static! {
     static ref DEFAULT_ORDERING: Order = Order {
-      columns: vec![("_rowid_".to_string(), OrderPrecedent::Descending)],
+      columns: vec![(
+        cfg_select! {
+            feature = "pg" => "ctid".to_string(),
+            _ => "_rowid_".to_string(),
+        },
+        OrderPrecedent::Descending
+      )],
     };
   }
   let users = fetch_users(
@@ -159,7 +171,7 @@ async fn fetch_users(
   let sql_query = format!(
     r#"
       SELECT _ROW_.*
-      FROM {USER_TABLE} as _ROW_
+      FROM {fq_table_name} as _ROW_
       WHERE
         {where_clause}
       ORDER BY
@@ -167,8 +179,15 @@ async fn fetch_users(
       LIMIT :limit
       OFFSET :offset;
     "#,
+    fq_table_name = USER_TABLE_FQ.escaped_string(),
   );
 
-  let users = conn.read_query_values::<DbUser>(sql_query, params).await?;
+  let users = conn
+    .read_query_values::<DbUser>(sql_query.clone(), params)
+    .await
+    .map_err(|err| {
+      log::error!("fetch users failed '{sql_query}': {err:?}");
+      return err;
+    })?;
   return Ok(users);
 }

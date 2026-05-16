@@ -370,7 +370,9 @@ async fn init_db<'a>(
     .await
     .unwrap();
 
-  return Ok((conn, Default::default(), init_schema));
+  let metadata = build_metadata(&conn, opts.json_registry).await?;
+
+  return Ok((conn, metadata, init_schema));
 }
 
 #[cfg(not(feature = "pg"))]
