@@ -151,6 +151,23 @@ fn get_columns(
     .collect::<Result<_, Error>>();
 }
 
+fn infer_data_type(type_name: &str) -> trailbase_schema::sqlite::ColumnDataType {
+  // NOTE: This is basically `FromSql`, i.e. how we map PG types to `Value`..
+  // NOTE: We may want to consider using tid.
+  if type_name.contains("int") {
+    return trailbase_schema::sqlite::ColumnDataType::Integer;
+  }
+  return trailbase_schema::sqlite::ColumnDataType::Any;
+}
+
+fn infer_affinity_type(type_name: &str) -> trailbase_schema::sqlite::ColumnAffinityType {
+  // NOTE: We may want to consider using tid.
+  if type_name.contains("int") {
+    return trailbase_schema::sqlite::ColumnAffinityType::Integer;
+  }
+  return trailbase_schema::sqlite::ColumnAffinityType::Blob;
+}
+
 pub fn build_table_schema(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   table: TableInformationSchema,
@@ -257,9 +274,9 @@ pub fn build_table_schema(
 
         return Column {
           name: c.column_name,
+          data_type: infer_data_type(&c.data_type),
+          affinity_type: infer_affinity_type(&c.data_type),
           type_name: c.data_type,
-          data_type: trailbase_schema::sqlite::ColumnDataType::Any,
-          affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
           options,
         };
       })

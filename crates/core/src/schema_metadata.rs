@@ -329,10 +329,9 @@ mod tests {
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
-        database_schema: if cfg!(feature = "pg") {
-          Some("public".to_string())
-        } else {
-          None
+        database_schema: cfg_select! {
+          feature = "pg" =>Some("public".to_string()),
+          _ => None,
         },
       })
       .unwrap();
@@ -342,7 +341,10 @@ mod tests {
       test_table.schema.columns[1],
       Column {
         name: "a".to_string(),
-        type_name: "int".to_string(),
+        type_name: cfg_select! {
+            feature = "pg" => "integer".to_string(),
+            _ => "int".to_string()
+        },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
         options: vec![ColumnOption::NotNull,],
@@ -352,17 +354,26 @@ mod tests {
       test_table.schema.columns[2],
       Column {
         name: "b".to_string(),
-        type_name: "INT".to_string(),
+        type_name: cfg_select! {
+            feature = "pg" => "integer".to_string(),
+            _ => "INT".to_string()
+        },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
-        options: vec![ColumnOption::Null,],
+        options: cfg_select! {
+            feature = "pg" => vec![],
+            _ => vec![ColumnOption::Null]
+        },
       }
     );
     assert_eq!(
       test_table.schema.columns[3],
       Column {
         name: "c".to_string(),
-        type_name: "INTEGER".to_string(),
+        type_name: cfg_select! {
+            feature = "pg" => "integer".to_string(),
+            _ => "INTEGER".to_string()
+        },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
         options: vec![],
