@@ -4,7 +4,7 @@
 
 use serde::Deserialize;
 use trailbase_schema::sqlite::{Column, ColumnOption, QualifiedName, Table};
-use trailbase_sqlite::{Connection, params};
+use trailbase_sqlite::params;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -51,33 +51,62 @@ ORDER BY
     t.table_name;
 ";
 
-#[allow(unused)]
-async fn get_tables_async(conn: &Connection) -> Result<Vec<TableInformationSchema>, Error> {
-  return Ok(
-    conn
-      .read_query_values(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())
-      .await?,
-  );
-}
-#[allow(unused)]
 fn get_tables(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
 ) -> Result<Vec<TableInformationSchema>, Error> {
-  return Ok(
-    conn
-      .query_rows(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())?
-      .into_iter()
-      .map(|row| {
-        return Ok(TableInformationSchema {
-          table_catalog: row.get(0)?,
-          table_schema: row.get(1)?,
-          table_name: row.get(2)?,
-          table_type: row.get(3)?,
-          is_typed: row.get(4)?,
-        });
-      })
-      .collect::<Result<_, Error>>()?,
-  );
+  return conn
+    .query_rows(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())?
+    .into_iter()
+    .map(|row| {
+      return Ok(TableInformationSchema {
+        table_catalog: row.get(0)?,
+        table_schema: row.get(1)?,
+        table_name: row.get(2)?,
+        table_type: row.get(3)?,
+        is_typed: row.get(4)?,
+      });
+    })
+    .collect::<Result<_, Error>>();
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ViewInformationSchema {
+  pub table_catalog: String,
+  pub table_schema: String,
+  pub table_name: String,
+  pub view_definition: String,
+}
+
+const QUERY_VIEWS: &str = "
+SELECT
+  table_catalog,
+  table_schema,
+  table_name,
+  view_definition
+FROM
+  information_schema.views
+WHERE
+  table_schema NOT IN ('information_schema', 'pg_catalog')
+ORDER BY
+  table_schema,
+  table_name;
+";
+
+fn get_views(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+) -> Result<Vec<ViewInformationSchema>, Error> {
+  return conn
+    .query_rows(QUERY_VIEWS, ())?
+    .into_iter()
+    .map(|row| {
+      return Ok(ViewInformationSchema {
+        table_catalog: row.get(0)?,
+        table_schema: row.get(1)?,
+        table_name: row.get(2)?,
+        view_definition: row.get::<String>(3)?.trim().to_string(),
+      });
+    })
+    .collect::<Result<_, Error>>();
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -146,32 +175,30 @@ fn get_columns(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   table_name: &str,
 ) -> Result<Vec<ColumnInformationSchema>, Error> {
-  return Ok(
-    conn
-      .query_rows(
-        QUERY_COLUMNS_WITH_CONSTRAINTS,
-        params!(table_name.to_string()),
-      )?
-      .into_iter()
-      .map(|row| {
-        return Ok(ColumnInformationSchema {
-          table_catalog: row.get(0)?,
-          table_schema: row.get(1)?,
-          table_name: row.get(2)?,
-          column_name: row.get(3)?,
-          ordinal_position: row.get(4)?,
-          data_type: row.get(5)?,
-          is_nullable: row.get(6)?,
-          column_default: row.get(7)?,
-          is_generated: row.get(8)?,
-          primary_key: row.get(9)?,
-          foreign_key: row.get(10)?,
-          unique_constraint: row.get(11)?,
-          check_constraint: row.get(12)?,
-        });
-      })
-      .collect::<Result<_, Error>>()?,
-  );
+  return conn
+    .query_rows(
+      QUERY_COLUMNS_WITH_CONSTRAINTS,
+      params!(table_name.to_string()),
+    )?
+    .into_iter()
+    .map(|row| {
+      return Ok(ColumnInformationSchema {
+        table_catalog: row.get(0)?,
+        table_schema: row.get(1)?,
+        table_name: row.get(2)?,
+        column_name: row.get(3)?,
+        ordinal_position: row.get(4)?,
+        data_type: row.get(5)?,
+        is_nullable: row.get(6)?,
+        column_default: row.get(7)?,
+        is_generated: row.get(8)?,
+        primary_key: row.get(9)?,
+        foreign_key: row.get(10)?,
+        unique_constraint: row.get(11)?,
+        check_constraint: row.get(12)?,
+      });
+    })
+    .collect::<Result<_, Error>>();
 }
 
 pub fn build_table_schema(
@@ -312,6 +339,14 @@ mod tests {
   use trailbase_sqlite::Connection;
 
   use super::*;
+
+  async fn get_tables_async(conn: &Connection) -> Result<Vec<TableInformationSchema>, Error> {
+    return Ok(
+      conn
+        .read_query_values(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())
+        .await?,
+    );
+  }
 
   async fn get_columns_async(
     conn: &Connection,
@@ -512,5 +547,28 @@ mod tests {
       .unwrap();
 
     assert_eq!(2, table_schemas.len());
+  }
+
+  #[tokio::test]
+  async fn postgres_view_schema_test() {
+    let (_db, conn) = test_connection().await;
+
+    conn
+      .execute_batch("CREATE VIEW view_name AS SELECT 5 AS i, 'text' AS t;")
+      .await
+      .unwrap();
+
+    let views = conn
+      .call_writer(|mut conn| {
+        return get_views(&mut conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+      })
+      .await
+      .unwrap();
+
+    assert_eq!(1, views.len());
+    assert_eq!(
+      "SELECT 5 AS i,\n    'text'::text AS t;",
+      views[0].view_definition
+    );
   }
 }
