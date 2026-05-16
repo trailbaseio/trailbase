@@ -897,7 +897,7 @@ pub struct View {
   /// QUESTION: We've been wondering if the inference should live more in ViewMetadata, however
   /// right now the `View` is heavily used in the UI to e.g. render tables and infer record API
   /// suitability. It's ok that this is more than just an AST.
-  pub(crate) column_mapping: Option<ColumnMapping>,
+  pub column_mapping: Option<ColumnMapping>,
 
   pub query: String,
 
