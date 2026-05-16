@@ -8,3 +8,4 @@ mod view;
 
 pub use crate::error::Error;
 pub use crate::table::build_all_table_schemas;
+pub use crate::view::build_all_view_schemas;

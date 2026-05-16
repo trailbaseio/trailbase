@@ -218,8 +218,9 @@ fn lookup_and_parse_all_view_schemas(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
-  log::warn!("FIXME: PG VIEW SCHEMAS NOT IMPLEMENTED");
-  return Ok(vec![]);
+  let views = trailbase_pg_schema::build_all_view_schemas(conn)?;
+  log::info!("PG Views: {views:?}");
+  return Ok(views);
 }
 
 #[cfg(not(feature = "pg"))]

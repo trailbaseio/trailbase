@@ -1,5 +1,6 @@
+use itertools::Itertools;
 use serde::Deserialize;
-use trailbase_schema::sqlite::View;
+use trailbase_schema::sqlite::{QualifiedName, View};
 
 use crate::error::Error;
 
@@ -37,17 +38,32 @@ fn get_views(
         table_catalog: row.get(0)?,
         table_schema: row.get(1)?,
         table_name: row.get(2)?,
-        view_definition: row.get::<String>(3)?.trim().to_string(),
+        view_definition: row.get::<String>(3)?.split_whitespace().join(" "),
       });
     })
     .collect::<Result<_, Error>>();
 }
 
-pub fn build_view_schema(
-  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
-  view: ViewInformationSchema,
-) -> Result<View, Error> {
-  panic!("not implemented");
+pub fn build_view_schema(view: ViewInformationSchema) -> Result<View, Error> {
+  let ViewInformationSchema {
+    table_catalog: _,
+    table_schema,
+    table_name,
+    view_definition,
+  } = view;
+
+  return Ok(View {
+    name: QualifiedName {
+      name: table_name,
+      database_schema: Some(table_schema),
+    },
+    // TODO: extract column mapping. We can either query PG some more or parse the view
+    // definition with something like: https://crates.io/crates/sqlparser.
+    column_mapping: None,
+    query: view_definition,
+    temporary: false,
+    if_not_exists: false,
+  });
 }
 
 pub fn build_all_view_schemas(
@@ -57,7 +73,7 @@ pub fn build_all_view_schemas(
 
   return views
     .into_iter()
-    .map(|view| build_view_schema(conn, view))
+    .map(build_view_schema)
     .collect::<Result<Vec<View>, Error>>();
 }
 
@@ -106,15 +122,13 @@ mod tests {
 
     let views = conn
       .call_writer(|mut conn| {
-        return get_views(&mut conn).map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+        return build_all_view_schemas(&mut conn)
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
       })
       .await
       .unwrap();
 
     assert_eq!(1, views.len());
-    assert_eq!(
-      "SELECT 5 AS i,\n    'text'::text AS t;",
-      views[0].view_definition
-    );
+    assert_eq!("SELECT 5 AS i, 'text'::text AS t;", views[0].query);
   }
 }
