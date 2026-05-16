@@ -1,3 +1,9 @@
+## v0.27.6
+
+- Fix auth-ui styling due to missing postcss config.
+- Minor: add support for PG `TID`s.
+- Update dependencies.
+
 ## v0.27.5
 
 - Updating a file columns with prior read resulsts is a no-op even when no explicit data is passed - thanks @royalcala 🙏.
