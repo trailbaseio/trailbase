@@ -7,11 +7,8 @@ use crate::rows::{Column, Rows};
 use crate::sqlite::connection::Connection;
 use crate::sqlite::executor::Executor;
 
-/// Batch execute SQL statements and return rows of last statement.
-///
-/// NOTE: This is a weird batch flavor that returns the last statement's rows. Most clients don't
-/// support this. We thus keep it out of `Connection::execute_batch()`. We currently only rely on
-/// it in the admin dashboard. Avoid further adoption.
+/// Batch execute SQL statements and return rows of last statement (the latter part makes it
+/// special).
 pub async fn execute_batch(
   conn: &Connection,
   sql: impl AsRef<str> + Send + 'static,
@@ -19,6 +16,9 @@ pub async fn execute_batch(
   return execute_batch_impl(&conn.exec, sql).await;
 }
 
+/// NOTE: This is a weird batch flavor that returns the last statement's rows. Most clients don't
+/// support this. We thus keep it out of `Connection::execute_batch()`. We currently only rely on
+/// it in the admin dashboard. Avoid further adoption.
 pub(crate) async fn execute_batch_impl(
   exec: &Executor,
   sql: impl AsRef<str> + Send + 'static,

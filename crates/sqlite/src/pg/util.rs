@@ -3,6 +3,7 @@ use regex::Regex;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 
+use crate::SyncConnectionTrait;
 use crate::error::Error;
 use crate::params::Params;
 use crate::rows::{Column, Row, Rows, ValueType};
@@ -139,6 +140,60 @@ pub(crate) fn from_row(row: &postgres::Row, cols: Arc<Vec<Column>>) -> Result<Ro
   return Ok(Row(values, cols));
 }
 
+pub(crate) async fn execute_batch_impl(
+  exec: &crate::pg::executor::Executor,
+  sql: impl AsRef<str> + Send + 'static,
+) -> Result<Option<Rows>, Error> {
+  // Postgres doesn't like more than one statement, even when using `query_raw`, we thus have to
+  // break it up.
+  // QUESTION: This feels very brittle, can we find a better way?
+  use sqlparser::dialect::PostgreSqlDialect;
+  use sqlparser::parser::Parser;
+
+  return match Parser::parse_sql(&PostgreSqlDialect {}, sql.as_ref()) {
+    Ok(stmts) if stmts.len() == 0 => Ok(None),
+    Ok(stmts) if stmts.len() > 1 => {
+      exec
+        .call({
+          move |conn| -> Result<Option<Rows>, Error> {
+            let (head, last) = stmts.split_at(stmts.len() - 1);
+            assert_eq!(1, last.len());
+
+            // This may be brittle due to query serialization not being dialect-aware
+            // :shrug:.
+            let head = head
+              .iter()
+              .map(|stmt| format!("{stmt}"))
+              .collect::<Vec<_>>()
+              .join("; ");
+
+            conn.execute_batch(head)?;
+
+            let row_iter = conn.query_raw(&format!("{}", &last[0]), [] as [i64; 0])?;
+
+            // Actually executes query.
+            return Ok(from_rows(row_iter).ok());
+          }
+        })
+        .await
+    }
+    Err(_) | Ok(_) => {
+      exec
+        .call({
+          let sql = sql.as_ref().to_string();
+
+          move |conn| -> Result<Option<Rows>, Error> {
+            let row_iter = conn.query_raw(&sql, [] as [i64; 0])?;
+
+            // Actually executes query.
+            return Ok(from_rows(row_iter).ok());
+          }
+        })
+        .await
+    }
+  };
+}
+
 #[inline]
 pub(crate) fn columns(row: &postgres::Row) -> Vec<Column> {
   return row
@@ -182,6 +237,29 @@ mod tests {
     assert_eq!(
       vec![Value::Text("p0".to_string()), Value::Text("p1".to_string())],
       params,
+    );
+  }
+
+  #[tokio::test]
+  async fn pg_execute_batch_test() {
+    let (_db, exec) = crate::pg::executor::build_pg_test_executor().unwrap();
+
+    assert_eq!(
+      5,
+      execute_batch_impl(
+        &exec,
+        "
+          CREATE TABLE some_table (id INTEGER);
+          SELECT 5;
+        ",
+      )
+      .await
+      .unwrap()
+      .unwrap()
+      .get(0)
+      .unwrap()
+      .get(0)
+      .unwrap_or(-1),
     );
   }
 }
