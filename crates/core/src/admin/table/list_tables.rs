@@ -32,6 +32,56 @@ pub struct ListSchemasResponse {
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
+  return cfg_select! {
+      feature = "pg" => list_tables_handler_pg_impl(state).await,
+      _ => list_tables_handler_sqlite_impl(state).await,
+  };
+}
+
+#[cfg(feature = "pg")]
+pub async fn list_tables_handler_pg_impl(
+  state: AppState,
+) -> Result<Json<ListSchemasResponse>, Error> {
+  use parking_lot::RwLock;
+  use std::sync::Arc;
+
+  let ConnectionEntry {
+    connection: conn, ..
+  } = state.connection_manager().main_entry();
+
+  let trailbase_schema::metadata::ConnectionMetadata { tables, views } =
+    crate::schema_metadata::build_metadata(&conn, &Arc::new(RwLock::new(Default::default())))
+      .await?;
+
+  return Ok(Json(ListSchemasResponse {
+    tables: tables
+      .into_iter()
+      .map(|(_k, t)| {
+        (
+          t.schema,
+          "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
+        )
+      })
+      .collect(),
+    // TODO: Add indexes.
+    indexes: vec![],
+    // TODO: Add triggers.
+    triggers: vec![],
+    views: views
+      .into_iter()
+      .map(|(_k, v)| {
+        (
+          v.schema,
+          "CREATE VIEW QUERY NOT AVAILABLE IN PG".to_string(),
+        )
+      })
+      .collect(),
+  }));
+}
+
+pub async fn list_tables_handler_sqlite_impl(
+  state: AppState,
+) -> Result<Json<ListSchemasResponse>, Error> {
   #[derive(Debug, Deserialize)]
   struct SqliteSchema {
     pub r#type: String,
