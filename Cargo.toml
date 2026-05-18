@@ -22,8 +22,6 @@ default-members = [
 ]
 exclude = [
   "crates/extension-so",
-  # Otherwise enables trailbase-sqlite`s `generic` feature for the workspace.
-  # "crates/pg-schema",
   # Fork of pgrow2serde depends on external PG setup.
   "vendor/pgrow2serde",
 ]
