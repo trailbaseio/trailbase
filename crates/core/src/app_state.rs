@@ -530,7 +530,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
     if tcp {
       let db = pglite_oxide::PgliteServer::builder()
         .fresh_temporary()
-        // .temporary()
+        .extensions([
+          // NOTE: pgcrypto and postgis are not currently suppored:
+          //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+          // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+        ])
         .start()?;
 
       (Some(db.connection_uri()), Some(db))
@@ -540,6 +544,11 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
       let db = pglite_oxide::PgliteServer::builder()
         .fresh_temporary()
+        .extensions([
+          // NOTE: pgcrypto and postgis are not currently suppored:
+          //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+          // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+        ])
         // .temporary()
         .unix(&sock)
         .start()?;
