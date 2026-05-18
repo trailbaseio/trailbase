@@ -22,7 +22,7 @@ harness = false
 [features]
 default = []
 generic = ["pg"]
-pg = ["dep:postgres", "dep:bytes", "dep:trailbase-pgrow2serde", "dep:regex"]
+pg = ["dep:postgres", "dep:bytes", "dep:trailbase-pgrow2serde", "dep:regex", "dep:sqlparser"]
 
 [dependencies]
 bytes = { version = "1.11.1", optional = true }
@@ -38,6 +38,7 @@ smallvec = { version = "1.15.1", features = ["const_generics"] }
 thiserror = "2.0.12"
 trailbase-pgrow2serde = { workspace = true, optional = true }
 tokio = { workspace = true }
+sqlparser = { version = "0.62.0", optional = true }
 
 [dev-dependencies]
 chrono = "0.4.43"

@@ -692,7 +692,7 @@ pub async fn execute_batch(
 ) -> Result<Option<Rows>, Error> {
   return match conn.exec {
     Executor::Sqlite(ref exec) => crate::sqlite::batch::execute_batch_impl(exec, sql).await,
-    Executor::Pg(_) => Err(Error::NotSupported),
+    Executor::Pg(ref exec) => crate::pg::util::execute_batch_impl(exec, sql).await,
   };
 }
 
