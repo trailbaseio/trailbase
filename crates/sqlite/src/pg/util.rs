@@ -151,7 +151,7 @@ pub(crate) async fn execute_batch_impl(
   use sqlparser::parser::Parser;
 
   return match Parser::parse_sql(&PostgreSqlDialect {}, sql.as_ref()) {
-    Ok(stmts) if stmts.len() == 0 => Ok(None),
+    Ok(stmts) if stmts.is_empty() => Ok(None),
     Ok(stmts) if stmts.len() > 1 => {
       exec
         .call({

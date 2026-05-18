@@ -53,6 +53,18 @@ pub async fn list_tables_handler_pg_impl(
     crate::schema_metadata::build_metadata(&conn, &Arc::new(RwLock::new(Default::default())))
       .await?;
 
+  let (indexes, triggers) = conn
+    .call_writer(|mut conn| -> Result<_, trailbase_sqlite::Error> {
+      let indexes = trailbase_pg_schema::build_all_index_schemas(&mut conn)
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
+      let triggers = trailbase_pg_schema::build_all_trigger_schemas(&mut conn)
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
+      return Ok((indexes, triggers));
+    })
+    .await?;
+
   return Ok(Json(ListSchemasResponse {
     tables: tables
       .into_iter()
@@ -63,10 +75,24 @@ pub async fn list_tables_handler_pg_impl(
         )
       })
       .collect(),
-    // TODO: Add indexes.
-    indexes: vec![],
-    // TODO: Add triggers.
-    triggers: vec![],
+    indexes,
+    triggers: triggers
+      .into_iter()
+      .map(|t| {
+        return (
+          TableTrigger {
+            name: QualifiedName {
+              name: t.trigger_name,
+              database_schema: Some(t.trigger_schema),
+            },
+            table_name: t.event_object_table,
+          },
+          // NOTE: The action statement is not the full `CREATE TRIGGER`
+          // statement like in SQLite.
+          t.action_statement,
+        );
+      })
+      .collect(),
     views: views
       .into_iter()
       .map(|(_k, v)| {
