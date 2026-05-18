@@ -379,6 +379,17 @@ async fn init_db<'a>(
 async fn init_db<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
+  // NOTE: Disable on debug builds and tests, just due to cargo handles workspace dependencies,
+  // i.e. the optional pg-schema dependency pulls in `trailbase-sqlite` with the `generic`
+  // feature enabled.
+  #[allow(unused)]
+  #[cfg(not(debug_assertions))]
+  fn assert_db_sqlite_connection_type() {
+    // Assert that we're not using th the polymorphic connection in production sqlite mode. The
+    // below constructor only exists on the sqlite flavor.
+    trailbase_sqlite::Connection::new(|| rusqlite::Connection::open_in_memory()).unwrap();
+  }
+
   if opts.attach.len() > 124 {
     return Err(ConnectionError::InvalidSetting("Too many databases"));
   }
@@ -558,15 +569,3 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 }
 
 const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 256;
-
-#[cfg(test)]
-mod tests {
-  #[test]
-  fn test_db_connetion_type() {
-    // Assert that we're not using th the polymorphic connection in non-pg mode. The below
-    // constructor only exists on sqlite flavor.
-
-    #[cfg(not(feature = "pg"))]
-    trailbase_sqlite::Connection::new(|| rusqlite::Connection::open_in_memory()).unwrap();
-  }
-}

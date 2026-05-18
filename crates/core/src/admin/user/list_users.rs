@@ -6,7 +6,6 @@ use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_qs::{Order, OrderPrecedent, Query};
-use trailbase_schema::QualifiedName;
 use ts_rs::TS;
 use uuid::Uuid;
 
