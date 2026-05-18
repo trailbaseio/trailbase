@@ -167,7 +167,7 @@ async fn fetch_rows(
   pagination: Pagination<'_>,
 ) -> Result<(Vec<Vec<SqlValue>>, Vec<Column>), Error> {
   let WhereClause {
-    mut clause,
+    clause: mut where_clause,
     mut params,
   } = filter_where_clause;
 
@@ -187,7 +187,7 @@ async fn fetch_rows(
       Cow::Borrowed(":cursor"),
       crate::admin::util::cursor_to_value(cursor),
     ));
-    clause = format!(r#"{clause} AND _ROW_."{}" < :cursor"#, pk_column.name);
+    where_clause = format!(r#"{where_clause} AND _ROW_."{}" < :cursor"#, pk_column.name);
   }
 
   let order_clause = match order {
@@ -196,7 +196,7 @@ async fn fetch_rows(
       .iter()
       .map(|(col, ord)| {
         format!(
-          r#"_ROW_."{col}" {}"#,
+          r#"ORDER BY _ROW_."{col}" {}"#,
           match ord {
             OrderPrecedent::Descending => "DESC",
             OrderPrecedent::Ascending => "ASC",
@@ -206,18 +206,16 @@ async fn fetch_rows(
       .collect::<Vec<_>>()
       .join(", "),
     None => match pagination.cursor_column {
-      Some(col) => format!(r#""{col_name}" DESC"#, col_name = col.name),
-      None => "NULL".to_string(),
+      Some(col) => format!(r#"ORDER BY "{col_name}" DESC"#, col_name = col.name),
+      None => "".to_string(),
     },
   };
 
   let query = format!(
     r#"
       SELECT _ROW_.* FROM {table} AS _ROW_
-        WHERE
-          {clause}
-        ORDER BY
-          {order_clause}
+        WHERE {where_clause}
+        {order_clause}
         LIMIT :limit
         OFFSET :offset
     "#,
