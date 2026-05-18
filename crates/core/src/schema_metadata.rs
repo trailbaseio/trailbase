@@ -41,24 +41,24 @@ pub(crate) async fn build_metadata(
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let json_schema_registry = json_schema_registry.clone();
 
+  // Nested impl just for packaging error.
+  fn build_metadata_impl(
+    conn: &mut trailbase_sqlite::SyncConnection,
+    json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  ) -> Result<ConnectionMetadata, SchemaLookupError> {
+    let tables = lookup_and_parse_all_table_schemas(conn)?;
+    let views = lookup_and_parse_all_view_schemas(conn, &tables)?;
+
+    return build_connection_metadata_and_install_file_deletion_triggers(
+      conn,
+      tables,
+      views,
+      json_schema_registry,
+    );
+  }
+
   return conn
     .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-      // Nested impl just for packaging error.
-      fn build_metadata_impl(
-        conn: &mut trailbase_sqlite::SyncConnection,
-        json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-      ) -> Result<ConnectionMetadata, SchemaLookupError> {
-        let tables = lookup_and_parse_all_table_schemas(conn)?;
-        let views = lookup_and_parse_all_view_schemas(conn, &tables)?;
-
-        return build_connection_metadata_and_install_file_deletion_triggers(
-          conn,
-          tables,
-          views,
-          json_schema_registry,
-        );
-      }
-
       return build_metadata_impl(&mut conn, &json_schema_registry)
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })

@@ -8101,6 +8101,7 @@ name = "trailbase-pg-schema"
 version = "0.0.1"
 dependencies = [
  "itertools 0.14.0",
+ "log",
  "pglite-oxide",
  "serde",
  "tempfile",

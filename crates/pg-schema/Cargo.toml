@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 itertools = "0.14.0"
+log = { version = "^0.4.21", default-features = false }
 serde = { workspace = true }
 thiserror = "2.0.12"
 tokio = { workspace = true }
