@@ -691,7 +691,7 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_record_api_list() {
+  async fn test_record_api_list_simple() {
     #[derive(Debug, PartialEq, Deserialize)]
     struct Entry {
       id: i64,
@@ -706,13 +706,13 @@ mod tests {
       .execute_batch(
                 conditionally_transform_query(
         r#"
-        CREATE TABLE 'table' (
+        CREATE TABLE "table" (
           id INTEGER PRIMARY KEY,
-          'index' TEXT NOT NULL DEFAULT '',
+          "index" TEXT NOT NULL DEFAULT '',
           nullable INTEGER
         ) STRICT;
 
-        INSERT INTO 'table' (id, 'index', nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
+        INSERT INTO "table" (id, "index", nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
         "#),
       )
       .await

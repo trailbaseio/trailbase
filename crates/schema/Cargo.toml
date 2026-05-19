@@ -8,6 +8,10 @@ homepage = "https://trailbase.io"
 repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
+[features]
+default = []
+pg = []
+
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fallible-iterator = "0.3.0"

@@ -179,7 +179,9 @@ fn setup_file_deletion_triggers(
 fn lookup_and_parse_all_table_schemas(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
 ) -> Result<Vec<Table>, SchemaLookupError> {
-  return Ok(trailbase_pg_schema::build_all_table_schemas(conn)?);
+  let tables = trailbase_pg_schema::build_all_table_schemas(conn)?;
+  log::info!("PG Tables: {tables:?}");
+  return Ok(tables);
 }
 
 #[cfg(not(feature = "pg"))]
