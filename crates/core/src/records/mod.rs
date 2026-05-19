@@ -13,9 +13,27 @@ pub(crate) mod list_records;
 pub(crate) mod params;
 pub(crate) mod read_queries;
 pub(crate) mod read_record;
-pub(crate) mod subscribe;
 pub(crate) mod util;
 pub(crate) mod write_queries;
+
+#[cfg(not(feature = "pg"))]
+pub(crate) mod subscribe;
+
+#[cfg(feature = "pg")]
+pub(crate) mod subscribe {
+  pub mod manager {
+    use std::collections::HashMap;
+    use trailbase_reactive::AsyncReactive;
+
+    pub struct SubscriptionManager;
+
+    impl SubscriptionManager {
+      pub fn new(_: AsyncReactive<HashMap<String, crate::records::RecordApi>>) -> Self {
+        return Self;
+      }
+    }
+  }
+}
 
 #[cfg(test)]
 pub mod test_utils;
@@ -35,7 +53,7 @@ use crate::AppState;
 use crate::config::proto::PermissionFlag;
 use crate::constants::{RECORD_API_PATH, TRANSACTION_API_PATH};
 
-#[allow(unused)]
+#[cfg(not(feature = "pg"))]
 #[derive(OpenApi)]
 #[openapi(paths(
   read_record::read_record_handler,
@@ -50,8 +68,22 @@ use crate::constants::{RECORD_API_PATH, TRANSACTION_API_PATH};
 ))]
 pub(super) struct RecordOpenApi;
 
+#[cfg(feature = "pg")]
+#[derive(OpenApi)]
+#[openapi(paths(
+  read_record::read_record_handler,
+  read_record::get_uploaded_file_from_record_handler,
+  read_record::get_uploaded_files_from_record_handler,
+  list_records::list_records_handler,
+  create_record::create_record_handler,
+  update_record::update_record_handler,
+  delete_record::delete_record_handler,
+  json_schema::json_schema_handler,
+))]
+pub(super) struct RecordOpenApi;
+
 pub(crate) fn router(enable_transactions: bool) -> Router<AppState> {
-  let router = Router::new()
+  let mut router = Router::new()
     .route(
       &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
       get(read_record::read_record_handler),
@@ -83,14 +115,18 @@ pub(crate) fn router(enable_transactions: bool) -> Router<AppState> {
     .route(
       &format!("/{RECORD_API_PATH}/{{name}}/schema"),
       get(json_schema::json_schema_handler),
-    )
-    .route(
+    );
+
+  #[cfg(not(feature = "pg"))]
+  {
+    router = router.route(
       &format!("/{RECORD_API_PATH}/{{name}}/subscribe/{{record}}"),
       get(subscribe::handler::add_subscription_sse_and_ws_handler),
     );
+  }
 
   if enable_transactions {
-    return router.route(
+    router = router.route(
       &format!("/{TRANSACTION_API_PATH}/execute"),
       post(transaction::record_transactions_handler),
     );
