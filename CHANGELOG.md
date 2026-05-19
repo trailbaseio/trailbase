@@ -1,3 +1,11 @@
+## v0.27.7
+
+- Mainline more Postgres changes:
+  - PG builds can now start and most admin UI functionality works.
+  - Support schemas of `VIEW`s, `INDEX`es and `TRIGGER`s.
+  - Important: this is still pre-alpha - tons of tests fail especially for RecordAPIs.
+- Update dependencies.
+
 ## v0.27.6
 
 - Fix auth-ui styling due to missing postcss config.
