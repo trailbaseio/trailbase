@@ -67,6 +67,8 @@ impl WriteQuery {
 
     #[cfg(feature = "pg")]
     let (conflict_clause, returning) = {
+      log::warn!("Conflict resolution not supported with PG: {conflict_resolution:?}");
+
       (
         // FIXME: PG requires trailing `ON CONFLICT` clauses.
         "",

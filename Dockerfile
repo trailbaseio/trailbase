@@ -1,11 +1,22 @@
+ARG TARGETARCH
+
 # NOTE: We cannot use alpine here because rusqlite's `libsqlite3-sys` with
 # `preupdate-hook` has a **build-time** dependency on the `bindgen` crate with
 # the `runtime` feature enabled. This in turn requires a dynamically linked
 # libclang.so, alpine's `clang-dev` package won't work :/.
 FROM messense/rust-musl-cross:x86_64-musl AS builder-amd64
+
+ARG RUST_TOOLCHAIN_VERSION=1.95
+RUN rustup default ${RUST_TOOLCHAIN_VERSION}
+RUN rustup target add x86_64-unknown-linux-musl
+
+
 FROM messense/rust-musl-cross:aarch64-musl AS builder-arm64
 
-ARG TARGETARCH
+ARG RUST_TOOLCHAIN_VERSION=1.95
+RUN rustup default ${RUST_TOOLCHAIN_VERSION}
+RUN rustup target add aarch64-unknown-linux-musl
+
 
 FROM builder-${TARGETARCH} AS base-builder
 
@@ -51,7 +62,7 @@ RUN case ${TARGETPLATFORM} in \
     mv target/${RUST_TARGET}/release/trail /app/trail.exe
 
 
-FROM alpine:3.22 AS image
+FROM alpine:3.23 AS image
 RUN apk add --no-cache tini curl
 
 RUN mkdir -p /app/traildepot/wasm

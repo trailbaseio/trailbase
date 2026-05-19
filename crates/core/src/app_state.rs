@@ -523,43 +523,29 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
-  let use_pglite = true;
-  let (pg_uri, db) = if use_pglite {
+  let (db, pg_uri) = if cfg!(feature = "pg") {
+    let extensions = [
+    // NOTE: pgcrypto and postgis are not currently suppored:
+    //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+    // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+  ];
+
     // Start PgLite.
-    let tcp = false;
-    if tcp {
-      let db = pglite_oxide::PgliteServer::builder()
-        .fresh_temporary()
-        .extensions([
-          // NOTE: pgcrypto and postgis are not currently suppored:
-          //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-          // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
-        ])
-        .start()?;
+    let sock = data_dir.main_db_path().join(".s.PGSQL.5432");
 
-      (Some(db.connection_uri()), Some(db))
-    } else {
-      // NOTE: `db.connection_uri()` returns rubish for UDS.
-      let sock = temp_dir.path().join(".s.PGSQL.5432");
+    let db = pglite_oxide::PgliteServer::builder()
+      .fresh_temporary()
+      .extensions(extensions)
+      .unix(&sock)
+      .start()?;
 
-      let db = pglite_oxide::PgliteServer::builder()
-        .fresh_temporary()
-        .extensions([
-          // NOTE: pgcrypto and postgis are not currently suppored:
-          //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-          // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
-        ])
-        // .temporary()
-        .unix(&sock)
-        .start()?;
+    // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
+    let pg_uri = format!(
+      "postgresql://postgres@/template1?host={}",
+      data_dir.main_db_path().to_string_lossy()
+    );
 
-      let pg_uri = format!(
-        "postgresql://postgres@/template1?host={}",
-        temp_dir.path().to_string_lossy()
-      );
-
-      (Some(pg_uri), Some(db))
-    }
+    (Some(db), Some(pg_uri))
   } else {
     (None, None)
   };
