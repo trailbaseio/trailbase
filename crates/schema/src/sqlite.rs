@@ -565,8 +565,16 @@ impl QualifiedName {
 
 impl PartialEq for QualifiedName {
   fn eq(&self, other: &Self) -> bool {
+    #[cfg(not(feature = "pg"))]
     if self.database_schema.as_deref().unwrap_or("main")
       != other.database_schema.as_deref().unwrap_or("main")
+    {
+      return false;
+    }
+
+    #[cfg(feature = "pg")]
+    if self.database_schema.as_deref().unwrap_or("public")
+      != other.database_schema.as_deref().unwrap_or("public")
     {
       return false;
     }
@@ -583,7 +591,10 @@ impl Hash for QualifiedName {
     self
       .database_schema
       .as_deref()
-      .unwrap_or("main")
+      .unwrap_or(cfg_select! {
+          feature = "pg" => "public",
+          _ => "main",
+      })
       .hash(state);
   }
 }
