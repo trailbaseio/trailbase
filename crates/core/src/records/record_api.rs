@@ -839,15 +839,24 @@ fn filter_excluded_columns(
 #[inline]
 fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
   // TODO: Should this be disabled in prod?
-  if let Some(ref db) = name.database_schema
-    && db != "main"
-  {
-    assert_eq!(
-      config.table_name.as_deref().unwrap_or_default(),
-      format!("{db}.{}", name.name)
-    );
-  } else {
-    assert_eq!(config.table_name.as_deref().unwrap_or_default(), &name.name);
+  match name.database_schema.as_deref() {
+    #[cfg(not(feature = "pg"))]
+    Some(db) if db != "main" => {
+      assert_eq!(
+        config.table_name.as_deref().unwrap_or_default(),
+        format!("{db}.{}", name.name)
+      );
+    }
+    #[cfg(feature = "pg")]
+    Some(db) if db != "public" => {
+      assert_eq!(
+        config.table_name.as_deref().unwrap_or_default(),
+        format!("{db}.{}", name.name)
+      );
+    }
+    _ => {
+      assert_eq!(config.table_name.as_deref().unwrap_or_default(), &name.name);
+    }
   }
 }
 
