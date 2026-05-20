@@ -520,15 +520,18 @@ impl RecordApi {
     query: impl AsRef<str> + Send + 'static,
     params: impl trailbase_sqlite::Params + Send + 'static,
   ) -> bool {
+    // TODO: Remove query from debug_assert and thus the extra allocation.
+    let q = query.as_ref().to_string();
+
     return match self.state.conn.read_query_row_get(query, params, 0).await {
       Ok(Some(allowed)) => allowed,
       Ok(None) => {
-        debug_assert!(false, "RLA query returned no result");
+        debug_assert!(false, "RLA query '{q}' returned no result");
 
         false
       }
       Err(err) => {
-        debug_assert!(false, "RLA query failed: {err}");
+        debug_assert!(false, "RLA query '{q}' failed: {err}");
 
         false
       }
@@ -714,12 +717,25 @@ fn build_read_delete_schema_query(
   pk_column_name: &str,
   access_rule: &str,
 ) -> Arc<str> {
+  #[cfg(not(feature = "pg"))]
   return format!(
     "\
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
         (SELECT :__user_id AS id) AS _USER_, \
+        (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
+    ",
+  )
+  .into();
+
+  #[cfg(feature = "pg")]
+  return format!(
+    "\
+      SELECT \
+        CAST(({access_rule}) AS INTEGER) \
+      FROM \
+        (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
   )

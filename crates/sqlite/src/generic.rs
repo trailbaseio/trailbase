@@ -830,6 +830,19 @@ mod tests {
       },
       data
     );
+  }
+
+  #[tokio::test]
+  async fn generic_connection_w_pg_create_simple_table_test() {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    let conn = Connection::pg_with_opts(PgOptions {
+      connection: PgConnection::Uri(pg_uri),
+      num_threads: Some(1),
+    })
+    .unwrap();
 
     conn
       .execute_batch(
@@ -846,14 +859,127 @@ mod tests {
       1,
       conn
         .execute(
-          r#"INSERT INTO foo ("bool", "uuid", "text") VALUES (:b, :u, :t)"#,
+          r#"INSERT INTO foo ("bool", "uuid", "text") VALUES (:b, :__u, :t)"#,
           named_params! {
               ":b": true,
-              ":u": [0u8; 16],
+              ":__u": [0u8; 16],
               ":t": "test",
           },
         )
         .await
+        .unwrap()
+    );
+  }
+
+  #[tokio::test]
+  async fn generic_connection_w_pg_create_more_complex_table_test() {
+    let db = PgliteServer::temporary_tcp().unwrap();
+    let pg_uri = db.connection_uri();
+    println!("Started PgLite: {pg_uri}");
+
+    let conn = Connection::pg_with_opts(PgOptions {
+      connection: PgConnection::Uri(pg_uri),
+      num_threads: Some(1),
+    })
+    .unwrap();
+
+    conn
+      .execute_batch(
+        r#"
+          CREATE TABLE IF NOT EXISTS _user (
+            id                               UUID PRIMARY KEY NOT NULL DEFAULT (gen_random_uuid()),
+            email                            TEXT NOT NULL
+          );
+
+          CREATE TABLE room (
+            rid          UUID PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            name         TEXT
+          );
+
+          CREATE TABLE message (
+            mid          UUID PRIMARY KEY NOT NULL DEFAULT (gen_random_uuid()),
+            _owner       UUID NOT NULL,
+            room         UUID NOT NULL,
+            data         TEXT NOT NULL DEFAULT 'empty',
+
+            -- on user delete, tombstone it.
+            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
+            -- On chat room delete, delete message
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
+          );
+
+          CREATE TABLE room_members (
+            "user"       UUID NOT NULL,
+            room         UUID NOT NULL,
+
+            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
+            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
+          );
+        "#,
+      )
+      .await
+      .unwrap();
+
+    let user_id = uuid::Uuid::new_v4();
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          "INSERT INTO _user (id, email) VALUES ($1, 'a@b.org');",
+          params!(user_id.into_bytes())
+        )
+        .await
+        .unwrap()
+    );
+
+    let room_id = uuid::Uuid::new_v4();
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          "INSERT INTO room (rid, name) VALUES ($1, 'test_room');",
+          params!(room_id.into_bytes())
+        )
+        .await
+        .unwrap()
+    );
+
+    let message_id = uuid::Uuid::new_v4();
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          "INSERT INTO message (mid, _owner, room) VALUES ($1, $2, $3);",
+          params!(
+            message_id.into_bytes(),
+            user_id.into_bytes(),
+            room_id.into_bytes(),
+          )
+        )
+        .await
+        .unwrap()
+    );
+
+    let rla_query = r#"
+      SELECT
+        CAST(((_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND "user" = _USER_.id))) AS INTEGER)
+      FROM
+        (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
+        (SELECT * FROM "public"."message" WHERE "mid" = CAST(:__record_id AS uuid)) AS _ROW_"#;
+
+    assert_eq!(
+      0,
+      conn
+        .read_query_row_get::<i64>(
+          rla_query,
+          named_params! {
+              ":__record_id": message_id.into_bytes(),
+              ":__user_id": user_id.into_bytes(),
+          },
+          0,
+        )
+        .await
+        .unwrap()
         .unwrap()
     );
   }
