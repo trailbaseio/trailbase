@@ -107,6 +107,7 @@ fn accepts_impl(ty: &postgres::types::Type) -> bool {
       | "int8"
       | "float8"
       | "float4"
+      | "json"
       | "text"
       | "name"
       | "varchar"
