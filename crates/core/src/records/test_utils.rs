@@ -195,7 +195,7 @@ pub async fn create_chat_message_app_tables_integer(state: &AppState) -> Result<
           );
 
           CREATE TABLE message (
-            mid          INT8 PRIMARY KEY,
+            mid          SERIAL PRIMARY KEY,
             _owner       UUID NOT NULL,
             room         UUID NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',

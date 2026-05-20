@@ -541,6 +541,7 @@ mod test {
         Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
+
       assert!(response.is_ok(), "{response:?}");
     }
   }
