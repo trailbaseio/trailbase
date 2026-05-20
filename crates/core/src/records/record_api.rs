@@ -742,11 +742,24 @@ fn build_read_delete_schema_query(
   .into();
 }
 
+#[cfg(not(feature = "pg"))]
 #[derive(Template)]
 #[template(
   escape = "none",
   whitespace = "minimize",
   path = "create_record_access_query.sql"
+)]
+struct CreateRecordAccessQueryTemplate<'a> {
+  create_access_rule: &'a str,
+  column_metadata: &'a [ColumnMetadata],
+}
+
+#[cfg(feature = "pg")]
+#[derive(Template)]
+#[template(
+  escape = "none",
+  whitespace = "minimize",
+  path = "create_record_access_query_pg.sql"
 )]
 struct CreateRecordAccessQueryTemplate<'a> {
   create_access_rule: &'a str,
@@ -772,11 +785,26 @@ fn build_create_access_query(
   );
 }
 
+#[cfg(not(feature = "pg"))]
 #[derive(Template)]
 #[template(
   escape = "none",
   whitespace = "minimize",
   path = "update_record_access_query.sql"
+)]
+struct UpdateRecordAccessQueryTemplate<'a> {
+  update_access_rule: &'a str,
+  table_name: &'a QualifiedNameEscaped,
+  pk_column_name: &'a str,
+  column_metadata: &'a [ColumnMetadata],
+}
+
+#[cfg(feature = "pg")]
+#[derive(Template)]
+#[template(
+  escape = "none",
+  whitespace = "minimize",
+  path = "update_record_access_query_pg.sql"
 )]
 struct UpdateRecordAccessQueryTemplate<'a> {
   update_access_rule: &'a str,
