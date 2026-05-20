@@ -944,6 +944,17 @@ mod tests {
         .unwrap()
     );
 
+    assert_eq!(
+      1,
+      conn
+        .execute(
+          "INSERT INTO room_members (\"user\", room) VALUES ($1, $2);",
+          params!(user_id.into_bytes(), room_id.into_bytes())
+        )
+        .await
+        .unwrap()
+    );
+
     let message_id = uuid::Uuid::new_v4();
     assert_eq!(
       1,
@@ -960,7 +971,7 @@ mod tests {
         .unwrap()
     );
 
-    let rla_query = r#"
+    let read_rla_query = r#"
       SELECT
         CAST(((_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND "user" = _USER_.id))) AS INTEGER)
       FROM
@@ -968,13 +979,43 @@ mod tests {
         (SELECT * FROM "public"."message" WHERE "mid" = CAST(:__record_id AS uuid)) AS _ROW_"#;
 
     assert_eq!(
-      0,
+      1,
       conn
         .read_query_row_get::<i64>(
-          rla_query,
+          read_rla_query,
           named_params! {
               ":__record_id": message_id.into_bytes(),
               ":__user_id": user_id.into_bytes(),
+          },
+          0,
+        )
+        .await
+        .unwrap()
+        .unwrap()
+    );
+
+    let create_rla_query = r#"
+      WITH _REQ_FIELDS_(_) AS (SELECT value FROM json_array_elements( :__fields ))
+      --
+      SELECT
+        CAST((_USER_.id = CAST(_REQ_._owner AS uuid) AND EXISTS(SELECT 1 FROM room_members AS m WHERE m.user = _USER_.id AND m.room = CAST(_REQ_.room AS uuid))) AS INTEGER)
+      FROM
+        (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
+        (SELECT CAST(:mid AS uuid) AS "mid", CAST(:_owner AS uuid) AS "_owner", CAST(:room AS uuid) AS "room", :data AS "data") AS _REQ_;
+      "#;
+
+    assert_eq!(
+      1,
+      conn
+        .read_query_row_get::<i64>(
+          create_rla_query,
+          named_params! {
+              ":__fields": r#"["mid", "_owner", "data"]"#,
+              ":__user_id": user_id.into_bytes(),
+              ":mid": message_id.into_bytes(),
+              ":_owner": user_id.into_bytes(),
+              ":room": room_id.into_bytes(),
+              ":data": "foo",
           },
           0,
         )
