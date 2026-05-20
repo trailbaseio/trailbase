@@ -750,25 +750,21 @@ fn build_read_delete_schema_query(
 )]
 struct CreateRecordAccessQueryTemplate<'a> {
   create_access_rule: &'a str,
-  column_names: Vec<&'a str>,
+  column_metadata: &'a [ColumnMetadata],
 }
 
 /// Build access query for record creation.
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
+#[inline]
 fn build_create_access_query(
   column_metadata: &[ColumnMetadata],
   create_access_rule: &str,
 ) -> Result<Arc<str>, String> {
-  let column_names: Vec<&str> = column_metadata
-    .iter()
-    .map(|m| m.column.name.as_str())
-    .collect();
-
   return Ok(
     CreateRecordAccessQueryTemplate {
       create_access_rule,
-      column_names,
+      column_metadata,
     }
     .render()
     .map_err(|err| err.to_string())?
@@ -786,29 +782,25 @@ struct UpdateRecordAccessQueryTemplate<'a> {
   update_access_rule: &'a str,
   table_name: &'a QualifiedNameEscaped,
   pk_column_name: &'a str,
-  column_names: Vec<&'a str>,
+  column_metadata: &'a [ColumnMetadata],
 }
 
 /// Build access query for record updates.
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
+#[inline]
 fn build_update_access_query(
   table_name: &QualifiedNameEscaped,
   column_metadata: &[ColumnMetadata],
   pk_column_name: &str,
   update_access_rule: &str,
 ) -> Result<Arc<str>, String> {
-  let column_names: Vec<&str> = column_metadata
-    .iter()
-    .map(|m| m.column.name.as_str())
-    .collect();
-
   return Ok(
     UpdateRecordAccessQueryTemplate {
       update_access_rule,
       table_name,
       pk_column_name,
-      column_names,
+      column_metadata,
     }
     .render()
     .map_err(|err| err.to_string())?
@@ -878,8 +870,8 @@ fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
 
 #[cfg(test)]
 mod tests {
-  use trailbase_schema::parse::parse_into_statement;
   use trailbase_schema::sqlite::QualifiedName;
+  use trailbase_schema::{parse::parse_into_statement, sqlite::Column};
 
   use super::*;
   use crate::{config::proto::PermissionFlag, records::Permission};
@@ -890,12 +882,28 @@ mod tests {
     assert!(!template.contains("\n\n"), "{template}");
   }
 
+  fn index_metadata() -> ColumnMetadata {
+    return ColumnMetadata {
+      index: 0,
+      column: Column {
+        name: "index".to_string(),
+        type_name: "uuid".to_string(),
+        data_type: trailbase_schema::sqlite::ColumnDataType::Blob,
+        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Blob,
+        options: vec![],
+      },
+      json: None,
+      is_file: false,
+      is_geometry: false,
+    };
+  }
+
   #[test]
   fn test_create_record_access_query_template() {
     {
       let query = CreateRecordAccessQueryTemplate {
         create_access_rule: "_USER_.id = X'05'",
-        column_names: vec![],
+        column_metadata: &[],
       }
       .render()
       .unwrap();
@@ -906,7 +914,7 @@ mod tests {
     {
       let query = CreateRecordAccessQueryTemplate {
         create_access_rule: r#"_USER_.id = X'05' AND "index" = 'secret'"#,
-        column_names: vec!["index"],
+        column_metadata: &vec![index_metadata()],
       }
       .render()
       .unwrap();
@@ -922,7 +930,7 @@ mod tests {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
         table_name: &QualifiedName::parse("table").unwrap().into(),
         pk_column_name: "index",
-        column_names: vec![],
+        column_metadata: &[],
       }
       .render()
       .unwrap();
@@ -935,7 +943,7 @@ mod tests {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
         table_name: &QualifiedName::parse("table").unwrap().into(),
         pk_column_name: "index",
-        column_names: vec!["index"],
+        column_metadata: &vec![index_metadata()],
       }
       .render()
       .unwrap();
