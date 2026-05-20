@@ -331,7 +331,7 @@ mod test {
         name: Some("messages_api".to_string()),
         table_name: Some("message".to_string()),
         acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
-        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
+        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND \"user\" = _USER_.id))".to_string()),
         ..Default::default()
       },
     ).await.unwrap();
@@ -888,7 +888,7 @@ mod test {
         name: Some("messages_api".to_string()),
         table_name: Some(view_name.to_string()),
         acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
-        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
+        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND \"user\" = _USER_.id))".to_string()),
         ..Default::default()
       },
     )

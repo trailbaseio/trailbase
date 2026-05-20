@@ -24,7 +24,7 @@ pub(crate) struct PgStatement<'a> {
 impl<'a> PgStatement<'a> {
   pub fn new(sql: &'a str) -> Result<Self, Error> {
     static NAMED_RE: LazyLock<Regex> =
-      LazyLock::new(|| Regex::new(r"(?<nparam>:[[:alpha:]][[:word:]]*)").expect("startup"));
+      LazyLock::new(|| Regex::new(r"(?<nparam>:[[:word:]]+)").expect("startup"));
 
     let mut placeholders: HashMap<String, usize> = Default::default();
     for (idx, cap) in NAMED_RE.captures_iter(sql).enumerate() {
@@ -228,9 +228,9 @@ mod tests {
     assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($1)", sql);
     assert_eq!(Value::Text("foo".to_string()), *params.first().unwrap());
 
-    let (sql, params) = PgStatement::new("INSERT INTO 'table' (col) VALUES (:p0), (:p1)")
+    let (sql, params) = PgStatement::new("INSERT INTO 'table' (col) VALUES (:p0), (:__p1)")
       .unwrap()
-      .bind(named_params! {":p0": "p0", ":p1": "p1"})
+      .bind(named_params! {":p0": "p0", ":__p1": "p1"})
       .unwrap();
 
     assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($2)", sql);
