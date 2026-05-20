@@ -539,6 +539,12 @@ fn is_suitable_record_pk_column<T: Borrow<Table>>(column: &Column, tables: &[T])
       true
     }
     ColumnDataType::Blob => {
+      // TODO: PG supports a UUID type, which would do the same if we wired it
+      // through.
+      if cfg!(feature = "pg") {
+        return column.type_name == "uuid";
+      }
+
       lazy_static! {
         static ref UUID_CHECK_RE: Regex =
           Regex::new(r"^is_uuid(|_v7|_v4)\s*\(").expect("infallible");

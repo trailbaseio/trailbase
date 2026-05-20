@@ -1,5 +1,7 @@
 use serde::Deserialize;
-use trailbase_schema::sqlite::{Column, ColumnOption, QualifiedName, Table};
+use trailbase_schema::sqlite::{
+  Column, ColumnAffinityType, ColumnDataType, ColumnOption, QualifiedName, Table,
+};
 use trailbase_sqlite::params;
 
 use crate::error::Error;
@@ -151,21 +153,32 @@ fn get_columns(
     .collect::<Result<_, Error>>();
 }
 
-fn infer_data_type(type_name: &str) -> trailbase_schema::sqlite::ColumnDataType {
+fn infer_data_type(type_name: &str) -> ColumnDataType {
   // NOTE: This is basically `FromSql`, i.e. how we map PG types to `Value`..
   // NOTE: We may want to consider using tid.
-  if type_name.contains("int") {
-    return trailbase_schema::sqlite::ColumnDataType::Integer;
-  }
-  return trailbase_schema::sqlite::ColumnDataType::Any;
+  return match type_name {
+    "uuid" | "bytea" => ColumnDataType::Blob,
+    "real" | "double" => ColumnDataType::Real,
+    "text" | "varchar" => ColumnDataType::Text,
+    name if name.contains("int") || name.contains("bool") || name.contains("serial") => {
+      ColumnDataType::Integer
+    }
+    _ => ColumnDataType::Any,
+  };
 }
 
-fn infer_affinity_type(type_name: &str) -> trailbase_schema::sqlite::ColumnAffinityType {
-  // NOTE: We may want to consider using tid.
-  if type_name.contains("int") {
-    return trailbase_schema::sqlite::ColumnAffinityType::Integer;
-  }
-  return trailbase_schema::sqlite::ColumnAffinityType::Blob;
+fn infer_affinity_type(type_name: &str) -> ColumnAffinityType {
+  // NOTE: Affinity type is really an weakly-typed SQLite thing, we may want to make this
+  // optional. Do we even need it at all beyond parsing?
+  return match type_name {
+    "uuid" | "bytea" => ColumnAffinityType::Blob,
+    "real" | "double" => ColumnAffinityType::Real,
+    "text" | "varchar" => ColumnAffinityType::Text,
+    name if name.contains("int") || name.contains("bool") || name.contains("serial") => {
+      ColumnAffinityType::Integer
+    }
+    _ => ColumnAffinityType::Blob,
+  };
 }
 
 pub fn build_table_schema(
@@ -252,9 +265,9 @@ pub fn build_table_schema(
           })
         }
 
-        if let Some(unique) = c.unique_constraint {
+        if c.unique_constraint.is_some() || c.primary_key.is_some() {
           options.push(ColumnOption::Unique {
-            is_primary: unique.contains("pkey"),
+            is_primary: c.primary_key.is_some(),
             conflict_clause: None,
           });
         }
