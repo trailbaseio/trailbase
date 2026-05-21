@@ -11,8 +11,8 @@ WITH
 {% endif -%}
 
 SELECT
-{% for name in column_names -%}
-  {%- if !loop.first %},{% endif %}_ROW_."{{ name }}"
+{% for metadata in column_metadata -%}
+  {%- if !loop.first %},{% endif %}_ROW_."{{ metadata.column.name }}"
 {%- endfor %}
 {%- for expanded in expanded_tables -%}
   , F{{ loop.index0 }}.*

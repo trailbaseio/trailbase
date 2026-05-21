@@ -246,11 +246,7 @@ pub async fn list_records_handler(
       // have them be stripped later on by `rows_to_json`.
       ListRecordQueryTemplate {
         table_name,
-        column_names: &api
-          .columns()
-          .iter()
-          .map(|meta| meta.column.name.as_str())
-          .collect::<Vec<_>>(),
+        column_metadata: api.columns(),
         // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
         // access early as we do for READs.
         read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
@@ -491,7 +487,7 @@ fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, R
 #[template(escape = "none", path = "list_record_query.sql")]
 struct ListRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
+  column_metadata: &'a [trailbase_schema::metadata::ColumnMetadata],
   read_access_clause: &'a str,
   filter_clause: &'a str,
   cursor_clause: Option<&'a str>,
@@ -507,7 +503,7 @@ struct ListRecordQueryTemplate<'a> {
 #[template(escape = "none", path = "list_record_query_pg.sql")]
 struct ListRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
+  column_metadata: &'a [trailbase_schema::metadata::ColumnMetadata],
   read_access_clause: &'a str,
   filter_clause: &'a str,
   cursor_clause: Option<&'a str>,
@@ -524,8 +520,9 @@ static EPHEMERAL_CURSOR_KEY: LazyLock<KeyType> = LazyLock::new(generate_random_k
 #[cfg(test)]
 mod tests {
   use serde::Deserialize;
+  use trailbase_schema::metadata::ColumnMetadata;
   use trailbase_schema::parse::parse_into_statement;
-  use trailbase_schema::sqlite::QualifiedName;
+  use trailbase_schema::sqlite::{Column, QualifiedName};
   use trailbase_sqlite::Value;
 
   use super::*;
@@ -545,12 +542,44 @@ mod tests {
     assert!(!template.contains("\n\n"), "{template}");
   }
 
+  fn index_column_metadata() -> ColumnMetadata {
+    return ColumnMetadata {
+      index: 0,
+      column: Column {
+        name: "index".to_string(),
+        type_name: "integer".to_string(),
+        data_type: trailbase_schema::sqlite::ColumnDataType::Integer,
+        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
+        options: vec![],
+      },
+      json: None,
+      is_file: false,
+      is_geometry: false,
+    };
+  }
+
+  fn a_column_metadata() -> ColumnMetadata {
+    return ColumnMetadata {
+      index: 0,
+      column: Column {
+        name: "a".to_string(),
+        type_name: "text".to_string(),
+        data_type: trailbase_schema::sqlite::ColumnDataType::Text,
+        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Text,
+        options: vec![],
+      },
+      json: None,
+      is_file: false,
+      is_geometry: false,
+    };
+  }
+
   #[test]
   fn test_list_records_template() {
     sanitize_template(
       &ListRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        column_names: &["a", "index"],
+        column_metadata: &vec![a_column_metadata(), index_column_metadata()],
         read_access_clause: "TRUE",
         filter_clause: "TRUE",
         cursor_clause: Some("TRUE"),
@@ -571,7 +600,7 @@ mod tests {
           database_schema: Some("db".to_string()),
         }
         .into(),
-        column_names: &["a", "index"],
+        column_metadata: &vec![a_column_metadata(), index_column_metadata()],
         read_access_clause: "_USER_.id IS NOT NULL",
         filter_clause: "a = 'value'",
         cursor_clause: None,
@@ -673,7 +702,7 @@ mod tests {
         database_schema: Some("main".to_string()),
       }
       .into(),
-      column_names: &["tid", "drop", "index"],
+      column_metadata: api.columns(),
       read_access_clause: "_USER_.id != X'F000'",
       filter_clause: "TRUE",
       cursor_clause: None,

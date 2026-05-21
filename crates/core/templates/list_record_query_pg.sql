@@ -3,7 +3,7 @@ WITH
   total_count AS (
     SELECT COUNT(*) AS _value_
     FROM
-      (SELECT :__user_id AS id) AS _USER_,
+      (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
       {{ table_name }} as _ROW_
     WHERE
       ({{ read_access_clause }}) AND ({{ filter_clause }})
@@ -11,8 +11,8 @@ WITH
 {% endif -%}
 
 SELECT
-{% for name in column_names -%}
-  {%- if !loop.first %},{% endif %}_ROW_."{{ name }}"
+{% for metadata in column_metadata -%}
+  {%- if !loop.first %},{% endif %}_ROW_."{{ metadata.column.name }}"
 {%- endfor %}
 {%- for expanded in expanded_tables -%}
   , F{{ loop.index0 }}.*
@@ -20,7 +20,7 @@ SELECT
 {%- if count -%}, total_count._value_ AS _total_count_{%- endif %}
 {%- if is_table -%}, _ROW_.ctid AS _rowid_{%- endif %}
 FROM
-  (SELECT :__user_id AS id) AS _USER_,
+  (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
 {%- if count %}
   total_count,
 {%- endif %}
