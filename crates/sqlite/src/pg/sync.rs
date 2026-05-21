@@ -8,6 +8,7 @@ use crate::pg::util::{PgStatement, columns, from_row, from_rows};
 use crate::rows::{Row, Rows};
 use crate::traits::SyncConnection as SyncConnectionTrait;
 use crate::traits::SyncTransaction as SyncTransactionTrait;
+use crate::value::Value;
 
 impl SyncConnectionTrait for postgres::Client {
   // Queries the first row and returns it if present, otherwise `None`.
@@ -82,11 +83,26 @@ impl<'a> SyncTransactionTrait for postgres::Transaction<'a> {
     return Ok(self.rollback()?);
   }
 
-  fn expand_sql(
-    &self,
-    _sql: impl AsRef<str>,
-    _params: impl Params,
-  ) -> Result<Option<String>, Error> {
-    return Err(Error::NotSupported);
+  fn expand_sql(&self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<String>, Error> {
+    let (mut sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
+
+    for (idx, param) in params.into_iter().enumerate() {
+      let param_string = match param {
+        Value::Null => "NULL",
+        Value::Blob(blob) => {
+          let hex_string: String = blob.iter().map(|b| format!("{:02x}", b)).collect();
+
+          // PG expects something like: `'\xDEADBEEF'::bytea`.
+          &format!("'\\x{hex_string}'::bytea")
+        }
+        Value::Real(v) => &format!("{v}"),
+        Value::Integer(v) => &format!("{v}"),
+        Value::Text(t) => &format!("'{t}'"),
+      };
+
+      sql = sql.replace(&format!("${}", idx + 1), param_string)
+    }
+
+    return Ok(Some(sql));
   }
 }

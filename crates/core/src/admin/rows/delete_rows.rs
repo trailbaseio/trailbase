@@ -12,7 +12,6 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::constants::ROW_ID_COLUMN;
 use crate::records::write_queries::run_delete_query;
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -130,6 +129,7 @@ mod tests {
   use crate::admin::rows::update_row::{UpdateRowRequest, update_row_handler};
   use crate::admin::table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
+  use crate::constants::ROW_ID_COLUMN;
   use crate::util::uuid_to_b64;
 
   // TODO: This full-lifecycle test should probably live outside the scope of delete_row.
