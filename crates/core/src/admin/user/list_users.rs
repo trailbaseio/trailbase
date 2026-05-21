@@ -13,7 +13,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::connection::ConnectionEntry;
-use crate::constants::USER_TABLE_FQ;
+use crate::constants::{ROW_ID_COLUMN, USER_TABLE_FQ};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 
 #[derive(Debug, Serialize, TS)]
@@ -104,13 +104,7 @@ pub async fn list_users_handler(
 
   lazy_static! {
     static ref DEFAULT_ORDERING: Order = Order {
-      columns: vec![(
-        cfg_select! {
-            feature = "pg" => "ctid".to_string(),
-            _ => "_rowid_".to_string(),
-        },
-        OrderPrecedent::Descending
-      )],
+      columns: vec![(ROW_ID_COLUMN.to_string(), OrderPrecedent::Descending)],
     };
   }
   let users = fetch_users(

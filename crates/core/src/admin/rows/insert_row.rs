@@ -8,6 +8,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
+use crate::constants::ROW_ID_COLUMN;
 use crate::records::params::Params;
 use crate::records::write_queries::run_insert_query;
 
@@ -48,7 +49,7 @@ pub async fn insert_row_handler(
     state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     None,
-    "_rowid_",
+    ROW_ID_COLUMN,
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
     Params::for_admin_insert(table_metadata, request.row)?,

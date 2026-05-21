@@ -8,6 +8,7 @@ use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_sqlite::{Connection, NamedParams, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
+use crate::constants::ROW_ID_COLUMN;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, Params};
@@ -51,30 +52,24 @@ impl WriteQuery {
     };
 
     #[cfg(not(feature = "pg"))]
-    let (conflict_clause, returning) = {
-      (
-        match conflict_resolution {
-          Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
-          Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
-          Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
-          Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
-          Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
-          _ => "",
-        },
-        &["_rowid_", return_column_name],
-      )
+    let conflict_clause = match conflict_resolution {
+      Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
+      Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
+      Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
+      Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
+      Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
+      _ => "",
     };
 
     #[cfg(feature = "pg")]
-    let (conflict_clause, returning) = {
+    let conflict_clause = {
       log::warn!("Conflict resolution not supported with PG: {conflict_resolution:?}");
 
-      (
-        // FIXME: PG requires trailing `ON CONFLICT` clauses.
-        "",
-        &["ctid", return_column_name],
-      )
+      // FIXME: PG requires trailing `ON CONFLICT` clauses.
+      ""
     };
+
+    let returning = &[ROW_ID_COLUMN, return_column_name];
 
     let query = CreateRecordQueryTemplate {
       table_name,
@@ -113,7 +108,7 @@ impl WriteQuery {
       table_name,
       column_names: &column_names,
       pk_column_name: &pk_column_name,
-      returning: Some("_rowid_"),
+      returning: Some(ROW_ID_COLUMN),
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -133,7 +128,9 @@ impl WriteQuery {
     pk_value: Value,
   ) -> Result<Self, RecordError> {
     return Ok(Self::Delete {
-      query: format!(r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING _rowid_"#),
+      query: format!(
+        r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {ROW_ID_COLUMN}"#
+      ),
       pk_value,
     });
   }

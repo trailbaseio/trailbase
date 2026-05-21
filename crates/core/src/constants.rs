@@ -12,6 +12,11 @@ pub static USER_TABLE_FQ: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedNa
   },
 });
 
+pub const ROW_ID_COLUMN: &str = cfg_select! {
+  feature = "pg" => "ctid",
+  _ => "_rowid_",
+};
+
 pub(crate) const LOGS_TABLE: &str = "_logs";
 pub(crate) const SESSION_TABLE: &str = "_session";
 pub(crate) const AVATAR_TABLE: &str = "_user_avatar";
