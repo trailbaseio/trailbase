@@ -1069,6 +1069,20 @@ mod tests {
     let (_db, exec) = build_pg_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
+    let uuid: Vec<u8> = conn
+      .read_query_row_get("SELECT uuid_generate_v7();", (), 0)
+      .await
+      .unwrap()
+      .unwrap();
+
+    let version: i64 = conn
+      .read_query_row_get("SELECT uuid_extract_version(:id)", [Value::Blob(uuid)], 0)
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!(7, version);
+
     conn
       .execute_batch(
         "

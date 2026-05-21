@@ -11,10 +11,22 @@ CREATE FUNCTION uuid_v4() RETURNS UUID AS $$
   END;
 $$ LANGUAGE plpgsql;
 
--- It's a lie:
 CREATE FUNCTION uuid_v7() RETURNS UUID AS $$
   BEGIN
-    RETURN gen_random_uuid();
+    RETURN uuid_generate_v7();
+  END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION is_uuid_v7(id UUID) RETURNS BOOL AS $$
+  BEGIN
+    RETURN uuid_extract_version(id) = 7;
+  END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION jsonschema(n TEXT, column_name TEXT) RETURNS BOOL AS $$
+  BEGIN
+    -- It's another lie:
+    RETURN TRUE;
   END;
 $$ LANGUAGE plpgsql;
 

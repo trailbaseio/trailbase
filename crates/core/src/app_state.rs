@@ -525,10 +525,12 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
 
   let (db, pg_uri) = if cfg!(feature = "pg") {
     let extensions = [
-    // NOTE: pgcrypto and postgis are not currently suppored:
-    //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-    // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
-  ];
+      // NOTE: pgcrypto and postgis are not currently supported:
+      //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+      // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+      // Enabled UUIDv7 support.
+      pglite_oxide::extensions::PG_UUIDV7,
+    ];
 
     // Start PgLite.
     let sock = data_dir.main_db_path().join(".s.PGSQL.5432");

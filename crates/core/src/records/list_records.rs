@@ -238,31 +238,27 @@ pub async fn list_records_handler(
     None => vec![],
   };
 
+  // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
+  // have them be stripped later on by `rows_to_json`.
+  let list_query = ListRecordQueryTemplate {
+    table_name,
+    column_metadata: api.columns(),
+    // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
+    // access early as we do for READs.
+    read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
+    filter_clause: &filter_clause,
+    cursor_clause: cursor_clause.as_deref(),
+    order_clause: &order_clause,
+    expanded_tables: &expanded_tables,
+    count: count.unwrap_or(false),
+    offset: offset.is_some(),
+    is_table,
+  }
+  .render()
+  .map_err(|err| RecordError::Internal(err.into()))?;
+
   // Execute the query.
-  let rows = api
-    .conn()
-    .read_query_rows(
-      // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
-      // have them be stripped later on by `rows_to_json`.
-      ListRecordQueryTemplate {
-        table_name,
-        column_metadata: api.columns(),
-        // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
-        // access early as we do for READs.
-        read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
-        filter_clause: &filter_clause,
-        cursor_clause: cursor_clause.as_deref(),
-        order_clause: &order_clause,
-        expanded_tables: &expanded_tables,
-        count: count.unwrap_or(false),
-        offset: offset.is_some(),
-        is_table,
-      }
-      .render()
-      .map_err(|err| RecordError::Internal(err.into()))?,
-      params,
-    )
-    .await?;
+  let rows = api.conn().read_query_rows(list_query, params).await?;
 
   let Some(last_row) = rows.last() else {
     // Query result is empty:
@@ -866,7 +862,15 @@ mod tests {
         name: Some("messages_api".to_string()),
         table_name: Some("message".to_string()),
         acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
-        read_access_rule: Some("(_ROW_._owner = _USER_.id OR EXISTS(SELECT 1 FROM room_members WHERE room = _ROW_.room AND user = _USER_.id))".to_string()),
+        read_access_rule: Some(
+          "\
+            _ROW_._owner = _USER_.id OR \
+            EXISTS( \
+              SELECT 1 FROM room_members WHERE room = _ROW_.room AND \"user\" = _USER_.id \
+            ) \
+          "
+          .to_string(),
+        ),
         ..Default::default()
       },
     )

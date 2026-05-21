@@ -245,6 +245,7 @@ pub fn build_pg_test_executor() -> Result<(pglite_oxide::PgliteServer, Executor)
 
   let db = pglite_oxide::PgliteServer::builder()
     .fresh_temporary()
+    .extensions([pglite_oxide::extensions::PG_UUIDV7])
     .unix(&sock)
     .start()
     .map_err(|err| Error::Other(err.into()))?;
