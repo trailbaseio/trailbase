@@ -1,8 +1,9 @@
 use itertools::Itertools;
 use serde::Deserialize;
-use trailbase_schema::sqlite::{QualifiedName, View};
+use trailbase_schema::sqlite::{ColumnMapping, QualifiedName, View, ViewColumn};
 
 use crate::error::Error;
+use crate::table::{build_column_schema, get_columns};
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ViewInformationSchema {
@@ -44,13 +45,40 @@ fn get_views(
     .collect::<Result<_, Error>>();
 }
 
-pub fn build_view_schema(view: ViewInformationSchema) -> Result<View, Error> {
+pub fn build_view_schema(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  view: ViewInformationSchema,
+) -> Result<View, Error> {
   let ViewInformationSchema {
     table_catalog: _,
     table_schema,
     table_name,
     view_definition,
   } = view;
+
+  let columns = get_columns(conn, &table_name)?;
+
+  let column_mapping = if let Ok(columns) = columns
+    .into_iter()
+    .map(build_column_schema)
+    .collect::<Result<Vec<_>, _>>()
+  {
+    // FIXME: Implement proper ColumnMapping extraction.
+    Some(ColumnMapping {
+      columns: columns
+        .into_iter()
+        .map(|c| ViewColumn {
+          column: c,
+          parent_name: None,
+          aggregation: None,
+        })
+        .collect(),
+      group_by: None,
+      joins: vec![],
+    })
+  } else {
+    None
+  };
 
   return Ok(View {
     name: QualifiedName {
@@ -59,7 +87,7 @@ pub fn build_view_schema(view: ViewInformationSchema) -> Result<View, Error> {
     },
     // TODO: extract column mapping. We can either query PG some more or parse the view
     // definition with something like: https://crates.io/crates/sqlparser.
-    column_mapping: None,
+    column_mapping,
     query: view_definition,
     temporary: false,
     if_not_exists: false,
@@ -73,7 +101,7 @@ pub fn build_all_view_schemas(
 
   return views
     .into_iter()
-    .map(build_view_schema)
+    .map(|view| build_view_schema(conn, view))
     .collect::<Result<Vec<View>, Error>>();
 }
 

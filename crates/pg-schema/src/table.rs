@@ -62,22 +62,22 @@ fn get_tables(
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
-struct ColumnInformationSchema {
-  table_catalog: String,
-  table_schema: String,
-  table_name: String,
-  column_name: String,
-  ordinal_position: i32,
+pub(crate) struct ColumnInformationSchema {
+  pub table_catalog: String,
+  pub table_schema: String,
+  pub table_name: String,
+  pub column_name: String,
+  pub ordinal_position: i32,
   // Is "NO" or "YES" :/.
-  data_type: String,
-  is_nullable: String,
-  column_default: Option<String>,
+  pub data_type: String,
+  pub is_nullable: String,
+  pub column_default: Option<String>,
   // E.g. "NEVER".
-  is_generated: String,
-  primary_key: Option<String>,
-  foreign_key: Option<String>,
-  unique_constraint: Option<String>,
-  check_constraint: Option<String>,
+  pub is_generated: String,
+  pub primary_key: Option<String>,
+  pub foreign_key: Option<String>,
+  pub unique_constraint: Option<String>,
+  pub check_constraint: Option<String>,
 }
 
 const QUERY_COLUMNS_WITH_CONSTRAINTS: &str = "
@@ -123,7 +123,7 @@ ORDER BY
     c.ordinal_position;
 ";
 
-fn get_columns(
+pub(crate) fn get_columns(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   table_name: &str,
 ) -> Result<Vec<ColumnInformationSchema>, Error> {
@@ -181,6 +181,53 @@ fn infer_affinity_type(type_name: &str) -> ColumnAffinityType {
   };
 }
 
+pub(crate) fn build_column_schema(c: ColumnInformationSchema) -> Result<Column, Error> {
+  let mut options = Vec::<ColumnOption>::new();
+
+  if c.is_nullable == "NO" {
+    options.push(ColumnOption::NotNull)
+  }
+
+  if let Some(default) = c.column_default {
+    options.push(ColumnOption::Default(default));
+  }
+
+  if c.is_generated != "NEVER" {
+    options.push(ColumnOption::Generated {
+      expr: "TODO".to_string(),
+      mode: None,
+    })
+  }
+
+  if c.unique_constraint.is_some() || c.primary_key.is_some() {
+    options.push(ColumnOption::Unique {
+      is_primary: c.primary_key.is_some(),
+      conflict_clause: None,
+    });
+  }
+
+  if let Some(fk) = c.foreign_key {
+    options.push(ColumnOption::ForeignKey {
+      foreign_table: fk,
+      referred_columns: vec![],
+      on_delete: None,
+      on_update: None,
+    })
+  }
+
+  if let Some(check) = c.check_constraint {
+    options.push(ColumnOption::Check(check));
+  }
+
+  return Ok(Column {
+    name: c.column_name,
+    data_type: infer_data_type(&c.data_type),
+    affinity_type: infer_affinity_type(&c.data_type),
+    type_name: c.data_type,
+    options,
+  });
+}
+
 pub fn build_table_schema(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   table: TableInformationSchema,
@@ -195,50 +242,6 @@ pub fn build_table_schema(
 
   let columns = get_columns(conn, &table_name)?;
 
-  // let foreign_keys: Vec<_> = columns
-  //   .iter()
-  //   .filter_map(|c| {
-  //     if let Some(ref fk) = c.foreign_key {
-  //       return Some(ForeignKey {
-  //         name: None,
-  //         columns: vec![],
-  //         foreign_table: fk.clone(),
-  //         referred_columns: vec![],
-  //         on_delete: None,
-  //         on_update: None,
-  //       });
-  //     }
-  //     return None;
-  //   })
-  //   .collect();
-  //
-  // let unique: Vec<_> = columns
-  //   .iter()
-  //   .filter_map(|c| {
-  //     if let Some(ref unique) = c.unique_constraint {
-  //       return Some(UniqueConstraint {
-  //         name: None,
-  //         columns: vec![unique.clone()],
-  //         conflict_clause: None,
-  //       });
-  //     }
-  //     return None;
-  //   })
-  //   .collect();
-  //
-  // let checks: Vec<_> = columns
-  //   .iter()
-  //   .filter_map(|c| {
-  //     if let Some(ref check) = c.check_constraint {
-  //       return Some(Check {
-  //         name: None,
-  //         expr: check.clone(),
-  //       });
-  //     }
-  //     return None;
-  //   })
-  //   .collect();
-
   return Ok(Table {
     name: QualifiedName {
       name: table_name,
@@ -247,54 +250,9 @@ pub fn build_table_schema(
     strict: is_typed == "NO",
     columns: columns
       .into_iter()
-      .map(|c| {
-        let mut options = Vec::<ColumnOption>::new();
-
-        if c.is_nullable == "NO" {
-          options.push(ColumnOption::NotNull)
-        }
-
-        if let Some(default) = c.column_default {
-          options.push(ColumnOption::Default(default));
-        }
-
-        if c.is_generated != "NEVER" {
-          options.push(ColumnOption::Generated {
-            expr: "TODO".to_string(),
-            mode: None,
-          })
-        }
-
-        if c.unique_constraint.is_some() || c.primary_key.is_some() {
-          options.push(ColumnOption::Unique {
-            is_primary: c.primary_key.is_some(),
-            conflict_clause: None,
-          });
-        }
-
-        if let Some(fk) = c.foreign_key {
-          options.push(ColumnOption::ForeignKey {
-            foreign_table: fk,
-            referred_columns: vec![],
-            on_delete: None,
-            on_update: None,
-          })
-        }
-
-        if let Some(check) = c.check_constraint {
-          options.push(ColumnOption::Check(check));
-        }
-
-        return Column {
-          name: c.column_name,
-          data_type: infer_data_type(&c.data_type),
-          affinity_type: infer_affinity_type(&c.data_type),
-          type_name: c.data_type,
-          options,
-        };
-      })
-      .collect(),
-    // QUESTION: These are table level constraints.
+      .map(build_column_schema)
+      .collect::<Result<Vec<_>, _>>()?,
+    // FIXME: Add table-level (as opposed to column) constraints.
     foreign_keys: vec![],
     unique: vec![],
     checks: vec![],
