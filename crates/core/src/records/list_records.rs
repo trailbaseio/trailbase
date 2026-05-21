@@ -198,10 +198,16 @@ pub async fn list_records_handler(
           .first()
           .is_some_and(|(_c, o)| *o == OrderPrecedent::Ascending) =>
       {
-        Some("_ROW_._rowid_ > :cursor".to_string())
+        Some(cfg_select! {
+            feature = "pg" => "_ROW_.ctid> :cursor".to_string(),
+            _ => "_ROW_._rowid_ > :cursor".to_string(),
+        })
       }
       // Descending:
-      _ => Some("_ROW_._rowid_ < :cursor".to_string()),
+      _ => Some(cfg_select! {
+          feature = "pg" => "_ROW_.ctid < :cursor".to_string(),
+          _=>"_ROW_._rowid_ < :cursor".to_string(),
+      }),
     }
   } else {
     None
@@ -484,8 +490,25 @@ fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, R
     .map_err(|_| RecordError::BadRequest("Bad cursor"));
 }
 
+#[cfg(not(feature = "pg"))]
 #[derive(Template)]
 #[template(escape = "none", path = "list_record_query.sql")]
+struct ListRecordQueryTemplate<'a> {
+  table_name: &'a QualifiedNameEscaped,
+  column_names: &'a [&'a str],
+  read_access_clause: &'a str,
+  filter_clause: &'a str,
+  cursor_clause: Option<&'a str>,
+  order_clause: &'a str,
+  expanded_tables: &'a [ExpandedTable<'a>],
+  count: bool,
+  offset: bool,
+  is_table: bool,
+}
+
+#[cfg(feature = "pg")]
+#[derive(Template)]
+#[template(escape = "none", path = "list_record_query_pg.sql")]
 struct ListRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
   column_names: &'a [&'a str],
