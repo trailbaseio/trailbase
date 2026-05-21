@@ -158,7 +158,11 @@ impl Connection {
       Executor::Sqlite(ref exec) => exec.write_lock(),
       // Expected: while locking is less of a problem for PG, running sync postgres on a
       // tokio task will make the runtime panic.
-      Executor::Pg(_) => Err(LockError::NotSupported),
+      Executor::Pg(_) => {
+        log::error!("Not supported: PG write lock");
+
+        Err(LockError::NotSupported)
+      }
     };
   }
 
@@ -171,7 +175,11 @@ impl Connection {
       Executor::Sqlite(ref exec) => exec.try_write_arc_lock_for(duration),
       // Expected: while locking is less of a problem for PG, running sync postgres on a
       // tokio task will make the runtime panic.
-      Executor::Pg(_) => Err(LockError::NotSupported),
+      Executor::Pg(_) => {
+        log::error!("Not supported: PG arc write lock");
+
+        Err(LockError::NotSupported)
+      }
     };
   }
 
@@ -500,8 +508,9 @@ impl Connection {
         })
       }
       Executor::Pg(_) => {
-        // TBD
-        Err(Error::NotSupported)
+        log::error!("Not implemented: attach DB");
+
+        Err(Error::NotImplemented)
       }
     };
   }
@@ -516,8 +525,9 @@ impl Connection {
         })
       }
       Executor::Pg(_) => {
-        // TBD
-        Err(Error::NotSupported)
+        log::error!("Not implemented: detach DB");
+
+        Err(Error::NotImplemented)
       }
     };
   }
@@ -532,7 +542,11 @@ impl Connection {
           })
           .await
       }
-      Executor::Pg(_) => Err(Error::NotSupported),
+      Executor::Pg(_) => {
+        log::error!("Not implemented: backup");
+
+        Err(Error::NotImplemented)
+      }
     };
   }
 
@@ -540,8 +554,9 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.call_reader(crate::sqlite::util::list_databases).await,
       Executor::Pg(_) => {
-        // TBD
-        return Err(Error::NotSupported);
+        log::error!("Not implemented: list databases");
+
+        return Err(Error::NotImplemented);
       }
     };
   }
