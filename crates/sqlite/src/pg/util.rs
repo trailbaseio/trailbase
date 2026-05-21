@@ -1,6 +1,6 @@
 use postgres::fallible_iterator::FallibleIterator;
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 use std::sync::{Arc, LazyLock};
 
 use crate::SyncConnectionTrait;
@@ -27,9 +27,17 @@ impl<'a> PgStatement<'a> {
       LazyLock::new(|| Regex::new(r"(?<nparam>:[[:word:]]+)").expect("startup"));
 
     let mut placeholders: HashMap<String, usize> = Default::default();
-    for (idx, cap) in NAMED_RE.captures_iter(sql).enumerate() {
+    for cap in NAMED_RE.captures_iter(sql) {
       let named_params = &cap["nparam"];
-      placeholders.insert(named_params.to_string(), idx + 1);
+      let length = placeholders.len();
+      match placeholders.entry(named_params.to_string()) {
+        Entry::Vacant(e) => {
+          e.insert(length + 1);
+        }
+        Entry::Occupied(_) => {
+          // Don't override, if the same named params is referenced multiple times.
+        }
+      }
     }
 
     return Ok(Self {
