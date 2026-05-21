@@ -4,6 +4,7 @@ use axum::{
   extract::{Path, Query, RawQuery, State},
 };
 use base64::prelude::*;
+use const_format::formatcp;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -15,6 +16,7 @@ use trailbase_sqlite::Value;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::constants::ROW_ID_COLUMN;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{ExpandedTable, JsonError, expand_tables, row_to_json_expand};
@@ -198,16 +200,10 @@ pub async fn list_records_handler(
           .first()
           .is_some_and(|(_c, o)| *o == OrderPrecedent::Ascending) =>
       {
-        Some(cfg_select! {
-            feature = "pg" => "_ROW_.ctid> :cursor".to_string(),
-            _ => "_ROW_._rowid_ > :cursor".to_string(),
-        })
+        Some(formatcp!("_ROW_.{ROW_ID_COLUMN}> :cursor").to_string())
       }
       // Descending:
-      _ => Some(cfg_select! {
-          feature = "pg" => "_ROW_.ctid < :cursor".to_string(),
-          _=>"_ROW_._rowid_ < :cursor".to_string(),
-      }),
+      _ => Some(formatcp!("_ROW_.{ROW_ID_COLUMN} < :cursor").to_string()),
     }
   } else {
     None

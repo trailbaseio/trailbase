@@ -12,6 +12,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
+use crate::constants::ROW_ID_COLUMN;
 use crate::records::write_queries::run_delete_query;
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -201,7 +202,7 @@ mod tests {
       return state
         .conn()
         .read_query_value::<TestTable>(
-          format!("SELECT * FROM {table_name} WHERE _rowid_ = ?1"),
+          format!("SELECT * FROM {table_name} WHERE {ROW_ID_COLUMN} = ?1"),
           trailbase_sqlite::params!(response.row_id),
         )
         .await
