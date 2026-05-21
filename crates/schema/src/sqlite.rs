@@ -446,7 +446,7 @@ impl ColumnAffinityType {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
 pub struct Column {
   pub name: String,
   pub type_name: String,
@@ -967,7 +967,7 @@ impl View {
   }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
 pub struct ViewColumn {
   // e.g. "foo" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
   // #[allow(unused)]
