@@ -78,6 +78,9 @@ pub(crate) struct ColumnInformationSchema {
   pub foreign_key: Option<String>,
   pub unique_constraint: Option<String>,
   pub check_constraint: Option<String>,
+  // For FKs and PKs (PKs typically reference themselves).
+  pub constraint_table_name: Option<String>,
+  pub constraint_column_name: Option<String>,
   // For VIEWs:
   pub source_table: Option<String>,
   pub source_column: Option<String>,
@@ -98,6 +101,9 @@ SELECT
     MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN tc.constraint_name END) AS foreign_key,
     MAX(CASE WHEN tc.constraint_type = 'UNIQUE' THEN tc.constraint_name END) AS unique_constraint,
     MAX(CASE WHEN tc.constraint_type = 'CHECK' THEN tc.constraint_name END) AS check_constraint,
+    -- Only for FKs
+    ccu.table_name AS constraint_table_name,
+    ccu.column_name AS constraint_column_name,
     -- Only defined for VIEW columns:
     vcu.table_name AS source_table,
     vcu.column_name AS source_column
@@ -110,6 +116,9 @@ LEFT JOIN information_schema.table_constraints tc
     ON kcu.constraint_name = tc.constraint_name
     AND kcu.table_schema = tc.table_schema
     AND kcu.table_name = tc.table_name
+LEFT JOIN information_schema.constraint_column_usage ccu
+    ON kcu.constraint_name = ccu.constraint_name
+    AND kcu.table_schema = ccu.table_schema
 LEFT JOIN information_schema.view_column_usage vcu
     ON c.table_schema = vcu.view_schema
     AND c.table_name = vcu.view_name
@@ -127,6 +136,8 @@ GROUP BY
     c.is_nullable,
     c.column_default,
     c.is_generated,
+    ccu.table_name,
+    ccu.column_name,
     vcu.table_name,
     vcu.column_name
 ORDER BY
@@ -160,8 +171,10 @@ pub(crate) fn get_columns(
         foreign_key: row.get(10)?,
         unique_constraint: row.get(11)?,
         check_constraint: row.get(12)?,
-        source_table: row.get(13)?,
-        source_column: row.get(14)?,
+        constraint_table_name: row.get(13)?,
+        constraint_column_name: row.get(14)?,
+        source_table: row.get(15)?,
+        source_column: row.get(16)?,
       });
     })
     .collect::<Result<_, Error>>();
@@ -220,10 +233,14 @@ pub(crate) fn build_column_schema(c: ColumnInformationSchema) -> Result<Column, 
     });
   }
 
-  if let Some(fk) = c.foreign_key {
+  if let (Some(_fk), Some(t), Some(c)) = (
+    c.foreign_key,
+    c.constraint_table_name,
+    c.constraint_column_name,
+  ) {
     options.push(ColumnOption::ForeignKey {
-      foreign_table: fk,
-      referred_columns: vec![],
+      foreign_table: t,
+      referred_columns: vec![c],
       on_delete: None,
       on_update: None,
     })
@@ -370,6 +387,9 @@ mod tests {
         foreign_key: None,
         unique_constraint: None,
         check_constraint: None,
+        // NOTE: PK references itself.
+        constraint_table_name: Some("table0".to_string()),
+        constraint_column_name: Some("id".to_string()),
         ..Default::default()
       },]
     );
@@ -378,65 +398,80 @@ mod tests {
     assert!(columns1.len() > 0);
 
     assert_eq!(
-      columns1,
-      vec![
-        ColumnInformationSchema {
-          table_catalog: "template1".to_string(),
-          table_schema: "public".to_string(),
-          table_name: "table1".to_string(),
-          column_name: "id".to_string(),
-          ordinal_position: 1,
-          is_nullable: "NO".to_string(),
-          data_type: "integer".to_string(),
-          column_default: None,
-          is_generated: "NEVER".to_string(),
-          primary_key: Some("table1_pkey".to_string()),
-          foreign_key: None,
-          unique_constraint: None,
-          check_constraint: None,
-          ..Default::default()
-        },
-        ColumnInformationSchema {
-          table_catalog: "template1".to_string(),
-          table_schema: "public".to_string(),
-          table_name: "table1".to_string(),
-          column_name: "fk".to_string(),
-          ordinal_position: 2,
-          is_nullable: "YES".to_string(),
-          data_type: "integer".to_string(),
-          column_default: None,
-          is_generated: "NEVER".to_string(),
-          primary_key: None,
-          foreign_key: Some("table1_fk_fkey".to_string()),
-          unique_constraint: None,
-          check_constraint: None,
-          ..Default::default()
-        },
-        ColumnInformationSchema {
-          table_catalog: "template1".to_string(),
-          table_schema: "public".to_string(),
-          table_name: "table1".to_string(),
-          column_name: "a".to_string(),
-          ordinal_position: 3,
-          is_nullable: "YES".to_string(),
-          data_type: "text".to_string(),
-          column_default: Some("'foo'::text".to_string()),
-          is_generated: "NEVER".to_string(),
-          ..Default::default()
-        },
-        ColumnInformationSchema {
-          table_catalog: "template1".to_string(),
-          table_schema: "public".to_string(),
-          table_name: "table1".to_string(),
-          column_name: "b".to_string(),
-          ordinal_position: 4,
-          is_nullable: "NO".to_string(),
-          data_type: "bigint".to_string(),
-          column_default: Some("5".to_string()),
-          is_generated: "NEVER".to_string(),
-          ..Default::default()
-        },
-      ]
+      columns1[0],
+      ColumnInformationSchema {
+        table_catalog: "template1".to_string(),
+        table_schema: "public".to_string(),
+        table_name: "table1".to_string(),
+        column_name: "id".to_string(),
+        ordinal_position: 1,
+        is_nullable: "NO".to_string(),
+        data_type: "integer".to_string(),
+        column_default: None,
+        is_generated: "NEVER".to_string(),
+        primary_key: Some("table1_pkey".to_string()),
+        foreign_key: None,
+        unique_constraint: None,
+        check_constraint: None,
+        // NOTE: PK references itself.
+        constraint_table_name: Some("table1".to_string()),
+        constraint_column_name: Some("id".to_string()),
+        ..Default::default()
+      }
+    );
+
+    assert_eq!(
+      columns1[1],
+      ColumnInformationSchema {
+        table_catalog: "template1".to_string(),
+        table_schema: "public".to_string(),
+        table_name: "table1".to_string(),
+        column_name: "fk".to_string(),
+        ordinal_position: 2,
+        is_nullable: "YES".to_string(),
+        data_type: "integer".to_string(),
+        column_default: None,
+        is_generated: "NEVER".to_string(),
+        primary_key: None,
+        foreign_key: Some("table1_fk_fkey".to_string()),
+        unique_constraint: None,
+        check_constraint: None,
+        constraint_table_name: Some("table0".to_string()),
+        constraint_column_name: Some("id".to_string()),
+        ..Default::default()
+      },
+    );
+
+    assert_eq!(
+      columns1[2],
+      ColumnInformationSchema {
+        table_catalog: "template1".to_string(),
+        table_schema: "public".to_string(),
+        table_name: "table1".to_string(),
+        column_name: "a".to_string(),
+        ordinal_position: 3,
+        is_nullable: "YES".to_string(),
+        data_type: "text".to_string(),
+        column_default: Some("'foo'::text".to_string()),
+        is_generated: "NEVER".to_string(),
+        ..Default::default()
+      },
+    );
+
+    assert_eq!(
+      columns1[3],
+      ColumnInformationSchema {
+        table_catalog: "template1".to_string(),
+        table_schema: "public".to_string(),
+        table_name: "table1".to_string(),
+        column_name: "b".to_string(),
+        ordinal_position: 4,
+        is_nullable: "NO".to_string(),
+        data_type: "bigint".to_string(),
+        column_default: Some("5".to_string()),
+        is_generated: "NEVER".to_string(),
+        ..Default::default()
+      },
     );
 
     println!("COLUMNS1: {columns1:?}\n");
