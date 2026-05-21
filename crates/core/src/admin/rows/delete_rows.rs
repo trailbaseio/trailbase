@@ -156,7 +156,10 @@ mod tests {
           columns: vec![
             Column {
               name: pk_col.clone(),
-              type_name: "BLOB".to_string(),
+              type_name: cfg_select! {
+                  feature = "pg" =>"uuid".to_string(),
+                  _ =>"BLOB".to_string(),
+              },
               data_type: ColumnDataType::Blob,
               affinity_type: ColumnAffinityType::Blob,
               options: vec![
@@ -164,8 +167,9 @@ mod tests {
                   is_primary: true,
                   conflict_clause: None,
                 },
-                ColumnOption::Check(format!("(is_uuid_v7({pk_col}))")),
                 ColumnOption::Default("(uuid_v7())".to_string()),
+                #[cfg(not(feature = "pg"))]
+                ColumnOption::Check(format!("(is_uuid_v7({pk_col}))")),
               ],
             },
             Column {

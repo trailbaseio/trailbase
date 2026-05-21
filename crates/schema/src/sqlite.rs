@@ -461,13 +461,13 @@ impl Column {
 
     return if options.is_empty() {
       format!(
-        "'{name}' {type_name}",
+        "\"{name}\" {type_name}",
         name = self.name,
         type_name = self.type_name,
       )
     } else {
       format!(
-        "'{name}' {type_name} {options}",
+        "\"{name}\" {type_name} {options}",
         name = self.name,
         type_name = self.type_name,
         options = options.join(" "),
@@ -653,7 +653,11 @@ impl Table {
       temporary = if self.temporary { " TEMPORARY" } else { "" },
       fq_name = self.name.escaped_string(),
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
-      strict = if self.strict { " STRICT" } else { "" },
+      strict = if cfg!(not(feature = "pg")) && self.strict {
+        " STRICT"
+      } else {
+        ""
+      },
     );
   }
 }
@@ -819,7 +823,7 @@ impl TableIndex {
       .iter()
       .map(|c| {
         format!(
-          "'{name}' {order}",
+          "\"{name}\" {order}",
           name = c.column_name,
           order = c
             .ascending
@@ -1718,7 +1722,7 @@ mod tests {
     let sql = table.create_table_statement();
 
     assert_eq!(
-      "CREATE TABLE \"table\" ('index' TEXT, 'delete' TEXT, 'create' TEXT) STRICT",
+      "CREATE TABLE \"table\" (\"index\" TEXT, \"delete\" TEXT, \"create\" TEXT) STRICT",
       sql
     );
     parse_into_statement(&sql).unwrap().unwrap();
@@ -1798,7 +1802,7 @@ mod tests {
   #[test]
   fn test_statement_to_table_index_and_back() {
     const SQL: &str =
-      "CREATE UNIQUE INDEX IF NOT EXISTS 'index' ON 'table' ('create') WHERE 'create' != '';";
+      r#"CREATE UNIQUE INDEX IF NOT EXISTS "index" ON "table" ("create") WHERE "create" != '';"#;
 
     let statement1 = parse_into_statement(SQL).unwrap().unwrap();
     let index1: TableIndex = statement1.clone().try_into().unwrap();

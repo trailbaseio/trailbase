@@ -44,6 +44,7 @@ pub async fn create_table_handler(
     .transaction(move |tx| {
       let mut tx = TransactionRecorder::new(tx);
 
+      log::debug!("Creating table: '{create_table_query}'");
       tx.execute(create_table_query, ())?;
 
       return tx
@@ -55,6 +56,7 @@ pub async fn create_table_handler(
   // Take transaction log, write a migration file and apply.
   if !dry_run && let Some(ref log) = tx_log {
     let filename = table_schema.name.migration_filename("create_table");
+
     let _report = log
       .apply_as_migration(&conn, migration_path, &filename)
       .await?;
