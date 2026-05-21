@@ -1,3 +1,14 @@
+## v0.27.8
+
+- Mainline more Postgres changes:
+  - Important: this is still pre-alpha. RecordApis, schema manipulations and many tests are broken.
+  - Derive `VIEW` column schema.
+  - Update queries, `_rowid_` references, escaping in various places.
+  - Fix repeat named parameters.
+  - Support for JSON columns.
+  - Support for (query, params) expansion.
+- Update dependencies.
+
 ## v0.27.7
 
 - Mainline more Postgres changes:
