@@ -4,4 +4,6 @@ pub enum Error {
   Db(#[from] trailbase_sqlite::Error),
   #[error("FromSql: {0}")]
   FromSql(#[from] trailbase_sqlite::from_sql::FromSqlError),
+  #[error("NotFound: {0}")]
+  NotFound(String),
 }

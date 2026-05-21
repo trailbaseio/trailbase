@@ -61,7 +61,7 @@ fn get_tables(
     .collect::<Result<_, Error>>();
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[derive(Clone, Default, Debug, Deserialize, PartialEq)]
 pub(crate) struct ColumnInformationSchema {
   pub table_catalog: String,
   pub table_schema: String,
@@ -78,6 +78,9 @@ pub(crate) struct ColumnInformationSchema {
   pub foreign_key: Option<String>,
   pub unique_constraint: Option<String>,
   pub check_constraint: Option<String>,
+  // For VIEWs:
+  pub source_table: Option<String>,
+  pub source_column: Option<String>,
 }
 
 const QUERY_COLUMNS_WITH_CONSTRAINTS: &str = "
@@ -94,7 +97,10 @@ SELECT
     MAX(CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN tc.constraint_name END) AS primary_key,
     MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN tc.constraint_name END) AS foreign_key,
     MAX(CASE WHEN tc.constraint_type = 'UNIQUE' THEN tc.constraint_name END) AS unique_constraint,
-    MAX(CASE WHEN tc.constraint_type = 'CHECK' THEN tc.constraint_name END) AS check_constraint
+    MAX(CASE WHEN tc.constraint_type = 'CHECK' THEN tc.constraint_name END) AS check_constraint,
+    -- Only defined for VIEW columns:
+    vcu.table_name AS source_table,
+    vcu.column_name AS source_column
 FROM information_schema.columns c
 LEFT JOIN information_schema.key_column_usage kcu
     ON c.table_schema = kcu.table_schema
@@ -104,6 +110,10 @@ LEFT JOIN information_schema.table_constraints tc
     ON kcu.constraint_name = tc.constraint_name
     AND kcu.table_schema = tc.table_schema
     AND kcu.table_name = tc.table_name
+LEFT JOIN information_schema.view_column_usage vcu
+    ON c.table_schema = vcu.view_schema
+    AND c.table_name = vcu.view_name
+    AND c.column_name = vcu.column_name
 WHERE
     c.table_schema NOT IN ('pg_catalog', 'information_schema')
     AND c.table_name = $1
@@ -116,7 +126,9 @@ GROUP BY
     c.data_type,
     c.is_nullable,
     c.column_default,
-    c.is_generated
+    c.is_generated,
+    vcu.table_name,
+    vcu.column_name
 ORDER BY
     -- c.table_schema,
     -- c.table_name,
@@ -148,6 +160,8 @@ pub(crate) fn get_columns(
         foreign_key: row.get(10)?,
         unique_constraint: row.get(11)?,
         check_constraint: row.get(12)?,
+        source_table: row.get(13)?,
+        source_column: row.get(14)?,
       });
     })
     .collect::<Result<_, Error>>();
@@ -356,6 +370,7 @@ mod tests {
         foreign_key: None,
         unique_constraint: None,
         check_constraint: None,
+        ..Default::default()
       },]
     );
 
@@ -379,6 +394,7 @@ mod tests {
           foreign_key: None,
           unique_constraint: None,
           check_constraint: None,
+          ..Default::default()
         },
         ColumnInformationSchema {
           table_catalog: "template1".to_string(),
@@ -394,6 +410,7 @@ mod tests {
           foreign_key: Some("table1_fk_fkey".to_string()),
           unique_constraint: None,
           check_constraint: None,
+          ..Default::default()
         },
         ColumnInformationSchema {
           table_catalog: "template1".to_string(),
@@ -405,10 +422,7 @@ mod tests {
           data_type: "text".to_string(),
           column_default: Some("'foo'::text".to_string()),
           is_generated: "NEVER".to_string(),
-          primary_key: None,
-          foreign_key: None,
-          unique_constraint: None,
-          check_constraint: None,
+          ..Default::default()
         },
         ColumnInformationSchema {
           table_catalog: "template1".to_string(),
@@ -420,10 +434,7 @@ mod tests {
           data_type: "bigint".to_string(),
           column_default: Some("5".to_string()),
           is_generated: "NEVER".to_string(),
-          primary_key: None,
-          foreign_key: None,
-          unique_constraint: None,
-          check_constraint: None,
+          ..Default::default()
         },
       ]
     );
