@@ -24,11 +24,16 @@ impl postgres::types::ToSql for Value {
             let t: &[u8] = &v.to_be_bytes()[0..6];
             t.to_sql(ty, out)?
           }
+          // NOTE: float8 is implicitly supported by the default below. This is just for symmetry.
+          "float4" => (*v as f32).to_sql(ty, out)?,
           _ => v.to_sql(ty, out)?,
         };
       }
       Value::Real(v) => {
-        v.to_sql(ty, out)?;
+        match ty.name() {
+          "float4" => (*v as f32).to_sql(ty, out)?,
+          "float8" | _ => v.to_sql(ty, out)?,
+        };
       }
       Value::Text(v) => {
         v.to_sql(ty, out)?;

@@ -176,7 +176,7 @@ mod test {
     assert_eq!(
       state
         .conn()
-        .read_query_value::<i64>(r#"SELECT "int" FROM "update" WHERE id = 1"#, ())
+        .read_query_row_get::<i64>(r#"SELECT "int" FROM "update" WHERE id = 1"#, (), 0)
         .await
         .unwrap(),
       Some(4)

@@ -1074,6 +1074,89 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn pg_int_test() {
+    let (_db, exec) = build_pg_test_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE int_table (
+          \"s\"     serial,
+          \"i2\"    int2,
+          \"i4\"    int4,
+          \"i8\"    int8
+        );
+        ",
+      )
+      .await
+      .unwrap();
+
+    for col in ["s", "i2", "i4", "i8"] {
+      conn
+        .execute(
+          format!("INSERT INTO int_table({col}) VALUES ($1);"),
+          [Value::Integer(5)],
+        )
+        .await
+        .unwrap();
+
+      let select = format!("SELECT {col} FROM int_table WHERE {col} IS NOT NULL");
+      conn
+        .read_query_row_get::<Value>(select.clone(), (), 0)
+        .await
+        .unwrap()
+        .unwrap();
+
+      conn
+        .read_query_row_get::<i64>(select.clone(), (), 0)
+        .await
+        .unwrap()
+        .unwrap();
+    }
+  }
+
+  #[tokio::test]
+  async fn pg_float_test() {
+    let (_db, exec) = build_pg_test_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE float_table (
+          \"f4\"    float4,
+          \"f8\"    float8
+        );
+        ",
+      )
+      .await
+      .unwrap();
+
+    for col in ["f4", "f8"] {
+      for v in [Value::Real(5.0), Value::Integer(5)] {
+        conn
+          .execute(format!("INSERT INTO float_table({col}) VALUES ($1);"), [v])
+          .await
+          .unwrap();
+      }
+
+      let select = format!("SELECT {col} FROM float_table WHERE {col} IS NOT NULL");
+      conn
+        .read_query_row_get::<Value>(select.clone(), (), 0)
+        .await
+        .unwrap()
+        .unwrap();
+
+      conn
+        .read_query_row_get::<f64>(select.clone(), (), 0)
+        .await
+        .unwrap()
+        .unwrap();
+    }
+  }
+
+  #[tokio::test]
   async fn pg_uuids_test() {
     let (_db, exec) = build_pg_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
