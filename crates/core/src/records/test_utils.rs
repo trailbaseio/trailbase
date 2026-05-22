@@ -114,12 +114,12 @@ pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyh
     .execute_batch(
       r#"
           CREATE TABLE room (
-            rid          UUID PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            rid          UUID PRIMARY KEY NOT NULL DEFAULT(uuid_v7()),
             name         TEXT
           );
 
           CREATE TABLE message (
-            mid          UUID PRIMARY KEY NOT NULL DEFAULT (gen_random_uuid()),
+            mid          UUID PRIMARY KEY NOT NULL DEFAULT (uuid_v7()),
             _owner       UUID NOT NULL,
             room         UUID NOT NULL,
             data         TEXT NOT NULL DEFAULT 'empty',
@@ -190,7 +190,7 @@ pub async fn create_chat_message_app_tables_integer(state: &AppState) -> Result<
     .execute_batch(
       r#"
           CREATE TABLE room (
-            rid          UUID PRIMARY KEY NOT NULL DEFAULT(gen_random_uuid()),
+            rid          UUID PRIMARY KEY NOT NULL DEFAULT(uuid_v7()),
             name         TEXT
           );
 

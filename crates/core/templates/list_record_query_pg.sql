@@ -30,9 +30,7 @@ FROM
 {%- endfor %}
 WHERE
   ({{ read_access_clause }}) AND ({{ filter_clause }})
-{%- if let Some(cursor_clause) = cursor_clause -%}
-  AND ({{ cursor_clause }})
-{%- endif %}
+  {%- if let Some(cursor_clause) = cursor_clause %} AND ({{ cursor_clause }}){% endif %}
 ORDER BY
   {{ order_clause }}
 LIMIT :__limit

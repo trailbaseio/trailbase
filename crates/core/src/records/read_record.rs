@@ -870,7 +870,7 @@ mod test {
     let view_name = "view";
     conn
       .execute(
-        format!("CREATE VIEW '{view_name}' AS SELECT * FROM {table_name}"),
+        format!("CREATE VIEW \"{view_name}\" AS SELECT * FROM {table_name}"),
         (),
       )
       .await
