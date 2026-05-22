@@ -133,6 +133,26 @@ async fn validate_event(
   return Ok(Some(ev.payload));
 }
 
+fn access_check_error_event(err: &RecordError, dev_mode: bool) -> Arc<EventPayload> {
+  if matches!(err, RecordError::Forbidden) {
+    return ACCESS_DENIED_EVENT.clone();
+  }
+
+  let message = if dev_mode {
+    Some(format!("Internal access-check error: {err}"))
+  } else {
+    Some("Internal access-check error".to_string())
+  };
+
+  return Arc::new(EventPayload::from(&JsonEventPayload::Error {
+    value: EventError {
+      status: EventErrorStatus::Unknown,
+      code: err.stable_code().map(ToOwned::to_owned),
+      message,
+    },
+  }));
+}
+
 pub async fn subscribe_sse(
   state: AppState,
   api: RecordApi,
@@ -204,15 +224,16 @@ pub async fn subscribe_sse(
                     ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
                   ))
                   .boxed(),
-                  Err(_) => {
-                    // Death sentence for record subscriptions to not have access
+                  Err(err) => {
+                    let is_forbidden = matches!(err, RecordError::Forbidden);
+                    if !is_forbidden {
+                      log::error!("SSE record access-check failed: {err}");
+                    }
+
                     stream::iter(vec![
-                      // First send an error event to the user.
-                      ACCESS_DENIED_EVENT
-                        .clone()
+                      access_check_error_event(&err, args.state.dev_mode())
                         .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
-                      // Then terminate the stream via the `take_while` below.
-                      Err(RecordError::Forbidden),
+                      Err(err),
                     ])
                     .boxed()
                   }
@@ -312,17 +333,19 @@ pub async fn subscribe_ws(
         Ok(None) => {
           continue;
         }
-        Err(_) => {
+        Err(err) => {
+          if !matches!(err, RecordError::Forbidden) {
+            log::error!("WS access-check failed: {err}");
+          }
+
           if is_record_subscription {
-            // Death sentence for record subscriptions to not have access
-            let _ = ACCESS_DENIED_EVENT
-              .clone()
+            let _ = access_check_error_event(&err, args.state.dev_mode())
               .into_ws_event()
               .map(|ev| sender.send(ev));
             return;
-          } else {
-            continue;
           }
+
+          continue;
         }
       };
 
@@ -402,9 +425,17 @@ pub async fn subscribe_ws(
         // NOTE: Access checking can only happen post upgrade, since browsers & Node.js don't allow
         // setting custom headers for the UPGRADE HTTP request. We could maybe use cookies in some
         // places but instead expect an explicit authorization.
-        if let Err(_err) = api.check_table_level_access(Permission::Read, user.as_ref()) {
-          abort(&mut ws_sender, Code::Policy, "unauthorized").await;
-          return;
+        match api.check_table_level_access(Permission::Read, user.as_ref()) {
+          Ok(()) => {}
+          Err(RecordError::Forbidden) => {
+            abort(&mut ws_sender, Code::Policy, "unauthorized").await;
+            return;
+          }
+          Err(err) => {
+            log::error!("WS table subscription access-check failed: {err}");
+            abort(&mut ws_sender, Code::Unexpected, "internal access-check error").await;
+            return;
+          }
         }
 
         let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
@@ -440,12 +471,20 @@ pub async fn subscribe_ws(
         // NOTE: Access checking can only happen post upgrade, since browsers & Node.js don't allow
         // setting custom headers for the UPGRADE HTTP request. We could maybe use cookies in some
         // places but instead expect an explicit authorization.
-        if let Err(_) = api
+        match api
           .check_record_level_access(Permission::Read, Some(&record_id), None, user.as_ref())
           .await
         {
-          abort(&mut ws_sender, Code::Policy, "unauthorized").await;
-          return;
+          Ok(()) => {}
+          Err(RecordError::Forbidden) => {
+            abort(&mut ws_sender, Code::Policy, "unauthorized").await;
+            return;
+          }
+          Err(err) => {
+            log::error!("WS record subscription access-check failed: {err}");
+            abort(&mut ws_sender, Code::Unexpected, "internal access-check error").await;
+            return;
+          }
         }
 
         let (sender, receiver) = async_channel::bounded::<EventCandidate>(64);
@@ -475,6 +514,7 @@ static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
   Arc::new(EventPayload::from(&JsonEventPayload::Error {
     value: EventError {
       status: EventErrorStatus::Forbidden,
+      code: None,
       message: Some("Access denied".into()),
     },
   }))
@@ -483,6 +523,7 @@ static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
   Arc::new(EventPayload::from(&JsonEventPayload::Error {
     value: EventError {
       status: EventErrorStatus::Loss,
+      code: None,
       message: None,
     },
   }))

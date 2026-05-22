@@ -1,7 +1,14 @@
 use axum::body::Body;
 use axum::http::{StatusCode, header::CONTENT_TYPE};
 use axum::response::{IntoResponse, Response};
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
+
+static EXPOSE_INTERNAL_ERRORS: AtomicBool = AtomicBool::new(cfg!(debug_assertions));
+
+pub(crate) fn set_expose_internal_errors(expose: bool) {
+  EXPOSE_INTERNAL_ERRORS.store(expose, Ordering::Relaxed);
+}
 
 /// Publicly visible errors of record APIs.
 ///
@@ -20,8 +27,19 @@ pub enum RecordError {
   Forbidden,
   #[error("Bad request: {0}")]
   BadRequest(&'static str),
+  #[error("Access check failed: {0}")]
+  AccessCheckFailed(Box<dyn std::error::Error + Send + Sync>),
   #[error("Internal: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl RecordError {
+  pub(crate) fn stable_code(&self) -> Option<&'static str> {
+    return match self {
+      Self::AccessCheckFailed(_) => Some("ACCESS_CHECK_EVAL_FAILED"),
+      _ => None,
+    };
+  }
 }
 
 impl From<trailbase_sqlite::Error> for RecordError {
@@ -80,13 +98,23 @@ impl From<object_store::Error> for RecordError {
 
 impl IntoResponse for RecordError {
   fn into_response(self) -> Response {
+    let expose_internal_errors = EXPOSE_INTERNAL_ERRORS.load(Ordering::Relaxed);
+
     let (status, body) = match self {
       Self::ApiNotFound => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::ApiRequiresTable => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::RecordNotFound => (StatusCode::NOT_FOUND, None),
       Self::Forbidden => (StatusCode::FORBIDDEN, None),
       Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, Some(msg.to_string())),
-      Self::Internal(err) if cfg!(debug_assertions) => {
+      Self::AccessCheckFailed(err) if expose_internal_errors => (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Some(format!("ACCESS_CHECK_EVAL_FAILED: {err}")),
+      ),
+      Self::AccessCheckFailed(_err) => (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Some("ACCESS_CHECK_EVAL_FAILED".to_string()),
+      ),
+      Self::Internal(err) if expose_internal_errors => {
         (StatusCode::INTERNAL_SERVER_ERROR, Some(err.to_string()))
       }
       Self::Internal(_err) => (StatusCode::INTERNAL_SERVER_ERROR, None),

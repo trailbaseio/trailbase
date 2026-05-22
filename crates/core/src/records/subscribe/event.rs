@@ -23,6 +23,8 @@ pub enum EventErrorStatus {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct EventError {
   pub status: EventErrorStatus,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub code: Option<String>,
   pub message: Option<String>,
 }
 
@@ -135,6 +137,7 @@ pub enum TestJsonEventPayload {
   Delete(JsonObject),
   Error {
     status: EventErrorStatus,
+    code: Option<String>,
     message: Option<String>,
   },
   Ping,
@@ -180,6 +183,7 @@ mod tests {
         event: Arc::new(EventPayload::from(&JsonEventPayload::Error {
           value: EventError {
             status: EventErrorStatus::Loss,
+            code: None,
             message: Some("test".to_string()),
           },
         })),
@@ -213,6 +217,7 @@ mod tests {
       assert_eq!(
         TestJsonEventPayload::Error {
           status: EventErrorStatus::Forbidden,
+          code: None,
           message: Some("test".to_string()),
         },
         test_event.event

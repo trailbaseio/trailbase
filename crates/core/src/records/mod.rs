@@ -45,7 +45,7 @@ mod transaction;
 mod update_record;
 mod validate;
 
-pub(crate) use error::RecordError;
+pub(crate) use error::{RecordError, set_expose_internal_errors};
 pub use record_api::RecordApi;
 pub(crate) use validate::validate_record_api_config;
 
