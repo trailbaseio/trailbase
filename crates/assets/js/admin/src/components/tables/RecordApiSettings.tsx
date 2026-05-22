@@ -264,12 +264,6 @@ function ConflictResolutionStrategyToString(
   switch (value) {
     case ConflictResolutionStrategy.ABORT:
       return "Abort";
-    case ConflictResolutionStrategy.ROLLBACK:
-      return "Rollback";
-    case ConflictResolutionStrategy.FAIL:
-      return "Fail";
-    case ConflictResolutionStrategy.IGNORE:
-      return "Ignore";
     case ConflictResolutionStrategy.REPLACE:
       return "Replace";
     default:
@@ -863,9 +857,6 @@ function IndividualRecordApiSettingsForm(props: {
                             options={[
                               ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED,
                               ConflictResolutionStrategy.ABORT,
-                              ConflictResolutionStrategy.ROLLBACK,
-                              ConflictResolutionStrategy.FAIL,
-                              ConflictResolutionStrategy.IGNORE,
                               ConflictResolutionStrategy.REPLACE,
                             ]}
                             onChange={(

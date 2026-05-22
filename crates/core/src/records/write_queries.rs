@@ -53,20 +53,24 @@ impl WriteQuery {
 
     #[cfg(not(feature = "pg"))]
     let conflict_clause = match conflict_resolution {
+      // NOTE: Abort is also the default behavior if absent.
       Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
-      Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
-      Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
-      Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
+      // Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
+      // Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
+      // Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
       Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
-      _ => "",
+      Some(ConflictResolutionStrategy::Undefined) | None => "",
     };
 
     #[cfg(feature = "pg")]
-    let conflict_clause = {
-      log::warn!("Conflict resolution not supported with PG: {conflict_resolution:?}");
+    let conflict_clause = match conflict_resolution {
+      Some(ConflictResolutionStrategy::Replace) => {
+        log::warn!("REPLACE resolution not supported with PG: {conflict_resolution:?}");
 
-      // FIXME: PG requires trailing `ON CONFLICT` clauses.
-      ""
+        // FIXME: PG requires trailing `ON CONFLICT` clauses.
+        ""
+      }
+      _ => "",
     };
 
     let returning = &[ROW_ID_COLUMN, return_column_name];
