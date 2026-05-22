@@ -251,14 +251,13 @@ fn prefix_filter(col_name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-  use object_store::{ObjectStore, ObjectStoreExt};
-  use std::io::Read;
-  use std::sync::Arc;
-
   use axum::Json;
   use axum::extract::{Path, Query, State};
+  use object_store::{ObjectStore, ObjectStoreExt};
   use serde::Serialize;
   use serde_json::json;
+  use std::io::Read;
+  use std::sync::Arc;
   use trailbase_schema::{FileUpload, FileUploadInput};
 
   use super::*;

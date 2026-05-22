@@ -30,6 +30,8 @@ pub enum SchemaLookupError {
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
   #[error("JsonSchemaError: {0}")]
   JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
+  #[error("NotFound")]
+  NotFound,
   #[cfg(feature = "pg")]
   #[error("PgSchema: {0}")]
   PgSchema(#[from] trailbase_pg_schema::Error),
@@ -72,6 +74,8 @@ pub(crate) async fn build_metadata(
     });
 }
 
+// FIXME: Table name is unqualified.
+#[cfg(not(feature = "pg"))]
 pub async fn lookup_and_parse_table_schema(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
@@ -99,6 +103,27 @@ pub async fn lookup_and_parse_table_schema(
     table.name.database_schema = Some(database.to_string());
   }
   return Ok(table);
+}
+
+// FIXME: Table name is unqualified.
+#[cfg(feature = "pg")]
+pub async fn lookup_and_parse_table_schema(
+  conn: &trailbase_sqlite::Connection,
+  table_name: &str,
+  database: Option<&str>,
+) -> Result<Table, SchemaLookupError> {
+  // TODO: We could just query for a specific table rather than for all and filter.
+  let tables = conn
+    .call_writer(|mut conn| -> Result<_, trailbase_sqlite::Error> {
+      return lookup_and_parse_all_table_schemas(&mut conn)
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+    })
+    .await?;
+
+  return tables
+    .into_iter()
+    .find(|t| t.name.name == table_name)
+    .ok_or(SchemaLookupError::NotFound);
 }
 
 /// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file

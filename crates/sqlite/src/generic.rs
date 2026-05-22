@@ -1254,4 +1254,71 @@ mod tests {
 
     assert_eq!("b", data);
   }
+
+  #[tokio::test]
+  async fn pg_trigger_test() {
+    let (_db, exec) = build_pg_test_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    let column_name = "test";
+    let unqualified_name = "tt";
+    let db = "public";
+    let table_name = format!("{db}.{unqualified_name}");
+
+    conn
+      .execute_batch(format!(
+        "
+          CREATE OR REPLACE FUNCTION UNIXEPOCH() RETURNS INT8 AS $$
+            BEGIN
+              RETURN EXTRACT(EPOCH FROM CURRENT_TIMESTAMP);
+            END;
+          $$ LANGUAGE plpgsql;
+
+          CREATE TABLE _file_deletions (
+            id                           SERIAL PRIMARY KEY NOT NULL,
+            deleted                      INTEGER NOT NULL DEFAULT (UNIXEPOCH()),
+          
+            -- Cleanup metadata
+            attempts                     INTEGER NOT NULL DEFAULT 0,
+            errors                       TEXT,
+          
+            -- Which record contained the file.
+            table_name                   TEXT NOT NULL,
+            record_rowid                 TID NOT NULL,
+            column_name                  TEXT NOT NULL,
+          
+            -- File metadata, including id (path).
+            --
+            -- IMPORTANT: non-binary `JSON` type does not support comparisons.
+            \"json\"                     JSONB NOT NULL
+          );
+
+          CREATE TABLE {table_name} ({column_name} JSONB);
+          "
+      ))
+      .await
+      .unwrap();
+
+    conn
+      .execute_batch(format!(
+        "
+          CREATE FUNCTION myfun() RETURNS TRIGGER AS $$
+            BEGIN
+              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
+                ('{table_name}', OLD.ctid, '{column_name}', \"{column_name}\");
+            END;
+          $$ LANGUAGE plpgsql;
+
+          DROP TRIGGER IF EXISTS \"__{unqualified_name}__{column_name}__update_trigger\" ON {table_name};
+
+          CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__update_trigger\"
+            AFTER UPDATE ON {table_name}
+            FOR EACH ROW
+            WHEN (OLD.{column_name} IS NOT NULL AND OLD.{column_name} != NEW.{column_name})
+            EXECUTE FUNCTION myfun();
+          ",
+      ))
+      .await
+      .unwrap();
+  }
 }

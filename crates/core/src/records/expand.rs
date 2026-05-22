@@ -242,11 +242,11 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
 
 #[cfg(test)]
 mod tests {
-
   use serde_json::json;
 
   use super::*;
   use crate::app_state::*;
+  use crate::records::test_utils::*;
   use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
   #[tokio::test]
@@ -281,11 +281,11 @@ mod tests {
 
     conn
       .execute(
-        format!(
+        conditionally_transform_query(format!(
           r#"CREATE TABLE test_table (
             col0 TEXT CHECK(jsonschema('foo', col0))
           ) STRICT"#
-        ),
+        )),
         (),
       )
       .await
@@ -294,6 +294,7 @@ mod tests {
     let table = lookup_and_parse_table_schema(conn, "test_table", Some("main"))
       .await
       .unwrap();
+
     let metadata = TableMetadata::new(
       &state.json_schema_registry().read(),
       table.clone(),
