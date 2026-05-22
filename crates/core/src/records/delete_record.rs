@@ -95,7 +95,7 @@ mod test {
       },
       AccessRules {
         create: Some(
-          "EXISTS(SELECT 1 FROM room_members WHERE room = _REQ_.room AND user = _USER_.id)"
+          "EXISTS(SELECT 1 FROM room_members WHERE room = _REQ_.room AND \"user\" = _USER_.id)"
             .to_string(),
         ),
         // Only owners can delete.

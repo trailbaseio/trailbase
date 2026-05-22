@@ -1010,10 +1010,19 @@ mod tests {
     );
 
     let create_rla_query = r#"
-      WITH _REQ_FIELDS_(_) AS (SELECT value FROM json_array_elements( :__fields ))
+      WITH _REQ_FIELDS_(_) AS (SELECT value FROM json_array_elements_text(:__fields))
       --
       SELECT
-        CAST((_USER_.id = CAST(_REQ_._owner AS uuid) AND EXISTS(SELECT 1 FROM room_members AS m WHERE m.user = _USER_.id AND m.room = CAST(_REQ_.room AS uuid))) AS INTEGER)
+        CAST(
+          (
+            _USER_.id = _REQ_._owner AND
+            EXISTS(
+              SELECT 1 FROM room_members AS m WHERE m.user = _USER_.id AND m.room = _REQ_.room
+            ) AND
+            -- NOTE: PG doesn't support `IN (subquery)`, i.e.: `'mid' IN _REQ_FIELDS_`, like SQLite does.
+            'mid' IN (SELECT * FROM _REQ_FIELDS_)
+          )
+          AS INTEGER)
       FROM
         (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
         (SELECT CAST(:mid AS uuid) AS "mid", CAST(:_owner AS uuid) AS "_owner", CAST(:room AS uuid) AS "room", :data AS "data") AS _REQ_;

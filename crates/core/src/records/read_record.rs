@@ -1057,7 +1057,13 @@ mod test {
           PermissionFlag::Delete as i32,
         ]
         .into(),
-        create_access_rule: Some("('col0' NOT IN _REQ_FIELDS_)".to_string()),
+        create_access_rule: Some(cfg_select! {
+            // NOTE: PG's `IN` operator doesn't support SQLite's `IN (subquery)` syntax.
+            // NOTE: We could use the same PG query in SQLite, just leaving the branch here to
+            // highlight the difference.
+            feature = "pg" =>"('col0' NOT IN (SELECT * FROM _REQ_FIELDS_))".to_string(),
+            _ => "('col0' NOT IN _REQ_FIELDS_)".to_string(),
+        }),
         ..Default::default()
       },
     )
