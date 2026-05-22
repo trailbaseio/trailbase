@@ -26,8 +26,8 @@ SELECT
     STRING_AGG(DISTINCT tc.constraint_type, ', ' ORDER BY tc.constraint_type) AS constraint_types,
     STRING_AGG(tc.constraint_name, ', ' ORDER BY tc.constraint_name) AS constraint_names
 FROM information_schema.tables t
-LEFT JOIN information_schema.table_constraints tc
-    ON t.table_schema = tc.table_schema
+LEFT JOIN information_schema.table_constraints tc ON
+    t.table_schema = tc.table_schema
     AND t.table_name = tc.table_name
 WHERE
     t.table_schema NOT IN ('pg_catalog', 'information_schema')
@@ -78,9 +78,9 @@ pub(crate) struct ColumnInformationSchema {
   pub foreign_key: Option<String>,
   pub unique_constraint: Option<String>,
   pub check_constraint: Option<String>,
-  // For FKs and PKs (PKs typically reference themselves).
-  pub constraint_table_name: Option<String>,
-  pub constraint_column_name: Option<String>,
+  // For FKs:
+  pub fk_table_name: Option<String>,
+  pub fk_column_name: Option<String>,
   // For VIEWs:
   pub source_table: Option<String>,
   pub source_column: Option<String>,
@@ -102,27 +102,29 @@ SELECT
     MAX(CASE WHEN tc.constraint_type = 'UNIQUE' THEN tc.constraint_name END) AS unique_constraint,
     MAX(CASE WHEN tc.constraint_type = 'CHECK' THEN tc.constraint_name END) AS check_constraint,
     -- Only for FKs
-    ccu.table_name AS constraint_table_name,
-    ccu.column_name AS constraint_column_name,
+    MAX(ccu.table_name) AS fk_table_name,
+    MAX(ccu.column_name) AS fk_column_name,
     -- Only defined for VIEW columns:
     vcu.table_name AS source_table,
     vcu.column_name AS source_column
-FROM information_schema.columns c
-LEFT JOIN information_schema.key_column_usage kcu
-    ON c.table_schema = kcu.table_schema
-    AND c.table_name = kcu.table_name
-    AND c.column_name = kcu.column_name
-LEFT JOIN information_schema.table_constraints tc
-    ON kcu.constraint_name = tc.constraint_name
-    AND kcu.table_schema = tc.table_schema
-    AND kcu.table_name = tc.table_name
-LEFT JOIN information_schema.constraint_column_usage ccu
-    ON kcu.constraint_name = ccu.constraint_name
-    AND kcu.table_schema = ccu.table_schema
-LEFT JOIN information_schema.view_column_usage vcu
-    ON c.table_schema = vcu.view_schema
-    AND c.table_name = vcu.view_name
-    AND c.column_name = vcu.column_name
+FROM
+    information_schema.columns c
+    LEFT JOIN information_schema.key_column_usage kcu ON
+        c.table_schema = kcu.table_schema
+        AND c.table_name = kcu.table_name
+        AND c.column_name = kcu.column_name
+    LEFT JOIN information_schema.table_constraints tc ON
+        kcu.constraint_name = tc.constraint_name
+        AND kcu.table_schema = tc.table_schema
+        AND kcu.table_name = tc.table_name
+    LEFT JOIN information_schema.constraint_column_usage ccu ON
+        tc.constraint_type = 'FOREIGN KEY'
+        AND kcu.constraint_name = ccu.constraint_name
+        AND kcu.table_schema = ccu.table_schema
+    LEFT JOIN information_schema.view_column_usage vcu ON
+        c.table_schema = vcu.view_schema
+        AND c.table_name = vcu.view_name
+        AND c.column_name = vcu.column_name
 WHERE
     c.table_schema NOT IN ('pg_catalog', 'information_schema')
     AND c.table_name = $1
@@ -136,8 +138,6 @@ GROUP BY
     c.is_nullable,
     c.column_default,
     c.is_generated,
-    ccu.table_name,
-    ccu.column_name,
     vcu.table_name,
     vcu.column_name
 ORDER BY
@@ -171,8 +171,8 @@ pub(crate) fn get_columns(
         foreign_key: row.get(10)?,
         unique_constraint: row.get(11)?,
         check_constraint: row.get(12)?,
-        constraint_table_name: row.get(13)?,
-        constraint_column_name: row.get(14)?,
+        fk_table_name: row.get(13)?,
+        fk_column_name: row.get(14)?,
         source_table: row.get(15)?,
         source_column: row.get(16)?,
       });
@@ -233,11 +233,7 @@ pub(crate) fn build_column_schema(c: ColumnInformationSchema) -> Result<Column, 
     });
   }
 
-  if let (Some(_fk), Some(t), Some(c)) = (
-    c.foreign_key,
-    c.constraint_table_name,
-    c.constraint_column_name,
-  ) {
+  if let (Some(_fk), Some(t), Some(c)) = (c.foreign_key, c.fk_table_name, c.fk_column_name) {
     options.push(ColumnOption::ForeignKey {
       foreign_table: t,
       referred_columns: vec![c],
@@ -387,9 +383,6 @@ mod tests {
         foreign_key: None,
         unique_constraint: None,
         check_constraint: None,
-        // NOTE: PK references itself.
-        constraint_table_name: Some("table0".to_string()),
-        constraint_column_name: Some("id".to_string()),
         ..Default::default()
       },]
     );
@@ -413,9 +406,6 @@ mod tests {
         foreign_key: None,
         unique_constraint: None,
         check_constraint: None,
-        // NOTE: PK references itself.
-        constraint_table_name: Some("table1".to_string()),
-        constraint_column_name: Some("id".to_string()),
         ..Default::default()
       }
     );
@@ -436,8 +426,8 @@ mod tests {
         foreign_key: Some("table1_fk_fkey".to_string()),
         unique_constraint: None,
         check_constraint: None,
-        constraint_table_name: Some("table0".to_string()),
-        constraint_column_name: Some("id".to_string()),
+        fk_table_name: Some("table0".to_string()),
+        fk_column_name: Some("id".to_string()),
         ..Default::default()
       },
     );
@@ -473,8 +463,6 @@ mod tests {
         ..Default::default()
       },
     );
-
-    println!("COLUMNS1: {columns1:?}\n");
   }
 
   #[tokio::test]
@@ -484,13 +472,20 @@ mod tests {
     conn
       .execute_batch(
         "
-        CREATE TABLE table0 (id INTEGER PRIMARY KEY NOT NULL);
+        CREATE TABLE table0 (
+          id     INTEGER PRIMARY KEY NOT NULL,
+          data   TEXT
+        );
 
         CREATE TABLE table1 (
           id     INTEGER PRIMARY KEY,
           fk     INTEGER REFERENCES table0(id),
           a      TEXT DEFAULT ('foo'),
           b      INT8 NOT NULL DEFAULT (5)
+        );
+
+        CREATE TABLE table2 (
+          id     INTEGER PRIMARY KEY REFERENCES table0(id)
         );
       ",
       )
@@ -505,6 +500,20 @@ mod tests {
       .await
       .unwrap();
 
-    assert_eq!(2, table_schemas.len());
+    assert_eq!(3, table_schemas.len());
+
+    let table1 = table_schemas
+      .iter()
+      .find(|t| t.name.name == "table1")
+      .unwrap();
+
+    assert_eq!(4, table1.columns.len());
+
+    let table2 = table_schemas
+      .iter()
+      .find(|t| t.name.name == "table2")
+      .unwrap();
+
+    assert_eq!(1, table2.columns.len());
   }
 }
