@@ -23,6 +23,16 @@ CREATE FUNCTION is_uuid_v7(id UUID) RETURNS BOOL AS $$
   END;
 $$ LANGUAGE plpgsql;
 
+CREATE FUNCTION is_uuid(id ANYELEMENT) RETURNS BOOL AS $$
+  BEGIN
+    RETURN uuid_extract_version(id) > 0;
+  EXCEPTION
+    -- pglite fallback
+    WHEN others THEN
+      RETURN FALSE;
+  END;
+$$ LANGUAGE plpgsql;
+
 CREATE FUNCTION jsonschema(n TEXT, column_name TEXT) RETURNS BOOL AS $$
   BEGIN
     -- It's another lie:

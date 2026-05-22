@@ -229,14 +229,14 @@ mod test {
 
     state
       .conn()
-      .execute_batch(
+      .execute_batch(conditionally_transform_query(
         r#"
           CREATE TABLE simple (
             owner   BLOB PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
             value   INTEGER
           ) STRICT;
         "#,
-      )
+      ))
       .await
       .unwrap();
 
