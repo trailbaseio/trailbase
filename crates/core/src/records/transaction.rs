@@ -208,10 +208,13 @@ fn apply_ops<T: SyncConnection>(
             user,
           )?;
 
-          let (query, _files) = WriteQuery::new_insert(
+          let (query, _files) = WriteQuery::new_insert_or_replace(
             api.table_name(),
+            api.columns(),
             &api.record_pk_column().column.name,
-            api.insert_conflict_resolution_strategy(),
+            api
+              .insert_conflict_resolution_strategy()
+              .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined),
             lazy_params
               .consume()
               .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,

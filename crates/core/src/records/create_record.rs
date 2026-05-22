@@ -146,6 +146,10 @@ pub async fn create_record_handler(
   }
 
   let pk_meta = api.record_pk_column();
+  let conflict_resolution_strategy = api
+    .insert_conflict_resolution_strategy()
+    .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
+
   let record_ids: Vec<String> = match params_list.len() {
     0 => {
       return Err(RecordError::BadRequest("no values provided"));
@@ -156,7 +160,7 @@ pub async fn create_record_handler(
         state.objectstore(),
         api.table_name(),
         api.columns(),
-        api.insert_conflict_resolution_strategy(),
+        conflict_resolution_strategy,
         &pk_meta.column.name,
         params_list.swap_remove(0),
       )
@@ -173,7 +177,7 @@ pub async fn create_record_handler(
             &table_name,
             api.columns(),
             &pk_meta.column.name,
-            api.insert_conflict_resolution_strategy(),
+            conflict_resolution_strategy,
             params,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;

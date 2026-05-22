@@ -14,7 +14,7 @@ use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::params::{JsonRow, LazyParams};
 use crate::records::read_queries::run_get_file_query;
-use crate::records::write_queries::run_insert_query;
+use crate::records::write_queries::run_insert_or_replace_query;
 use crate::util::uuid_to_b64;
 
 #[utoipa::path(
@@ -100,11 +100,12 @@ pub async fn create_avatar_handler(
     .consume()
     .map_err(|_| AuthError::BadRequest("parameter conversion"))?;
 
-  let _user_id_value = run_insert_query(
+  let _user_id_value = run_insert_or_replace_query(
     conn,
     state.objectstore(),
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
-    Some(ConflictResolutionStrategy::Replace),
+    &AVATAR_TABLE_METADATA.column_metadata,
+    ConflictResolutionStrategy::Replace,
     "user",
     params,
   )

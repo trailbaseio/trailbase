@@ -36,69 +36,11 @@ pub struct WriteQueryResult {
 }
 
 impl WriteQuery {
-  pub fn new_insert(
-    table_name: &QualifiedNameEscaped,
-    return_column_name: &str,
-    conflict_resolution: Option<ConflictResolutionStrategy>,
-    params: Params,
-  ) -> Result<(Self, FileMetadataContents), RecordError> {
-    let Params::Insert {
-      named_params,
-      files,
-      column_names,
-      column_indexes: _,
-    } = params
-    else {
-      return Err(RecordError::Internal("not an insert".into()));
-    };
-
-    #[cfg(not(feature = "pg"))]
-    let conflict_clause = match conflict_resolution {
-      // NOTE: Abort is also the default behavior if absent.
-      Some(ConflictResolutionStrategy::Abort) => "OR ABORT",
-      // Some(ConflictResolutionStrategy::Rollback) => "OR ROLLBACK",
-      // Some(ConflictResolutionStrategy::Fail) => "OR FAIL",
-      // Some(ConflictResolutionStrategy::Ignore) => "OR IGNORE",
-      Some(ConflictResolutionStrategy::Replace) => "OR REPLACE",
-      Some(ConflictResolutionStrategy::Undefined) | None => "",
-    };
-
-    #[cfg(feature = "pg")]
-    let conflict_clause = match conflict_resolution {
-      Some(ConflictResolutionStrategy::Replace) => {
-        log::warn!("REPLACE resolution not supported with PG: {conflict_resolution:?}");
-
-        // FIXME: PG requires trailing `ON CONFLICT` clauses.
-        ""
-      }
-      _ => "",
-    };
-
-    let returning = &[ROW_ID_COLUMN, return_column_name];
-
-    let query = CreateRecordQueryTemplate {
-      table_name,
-      conflict_clause,
-      column_names: &column_names,
-      returning,
-    }
-    .render()
-    .map_err(|err| RecordError::Internal(err.into()))?;
-
-    return Ok((
-      Self::Insert {
-        query,
-        named_params,
-      },
-      files,
-    ));
-  }
-
   pub fn new_insert_or_replace(
     table_name: &QualifiedNameEscaped,
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
-    conflict_resolution: Option<ConflictResolutionStrategy>,
+    conflict_resolution: ConflictResolutionStrategy,
     params: Params,
   ) -> Result<(Self, FileMetadataContents), RecordError> {
     let Params::Insert {
@@ -115,7 +57,7 @@ impl WriteQuery {
       table_name,
       req_column_names: &column_names,
       column_metadata: match conflict_resolution {
-        Some(ConflictResolutionStrategy::Replace) => column_metadata,
+        ConflictResolutionStrategy::Replace => column_metadata,
         _ => &[],
       },
       pk_column_name,
@@ -338,50 +280,12 @@ pub(crate) async fn run_queries<'a>(
   return Ok(result.into_iter().filter_map(|r| r.pk_value).collect());
 }
 
-pub(crate) async fn run_insert_query(
-  conn: &Connection,
-  objectstore: &Arc<dyn ObjectStore>,
-  table_name: &QualifiedNameEscaped,
-  conflict_resolution: Option<ConflictResolutionStrategy>,
-  return_column_name: &str,
-  params: Params,
-) -> Result<trailbase_sqlite::Value, RecordError> {
-  let (query, files) =
-    WriteQuery::new_insert(table_name, return_column_name, conflict_resolution, params)?;
-
-  // We're storing any files to the object store first to make sure the DB entry is valid right
-  // after commit and not racily pointing to soon-to-be-written files.
-  let file_manager = if files.is_empty() {
-    None
-  } else {
-    Some(FileManager::write(objectstore, files).await?)
-  };
-
-  let WriteQueryResult { rowid, pk_value } = query.apply_async(conn).await?;
-  let Some(return_value) = pk_value else {
-    return Err(RecordError::Internal("missing pk".into()));
-  };
-
-  // Successful write, do not cleanup written files.
-  if let Some(mut file_manager) = file_manager {
-    file_manager.release();
-
-    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution {
-      delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
-        .await
-        .map_err(|err| RecordError::Internal(err.into()))?;
-    }
-  }
-
-  return Ok(return_value);
-}
-
 pub(crate) async fn run_insert_or_replace_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   column_metadata: &[ColumnMetadata],
-  conflict_resolution: Option<ConflictResolutionStrategy>,
+  conflict_resolution: ConflictResolutionStrategy,
   return_column_name: &str,
   params: Params,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
@@ -410,7 +314,7 @@ pub(crate) async fn run_insert_or_replace_query(
   if let Some(mut file_manager) = file_manager {
     file_manager.release();
 
-    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution {
+    if conflict_resolution == ConflictResolutionStrategy::Replace {
       delete_files_marked_for_deletion(conn, objectstore, &table_name, &[rowid])
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;
@@ -480,15 +384,6 @@ struct UpdateRecordQueryTemplate<'a> {
 }
 
 #[derive(Template)]
-#[template(escape = "none", path = "create_record_query.sql")]
-struct CreateRecordQueryTemplate<'a> {
-  table_name: &'a QualifiedNameEscaped,
-  conflict_clause: &'a str,
-  column_names: &'a [String],
-  returning: &'a [&'a str],
-}
-
-#[derive(Template)]
 #[template(escape = "none", path = "create_or_replace_record_query.sql")]
 struct CreateOrReplaceRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
@@ -513,10 +408,11 @@ mod tests {
   #[test]
   fn test_create_record_template() {
     {
-      let query = CreateRecordQueryTemplate {
+      let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        conflict_clause: "OR ABORT",
-        column_names: &["index".to_string(), "trigger".to_string()],
+        req_column_names: &["index".to_string(), "trigger".to_string()],
+        column_metadata: &[],
+        pk_column_name: "index",
         returning: &["index"],
       }
       .render()
@@ -526,14 +422,15 @@ mod tests {
     }
 
     {
-      let query = CreateRecordQueryTemplate {
+      let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName {
           name: "table".to_string(),
           database_schema: Some("db".to_string()),
         }
         .into(),
-        conflict_clause: "",
-        column_names: &[],
+        req_column_names: &[],
+        column_metadata: &[],
+        pk_column_name: "id",
         returning: &["*"],
       }
       .render()
@@ -543,10 +440,11 @@ mod tests {
     }
 
     {
-      let query = CreateRecordQueryTemplate {
+      let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        conflict_clause: "",
-        column_names: &["index".to_string()],
+        req_column_names: &["index".to_string()],
+        pk_column_name: "index",
+        column_metadata: &[],
         returning: &[],
       }
       .render()
