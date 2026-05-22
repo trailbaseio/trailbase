@@ -536,19 +536,15 @@ impl RecordApi {
   ) -> Result<bool, RecordError> {
     return match self.state.conn.read_query_row_get(query, params, 0).await {
       Ok(Some(allowed)) => Ok(allowed),
-      Ok(None) => {
-        Err(RecordError::AccessCheckFailed(
-          std::io::Error::other("Access rule query returned no boolean result").into(),
+      Ok(None) => Err(RecordError::AccessCheckFailed(
+        std::io::Error::other("Access rule query returned no boolean result").into(),
+      )),
+      Err(err) => Err(RecordError::AccessCheckFailed(
+        std::io::Error::other(format!(
+          "Failed to evaluate record-level access rule: {err}"
         ))
-      }
-      Err(err) => {
-        Err(RecordError::AccessCheckFailed(
-          std::io::Error::other(format!(
-            "Failed to evaluate record-level access rule: {err}"
-          ))
-          .into(),
-        ))
-      }
+        .into(),
+      )),
     };
   }
 

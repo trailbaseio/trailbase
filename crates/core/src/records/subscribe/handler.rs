@@ -433,7 +433,12 @@ pub async fn subscribe_ws(
           }
           Err(err) => {
             log::error!("WS table subscription access-check failed: {err}");
-            abort(&mut ws_sender, Code::Unexpected, "internal access-check error").await;
+            abort(
+              &mut ws_sender,
+              Code::Unexpected,
+              "internal access-check error",
+            )
+            .await;
             return;
           }
         }
@@ -482,7 +487,12 @@ pub async fn subscribe_ws(
           }
           Err(err) => {
             log::error!("WS record subscription access-check failed: {err}");
-            abort(&mut ws_sender, Code::Unexpected, "internal access-check error").await;
+            abort(
+              &mut ws_sender,
+              Code::Unexpected,
+              "internal access-check error",
+            )
+            .await;
             return;
           }
         }
