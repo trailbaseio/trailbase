@@ -18,6 +18,12 @@ impl postgres::types::ToSql for Value {
           "char" => i8::try_from(*v)?.to_sql(ty, out)?,
           "int2" => i16::try_from(*v)?.to_sql(ty, out)?,
           "int4" => i32::try_from(*v)?.to_sql(ty, out)?,
+          "tid" => {
+            // NOTE: `tid`s in PG are a tuple like:
+            //   struct Tid { pub block: u32, pub offset: u16, }
+            let t: &[u8] = &v.to_be_bytes()[0..6];
+            t.to_sql(ty, out)?
+          }
           _ => v.to_sql(ty, out)?,
         };
       }
@@ -83,11 +89,7 @@ impl<'a> postgres::types::FromSql<'a> for Value {
   }
 
   fn accepts(ty: &postgres::types::Type) -> bool {
-    return match ty.name() {
-      // PG's `TID`s are an internal tuple of (block, offset) and are RO, i.e. cannot be written.
-      "tid" => true,
-      _ => accepts_impl(ty),
-    };
+    return accepts_impl(ty);
   }
 }
 
@@ -105,6 +107,7 @@ fn accepts_impl(ty: &postgres::types::Type) -> bool {
       | "int2"
       | "int4"
       | "int8"
+      | "tid"
       | "float8"
       | "float4"
       | "json"

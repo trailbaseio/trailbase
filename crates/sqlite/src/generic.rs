@@ -1135,4 +1135,40 @@ mod tests {
       .unwrap()
       .unwrap();
   }
+
+  #[tokio::test]
+  async fn pg_tid_test() {
+    let (_db, exec) = build_pg_test_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE t (
+          id     SERIAL PRIMARY KEY,
+          data   TEXT
+        );
+
+        INSERT INTO t (data) VALUES ('a'), ('b');
+        ",
+      )
+      .await
+      .unwrap();
+
+    let tid: Value = conn
+      .read_query_row_get("SELECT ctid FROM t WHERE data = 'b'", (), 0)
+      .await
+      .unwrap()
+      .unwrap();
+
+    log::info!("TID {tid:?}");
+
+    let data: String = conn
+      .read_query_row_get("SELECT data FROM t WHERE ctid = :id", [tid], 0)
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!("b", data);
+  }
 }
