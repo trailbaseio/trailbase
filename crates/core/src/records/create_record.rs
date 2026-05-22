@@ -9,7 +9,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams, Params};
-use crate::records::write_queries::{WriteQuery, run_insert_query, run_queries};
+use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -151,10 +151,11 @@ pub async fn create_record_handler(
       return Err(RecordError::BadRequest("no values provided"));
     }
     1 => {
-      let record_id = run_insert_query(
+      let record_id = run_insert_or_replace_query(
         api.conn(),
         state.objectstore(),
         api.table_name(),
+        api.columns(),
         api.insert_conflict_resolution_strategy(),
         &pk_meta.column.name,
         params_list.swap_remove(0),
@@ -168,8 +169,9 @@ pub async fn create_record_handler(
         .into_iter()
         .map(|params| -> Result<_, RecordError> {
           let table_name: QualifiedNameEscaped = api.table_name().clone();
-          let (query, files) = WriteQuery::new_insert(
+          let (query, files) = WriteQuery::new_insert_or_replace(
             &table_name,
+            api.columns(),
             &pk_meta.column.name,
             api.insert_conflict_resolution_strategy(),
             params,
@@ -289,7 +291,11 @@ mod test {
     assert_eq!(
       state
         .conn()
-        .read_query_value::<i64>("SELECT value FROM simple WHERE owner = ?1", params!(user_x))
+        .read_query_row_get::<i64>(
+          "SELECT value FROM simple WHERE owner = ?1",
+          params!(user_x),
+          0
+        )
         .await
         .unwrap(),
       Some(9)

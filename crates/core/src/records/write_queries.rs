@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
+use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_sqlite::{Connection, NamedParams, Value};
 
@@ -93,6 +94,45 @@ impl WriteQuery {
     ));
   }
 
+  pub fn new_insert_or_replace(
+    table_name: &QualifiedNameEscaped,
+    column_metadata: &[ColumnMetadata],
+    pk_column_name: &str,
+    conflict_resolution: Option<ConflictResolutionStrategy>,
+    params: Params,
+  ) -> Result<(Self, FileMetadataContents), RecordError> {
+    let Params::Insert {
+      named_params,
+      files,
+      column_names,
+      column_indexes: _,
+    } = params
+    else {
+      return Err(RecordError::Internal("not an insert".into()));
+    };
+
+    let query = CreateOrReplaceRecordQueryTemplate {
+      table_name,
+      req_column_names: &column_names,
+      column_metadata: match conflict_resolution {
+        Some(ConflictResolutionStrategy::Replace) => column_metadata,
+        _ => &[],
+      },
+      pk_column_name,
+      returning: &[ROW_ID_COLUMN, pk_column_name],
+    }
+    .render()
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok((
+      Self::Insert {
+        query,
+        named_params,
+      },
+      files,
+    ));
+  }
+
   pub fn new_update(
     table_name: &QualifiedNameEscaped,
     params: Params,
@@ -147,6 +187,7 @@ impl WriteQuery {
       Self::Insert {
         query,
         named_params,
+        ..
       } => {
         if let Some(row) = conn.write_query_row(query, named_params).await? {
           Ok(WriteQueryResult {
@@ -191,6 +232,7 @@ impl WriteQuery {
       Self::Insert {
         query,
         named_params,
+        ..
       } => {
         if let Some(row) = conn.query_row(query, named_params)? {
           Ok(WriteQueryResult {
@@ -228,7 +270,7 @@ impl WriteQuery {
   }
 }
 
-pub(crate) async fn run_queries(
+pub(crate) async fn run_queries<'a>(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   queries: Vec<(
@@ -334,6 +376,50 @@ pub(crate) async fn run_insert_query(
   return Ok(return_value);
 }
 
+pub(crate) async fn run_insert_or_replace_query(
+  conn: &Connection,
+  objectstore: &Arc<dyn ObjectStore>,
+  table_name: &QualifiedNameEscaped,
+  column_metadata: &[ColumnMetadata],
+  conflict_resolution: Option<ConflictResolutionStrategy>,
+  return_column_name: &str,
+  params: Params,
+) -> Result<trailbase_sqlite::Value, RecordError> {
+  let (query, files) = WriteQuery::new_insert_or_replace(
+    table_name,
+    column_metadata,
+    return_column_name,
+    conflict_resolution,
+    params,
+  )?;
+
+  // We're storing any files to the object store first to make sure the DB entry is valid right
+  // after commit and not racily pointing to soon-to-be-written files.
+  let file_manager = if files.is_empty() {
+    None
+  } else {
+    Some(FileManager::write(objectstore, files).await?)
+  };
+
+  let WriteQueryResult { rowid, pk_value } = query.apply_async(conn).await?;
+  let Some(return_value) = pk_value else {
+    return Err(RecordError::Internal("missing pk".into()));
+  };
+
+  // Successful write, do not cleanup written files.
+  if let Some(mut file_manager) = file_manager {
+    file_manager.release();
+
+    if Some(ConflictResolutionStrategy::Replace) == conflict_resolution {
+      delete_files_marked_for_deletion(conn, objectstore, &table_name, &[rowid])
+        .await
+        .map_err(|err| RecordError::Internal(err.into()))?;
+    }
+  }
+
+  return Ok(return_value);
+}
+
 pub(crate) async fn run_update_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
@@ -399,6 +485,16 @@ struct CreateRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
   conflict_clause: &'a str,
   column_names: &'a [String],
+  returning: &'a [&'a str],
+}
+
+#[derive(Template)]
+#[template(escape = "none", path = "create_or_replace_record_query.sql")]
+struct CreateOrReplaceRecordQueryTemplate<'a> {
+  table_name: &'a QualifiedNameEscaped,
+  req_column_names: &'a [String],
+  pk_column_name: &'a str,
+  column_metadata: &'a [ColumnMetadata],
   returning: &'a [&'a str],
 }
 
