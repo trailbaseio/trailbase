@@ -1,5 +1,4 @@
 use crossfire;
-// use flume::{Receiver, Sender};
 use log::*;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -339,78 +338,44 @@ fn writer_event_loop(
   select.add(&writer_receiver);
 
   loop {
-    let res = match select.select() {
-      Ok(res) => res,
+    match select.select() {
+      Ok(rx) if rx == reader_receiver => {
+        match reader_receiver.read_select(rx) {
+          Ok(m) => match m {
+            ReaderMessage::Terminate => break,
+            ReaderMessage::RunConst(f) => {
+              let lock = conns.read();
+              f(&lock.0[0]);
+            }
+          },
+          Err(crossfire::RecvError) => {
+            debug!("reader disconnected, removing from select.");
+            select.remove(&reader_receiver); // Remove disconnected receiver
+          }
+        }
+      }
+      Ok(rx) if rx == writer_receiver => {
+        match writer_receiver.read_select(rx) {
+          Ok(m) => match m {
+            WriterMessage::RunMut(f) => {
+              let mut lock = conns.write();
+              f(&mut lock.0[0]);
+            }
+          },
+          Err(crossfire::RecvError) => {
+            debug!("writer disconnected, removing from select.");
+            select.remove(&writer_receiver); // Remove disconnected receiver
+          }
+        }
+      }
+      Ok(_) => {
+        debug_assert!(false, "Unexpected select result");
+      }
       Err(crossfire::RecvError) => {
         break;
       }
     };
-
-    // Handle the result from the ready receiver
-    if res == reader_receiver {
-      match reader_receiver.read_select(res) {
-        Ok(m) => match m {
-          ReaderMessage::Terminate => break,
-          ReaderMessage::RunConst(f) => {
-            let lock = conns.read();
-            f(&lock.0[0]);
-          }
-        },
-        Err(crossfire::RecvError) => {
-          debug!("reader disconnected, removing from select.");
-          select.remove(&reader_receiver); // Remove disconnected receiver
-        }
-      }
-    } else if res == writer_receiver {
-      match writer_receiver.read_select(res) {
-        Ok(m) => match m {
-          WriterMessage::RunMut(f) => {
-            let mut lock = conns.write();
-            f(&mut lock.0[0]);
-          }
-        },
-        Err(crossfire::RecvError) => {
-          debug!("writer disconnected, removing from select.");
-          select.remove(&writer_receiver); // Remove disconnected receiver
-        }
-      }
-    }
   }
-
-  // while flume::Selector::new()
-  //   .recv(&writer_receiver, |m| {
-  //     let Ok(m) = m else {
-  //       return false;
-  //     };
-  //
-  //     return match m {
-  //       WriterMessage::RunMut(f) => {
-  //         let mut lock = conns.write();
-  //         f(&mut lock.0[0]);
-  //
-  //         // Continue
-  //         true
-  //       }
-  //     };
-  //   })
-  //   .recv(&reader_receiver, |m| {
-  //     let Ok(m) = m else {
-  //       return false;
-  //     };
-  //
-  //     return match m {
-  //       ReaderMessage::Terminate => false,
-  //       ReaderMessage::RunConst(f) => {
-  //         let lock = conns.read();
-  //         f(&lock.0[0]);
-  //
-  //         // Continue
-  //         true
-  //       }
-  //     };
-  //   })
-  //   .wait()
-  // {}
 
   debug!("writer thread shut down");
 }
