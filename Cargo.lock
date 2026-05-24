@@ -1735,6 +1735,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "crossfire"
+version = "3.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d8c4de3db833e7ef74050bae09d5f3fa8f9d1507d3c2689c6e8c50b71208b18"
+dependencies = [
+ "crossbeam-utils",
+ "embed-collections",
+ "futures-core",
+ "parking_lot",
+ "smallvec",
+]
+
+[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2288,6 +2301,12 @@ checksum = "e079f19b08ca6239f47f8ba8509c11cf3ea30095831f7fed61441475edd8c449"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "embed-collections"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7443f27e9135fe3226421aaaae783096d74def1c626c15e0c4646a9a1782349a"
 
 [[package]]
 name = "embedded-io"
@@ -8208,6 +8227,7 @@ dependencies = [
  "bytes",
  "chrono",
  "criterion",
+ "crossfire",
  "csv",
  "env_logger",
  "flume",

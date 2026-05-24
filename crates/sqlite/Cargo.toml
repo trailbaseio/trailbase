@@ -39,6 +39,7 @@ thiserror = "2.0.12"
 trailbase-pgrow2serde = { workspace = true, optional = true }
 tokio = { workspace = true }
 sqlparser = { version = "0.62.0", optional = true }
+crossfire = "3.1.16"
 
 [dev-dependencies]
 chrono = "0.4.43"
