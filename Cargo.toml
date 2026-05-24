@@ -56,6 +56,7 @@ opt-level = 1
 askama = { version = "0.16.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
+crossfire = { version = "3.1.16", default-features = false, features = ["tokio"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 flume = { version = "0.12.0", default-features = false, features = ["select", "async"] }
 futures-util = { version = "0.3.32", default-features = false, features = ["alloc", "spin"] }

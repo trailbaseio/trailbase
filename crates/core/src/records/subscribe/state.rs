@@ -206,9 +206,9 @@ impl PerConnectionState {
       .spawn(move || {
         let mut expected = 1;
         loop {
-          if receiver.sender_count() == 0 {
-            break;
-          }
+          // if receiver.get_tx_count() == 0 {
+          //   break;
+          // }
 
           let event = match receiver.recv() {
             Ok((cnt, event)) => {
@@ -225,7 +225,8 @@ impl PerConnectionState {
 
               event
             }
-            Err(flume::RecvError::Disconnected) => {
+            Err(crossfire::RecvError) => {
+              // Disconnected and empty.
               break;
             }
           };

@@ -2,7 +2,6 @@ use axum::body::Body;
 use axum::http::{Request, header};
 use axum::response::Response;
 use const_format::formatcp;
-use flume::TrySendError;
 use serde::Serialize;
 use serde_json::json;
 use std::time::Duration;
@@ -220,7 +219,7 @@ pub(super) fn sqlite_logger_on_response(response: &Response<Body>, latency: Dura
 }
 
 pub struct SqliteLogLayer {
-  sender: flume::Sender<LogFieldStorage>,
+  sender: crossfire::MTx<crossfire::mpsc::List<LogFieldStorage>>,
 
   #[allow(unused)]
   json_stdout: bool,
@@ -233,7 +232,7 @@ impl SqliteLogLayer {
     // NOTE: If anything here becomes a performance bottleneck we could switch to a dedicated
     // lock-free single thread writer. We also may not want to support sinks other than SQLite.
     // TODO: We could consider a bounded receiver to create back-pressure?
-    let (sender, receiver) = flume::unbounded();
+    let (sender, receiver) = crossfire::mpsc::unbounded_async();
 
     tokio::spawn(async move {
       #[inline]
@@ -242,9 +241,11 @@ impl SqliteLogLayer {
       }
 
       let mut buffer = new_buffer();
-      while let Ok(first) = receiver.recv_async().await {
+      while let Ok(first) = receiver.recv().await {
         buffer.push(first);
-        buffer.extend(receiver.try_iter());
+        while let Ok(more) = receiver.try_recv() {
+          buffer.push(more);
+        }
         let len = buffer.len();
 
         buffer = conn
@@ -293,10 +294,10 @@ impl SqliteLogLayer {
 
     match self.sender.try_send(storage) {
       Ok(()) => {}
-      Err(TrySendError::Full(_)) => {
+      Err(crossfire::TrySendError::Full(_)) => {
         log::warn!("Back-pressure. Dropping log.");
       }
-      Err(TrySendError::Disconnected(_)) => {
+      Err(crossfire::TrySendError::Disconnected(_)) => {
         panic!("Log writer dead?");
       }
     };

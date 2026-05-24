@@ -1745,6 +1745,7 @@ dependencies = [
  "futures-core",
  "parking_lot",
  "smallvec",
+ "tokio",
 ]
 
 [[package]]
@@ -7934,10 +7935,10 @@ dependencies = [
  "const_format",
  "criterion",
  "cron",
+ "crossfire",
  "ed25519-dalek",
  "env_logger",
  "fallible-iterator 0.3.0",
- "flume",
  "form_urlencoded",
  "futures-util",
  "geos",

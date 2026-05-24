@@ -38,8 +38,8 @@ pub fn uninstall_hook(conn: &Connection) -> Result<(), RecordError> {
 
 pub fn install_hook(
   conn: &Connection,
-) -> Result<flume::Receiver<(usize, PreupdateHookEvent)>, RecordError> {
-  let (sender, receiver) = flume::bounded(CAPACITY);
+) -> Result<crossfire::Rx<crossfire::spsc::Array<(usize, PreupdateHookEvent)>>, RecordError> {
+  let (sender, receiver) = crossfire::spsc::bounded_blocking(CAPACITY);
   let lock = conn
     .write_lock()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -91,10 +91,10 @@ pub fn install_hook(
 
           match sender.try_send((cnt, event)) {
             Ok(()) => {}
-            Err(flume::TrySendError::Full(_)) => {
+            Err(crossfire::TrySendError::Full(_)) => {
               warn!("Channel full. Failed to forward preupdate event.");
             }
-            Err(flume::TrySendError::Disconnected(_)) => {
+            Err(crossfire::TrySendError::Disconnected(_)) => {
               // QUESTION: Should it self-uninstall? This may be racy if a new hook
               // is being installed while one is already installed. In principle this
               // should not happen.
@@ -141,17 +141,19 @@ mod tests {
       .await
       .unwrap();
 
-    let (cnt, ev0) = receiver.recv_async().await.unwrap();
+    let receiver = receiver.into_async();
+
+    let (cnt, ev0) = receiver.recv().await.unwrap();
     assert_eq!(1, cnt);
     assert_eq!("\"test\"", ev0.table_name.escaped_string());
     assert_eq!(Value::Integer(3), ev0.record[0]);
 
-    let (cnt, ev1) = receiver.recv_async().await.unwrap();
+    let (cnt, ev1) = receiver.recv().await.unwrap();
     assert_eq!(2, cnt);
     assert_eq!(Value::Integer(4), ev1.record[0]);
 
     uninstall_hook(&conn).unwrap();
 
-    assert_eq!(0, receiver.sender_count());
+    assert_eq!(0, receiver.get_tx_count());
   }
 }

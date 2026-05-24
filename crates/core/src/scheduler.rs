@@ -559,7 +559,7 @@ mod tests {
     // night).
     let registry = JobRegistry::new();
 
-    let (sender, receiver) = flume::unbounded::<()>();
+    let (sender, receiver) = crossfire::mpmc::unbounded_async();
 
     //               sec  min   hour   day of month   month   day of week  year
     let expression = "*    *     *         *            *         *         *";
@@ -571,7 +571,7 @@ mod tests {
         build_callback(move || {
           let sender = sender.clone();
           return async move {
-            sender.send_async(()).await.unwrap();
+            sender.send(()).unwrap();
             Err("result")
           };
         }),
@@ -580,7 +580,7 @@ mod tests {
 
     job.start();
 
-    receiver.recv_async().await.unwrap();
+    receiver.recv().await.unwrap();
 
     let jobs = registry.jobs.lock();
     let first = jobs.keys().next().unwrap();
