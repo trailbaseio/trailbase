@@ -164,36 +164,54 @@ fn setup_file_deletion_triggers(
         .name
         .database_schema
         .as_deref()
-        .unwrap_or("main");
+        .unwrap_or(cfg_select! {
+            feature = "pg" => "public",
+            _ => "main",
+        });
 
       let column_name = &column_meta.column.name;
 
-      #[cfg(feature = "pg")]
-      {
-        log::warn!("Skipping file triggers for PG column: '{table_name}'::'{column_name}'");
-        continue;
-      }
-
-      conn.execute_batch(format!(
-          "\
-          DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\"; \
-          CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\" AFTER UPDATE ON {table_name} \
-            WHEN OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\" \
-            BEGIN \
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
-            END; \
-          \
-          DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\"; \
-          CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\" AFTER DELETE ON {table_name} \
-            WHEN OLD.\"{column_name}\" IS NOT NULL \
-            BEGIN \
-              INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
-                ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
-            END; \
-          ",
-          table_name = table_name.escaped_string(),
-        ))?;
+      conn.execute_batch(cfg_select! {
+          feature = "pg" => format!(
+            "\
+            CREATE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$ \
+              BEGIN \
+                INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                  ('{table_name}', OLD.ctid, '{column_name}', \"{column_name}\"); \
+              END; \
+            $$ LANGUAGE plpgsql; \
+            \
+            CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__update_trigger\" \
+              AFTER UPDATE ON {table_name} FOR EACH ROW \
+              WHEN (OLD.{column_name} IS NOT NULL AND OLD.{column_name} != NEW.{column_name}) \
+              EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"(); \
+            \
+            CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__delete_trigger\" \
+              AFTER DELETE ON {table_name} FOR EACH ROW \
+              WHEN (OLD.{column_name} IS NOT NULL) \
+              EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"(); \
+          "),
+          _ => format!(
+            "\
+            DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\"; \
+            CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\" AFTER UPDATE ON {table_name} \
+              WHEN OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\" \
+              BEGIN \
+                INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                  ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+              END; \
+            \
+            DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\"; \
+            CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\" AFTER DELETE ON {table_name} \
+              WHEN OLD.\"{column_name}\" IS NOT NULL \
+              BEGIN \
+                INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                  ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+              END; \
+            ",
+            table_name = table_name.escaped_string(),
+          ),
+        })?;
     }
   }
 

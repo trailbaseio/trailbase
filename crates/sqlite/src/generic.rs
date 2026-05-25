@@ -1220,6 +1220,51 @@ mod tests {
   }
 
   #[tokio::test]
+  async fn pg_json_test() {
+    let (_db, exec) = build_pg_test_executor().unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE t (
+          id     SERIAL PRIMARY KEY,
+          jt     JSON,
+          jb     JSONB
+        );
+
+        INSERT INTO t (jt, jb) VALUES ('{\"a\": 5}', '[]');
+        ",
+      )
+      .await
+      .unwrap();
+
+    let json_text: String = conn
+      .read_query_row_get("SELECT jt FROM t;", (), 0)
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!("{\"a\": 5}", json_text);
+
+    let json_binary: String = conn
+      .read_query_row_get("SELECT jb FROM t;", (), 0)
+      .await
+      .unwrap()
+      .unwrap();
+
+    assert_eq!("[]", json_binary);
+
+    conn
+      .execute(
+        "INSERT INTO t (jt, jb) VALUES ($1, $2);",
+        params!("[]", "{}"),
+      )
+      .await
+      .unwrap();
+  }
+
+  #[tokio::test]
   async fn pg_tid_test() {
     let (_db, exec) = build_pg_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
@@ -1277,16 +1322,16 @@ mod tests {
           CREATE TABLE _file_deletions (
             id                           SERIAL PRIMARY KEY NOT NULL,
             deleted                      INTEGER NOT NULL DEFAULT (UNIXEPOCH()),
-          
+
             -- Cleanup metadata
             attempts                     INTEGER NOT NULL DEFAULT 0,
             errors                       TEXT,
-          
+
             -- Which record contained the file.
             table_name                   TEXT NOT NULL,
             record_rowid                 TID NOT NULL,
             column_name                  TEXT NOT NULL,
-          
+
             -- File metadata, including id (path).
             --
             -- IMPORTANT: non-binary `JSON` type does not support comparisons.
@@ -1302,20 +1347,24 @@ mod tests {
     conn
       .execute_batch(format!(
         "
-          CREATE FUNCTION myfun() RETURNS TRIGGER AS $$
+          CREATE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$
             BEGIN
               INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES
                 ('{table_name}', OLD.ctid, '{column_name}', \"{column_name}\");
             END;
           $$ LANGUAGE plpgsql;
 
-          DROP TRIGGER IF EXISTS \"__{unqualified_name}__{column_name}__update_trigger\" ON {table_name};
+          -- DROP TRIGGER IF EXISTS \"__{unqualified_name}__{column_name}__update_trigger\" ON {table_name};
 
           CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__update_trigger\"
-            AFTER UPDATE ON {table_name}
-            FOR EACH ROW
+            AFTER UPDATE ON {table_name} FOR EACH ROW
             WHEN (OLD.{column_name} IS NOT NULL AND OLD.{column_name} != NEW.{column_name})
-            EXECUTE FUNCTION myfun();
+            EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"();
+
+          CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__delete_trigger\"
+            AFTER DELETE ON {table_name} FOR EACH ROW
+            WHEN (OLD.{column_name} IS NOT NULL)
+            EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"();
           ",
       ))
       .await

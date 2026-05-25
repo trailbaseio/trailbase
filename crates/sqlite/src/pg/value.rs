@@ -36,7 +36,14 @@ impl postgres::types::ToSql for Value {
         };
       }
       Value::Text(v) => {
-        v.to_sql(ty, out)?;
+        match ty.name() {
+          // TODO: We should probably extend our value enum ot java Json(serde_json::Value).
+          "jsonb" => {
+            let value = serde_json::from_str::<serde_json::Value>(&v)?;
+            value.to_sql(ty, out)?
+          }
+          _ => v.to_sql(ty, out)?,
+        };
       }
       Value::Blob(v) => {
         v.to_sql(ty, out)?;
@@ -72,6 +79,11 @@ impl<'a> postgres::types::FromSql<'a> for Value {
       "float4" => Ok(Value::Real(f32::from_sql(ty, raw)? as f64)),
       "float8" => Ok(Value::Real(f64::from_sql(ty, raw)?)),
       "text" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?)),
+      "json" => Ok(Value::Text(String::from_sql(ty, raw)?)),
+      "jsonb" => {
+        let value = serde_json::Value::from_sql(ty, raw)?;
+        Ok(Value::Text(serde_json::to_string(&value)?))
+      }
       "bytea" | "uuid" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?)),
       "tid" => {
         // NOTE: `tid`s in PG are a tuple like:
@@ -116,6 +128,7 @@ fn accepts_impl(ty: &postgres::types::Type) -> bool {
       | "float8"
       | "float4"
       | "json"
+      | "jsonb"
       | "text"
       | "name"
       | "varchar"

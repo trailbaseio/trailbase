@@ -33,6 +33,7 @@ postgres = { version = "0.19.12", optional = true, features = ["with-serde_json-
 regex = { version = "1.12.3", optional = true}
 rusqlite = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_rusqlite = { workspace = true }
 smallvec = { version = "1.15.1", features = ["const_generics"] }
 sqlparser = { version = "0.62.0", optional = true }
