@@ -471,7 +471,7 @@ async fn test_hooks() {
     row_id: i64,
   }
 
-  let (sender, receiver) = flume::unbounded::<String>();
+  let (sender, receiver) = crossfire::mpsc::unbounded_blocking::<String>();
 
   conn
     .write_lock()

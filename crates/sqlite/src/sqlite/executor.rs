@@ -213,7 +213,7 @@ impl Executor {
     self
       .writer
       .send(WriterMessage::RunMut(Box::new(move |conn| {
-        let _ = sender.send(function(conn));
+        sender.send(function(conn));
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
@@ -233,7 +233,7 @@ impl Executor {
     self
       .reader
       .send(ReaderMessage::RunConst(Box::new(move |conn| {
-        let _ = sender.send(function(conn).map_err(|err| err.into()));
+        sender.send(function(conn).map_err(|err| err.into()));
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 

@@ -27,7 +27,6 @@ pg = ["dep:postgres", "dep:bytes", "dep:trailbase-pgrow2serde", "dep:regex", "de
 [dependencies]
 bytes = { version = "1.11.1", optional = true }
 crossfire = { workspace = true }
-flume = { workspace = true }
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
 postgres = { version = "0.19.12", optional = true, features = ["with-serde_json-1"] }
