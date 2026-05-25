@@ -1,8 +1,7 @@
-use flume::{Receiver, Sender};
+use crossfire;
 use log::*;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use tokio::sync::oneshot;
 
 use crate::error::Error;
 use crate::params::Params;
@@ -32,10 +31,15 @@ pub struct Options {
   pub num_threads: Option<usize>,
 }
 
+type MpmcSender<T> = crossfire::MTx<crossfire::mpmc::List<T>>;
+type MpmcReceiver<T> = crossfire::MRx<crossfire::mpmc::List<T>>;
+type MpscSender<T> = crossfire::MTx<crossfire::mpsc::List<T>>;
+type MpscReceiver<T> = crossfire::Rx<crossfire::mpsc::List<T>>;
+
 /// A handle to call functions in background thread.
 pub(crate) struct Executor {
-  reader: Sender<ReaderMessage>,
-  writer: Sender<WriterMessage>,
+  reader: MpmcSender<ReaderMessage>,
+  writer: MpscSender<WriterMessage>,
   // NOTE: Is shared across reader and writer worker threads.
   // NOTE: Only needs to be an to get parking_lot's owned ArcLocks.
   conns: Arc<RwLock<ConnectionVec>>,
@@ -115,8 +119,10 @@ impl Executor {
 
     assert_eq!(num_threads, conns.read().0.len());
 
-    let (shared_write_sender, shared_write_receiver) = flume::unbounded::<WriterMessage>();
-    let (shared_read_sender, shared_read_receiver) = flume::unbounded::<ReaderMessage>();
+    let (shared_write_sender, shared_write_receiver) =
+      crossfire::mpsc::unbounded_blocking::<WriterMessage>();
+    let (shared_read_sender, shared_read_receiver) =
+      crossfire::mpmc::unbounded_blocking::<ReaderMessage>();
 
     // Spawn writer thread.
     std::thread::Builder::new()
@@ -202,12 +208,12 @@ impl Executor {
     E: Send + 'static,
     Error: From<E>,
   {
-    let (sender, receiver) = oneshot::channel::<Result<R, E>>();
+    let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, E>>();
 
     self
       .writer
       .send(WriterMessage::RunMut(Box::new(move |conn| {
-        let _ = sender.send(function(conn));
+        sender.send(function(conn));
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
@@ -222,12 +228,12 @@ impl Executor {
     E: Send + 'static,
     Error: From<E>,
   {
-    let (sender, receiver) = oneshot::channel::<Result<R, Error>>();
+    let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, Error>>();
 
     self
       .reader
       .send(ReaderMessage::RunConst(Box::new(move |conn| {
-        let _ = sender.send(function(conn).map_err(|err| err.into()));
+        sender.send(function(conn).map_err(|err| err.into()));
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
@@ -305,7 +311,7 @@ impl Executor {
 fn reader_event_loop(
   idx: usize,
   conns: Arc<RwLock<ConnectionVec>>,
-  receiver: Receiver<ReaderMessage>,
+  receiver: MpmcReceiver<ReaderMessage>,
 ) {
   while let Ok(message) = receiver.recv() {
     match message {
@@ -324,43 +330,52 @@ fn reader_event_loop(
 
 fn writer_event_loop(
   conns: Arc<RwLock<ConnectionVec>>,
-  reader_receiver: Receiver<ReaderMessage>,
-  writer_receiver: Receiver<WriterMessage>,
+  reader_receiver: MpmcReceiver<ReaderMessage>,
+  writer_receiver: MpscReceiver<WriterMessage>,
 ) {
-  while flume::Selector::new()
-    .recv(&writer_receiver, |m| {
-      let Ok(m) = m else {
-        return false;
-      };
+  let mut select = crossfire::select::Select::new();
+  select.add(&reader_receiver);
+  select.add(&writer_receiver);
 
-      return match m {
-        WriterMessage::RunMut(f) => {
-          let mut lock = conns.write();
-          f(&mut lock.0[0]);
-
-          // Continue
-          true
+  loop {
+    match select.select() {
+      Ok(rx) if rx == reader_receiver => {
+        match reader_receiver.read_select(rx) {
+          Ok(m) => match m {
+            ReaderMessage::Terminate => break,
+            ReaderMessage::RunConst(f) => {
+              let lock = conns.read();
+              f(&lock.0[0]);
+            }
+          },
+          Err(crossfire::RecvError) => {
+            debug!("reader disconnected, removing from select.");
+            select.remove(&reader_receiver); // Remove disconnected receiver
+          }
         }
-      };
-    })
-    .recv(&reader_receiver, |m| {
-      let Ok(m) = m else {
-        return false;
-      };
-
-      return match m {
-        ReaderMessage::Terminate => false,
-        ReaderMessage::RunConst(f) => {
-          let lock = conns.read();
-          f(&lock.0[0]);
-
-          // Continue
-          true
+      }
+      Ok(rx) if rx == writer_receiver => {
+        match writer_receiver.read_select(rx) {
+          Ok(m) => match m {
+            WriterMessage::RunMut(f) => {
+              let mut lock = conns.write();
+              f(&mut lock.0[0]);
+            }
+          },
+          Err(crossfire::RecvError) => {
+            debug!("writer disconnected, removing from select.");
+            select.remove(&writer_receiver); // Remove disconnected receiver
+          }
         }
-      };
-    })
-    .wait()
-  {}
+      }
+      Ok(_) => {
+        debug_assert!(false, "Unexpected select result");
+      }
+      Err(crossfire::RecvError) => {
+        break;
+      }
+    };
+  }
 
   debug!("writer thread shut down");
 }

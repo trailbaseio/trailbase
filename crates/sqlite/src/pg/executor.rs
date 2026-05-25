@@ -1,4 +1,3 @@
-use flume::{Receiver, Sender};
 use log::*;
 use std::sync::Arc;
 use tokio::sync::oneshot;
@@ -19,8 +18,8 @@ enum Message {
 
 /// A handle to call functions in background thread.
 pub(crate) struct Executor {
-  sender: Sender<Message>,
-  threads: Vec<Sender<Message>>,
+  sender: crossfire::MTx<crossfire::mpmc::List<Message>>,
+  threads: Vec<crossfire::MTx<crossfire::mpsc::List<Message>>>,
 }
 
 impl Drop for Executor {
@@ -65,37 +64,41 @@ impl Executor {
 
     assert!(num_threads > 0);
 
-    let (shared_sender, shared_receiver) = flume::unbounded::<Message>();
+    let (shared_sender, shared_receiver) = crossfire::mpmc::unbounded_blocking::<Message>();
     let threads = (0..num_threads)
-      .map(|index| -> Result<Sender<Message>, Error> {
-        let shared_receiver = shared_receiver.clone();
-        let conn_builder = conn_builder.clone();
+      .map(
+        |index| -> Result<crossfire::MTx<crossfire::mpsc::List<Message>>, Error> {
+          let shared_receiver = shared_receiver.clone();
+          let conn_builder = conn_builder.clone();
 
-        let (s, r) = flume::bounded::<Result<Sender<Message>, Error>>(1);
+          let (s, r) = crossfire::oneshot::oneshot::<
+            Result<crossfire::MTx<crossfire::mpsc::List<Message>>, Error>,
+          >();
 
-        std::thread::Builder::new()
-          .name(format!("tb-pg-{index}"))
-          .spawn(move || -> () {
-            let (sender, receiver) = flume::unbounded::<Message>();
-            let conn = match conn_builder() {
-              Ok(conn) => {
-                s.send(Ok(sender)).expect("unreachable");
-                conn
-              }
-              Err(err) => {
-                s.send(Err(err)).expect("unreachable");
-                return;
-              }
-            };
+          std::thread::Builder::new()
+            .name(format!("tb-pg-{index}"))
+            .spawn(move || -> () {
+              let (sender, receiver) = crossfire::mpsc::unbounded_blocking::<Message>();
+              let conn = match conn_builder() {
+                Ok(conn) => {
+                  s.send(Ok(sender));
+                  conn
+                }
+                Err(err) => {
+                  s.send(Err(err));
+                  return;
+                }
+              };
 
-            event_loop(index, conn, shared_receiver, receiver);
-          })
-          .map_err(|err| Error::Other(format!("spawning thread {index} failed: {err}").into()))?;
+              event_loop(index, conn, shared_receiver, receiver);
+            })
+            .map_err(|err| Error::Other(format!("spawning thread {index} failed: {err}").into()))?;
 
-        return r
-          .recv()
-          .map_err(|err| Error::Other(format!("recv failed: {err}").into()))?;
-      })
+          return r
+            .recv()
+            .map_err(|err| Error::Other(format!("recv failed: {err}").into()))?;
+        },
+      )
       .collect::<Result<Vec<_>, Error>>()?;
 
     debug!("Opened Postgres DB ({num_threads} threads",);
@@ -182,14 +185,44 @@ impl Executor {
 fn event_loop(
   index: usize,
   mut conn: postgres::Client,
-  shared_receiver: Receiver<Message>,
-  solo_receiver: Receiver<Message>,
+  shared_receiver: crossfire::MRx<crossfire::mpmc::List<Message>>,
+  solo_receiver: crossfire::Rx<crossfire::mpsc::List<Message>>,
 ) {
-  while let Ok(message) = flume::Selector::new()
-    .recv(&shared_receiver, |m| m)
-    .recv(&solo_receiver, |m| m)
-    .wait()
-  {
+  let mut select = crossfire::select::Select::new();
+  select.add(&shared_receiver);
+  select.add(&solo_receiver);
+
+  loop {
+    let message = match select.select() {
+      Ok(rx) if rx == shared_receiver => {
+        match shared_receiver.read_select(rx) {
+          Ok(m) => m,
+          Err(crossfire::RecvError) => {
+            debug!("shared disconnected, removing from select.");
+            select.remove(&shared_receiver); // Remove disconnected receiver
+            continue;
+          }
+        }
+      }
+      Ok(rx) if rx == solo_receiver => {
+        match solo_receiver.read_select(rx) {
+          Ok(m) => m,
+          Err(crossfire::RecvError) => {
+            debug!("solo disconnected, removing from select.");
+            select.remove(&solo_receiver); // Remove disconnected receiver
+            continue;
+          }
+        }
+      }
+      Ok(_) => {
+        debug_assert!(false, "Unexpected select result");
+        break;
+      }
+      Err(crossfire::RecvError) => {
+        break;
+      }
+    };
+
     match message {
       Message::RunMut(f) => f(&mut conn),
       Message::Terminate => {
