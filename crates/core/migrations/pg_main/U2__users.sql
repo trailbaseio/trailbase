@@ -1,18 +1,5 @@
--- PG before v18 may not provide `uuidv4()`, thus add an impl.
-CREATE FUNCTION uuidv4() RETURNS UUID AS $$
-  BEGIN
-    RETURN gen_random_uuid();
-  END;
-$$ LANGUAGE plpgsql;
-
-CREATE OR REPLACE FUNCTION UNIXEPOCH() RETURNS INT8 AS $$
-  BEGIN
-    RETURN EXTRACT(EPOCH FROM CURRENT_TIMESTAMP);
-  END;
-$$ LANGUAGE plpgsql;
-
 CREATE TABLE IF NOT EXISTS _user (
-  id                               UUID PRIMARY KEY NOT NULL DEFAULT (uuidv4()),
+  id                               UUID PRIMARY KEY NOT NULL DEFAULT (uuid_v4()),
   email                            TEXT NOT NULL,
   password_hash                    TEXT DEFAULT '' NOT NULL,
   verified                         BOOLEAN DEFAULT FALSE NOT NULL,

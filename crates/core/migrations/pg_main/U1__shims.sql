@@ -1,10 +1,10 @@
--- Fake SQLite functionality.
-CREATE VIEW pragma_database_list AS
-  SELECT 0 AS seq, 'public' AS name;
+CREATE OR REPLACE FUNCTION UNIXEPOCH() RETURNS INT8 AS $$
+  BEGIN
+    RETURN EXTRACT(EPOCH FROM CURRENT_TIMESTAMP);
+  END;
+$$ LANGUAGE plpgsql;
 
-CREATE VIEW sqlite_schema AS
-  SELECT 'table' AS "type", 'test_table' AS "name", 'test_table' AS tbl_name, 2 AS rootpage, 'CREATE TABLE test_table (id INTEGER PRIMARY KEY) STRICT' AS sql;
-
+-- PG before v18 may not provide `uuidv4()`, thus add an impl.
 CREATE FUNCTION uuid_v4() RETURNS UUID AS $$
   BEGIN
     RETURN gen_random_uuid();
@@ -36,7 +36,7 @@ $$ LANGUAGE plpgsql;
 CREATE FUNCTION jsonschema(n TEXT, column_name TEXT) RETURNS BOOL AS $$
   BEGIN
     -- It's another lie:
-    RETURN TRUE;
+    RAISE 'Not supported alongside PG';
   END;
 $$ LANGUAGE plpgsql;
 

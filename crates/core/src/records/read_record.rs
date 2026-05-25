@@ -428,19 +428,35 @@ mod test {
     let table_name = "table 😍";
     conn
       .execute(
-        conditionally_transform_query(format!(
-          r#"
-          CREATE TABLE "{table_name}" (
-            id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
-            file         TEXT CHECK(jsonschema('std.FileUpload', file)),
-            files        TEXT CHECK(jsonschema('std.FileUploads', files)),
-            -- Add a "keyword" column to ensure escaping is correct.
-            "index"      TEXT NOT NULL DEFAULT(''),
-            -- A special char column to check more escaping.
-            "test 😍"    TEXT NOT NULL DEFAULT('')
-          ) STRICT
-          "#
-        )),
+        cfg_select! {
+        feature = "pg" => format!(
+            r#"
+              CREATE TABLE "{table_name}" (
+                id           UUID PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+                -- TODO: Should this be a JSON(B)?
+                file         TEXT CHECK(TRUE),
+                files        TEXT CHECK(TRUE),
+                -- Add a "keyword" column to ensure escaping is correct.
+                "index"      TEXT NOT NULL DEFAULT(''),
+                -- A special char column to check more escaping.
+                "test 😍"    TEXT NOT NULL DEFAULT('')
+              )
+            "#
+          ),
+        _ => format!(
+            r#"
+              CREATE TABLE "{table_name}" (
+                id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+                file         TEXT CHECK(jsonschema('std.FileUpload', file)),
+                files        TEXT CHECK(jsonschema('std.FileUploads', files)),
+                -- Add a "keyword" column to ensure escaping is correct.
+                "index"      TEXT NOT NULL DEFAULT(''),
+                -- A special char column to check more escaping.
+                "test 😍"    TEXT NOT NULL DEFAULT('')
+              ) STRICT
+            "#
+          ),
+        },
         (),
       )
       .await
