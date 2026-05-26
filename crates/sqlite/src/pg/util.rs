@@ -29,6 +29,7 @@ impl<'a> PgStatement<'a> {
     let mut placeholders: HashMap<String, usize> = Default::default();
     for cap in NAMED_RE.captures_iter(sql) {
       let named_params = &cap["nparam"];
+
       let length = placeholders.len();
       match placeholders.entry(named_params.to_string()) {
         Entry::Vacant(e) => {
@@ -71,7 +72,11 @@ impl<'a> PgStatement<'a> {
 
     let mut sql = RE.replace_all(sql, "$$$index").to_string();
 
+    // NOTE: Order by length to avoid issues where a named parameter is a prefix of another.
     // TODO: We should probably do this along the initial parse when we find the placeholders.
+    let mut placeholders: Vec<(String, usize)> = placeholders.into_iter().collect();
+    placeholders.sort_by(|a, b| return b.0.len().cmp(&a.0.len()));
+
     for (name, idx) in placeholders {
       sql = sql.replace(&name, &format!("${idx}"));
     }
@@ -244,6 +249,21 @@ mod tests {
     assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($2)", sql);
     assert_eq!(
       vec![Value::Text("p0".to_string()), Value::Text("p1".to_string())],
+      params,
+    );
+
+    // Check params where they're prefixes of each other
+    let (sql, params) = PgStatement::new("INSERT INTO 'table' (c0, c1) VALUES (:file, :files);")
+      .unwrap()
+      .bind(named_params! {":file": "file", ":files": "files"})
+      .unwrap();
+
+    assert_eq!("INSERT INTO 'table' (c0, c1) VALUES ($1, $2);", sql);
+    assert_eq!(
+      vec![
+        Value::Text("file".to_string()),
+        Value::Text("files".to_string())
+      ],
       params,
     );
   }
