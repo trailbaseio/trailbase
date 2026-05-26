@@ -72,6 +72,22 @@ pub(crate) struct FileDeletionsDb {
   json: String,
 }
 
+#[cfg(feature = "pg")]
+fn file_deletions_from_row(
+  row: trailbase_sqlite::Row,
+) -> Result<FileDeletionsDb, trailbase_sqlite::Error> {
+  return Ok(FileDeletionsDb {
+    id: row.get(0)?,
+    deleted: row.get(1)?,
+    attempts: row.get(2)?,
+    errors: row.get(3)?,
+    table_name: row.get(4)?,
+    record_rowid: row.get(5)?,
+    column_name: row.get(6)?,
+    json: row.get(7)?,
+  });
+}
+
 /// Deletes files already marked for deletion (by trigger) for the given rowid.
 ///
 /// NOTE: We're specific on the record/rowid, rather than deleting all pending files, to avoid
@@ -95,23 +111,54 @@ pub(crate) async fn delete_files_marked_for_deletion(
       return Ok(());
     }
     1 => {
-      conn
-        .write_query_values(
-          format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *"#),
-          trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
-        )
-        .await?
+      cfg_select! {
+      // NOTE: `write_query_values` with pgrow2serde doesn't support i64 <=> TID.
+      feature = "pg" => {
+        conn
+          .write_query_rows(
+            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *"#),
+            trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
+          )
+          .await?
+          .into_iter()
+          .map(file_deletions_from_row)
+          .collect::<Result<Vec<_>,_>>()?
+      },
+      _ => conn
+          .write_query_values(
+            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *"#),
+            trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
+          )
+          .await?,
+      }
     }
     _ => {
-      conn
-      .write_query_values(
-        format!(
-          r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid IN ({ids}) RETURNING *"#,
-            ids = rowids.iter().join(", "),
-        ),
-          trailbase_sqlite::params!(qualified_table_name.escaped_string()),
-      )
-      .await?
+      // NOTE: `write_query_values` with pgrow2serde doesn't support i64 <=> TID.
+      cfg_select! {
+      feature = "pg" => {
+        conn
+          .write_query_rows(
+            format!(
+              r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid IN ({ids}) RETURNING *"#,
+                ids = rowids.iter().join(", "),
+            ),
+            trailbase_sqlite::params!(qualified_table_name.escaped_string()),
+          )
+          .await?
+          .into_iter()
+          .map(file_deletions_from_row)
+          .collect::<Result<Vec<_>,_>>()?
+      },
+      _ => conn
+        .write_query_values(
+          format!(
+            r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid IN ({ids}) RETURNING *"#,
+              ids = rowids.iter().join(", "),
+          ),
+            trailbase_sqlite::params!(qualified_table_name.escaped_string()),
+        )
+        .await?
+      }
     }
   };
 

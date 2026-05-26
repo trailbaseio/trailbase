@@ -177,18 +177,24 @@ fn setup_file_deletion_triggers(
             CREATE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$ \
               BEGIN \
                 INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
-                  ('{table_name}', OLD.ctid, '{column_name}', \"{column_name}\"); \
+                  ('{table_name}', OLD.ctid, '{column_name}', OLD.\"{column_name}\");
+
+                IF TG_OP = 'UPDATE' THEN
+                  RETURN NEW;
+                ELSE
+                  RETURN OLD;
+                END IF;
               END; \
             $$ LANGUAGE plpgsql; \
             \
             CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__update_trigger\" \
               AFTER UPDATE ON {table_name} FOR EACH ROW \
-              WHEN (OLD.{column_name} IS NOT NULL AND OLD.{column_name} != NEW.{column_name}) \
+              WHEN (OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\") \
               EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"(); \
             \
             CREATE OR REPLACE TRIGGER \"__{unqualified_name}__{column_name}__delete_trigger\" \
               AFTER DELETE ON {table_name} FOR EACH ROW \
-              WHEN (OLD.{column_name} IS NOT NULL) \
+              WHEN (OLD.\"{column_name}\" IS NOT NULL) \
               EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"(); \
           "),
           _ => format!(
