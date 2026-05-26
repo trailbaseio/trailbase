@@ -43,7 +43,7 @@ CREATE TRIGGER __user__updated_trigger BEFORE UPDATE ON _user
 --
 CREATE TABLE IF NOT EXISTS _user_avatar (
   "user"                       UUID PRIMARY KEY NOT NULL REFERENCES _user(id) ON DELETE CASCADE,
-  file                         TEXT NOT NULL,
+  file                         JSONB CHECK(jsonschema('std.FileUpload', file, 'image/png, image/jpeg')) NOT NULL,
   updated                      INT8 DEFAULT (UNIXEPOCH()) NOT NULL
 );
 

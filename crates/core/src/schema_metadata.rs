@@ -174,7 +174,7 @@ fn setup_file_deletion_triggers(
       conn.execute_batch(cfg_select! {
           feature = "pg" => format!(
             "\
-            CREATE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$ \
+            CREATE OR REPLACE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$ \
               BEGIN \
                 INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
                   ('{table_name}', OLD.ctid, '{column_name}', OLD.\"{column_name}\");

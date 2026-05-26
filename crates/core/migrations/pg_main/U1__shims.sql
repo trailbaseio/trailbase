@@ -33,11 +33,17 @@ CREATE FUNCTION is_uuid(id ANYELEMENT) RETURNS BOOL AS $$
   END;
 $$ LANGUAGE plpgsql;
 
-CREATE FUNCTION jsonschema(n TEXT, contents JSONB) RETURNS BOOL AS $$
+CREATE FUNCTION jsonschema(n TEXT, contents JSONB, args TEXT DEFAULT NULL) RETURNS BOOL AS $$
   BEGIN
     CASE n
       -- We're lying a little here:
       WHEN 'std.FileUpload' THEN
+        IF args IS NOT NULL THEN
+          RETURN contents->>'mime_type' = ANY(
+              SELECT TRIM(elem) FROM unnest(string_to_array(args, ',')) AS elem
+          );
+        END IF;
+
         RETURN TRUE;
       WHEN 'std.FileUploads' THEN
         RETURN TRUE;

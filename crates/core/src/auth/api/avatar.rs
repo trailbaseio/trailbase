@@ -333,15 +333,21 @@ mod tests {
     );
 
     // Test non png/jpeg types will be rejected
-    assert!(
-      upload_avatar(
-        &state,
-        User::from_auth_token(&state, &user_x_token.auth_token).unwrap(),
-        b"<html><body>Body 0</body></html>",
-      )
+
+    let non_img_result = upload_avatar(
+      &state,
+      User::from_auth_token(&state, &user_x_token.auth_token).unwrap(),
+      b"<html><body>Body 0</body></html>",
+    )
+    .await;
+
+    let rows = state
+      .conn()
+      .read_query_rows("SELECT * FROM _user_avatar", ())
       .await
-      .is_err()
-    );
+      .unwrap();
+
+    assert!(non_img_result.is_err(), "{rows:?}");
 
     let response = get_avatar_handler(State(state.clone()), Path(id_to_b64(&db_user.id)))
       .await
