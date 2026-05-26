@@ -119,7 +119,7 @@ pub async fn create_record_handler(
     crate::records::json_schema::validate_api_json_schema(
       &state,
       &api,
-      trailbase_schema::json_schema::JsonSchemaMode::Update,
+      trailbase_schema::json_schema::JsonSchemaMode::Insert,
       &serde_json::Value::Object(record.clone()),
     )
     .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
@@ -141,7 +141,7 @@ pub async fn create_record_handler(
     params_list.push(
       lazy_params
         .consume()
-        .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
+        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?,
     );
   }
 

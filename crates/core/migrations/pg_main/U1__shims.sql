@@ -33,10 +33,17 @@ CREATE FUNCTION is_uuid(id ANYELEMENT) RETURNS BOOL AS $$
   END;
 $$ LANGUAGE plpgsql;
 
-CREATE FUNCTION jsonschema(n TEXT, column_name TEXT) RETURNS BOOL AS $$
+CREATE FUNCTION jsonschema(n TEXT, contents JSONB) RETURNS BOOL AS $$
   BEGIN
-    -- It's another lie:
-    RAISE 'Not supported alongside PG';
+    CASE n
+      -- We're lying a little here:
+      WHEN 'std.FileUpload' THEN
+        RETURN TRUE;
+      WHEN 'std.FileUploads' THEN
+        RETURN TRUE;
+      ELSE
+        RAISE EXCEPTION 'Not supported alongside PG';
+    END CASE;
   END;
 $$ LANGUAGE plpgsql;
 

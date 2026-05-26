@@ -211,6 +211,7 @@ fn infer_data_type(type_name: &str) -> ColumnDataType {
     "uuid" | "bytea" => ColumnDataType::Blob,
     "real" | "double" => ColumnDataType::Real,
     "text" | "varchar" => ColumnDataType::Text,
+    "json" | "jsonb" => ColumnDataType::Text,
     name if name.contains("int") || name.contains("bool") || name.contains("serial") => {
       ColumnDataType::Integer
     }
@@ -225,6 +226,7 @@ fn infer_affinity_type(type_name: &str) -> ColumnAffinityType {
     "uuid" | "bytea" => ColumnAffinityType::Blob,
     "real" | "double" => ColumnAffinityType::Real,
     "text" | "varchar" => ColumnAffinityType::Text,
+    "json" | "jsonb" => ColumnAffinityType::Text,
     name if name.contains("int") || name.contains("bool") || name.contains("serial") => {
       ColumnAffinityType::Integer
     }

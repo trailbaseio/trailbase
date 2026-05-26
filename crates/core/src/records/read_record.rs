@@ -434,8 +434,8 @@ mod test {
               CREATE TABLE "{table_name}" (
                 id           UUID PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
                 -- TODO: Should this be a JSON(B)?
-                file         TEXT CHECK(TRUE),
-                files        TEXT CHECK(TRUE),
+                file         JSONB CHECK(jsonschema('std.FileUpload', file)),
+                files        JSONB CHECK(jsonschema('std.FileUploads', files)),
                 -- Add a "keyword" column to ensure escaping is correct.
                 "index"      TEXT NOT NULL DEFAULT(''),
                 -- A special char column to check more escaping.

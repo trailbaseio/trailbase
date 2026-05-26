@@ -410,7 +410,7 @@ pub(crate) fn extract_json_metadata(
 
   lazy_static! {
     static ref SCHEMA_RE: Regex =
-      Regex::new(r#"(?smR)jsonschema\s*\(\s*[\['"](?<name>.*)[\]'"]\s*,.+?\)"#)
+      Regex::new(r#"(?smR)jsonschema\s*\(\s*[\['"](?<name>.*)[\]'"]\s*(::text)?,.+?\)"#)
         .expect("infallible");
   }
 
@@ -1068,5 +1068,30 @@ mod tests {
       let metadata = ViewMetadata::new(&registry, view, &tables).unwrap();
       assert_eq!(Some(0), metadata.record_pk_column().map(|c| c.index));
     }
+  }
+
+  #[test]
+  fn test_extract_json_metadata() {
+    let registry = crate::registry::build_json_schema_registry(vec![]).unwrap();
+
+    assert!(
+      extract_json_metadata(&registry, &ColumnOption::Check("".to_string()))
+        .unwrap()
+        .is_none()
+    );
+
+    extract_json_metadata(
+      &registry,
+      &ColumnOption::Check("jsonschema('std.FileUpload', col)".to_string()),
+    )
+    .unwrap()
+    .unwrap();
+
+    extract_json_metadata(
+      &registry,
+      &ColumnOption::Check("jsonschema('std.FileUpload'::text, col)".to_string()),
+    )
+    .unwrap()
+    .unwrap();
   }
 }
