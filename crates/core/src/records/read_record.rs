@@ -1324,9 +1324,13 @@ mod test {
     }
   }
 
-  #[cfg(any(feature = "geos", feature = "geos-static"))]
+  // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
+  // instance.
+  #[cfg(all(any(feature = "geos", feature = "geos-static"), not(feature = "pg")))]
   #[tokio::test]
   async fn test_geometry_columns_and_geojson() {
+    use crate::test_utils::blob_column;
+
     let state = test_state(None).await.unwrap();
 
     let name = "with_geo".to_string();
@@ -1341,10 +1345,7 @@ mod test {
           ) {strict}
           "#,
           strict = strict(),
-          blob = cfg_select! {
-              feature = "pg" => "BYTEA",
-              _ => "BLOB",
-          },
+          blob = blob_column(),
         ),
         (),
       )

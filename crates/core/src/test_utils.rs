@@ -11,3 +11,10 @@ pub fn uuid_column() -> &'static str {
       _ => "BLOB",
   };
 }
+
+pub fn blob_column() -> &'static str {
+  return cfg_select! {
+      feature = "pg" => "BYTEA",
+      _ => "BLOB",
+  };
+}

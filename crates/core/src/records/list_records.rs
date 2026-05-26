@@ -1363,7 +1363,9 @@ mod tests {
     assert_eq!(1, resp_filtered1.total_count.unwrap());
   }
 
-  #[cfg(any(feature = "geos", feature = "geos-static"))]
+  // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
+  // instance.
+  #[cfg(all(any(feature = "geos", feature = "geos-static"), not(feature = "pg")))]
   #[tokio::test]
   async fn test_record_api_geojson_list() {
     let state = test_state(None).await.unwrap();

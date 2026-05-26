@@ -67,7 +67,9 @@ pub async fn insert_row_handler(
 
 #[cfg(test)]
 mod tests {
-  #[cfg(any(feature = "geos", feature = "geos-static"))]
+  // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
+  // instance.
+  #[cfg(all(any(feature = "geos", feature = "geos-static"), not(feature = "pg")))]
   #[tokio::test]
   async fn admin_insert_geometry_test() {
     use super::*;
@@ -76,14 +78,16 @@ mod tests {
     let conn = state.conn();
 
     conn
-      .execute_batch(
+      .execute_batch(format!(
         "
          CREATE TABLE IF NOT EXISTS geom_table (
              id       INTEGER PRIMARY KEY,
-             geom     BLOB CHECK(ST_IsValid(geom))
-         ) STRICT;
+             geom     {blob} CHECK(ST_IsValid(geom))
+         ) {strict};
         ",
-      )
+        strict = crate::test_utils::strict(),
+        blob = crate::test_utils::blob_column(),
+      ))
       .await
       .unwrap();
 
