@@ -695,11 +695,17 @@ mod tests {
     let query = ListRecordQueryTemplate {
       table_name: &QualifiedName {
         name: "table".to_string(),
-        database_schema: Some("main".to_string()),
+        database_schema: Some(cfg_select! {
+            feature = "pg" => "public".to_string(),
+        _ => "main".to_string(),
+        }),
       }
       .into(),
       column_metadata: api.columns(),
-      read_access_clause: "_USER_.id != X'F000'",
+      read_access_clause: cfg_select! {
+        feature = "pg" => "TRUE",
+        _ => "_USER_.id != X'F000'",
+      },
       filter_clause: "TRUE",
       cursor_clause: None,
       order_clause: "tid",
@@ -723,7 +729,7 @@ mod tests {
 
     let result = conn.read_query_rows(query, params).await;
     if let Err(err) = result {
-      panic!("ERROR: {err}");
+      panic!("ERROR: {err:?}");
     }
   }
 
