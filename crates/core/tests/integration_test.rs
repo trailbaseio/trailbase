@@ -11,6 +11,7 @@ use trailbase::AppState;
 use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password_for_test};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
+use trailbase::test_utils::{strict, uuid_column};
 use trailbase::util::id_to_b64;
 use trailbase::{DataDir, Server, ServerOptions};
 
@@ -274,34 +275,36 @@ async fn create_chat_message_app_tables(
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
   conn
-    .execute_batch(
+    .execute_batch(format!(
       r#"
-          CREATE TABLE room (
-            id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
-            name         TEXT
-          ) STRICT;
+        CREATE TABLE room (
+          id           {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+          name         TEXT
+        ) {strict};
 
-          CREATE TABLE message (
-            id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT (uuid_v7()),
-            _owner       BLOB NOT NULL,
-            room         BLOB NOT NULL,
-            data         TEXT NOT NULL DEFAULT 'empty',
+        CREATE TABLE message (
+          id           {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT (uuid_v7()),
+          _owner       {uuid} NOT NULL,
+          room         {uuid} NOT NULL,
+          data         TEXT NOT NULL DEFAULT 'empty',
 
-            -- on user delete, toombstone it.
-            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chatroom delete, delete message
-            FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE
-          ) STRICT;
+          -- on user delete, tombstone it.
+          FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
+          -- On chat room delete, delete message
+          FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE
+        ) {strict};
 
-          CREATE TABLE room_members (
-            user         BLOB NOT NULL,
-            room         BLOB NOT NULL,
+        CREATE TABLE room_members (
+          "user"       {uuid} NOT NULL,
+          room         {uuid} NOT NULL,
 
-            FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE,
-            FOREIGN KEY(user) REFERENCES _user(id) ON DELETE CASCADE
-          ) STRICT;
-        "#,
-    )
+          FOREIGN KEY(room) REFERENCES room(id) ON DELETE CASCADE,
+          FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
+        ) {strict};
+      "#,
+      strict = strict(),
+      uuid = uuid_column(),
+    ))
     .await?;
 
   return Ok(());

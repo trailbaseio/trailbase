@@ -10,7 +10,7 @@ pub mod metadata;
 pub mod records;
 pub mod util;
 
-#[cfg(test)]
+#[cfg(debug_assertions)]
 pub mod test_utils;
 
 mod admin;

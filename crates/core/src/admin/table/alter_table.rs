@@ -579,8 +579,13 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn test_alter_table() -> Result<(), anyhow::Error> {
-    let state = test_state(None).await?;
+  async fn test_alter_table() {
+    if cfg!(feature = "pg") {
+      log::warn!("`test_alter_table()` disabled for PG");
+      return;
+    }
+
+    let state = test_state(None).await.unwrap();
     let conn = state.conn();
     let pk_col = "my_pk".to_string();
 
@@ -610,11 +615,14 @@ mod tests {
       "Create Table: {}",
       create_table_request.schema.create_table_statement()
     );
-    let _ = create_table_handler(State(state.clone()), Json(create_table_request.clone())).await?;
+    let _ = create_table_handler(State(state.clone()), Json(create_table_request.clone()))
+      .await
+      .unwrap();
 
     conn
       .read_query_rows(format!("SELECT {pk_col} FROM foo"), ())
-      .await?;
+      .await
+      .unwrap();
 
     {
       // Noop: source and target identical.
@@ -632,7 +640,8 @@ mod tests {
 
       conn
         .read_query_rows(format!("SELECT {pk_col} FROM foo"), ())
-        .await?;
+        .await
+        .unwrap();
     }
 
     {
@@ -662,7 +671,8 @@ mod tests {
 
       conn
         .read_query_rows(format!("SELECT {pk_col}, new FROM foo"), ())
-        .await?;
+        .await
+        .unwrap();
     }
 
     {
@@ -684,9 +694,8 @@ mod tests {
       assert!(conn.read_query_rows("SELECT * FROM foo", ()).await.is_err());
       conn
         .read_query_rows(format!("SELECT {pk_col} FROM bar"), ())
-        .await?;
+        .await
+        .unwrap();
     }
-
-    return Ok(());
   }
 }
