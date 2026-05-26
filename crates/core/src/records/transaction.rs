@@ -326,13 +326,18 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         r#"
           CREATE TABLE test (
-            id      INTEGER PRIMARY KEY,
+            id      {int} PRIMARY KEY,
             value   INTEGER
-          ) STRICT;
+          ) {strict};
         "#,
+        strict = strict(),
+        int = cfg_select! {
+            feature = "pg" => "BIGSERIAL",
+            _ => "INTEGER",
+        },
       ))
       .await
       .unwrap();

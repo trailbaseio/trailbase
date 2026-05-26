@@ -235,13 +235,18 @@ mod test {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         r#"
           CREATE TABLE simple (
-            owner   BLOB PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
+            owner   {uuid} PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
             value   INTEGER
-          ) STRICT;
+          ) {strict};
         "#,
+        strict = strict(),
+        uuid = cfg_select! {
+            feature = "pg" => "UUID",
+            _ => "BLOB",
+        },
       ))
       .await
       .unwrap();

@@ -356,17 +356,22 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         "
-            CREATE TABLE test (
-                id  INTEGER PRIMARY KEY,
-                a   int NOT NULL,
-                b   INT NULL,
-                c   INTEGER
-            ) STRICT;
+          CREATE TABLE test (
+              id  {int} PRIMARY KEY,
+              a   int NOT NULL,
+              b   INT NULL,
+              c   INTEGER
+          ) {strict};
 
-            INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
+          INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
         ",
+        strict = strict(),
+        int = cfg_select! {
+            feature = "pg" => "BIGSERIAL",
+            _ => "INTEGER",
+        },
       ))
       .await
       .unwrap();
@@ -445,18 +450,19 @@ mod tests {
       } = state.connection_manager().main_entry();
 
       conn
-        .execute_batch(conditionally_transform_query(format!(
+        .execute_batch(format!(
           "
-            CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) STRICT;
+            CREATE TABLE foreign_table (id INTEGER PRIMARY KEY) {strict};
 
             CREATE TABLE {table_name} (
               id       INTEGER PRIMARY KEY,
               fk       INTEGER NOT NULL REFERENCES foreign_table(id),
               fk_null  INTEGER REFERENCES foreign_table(id)
-            ) STRICT;
+            ) {strict};
           ",
           table_name = table_name.escaped_string(),
-        )))
+          strict = strict(),
+        ))
         .await
         .unwrap();
 
@@ -703,24 +709,25 @@ mod tests {
       .connection_manager()
       .main_entry()
       .connection
-      .execute_batch(conditionally_transform_query(format!(
+      .execute_batch(format!(
         r#"
-        CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) STRICT;
-        INSERT INTO foreign_table0 (id) VALUES (1);
+          CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) {strict};
+          INSERT INTO foreign_table0 (id) VALUES (1);
 
-        CREATE TABLE foreign_table1 (id INTEGER PRIMARY KEY) STRICT;
-        INSERT INTO foreign_table1 (id) VALUES (1);
+          CREATE TABLE foreign_table1 (id INTEGER PRIMARY KEY) {strict};
+          INSERT INTO foreign_table1 (id) VALUES (1);
 
-        CREATE TABLE {table_name} (
-          id        INTEGER PRIMARY KEY,
-          fk0       INTEGER REFERENCES foreign_table0(id),
-          fk0_null  INTEGER REFERENCES foreign_table0(id),
-          fk1       INTEGER REFERENCES foreign_table1(id)
-        ) STRICT;
+          CREATE TABLE {table_name} (
+            id        INTEGER PRIMARY KEY,
+            fk0       INTEGER REFERENCES foreign_table0(id),
+            fk0_null  INTEGER REFERENCES foreign_table0(id),
+            fk1       INTEGER REFERENCES foreign_table1(id)
+          ) {strict};
 
-        INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);
-        "#
-      )))
+          INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);
+        "#,
+        strict = strict(),
+      ))
       .await
       .unwrap();
 

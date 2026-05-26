@@ -635,12 +635,9 @@ mod tests {
 
       conn
         .execute(
-          conditionally_transform_query(
-            r#"
-            CREATE TABLE "other" (
-              "index" INTEGER PRIMARY KEY
-            ) STRICT
-            "#,
+          format!(
+            "CREATE TABLE \"other\" (\"index\" INTEGER PRIMARY KEY) {}",
+            strict()
           ),
           (),
         )
@@ -649,14 +646,15 @@ mod tests {
 
       conn
         .execute(
-          conditionally_transform_query(
+          format!(
             r#"
-          CREATE TABLE "table" (
-              tid     INTEGER PRIMARY KEY,
-              "drop"  TEXT,
-              "index" INTEGER REFERENCES "other"("index")
-            ) STRICT
-          "#,
+              CREATE TABLE "table" (
+                  tid     INTEGER PRIMARY KEY,
+                  "drop"  TEXT,
+                  "index" INTEGER REFERENCES "other"("index")
+                ) {}
+            "#,
+            strict()
           ),
           (),
         )
@@ -754,16 +752,15 @@ mod tests {
     state
       .conn()
       .execute_batch(
-                conditionally_transform_query(
-        r#"
-        CREATE TABLE "table" (
-          id INTEGER PRIMARY KEY,
-          "index" TEXT NOT NULL DEFAULT '',
-          nullable INTEGER
-        ) STRICT;
+                format!(r#"
+          CREATE TABLE "table" (
+            id         INTEGER PRIMARY KEY,
+            "index"    TEXT NOT NULL DEFAULT '',
+            nullable   INTEGER
+          ) {};
 
-        INSERT INTO "table" (id, "index", nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
-        "#),
+          INSERT INTO "table" (id, "index", nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
+        "#, strict()),
       )
       .await
       .unwrap();
@@ -1265,13 +1262,13 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         r#"
           CREATE TABLE data (
             id       INTEGER PRIMARY KEY,
             data     TEXT NOT NULL,
             flag     INTEGER NOT NULL DEFAULT 0
-          ) STRICT;
+          ) {strict};
 
           INSERT INTO data (id, data, flag) VALUES (0, 'msg0', 1), (1, 'msg1', 1), (2, 'msg2', 0);
 
@@ -1283,6 +1280,7 @@ mod tests {
             FROM data AS d
             WHERE d.flag > 0;
         "#,
+        strict = strict()
       ))
       .await
       .unwrap();
@@ -1373,21 +1371,26 @@ mod tests {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(format!(
+      .execute_batch(format!(
         r#"
-        CREATE TABLE {name} (
-          id            INTEGER PRIMARY KEY,
-          description   TEXT,
-          geom          BLOB CHECK(ST_IsValid(geom))
-        ) STRICT;
+          CREATE TABLE "{name}" (
+            id            INTEGER PRIMARY KEY,
+            description   TEXT,
+            geom          {blob} CHECK(ST_IsValid(geom))
+          ) {strict};
 
-        INSERT INTO {name} (id, description, geom) VALUES
-          ( 3, 'Colloseo',     ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
-          ( 7, 'A Line',       ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326)),
-          ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
-          (21, 'null',         NULL);
-      "#
-      )))
+          INSERT INTO "{name}" (id, description, geom) VALUES
+            ( 3, 'Colloseo',     ST_GeomFromText('POINT(12.4924 41.8902)', 4326)),
+            ( 7, 'A Line',       ST_GeomFromText('LINESTRING(10 20, 20 30)', 4326)),
+            ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
+            (21, 'null',         NULL);
+        "#,
+        strict = strict(),
+        blob = cfg_select! {
+            feature = "pg" => "BYTEA",
+            _ => "BLOB",
+        },
+      ))
       .await
       .unwrap();
 

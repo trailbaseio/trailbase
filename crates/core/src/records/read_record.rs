@@ -946,15 +946,16 @@ mod test {
     state
       .conn()
       .execute(
-        conditionally_transform_query(format!(
+        format!(
           r#"
-          CREATE TABLE "table" (
-            pid          INTEGER PRIMARY KEY,
-            "drop"       TEXT NOT NULL,
-            "index"      TEXT NOT NULL DEFAULT('')
-          ) STRICT
-          "#
-        )),
+            CREATE TABLE "table" (
+              pid          INTEGER PRIMARY KEY,
+              "drop"       TEXT NOT NULL,
+              "index"      TEXT NOT NULL DEFAULT('')
+            ) {strict}
+          "#,
+          strict = strict()
+        ),
         (),
       )
       .await
@@ -1043,15 +1044,20 @@ mod test {
     let conn = state.conn();
     conn
       .execute(
-        conditionally_transform_query(format!(
+        format!(
           r#"
-          CREATE TABLE "{TABLE_NAME}" (
-             id           INTEGER PRIMARY KEY NOT NULL,
-             col0         TEXT NOT NULL DEFAULT(''),
-             col1         TEXT NOT NULL DEFAULT('')
-          ) STRICT
-          "#
-        )),
+            CREATE TABLE "{TABLE_NAME}" (
+               id           {int} PRIMARY KEY NOT NULL,
+               col0         TEXT NOT NULL DEFAULT(''),
+               col1         TEXT NOT NULL DEFAULT('')
+            ) {strict}
+          "#,
+          strict = strict(),
+          int = cfg_select! {
+              feature = "pg" => "BIGSERIAL",
+              _ => "INTEGER",
+          },
+        ),
         (),
       )
       .await
@@ -1126,22 +1132,23 @@ mod test {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         r#"
           CREATE TABLE parent (
             id           INTEGER PRIMARY KEY NOT NULL,
             value        TEXT NOT NULL
-          ) STRICT;
+          ) {strict};
           INSERT INTO parent (id, value) VALUES (1, 'first'), (2, 'second');
 
           CREATE TABLE child (
             id           INTEGER PRIMARY KEY NOT NULL,
             parent       INTEGER REFERENCES parent NOT NULL
-          ) STRICT;
+          ) {strict};
           INSERT INTO child (id, parent) VALUES (1, 1), (2, 2);
 
           CREATE VIEW child_view AS SELECT * FROM child;
        "#,
+        strict = strict(),
       ))
       .await
       .unwrap();
@@ -1326,14 +1333,19 @@ mod test {
     state
       .conn()
       .execute(
-        conditionally_transform_query(format!(
+        format!(
           r#"
           CREATE TABLE "{name}" (
             id           INTEGER PRIMARY KEY,
-            geo          BLOB CHECK(ST_IsValid(geo))
-          ) STRICT
-          "#
-        )),
+            geo          {blob} CHECK(ST_IsValid(geo))
+          ) {strict}
+          "#,
+          strict = strict(),
+          blob = cfg_select! {
+              feature = "pg" => "BYTEA",
+              _ => "BLOB",
+          },
+        ),
         (),
       )
       .await

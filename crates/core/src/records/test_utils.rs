@@ -6,7 +6,7 @@ use crate::records::params::JsonRow;
 use crate::records::{AccessRules, Acls};
 
 pub use crate::config::proto::RecordApiConfig;
-pub use crate::test_utils::conditionally_transform_query;
+pub use crate::test_utils::strict;
 
 // NOTE: Prefer add_record_api_config below.
 pub(crate) async fn add_record_api(

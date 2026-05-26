@@ -108,15 +108,16 @@ mod test {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         r#"
           CREATE TABLE "update" (
             "id"      INTEGER PRIMARY KEY,
             "int"     INTEGER NOT NULL DEFAULT (-1),
             "float"   REAL NOT NULL,
             "text"    TEXT
-          ) STRICT;
+          ) {strict};
         "#,
+        strict = strict()
       ))
       .await
       .unwrap();
@@ -346,15 +347,20 @@ mod test {
 
     state
       .conn()
-      .execute_batch(conditionally_transform_query(
+      .execute_batch(format!(
         r#"
           CREATE TABLE test (
-            "user"    BLOB PRIMARY KEY REFERENCES _user(id),
+            "user"    {uuid} PRIMARY KEY REFERENCES _user(id),
             "data"    TEXT NOT NULL
-          ) STRICT;
+          ) {strict};
 
           INSERT INTO test ("user", data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
         "#,
+        strict = strict(),
+        uuid = cfg_select! {
+            feature = "pg" => "UUID",
+            _ => "BLOB",
+        },
       ))
       .await
       .unwrap();
