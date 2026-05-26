@@ -1687,8 +1687,11 @@ mod tests {
   #[test]
   fn test_quote() {
     assert_eq!("", quote(&vec![]));
-    assert_eq!("''", quote(&vec!["".to_string()]));
-    assert_eq!("'foo', ''", quote(&vec!["foo".to_string(), "".to_string()]));
+    assert_eq!(r#""""#, quote(&vec!["".to_string()]));
+    assert_eq!(
+      r#""foo", """#,
+      quote(&vec!["foo".to_string(), "".to_string()])
+    );
   }
 
   #[test]
@@ -1722,7 +1725,14 @@ mod tests {
     let sql = table.create_table_statement();
 
     assert_eq!(
-      "CREATE TABLE \"table\" (\"index\" TEXT, \"delete\" TEXT, \"create\" TEXT) STRICT",
+      format!(
+        "CREATE TABLE \"table\" (\"index\" TEXT, \"delete\" TEXT, \"create\" TEXT) {strict}",
+        strict = cfg_select! {
+            feature = "pg" => "",
+            _ => "STRICT"
+        }
+      )
+      .trim(),
       sql
     );
     parse_into_statement(&sql).unwrap().unwrap();
@@ -1759,8 +1769,12 @@ mod tests {
           CONSTRAINT `unique` UNIQUE ([index]) ON CONFLICT FAIL,
           FOREIGN KEY(user_id) REFERENCES 'table'('index') ON DELETE CASCADE,
           CONSTRAINT `check` CHECK(username != '')
-      ) STRICT;
-      "#
+      ) {strict};
+      "#,
+      strict = cfg_select! {
+          feature = "pg" => "",
+          _ => "STRICT"
+      },
     );
 
     {

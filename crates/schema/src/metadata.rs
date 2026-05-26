@@ -541,8 +541,8 @@ fn is_suitable_record_pk_column<T: Borrow<Table>>(column: &Column, tables: &[T])
     ColumnDataType::Blob => {
       // TODO: PG supports a UUID type, which would do the same if we wired it
       // through.
-      if cfg!(feature = "pg") {
-        return column.type_name == "uuid";
+      if cfg!(feature = "pg") && column.type_name == "uuid" {
+        return true;
       }
 
       lazy_static! {
