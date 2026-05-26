@@ -291,18 +291,28 @@ mod tests {
     let conn = state.conn();
 
     conn
-      .execute_batch(conditionally_transform_query(
-        r#"
-        CREATE TABLE test_table (
-          text    TEXT NOT NULL,
-          number  INTEGER,
-          blob    BLOB NOT NULL,
-          json    TEXT CHECK(jsonschema('foo', json))
-        ) STRICT;
+      .execute_batch(cfg_select!{
+        feature = "pg" => "
+          CREATE TABLE test_table (
+            text      TEXT NOT NULL,
+            number    INTEGER,
+            blob      BYTEA NOT NULL,
+            json      JSONB
+          );
 
-        INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, X'FACE', '{"name": "alice"}');
+          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, '\\xFACE', '{\"name\": \"alice\"}');
+        ",
+        _ => r#"
+          CREATE TABLE test_table (
+            text    TEXT NOT NULL,
+            number  INTEGER,
+            blob    BLOB NOT NULL,
+            json    TEXT CHECK(jsonschema('foo', json))
+          ) STRICT;
+
+          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, X'FACE', '{"name": "alice"}');
         "#,
-      ))
+      })
       .await
       .unwrap();
 
@@ -319,7 +329,10 @@ mod tests {
       conn,
       &QualifiedName {
         name: "test_table".to_string(),
-        database_schema: Some("main".to_string()),
+        database_schema: Some(cfg_select! {
+            feature = "pg" => "public".to_string(),
+            _ => "main".to_string(),
+        }),
       },
       WhereClause {
         clause: "TRUE".to_string(),
@@ -354,6 +367,11 @@ mod tests {
     let SqlValue::Text(json) = row.get(3).unwrap() else {
       panic!("Not a string: {:?}", row);
     };
-    assert_eq!(json, r#"{"name": "alice"}"#);
+    assert_eq!(
+      serde_json::json!({
+          "name": "alice",
+      }),
+      serde_json::from_str::<serde_json::Value>(json).unwrap()
+    );
   }
 }
