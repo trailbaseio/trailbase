@@ -212,7 +212,7 @@ impl WriteQuery {
   }
 }
 
-pub(crate) async fn run_queries<'a>(
+pub(crate) async fn run_queries(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   queries: Vec<(
@@ -315,7 +315,7 @@ pub(crate) async fn run_insert_or_replace_query(
     file_manager.release();
 
     if conflict_resolution == ConflictResolutionStrategy::Replace {
-      delete_files_marked_for_deletion(conn, objectstore, &table_name, &[rowid])
+      delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;
     }

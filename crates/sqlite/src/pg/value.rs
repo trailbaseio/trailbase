@@ -32,14 +32,15 @@ impl postgres::types::ToSql for Value {
       Value::Real(v) => {
         match ty.name() {
           "float4" => (*v as f32).to_sql(ty, out)?,
-          "float8" | _ => v.to_sql(ty, out)?,
+          "float8" => v.to_sql(ty, out)?,
+          _ => v.to_sql(ty, out)?,
         };
       }
       Value::Text(v) => {
         match ty.name() {
           // TODO: We should probably extend our value enum ot java Json(serde_json::Value).
           "jsonb" => {
-            let value = serde_json::from_str::<serde_json::Value>(&v)?;
+            let value = serde_json::from_str::<serde_json::Value>(v)?;
             value.to_sql(ty, out)?
           }
           _ => v.to_sql(ty, out)?,
