@@ -833,7 +833,7 @@ impl TableIndex {
       .join(", ");
 
     return format!(
-      "CREATE{unique} INDEX {if_not_exists} {fqn_name} ON '{table_name}' ({indexed_columns}) {predicate}",
+      "CREATE{unique} INDEX {if_not_exists} {fqn_name} ON \"{table_name}\" ({indexed_columns}) {predicate}",
       unique = if self.unique { " UNIQUE" } else { "" },
       if_not_exists = if self.if_not_exists {
         "IF NOT EXISTS"
@@ -1583,12 +1583,12 @@ pub(crate) fn quote(column_names: &[String]) -> String {
   let mut s = String::new();
   for (i, name) in column_names.iter().enumerate() {
     if i > 0 {
-      s.push_str(", '");
+      s.push_str(", \"");
     } else {
-      s.push('\'');
+      s.push('\"');
     }
     s.push_str(name);
-    s.push('\'');
+    s.push('\"');
   }
   return s;
 }

@@ -140,7 +140,7 @@ mod tests {
 
     #[derive(Deserialize)]
     struct TestTable {
-      myid: Vec<u8>,
+      myid: [u8; 16],
       col0: Option<String>,
     }
 
@@ -157,7 +157,7 @@ mod tests {
             Column {
               name: pk_col.clone(),
               type_name: cfg_select! {
-                  feature = "pg" =>"uuid".to_string(),
+                  feature = "pg" =>"UUID".to_string(),
                   _ =>"BLOB".to_string(),
               },
               data_type: ColumnDataType::Blob,
@@ -168,7 +168,6 @@ mod tests {
                   conflict_clause: None,
                 },
                 ColumnOption::Default("(uuid_v7())".to_string()),
-                #[cfg(not(feature = "pg"))]
                 ColumnOption::Check(format!("(is_uuid_v7({pk_col}))")),
               ],
             },
@@ -226,7 +225,7 @@ mod tests {
 
     let count = async || -> i64 {
       conn
-        .read_query_row_get(format!("SELECT COUNT(*) FROM '{table_name}'"), (), 0)
+        .read_query_row_get(format!("SELECT COUNT(*) FROM {table_name}"), (), 0)
         .await
         .unwrap()
         .unwrap()
