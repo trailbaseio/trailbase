@@ -13,7 +13,12 @@ $$ LANGUAGE plpgsql;
 
 CREATE FUNCTION uuid_v7() RETURNS UUID AS $$
   BEGIN
-    RETURN uuid_generate_v7();
+    IF to_regprocedure('uuidv7()') IS NOT NULL THEN
+      RETURN uuidv7();
+    ELSE
+      -- pglite fallback
+      RETURN uuid_generate_v7();
+    END IF;
   END;
 $$ LANGUAGE plpgsql;
 

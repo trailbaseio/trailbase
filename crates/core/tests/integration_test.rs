@@ -81,13 +81,19 @@ async fn test_record_apis() {
       )
       .await.unwrap();
 
-  let user_x_email = "user_x@test.com";
-  let user_x = create_user_for_test(&state, user_x_email, password)
+  let now = std::time::SystemTime::now();
+  let timestamp = now
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap_or_default()
+    .as_secs();
+
+  let user_x_email = format!("user_x_{timestamp}@test.com");
+  let user_x = create_user_for_test(&state, &user_x_email, password)
     .await
     .unwrap()
     .into_bytes();
 
-  let user_x_token = login_with_password_for_test(&state, user_x_email, password)
+  let user_x_token = login_with_password_for_test(&state, &user_x_email, password)
     .await
     .unwrap()
     .unwrap();
@@ -277,6 +283,10 @@ async fn create_chat_message_app_tables(
   conn
     .execute_batch(format!(
       r#"
+        DROP TABLE IF EXISTS room_members;
+        DROP TABLE IF EXISTS message;
+        DROP TABLE IF EXISTS room;
+
         CREATE TABLE room (
           id           {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
           name         TEXT
@@ -333,7 +343,7 @@ async fn add_user_to_room(
 ) -> Result<(), anyhow::Error> {
   conn
     .execute(
-      "INSERT INTO room_members (user, room) VALUES ($1, $2)",
+      "INSERT INTO room_members (\"user\", room) VALUES ($1, $2)",
       params!(user, room),
     )
     .await?;
