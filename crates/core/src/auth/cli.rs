@@ -77,7 +77,7 @@ pub async fn add_user(
   password: &str,
 ) -> Result<Uuid, AuthError> {
   const ADD_USER_QUERY: &str = formatcp!(
-    r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES (?1, ?2, ?3) RETURNING *"#
+    r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES ($1, $2, $3) RETURNING *"#
   );
 
   let normalized_email = validate_and_normalize_email_address(email)?;
@@ -218,7 +218,7 @@ pub async fn import_users(
   user_conn
     .transaction(|mut tx| -> Result<(), trailbase_sqlite::Error> {
       const IMPORT_USER_QUERY: &str = formatcp!(
-        r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES (?1, ?2, ?3)"#
+        r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES ($1, $2, $3)"#
       );
 
       for user in users {

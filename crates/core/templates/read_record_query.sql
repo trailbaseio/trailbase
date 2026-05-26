@@ -3,4 +3,4 @@ SELECT
   {%- if !loop.first %},{% endif %}MAIN."{{ name }}"
 {%- endfor %}
 FROM {{ table_name }} as MAIN
-WHERE MAIN."{{ pk_column_name }}" = ?1
+WHERE MAIN."{{ pk_column_name }}" = $1

@@ -850,14 +850,13 @@ mod test {
     .unwrap();
 
     // Make sure the _file_deletions have been processed
-    let count: i64 = state
+    let pending_deletions = state
       .conn()
-      .read_query_value("SELECT COUNT(*) FROM _file_deletions", ())
+      .read_query_rows("SELECT * FROM _file_deletions", ())
       .await
-      .unwrap()
       .unwrap();
 
-    assert_eq!(0, count);
+    assert_eq!(0, pending_deletions.len(), "{pending_deletions:?}");
 
     // And the actual files are gone.
     for paths in [paths0, paths1_0, paths1_1] {

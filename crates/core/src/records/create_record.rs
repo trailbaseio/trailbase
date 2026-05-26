@@ -296,7 +296,7 @@ mod test {
       state
         .conn()
         .read_query_row_get::<i64>(
-          "SELECT value FROM simple WHERE owner = ?1",
+          "SELECT value FROM simple WHERE owner = $1",
           params!(user_x),
           0
         )

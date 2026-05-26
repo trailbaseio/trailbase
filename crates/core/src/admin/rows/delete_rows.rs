@@ -206,7 +206,7 @@ mod tests {
       return state
         .conn()
         .read_query_value::<TestTable>(
-          format!("SELECT * FROM {table_name} WHERE {ROW_ID_COLUMN} = ?1"),
+          format!("SELECT * FROM {table_name} WHERE {ROW_ID_COLUMN} = $1"),
           trailbase_sqlite::params!(response.row_id),
         )
         .await

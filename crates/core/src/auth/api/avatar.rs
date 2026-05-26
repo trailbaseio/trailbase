@@ -125,7 +125,7 @@ pub async fn delete_avatar_handler(
   State(state): State<AppState>,
   user: User,
 ) -> Result<(), AuthError> {
-  const QUERY: &str = formatcp!("DELETE FROM '{AVATAR_TABLE}' WHERE user = ?1");
+  const QUERY: &str = formatcp!("DELETE FROM '{AVATAR_TABLE}' WHERE user = $1");
 
   let main_conn = state.connection_manager().main_entry().connection;
   main_conn

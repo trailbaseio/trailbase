@@ -148,7 +148,7 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
               INSERT INTO {USER_TABLE}
                 (email, password_hash, verified, admin)
               VALUES
-                (?1, ?2, TRUE, TRUE)
+                ($1, $2, TRUE, TRUE)
             "#
           ),
           trailbase_sqlite::params!(email.to_string(), hashed_password),

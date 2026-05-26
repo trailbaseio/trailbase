@@ -116,8 +116,11 @@ pub(crate) async fn delete_files_marked_for_deletion(
       feature = "pg" => {
         conn
           .write_query_rows(
-            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *"#),
-            trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
+            // FIXME: This doesn't work because record_rowids are i64 as opposed to TIDs.
+            // format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid = $2 RETURNING *"#),
+            // trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
+            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 RETURNING *"#),
+            trailbase_sqlite::params!(qualified_table_name.escaped_string()),
           )
           .await?
           .into_iter()
@@ -126,7 +129,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
       },
       _ => conn
           .write_query_values(
-            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid = ?2 RETURNING *"#),
+            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid = $2 RETURNING *"#),
             trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
           )
           .await?,
@@ -138,10 +141,12 @@ pub(crate) async fn delete_files_marked_for_deletion(
       feature = "pg" => {
         conn
           .write_query_rows(
-            format!(
-              r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid IN ({ids}) RETURNING *"#,
-                ids = rowids.iter().join(", "),
-            ),
+            // FIXME: This doesn't work because record_rowids are i64 as opposed to TIDs.
+            // format!(
+            //   r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid IN ({ids}) RETURNING *"#,
+            //     ids = rowids.iter().join(", "),
+            // ),
+            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 RETURNING *"#),
             trailbase_sqlite::params!(qualified_table_name.escaped_string()),
           )
           .await?
@@ -152,7 +157,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
       _ => conn
         .write_query_values(
           format!(
-            r#"DELETE FROM "{db}"._file_deletions WHERE table_name = ?1 AND record_rowid IN ({ids}) RETURNING *"#,
+            r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid IN ({ids}) RETURNING *"#,
               ids = rowids.iter().join(", "),
           ),
             trailbase_sqlite::params!(qualified_table_name.escaped_string()),
@@ -227,7 +232,7 @@ pub(crate) async fn delete_pending_files_impl(
           r#"INSERT INTO "{database_schema}"._file_deletions
             (deleted, attempts, errors, table_name, record_row_id, column_name, json)
           VALUES
-            (?1, ?2, ?3, ?4, ?5, ?6, ?7)"#
+            ($1, $2, $3, $4, $5, $6, $7)"#
         ),
         params!(
           error.deleted,

@@ -241,7 +241,7 @@ mod tests {
         let mut recorder = TransactionRecorder::new(tx);
 
         recorder
-          .execute("DELETE FROM 'table' WHERE age < ?1", (20,))
+          .execute("DELETE FROM 'table' WHERE age < $1", (20,))
           .unwrap();
 
         return Ok(recorder.rollback().unwrap().unwrap());
