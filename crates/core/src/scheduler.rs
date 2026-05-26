@@ -396,25 +396,24 @@ fn build_job(
 
           return async move {
             let _ = tokio::spawn(async move {
-              let mut db_names = vec!["main".to_string()];
+              let mut db_names = vec![DEFAULT_SCHEMA.to_string()];
               db_names.extend(databases.iter().flat_map(|d| d.name.clone()));
 
               for db_name in db_names {
-                let conn = match db_name.as_str() {
-                  "main" => connection_manager.main_entry().connection,
-                  name => {
-                    let Ok(entry) = connection_manager
-                      .get_entry(BuildOptions {
-                        is_main: false,
-                        attached_databases: Some([name.to_string()].into()),
-                        num_threads: Some(1),
-                      })
-                      .await
-                    else {
-                      continue;
-                    };
-                    entry.connection
-                  }
+                let conn = if db_name == DEFAULT_SCHEMA {
+                  connection_manager.main_entry().connection
+                } else {
+                  let Ok(entry) = connection_manager
+                    .get_entry(BuildOptions {
+                      is_main: false,
+                      attached_databases: Some([db_name.clone()].into()),
+                      num_threads: Some(1),
+                    })
+                    .await
+                  else {
+                    continue;
+                  };
+                  entry.connection
                 };
 
                 if let Err(err) = delete_pending_files_job(&conn, &object_store, &db_name).await {
@@ -521,6 +520,11 @@ pub fn build_job_registry_from_config(
   return Ok(jobs);
 }
 
+const DEFAULT_SCHEMA: &str = cfg_select! {
+    feature = "pg" => "public",
+    _ => "main",
+};
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -594,7 +598,7 @@ mod tests {
   async fn test_delete_pending_files_job() {
     let state = crate::app_state::test_state(None).await.unwrap();
 
-    delete_pending_files_job(state.conn(), state.objectstore(), "main")
+    delete_pending_files_job(state.conn(), state.objectstore(), DEFAULT_SCHEMA)
       .await
       .unwrap();
   }
