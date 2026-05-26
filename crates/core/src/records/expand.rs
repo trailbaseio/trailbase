@@ -333,7 +333,7 @@ mod tests {
       }
     }
 
-    // PG doesn't (yet) support custom schemas as defined for col0.
+    // PG doesn't (yet) support custom schemas as defined for column `col0` above.
     #[cfg(not(feature = "pg"))]
     {
       insert(object.clone()).await.unwrap();

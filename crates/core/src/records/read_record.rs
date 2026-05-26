@@ -1241,14 +1241,18 @@ mod test {
     state
       .conn()
       .execute(
-        conditionally_transform_query(format!(
-          r#"
-          CREATE TABLE "{name}" (
-            id           INTEGER PRIMARY KEY,
-            list         TEXT NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
-          ) STRICT
-          "#
-        )),
+        cfg_select! {
+          feature = "pg" => format!("
+            CREATE TABLE \"{name}\" (
+              id           BIGSERIAL PRIMARY KEY,
+              list         JSONB NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
+            )"),
+          _ => format!("
+            CREATE TABLE \"{name}\" (
+              id           INTEGER PRIMARY KEY,
+              list         TEXT NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
+            ) STRICT"),
+        },
         (),
       )
       .await
@@ -1279,30 +1283,38 @@ mod test {
       "list": StringArray(vec!["item0".to_string(), "item1".to_string()]),
     });
 
-    let create_response: CreateRecordResponse = unpack_json_response(
-      create_record_handler(
-        State(state.clone()),
-        Path(name.clone()),
-        Query(CreateRecordQuery::default()),
+    let create_response = create_record_handler(
+      State(state.clone()),
+      Path(name.clone()),
+      Query(CreateRecordQuery::default()),
+      None,
+      Either::Json(record.clone()),
+    )
+    .await;
+
+    #[cfg(feature = "pg")]
+    {
+      assert!(create_response.is_err());
+    }
+
+    // PG doesn't (yet) support custom schemas as defined for column `list` above.
+    #[cfg(not(feature = "pg"))]
+    {
+      let create_response: CreateRecordResponse = unpack_json_response(create_response.unwrap())
+        .await
+        .unwrap();
+
+      let Json(read_response) = read_record_handler(
+        State(state),
+        Path((name.clone(), create_response.ids[0].clone())),
+        Query(ReadRecordQuery::default()),
         None,
-        Either::Json(record.clone()),
       )
       .await
-      .unwrap(),
-    )
-    .await
-    .unwrap();
+      .unwrap();
 
-    let Json(read_response) = read_record_handler(
-      State(state),
-      Path((name.clone(), create_response.ids[0].clone())),
-      Query(ReadRecordQuery::default()),
-      None,
-    )
-    .await
-    .unwrap();
-
-    assert_eq!(read_response, record);
+      assert_eq!(read_response, record);
+    }
   }
 
   #[cfg(any(feature = "geos", feature = "geos-static"))]
