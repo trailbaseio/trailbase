@@ -281,11 +281,16 @@ mod tests {
 
     conn
       .execute(
-        conditionally_transform_query(format!(
-          r#"CREATE TABLE test_table (
-            col0 TEXT CHECK(jsonschema('foo', col0))
-          ) STRICT"#
-        )),
+        cfg_select! {
+          feature = "pg" => format!(r#"
+            CREATE TABLE test_table (
+              col0   JSONB CHECK(jsonschema('foo', col0))
+            );"#),
+          _ => format!(r#"
+            CREATE TABLE test_table (
+              col0   TEXT CHECK(jsonschema('foo', col0))
+            ) STRICT;"#),
+        },
         (),
       )
       .await
@@ -303,38 +308,52 @@ mod tests {
     .unwrap();
 
     let insert = |json: serde_json::Value| async move {
-      conn
-        .execute(
-          format!(
-            "INSERT INTO test_table (col0) VALUES ('{}')",
-            json.to_string()
-          ),
-          (),
-        )
-        .await
+      let query = format!(
+        "INSERT INTO test_table (col0) VALUES ('{}')",
+        serde_json::to_string(&json).unwrap()
+      );
+      conn.execute(query, ()).await
     };
 
     let object = json!({"name": "foo", "obj": json!({
       "a": "b",
       "c": 42,
     })});
-    insert(object.clone()).await.unwrap();
 
-    let rows = conn
-      .read_query_rows("SELECT * FROM test_table", ())
-      .await
-      .unwrap();
+    #[cfg(feature = "pg")]
+    {
+      let err = insert(object.clone()).await.err().unwrap();
+      match err {
+        trailbase_sqlite::Error::Postgres(err) => {
+          assert!(format!("{err:?}").contains("jsonschema"));
+        }
+        _ => {
+          panic!("unexpected error: {err}");
+        }
+      }
+    }
 
-    let parsed = rows
-      .iter()
-      .map(|row| row_to_json_expand(&metadata.column_metadata, row, |_| true, None))
-      .collect::<Result<Vec<_>, _>>()
-      .unwrap();
+    // PG doesn't (yet) support custom schemas as defined for col0.
+    #[cfg(not(feature = "pg"))]
+    {
+      insert(object.clone()).await.unwrap();
 
-    assert_eq!(parsed.len(), 1);
-    let serde_json::Value::Object(map) = parsed.first().unwrap() else {
-      panic!("expected object");
-    };
-    assert_eq!(map.get("col0").unwrap().clone(), object);
+      let rows = conn
+        .read_query_rows("SELECT * FROM test_table", ())
+        .await
+        .unwrap();
+
+      let parsed = rows
+        .iter()
+        .map(|row| row_to_json_expand(&metadata.column_metadata, row, |_| true, None))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+      assert_eq!(parsed.len(), 1);
+      let serde_json::Value::Object(map) = parsed.first().unwrap() else {
+        panic!("expected object");
+      };
+      assert_eq!(map.get("col0").unwrap().clone(), object);
+    }
   }
 }

@@ -24,7 +24,7 @@ pub(crate) struct PgStatement<'a> {
 impl<'a> PgStatement<'a> {
   pub fn new(sql: &'a str) -> Result<Self, Error> {
     static NAMED_RE: LazyLock<Regex> =
-      LazyLock::new(|| Regex::new(r"(?<nparam>:[[:word:]]+)").expect("startup"));
+      LazyLock::new(|| Regex::new(r"(?<nparam>:[a-zA-Z_][[:word:]]*)").expect("startup"));
 
     let mut placeholders: HashMap<String, usize> = Default::default();
     for cap in NAMED_RE.captures_iter(sql) {
