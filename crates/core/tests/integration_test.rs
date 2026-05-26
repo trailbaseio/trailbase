@@ -36,6 +36,20 @@ fn integration_tests() {
 
 async fn test_record_apis() {
   let data_dir = temp_dir::TempDir::new().unwrap();
+
+  #[cfg(feature = "pg")]
+  let db = pglite_oxide::PgliteServer::builder()
+    .fresh_temporary()
+    .extensions([
+      // NOTE: pgcrypto and postgis are not currently supported:
+      //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+      // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+      // Enabled UUIDv7 support.
+      pglite_oxide::extensions::PG_UUIDV7,
+    ])
+    .start()
+    .unwrap();
+
   let options = ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "localhost:4041".to_string(),
@@ -43,6 +57,14 @@ async fn test_record_apis() {
     public_dir: None,
     dev: false,
     cors_allowed_origins: vec![],
+
+    #[cfg(feature = "pg")]
+    pg_uri: Some(if true {
+      db.connection_uri()
+    } else {
+      "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
+    }),
+
     ..Default::default()
   };
 

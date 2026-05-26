@@ -336,6 +336,7 @@ async fn init_db<'a>(
       num_threads: Some(1),
     }
   } else {
+    // Fallback.
     let host = trailbase_sqlite::generic::PgConnection::Host {
       host: Some("127.0.0.1".to_string()),
       port: Some(5432),

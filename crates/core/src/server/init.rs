@@ -53,6 +53,9 @@ pub struct InitArgs {
   pub dev: bool,
   pub demo: bool,
   pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
+
+  #[cfg(feature = "pg")]
+  pub pg_uri: Option<String>,
 }
 
 pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
@@ -84,7 +87,10 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
     json_schema_registry: json_schema_registry.clone(),
     sqlite_function_runtimes: sync_wasm_runtimes,
     // TODO: Wire up from config, if/when PG is supported.
-    pg_uri: None,
+    pg_uri: cfg_select! {
+        feature = "pg" => args.pg_uri,
+        _ => None,
+    },
   })
   .await?;
 

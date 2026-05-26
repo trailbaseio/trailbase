@@ -93,6 +93,9 @@ pub struct ServerOptions {
   pub tls_cert: Option<CertificateDer<'static>>,
   /// TLS key path.
   pub tls_key: Option<Arc<PrivateKeyDer<'static>>>,
+
+  #[cfg(feature = "pg")]
+  pub pg_uri: Option<String>,
 }
 
 pub struct Server {
@@ -146,6 +149,9 @@ impl Server {
       dev: opts.dev,
       demo: opts.demo,
       wasm_tokio_runtime: opts.wasm_tokio_runtime.clone(),
+
+      #[cfg(feature = "pg")]
+      pg_uri: opts.pg_uri.clone(),
     })
     .await?;
 
