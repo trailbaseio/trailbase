@@ -246,7 +246,6 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
-  use crate::records::test_utils::*;
   use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
   #[tokio::test]

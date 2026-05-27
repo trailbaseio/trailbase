@@ -80,6 +80,8 @@ struct ConnectionManagerState {
   // Properties for caching connections:
   main: RwLock<ConnectionEntry>,
   connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
+
+  #[allow(unused)]
   pg_uri: Option<String>,
 }
 
@@ -108,7 +110,36 @@ pub struct BuildOptions {
 
 impl ConnectionManager {
   pub(crate) async fn new(opts: Options) -> Result<(Self, bool), ConnectionError> {
-    let (main_conn, main_metadata, new_db) = init_db(InitDbOptions {
+    #[cfg(feature = "pg")]
+    let (main_conn, main_metadata, new_db) = if cfg!(feature = "pg-test") || opts.pg_uri.is_some() {
+      init_db_pg(
+        InitDbOptions {
+          data_path: Some(&opts.data_dir.main_db_path()),
+          migration_path: Some(&opts.data_dir.migrations_path()),
+          is_main_db: true,
+          json_registry: &opts.json_schema_registry,
+          runtimes: &opts.sqlite_function_runtimes,
+          attach: vec![],
+          num_threads: None,
+        },
+        opts.pg_uri.clone(),
+      )
+      .await?
+    } else {
+      init_db_sqlite(InitDbOptions {
+        data_path: Some(&opts.data_dir.main_db_path()),
+        migration_path: Some(&opts.data_dir.migrations_path()),
+        is_main_db: true,
+        json_registry: &opts.json_schema_registry,
+        runtimes: &opts.sqlite_function_runtimes,
+        attach: vec![],
+        num_threads: None,
+      })
+      .await?
+    };
+
+    #[cfg(not(feature = "pg"))]
+    let (main_conn, main_metadata, new_db) = init_db_sqlite(InitDbOptions {
       data_path: Some(&opts.data_dir.main_db_path()),
       migration_path: Some(&opts.data_dir.migrations_path()),
       is_main_db: true,
@@ -116,7 +147,6 @@ impl ConnectionManager {
       runtimes: &opts.sqlite_function_runtimes,
       attach: vec![],
       num_threads: None,
-      pg_uri: opts.pg_uri.clone(),
     })
     .await?;
 
@@ -152,7 +182,24 @@ impl ConnectionManager {
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
     pg_uri: Option<String>,
   ) -> Self {
-    let (main_conn, main_metadata, new_db) = init_db(InitDbOptions {
+    #[cfg(feature = "pg-test")]
+    let (main_conn, main_metadata, new_db) = init_db_pg(
+      InitDbOptions {
+        data_path: None,
+        migration_path: None,
+        is_main_db: true,
+        json_registry: &json_schema_registry,
+        runtimes: &sqlite_function_runtimes,
+        attach: vec![],
+        num_threads: None,
+      },
+      pg_uri.clone(),
+    )
+    .await
+    .unwrap();
+
+    #[cfg(not(feature = "pg-test"))]
+    let (main_conn, main_metadata, new_db) = init_db_sqlite(InitDbOptions {
       data_path: None,
       migration_path: None,
       is_main_db: true,
@@ -160,7 +207,6 @@ impl ConnectionManager {
       runtimes: &sqlite_function_runtimes,
       attach: vec![],
       num_threads: None,
-      pg_uri: pg_uri.clone(),
     })
     .await
     .unwrap();
@@ -252,7 +298,7 @@ impl ConnectionManager {
       attached_databases
         .iter()
         .flat_map(|name| {
-          if name != "main" {
+          if name != "main" || name != "public" {
             Some(AttachedDatabase::from_data_dir(&self.state.data_dir, name))
           } else {
             is_main = true;
@@ -264,7 +310,8 @@ impl ConnectionManager {
       vec![]
     };
 
-    let (conn, metadata, _new_db) = init_db(InitDbOptions {
+    #[cfg(not(feature = "pg"))]
+    let (conn, metadata, _new_db) = init_db_sqlite(InitDbOptions {
       data_path: Some(&self.state.data_dir.main_db_path()),
       migration_path: Some(&self.state.data_dir.migrations_path()),
       is_main_db: is_main,
@@ -272,9 +319,36 @@ impl ConnectionManager {
       runtimes: &self.state.sqlite_function_runtimes,
       attach,
       num_threads: opts.num_threads,
-      pg_uri: self.state.pg_uri.clone(),
     })
     .await?;
+
+    #[cfg(feature = "pg")]
+    let (conn, metadata, _new_db) = if cfg!(feature = "pg-test") || self.state.pg_uri.is_some() {
+      init_db_pg(
+        InitDbOptions {
+          data_path: Some(&self.state.data_dir.main_db_path()),
+          migration_path: Some(&self.state.data_dir.migrations_path()),
+          is_main_db: is_main,
+          json_registry: &self.state.json_schema_registry,
+          runtimes: &self.state.sqlite_function_runtimes,
+          attach,
+          num_threads: opts.num_threads,
+        },
+        self.state.pg_uri.clone(),
+      )
+      .await?
+    } else {
+      init_db_sqlite(InitDbOptions {
+        data_path: Some(&self.state.data_dir.main_db_path()),
+        migration_path: Some(&self.state.data_dir.migrations_path()),
+        is_main_db: is_main,
+        json_registry: &self.state.json_schema_registry,
+        runtimes: &self.state.sqlite_function_runtimes,
+        attach,
+        num_threads: opts.num_threads,
+      })
+      .await?
+    };
 
     return Ok(ConnectionEntry {
       connection: Arc::new(conn),
@@ -321,16 +395,14 @@ struct InitDbOptions<'a> {
   runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
   attach: Vec<AttachedDatabase>,
   num_threads: Option<usize>,
-
-  #[allow(unused)]
-  pg_uri: Option<String>,
 }
 
 #[cfg(feature = "pg")]
-async fn init_db<'a>(
+async fn init_db_pg<'a>(
   opts: InitDbOptions<'a>,
+  pg_uri: Option<String>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
-  let conn = trailbase_sqlite::Connection::pg_with_opts(if let Some(uri) = opts.pg_uri {
+  let conn = trailbase_sqlite::Connection::pg_with_opts(if let Some(uri) = pg_uri {
     trailbase_sqlite::generic::PgOptions {
       connection: trailbase_sqlite::generic::PgConnection::Uri(uri),
       num_threads: Some(1),
@@ -376,8 +448,7 @@ async fn init_db<'a>(
   return Ok((conn, metadata, init_schema));
 }
 
-#[cfg(not(feature = "pg"))]
-async fn init_db<'a>(
+async fn init_db_sqlite<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   // NOTE: Disable on debug builds and tests, just due to cargo handles workspace dependencies,

@@ -259,7 +259,6 @@ mod tests {
   use crate::admin::rows::list_rows::Pagination;
   use crate::app_state::*;
   use crate::listing::WhereClause;
-  use crate::test_utils::*;
 
   #[tokio::test]
   async fn test_fetch_rows() {

@@ -94,7 +94,7 @@ pub struct ServerOptions {
   /// TLS key path.
   pub tls_key: Option<Arc<PrivateKeyDer<'static>>>,
 
-  #[cfg(feature = "pg")]
+  /// Postgres connection URI. Is ignored in default builds. PG support is optional.
   pub pg_uri: Option<String>,
 }
 
