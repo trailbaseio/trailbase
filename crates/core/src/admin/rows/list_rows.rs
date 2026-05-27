@@ -253,6 +253,7 @@ fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, Error> {
 #[cfg(test)]
 mod tests {
   use base64::prelude::*;
+  use trailbase_sqlite::ConnectionType;
   use trailbase_sqlvalue::Blob;
 
   use super::*;
@@ -290,28 +291,29 @@ mod tests {
     let conn = state.conn();
 
     conn
-      .execute_batch(cfg_select!{
-        feature = "pg" => "
+      .execute_batch(
+                format!("
           CREATE TABLE test_table (
             text      TEXT NOT NULL,
             number    INTEGER,
-            blob      BYTEA NOT NULL,
-            json      JSONB
+            blob      {blob} NOT NULL,
+            json      {json}
           );
 
-          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, '\\xFACE', '{\"name\": \"alice\"}');
-        ",
-        _ => r#"
-          CREATE TABLE test_table (
-            text    TEXT NOT NULL,
-            number  INTEGER,
-            blob    BLOB NOT NULL,
-            json    TEXT CHECK(jsonschema('foo', json))
-          ) STRICT;
-
-          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, X'FACE', '{"name": "alice"}');
-        "#,
-      })
+          INSERT INTO test_table (text, number, blob, json) VALUES ('test', 5, {bytes}, '{{\"name\": \"alice\"}}');",
+          blob = match conn.connection_type() {
+            ConnectionType::Pg => "BYTEA",
+            ConnectionType::Sqlite =>"BLOB",
+          },
+          json = match conn.connection_type() {
+            ConnectionType::Pg => "JSONB",
+            ConnectionType::Sqlite =>"TEXT CHECK(jsonschema('foo', json))",
+          },
+          bytes =match conn.connection_type() {
+            ConnectionType::Pg => "'\\xFACE'",
+            ConnectionType::Sqlite =>"X'FACE'",
+          },
+      ))
       .await
       .unwrap();
 
@@ -328,9 +330,9 @@ mod tests {
       conn,
       &QualifiedName {
         name: "test_table".to_string(),
-        database_schema: Some(cfg_select! {
-            feature = "pg" => "public".to_string(),
-            _ => "main".to_string(),
+        database_schema: Some(match conn.connection_type() {
+          ConnectionType::Pg => "public".to_string(),
+          _ => "main".to_string(),
         }),
       },
       WhereClause {

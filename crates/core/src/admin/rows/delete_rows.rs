@@ -120,6 +120,7 @@ mod tests {
   use axum::extract::{Json, Path, RawQuery, State};
   use serde::Deserialize;
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
+  use trailbase_sqlite::ConnectionType;
   use trailbase_sqlvalue::Blob;
   use uuid::Uuid;
 
@@ -129,8 +130,7 @@ mod tests {
   use crate::admin::rows::update_row::{UpdateRowRequest, update_row_handler};
   use crate::admin::table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
-  use crate::constants::ROW_ID_COLUMN;
-  use crate::util::uuid_to_b64;
+  use crate::util::{row_id_column, uuid_to_b64};
 
   // TODO: This full-lifecycle test should probably live outside the scope of delete_row.
   #[tokio::test]
@@ -156,9 +156,9 @@ mod tests {
           columns: vec![
             Column {
               name: pk_col.clone(),
-              type_name: cfg_select! {
-                  feature = "pg" =>"UUID".to_string(),
-                  _ =>"BLOB".to_string(),
+              type_name: match conn.connection_type() {
+                ConnectionType::Pg => "UUID".to_string(),
+                ConnectionType::Sqlite => "BLOB".to_string(),
               },
               data_type: ColumnDataType::Blob,
               affinity_type: ColumnAffinityType::Blob,
@@ -202,10 +202,12 @@ mod tests {
       .await
       .unwrap();
 
-      return state
-        .conn()
+      return conn
         .read_query_value::<TestTable>(
-          format!("SELECT * FROM {table_name} WHERE {ROW_ID_COLUMN} = $1"),
+          format!(
+            "SELECT * FROM {table_name} WHERE {} = $1",
+            row_id_column(conn)
+          ),
           trailbase_sqlite::params!(response.row_id),
         )
         .await

@@ -3,8 +3,13 @@ use crate::params::Params;
 use crate::rows::{Row, Rows};
 use crate::sqlite::sync::{execute, execute_batch, query_row, query_rows};
 use crate::traits::{SyncConnection, SyncTransaction};
+use crate::r#type::ConnectionType;
 
 impl<'a> SyncConnection for rusqlite::Transaction<'a> {
+  fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Sqlite;
+  }
+
   // Queries the first row and returns it if present, otherwise `None`.
   #[inline]
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
@@ -50,6 +55,10 @@ pub struct Transaction<'a> {
 }
 
 impl<'a> SyncConnection for Transaction<'a> {
+  fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Sqlite;
+  }
+
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return query_row(&self.tx, sql, params);

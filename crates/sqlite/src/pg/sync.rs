@@ -8,9 +8,14 @@ use crate::pg::util::{PgStatement, columns, from_row, from_rows};
 use crate::rows::{Row, Rows};
 use crate::traits::SyncConnection as SyncConnectionTrait;
 use crate::traits::SyncTransaction as SyncTransactionTrait;
+use crate::r#type::ConnectionType;
 use crate::value::Value;
 
 impl SyncConnectionTrait for postgres::Client {
+  fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Pg;
+  }
+
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;
@@ -45,6 +50,10 @@ impl SyncConnectionTrait for postgres::Client {
 }
 
 impl<'a> SyncConnectionTrait for postgres::Transaction<'a> {
+  fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Pg;
+  }
+
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     let (sql, params) = PgStatement::new(sql.as_ref())?.bind(params)?;

@@ -212,7 +212,9 @@ fn apply_ops<T: SyncConnection>(
           let conflict_resolution_strategy = api
             .insert_conflict_resolution_strategy()
             .unwrap_or(ConflictResolutionStrategy::Undefined);
+
           let (query, _files) = WriteQuery::new_insert_or_replace(
+            conn.connection_type(),
             api.table_name(),
             api.columns(),
             &api.record_pk_column().column.name,
@@ -279,6 +281,7 @@ fn apply_ops<T: SyncConnection>(
           )?;
 
           let (query, _files) = WriteQuery::new_update(
+            conn.connection_type(),
             api.table_name(),
             lazy_params
               .consume()
@@ -306,6 +309,7 @@ fn apply_ops<T: SyncConnection>(
           api.record_level_access_check(conn, Permission::Delete, Some(&record_id), None, user)?;
 
           let query = WriteQuery::new_delete(
+            conn.connection_type(),
             api.table_name(),
             &api.record_pk_column().column.name,
             record_id,
@@ -340,28 +344,24 @@ mod tests {
   #[tokio::test]
   async fn test_transactions() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE test (
-            id      {int} PRIMARY KEY,
+            id      {serial} PRIMARY KEY,
             value   INTEGER
           ) {strict};
         "#,
-        strict = strict(),
-        int = cfg_select! {
-            feature = "pg" => "BIGSERIAL",
-            _ => "INTEGER",
-        },
+        strict = strict2(conn),
+        serial = serial_column(conn),
       ))
       .await
       .unwrap();
 
     state.rebuild_connection_metadata().await.unwrap();
 
-    let conn = state.conn();
     let get_value = async move |id: i64| {
       return conn
         .read_query_row_get::<i64>("SELECT value FROM test WHERE id = $1;", (id,), 0)
@@ -459,8 +459,7 @@ mod tests {
 
     assert_eq!(
       2,
-      state
-        .conn()
+      conn
         .read_query_value::<i64>("SELECT COUNT(*) FROM test;", ())
         .await
         .unwrap()

@@ -105,9 +105,9 @@ mod test {
   #[tokio::test]
   async fn test_simple_record_api_update() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE "update" (
@@ -117,7 +117,7 @@ mod test {
             "text"    TEXT
           ) {strict};
         "#,
-        strict = strict()
+        strict = strict2(conn)
       ))
       .await
       .unwrap();
@@ -175,8 +175,7 @@ mod test {
     .unwrap();
 
     assert_eq!(
-      state
-        .conn()
+      conn
         .read_query_row_get::<i64>(r#"SELECT "int" FROM "update" WHERE id = 1"#, (), 0)
         .await
         .unwrap(),
@@ -332,6 +331,7 @@ mod test {
   #[tokio::test]
   async fn test_check_pk_column_cannot_be_overriden() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
     let password = "secret123";
 
@@ -345,8 +345,7 @@ mod test {
       .unwrap()
       .into_bytes();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE test (
@@ -356,11 +355,8 @@ mod test {
 
           INSERT INTO test ("user", data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
         "#,
-        strict = strict(),
-        uuid = cfg_select! {
-            feature = "pg" => "UUID",
-            _ => "BLOB",
-        },
+        strict = strict2(conn),
+        uuid = uuid_column2(conn),
       ))
       .await
       .unwrap();

@@ -11,7 +11,7 @@ use trailbase::AppState;
 use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password_for_test};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
-use trailbase::test_utils::{strict, uuid_column};
+use trailbase::test_utils::*;
 use trailbase::util::id_to_b64;
 use trailbase::{DataDir, Server, ServerOptions};
 
@@ -37,18 +37,22 @@ fn integration_tests() {
 async fn test_record_apis() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
+  #[allow(unused)]
   #[cfg(feature = "pg")]
-  let db = pglite_oxide::PgliteServer::builder()
-    .fresh_temporary()
-    .extensions([
-      // NOTE: pgcrypto and postgis are not currently supported:
-      //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-      // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
-      // Enabled UUIDv7 support.
-      pglite_oxide::extensions::PG_UUIDV7,
-    ])
-    .start()
-    .unwrap();
+  let db = cfg_select! {
+      feature = "pg-test" => Some(pglite_oxide::PgliteServer::builder()
+      .fresh_temporary()
+      .extensions([
+        // NOTE: pgcrypto and postgis are not currently supported:
+        //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+        // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+        // Enabled UUIDv7 support.
+        pglite_oxide::extensions::PG_UUIDV7,
+      ])
+      .start()
+      .unwrap()),
+   _ => None::<()>,
+  };
 
   let options = ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
@@ -58,8 +62,8 @@ async fn test_record_apis() {
     dev: false,
     cors_allowed_origins: vec![],
 
-    #[cfg(feature = "pg")]
-    pg_uri: Some(if true {
+    #[cfg(feature = "pg-test")]
+    pg_uri: Some(if let Some(db) = db.as_ref() {
       db.connection_uri()
     } else {
       "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
@@ -334,8 +338,8 @@ async fn create_chat_message_app_tables(
           FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
         ) {strict};
       "#,
-      strict = strict(),
-      uuid = uuid_column(),
+      strict = strict2(conn),
+      uuid = uuid_column2(conn),
     ))
     .await?;
 

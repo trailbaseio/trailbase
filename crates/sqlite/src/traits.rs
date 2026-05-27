@@ -1,8 +1,11 @@
 use crate::error::Error;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
+use crate::r#type::ConnectionType;
 
 pub trait SyncConnection {
+  fn connection_type(&self) -> ConnectionType;
+
   /// Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error>;
 

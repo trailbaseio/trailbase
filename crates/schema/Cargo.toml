@@ -10,7 +10,6 @@ readme = "../../README.md"
 
 [features]
 default = []
-pg = []
 
 [dependencies]
 base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }

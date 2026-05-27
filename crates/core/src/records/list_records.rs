@@ -4,7 +4,6 @@ use axum::{
   extract::{Path, Query, RawQuery, State},
 };
 use base64::prelude::*;
-use const_format::formatcp;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -12,15 +11,15 @@ use std::convert::TryInto;
 use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::QualifiedNameEscaped;
-use trailbase_sqlite::Value;
+use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::ROW_ID_COLUMN;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{ExpandedTable, JsonError, expand_tables, row_to_json_expand};
 use crate::records::{Permission, RecordError};
+use crate::util::row_id_column;
 
 /// JSON response containing the listed records.
 #[derive(Debug, Serialize)]
@@ -95,6 +94,7 @@ pub async fn list_records_handler(
   // on the table, i.e. no access -> empty results.
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
+  let conn = api.conn();
   let table_name = api.table_name();
   let pk_meta = api.record_pk_column();
   let pk_column = &pk_meta.column;
@@ -200,10 +200,10 @@ pub async fn list_records_handler(
           .first()
           .is_some_and(|(_c, o)| *o == OrderPrecedent::Ascending) =>
       {
-        Some(formatcp!("_ROW_.{ROW_ID_COLUMN}> :cursor").to_string())
+        Some(format!("_ROW_.{}> :cursor", row_id_column(conn)).to_string())
       }
       // Descending:
-      _ => Some(formatcp!("_ROW_.{ROW_ID_COLUMN} < :cursor").to_string()),
+      _ => Some(format!("_ROW_.{} < :cursor", row_id_column(conn)).to_string()),
     }
   } else {
     None
@@ -240,25 +240,42 @@ pub async fn list_records_handler(
 
   // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
   // have them be stripped later on by `rows_to_json`.
-  let list_query = ListRecordQueryTemplate {
-    table_name,
-    column_metadata: api.columns(),
-    // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
-    // access early as we do for READs.
-    read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
-    filter_clause: &filter_clause,
-    cursor_clause: cursor_clause.as_deref(),
-    order_clause: &order_clause,
-    expanded_tables: &expanded_tables,
-    count: count.unwrap_or(false),
-    offset: offset.is_some(),
-    is_table,
+  let list_query = match conn.connection_type() {
+    ConnectionType::Pg => ListRecordQueryTemplatePg {
+      table_name,
+      column_metadata: api.columns(),
+      // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
+      // access early as we do for READs.
+      read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
+      filter_clause: &filter_clause,
+      cursor_clause: cursor_clause.as_deref(),
+      order_clause: &order_clause,
+      expanded_tables: &expanded_tables,
+      count: count.unwrap_or(false),
+      offset: offset.is_some(),
+      is_table,
+    }
+    .render(),
+    ConnectionType::Sqlite => ListRecordQueryTemplateSqlite {
+      table_name,
+      column_metadata: api.columns(),
+      // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking
+      // access early as we do for READs.
+      read_access_clause: api.read_access_rule().unwrap_or("TRUE"),
+      filter_clause: &filter_clause,
+      cursor_clause: cursor_clause.as_deref(),
+      order_clause: &order_clause,
+      expanded_tables: &expanded_tables,
+      count: count.unwrap_or(false),
+      offset: offset.is_some(),
+      is_table,
+    }
+    .render(),
   }
-  .render()
   .map_err(|err| RecordError::Internal(err.into()))?;
 
   // Execute the query.
-  let rows = api.conn().read_query_rows(list_query, params).await?;
+  let rows = conn.read_query_rows(list_query, params).await?;
 
   let Some(last_row) = rows.last() else {
     // Query result is empty:
@@ -478,10 +495,9 @@ fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, R
     .map_err(|_| RecordError::BadRequest("Bad cursor"));
 }
 
-#[cfg(not(feature = "pg"))]
 #[derive(Template)]
 #[template(escape = "none", path = "list_record_query.sql")]
-struct ListRecordQueryTemplate<'a> {
+struct ListRecordQueryTemplateSqlite<'a> {
   table_name: &'a QualifiedNameEscaped,
   column_metadata: &'a [trailbase_schema::metadata::ColumnMetadata],
   read_access_clause: &'a str,
@@ -494,10 +510,9 @@ struct ListRecordQueryTemplate<'a> {
   is_table: bool,
 }
 
-#[cfg(feature = "pg")]
 #[derive(Template)]
 #[template(escape = "none", path = "list_record_query_pg.sql")]
-struct ListRecordQueryTemplate<'a> {
+struct ListRecordQueryTemplatePg<'a> {
   table_name: &'a QualifiedNameEscaped,
   column_metadata: &'a [trailbase_schema::metadata::ColumnMetadata],
   read_access_clause: &'a str,
@@ -573,7 +588,7 @@ mod tests {
   #[test]
   fn test_list_records_template() {
     sanitize_template(
-      &ListRecordQueryTemplate {
+      &ListRecordQueryTemplateSqlite {
         table_name: &QualifiedName::parse("table").unwrap().into(),
         column_metadata: &vec![a_column_metadata(), index_column_metadata()],
         read_access_clause: "TRUE",
@@ -590,7 +605,7 @@ mod tests {
     );
 
     sanitize_template(
-      &ListRecordQueryTemplate {
+      &ListRecordQueryTemplateSqlite {
         table_name: &QualifiedName {
           name: "table".to_string(),
           database_schema: Some("db".to_string()),
@@ -627,43 +642,28 @@ mod tests {
   #[tokio::test]
   async fn test_list_records_template_with_expansions() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    {
-      let ConnectionEntry {
-        connection: conn, ..
-      } = state.connection_manager().main_entry();
+    conn
+      .execute_batch(format!(
+        r#"
+          CREATE TABLE "other" ("index" {serial} PRIMARY KEY) {strict};
 
-      conn
-        .execute(
-          format!(
-            "CREATE TABLE \"other\" (\"index\" INTEGER PRIMARY KEY) {}",
-            strict()
-          ),
-          (),
-        )
-        .await
-        .unwrap();
+          CREATE TABLE "table" (
+              tid     {serial} PRIMARY KEY,
+              "drop"  TEXT,
+              "index" INTEGER REFERENCES "other"("index")
+            ) {strict};
+        "#,
+        strict = strict2(&conn),
+        serial = serial_column(&conn),
+      ))
+      .await
+      .unwrap();
 
-      conn
-        .execute(
-          format!(
-            r#"
-              CREATE TABLE "table" (
-                  tid     INTEGER PRIMARY KEY,
-                  "drop"  TEXT,
-                  "index" INTEGER REFERENCES "other"("index")
-                ) {}
-            "#,
-            strict()
-          ),
-          (),
-        )
-        .await
-        .unwrap();
+    state.rebuild_connection_metadata().await.unwrap();
 
-      state.rebuild_connection_metadata().await.unwrap();
-    }
-
+    // NOTE: needs to happen after rebuild metadata above.
     let ConnectionEntry {
       connection: conn,
       metadata: connection_metadata,
@@ -690,30 +690,44 @@ mod tests {
     assert_eq!(expanded_tables[0].foreign_table_name, "other");
     assert_eq!(expanded_tables[0].foreign_column_name, "index");
 
-    let query = ListRecordQueryTemplate {
-      table_name: &QualifiedName {
-        name: "table".to_string(),
-        database_schema: Some(cfg_select! {
-            feature = "pg" => "public".to_string(),
-        _ => "main".to_string(),
-        }),
+    let query = match conn.connection_type() {
+      ConnectionType::Sqlite => ListRecordQueryTemplateSqlite {
+        table_name: &QualifiedName {
+          name: "table".to_string(),
+          database_schema: Some("main".to_string()),
+        }
+        .into(),
+        column_metadata: api.columns(),
+        read_access_clause: "_USER_.id != X'F000'",
+        filter_clause: "TRUE",
+        cursor_clause: None,
+        order_clause: "tid",
+        expanded_tables: &expanded_tables,
+        count: true,
+        offset: false,
+        is_table: true,
       }
-      .into(),
-      column_metadata: api.columns(),
-      read_access_clause: cfg_select! {
-        feature = "pg" => "TRUE",
-        _ => "_USER_.id != X'F000'",
-      },
-      filter_clause: "TRUE",
-      cursor_clause: None,
-      order_clause: "tid",
-      expanded_tables: &expanded_tables,
-      count: true,
-      offset: false,
-      is_table: true,
-    }
-    .render()
-    .unwrap();
+      .render()
+      .unwrap(),
+      ConnectionType::Pg => ListRecordQueryTemplatePg {
+        table_name: &QualifiedName {
+          name: "table".to_string(),
+          database_schema: None,
+        }
+        .into(),
+        column_metadata: api.columns(),
+        read_access_clause: "_USER_.id != uuid_v7()",
+        filter_clause: "TRUE",
+        cursor_clause: None,
+        order_clause: "tid",
+        expanded_tables: &expanded_tables,
+        count: true,
+        offset: false,
+        is_table: true,
+      }
+      .render()
+      .unwrap(),
+    };
 
     sanitize_template(&query);
 
@@ -748,20 +762,21 @@ mod tests {
     }
 
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
-      .execute_batch(
-                format!(r#"
+    conn
+      .execute_batch(format!(
+        r#"
           CREATE TABLE "table" (
             id         INTEGER PRIMARY KEY,
             "index"    TEXT NOT NULL DEFAULT '',
             nullable   INTEGER
-          ) {};
+          ) {strict};
 
           INSERT INTO "table" (id, "index", nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
-        "#, strict()),
-      )
+        "#, 
+        strict = strict2(conn),
+      ))
       .await
       .unwrap();
 
@@ -1259,9 +1274,9 @@ mod tests {
   #[tokio::test]
   async fn test_record_api_list_view_api() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE data (
@@ -1280,7 +1295,7 @@ mod tests {
             FROM data AS d
             WHERE d.flag > 0;
         "#,
-        strict = strict()
+        strict = strict2(conn),
       ))
       .await
       .unwrap();
@@ -1369,10 +1384,11 @@ mod tests {
   #[tokio::test]
   async fn test_record_api_geojson_list() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
     let name = "geometry";
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE "{name}" (
@@ -1387,11 +1403,8 @@ mod tests {
             ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
             (21, 'null',         NULL);
         "#,
-        strict = strict(),
-        blob = cfg_select! {
-            feature = "pg" => "BYTEA",
-            _ => "BLOB",
-        },
+        strict = strict2(conn),
+        blob = blob_column2(conn),
       ))
       .await
       .unwrap();

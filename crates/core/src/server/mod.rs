@@ -35,6 +35,7 @@ use crate::admin;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
+use crate::connection::ConnectionEntry;
 use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
 use crate::extract::ip::RealIpKeyExtractor;
@@ -463,9 +464,13 @@ impl Server {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
 
+    let ConnectionEntry {
+      connection: conn, ..
+    } = state.connection_manager().main_entry();
+
     let mut router = Router::new()
       // Public, stable and versioned APIs.
-      .merge(records::router(enable_transactions))
+      .merge(records::router(conn.connection_type(), enable_transactions))
       .merge(install_auth_rate_limiter.map_or_else(
         || auth::router(&state.get_config()),
         |inst| inst(auth::router(&state.get_config())),

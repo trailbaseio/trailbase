@@ -6,7 +6,7 @@ use crate::records::params::JsonRow;
 use crate::records::{AccessRules, Acls};
 
 pub use crate::config::proto::RecordApiConfig;
-pub use crate::test_utils::strict;
+pub use crate::test_utils::*;
 
 // NOTE: Prefer add_record_api_config below.
 pub(crate) async fn add_record_api(
@@ -71,77 +71,43 @@ pub fn to_message(v: serde_json::Value) -> Message {
 }
 
 pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {
+  let conn = state.conn();
+
   // Create a messages, chat room and members tables.
-  #[cfg(not(feature = "pg"))]
-  state
-    .conn()
-    .execute_batch(
+  conn
+    .execute_batch(format!(
       r#"
-          CREATE TABLE room (
-            rid          BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(rid)) DEFAULT(uuid_v7()),
-            name         TEXT
-          ) STRICT;
+        CREATE TABLE room (
+          rid          {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(rid)) DEFAULT(uuid_v7()),
+          name         TEXT
+        ) {strict};
 
-          CREATE TABLE message (
-            mid          BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(mid)) DEFAULT (uuid_v7()),
-            _owner       BLOB NOT NULL,
-            room         BLOB NOT NULL,
-            data         TEXT NOT NULL DEFAULT 'empty',
+        CREATE TABLE message (
+          mid          {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(mid)) DEFAULT (uuid_v7()),
+          _owner       {uuid} NOT NULL,
+          room         {uuid} NOT NULL,
+          data         TEXT NOT NULL DEFAULT 'empty',
 
-            -- Dummy column with a name requiring escaping.
-            "table"      INTEGER NOT NULL DEFAULT 0,
+          -- Dummy column with a name requiring escaping.
+          "table"      INTEGER NOT NULL DEFAULT 0,
 
-            -- on user delete, tombstone it.
-            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chat room delete, delete message
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
-          ) STRICT;
+          -- on user delete, tombstone it.
+          FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
+          -- On chat room delete, delete message
+          FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
+        ) {strict};
 
-          CREATE TABLE room_members (
-            "user"       BLOB NOT NULL,
-            room         BLOB NOT NULL,
+        CREATE TABLE room_members (
+          "user"       {uuid} NOT NULL,
+          room         {uuid} NOT NULL,
 
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
-          ) STRICT;
-        "#,
-    )
-    .await?;
-
-  #[cfg(feature = "pg")]
-  state
-    .conn()
-    .execute_batch(
-      r#"
-          CREATE TABLE room (
-            rid          UUID PRIMARY KEY NOT NULL DEFAULT(uuid_v7()),
-            name         TEXT
-          );
-
-          CREATE TABLE message (
-            mid          UUID PRIMARY KEY NOT NULL DEFAULT (uuid_v7()),
-            _owner       UUID NOT NULL,
-            room         UUID NOT NULL,
-            data         TEXT NOT NULL DEFAULT 'empty',
-
-            -- Dummy column with a name requiring escaping.
-            "table"      INT8 NOT NULL DEFAULT 0,
-
-            -- on user delete, tombstone it.
-            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chat room delete, delete message
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
-          );
-
-          CREATE TABLE room_members (
-            "user"       UUID NOT NULL,
-            room         UUID NOT NULL,
-
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
-          );
-        "#,
-    )
+          FOREIGN KEY("room") REFERENCES room(rid) ON DELETE CASCADE,
+          FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
+        ) {strict};
+      "#,
+      strict = strict2(conn),
+      uuid = uuid_column2(conn),
+    ))
     .await?;
 
   state.rebuild_connection_metadata().await.unwrap();
@@ -150,71 +116,41 @@ pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyh
 }
 
 pub async fn create_chat_message_app_tables_integer(state: &AppState) -> Result<(), anyhow::Error> {
+  let conn = state.conn();
+
   // Create a messages, chat room and members tables.
-  #[cfg(not(feature = "pg"))]
-  state
-    .conn()
-    .execute_batch(
+  conn
+    .execute_batch(format!(
       r#"
-          CREATE TABLE room (
-            rid          BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(rid)) DEFAULT(uuid_v7()),
-            name         TEXT
-          ) STRICT;
+        CREATE TABLE room (
+          rid          {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(rid)) DEFAULT(uuid_v7()),
+          name         TEXT
+        ) {strict};
 
-          CREATE TABLE message (
-            mid          INTEGER PRIMARY KEY,
-            _owner       BLOB NOT NULL,
-            room         BLOB NOT NULL,
-            data         TEXT NOT NULL DEFAULT 'empty',
+        CREATE TABLE message (
+          mid          {serial} PRIMARY KEY,
+          _owner       {uuid} NOT NULL,
+          room         {uuid} NOT NULL,
+          data         TEXT NOT NULL DEFAULT 'empty',
 
-            -- on user delete, tombstone it.
-            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chat room delete, delete message
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
-          ) STRICT;
+          -- on user delete, tombstone it.
+          FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
+          -- On chat room delete, delete message
+          FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
+        ) {strict};
 
-          CREATE TABLE room_members (
-            "user"       BLOB NOT NULL,
-            room         BLOB NOT NULL,
+        CREATE TABLE room_members (
+          "user"       {uuid} NOT NULL,
+          room         {uuid} NOT NULL,
 
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
-          ) STRICT;
-        "#,
-    )
-    .await?;
-
-  #[cfg(feature = "pg")]
-  state
-    .conn()
-    .execute_batch(
-      r#"
-          CREATE TABLE room (
-            rid          UUID PRIMARY KEY NOT NULL DEFAULT(uuid_v7()),
-            name         TEXT
-          );
-
-          CREATE TABLE message (
-            mid          SERIAL PRIMARY KEY,
-            _owner       UUID NOT NULL,
-            room         UUID NOT NULL,
-            data         TEXT NOT NULL DEFAULT 'empty',
-
-            -- on user delete, tombstone it.
-            FOREIGN KEY(_owner) REFERENCES _user(id) ON DELETE SET NULL,
-            -- On chat room delete, delete message
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE
-          );
-
-          CREATE TABLE room_members (
-            "user"       UUID NOT NULL,
-            room         UUID NOT NULL,
-
-            FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
-            FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
-          );
-        "#,
-    )
+          FOREIGN KEY(room) REFERENCES room(rid) ON DELETE CASCADE,
+          FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
+        ) {strict};
+      "#,
+      strict = strict2(conn),
+      uuid = uuid_column2(conn),
+      serial = serial_column(conn),
+    ))
     .await?;
 
   state.rebuild_connection_metadata().await.unwrap();

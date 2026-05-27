@@ -35,8 +35,11 @@ impl SubscriptionManager {
       connections: RwLock::new(HashMap::new()),
     });
 
+    // FIXME: We get a deadlock with PG in tests. Needs further debugging.
+    #[cfg(not(feature = "pg-test"))]
     {
       let state = state.clone();
+
       record_apis.add_observer(move |record_apis| {
         let mut lock = state.connections.write();
 

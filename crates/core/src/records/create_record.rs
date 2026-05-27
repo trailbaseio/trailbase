@@ -169,11 +169,13 @@ pub async fn create_record_handler(
       vec![extract_record_id(record_id)?]
     }
     _ => {
+      let conn = api.conn();
       let queries = params_list
         .into_iter()
         .map(|params| -> Result<_, RecordError> {
           let table_name: QualifiedNameEscaped = api.table_name().clone();
           let (query, files) = WriteQuery::new_insert_or_replace(
+            conn.connection_type(),
             &table_name,
             api.columns(),
             &pk_meta.column.name,
@@ -186,7 +188,7 @@ pub async fn create_record_handler(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-      run_queries(api.conn(), state.objectstore(), queries)
+      run_queries(conn, state.objectstore(), queries)
         .await
         .map_err(|err| RecordError::Internal(err.into()))?
         .into_iter()
@@ -232,9 +234,9 @@ mod test {
   #[tokio::test]
   async fn test_simple_record_api_create() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE simple (
@@ -242,11 +244,8 @@ mod test {
             value   INTEGER
           ) {strict};
         "#,
-        strict = strict(),
-        uuid = cfg_select! {
-            feature = "pg" => "UUID",
-            _ => "BLOB",
-        },
+        strict = strict2(conn),
+        uuid = uuid_column2(conn),
       ))
       .await
       .unwrap();

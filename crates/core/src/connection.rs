@@ -213,6 +213,7 @@ impl ConnectionManager {
 
     if !new_db {
       if cfg!(feature = "pg") {
+        // TODO: Remove now that we use pglite everywhere?
         log::warn!("Re-using existing DB for test :/. Should only happen for shared external DBs.");
       } else {
         panic!("Expected 'fresh' DB for test");
@@ -427,7 +428,7 @@ async fn init_db_pg<'a>(
   //
   // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
   let init_schema = if opts.is_main_db {
-    apply_main_migrations(&conn, opts.migration_path)
+    crate::migrations::apply_pg_main_migrations(&conn, opts.migration_path)
       .await
       .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?
   } else {

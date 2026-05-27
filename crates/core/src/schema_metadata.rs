@@ -6,7 +6,7 @@ use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::{Table, View};
-use trailbase_sqlite::{params, unpack_other_error};
+use trailbase_sqlite::{ConnectionType, params, unpack_other_error};
 
 pub use trailbase_schema::metadata::{
   ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata,
@@ -46,22 +46,25 @@ pub(crate) async fn build_metadata(
   // Nested impl just for packaging error.
   fn build_metadata_impl(
     conn: &mut trailbase_sqlite::SyncConnection,
+    connection_type: ConnectionType,
     json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   ) -> Result<ConnectionMetadata, SchemaLookupError> {
-    let tables = lookup_and_parse_all_table_schemas(conn)?;
-    let views = lookup_and_parse_all_view_schemas(conn, &tables)?;
+    let tables = lookup_and_parse_all_table_schemas(conn, connection_type)?;
+    let views = lookup_and_parse_all_view_schemas(conn, connection_type, &tables)?;
 
     return build_connection_metadata_and_install_file_deletion_triggers(
       conn,
+      connection_type,
       tables,
       views,
       json_schema_registry,
     );
   }
 
+  let connection_type = conn.connection_type();
   return conn
     .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-      return build_metadata_impl(&mut conn, &json_schema_registry)
+      return build_metadata_impl(&mut conn, connection_type, &json_schema_registry)
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
     .await
@@ -75,8 +78,24 @@ pub(crate) async fn build_metadata(
 }
 
 // FIXME: Table name is unqualified.
-#[cfg(not(feature = "pg"))]
 pub async fn lookup_and_parse_table_schema(
+  conn: &trailbase_sqlite::Connection,
+  table_name: &str,
+  database: Option<&str>,
+) -> Result<Table, SchemaLookupError> {
+  #[cfg(feature = "pg")]
+  return match conn.connection_type() {
+    ConnectionType::Pg => lookup_and_parse_table_schema_pg(conn, table_name, database).await,
+    ConnectionType::Sqlite => {
+      lookup_and_parse_table_schema_sqlite(conn, table_name, database).await
+    }
+  };
+
+  #[cfg(not(feature = "pg"))]
+  return lookup_and_parse_table_schema_sqlite(conn, table_name, database).await;
+}
+
+pub async fn lookup_and_parse_table_schema_sqlite(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
   database: Option<&str>,
@@ -105,9 +124,8 @@ pub async fn lookup_and_parse_table_schema(
   return Ok(table);
 }
 
-// FIXME: Table name is unqualified.
 #[cfg(feature = "pg")]
-pub async fn lookup_and_parse_table_schema(
+pub async fn lookup_and_parse_table_schema_pg(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
   database: Option<&str>,
@@ -115,7 +133,7 @@ pub async fn lookup_and_parse_table_schema(
   // TODO: We could just query for a specific table rather than for all and filter.
   let tables = conn
     .call_writer(|mut conn| -> Result<_, trailbase_sqlite::Error> {
-      return lookup_and_parse_all_table_schemas(&mut conn)
+      return lookup_and_parse_all_table_schemas_pg(&mut conn)
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
     .await?;
@@ -134,13 +152,14 @@ pub async fn lookup_and_parse_table_schema(
 /// column is added, we need to rebuild the metadata and update or install missing triggers.
 fn build_connection_metadata_and_install_file_deletion_triggers(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  connection_type: ConnectionType,
   tables: Vec<Table>,
   views: Vec<View>,
   registry: &RwLock<JsonSchemaRegistry>,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
 
-  setup_file_deletion_triggers(conn, &metadata)?;
+  setup_file_deletion_triggers(conn, connection_type, &metadata)?;
 
   return Ok(metadata);
 }
@@ -149,6 +168,7 @@ fn build_connection_metadata_and_install_file_deletion_triggers(
 // schema changes.
 fn setup_file_deletion_triggers(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  connection_type: ConnectionType,
   metadata: &ConnectionMetadata,
 ) -> Result<(), trailbase_sqlite::Error> {
   for metadata in metadata.tables.values() {
@@ -164,15 +184,15 @@ fn setup_file_deletion_triggers(
         .name
         .database_schema
         .as_deref()
-        .unwrap_or(cfg_select! {
-            feature = "pg" => "public",
-            _ => "main",
+        .unwrap_or(match connection_type {
+          ConnectionType::Pg => "public",
+          ConnectionType::Sqlite => "main",
         });
 
       let column_name = &column_meta.column.name;
 
-      conn.execute_batch(cfg_select! {
-          feature = "pg" => format!(
+      conn.execute_batch(match connection_type {
+          ConnectionType::Pg => format!(
             "\
             CREATE OR REPLACE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$ \
               BEGIN \
@@ -197,7 +217,7 @@ fn setup_file_deletion_triggers(
               WHEN (OLD.\"{column_name}\" IS NOT NULL) \
               EXECUTE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"(); \
           "),
-          _ => format!(
+          ConnectionType::Sqlite => format!(
             "\
             DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\"; \
             CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\" AFTER UPDATE ON {table_name} \
@@ -224,17 +244,28 @@ fn setup_file_deletion_triggers(
   return Ok(());
 }
 
-#[cfg(feature = "pg")]
 fn lookup_and_parse_all_table_schemas(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  #[allow(unused)] connection_type: ConnectionType,
 ) -> Result<Vec<Table>, SchemaLookupError> {
-  let tables = trailbase_pg_schema::build_all_table_schemas(conn)?;
-  log::debug!("PG Tables: {tables:?}");
-  return Ok(tables);
+  #[cfg(feature = "pg")]
+  return match connection_type {
+    ConnectionType::Pg => lookup_and_parse_all_table_schemas_pg(conn),
+    ConnectionType::Sqlite => lookup_and_parse_all_table_schemas_sqlite(conn),
+  };
+
+  #[cfg(not(feature = "pg"))]
+  return lookup_and_parse_all_table_schemas_sqlite(conn);
 }
 
-#[cfg(not(feature = "pg"))]
-fn lookup_and_parse_all_table_schemas(
+#[cfg(feature = "pg")]
+fn lookup_and_parse_all_table_schemas_pg(
+  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+) -> Result<Vec<Table>, SchemaLookupError> {
+  return Ok(trailbase_pg_schema::build_all_table_schemas(conn)?);
+}
+
+fn lookup_and_parse_all_table_schemas_sqlite(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
 ) -> Result<Vec<Table>, SchemaLookupError> {
   let databases = list_databases(conn)?;
@@ -262,18 +293,22 @@ fn lookup_and_parse_all_table_schemas(
   return Ok(tables);
 }
 
-#[cfg(feature = "pg")]
 fn lookup_and_parse_all_view_schemas(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  #[allow(unused)] connection_type: ConnectionType,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
-  let views = trailbase_pg_schema::build_all_view_schemas(conn)?;
-  log::debug!("PG Views: {views:?}");
-  return Ok(views);
+  #[cfg(feature = "pg")]
+  match connection_type {
+    ConnectionType::Pg => Ok(trailbase_pg_schema::build_all_view_schemas(conn)?),
+    ConnectionType::Sqlite => lookup_and_parse_all_view_schemas_sqlite(conn, tables),
+  }
+
+  #[cfg(not(feature = "pg"))]
+  return lookup_and_parse_all_view_schemas_sqlite(conn, tables);
 }
 
-#[cfg(not(feature = "pg"))]
-fn lookup_and_parse_all_view_schemas(
+fn lookup_and_parse_all_view_schemas_sqlite(
   conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   tables: &[Table],
 ) -> Result<Vec<View>, SchemaLookupError> {
@@ -341,6 +376,7 @@ mod tests {
   use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
+  use trailbase_sqlite::ConnectionType;
 
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
@@ -353,13 +389,14 @@ mod tests {
   #[tokio::test]
   async fn test_column_nullability() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+    let connection_type = conn.connection_type();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         "
           CREATE TABLE test (
-              id  {int} PRIMARY KEY,
+              id  {serial} PRIMARY KEY,
               a   int NOT NULL,
               b   INT NULL,
               c   INTEGER
@@ -367,11 +404,8 @@ mod tests {
 
           INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
         ",
-        strict = strict(),
-        int = cfg_select! {
-            feature = "pg" => "BIGSERIAL",
-            _ => "INTEGER",
-        },
+        strict = strict2(conn),
+        serial = serial_column(conn),
       ))
       .await
       .unwrap();
@@ -383,10 +417,7 @@ mod tests {
     let test_table = metadata
       .get_table(&QualifiedName {
         name: "test".to_string(),
-        database_schema: cfg_select! {
-          feature = "pg" =>Some("public".to_string()),
-          _ => None,
-        },
+        database_schema: None,
       })
       .unwrap();
 
@@ -395,9 +426,9 @@ mod tests {
       test_table.schema.columns[1],
       Column {
         name: "a".to_string(),
-        type_name: cfg_select! {
-            feature = "pg" => "integer".to_string(),
-            _ => "int".to_string()
+        type_name: match connection_type {
+          ConnectionType::Pg => "integer".to_string(),
+          ConnectionType::Sqlite => "int".to_string(),
         },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
@@ -408,15 +439,15 @@ mod tests {
       test_table.schema.columns[2],
       Column {
         name: "b".to_string(),
-        type_name: cfg_select! {
-            feature = "pg" => "integer".to_string(),
-            _ => "INT".to_string()
+        type_name: match connection_type {
+          ConnectionType::Pg => "integer".to_string(),
+          ConnectionType::Sqlite => "INT".to_string(),
         },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
-        options: cfg_select! {
-            feature = "pg" => vec![],
-            _ => vec![ColumnOption::Null]
+        options: match connection_type {
+          ConnectionType::Pg => vec![],
+          ConnectionType::Sqlite => vec![ColumnOption::Null],
         },
       }
     );
@@ -424,9 +455,9 @@ mod tests {
       test_table.schema.columns[3],
       Column {
         name: "c".to_string(),
-        type_name: cfg_select! {
-            feature = "pg" => "integer".to_string(),
-            _ => "INTEGER".to_string()
+        type_name: match connection_type {
+          ConnectionType::Pg => "integer".to_string(),
+          ConnectionType::Sqlite => "INTEGER".to_string(),
         },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
@@ -461,7 +492,7 @@ mod tests {
             ) {strict};
           ",
           table_name = table_name.escaped_string(),
-          strict = strict(),
+          strict = strict2(&conn),
         ))
         .await
         .unwrap();
@@ -702,13 +733,11 @@ mod tests {
   #[tokio::test]
   async fn test_expanded_with_multiple_foreign_keys() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
     let table_name = "test_table";
 
-    state
-      .connection_manager()
-      .main_entry()
-      .connection
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE foreign_table0 (id INTEGER PRIMARY KEY) {strict};
@@ -726,7 +755,7 @@ mod tests {
 
           INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);
         "#,
-        strict = strict(),
+        strict = strict2(conn),
       ))
       .await
       .unwrap();

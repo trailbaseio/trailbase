@@ -2,7 +2,6 @@ use axum::{
   Json,
   extract::{RawQuery, State},
 };
-use lazy_static::lazy_static;
 use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_qs::{Order, OrderPrecedent, Query};
@@ -13,8 +12,9 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::user::DbUser;
 use crate::connection::ConnectionEntry;
-use crate::constants::{ROW_ID_COLUMN, USER_TABLE_FQ};
+use crate::constants::USER_TABLE_FQ;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
+use crate::util::row_id_column;
 
 #[derive(Debug, Serialize, TS)]
 pub struct UserJson {
@@ -102,16 +102,13 @@ pub async fn list_users_handler(
     .await?
     .unwrap_or(-1);
 
-  lazy_static! {
-    static ref DEFAULT_ORDERING: Order = Order {
-      columns: vec![(ROW_ID_COLUMN.to_string(), OrderPrecedent::Descending)],
-    };
-  }
   let users = fetch_users(
     &conn,
     filter_where_clause.clone(),
     offset,
-    order.as_ref().unwrap_or_else(|| &DEFAULT_ORDERING),
+    &order.unwrap_or_else(|| Order {
+      columns: vec![(row_id_column(&conn).to_string(), OrderPrecedent::Descending)],
+    }),
     limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
   )
   .await?;

@@ -63,7 +63,7 @@ pub async fn create_avatar_handler(
 ) -> Result<(), AuthError> {
   let conn = state.user_conn();
 
-  #[cfg(all(not(feature = "pg"), debug_assertions))]
+  #[cfg(all(not(feature = "pg-test"), debug_assertions))]
   {
     let crate::connection::ConnectionEntry { metadata, .. } =
       state.connection_manager().main_entry();
@@ -158,11 +158,7 @@ static AVATAR_TABLE_FILE_COLUMN: LazyLock<ColumnMetadata> = LazyLock::new(|| Col
 
 static AVATAR_TABLE_NAME: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedName {
   name: AVATAR_TABLE.to_string(),
-  database_schema: Some(if cfg!(feature = "pg") {
-    "public".to_string()
-  } else {
-    "main".to_string()
-  }),
+  database_schema: None,
 });
 
 // NOTE: We need TableMetadata to re-use the more generic RecordApi utilities for reading and

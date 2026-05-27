@@ -8,7 +8,7 @@ use trailbase_schema::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, NamedParams, SyncConnectionTrait, Value};
+use trailbase_sqlite::{Connection, ConnectionType, NamedParams, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
@@ -223,6 +223,7 @@ impl RecordApi {
     let (read_access_query, subscription_read_access_query) = match &config.read_access_rule {
       Some(rule) => {
         let read_access_query = build_read_delete_schema_query(
+          conn.connection_type(),
           &schema.table_name,
           &schema.record_pk_column.column.name,
           rule,
@@ -252,6 +253,7 @@ impl RecordApi {
 
     let delete_access_query = config.delete_access_rule.as_ref().map(|rule| {
       build_read_delete_schema_query(
+        conn.connection_type(),
         &schema.table_name,
         &schema.record_pk_column.column.name,
         rule,
@@ -260,6 +262,7 @@ impl RecordApi {
 
     let schema_access_query = config.schema_access_rule.as_ref().map(|rule| {
       build_read_delete_schema_query(
+        conn.connection_type(),
         &schema.table_name,
         &schema.record_pk_column.column.name,
         rule,
@@ -269,7 +272,11 @@ impl RecordApi {
     let create_access_query = match &config.create_access_rule {
       Some(rule) => {
         if schema.is_table {
-          Some(build_create_access_query(&schema.column_metadata, rule)?)
+          Some(build_create_access_query(
+            conn.connection_type(),
+            &schema.column_metadata,
+            rule,
+          )?)
         } else {
           None
         }
@@ -281,6 +288,7 @@ impl RecordApi {
       Some(rule) => {
         if schema.is_table {
           Some(build_update_access_query(
+            conn.connection_type(),
             &schema.table_name,
             &schema.column_metadata,
             &schema.record_pk_column.column.name,
@@ -713,55 +721,53 @@ struct SubscriptionRecordReadTemplate<'a> {
 ///
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 fn build_read_delete_schema_query(
+  connection_type: ConnectionType,
   qualified_table_name: &QualifiedNameEscaped,
   pk_column_name: &str,
   access_rule: &str,
 ) -> Arc<str> {
-  #[cfg(not(feature = "pg"))]
-  return format!(
-    "\
-      SELECT \
-        CAST(({access_rule}) AS INTEGER) \
-      FROM \
-        (SELECT :__user_id AS id) AS _USER_, \
-        (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
-    ",
-  )
-  .into();
-
-  #[cfg(feature = "pg")]
-  return format!(
-    "\
+  return match connection_type {
+    ConnectionType::Pg => format!(
+      "\
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
         (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
-  )
-  .into();
+    )
+    .into(),
+    ConnectionType::Sqlite => format!(
+      "\
+      SELECT \
+        CAST(({access_rule}) AS INTEGER) \
+      FROM \
+        (SELECT :__user_id AS id) AS _USER_, \
+        (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
+    ",
+    )
+    .into(),
+  };
 }
 
-#[cfg(not(feature = "pg"))]
 #[derive(Template)]
 #[template(
   escape = "none",
   whitespace = "minimize",
   path = "create_record_access_query.sql"
 )]
-struct CreateRecordAccessQueryTemplate<'a> {
+struct CreateRecordAccessQueryTemplateSqlite<'a> {
   create_access_rule: &'a str,
   column_metadata: &'a [ColumnMetadata],
 }
 
-#[cfg(feature = "pg")]
 #[derive(Template)]
 #[template(
   escape = "none",
   whitespace = "minimize",
   path = "create_record_access_query_pg.sql"
 )]
-struct CreateRecordAccessQueryTemplate<'a> {
+struct CreateRecordAccessQueryTemplatePg<'a> {
   create_access_rule: &'a str,
   column_metadata: &'a [ColumnMetadata],
 }
@@ -771,42 +777,48 @@ struct CreateRecordAccessQueryTemplate<'a> {
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 #[inline]
 fn build_create_access_query(
+  connection_type: ConnectionType,
   column_metadata: &[ColumnMetadata],
   create_access_rule: &str,
 ) -> Result<Arc<str>, String> {
-  return Ok(
-    CreateRecordAccessQueryTemplate {
+  return Ok(match connection_type {
+    ConnectionType::Sqlite => CreateRecordAccessQueryTemplateSqlite {
       create_access_rule,
       column_metadata,
     }
     .render()
     .map_err(|err| err.to_string())?
     .into(),
-  );
+    ConnectionType::Pg => CreateRecordAccessQueryTemplatePg {
+      create_access_rule,
+      column_metadata,
+    }
+    .render()
+    .map_err(|err| err.to_string())?
+    .into(),
+  });
 }
 
-#[cfg(not(feature = "pg"))]
 #[derive(Template)]
 #[template(
   escape = "none",
   whitespace = "minimize",
   path = "update_record_access_query.sql"
 )]
-struct UpdateRecordAccessQueryTemplate<'a> {
+struct UpdateRecordAccessQueryTemplateSqlite<'a> {
   update_access_rule: &'a str,
   table_name: &'a QualifiedNameEscaped,
   pk_column_name: &'a str,
   column_metadata: &'a [ColumnMetadata],
 }
 
-#[cfg(feature = "pg")]
 #[derive(Template)]
 #[template(
   escape = "none",
   whitespace = "minimize",
   path = "update_record_access_query_pg.sql"
 )]
-struct UpdateRecordAccessQueryTemplate<'a> {
+struct UpdateRecordAccessQueryTemplatePg<'a> {
   update_access_rule: &'a str,
   table_name: &'a QualifiedNameEscaped,
   pk_column_name: &'a str,
@@ -818,13 +830,14 @@ struct UpdateRecordAccessQueryTemplate<'a> {
 /// Assumes access_rule is an expression: https://www.sqlite.org/syntax/expr.html
 #[inline]
 fn build_update_access_query(
+  connection_type: ConnectionType,
   table_name: &QualifiedNameEscaped,
   column_metadata: &[ColumnMetadata],
   pk_column_name: &str,
   update_access_rule: &str,
 ) -> Result<Arc<str>, String> {
-  return Ok(
-    UpdateRecordAccessQueryTemplate {
+  return Ok(match connection_type {
+    ConnectionType::Sqlite => UpdateRecordAccessQueryTemplateSqlite {
       update_access_rule,
       table_name,
       pk_column_name,
@@ -833,7 +846,16 @@ fn build_update_access_query(
     .render()
     .map_err(|err| err.to_string())?
     .into(),
-  );
+    ConnectionType::Pg => UpdateRecordAccessQueryTemplatePg {
+      update_access_rule,
+      table_name,
+      pk_column_name,
+      column_metadata,
+    }
+    .render()
+    .map_err(|err| err.to_string())?
+    .into(),
+  });
 }
 
 fn convert_acl(acl: &Vec<i32>) -> u8 {
@@ -874,17 +896,10 @@ fn filter_excluded_columns(
 
 #[inline]
 fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
-  // TODO: Should this be disabled in prod?
+  // QUESTION: Should this be disabled in prod? This can only triger during start and config
+  // reload.
   match name.database_schema.as_deref() {
-    #[cfg(not(feature = "pg"))]
-    Some(db) if db != "main" => {
-      assert_eq!(
-        config.table_name.as_deref().unwrap_or_default(),
-        format!("{db}.{}", name.name)
-      );
-    }
-    #[cfg(feature = "pg")]
-    Some(db) if db != "public" => {
+    Some(db) if db != "main" && db != "public" => {
       assert_eq!(
         config.table_name.as_deref().unwrap_or_default(),
         format!("{db}.{}", name.name)
@@ -929,8 +944,17 @@ mod tests {
   #[test]
   fn test_create_record_access_query_template() {
     {
-      let query = CreateRecordAccessQueryTemplate {
+      let query = CreateRecordAccessQueryTemplateSqlite {
         create_access_rule: "_USER_.id = X'05'",
+        column_metadata: &[],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+
+      let query = CreateRecordAccessQueryTemplatePg {
+        create_access_rule: "_USER_.id = '\\x05'",
         column_metadata: &[],
       }
       .render()
@@ -940,7 +964,7 @@ mod tests {
     }
 
     {
-      let query = CreateRecordAccessQueryTemplate {
+      let query = CreateRecordAccessQueryTemplateSqlite {
         create_access_rule: r#"_USER_.id = X'05' AND "index" = 'secret'"#,
         column_metadata: &vec![index_metadata()],
       }
@@ -954,7 +978,18 @@ mod tests {
   #[test]
   fn test_update_record_access_query_template() {
     {
-      let query = UpdateRecordAccessQueryTemplate {
+      let query = UpdateRecordAccessQueryTemplateSqlite {
+        update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
+        table_name: &QualifiedName::parse("table").unwrap().into(),
+        pk_column_name: "index",
+        column_metadata: &[],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+
+      let query = UpdateRecordAccessQueryTemplatePg {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = 'secret'"#,
         table_name: &QualifiedName::parse("table").unwrap().into(),
         pk_column_name: "index",
@@ -967,7 +1002,18 @@ mod tests {
     }
 
     {
-      let query = UpdateRecordAccessQueryTemplate {
+      let query = UpdateRecordAccessQueryTemplateSqlite {
+        update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
+        table_name: &QualifiedName::parse("table").unwrap().into(),
+        pk_column_name: "index",
+        column_metadata: &vec![index_metadata()],
+      }
+      .render()
+      .unwrap();
+
+      sanitize_template(&query);
+
+      let query = UpdateRecordAccessQueryTemplatePg {
         update_access_rule: r#"_USER_.id = X'05' AND _ROW_."index" = _REQ_."index""#,
         table_name: &QualifiedName::parse("table").unwrap().into(),
         pk_column_name: "index",

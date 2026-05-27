@@ -259,6 +259,7 @@ mod test {
   use std::io::Read;
   use std::sync::Arc;
   use trailbase_schema::{FileUpload, FileUploadInput};
+  use trailbase_sqlite::ConnectionType;
 
   use super::*;
   use crate::admin::user::*;
@@ -428,35 +429,23 @@ mod test {
     let table_name = "table 😍";
     conn
       .execute(
-        cfg_select! {
-        feature = "pg" => format!(
-            r#"
-              CREATE TABLE "{table_name}" (
-                id           UUID PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
-                -- TODO: Should this be a JSON(B)?
-                file         JSONB CHECK(jsonschema('std.FileUpload', file)),
-                files        JSONB CHECK(jsonschema('std.FileUploads', files)),
-                -- Add a "keyword" column to ensure escaping is correct.
-                "index"      TEXT NOT NULL DEFAULT(''),
-                -- A special char column to check more escaping.
-                "test 😍"    TEXT NOT NULL DEFAULT('')
-              )
-            "#
-          ),
-        _ => format!(
-            r#"
-              CREATE TABLE "{table_name}" (
-                id           BLOB PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
-                file         TEXT CHECK(jsonschema('std.FileUpload', file)),
-                files        TEXT CHECK(jsonschema('std.FileUploads', files)),
-                -- Add a "keyword" column to ensure escaping is correct.
-                "index"      TEXT NOT NULL DEFAULT(''),
-                -- A special char column to check more escaping.
-                "test 😍"    TEXT NOT NULL DEFAULT('')
-              ) STRICT
-            "#
-          ),
-        },
+        format!(
+          r#"
+            CREATE TABLE "{table_name}" (
+              id           {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
+              -- TODO: Should this be a JSON(B)?
+              file         {json} CHECK(jsonschema('std.FileUpload', file)),
+              files        {json} CHECK(jsonschema('std.FileUploads', files)),
+              -- Add a "keyword" column to ensure escaping is correct.
+              "index"      TEXT NOT NULL DEFAULT(''),
+              -- A special char column to check more escaping.
+              "test 😍"    TEXT NOT NULL DEFAULT('')
+            ) {strict};
+          "#,
+          strict = strict2(conn),
+          uuid = uuid_column2(conn),
+          json = json_column(conn),
+        ),
         (),
       )
       .await
@@ -678,6 +667,7 @@ mod test {
   #[tokio::test]
   async fn test_multiple_file_upload_download_e2e_and_deletion() {
     let state = test_state(None).await.unwrap();
+
     const API_NAME: &str = "test_api";
     create_test_record_api(&state, API_NAME).await;
 
@@ -940,12 +930,13 @@ mod test {
   #[tokio::test]
   async fn test_record_api_with_excluded_columns() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
     const API_NAME: &str = "test_api";
 
-    state
-      .conn()
+    conn
       .execute(
+        // NOTE: The PK isn't auto-incrementing on PG, that's fine.
         format!(
           r#"
             CREATE TABLE "table" (
@@ -954,7 +945,7 @@ mod test {
               "index"      TEXT NOT NULL DEFAULT('')
             ) {strict}
           "#,
-          strict = strict()
+          strict = strict2(conn)
         ),
         (),
       )
@@ -1027,8 +1018,7 @@ mod test {
     .await
     .unwrap();
 
-    let index: String = state
-      .conn()
+    let index: String = conn
       .read_query_row_get(r#"SELECT "index" from "table" WHERE pid = 2"#, (), 0)
       .await
       .unwrap()
@@ -1042,21 +1032,19 @@ mod test {
     const API_NAME: &str = "table";
     let state = test_state(None).await.unwrap();
     let conn = state.conn();
+
     conn
       .execute(
         format!(
           r#"
             CREATE TABLE "{TABLE_NAME}" (
-               id           {int} PRIMARY KEY NOT NULL,
+               id           {serial} PRIMARY KEY NOT NULL,
                col0         TEXT NOT NULL DEFAULT(''),
                col1         TEXT NOT NULL DEFAULT('')
             ) {strict}
           "#,
-          strict = strict(),
-          int = cfg_select! {
-              feature = "pg" => "BIGSERIAL",
-              _ => "INTEGER",
-          },
+          strict = strict2(conn),
+          serial = serial_column(conn)
         ),
         (),
       )
@@ -1077,12 +1065,12 @@ mod test {
           PermissionFlag::Delete as i32,
         ]
         .into(),
-        create_access_rule: Some(cfg_select! {
-            // NOTE: PG's `IN` operator doesn't support SQLite's `IN (subquery)` syntax.
-            // NOTE: We could use the same PG query in SQLite, just leaving the branch here to
-            // highlight the difference.
-            feature = "pg" =>"('col0' NOT IN (SELECT * FROM _REQ_FIELDS_))".to_string(),
-            _ => "('col0' NOT IN _REQ_FIELDS_)".to_string(),
+        create_access_rule: Some(match conn.connection_type() {
+          // NOTE: PG's `IN` operator doesn't support SQLite's `IN (subquery)` syntax.
+          // NOTE: We could use the same PG query in SQLite, just leaving the branch here to
+          // highlight the difference.
+          ConnectionType::Pg => "('col0' NOT IN (SELECT * FROM _REQ_FIELDS_))".to_string(),
+          ConnectionType::Sqlite => "('col0' NOT IN _REQ_FIELDS_)".to_string(),
         }),
         ..Default::default()
       },
@@ -1129,9 +1117,9 @@ mod test {
   #[tokio::test]
   async fn test_expand_fields() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
+    conn
       .execute_batch(format!(
         r#"
           CREATE TABLE parent (
@@ -1148,7 +1136,7 @@ mod test {
 
           CREATE VIEW child_view AS SELECT * FROM child;
        "#,
-        strict = strict(),
+        strict = strict2(conn),
       ))
       .await
       .unwrap();
@@ -1245,21 +1233,19 @@ mod test {
 
     let name = "with_schema".to_string();
 
-    state
-      .conn()
+    let conn = state.conn();
+    conn
       .execute(
-        cfg_select! {
-          feature = "pg" => format!("
+        format!(
+          "
             CREATE TABLE \"{name}\" (
-              id           BIGSERIAL PRIMARY KEY,
-              list         JSONB NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
-            )"),
-          _ => format!("
-            CREATE TABLE \"{name}\" (
-              id           INTEGER PRIMARY KEY,
-              list         TEXT NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
-            ) STRICT"),
-        },
+              id           {serial} PRIMARY KEY,
+              list         {json} NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
+            ) {strict}",
+          strict = strict2(conn),
+          serial = serial_column(conn),
+          json = json_column(conn),
+        ),
         (),
       )
       .await
@@ -1299,43 +1285,43 @@ mod test {
     )
     .await;
 
-    #[cfg(feature = "pg")]
-    {
-      assert!(create_response.is_err());
-    }
+    match conn.connection_type() {
+      // PG doesn't (yet) support custom schemas as defined for column `list` above.
+      ConnectionType::Pg => {
+        assert!(create_response.is_err());
+      }
+      ConnectionType::Sqlite => {
+        let create_response: CreateRecordResponse = unpack_json_response(create_response.unwrap())
+          .await
+          .unwrap();
 
-    // PG doesn't (yet) support custom schemas as defined for column `list` above.
-    #[cfg(not(feature = "pg"))]
-    {
-      let create_response: CreateRecordResponse = unpack_json_response(create_response.unwrap())
+        let Json(read_response) = read_record_handler(
+          State(state),
+          Path((name.clone(), create_response.ids[0].clone())),
+          Query(ReadRecordQuery::default()),
+          None,
+        )
         .await
         .unwrap();
 
-      let Json(read_response) = read_record_handler(
-        State(state),
-        Path((name.clone(), create_response.ids[0].clone())),
-        Query(ReadRecordQuery::default()),
-        None,
-      )
-      .await
-      .unwrap();
-
-      assert_eq!(read_response, record);
+        assert_eq!(read_response, record);
+      }
     }
   }
 
   // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
   // instance.
-  #[cfg(all(any(feature = "geos", feature = "geos-static"), not(feature = "pg")))]
+  #[cfg(all(
+    any(feature = "geos", feature = "geos-static"),
+    not(feature = "pg-test")
+  ))]
   #[tokio::test]
   async fn test_geometry_columns_and_geojson() {
-    use crate::test_utils::blob_column;
-
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
     let name = "with_geo".to_string();
-    state
-      .conn()
+    conn
       .execute(
         format!(
           r#"
@@ -1344,8 +1330,8 @@ mod test {
             geo          {blob} CHECK(ST_IsValid(geo))
           ) {strict}
           "#,
-          strict = strict(),
-          blob = blob_column(),
+          strict = strict2(conn),
+          blob = blob_column2(conn),
         ),
         (),
       )

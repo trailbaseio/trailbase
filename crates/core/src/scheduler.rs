@@ -12,6 +12,7 @@ use std::sync::{
   Arc,
   atomic::{AtomicI32, Ordering},
 };
+use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, params};
 
 use crate::DataDir;
@@ -396,27 +397,31 @@ fn build_job(
 
           return async move {
             let _ = tokio::spawn(async move {
-              let mut db_names = vec![DEFAULT_SCHEMA.to_string()];
-              db_names.extend(databases.iter().flat_map(|d| d.name.clone()));
+              let db_names: Vec<Option<String>> = {
+                let mut db_names = vec![None];
+                db_names.extend(databases.iter().map(|d| d.name.clone()));
+                db_names
+              };
 
               for db_name in db_names {
-                let conn = if db_name == DEFAULT_SCHEMA {
-                  connection_manager.main_entry().connection
-                } else {
-                  let Ok(entry) = connection_manager
-                    .get_entry(BuildOptions {
-                      is_main: false,
-                      attached_databases: Some([db_name.clone()].into()),
-                      num_threads: Some(1),
-                    })
-                    .await
-                  else {
-                    continue;
-                  };
-                  entry.connection
+                let conn = match db_name {
+                  None => connection_manager.main_entry().connection,
+                  Some(ref db_name) => {
+                    let Ok(entry) = connection_manager
+                      .get_entry(BuildOptions {
+                        is_main: false,
+                        attached_databases: Some([db_name.clone()].into()),
+                        num_threads: Some(1),
+                      })
+                      .await
+                    else {
+                      continue;
+                    };
+                    entry.connection
+                  }
                 };
 
-                if let Err(err) = delete_pending_files_job(&conn, &object_store, &db_name).await {
+                if let Err(err) = delete_pending_files_job(&conn, &object_store, db_name).await {
                   warn!("Failed to delete files: {err}");
                 }
               }
@@ -433,12 +438,18 @@ fn build_job(
 async fn delete_pending_files_job(
   conn: &Connection,
   object_store: &Arc<dyn ObjectStore>,
-  database_schema: &str,
+  database_schema: Option<String>,
 ) -> Result<(), FileError> {
+  let file_deletions: QualifiedNameEscaped = QualifiedName {
+    name: "_file_deletions".to_string(),
+    database_schema,
+  }
+  .into();
+
   // TODO: Update job to delete files for all DBs.
   let rows: Vec<FileDeletionsDb> = match conn
     .write_query_values(
-      format!(r#"DELETE FROM "{database_schema}"._file_deletions WHERE deleted < (UNIXEPOCH() - 900) RETURNING *"#),
+      format!(r#"DELETE FROM {file_deletions} WHERE deleted < (UNIXEPOCH() - 900) RETURNING *"#),
       (),
     )
     .await
@@ -450,7 +461,7 @@ async fn delete_pending_files_job(
     }
   };
 
-  delete_pending_files_impl(conn, object_store, rows, database_schema).await?;
+  delete_pending_files_impl(conn, object_store, rows, &file_deletions).await?;
 
   return Ok(());
 }
@@ -519,11 +530,6 @@ pub fn build_job_registry_from_config(
 
   return Ok(jobs);
 }
-
-const DEFAULT_SCHEMA: &str = cfg_select! {
-    feature = "pg" => "public",
-    _ => "main",
-};
 
 #[cfg(test)]
 mod tests {
@@ -598,7 +604,7 @@ mod tests {
   async fn test_delete_pending_files_job() {
     let state = crate::app_state::test_state(None).await.unwrap();
 
-    delete_pending_files_job(state.conn(), state.objectstore(), DEFAULT_SCHEMA)
+    delete_pending_files_job(state.conn(), state.objectstore(), None)
       .await
       .unwrap();
   }

@@ -6,13 +6,13 @@ use std::sync::Arc;
 use trailbase_schema::QualifiedNameEscaped;
 use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_sqlite::traits::SyncTransaction;
-use trailbase_sqlite::{Connection, NamedParams, Value};
+use trailbase_sqlite::{Connection, ConnectionType, NamedParams, Value};
 
 use crate::config::proto::ConflictResolutionStrategy;
-use crate::constants::ROW_ID_COLUMN;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, Params};
+use crate::util::row_id_column2;
 
 #[derive(Debug)]
 pub enum WriteQuery {
@@ -37,6 +37,7 @@ pub struct WriteQueryResult {
 
 impl WriteQuery {
   pub fn new_insert_or_replace(
+    connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
@@ -53,6 +54,7 @@ impl WriteQuery {
       return Err(RecordError::Internal("not an insert".into()));
     };
 
+    let row_id_column = row_id_column2(connection_type);
     let query = CreateOrReplaceRecordQueryTemplate {
       table_name,
       req_column_names: &column_names,
@@ -63,7 +65,7 @@ impl WriteQuery {
         ConflictResolutionStrategy::Abort | ConflictResolutionStrategy::Undefined => &[],
       },
       ignore_conflict: matches!(conflict_resolution, ConflictResolutionStrategy::Ignore),
-      returning: &[ROW_ID_COLUMN, pk_column_name],
+      returning: &[&row_id_column, pk_column_name],
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -78,6 +80,7 @@ impl WriteQuery {
   }
 
   pub fn new_update(
+    connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
     params: Params,
   ) -> Result<(Self, FileMetadataContents), RecordError> {
@@ -96,7 +99,7 @@ impl WriteQuery {
       table_name,
       column_names: &column_names,
       pk_column_name: &pk_column_name,
-      returning: Some(ROW_ID_COLUMN),
+      returning: Some(row_id_column2(connection_type)),
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -111,13 +114,15 @@ impl WriteQuery {
   }
 
   pub fn new_delete(
+    connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
     pk_column_name: &str,
     pk_value: Value,
   ) -> Result<Self, RecordError> {
     return Ok(Self::Delete {
       query: format!(
-        r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {ROW_ID_COLUMN}"#
+        r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {row_id}"#,
+        row_id = row_id_column2(connection_type)
       ),
       pk_value,
     });
@@ -293,6 +298,7 @@ pub(crate) async fn run_insert_or_replace_query(
   params: Params,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
   let (query, files) = WriteQuery::new_insert_or_replace(
+    conn.connection_type(),
     table_name,
     column_metadata,
     return_column_name,
@@ -333,7 +339,7 @@ pub(crate) async fn run_update_query(
   table_name: &QualifiedNameEscaped,
   params: Params,
 ) -> Result<(), RecordError> {
-  let (query, files) = WriteQuery::new_update(table_name, params)?;
+  let (query, files) = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
 
   // We're storing any files to the object store first to make sure the DB entry is valid right
   // after commit and not racily pointing to soon-to-be-written files.
@@ -364,7 +370,7 @@ pub(crate) async fn run_delete_query(
   pk_value: Value,
   has_file_columns: bool,
 ) -> Result<i64, RecordError> {
-  let query = WriteQuery::new_delete(table_name, pk_column, pk_value)?;
+  let query = WriteQuery::new_delete(conn.connection_type(), table_name, pk_column, pk_value)?;
 
   let WriteQueryResult { rowid, pk_value: _ } = query.apply_async(conn).await?;
 

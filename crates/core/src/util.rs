@@ -3,7 +3,21 @@ use base64::prelude::*;
 use reqwest::header::AsHeaderName;
 use std::borrow::Cow;
 use thiserror::Error;
+use trailbase_sqlite::{Connection, ConnectionType};
 use uuid::Uuid;
+
+#[inline]
+pub fn row_id_column(conn: &Connection) -> &'static str {
+  return row_id_column2(conn.connection_type());
+}
+
+#[inline]
+pub fn row_id_column2(connection_type: ConnectionType) -> &'static str {
+  return match connection_type {
+    ConnectionType::Pg => "ctid",
+    ConnectionType::Sqlite => "_rowid_",
+  };
+}
 
 #[derive(Clone, Debug, Error)]
 pub enum IdError {

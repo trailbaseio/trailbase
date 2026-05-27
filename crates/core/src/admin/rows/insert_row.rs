@@ -8,9 +8,9 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::constants::ROW_ID_COLUMN;
 use crate::records::params::Params;
 use crate::records::write_queries::run_insert_or_replace_query;
+use crate::util::row_id_column;
 
 #[derive(Debug, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -50,7 +50,7 @@ pub async fn insert_row_handler(
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     &table_metadata.column_metadata,
     crate::config::proto::ConflictResolutionStrategy::Abort,
-    ROW_ID_COLUMN,
+    row_id_column(&conn),
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
     Params::for_admin_insert(table_metadata, request.row)?,
@@ -69,10 +69,14 @@ pub async fn insert_row_handler(
 mod tests {
   // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
   // instance.
-  #[cfg(all(any(feature = "geos", feature = "geos-static"), not(feature = "pg")))]
+  #[cfg(all(
+    any(feature = "geos", feature = "geos-static"),
+    not(feature = "pg-test")
+  ))]
   #[tokio::test]
   async fn admin_insert_geometry_test() {
     use super::*;
+    use crate::test_utils::*;
 
     let state = crate::app_state::test_state(None).await.unwrap();
     let conn = state.conn();
@@ -85,8 +89,8 @@ mod tests {
              geom     {blob} CHECK(ST_IsValid(geom))
          ) {strict};
         ",
-        strict = crate::test_utils::strict(),
-        blob = crate::test_utils::blob_column(),
+        strict = strict2(conn),
+        blob = blob_column2(conn),
       ))
       .await
       .unwrap();

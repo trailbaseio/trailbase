@@ -12,6 +12,7 @@ pub static USER_TABLE_FQ: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedNa
   },
 });
 
+// TODO: Replace with something more dynamic.
 pub const ROW_ID_COLUMN: &str = cfg_select! {
   feature = "pg" => "ctid",
   _ => "_rowid_",

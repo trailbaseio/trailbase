@@ -601,6 +601,14 @@ pub enum SyncConnection<'a> {
 
 impl<'a> SyncConnectionTrait for SyncConnection<'a> {
   #[inline]
+  fn connection_type(&self) -> ConnectionType {
+    return match self {
+      Self::Sqlite(_) => ConnectionType::Sqlite,
+      Self::Pg(_) => ConnectionType::Pg,
+    };
+  }
+
+  #[inline]
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::query_row(*conn, sql, params),
@@ -640,6 +648,14 @@ pub enum Transaction<'a> {
 
 #[allow(unused)]
 impl<'a> SyncConnectionTrait for Transaction<'a> {
+  #[inline]
+  fn connection_type(&self) -> ConnectionType {
+    return match self {
+      Self::Sqlite(_) => ConnectionType::Sqlite,
+      Self::Pg(_) => ConnectionType::Pg,
+    };
+  }
+
   #[inline]
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return match self {

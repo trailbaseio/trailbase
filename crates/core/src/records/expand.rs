@@ -247,6 +247,7 @@ mod tests {
   use super::*;
   use crate::app_state::*;
   use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
+  use crate::test_utils::json_column;
 
   #[tokio::test]
   async fn test_read_rows() {
@@ -279,19 +280,14 @@ mod tests {
     let conn = state.conn();
 
     conn
-      .execute(
-        cfg_select! {
-          feature = "pg" => format!(r#"
-            CREATE TABLE test_table (
-              col0   JSONB CHECK(jsonschema('foo', col0))
-            );"#),
-          _ => format!(r#"
-            CREATE TABLE test_table (
-              col0   TEXT CHECK(jsonschema('foo', col0))
-            ) STRICT;"#),
-        },
-        (),
-      )
+      .execute_batch(format!(
+        r#"
+          CREATE TABLE test_table (
+            col0   {json} CHECK(jsonschema('foo', col0))
+          );
+        "#,
+        json = json_column(conn)
+      ))
       .await
       .unwrap();
 
@@ -319,7 +315,7 @@ mod tests {
       "c": 42,
     })});
 
-    #[cfg(feature = "pg")]
+    #[cfg(feature = "pg-test")]
     {
       let err = insert(object.clone()).await.err().unwrap();
       match err {
@@ -333,7 +329,7 @@ mod tests {
     }
 
     // PG doesn't (yet) support custom schemas as defined for column `col0` above.
-    #[cfg(not(feature = "pg"))]
+    #[cfg(not(feature = "pg-test"))]
     {
       insert(object.clone()).await.unwrap();
 

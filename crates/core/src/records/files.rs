@@ -7,7 +7,7 @@ use object_store::{ObjectStore, ObjectStoreExt};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
+use trailbase_schema::{FileUpload, FileUploads, QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
@@ -72,6 +72,7 @@ pub(crate) struct FileDeletionsDb {
   json: String,
 }
 
+// TODO: We need this right now because `pgrow2serde` can't currently desieralize FileDeletionsDb.
 #[cfg(feature = "pg")]
 fn file_deletions_from_row(
   row: trailbase_sqlite::Row,
@@ -99,46 +100,46 @@ pub(crate) async fn delete_files_marked_for_deletion(
   table_name: &QualifiedNameEscaped,
   rowids: &[i64],
 ) -> Result<(), FileError> {
+  let connection_type = conn.connection_type();
   // TODO: Ideally we would not re-parse here and instead pass a QualifiedName all the way.
   let qualified_table_name = table_name.parse();
-  let db = qualified_table_name
-    .database_schema
-    .as_deref()
-    .unwrap_or("main");
+  let file_deletions: QualifiedNameEscaped = QualifiedName {
+    name: "_file_deletions".to_string(),
+    database_schema: qualified_table_name.database_schema.clone(),
+  }
+  .into();
 
   let rows: Vec<FileDeletionsDb> = match rowids.len() {
     0 => {
       return Ok(());
     }
-    1 => {
-      cfg_select! {
-      // NOTE: `write_query_values` with pgrow2serde doesn't support i64 <=> TID.
-      feature = "pg" => {
+    1 => match connection_type {
+      #[cfg(feature = "pg")]
+      trailbase_sqlite::ConnectionType::Pg => {
         conn
           .write_query_rows(
             // FIXME: This doesn't work because record_rowids are i64 as opposed to TIDs.
             // format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid = $2 RETURNING *"#),
             // trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
-            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 RETURNING *"#),
+            format!(r#"DELETE FROM {file_deletions} WHERE table_name = $1 RETURNING *"#),
             trailbase_sqlite::params!(qualified_table_name.escaped_string()),
           )
           .await?
           .into_iter()
+      // NOTE: `write_query_values` with pgrow2serde doesn't support i64 <=> TID.
           .map(file_deletions_from_row)
           .collect::<Result<Vec<_>,_>>()?
       },
       _ => conn
           .write_query_values(
-            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid = $2 RETURNING *"#),
+            format!(r#"DELETE FROM {file_deletions} WHERE table_name = $1 AND record_rowid = $2 RETURNING *"#),
             trailbase_sqlite::params!(qualified_table_name.escaped_string(), rowids[0]),
           )
           .await?,
-      }
-    }
-    _ => {
-      // NOTE: `write_query_values` with pgrow2serde doesn't support i64 <=> TID.
-      cfg_select! {
-      feature = "pg" => {
+      },
+    _ => match connection_type {
+      #[cfg(feature = "pg")]
+      trailbase_sqlite::ConnectionType::Pg => {
         conn
           .write_query_rows(
             // FIXME: This doesn't work because record_rowids are i64 as opposed to TIDs.
@@ -146,30 +147,30 @@ pub(crate) async fn delete_files_marked_for_deletion(
             //   r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid IN ({ids}) RETURNING *"#,
             //     ids = rowids.iter().join(", "),
             // ),
-            format!(r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 RETURNING *"#),
+            format!(r#"DELETE FROM {file_deletions} WHERE table_name = $1 RETURNING *"#),
             trailbase_sqlite::params!(qualified_table_name.escaped_string()),
           )
           .await?
           .into_iter()
+      // NOTE: `write_query_values` with pgrow2serde doesn't support i64 <=> TID.
           .map(file_deletions_from_row)
           .collect::<Result<Vec<_>,_>>()?
       },
       _ => conn
         .write_query_values(
           format!(
-            r#"DELETE FROM "{db}"._file_deletions WHERE table_name = $1 AND record_rowid IN ({ids}) RETURNING *"#,
+            r#"DELETE FROM {file_deletions} WHERE table_name = $1 AND record_rowid IN ({ids}) RETURNING *"#,
               ids = rowids.iter().join(", "),
           ),
             trailbase_sqlite::params!(qualified_table_name.escaped_string()),
         )
         .await?
-      }
-    }
+      },
   };
 
   // Question: Should we do this opportunistically like during updates?
   if !rows.is_empty() {
-    delete_pending_files_impl(conn, store, rows, db).await?;
+    delete_pending_files_impl(conn, store, rows, &file_deletions).await?;
   }
 
   return Ok(());
@@ -179,7 +180,7 @@ pub(crate) async fn delete_pending_files_impl(
   conn: &trailbase_sqlite::Connection,
   store: &Arc<dyn ObjectStore>,
   pending_deletions: Vec<FileDeletionsDb>,
-  database_schema: &str,
+  file_deletions: &QualifiedNameEscaped,
 ) -> Result<(), FileError> {
   const ATTEMPTS_LIMIT: i64 = 10;
   if pending_deletions.is_empty() {
@@ -229,7 +230,7 @@ pub(crate) async fn delete_pending_files_impl(
     if let Err(err) = conn
       .execute(
         format!(
-          r#"INSERT INTO "{database_schema}"._file_deletions
+          r#"INSERT INTO {file_deletions}
             (deleted, attempts, errors, table_name, record_row_id, column_name, json)
           VALUES
             ($1, $2, $3, $4, $5, $6, $7)"#

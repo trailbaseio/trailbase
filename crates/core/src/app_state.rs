@@ -523,7 +523,7 @@ pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<App
   tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
   let data_dir = DataDir(temp_dir.path().to_path_buf());
 
-  let (db, pg_uri) = if cfg!(feature = "pg") {
+  let (db, pg_uri) = if cfg!(feature = "pg-test") {
     let extensions = [
       // NOTE: pgcrypto and postgis are not currently supported:
       //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md

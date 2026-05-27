@@ -565,21 +565,21 @@ impl QualifiedName {
 
 impl PartialEq for QualifiedName {
   fn eq(&self, other: &Self) -> bool {
-    #[cfg(not(feature = "pg"))]
-    if self.database_schema.as_deref().unwrap_or("main")
-      != other.database_schema.as_deref().unwrap_or("main")
-    {
+    if self.name != other.name {
       return false;
     }
 
-    #[cfg(feature = "pg")]
-    if self.database_schema.as_deref().unwrap_or("public")
-      != other.database_schema.as_deref().unwrap_or("public")
-    {
-      return false;
-    }
-
-    return self.name == other.name;
+    return match (
+      self.database_schema.as_deref(),
+      other.database_schema.as_deref(),
+    ) {
+      (None, None) => true,
+      (None, Some("main")) => true,
+      (Some("main"), None) => true,
+      (None, Some("public")) => true,
+      (Some("public"), None) => true,
+      (a, b) => a == b,
+    };
   }
 }
 
@@ -588,14 +588,10 @@ impl Eq for QualifiedName {}
 impl Hash for QualifiedName {
   fn hash<H: Hasher>(&self, state: &mut H) {
     self.name.hash(state);
-    self
-      .database_schema
-      .as_deref()
-      .unwrap_or(cfg_select! {
-          feature = "pg" => "public",
-          _ => "main",
-      })
-      .hash(state);
+    match self.database_schema.as_deref().unwrap_or("<d>") {
+      "main" | "public" | "<d>" => "<d>".hash(state),
+      x => x.hash(state),
+    };
   }
 }
 
@@ -653,11 +649,7 @@ impl Table {
       temporary = if self.temporary { " TEMPORARY" } else { "" },
       fq_name = self.name.escaped_string(),
       col_defs_and_constraints = column_defs_and_table_constraints.join(", "),
-      strict = if cfg!(not(feature = "pg")) && self.strict {
-        " STRICT"
-      } else {
-        ""
-      },
+      strict = if self.strict { " STRICT" } else { "" },
     );
   }
 }
@@ -1725,14 +1717,7 @@ mod tests {
     let sql = table.create_table_statement();
 
     assert_eq!(
-      format!(
-        "CREATE TABLE \"table\" (\"index\" TEXT, \"delete\" TEXT, \"create\" TEXT) {strict}",
-        strict = cfg_select! {
-            feature = "pg" => "",
-            _ => "STRICT"
-        }
-      )
-      .trim(),
+      format!("CREATE TABLE \"table\" (\"index\" TEXT, \"delete\" TEXT, \"create\" TEXT) STRICT"),
       sql
     );
     parse_into_statement(&sql).unwrap().unwrap();
@@ -1748,8 +1733,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_statement_to_table_schema_and_back() {
-    let statement = format!(
-      r#"
+    let statement = r#"
       CREATE TABLE test (
           -- Comment
           id                           BLOB PRIMARY KEY DEFAULT (uuid_v7()) NOT NULL,
@@ -1769,13 +1753,8 @@ mod tests {
           CONSTRAINT `unique` UNIQUE ([index]) ON CONFLICT FAIL,
           FOREIGN KEY(user_id) REFERENCES 'table'('index') ON DELETE CASCADE,
           CONSTRAINT `check` CHECK(username != '')
-      ) {strict};
-      "#,
-      strict = cfg_select! {
-          feature = "pg" => "",
-          _ => "STRICT"
-      },
-    );
+      ) STRICT;
+      "#;
 
     {
       // First Make sure the query is actually valid, as opposed to "only" parsable.

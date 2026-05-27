@@ -41,22 +41,41 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   return runner;
 }
 
-/// Apply migrations: embedded and from `user_mgiations_path`.
+/// Apply migrations: embedded and from `user_migrations_path`.
 ///
 /// Returns true, if V1 was applied, i.e. DB is initialized for the first time,
 /// otherwise false.
+#[allow(unused)]
 pub(crate) async fn apply_main_migrations(
   conn: &trailbase_sqlite::Connection,
   base_migrations_path: Option<impl AsRef<Path>>,
 ) -> Result<bool, RefineryError> {
-  #[cfg(feature = "pg")]
-  let mut migrations = vec![load_embedded_migrations::<PgMainMigrations>()];
-
-  #[cfg(not(feature = "pg"))]
   let mut migrations = vec![
     load_embedded_migrations::<BaseMigrations>(),
     load_embedded_migrations::<MainMigrations>(),
   ];
+
+  if let Some(path) = base_migrations_path {
+    // Ignore when `<traildepot>/migrations/main/` is missing.
+    migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
+
+    // Legacy: all *.sql files in migrations.
+    migrations.push(load_sql_migrations(path, false)?);
+  }
+
+  return apply_migrations_async("main", conn, migrations).await;
+}
+
+/// Apply migrations: embedded and from `user_migrations_path`.
+///
+/// Returns true, if V1 was applied, i.e. DB is initialized for the first time,
+/// otherwise false.
+#[allow(unused)]
+pub(crate) async fn apply_pg_main_migrations(
+  conn: &trailbase_sqlite::Connection,
+  base_migrations_path: Option<impl AsRef<Path>>,
+) -> Result<bool, RefineryError> {
+  let mut migrations = vec![load_embedded_migrations::<PgMainMigrations>()];
 
   if let Some(path) = base_migrations_path {
     // Ignore when `<traildepot>/migrations/main/` is missing.
@@ -305,7 +324,7 @@ struct BaseMigrations;
 #[folder = "migrations/main"]
 struct MainMigrations;
 
-#[cfg(feature = "pg")]
+#[allow(unused)]
 #[derive(Clone, rust_embed::RustEmbed)]
 #[folder = "migrations/pg_main"]
 struct PgMainMigrations;

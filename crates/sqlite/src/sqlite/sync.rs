@@ -5,12 +5,17 @@ use crate::params::Params;
 use crate::rows::{Row, Rows};
 use crate::sqlite::util::{columns, from_row, from_rows};
 use crate::traits::SyncConnection as SyncConnectionTrait;
+use crate::r#type::ConnectionType;
 
 pub struct SyncConnection<'a> {
   pub(crate) conn: &'a mut rusqlite::Connection,
 }
 
 impl<'a> SyncConnectionTrait for SyncConnection<'a> {
+  fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Sqlite;
+  }
+
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return query_row(self.conn, sql, params);
   }
@@ -29,6 +34,10 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
 }
 
 impl SyncConnectionTrait for rusqlite::Connection {
+  fn connection_type(&self) -> ConnectionType {
+    return ConnectionType::Sqlite;
+  }
+
   // Queries the first row and returns it if present, otherwise `None`.
   fn query_row(&mut self, sql: impl AsRef<str>, params: impl Params) -> Result<Option<Row>, Error> {
     return query_row(self, sql, params);
