@@ -7,6 +7,7 @@ use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::config::proto::ConflictResolutionStrategy;
 use crate::records::params::LazyParams;
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
@@ -208,27 +209,43 @@ fn apply_ops<T: SyncConnection>(
             user,
           )?;
 
+          let conflict_resolution_strategy = api
+            .insert_conflict_resolution_strategy()
+            .unwrap_or(ConflictResolutionStrategy::Undefined);
           let (query, _files) = WriteQuery::new_insert_or_replace(
             api.table_name(),
             api.columns(),
             &api.record_pk_column().column.name,
-            api
-              .insert_conflict_resolution_strategy()
-              .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined),
+            conflict_resolution_strategy,
             lazy_params
               .consume()
               .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-          let result = query
-            .apply_sync(conn)
-            .map_err(|err| RecordError::Internal(err.into()))?;
+          #[inline]
+          fn is_no_rows_err(err: &trailbase_sqlite::Error) -> bool {
+            // NOTE: We're turning non-result into rusqlite errors even for postgres.
+            // We should change that.
+            return match err {
+              trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows) => true,
+              _ => false,
+            };
+          }
 
-          Ok(Some(
-            extract_record_id(result.pk_value.expect("insert"))
-              .map_err(|err| RecordError::Internal(err.into()))?,
-          ))
+          match query.apply_sync(conn) {
+            Ok(result) => Ok(Some(
+              extract_record_id(result.pk_value.expect("insert"))
+                .map_err(|err| RecordError::Internal(err.into()))?,
+            )),
+            Err(err)
+              if conflict_resolution_strategy == ConflictResolutionStrategy::Ignore
+                && is_no_rows_err(&err) =>
+            {
+              Ok(None)
+            }
+            Err(err) => Err(RecordError::Internal(err.into())),
+          }
         }
         Operation::Update {
           api_name,
@@ -317,7 +334,7 @@ mod tests {
 
   use super::*;
   use crate::app_state::*;
-  use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
+  use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::records::test_utils::*;
 
   #[tokio::test]
@@ -343,6 +360,15 @@ mod tests {
       .unwrap();
 
     state.rebuild_connection_metadata().await.unwrap();
+
+    let conn = state.conn();
+    let get_value = async move |id: i64| {
+      return conn
+        .read_query_row_get::<i64>("SELECT value FROM test WHERE id = $1;", (id,), 0)
+        .await
+        .unwrap()
+        .unwrap();
+    };
 
     add_record_api_config(
       &state,
@@ -374,7 +400,7 @@ mod tests {
           },
           Operation::Create {
             api_name: "test_api".to_string(),
-            value: json!({"value": 2}),
+            value: json!({"id": 5, "value": -1}),
           },
         ],
         transaction: None,
@@ -384,6 +410,30 @@ mod tests {
     .unwrap();
 
     assert_eq!(2, response.ids.len());
+    let first_id = response.ids[0].clone();
+    let second_id = response.ids[1].parse::<i64>().unwrap();
+    assert_eq!(5, second_id, "{:?}", response.ids);
+    assert_eq!(-1, get_value(second_id).await,);
+
+    // Make sure replace works.
+    let response = record_transactions_handler(
+      State(state.clone()),
+      None,
+      Json(TransactionRequest {
+        operations: vec![Operation::Create {
+          api_name: "test_api".to_string(),
+          value: json!({"id": 5, "value": 2}),
+        }],
+        transaction: None,
+      }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(1, response.ids.len());
+    let id = response.ids[0].parse::<i64>().unwrap();
+    assert_eq!(5, id, "{:?}", response.ids);
+    assert_eq!(2, get_value(id).await);
 
     let response = record_transactions_handler(
       State(state.clone()),
@@ -392,7 +442,7 @@ mod tests {
         operations: vec![
           Operation::Delete {
             api_name: "test_api".to_string(),
-            record_id: response.ids[0].clone(),
+            record_id: first_id,
           },
           Operation::Create {
             api_name: "test_api".to_string(),
@@ -416,5 +466,42 @@ mod tests {
         .unwrap()
         .unwrap()
     );
+
+    // Test ignore strategy
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some("test_api_ignore".to_string()),
+        table_name: Some("test".to_string()),
+        conflict_resolution: Some(ConflictResolutionStrategy::Ignore as i32),
+        acl_world: [
+          PermissionFlag::Create as i32,
+          PermissionFlag::Create as i32,
+          PermissionFlag::Delete as i32,
+          PermissionFlag::Read as i32,
+        ]
+        .into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    // Make sure ignore works.
+    let response = record_transactions_handler(
+      State(state.clone()),
+      None,
+      Json(TransactionRequest {
+        operations: vec![Operation::Create {
+          api_name: "test_api_ignore".to_string(),
+          value: json!({"id": 5, "value": -5}),
+        }],
+        transaction: None,
+      }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(0, response.ids.len());
   }
 }

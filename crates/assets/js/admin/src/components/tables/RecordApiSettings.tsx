@@ -266,6 +266,8 @@ function ConflictResolutionStrategyToString(
       return "Abort";
     case ConflictResolutionStrategy.REPLACE:
       return "Replace";
+    case ConflictResolutionStrategy.IGNORE:
+      return "Ignore";
     default:
       return "Undefined";
   }
@@ -858,6 +860,7 @@ function IndividualRecordApiSettingsForm(props: {
                               ConflictResolutionStrategy.CONFLICT_RESOLUTION_STRATEGY_UNDEFINED,
                               ConflictResolutionStrategy.ABORT,
                               ConflictResolutionStrategy.REPLACE,
+                              ConflictResolutionStrategy.IGNORE,
                             ]}
                             onChange={(
                               strategy: ConflictResolutionStrategy | null,

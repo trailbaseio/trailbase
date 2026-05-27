@@ -219,6 +219,12 @@ export enum ConflictResolutionStrategy {
   /** ABORT - / SQL default: Keep transaction open and abort the current statement. */
   ABORT = 1,
   /**
+   * IGNORE - / Skip the statement and continue. Mostly matters in the context of batches
+   * / and transaction. Rather than aborting, subsequent operations will
+   * / continue.
+   */
+  IGNORE = 4,
+  /**
    * REPLACE - / Replaces the conflicting row in case of a collision (e.g. unique
    * / constraint).
    */
@@ -234,6 +240,9 @@ export function conflictResolutionStrategyFromJSON(object: any): ConflictResolut
     case 1:
     case "ABORT":
       return ConflictResolutionStrategy.ABORT;
+    case 4:
+    case "IGNORE":
+      return ConflictResolutionStrategy.IGNORE;
     case 5:
     case "REPLACE":
       return ConflictResolutionStrategy.REPLACE;
@@ -250,6 +259,8 @@ export function conflictResolutionStrategyToJSON(object: ConflictResolutionStrat
       return "CONFLICT_RESOLUTION_STRATEGY_UNDEFINED";
     case ConflictResolutionStrategy.ABORT:
       return "ABORT";
+    case ConflictResolutionStrategy.IGNORE:
+      return "IGNORE";
     case ConflictResolutionStrategy.REPLACE:
       return "REPLACE";
     case ConflictResolutionStrategy.UNRECOGNIZED:

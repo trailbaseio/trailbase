@@ -188,6 +188,10 @@ enum ConflictResolutionStrategy {
   CONFLICT_RESOLUTION_STRATEGY_UNDEFINED = 0;
   /// SQL default: Keep transaction open and abort the current statement.
   ABORT = 1;
+  /// Skip the statement and continue. Mostly matters in the context of batches
+  /// and transaction. Rather than aborting, subsequent operations will
+  /// continue.
+  IGNORE = 4;
   /// Replaces the conflicting row in case of a collision (e.g. unique
   /// constraint).
   REPLACE = 5;

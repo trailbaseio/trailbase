@@ -11,11 +11,13 @@ INSERT INTO {{ table_name }}
 )
 {%- endif -%}
 
-{%- if !column_metadata.is_empty() %}
+{%- if !ignore_conflict && !column_metadata.is_empty() %}
   ON CONFLICT ("{{ pk_column_name }}") DO UPDATE SET
   {%- for meta in column_metadata -%}
     {%- if !loop.first %},{% endif %} "{{ meta.column.name }}" = EXCLUDED."{{ meta.column.name }}"
   {%- endfor -%}
+{%- elif ignore_conflict %}
+  ON CONFLICT ("{{ pk_column_name }}") DO NOTHING
 {%- endif -%}
 
 {%- for col in returning -%}

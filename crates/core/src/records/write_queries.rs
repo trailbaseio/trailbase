@@ -56,11 +56,13 @@ impl WriteQuery {
     let query = CreateOrReplaceRecordQueryTemplate {
       table_name,
       req_column_names: &column_names,
+      pk_column_name,
       column_metadata: match conflict_resolution {
         ConflictResolutionStrategy::Replace => column_metadata,
-        _ => &[],
+        ConflictResolutionStrategy::Ignore => &[],
+        ConflictResolutionStrategy::Abort | ConflictResolutionStrategy::Undefined => &[],
       },
-      pk_column_name,
+      ignore_conflict: matches!(conflict_resolution, ConflictResolutionStrategy::Ignore),
       returning: &[ROW_ID_COLUMN, pk_column_name],
     }
     .render()
@@ -166,6 +168,7 @@ impl WriteQuery {
     };
   }
 
+  // FIXME: We shouldn't return leaky rusqlite errors from here.
   pub(super) fn apply_sync(
     self,
     conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
@@ -310,7 +313,7 @@ pub(crate) async fn run_insert_or_replace_query(
     return Err(RecordError::Internal("missing pk".into()));
   };
 
-  // Successful write, do not cleanup written files.
+  // Successful write, do not cleanup written files unless old ones were overridden.
   if let Some(mut file_manager) = file_manager {
     file_manager.release();
 
@@ -390,6 +393,7 @@ struct CreateOrReplaceRecordQueryTemplate<'a> {
   req_column_names: &'a [String],
   pk_column_name: &'a str,
   column_metadata: &'a [ColumnMetadata],
+  ignore_conflict: bool,
   returning: &'a [&'a str],
 }
 
@@ -411,8 +415,9 @@ mod tests {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
         req_column_names: &["index".to_string(), "trigger".to_string()],
-        column_metadata: &[],
         pk_column_name: "index",
+        column_metadata: &[],
+        ignore_conflict: false,
         returning: &["index"],
       }
       .render()
@@ -429,8 +434,9 @@ mod tests {
         }
         .into(),
         req_column_names: &[],
-        column_metadata: &[],
         pk_column_name: "id",
+        column_metadata: &[],
+        ignore_conflict: false,
         returning: &["*"],
       }
       .render()
@@ -445,6 +451,7 @@ mod tests {
         req_column_names: &["index".to_string()],
         pk_column_name: "index",
         column_metadata: &[],
+        ignore_conflict: true,
         returning: &[],
       }
       .render()
