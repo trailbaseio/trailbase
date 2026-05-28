@@ -166,8 +166,10 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
       ...props.schema.tables.map(([t, _]) => t),
       ...props.schema.views.map(([v, _]) => v),
     ];
+
     for (const tableOrView of allTablesAndViews) {
       if (hiddenTable(tableOrView) && !isUserTable(tableOrView.name)) {
+        console.debug("skipping:", tableOrView);
         continue;
       }
 
@@ -175,6 +177,10 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
       nodes.push(n);
       edges.push(...e);
     }
+
+    console.debug(
+      `ErdGraph: ${allTablesAndViews}, nodes: ${nodes}, edges: ${edges}`,
+    );
 
     return { nodes, edges };
   });

@@ -201,13 +201,15 @@ export function ErdGraph(props: {
 
     graph.resetCells(cells);
 
-    // The zoomToFit seems a bit buggy. It will happily cut off boxes at the bottom.
-    graph.zoomToRect({
-      x: -20,
-      y: -20,
-      width: columns * width + 20,
-      height: rows * height + 20,
-    });
+    if (cells.length > 0) {
+      // The zoomToFit seems a bit buggy. It will happily cut off boxes at the bottom.
+      graph.zoomToRect({
+        x: -20,
+        y: -20,
+        width: columns * width + 20,
+        height: rows * height + 20,
+      });
+    }
 
     props.onMount?.(graph);
   });
