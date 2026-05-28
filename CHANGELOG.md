@@ -1,3 +1,26 @@
+## v0.28.0
+
+- Experimental Postgres support 🎉
+  - For context, this is not an effort to replace SQLite but rather to provide options. SQLite will remain the recommend default due to its speed and simplicity aligning best with TrailBase's mission of offering a cheap & easily self-hostable stack.
+  - Yet, some user may want to use Postgres due to personal preference, very write-heavy workloads or needing some of Postgres' plentiful features.
+  - Note that offering transparent, hands-off migrations between SQLite and Postgres is a non-goal. Their data formats, dialects, feature sets, ... are just too different. However Postgres support can provide a path forward for folks with evolving requirements.
+  - If you're brave enough to join the experiment, you can specify a running Postgres instance via:
+    `trail run --experimental-pg=postgresql://<user>:<pass>@127.0.0.1:5432/<db>`
+  - If you run into any issues, don't hesitate to reach out. Some of the known differences include:
+    - No realtime subscriptions. Endpoint is not registered and config validation will fail.
+    - No UI-driven schema manipulation/migrations - UI elements are disabled.
+    - No custom JSON schemas.
+    - No multi-DB or custom DB schemas beyond "public".
+    - Geo/PostGIS functionality is untested, mostly due to our testing setup with `pglite-oxide` not supporting it.
+    - Expect many non-trivial PG types to not work yet. The translations from and to JSON may be missing.
+    - Differences in the SQL dialect, which may surface in migrations or ACLs. For example:
+      - `IN _REQ_FIELDS_` operator => `IN (SELECT * FROM _REQ_FIELDS_)`.
+      - Unlike SQLite, Postgres only accepts `"` for escaping qualifiers.
+    - PG connections do not yet support TLS.
+    - The PG connection-pooling/execution has not yet been optimized.
+- Minor: fix admin UI ERG issue when no `TABLE`s/`VIEW`s exist yet.
+- Update dependencies.
+
 ## v0.27.9
 
 - Use `crossfire` channels in `trailbase_sqlite` execution model. They're supposedly faster than `kanal` but with select support like `flume` et al.
@@ -6,7 +29,7 @@
   - Follow foreign key references.
   - Improve and fix shims around UUIDs.
   - Support PG `TID`s in `ToSql`
-  - Fix issue with columns being bok PKs and FKs.
+  - Fix issue with columns being both PKs and FKs.
   - Make number conversions more consistent.
 - Update dependencies including Wasmtime.
 
