@@ -78,7 +78,7 @@ tokio = { version = "^1.38.0", default-features = false, features = ["fs", "io-s
 tokio-rustls = { version = "0.26.1", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
-trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm"] }
+trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm", "pg"] }
 trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.8.0" }
