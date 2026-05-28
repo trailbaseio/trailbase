@@ -413,15 +413,6 @@ async fn init_db_pg<'a>(
     false
   };
 
-  // TODO: Remove sanity check.
-  conn
-    .read_query_rows(
-      r#"SELECT EXISTS(SELECT 1 FROM "_user" WHERE email = 'foo')"#,
-      (),
-    )
-    .await
-    .unwrap();
-
   let metadata = build_metadata(&conn, opts.json_registry).await?;
 
   return Ok((conn, metadata, init_schema));

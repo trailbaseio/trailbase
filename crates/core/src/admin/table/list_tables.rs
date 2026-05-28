@@ -64,8 +64,8 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
 
   return Ok(Json(ListSchemasResponse {
     tables: tables
-      .into_iter()
-      .map(|(_k, t)| {
+      .into_values()
+      .map(|t| {
         (
           t.schema,
           "CREATE TABLE QUERY NOT AVAILABLE IN PG".to_string(),
@@ -91,8 +91,8 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
       })
       .collect(),
     views: views
-      .into_iter()
-      .map(|(_k, v)| {
+      .into_values()
+      .map(|v| {
         (
           v.schema,
           "CREATE VIEW QUERY NOT AVAILABLE IN PG".to_string(),
