@@ -9,6 +9,7 @@ use std::convert::TryFrom;
 use std::fs;
 use std::str::FromStr;
 use thiserror::Error;
+use trailbase_sqlite::ConnectionType;
 use validator::{ValidateEmail, ValidateUrl};
 
 use crate::DESCRIPTOR_POOL;
@@ -510,8 +511,14 @@ pub async fn validate_config(
     None => None,
   };
 
+  let connection_type = connection_manager.main_entry().connection.connection_type();
+
   let mut db_names = HashSet::<String>::new();
   for db in &config.databases {
+    if matches!(connection_type, ConnectionType::Pg) {
+      return ierr("PG doesn't (yet) support multiple DBs.");
+    }
+
     let Some(ref name) = db.name else {
       return ierr("Missing database name");
     };
@@ -628,6 +635,10 @@ pub async fn validate_config(
 
   // Check JSON Schema configs
   for schema in &config.schemas {
+    if matches!(connection_type, ConnectionType::Pg) {
+      return ierr("PG doesn't (yet) support custom schemas.");
+    }
+
     if schema.name.is_none() {
       return ierr("Missing schema name");
     }

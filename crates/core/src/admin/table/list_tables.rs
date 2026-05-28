@@ -32,26 +32,23 @@ pub struct ListSchemasResponse {
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
-  return cfg_select! {
-      feature = "pg" => list_tables_handler_pg_impl(state).await,
-      _ => list_tables_handler_sqlite_impl(state).await,
+  let conn = state.connection_manager().main_entry().connection;
+
+  return match conn.connection_type() {
+    #[cfg(feature = "pg")]
+    trailbase_sqlite::ConnectionType::Pg => list_tables_handler_pg_impl(state).await,
+    _ => list_tables_handler_sqlite_impl(state).await,
   };
 }
 
 #[cfg(feature = "pg")]
-pub async fn list_tables_handler_pg_impl(
-  state: AppState,
-) -> Result<Json<ListSchemasResponse>, Error> {
-  use parking_lot::RwLock;
-  use std::sync::Arc;
-
+async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemasResponse>, Error> {
   let ConnectionEntry {
     connection: conn, ..
   } = state.connection_manager().main_entry();
 
   let trailbase_schema::metadata::ConnectionMetadata { tables, views } =
-    crate::schema_metadata::build_metadata(&conn, &Arc::new(RwLock::new(Default::default())))
-      .await?;
+    crate::schema_metadata::build_metadata(&conn, state.json_schema_registry()).await?;
 
   let (indexes, triggers) = conn
     .call_writer(|mut conn| -> Result<_, trailbase_sqlite::Error> {
@@ -105,7 +102,7 @@ pub async fn list_tables_handler_pg_impl(
   }));
 }
 
-pub async fn list_tables_handler_sqlite_impl(
+async fn list_tables_handler_sqlite_impl(
   state: AppState,
 ) -> Result<Json<ListSchemasResponse>, Error> {
   #[derive(Debug, Deserialize)]

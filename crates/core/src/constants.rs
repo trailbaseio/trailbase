@@ -6,17 +6,8 @@ pub const SQLITE_SCHEMA_TABLE: &str = "sqlite_schema";
 pub const USER_TABLE: &str = "_user";
 pub static USER_TABLE_FQ: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedName {
   name: USER_TABLE.to_string(),
-  database_schema: cfg_select! {
-      feature = "pg" => Some("public".to_string()),
-      _ => None,
-  },
+  database_schema: None,
 });
-
-// TODO: Replace with something more dynamic.
-pub const ROW_ID_COLUMN: &str = cfg_select! {
-  feature = "pg" => "ctid",
-  _ => "_rowid_",
-};
 
 pub(crate) const LOGS_TABLE: &str = "_logs";
 pub(crate) const SESSION_TABLE: &str = "_session";

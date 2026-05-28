@@ -125,7 +125,7 @@ pub(crate) fn apply_session_migrations(
   return Ok(());
 }
 
-pub(crate) fn apply_migrations(
+fn apply_migrations(
   name: &str,
   conn: &mut rusqlite::Connection,
   migrations: Vec<Vec<Migration>>,
@@ -134,7 +134,10 @@ pub(crate) fn apply_migrations(
 
   let runner = new_migration_runner(&migrations);
   let report = runner.run(conn).map_err(|err| {
-    error!("Migration error for '{name}' DB: {err}");
+    error!(
+      "Migration error for '{name}' DB: {err}\n{:?}",
+      migrations.iter().map(|m| m.name()).collect::<Vec<_>>()
+    );
     return err;
   })?;
 
@@ -147,7 +150,7 @@ pub(crate) fn apply_migrations(
   return Ok(new_db);
 }
 
-pub(crate) async fn apply_migrations_async(
+async fn apply_migrations_async(
   name: &str,
   conn: &trailbase_sqlite::Connection,
   migrations: Vec<Vec<Migration>>,
@@ -157,7 +160,10 @@ pub(crate) async fn apply_migrations_async(
   let mut conn = conn.clone();
   let runner = new_migration_runner(&migrations);
   let report = runner.run_async(&mut conn).await.map_err(|err| {
-    error!("Migration error for '{name}' DB: {err}");
+    error!(
+      "Migration error for '{name}' DB (asnyc): {err}\n{:?}",
+      migrations.iter().map(|m| m.name()).collect::<Vec<_>>()
+    );
     return err;
   })?;
 
@@ -358,7 +364,7 @@ mod tests {
     let state = crate::app_state::test_state(None).await.unwrap();
 
     async fn exists(conn: &Connection, name: &str, schema_type: &str) -> bool {
-      if cfg!(feature = "pg") {
+      if cfg!(feature = "pg-test") {
         log::warn!("Test disabled for PG");
         return true;
       }

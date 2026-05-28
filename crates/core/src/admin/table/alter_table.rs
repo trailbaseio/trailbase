@@ -580,7 +580,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_alter_table() {
-    if cfg!(feature = "pg") {
+    if cfg!(feature = "pg-test") {
       log::warn!("`test_alter_table()` disabled for PG");
       return;
     }

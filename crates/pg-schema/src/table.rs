@@ -319,8 +319,6 @@ pub fn build_all_table_schemas(
 ) -> Result<Vec<Table>, Error> {
   let tables = get_tables(conn)?;
 
-  log::debug!("Found tables: {tables:?}");
-
   return tables
     .into_iter()
     .map(|table| build_table_schema(conn, table))

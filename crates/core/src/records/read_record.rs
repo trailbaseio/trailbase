@@ -254,7 +254,6 @@ mod test {
   use axum::Json;
   use axum::extract::{Path, Query, State};
   use object_store::{ObjectStore, ObjectStoreExt};
-  use serde::Serialize;
   use serde_json::json;
   use std::io::Read;
   use std::sync::Arc;
@@ -266,7 +265,7 @@ mod test {
   use crate::app_state::*;
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
-  use crate::config::proto::{JsonSchemaConfig, PermissionFlag, RecordApiConfig};
+  use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::records::create_record::{
@@ -1208,15 +1207,17 @@ mod test {
     assert_eq!(value, expected);
   }
 
+  // NOTE: Fails config validation for a PG connection ("custom schemas not (yet) supported...").
+  #[cfg(not(feature = "pg-test"))]
   #[tokio::test]
   async fn test_custom_schema() {
-    #[derive(Serialize, schemars::JsonSchema)]
+    #[derive(serde::Serialize, schemars::JsonSchema)]
     struct StringArray(Vec<String>);
 
     let config = {
       let mut config = test_config();
 
-      config.schemas.push(JsonSchemaConfig {
+      config.schemas.push(crate::config::proto::JsonSchemaConfig {
         name: Some("StringArray".to_string()),
         schema: Some(serde_json::to_string_pretty(&schemars::schema_for!(StringArray)).unwrap()),
       });
@@ -1237,11 +1238,12 @@ mod test {
     conn
       .execute(
         format!(
-          "
-            CREATE TABLE \"{name}\" (
+          r#"
+            CREATE TABLE "{name}" (
               id           {serial} PRIMARY KEY,
               list         {json} NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
-            ) {strict}",
+            ) {strict}
+          "#,
           strict = strict2(conn),
           serial = serial_column(conn),
           json = json_column(conn),

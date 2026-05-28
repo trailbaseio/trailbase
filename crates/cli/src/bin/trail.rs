@@ -79,7 +79,7 @@ async fn async_main(
         wasm_tokio_runtime,
         tls_key: None,
         tls_cert: None,
-        pg_uri: None,
+        pg_uri: cmd.experimental_pg,
       })
       .await?;
 

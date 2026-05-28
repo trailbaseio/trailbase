@@ -3,6 +3,7 @@ use trailbase_schema::QualifiedName;
 use trailbase_schema::metadata::TableOrViewMetadata;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::ColumnOption;
+use trailbase_sqlite::ConnectionType;
 
 use crate::config::{ConfigError, proto};
 use crate::connection::{ConnectionEntry, ConnectionManager};
@@ -26,6 +27,17 @@ pub(crate) async fn validate_record_api_config(
   api_config: &proto::RecordApiConfig,
   databases: &[proto::DatabaseConfig],
 ) -> Result<String, ConfigError> {
+  let connection_type = connection_manager.main_entry().connection.connection_type();
+  if matches!(connection_type, ConnectionType::Pg) {
+    if !databases.is_empty() {
+      return Err(invalid("PG doesn't (yet) support multi-DB"));
+    }
+
+    if api_config.enable_subscriptions() {
+      return Err(invalid("PG doesn't (yet) support realtime subscriptions"));
+    }
+  }
+
   let Some(ref api_name) = api_config.name else {
     return Err(invalid("Found RecordApi config entry w/o API name."));
   };

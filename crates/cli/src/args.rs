@@ -133,6 +133,9 @@ pub struct ServerArgs {
   /// Number of threads the WASM runtime uses (Default: #cpus).
   #[arg(long, env)]
   pub runtime_threads: Option<usize>,
+
+  #[arg(long, env)]
+  pub experimental_pg: Option<String>,
 }
 
 #[derive(Args, Clone, Debug)]

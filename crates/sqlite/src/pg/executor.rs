@@ -101,7 +101,7 @@ impl Executor {
       )
       .collect::<Result<Vec<_>, Error>>()?;
 
-    debug!("Opened Postgres DB ({num_threads} threads",);
+    debug!("Opened Postgres DB ({num_threads} threads).",);
 
     return Ok(Self {
       sender: shared_sender,

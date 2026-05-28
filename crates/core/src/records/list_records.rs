@@ -774,7 +774,7 @@ mod tests {
           ) {strict};
 
           INSERT INTO "table" (id, "index", nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
-        "#, 
+        "#,
         strict = strict2(conn),
       ))
       .await
@@ -1380,7 +1380,10 @@ mod tests {
 
   // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
   // instance.
-  #[cfg(all(any(feature = "geos", feature = "geos-static"), not(feature = "pg")))]
+  #[cfg(all(
+    any(feature = "geos", feature = "geos-static"),
+    not(feature = "pg-test")
+  ))]
   #[tokio::test]
   async fn test_record_api_geojson_list() {
     let state = test_state(None).await.unwrap();

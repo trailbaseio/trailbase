@@ -85,7 +85,7 @@ pub async fn lookup_and_parse_table_schema(
 ) -> Result<Table, SchemaLookupError> {
   #[cfg(feature = "pg")]
   return match conn.connection_type() {
-    ConnectionType::Pg => lookup_and_parse_table_schema_pg(conn, table_name, database).await,
+    ConnectionType::Pg => lookup_and_parse_table_schema_pg(conn, table_name).await,
     ConnectionType::Sqlite => {
       lookup_and_parse_table_schema_sqlite(conn, table_name, database).await
     }
@@ -95,7 +95,7 @@ pub async fn lookup_and_parse_table_schema(
   return lookup_and_parse_table_schema_sqlite(conn, table_name, database).await;
 }
 
-pub async fn lookup_and_parse_table_schema_sqlite(
+async fn lookup_and_parse_table_schema_sqlite(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
   database: Option<&str>,
@@ -125,10 +125,9 @@ pub async fn lookup_and_parse_table_schema_sqlite(
 }
 
 #[cfg(feature = "pg")]
-pub async fn lookup_and_parse_table_schema_pg(
+async fn lookup_and_parse_table_schema_pg(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,
-  database: Option<&str>,
 ) -> Result<Table, SchemaLookupError> {
   // TODO: We could just query for a specific table rather than for all and filter.
   let tables = conn
