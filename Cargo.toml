@@ -61,12 +61,12 @@ env_logger = { version = "^0.11.8", default-features = false, features = ["auto-
 flume = { version = "0.12.0", default-features = false, features = ["select", "async"] }
 futures-util = { version = "0.3.32", default-features = false, features = ["alloc", "spin"] }
 libsqlite3-sys = { version = "0.37.0", default-features = false, features = ["bundled", "preupdate_hook"] }
-litegis = { version = "0.0.6", default-features = false }
+litegis = { version = "0.0.7", default-features = false }
 minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.0"
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
-rusqlite = { version = "0.39.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
+rusqlite = { version = "0.40.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
 serde = { version = "^1.0.203", features = ["derive", "rc"] }
 serde_json = { version = "^1.0.117" }
