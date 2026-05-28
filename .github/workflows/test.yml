@@ -88,3 +88,27 @@ jobs:
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
         run: df -h
+
+  test-pg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+
+      - name: "Build & Run Tests"
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo test --features=geos,otel,pg-test
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
