@@ -67,8 +67,15 @@ impl From<trailbase_sqlite::Error> for RecordError {
         }
         _ => Self::Internal(err.into()),
       },
+      trailbase_sqlite::Error::FromSql(err) => err.into(),
       err => Self::Internal(err.into()),
     };
+  }
+}
+
+impl From<trailbase_sqlite::from_sql::FromSqlError> for RecordError {
+  fn from(err: trailbase_sqlite::from_sql::FromSqlError) -> Self {
+    return Self::Internal(err.into());
   }
 }
 

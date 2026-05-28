@@ -225,24 +225,15 @@ fn apply_ops<T: SyncConnection>(
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-          #[inline]
-          fn is_no_rows_err(err: &trailbase_sqlite::Error) -> bool {
-            // NOTE: We're turning non-result into rusqlite errors even for postgres.
-            // We should change that.
-            return match err {
-              trailbase_sqlite::Error::Rusqlite(rusqlite::Error::QueryReturnedNoRows) => true,
-              _ => false,
-            };
-          }
-
           match query.apply_sync(conn) {
             Ok(result) => Ok(Some(
               extract_record_id(result.pk_value.expect("insert"))
                 .map_err(|err| RecordError::Internal(err.into()))?,
             )),
+            // Skip over errors for `Ignore` conflict strategy.
             Err(err)
               if conflict_resolution_strategy == ConflictResolutionStrategy::Ignore
-                && is_no_rows_err(&err) =>
+                && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
             {
               Ok(None)
             }

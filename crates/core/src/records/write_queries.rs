@@ -65,7 +65,7 @@ impl WriteQuery {
         ConflictResolutionStrategy::Abort | ConflictResolutionStrategy::Undefined => &[],
       },
       ignore_conflict: matches!(conflict_resolution, ConflictResolutionStrategy::Ignore),
-      returning: &[&row_id_column, pk_column_name],
+      returning: &[row_id_column, pk_column_name],
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -144,7 +144,7 @@ impl WriteQuery {
             pk_value: Some(row.get(1)?),
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows.into())
+          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
       Self::Update {
@@ -157,7 +157,7 @@ impl WriteQuery {
             pk_value: None,
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows.into())
+          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
       Self::Delete { query, pk_value } => {
@@ -167,13 +167,12 @@ impl WriteQuery {
             pk_value: None,
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows.into())
+          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
     };
   }
 
-  // FIXME: We shouldn't return leaky rusqlite errors from here.
   pub(super) fn apply_sync(
     self,
     conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
@@ -190,7 +189,7 @@ impl WriteQuery {
             pk_value: Some(row.get(1)?),
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows.into())
+          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
       Self::Update {
@@ -203,7 +202,7 @@ impl WriteQuery {
             pk_value: None,
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows.into())
+          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
       Self::Delete { query, pk_value } => {
@@ -213,7 +212,7 @@ impl WriteQuery {
             pk_value: None,
           })
         } else {
-          Err(rusqlite::Error::QueryReturnedNoRows.into())
+          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
     };

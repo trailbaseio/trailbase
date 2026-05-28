@@ -33,11 +33,14 @@ pub enum Error {
   // QUESTION: This is leaky. How often do downstream users have to introspect on this
   // rusqlite::Error. Otherwise, should/could this be more opaue.
   #[cfg(feature = "pg")]
-  #[error("Posgres: {0}")]
+  #[error("Postgres: {0}")]
   Postgres(#[from] postgres::Error),
 
   #[error("DeserializeValue: {0}")]
   DeserializeValue(serde_rusqlite::Error),
+
+  #[error("QueryReturnedNoRows")]
+  QueryReturnedNoRows,
 
   /// This one is useful for downstream consumers providing a `Connection` builder returning this
   /// error.
