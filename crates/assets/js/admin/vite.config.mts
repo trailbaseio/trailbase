@@ -5,6 +5,13 @@ import solidPlugin from "vite-plugin-solid";
 import csp from "vite-plugin-csp-guard";
 import tailwindcss from "@tailwindcss/vite";
 
+const DEFAULT_CSP = [
+  "'self'",
+  "chrome-extension:",
+  "moz-extension:",
+  "safari-extension:",
+];
+
 export default defineConfig({
   base: "/_/admin",
   plugins: [
@@ -17,10 +24,11 @@ export default defineConfig({
         run: false,
       },
       policy: {
-        "default-src": ["'self'"],
+        "default-src": DEFAULT_CSP,
 
         "connect-src": ["'self'", "https://tiles.openfreemap.org"],
-        "img-src": ["'self'", "data:"],
+        "img-src": [...DEFAULT_CSP, "data:"],
+        "object-src": DEFAULT_CSP,
         "script-src": ["'self'", "blob:"],
         "style-src": ["'self'", "'unsafe-inline'"],
         // 'unsafe-inline' needed for ERD renderer.
