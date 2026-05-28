@@ -324,6 +324,11 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
         <span class="font-mono">
           {info().command_line_arguments?.join(" ")}
         </span>
+
+        <Show when={props.systemInfo.postgres}>
+          <TextFieldLabel class={width}>Postgres:</TextFieldLabel>
+          <span>enabled</span>
+        </Show>
       </div>
     </TextField>
   );

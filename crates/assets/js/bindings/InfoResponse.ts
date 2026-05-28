@@ -16,4 +16,8 @@ threads: number, command_line_arguments: Array<string> | null,
 /**
  * Start time in seconds since epoch,
  */
-start_time: bigint, };
+start_time: bigint, 
+/**
+ * Experimental Postgres mode
+ */
+postgres: boolean, };

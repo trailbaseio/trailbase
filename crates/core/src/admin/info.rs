@@ -1,5 +1,6 @@
 use axum::{Json, extract::State};
 use serde::Serialize;
+use trailbase_sqlite::ConnectionType;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -19,6 +20,8 @@ pub struct InfoResponse {
   command_line_arguments: Option<Vec<String>>,
   /// Start time in seconds since epoch,
   start_time: u64,
+  /// Experimental Postgres mode
+  postgres: bool,
 }
 
 pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResponse>, Error> {
@@ -43,5 +46,13 @@ fn build_info_response(state: &AppState) -> InfoResponse {
       .duration_since(std::time::UNIX_EPOCH)
       .unwrap_or_default()
       .as_secs(),
+    postgres: matches!(
+      state
+        .connection_manager()
+        .main_entry()
+        .connection
+        .connection_type(),
+      ConnectionType::Pg
+    ),
   };
 }

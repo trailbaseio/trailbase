@@ -268,6 +268,7 @@ function TableHeaderRightHandButtons(props: {
   table: Table | View;
   allTables: Table[];
   schemaRefetch: () => Promise<void>;
+  postgres: boolean;
 }) {
   const selectedSchema = () => props.table;
   const hidden = () => hiddenTable(selectedSchema());
@@ -284,7 +285,7 @@ function TableHeaderRightHandButtons(props: {
   return (
     <div class="flex items-center justify-end gap-2">
       {/* Delete table button */}
-      {!hidden() && (
+      {!hidden() && !props.postgres && (
         <DestructiveActionButton
           size="sm"
           action={() => {
@@ -363,7 +364,8 @@ function TableHeaderRightHandButtons(props: {
         />
       )}
 
-      {type() === "table" && !hidden() && (
+      {/* Alter table schema */}
+      {type() === "table" && !hidden() && !props.postgres && (
         <SafeSheet
           children={(sheet) => {
             return (
@@ -403,6 +405,7 @@ function TableHeader(props: {
   allTables: [Table, string][];
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => void;
+  postgres: boolean;
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
   const selectedSchema = () => props.table[0];
@@ -453,6 +456,7 @@ function TableHeader(props: {
           table={selectedSchema()}
           allTables={allTables()}
           schemaRefetch={props.schemaRefetch}
+          postgres={props.postgres}
         />
       }
     />
@@ -982,6 +986,7 @@ export function TablePane(props: {
   selectedTable: [Table, string] | [View, string];
   schemas: ListSchemasResponse;
   schemaRefetch: () => Promise<void>;
+  postgres: boolean;
 }) {
   const selectedSchema = () => props.selectedTable[0];
   const isTable = () => tableType(selectedSchema()) === "table";
@@ -1096,6 +1101,7 @@ export function TablePane(props: {
         allTables={props.schemas.tables}
         schemaRefetch={schemaRefetch}
         rowsRefetch={rowsRefetch}
+        postgres={props.postgres}
       />
 
       <div class="flex flex-col gap-8 p-4">

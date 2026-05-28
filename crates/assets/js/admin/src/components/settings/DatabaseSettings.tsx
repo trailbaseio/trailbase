@@ -1,6 +1,7 @@
 import { createSignal, Switch, Match, createMemo } from "solid-js";
 import { useQueryClient } from "@tanstack/solid-query";
 import type { Row, ColumnDef } from "@tanstack/solid-table";
+import { TbOutlineLink, TbOutlineUnlink } from "solid-icons/tb";
 
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 
@@ -23,16 +24,32 @@ import {
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 
 import { Config, DatabaseConfig } from "@proto/config";
-import { TbOutlineLink, TbOutlineUnlink } from "solid-icons/tb";
+import { createSystemInfoQuery } from "@/lib/api/info";
 
 export function DatabaseSettings(props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
   const config = createConfigQuery();
+  const systemInfo = createSystemInfoQuery();
+  const isPostgres = () => systemInfo.data?.postgres ?? false;
 
   return (
     <Switch>
+      <Match when={isPostgres()}>
+        <div class="flex flex-col gap-4">
+          <Card class="text-sm">
+            <CardHeader>
+              <h2>Linked Databases</h2>
+            </CardHeader>
+
+            <CardContent class="flex flex-col gap-4">
+              Not supported in Postgres mode.
+            </CardContent>
+          </Card>
+        </div>
+      </Match>
+
       <Match when={config.isError}>Failed to fetch config</Match>
 
       <Match when={config.isLoading}>Loading</Match>

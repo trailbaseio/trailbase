@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 import { adminFetch } from "@/lib/fetch";
+import { createSystemInfoQuery } from "@/lib/api/info";
 
 import type { ListJsonSchemasResponse } from "@bindings/ListJsonSchemasResponse";
 import type { JsonSchema } from "@bindings/JsonSchema";
@@ -108,6 +109,9 @@ export function SchemaSettings(props: {
     queryFn: listSchemas,
   }));
 
+  const systemInfo = createSystemInfoQuery();
+  const isPostgres = () => systemInfo.data?.postgres ?? false;
+
   return (
     <Suspense fallback={<div>Loading...</div>}>
       <Switch>
@@ -122,23 +126,34 @@ export function SchemaSettings(props: {
             </CardHeader>
 
             <CardContent>
-              <div class="pb-8">
-                <p class="text-sm">
-                  Custom JSON schemas can be registered to enforce constraints
-                  on columns of your database tables, e.g.:
-                </p>
+              <Switch>
+                <Match when={isPostgres()}>
+                  <p class="text-sm">
+                    Custom schemas are not supported in Postgres mode. Only the
+                    following built-ins are available:
+                  </p>
+                </Match>
 
-                <pre class="my-4 overflow-x-auto text-sm">{exampleTable}</pre>
+                <Match when={true}>
+                  <p class="text-sm">
+                    Custom JSON schemas can be registered to enforce constraints
+                    on columns of your database tables, e.g.:
+                  </p>
 
-                <p class="text-sm">
-                  Note, registration via the admin UI is not yet available. You
-                  can register custom schemas in your instance's{" "}
-                  <span class="font-mono text-nowrap">
-                    `{"<"}traildepot{">"}/config.textproto`
-                  </span>{" "}
-                  and they will show up here.
-                </p>
-              </div>
+                  <pre class="my-4 overflow-x-auto text-sm">{exampleTable}</pre>
+
+                  <p class="text-sm">
+                    Note, registration via the admin UI is not yet available.
+                    You can register custom schemas in your instance's{" "}
+                    <span class="font-mono text-nowrap">
+                      `{"<"}traildepot{">"}/config.textproto`
+                    </span>{" "}
+                    and they will show up here.
+                  </p>
+                </Match>
+              </Switch>
+
+              <div class="h-4" />
 
               <SchemaSettingsForm
                 markDirty={props.markDirty}

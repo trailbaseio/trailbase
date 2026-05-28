@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 
 import { createTableSchemaQuery } from "@/lib/api/table";
+import { createSystemInfoQuery } from "@/lib/api/info";
 import {
   hiddenTable,
   tableType,
@@ -96,6 +97,7 @@ function TablePickerSidebar(props: {
   selectedTable: Table | View | undefined;
   schemaRefetch: () => Promise<void>;
   openCreateTableDialog: () => void;
+  postgres: boolean;
 }) {
   const { setOpenMobile } = useSidebar();
   const settings = useStore($explorerSettings);
@@ -112,6 +114,7 @@ function TablePickerSidebar(props: {
             <Button
               class="min-w-[100px] grow gap-2"
               variant="secondary"
+              disabled={props.postgres}
               onClick={() => {
                 setOpenMobile(false);
                 props.openCreateTableDialog();
@@ -257,6 +260,9 @@ function TableSplitView(props: {
     return pickInitiallySelectedTable(filteredTables, table);
   });
 
+  const systemInfo = createSystemInfoQuery();
+  const isPostgres = () => systemInfo.data?.postgres ?? false;
+
   return (
     <SafeSheet
       id="add_table_dialog"
@@ -300,6 +306,7 @@ function TableSplitView(props: {
                       selectedTable={selectedTable()?.[0]}
                       schemaRefetch={props.schemaRefetch}
                       openCreateTableDialog={() => setCreateTableDialog(true)}
+                      postgres={isPostgres()}
                     />
                   </SidebarGroup>
 
@@ -320,6 +327,7 @@ function TableSplitView(props: {
                         selectedTable={selectedTable()!}
                         schemas={props.schemas}
                         schemaRefetch={props.schemaRefetch}
+                        postgres={isPostgres()}
                       />
                     </Match>
 
@@ -329,6 +337,7 @@ function TableSplitView(props: {
                           selectedTable={selectedTable()!}
                           schemas={props.schemas}
                           schemaRefetch={props.schemaRefetch}
+                          postgres={isPostgres()}
                         />
                       </div>
                     </Match>
