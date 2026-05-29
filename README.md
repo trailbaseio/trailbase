@@ -10,7 +10,7 @@
   An open, <a href="https://trailbase.io/reference/benchmarks/">sub-millisecond</a>,
   single-executable Firebase alternative with type-safe REST & realtime APIs,
   multi-DB, WebAssembly runtime, geospatial support, SSR, auth and admin
-  UI built on Rust, SQLite & Wasmtime.
+  UI built on Rust, Wasmtime & SQLite (or experimentally Postgres v0.28+).
 <p>
 
 <p align="center">
