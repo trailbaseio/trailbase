@@ -14,7 +14,7 @@
     - No custom JSON schemas.
     - No multi-DB or custom DB schemas beyond "public".
     - Logs and session data will remain in SQLite separate databases for now.
-    - Geo/PostGIS functionality is untested, mostly due to our testing setup with `pglite-oxide` not supporting it.
+    - Geo/PostGIS functionality is untested due to limitations of our testing setup.
     - Expect many non-trivial PG types to not work yet. The translations from and to JSON may be missing.
     - Differences in the SQL dialect, which may surface in migrations or ACLs. For example:
       - `IN _REQ_FIELDS_` operator => `IN (SELECT * FROM _REQ_FIELDS_)`.
@@ -69,7 +69,7 @@
 
 ## v0.27.5
 
-- Updating a file columns with prior read resulsts is a no-op even when no explicit data is passed - thanks @royalcala 🙏.
+- Updating a file columns with prior read results is a no-op even when no explicit data is passed - thanks @royalcala 🙏.
   - We may want to be stricter here in the future, i.e. match DB contents vs input.
   - We may want support sub-setting operations for lists of files.
 - Main-line some early PG schema consumer.
