@@ -4,14 +4,12 @@
 
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 use rquickjs::prelude::{Async, Ctx, Func};
-use rquickjs::{
-  AsyncContext, AsyncRuntime, Context, Function, Module, Object, Runtime, async_with,
-};
+use rquickjs::{AsyncContext, AsyncRuntime, Context, Function, Module, Object, Runtime};
 use trailbase_wasm::db::{Value, query};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::kv::Store;
-use trailbase_wasm::time::{Duration, Timer};
+use trailbase_wasm::time::{Duration, FutureExt};
 use trailbase_wasm::{Guest, export};
 
 // Implement the function exported in this world (see above).
@@ -102,8 +100,10 @@ async fn set_timeout<'js>(
   callback: Function<'js>,
   // millis: Option<usize>,
 ) -> rquickjs::Result<()> {
-  Timer::after(Duration::from_millis(0)).wait().await;
-  callback.call::<_, ()>(()).expect("success");
+  trailbase_wasm::time::Timer::after(Duration::from_nanos(0))
+    .wait()
+    .await;
+  callback.call::<_, ()>(())?;
 
   Ok(())
 }
@@ -117,40 +117,45 @@ async fn render(count: i64) -> Result<RenderResult, HttpError> {
   rt.set_loader(resolver, loader).await;
 
   let ctx = AsyncContext::full(&rt).await.map_err(internal)?;
-  let result: Result<RenderResult, HttpError> = async_with!(ctx => |ctx| {
-    ctx
-      .globals()
-      .set("setTimeout", Func::from(Async(set_timeout)))
+  let result: Result<RenderResult, HttpError> = ctx
+    .async_with(async |ctx| {
+      ctx
+        .globals()
+        .set("setTimeout", Func::from(Async(set_timeout)))
+        .map_err(internal)?;
+
+      let (module, promise) = Module::declare(
+        ctx.clone(),
+        "ssr",
+        format!(
+          "\
+          import {{ render }} from \"server/entry-server.js\"; \
+          \
+          const count = {count}; \
+          export const output = render(\"ignored\", count); \
+          "
+        ),
+      )
+      .map_err(internal)?
+      .eval()
       .map_err(internal)?;
 
-    let (module, promise) = Module::declare(
-      ctx.clone(),
-      "ssr",
-      format!(r#"
-        import {{ render }} from "server/entry-server.js";
+      promise.finish::<()>().map_err(internal)?;
 
-        const count = {count};
-        export const output = render("ignored", count);
-      "#),
-    )
-    .map_err(internal)?
-    .eval()
-    .map_err(internal)?;
+      let obj: Object = module.get("output").map_err(internal)?;
 
-    promise.finish::<()>().map_err(internal)?;
-
-    let obj: Object = module.get("output").map_err(internal)?;
-
-    return Ok(RenderResult {
-      head: obj.get("head").map_err(internal)?,
-      data: obj.get("data").map_err(internal)?,
-      html: obj.get("html").map_err(internal)?,
-    });
-  })
-  .await;
+      return Ok(RenderResult {
+        head: obj.get("head").map_err(internal)?,
+        data: obj.get("data").map_err(internal)?,
+        html: obj.get("html").map_err(internal)?,
+      });
+    })
+    .await;
 
   // Drain event-loop giving pending timers a chance to run.
-  rt.idle().await;
+  if let Err(err) = rt.idle().timeout(Duration::from_millis(1000)).await {
+    eprintln!("Failed to drain event-loop: {err}");
+  };
 
   return result;
 }
@@ -168,20 +173,20 @@ fn fibonacci(n: usize) -> Result<usize, HttpError> {
       ctx,
       "fibonacci",
       format!(
-        r#"
-function fibonacci(num) {{
-  switch (num) {{
-    case 0:
-      return 0;
-    case 1:
-      return 1;
-    default:
-      return fibonacci(num - 1) + fibonacci(num - 2);
-  }}
-}}
-
-export const output = fibonacci({n});
-"#
+        "\
+        function fibonacci(num) {{ \
+          switch (num) {{ \
+            case 0: \
+              return 0; \
+            case 1: \
+              return 1; \
+            default: \
+              return fibonacci(num - 1) + fibonacci(num - 2); \
+          }} \
+        }} \
+        \
+        export const output = fibonacci({n}); \
+        "
       ),
     )
     .map_err(internal)?

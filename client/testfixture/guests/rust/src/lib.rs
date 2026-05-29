@@ -28,7 +28,7 @@ impl Guest for Endpoints {
       routing::get("/readfile", async |_req| {
         let r = read_file("/crates/sqlite/Cargo.toml")
           .map_err(|err| HttpError::message(StatusCode::NOT_FOUND, err))?;
-        println!("result: {}", String::from_utf8_lossy(&r));
+        eprintln!("result: {}", String::from_utf8_lossy(&r));
         return Ok(());
       }),
       routing::get("/json", async |_req| {
@@ -62,6 +62,7 @@ impl Guest for Endpoints {
       }),
       routing::get("/await", async |req| -> Result<Vec<u8>, HttpError> {
         let ms: u64 = req.query_param("ms").map_or(10, |p| p.parse().unwrap());
+        eprintln!("waiting {ms}ms");
 
         Timer::after(Duration::from_millis(ms)).wait().await;
         return Ok(vec![b'A'; 5000]);
@@ -75,7 +76,7 @@ impl Guest for Endpoints {
         .await
         .map_err(internal)?[0][0];
 
-        println!("[print from WASM guest] user id: {user_id:?}");
+        eprintln!("[print from WASM guest] user id: {user_id:?}");
 
         let mut bytes: [u8; 32] = [0; 32];
         trailbase_wasm::rand::get_random_bytes(&mut bytes);
@@ -197,7 +198,7 @@ impl Guest for Endpoints {
     SEQ.fetch_add(4000, Ordering::SeqCst);
 
     return vec![Job::hourly("WASM-registered Job", async || {
-      println!("JS-registered cron job reporting for duty 🚀");
+      eprintln!("JS-registered cron job reporting for duty 🚀");
     })];
   }
 
