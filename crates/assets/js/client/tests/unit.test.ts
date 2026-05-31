@@ -1,10 +1,13 @@
 import { test } from "vitest";
+import { describe, it, expect } from "vitest";
 
 import { FetchError, initClient } from "../src/index";
 import { parseJSON } from "../src/json";
 import {
   exportedForTesting,
   ChangeEventStatusForbidden,
+  isNull,
+  isNotNull,
 } from "../src/record_api";
 
 const { parseChangeEvent } = exportedForTesting!;
@@ -49,5 +52,28 @@ test("ChangeEvent parsing", ({ expect }) => {
       status: ChangeEventStatusForbidden,
       message: "test",
     },
+  });
+});
+
+describe("filter $is", () => {
+  it("serializes isNull to $is=NULL", () => {
+    const p = new URLSearchParams();
+    exportedForTesting!.addFiltersToParams(p, "filter", isNull("col0"));
+    expect(p.get("filter[col0][$is]")).toBe("NULL");
+  });
+
+  it("serializes isNotNull to $is=!NULL", () => {
+    const p = new URLSearchParams();
+    exportedForTesting!.addFiltersToParams(p, "filter", isNotNull("col0"));
+    expect(p.get("filter[col0][$is]")).toBe("!NULL");
+  });
+
+  it("works inside an And composite", () => {
+    const p = new URLSearchParams();
+    exportedForTesting!.addFiltersToParams(p, "filter", {
+      and: [isNull("a"), isNotNull("b")],
+    });
+    expect(p.get("filter[$and][0][a][$is]")).toBe("NULL");
+    expect(p.get("filter[$and][1][b][$is]")).toBe("!NULL");
   });
 });

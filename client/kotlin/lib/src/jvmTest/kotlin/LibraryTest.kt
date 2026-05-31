@@ -131,6 +131,20 @@ class ClientTest {
   }
 
   @Test
+  fun filterIsNullSerializer() {
+    val params = mutableMapOf<String, String>()
+    addFiltersToParams(params, "filter", Filter.isNull("col0"))
+    assertEquals("NULL", params["filter[col0][\$is]"])
+  }
+
+  @Test
+  fun filterIsNotNullSerializer() {
+    val params = mutableMapOf<String, String>()
+    addFiltersToParams(params, "filter", Filter.isNotNull("col0"))
+    assertEquals("!NULL", params["filter[col0][\$is]"])
+  }
+
+  @Test
   fun `parse change events`() {
     val ev0 =
             ChangeEvent.parse(

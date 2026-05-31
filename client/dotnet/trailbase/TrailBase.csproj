@@ -30,4 +30,7 @@
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.16.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TrailBase.Tests" />
+  </ItemGroup>
 </Project>

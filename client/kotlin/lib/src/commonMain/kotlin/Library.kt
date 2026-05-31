@@ -171,6 +171,8 @@ enum class CompareOp {
   stWithin,
   stIntersects,
   stContains,
+  isNull,
+  isNotNull,
 }
 
 private fun opToString(op: CompareOp): String {
@@ -186,12 +188,24 @@ private fun opToString(op: CompareOp): String {
     CompareOp.stWithin -> "@within"
     CompareOp.stIntersects -> "@intersects"
     CompareOp.stContains -> "@contains"
+    CompareOp.isNull -> "\$is"
+    CompareOp.isNotNull -> "\$is"
   }
 }
 
 sealed class FilterBase {}
 
-class Filter(val column: String, val value: String, val op: CompareOp? = null) : FilterBase() {}
+class Filter(val column: String, val value: String, val op: CompareOp? = null) : FilterBase() {
+  companion object {
+    /** Filter rows where [column] IS NULL. Wire: `filter[<column>][$is]=NULL`. */
+    fun isNull(column: String): Filter =
+        Filter(column = column, value = "NULL", op = CompareOp.isNull)
+
+    /** Filter rows where [column] IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`. */
+    fun isNotNull(column: String): Filter =
+        Filter(column = column, value = "!NULL", op = CompareOp.isNotNull)
+  }
+}
 
 class And(val filters: List<FilterBase>) : FilterBase() {}
 
@@ -617,7 +631,13 @@ fun addFiltersToParams(params: MutableMap<String, String>, path: String, filter:
   when (filter) {
     is Filter -> {
       if (filter.op != null) {
-        params["${path}[${filter.column}][${opToString(filter.op)}]"] = filter.value
+        val value =
+            when (filter.op) {
+              CompareOp.isNull -> "NULL"
+              CompareOp.isNotNull -> "!NULL"
+              else -> filter.value
+            }
+        params["${path}[${filter.column}][${opToString(filter.op)}]"] = value
       } else {
         params["${path}[${filter.column}]"] = filter.value
       }

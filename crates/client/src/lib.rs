@@ -368,6 +368,10 @@ pub enum CompareOp {
   StWithin,
   StIntersects,
   StContains,
+  /// Matches rows where the column IS NULL. Wire: `filter[<col>][$is]=NULL`.
+  IsNull,
+  /// Matches rows where the column IS NOT NULL. Wire: `filter[<col>][$is]=!NULL`.
+  IsNotNull,
 }
 
 impl CompareOp {
@@ -384,6 +388,8 @@ impl CompareOp {
       Self::StWithin => "@within",
       Self::StIntersects => "@intersects",
       Self::StContains => "@contains",
+      Self::IsNull => "$is",
+      Self::IsNotNull => "$is",
     };
   }
 }
@@ -401,6 +407,24 @@ impl Filter {
       column: column.into(),
       op: Some(op),
       value: value.into(),
+    };
+  }
+
+  /// Filter rows where `column` IS NULL. Wire: `filter[<column>][$is]=NULL`.
+  pub fn is_null(column: impl Into<String>) -> Self {
+    return Self {
+      column: column.into(),
+      op: Some(CompareOp::IsNull),
+      value: String::new(),
+    };
+  }
+
+  /// Filter rows where `column` IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`.
+  pub fn is_not_null(column: impl Into<String>) -> Self {
+    return Self {
+      column: column.into(),
+      op: Some(CompareOp::IsNotNull),
+      value: String::new(),
     };
   }
 }
@@ -504,13 +528,18 @@ impl RecordApi {
       match filter {
         ValueOrFilterGroup::Filter(filter) => {
           if let Some(op) = filter.op {
+            let value: Cow<'static, str> = match op {
+              CompareOp::IsNull => Cow::Borrowed("NULL"),
+              CompareOp::IsNotNull => Cow::Borrowed("!NULL"),
+              _ => Cow::Owned(filter.value),
+            };
             params.push((
               Cow::Owned(format!(
                 "{path}[{col}][{op}]",
                 col = filter.column,
                 op = op.format()
               )),
-              Cow::Owned(filter.value),
+              value,
             ));
           } else {
             params.push((
@@ -1195,6 +1224,45 @@ const RECORD_API: &str = "api/records/v1";
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn is_null_formats_to_is() {
+    assert_eq!(CompareOp::IsNull.format(), "$is");
+    assert_eq!(CompareOp::IsNotNull.format(), "$is");
+  }
+
+  #[test]
+  fn is_null_filter_builder() {
+    let f = Filter::is_null("col0");
+    assert_eq!(f.column, "col0");
+    assert_eq!(f.op, Some(CompareOp::IsNull));
+  }
+
+  #[test]
+  fn is_null_wire_values() {
+    let f_null = Filter::is_null("col0");
+    assert_eq!(f_null.op, Some(CompareOp::IsNull));
+    assert_eq!(f_null.column, "col0");
+
+    let f_not_null = Filter::is_not_null("col1");
+    assert_eq!(f_not_null.op, Some(CompareOp::IsNotNull));
+    assert_eq!(f_not_null.column, "col1");
+
+    // Verify the value override logic matches expected wire strings.
+    let null_wire: Cow<'static, str> = match f_null.op.unwrap() {
+      CompareOp::IsNull => Cow::Borrowed("NULL"),
+      CompareOp::IsNotNull => Cow::Borrowed("!NULL"),
+      _ => Cow::Owned(f_null.value.clone()),
+    };
+    let not_null_wire: Cow<'static, str> = match f_not_null.op.unwrap() {
+      CompareOp::IsNull => Cow::Borrowed("NULL"),
+      CompareOp::IsNotNull => Cow::Borrowed("!NULL"),
+      _ => Cow::Owned(f_not_null.value.clone()),
+    };
+
+    assert_eq!(null_wire, "NULL");
+    assert_eq!(not_null_wire, "!NULL");
+  }
 
   #[tokio::test]
   async fn is_send_test() {

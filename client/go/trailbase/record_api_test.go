@@ -62,6 +62,22 @@ func TestFilter(t *testing.T) {
 	}
 }
 
+func TestFilterIsNullToParams(t *testing.T) {
+	got := IsNullFilter("col0").toParams("filter")
+	want := []QueryParam{{key: "filter[col0][$is]", value: "NULL"}}
+	if !testEq(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestFilterIsNotNullToParams(t *testing.T) {
+	got := IsNotNullFilter("col0").toParams("filter")
+	want := []QueryParam{{key: "filter[col0][$is]", value: "!NULL"}}
+	if !testEq(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
 func TestEventParsing(t *testing.T) {
 	{
 		errJson := `
