@@ -23,6 +23,8 @@ export type CompareOp =
   | "greaterThanEqual"
   | "like"
   | "regexp"
+  | "isNull"
+  | "isNotNull"
   | "@within"
   | "@intersects"
   | "@contains";
@@ -45,6 +47,9 @@ function formatCompareOp(op: CompareOp): string {
       return "$like";
     case "regexp":
       return "$re";
+    case "isNull":
+    case "isNotNull":
+      return "$is";
     // Geospatials:
     case "@within":
     case "@intersects":
@@ -58,6 +63,16 @@ export type Filter = {
   op?: CompareOp;
   value: string;
 };
+
+/** Filter rows where `column` IS NULL. Wire: `filter[<column>][$is]=NULL`. */
+export function isNull(column: string): Filter {
+  return { column, op: "isNull", value: "" };
+}
+
+/** Filter rows where `column` IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`. */
+export function isNotNull(column: string): Filter {
+  return { column, op: "isNotNull", value: "" };
+}
 
 export type And = {
   and: FilterOrComposite[];
@@ -630,7 +645,9 @@ function addFiltersToParams(
     const f = filter as Filter;
     const op = f.op;
     if (op) {
-      params.append(`${path}[${f.column}][${formatCompareOp(op)}]`, f.value);
+      const wireValue =
+        op === "isNull" ? "NULL" : op === "isNotNull" ? "!NULL" : f.value;
+      params.append(`${path}[${f.column}][${formatCompareOp(op)}]`, wireValue);
     } else {
       params.append(`${path}[${f.column}]`, f.value);
     }
@@ -657,5 +674,6 @@ export const exportedForTesting = isDev
         opts?: SubscribeOpts & SubscribeFilterOpts,
       ) => api.subscribeWs(id, opts),
       parseChangeEvent,
+      addFiltersToParams,
     }
   : undefined;

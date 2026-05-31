@@ -197,6 +197,8 @@ enum CompareOp {
   stWithin,
   stIntersects,
   stContains,
+  isNull,
+  isNotNull,
 }
 
 String _opToString(CompareOp op) {
@@ -212,6 +214,8 @@ String _opToString(CompareOp op) {
     CompareOp.stWithin => '@within',
     CompareOp.stIntersects => '@intersects',
     CompareOp.stContains => '@contains',
+    CompareOp.isNull => '\$is',
+    CompareOp.isNotNull => '\$is',
   };
 }
 
@@ -229,6 +233,18 @@ class Filter extends FilterBase {
     required this.value,
     this.op,
   });
+
+  /// Filter rows where `column` IS NULL.
+  ///
+  /// Wire format: `filter[<column>][$is]=NULL`.
+  const Filter.isNull({required String column})
+      : this(column: column, value: 'NULL', op: CompareOp.isNull);
+
+  /// Filter rows where `column` IS NOT NULL.
+  ///
+  /// Wire format: `filter[<column>][$is]=!NULL`.
+  const Filter.isNotNull({required String column})
+      : this(column: column, value: '!NULL', op: CompareOp.isNotNull);
 }
 
 class And extends FilterBase {
@@ -696,8 +712,14 @@ void addFiltersToParams(
     Map<String, String> params, String path, FilterBase filter) {
   final _ = switch (filter) {
     Filter(column: final c, op: final op, value: final v) => () {
-        if (op != null) {
-          params['${path}[${c}][${_opToString(op)}]'] = v;
+       if (op != null) {
+          if (op == CompareOp.isNull) {
+            params['${path}[${c}][${_opToString(op)}]'] = 'NULL';
+          } else if (op == CompareOp.isNotNull) {
+            params['${path}[${c}][${_opToString(op)}]'] = '!NULL';
+          } else {
+            params['${path}[${c}][${_opToString(op)}]'] = v;
+          }
         } else {
           params['${path}[${c}]'] = v;
         }

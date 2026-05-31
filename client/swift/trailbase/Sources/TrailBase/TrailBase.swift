@@ -81,7 +81,7 @@ public struct ListResponse<T: Decodable>: Decodable {
   public let records: [T]
 }
 
-public enum CompareOp {
+public enum CompareOp: Equatable {
   case Equal
   case NotEqual
   case LessThan
@@ -93,6 +93,8 @@ public enum CompareOp {
   case StWithin
   case StIntersects
   case StContains
+  case IsNull
+  case IsNotNull
 }
 
 extension CompareOp {
@@ -109,6 +111,8 @@ extension CompareOp {
     case .StWithin: "@within"
     case .StIntersects: "@intersects"
     case .StContains: "@contains"
+    case .IsNull: "$is"
+    case .IsNotNull: "$is"
     }
   }
 }
@@ -117,6 +121,18 @@ public enum Filter {
   case Filter(column: String, op: CompareOp? = nil, value: String)
   case And(filters: [Filter])
   case Or(filters: [Filter])
+}
+
+extension Filter {
+  /// Filter rows where `column` IS NULL. Wire: `filter[<column>][$is]=NULL`.
+  public static func isNull(column: String) -> Filter {
+    return .Filter(column: column, op: .IsNull, value: "NULL")
+  }
+
+  /// Filter rows where `column` IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`.
+  public static func isNotNull(column: String) -> Filter {
+    return .Filter(column: column, op: .IsNotNull, value: "!NULL")
+  }
 }
 
 public class RecordApi {
@@ -168,9 +184,15 @@ public class RecordApi {
     func traverseFilters(path: String, filter: Filter) {
       switch filter {
       case .Filter(let column, let op, let value):
-        if op != nil {
+        if let op = op {
+          let emittedValue: String =
+            switch op {
+            case .IsNull: "NULL"
+            case .IsNotNull: "!NULL"
+            default: value
+            }
           queryParams.append(
-            URLQueryItem(name: "\(path)[\(column)][\(op!.op())]", value: value))
+            URLQueryItem(name: "\(path)[\(column)][\(op.op())]", value: emittedValue))
         } else {
           queryParams.append(
             URLQueryItem(name: "\(path)[\(column)]", value: value))

@@ -372,4 +372,22 @@ def test_subscriptions(trailbase: TrailBaseFixture):
     assert ev2.value["text_not_null"] == update_message
 
 
+def test_filter_is_null_repr():
+    assert repr(CompareOp.IS_NULL) == "$is"
+    assert repr(CompareOp.IS_NOT_NULL) == "$is"
+
+
+def test_filter_is_null_factory():
+    f = Filter.is_null("col0")
+    assert f.column == "col0"
+    assert f.op is CompareOp.IS_NULL
+    assert f.value == "NULL"
+
+
+def test_filter_is_not_null_factory():
+    f = Filter.is_not_null("col0")
+    assert f.value == "!NULL"
+    assert f.op is CompareOp.IS_NOT_NULL
+
+
 logger = logging.getLogger(__name__)

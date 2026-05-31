@@ -245,6 +245,26 @@ Future<void> main() async {
     expect(params.length, 2);
   });
 
+  test('filter is null', () {
+    final params = <String, String>{};
+    addFiltersToParams(params, 'filter', Filter.isNull(column: 'col0'));
+    expect(params, equals({'filter[col0][\$is]': 'NULL'}));
+  });
+
+  test('filter is not null', () {
+    final params = <String, String>{};
+    addFiltersToParams(params, 'filter', Filter.isNotNull(column: 'col0'));
+    expect(params, equals({'filter[col0][\$is]': '!NULL'}));
+  });
+
+  test('is-null inside And composite', () {
+    final params = <String, String>{};
+    addFiltersToParams(params, 'filter',
+        And([Filter.isNull(column: 'a'), Filter.isNotNull(column: 'b')]));
+    expect(params['filter[\$and][0][a][\$is]'], equals('NULL'));
+    expect(params['filter[\$and][1][b][\$is]'], equals('!NULL'));
+  });
+
   group('client tests', () {
     test('auth', () async {
       final client = await connect();

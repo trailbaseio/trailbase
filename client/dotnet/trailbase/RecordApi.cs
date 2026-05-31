@@ -254,6 +254,10 @@ public enum CompareOp {
   StIntersects,
   /// <summary>Geometry contains operator: 'ST_Contains'.</summary>
   StContains,
+  /// <summary>Is null operator: 'IS NULL'.</summary>
+  IsNull,
+  /// <summary>Is not null operator: 'IS NOT NULL'.</summary>
+  IsNotNull,
 }
 
 /// <summary>Abstract base class for filters.</summary>
@@ -273,6 +277,8 @@ public abstract class FilterBase {
         CompareOp.StWithin => "@within",
         CompareOp.StIntersects => "@intersects",
         CompareOp.StContains => "@contains",
+        CompareOp.IsNull => "$is",
+        CompareOp.IsNotNull => "$is",
         _ => "??",
       };
     }
@@ -281,7 +287,12 @@ public abstract class FilterBase {
       case Filter f:
         if (f.op != null) {
           var o = op((CompareOp)f.op);
-          queryParams.Add($"{path}[{f.column}][{o}]", f.value);
+          var v = f.op switch {
+            CompareOp.IsNull => "NULL",
+            CompareOp.IsNotNull => "!NULL",
+            _ => f.value,
+          };
+          queryParams.Add($"{path}[{f.column}][{o}]", v);
         }
         else {
           queryParams.Add($"{path}[{f.column}]", f.value);
@@ -317,6 +328,14 @@ sealed public class Filter : FilterBase {
     this.op = op;
     this.value = value;
   }
+
+  /// <summary>Filter rows where <paramref name="column"/> IS NULL.</summary>
+  public static Filter IsNull(String column) =>
+    new Filter(column, "NULL", CompareOp.IsNull);
+
+  /// <summary>Filter rows where <paramref name="column"/> IS NOT NULL.</summary>
+  public static Filter IsNotNull(String column) =>
+    new Filter(column, "!NULL", CompareOp.IsNotNull);
 }
 
 /// <summary>Logical "and" for column filters.</summary>

@@ -248,6 +248,23 @@ extension Trait where Self == SetupTrailBaseTrait {
 }
 
 @Test()
+func testIsNullCompareOp() {
+  #expect(CompareOp.IsNull.op() == "$is")
+  #expect(CompareOp.IsNotNull.op() == "$is")
+}
+
+@Test()
+func testIsNullFactory() {
+  guard case let .Filter(column, op, value) = Filter.isNull(column: "col0") else {
+    Issue.record("Filter.isNull did not produce a .Filter case")
+    return
+  }
+  #expect(column == "col0")
+  #expect(op == .IsNull)
+  #expect(value == "NULL")
+}
+
+@Test()
 func eventEncoding() async throws {
   let data0 = """
     {

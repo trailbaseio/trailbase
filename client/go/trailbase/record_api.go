@@ -132,6 +132,8 @@ const (
 	StWithin
 	StIntersects
 	StContains
+	IsNull    // serializes to $is with value "NULL"
+	IsNotNull // serializes to $is with value "!NULL"
 )
 
 func (op CompareOp) toString() string {
@@ -158,6 +160,10 @@ func (op CompareOp) toString() string {
 		return "@intersects"
 	case StContains:
 		return "@contains"
+	case IsNull:
+		return "$is"
+	case IsNotNull:
+		return "$is"
 	default:
 		panic(fmt.Sprint("Unknown operation:", op))
 	}
@@ -171,10 +177,16 @@ type FilterColumn struct {
 
 func (f FilterColumn) toParams(path string) []QueryParam {
 	if f.Op != Undefined {
+		value := f.Value
+		if f.Op == IsNull {
+			value = "NULL"
+		} else if f.Op == IsNotNull {
+			value = "!NULL"
+		}
 		return []QueryParam{
 			QueryParam{
 				key:   fmt.Sprintf("%s[%s][%s]", path, f.Column, f.Op.toString()),
-				value: f.Value,
+				value: value,
 			},
 		}
 	}
@@ -184,6 +196,16 @@ func (f FilterColumn) toParams(path string) []QueryParam {
 			value: f.Value,
 		},
 	}
+}
+
+// IsNullFilter returns a Filter that matches rows where column IS NULL.
+func IsNullFilter(column string) FilterColumn {
+	return FilterColumn{Column: column, Op: IsNull}
+}
+
+// IsNotNullFilter returns a Filter that matches rows where column IS NOT NULL.
+func IsNotNullFilter(column string) FilterColumn {
+	return FilterColumn{Column: column, Op: IsNotNull}
 }
 
 type FilterAnd struct {

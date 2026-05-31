@@ -547,6 +547,8 @@ class CompareOp(Enum):
     ST_WITHIN = 9
     ST_INTERSECTS = 10
     ST_CONTAINS = 11
+    IS_NULL = 12
+    IS_NOT_NULL = 13
 
     def __repr__(self) -> str:
         match self:
@@ -572,6 +574,10 @@ class CompareOp(Enum):
                 return "@intersects"
             case CompareOp.ST_CONTAINS:
                 return "@contains"
+            case CompareOp.IS_NULL:
+                return "$is"
+            case CompareOp.IS_NOT_NULL:
+                return "$is"
 
 
 @final
@@ -584,6 +590,22 @@ class Filter:
         self.column = column
         self.op = op
         self.value = value
+
+    @classmethod
+    def is_null(cls, column: str) -> "Filter":
+        """Filter rows where `column` IS NULL.
+
+        Wire format: ``filter[<column>][$is]=NULL``.
+        """
+        return cls(column=column, value="NULL", op=CompareOp.IS_NULL)
+
+    @classmethod
+    def is_not_null(cls, column: str) -> "Filter":
+        """Filter rows where `column` IS NOT NULL.
+
+        Wire format: ``filter[<column>][$is]=!NULL``.
+        """
+        return cls(column=column, value="!NULL", op=CompareOp.IS_NOT_NULL)
 
 
 @final

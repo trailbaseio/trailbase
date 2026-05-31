@@ -139,6 +139,20 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
+  public void Filter_IsNull_SerializesToIs() {
+    var p = new Dictionary<string, string>();
+    FilterBase.addFiltersToParams(ref p, "filter", Filter.IsNull("col0"));
+    Assert.Equal("NULL", p["filter[col0][$is]"]);
+  }
+
+  [Fact]
+  public void Filter_IsNotNull_SerializesToIs() {
+    var p = new Dictionary<string, string>();
+    FilterBase.addFiltersToParams(ref p, "filter", Filter.IsNotNull("col0"));
+    Assert.Equal("!NULL", p["filter[col0][$is]"]);
+  }
+
+  [Fact]
   public async Task AuthTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     var mfaToken = await client.Login("admin@localhost", "secret");
