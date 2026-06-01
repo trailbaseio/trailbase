@@ -729,7 +729,7 @@ mod tests {
 
             INSERT INTO test_table (id, data) VALUES (1, 'test');
           "#,
-          strict = strict2(conn)
+          strict = strict(conn)
         ),
       )
       .await

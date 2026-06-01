@@ -105,8 +105,8 @@ pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyh
           FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
         ) {strict};
       "#,
-      strict = strict2(conn),
-      uuid = uuid_column2(conn),
+      strict = strict(conn),
+      uuid = uuid_column(conn),
     ))
     .await?;
 
@@ -147,8 +147,8 @@ pub async fn create_chat_message_app_tables_integer(state: &AppState) -> Result<
           FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
         ) {strict};
       "#,
-      strict = strict2(conn),
-      uuid = uuid_column2(conn),
+      strict = strict(conn),
+      uuid = uuid_column(conn),
       serial = serial_column(conn),
     ))
     .await?;

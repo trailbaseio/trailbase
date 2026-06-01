@@ -89,8 +89,8 @@ mod tests {
              geom     {blob} CHECK(ST_IsValid(geom))
          ) {strict};
         ",
-        strict = strict2(conn),
-        blob = blob_column2(conn),
+        strict = strict(conn),
+        blob = blob_column(conn),
       ))
       .await
       .unwrap();

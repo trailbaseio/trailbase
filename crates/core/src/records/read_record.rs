@@ -441,8 +441,8 @@ mod test {
               "test 😍"    TEXT NOT NULL DEFAULT('')
             ) {strict};
           "#,
-          strict = strict2(conn),
-          uuid = uuid_column2(conn),
+          strict = strict(conn),
+          uuid = uuid_column(conn),
           json = json_column(conn),
         ),
         (),
@@ -944,7 +944,7 @@ mod test {
               "index"      TEXT NOT NULL DEFAULT('')
             ) {strict}
           "#,
-          strict = strict2(conn)
+          strict = strict(conn)
         ),
         (),
       )
@@ -1042,7 +1042,7 @@ mod test {
                col1         TEXT NOT NULL DEFAULT('')
             ) {strict}
           "#,
-          strict = strict2(conn),
+          strict = strict(conn),
           serial = serial_column(conn)
         ),
         (),
@@ -1135,7 +1135,7 @@ mod test {
 
           CREATE VIEW child_view AS SELECT * FROM child;
        "#,
-        strict = strict2(conn),
+        strict = strict(conn),
       ))
       .await
       .unwrap();
@@ -1244,7 +1244,7 @@ mod test {
               list         {json} NOT NULL CHECK(jsonschema('StringArray', list)) DEFAULT '[]'
             ) {strict}
           "#,
-          strict = strict2(conn),
+          strict = strict(conn),
           serial = serial_column(conn),
           json = json_column(conn),
         ),
@@ -1332,8 +1332,8 @@ mod test {
             geo          {blob} CHECK(ST_IsValid(geo))
           ) {strict}
           "#,
-          strict = strict2(conn),
-          blob = blob_column2(conn),
+          strict = strict(conn),
+          blob = blob_column(conn),
         ),
         (),
       )

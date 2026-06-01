@@ -345,7 +345,7 @@ mod tests {
             value   INTEGER
           ) {strict};
         "#,
-        strict = strict2(conn),
+        strict = strict(conn),
         serial = serial_column(conn),
       ))
       .await

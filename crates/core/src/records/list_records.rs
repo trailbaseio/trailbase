@@ -655,7 +655,7 @@ mod tests {
               "index" INTEGER REFERENCES "other"("index")
             ) {strict};
         "#,
-        strict = strict2(&conn),
+        strict = strict(&conn),
         serial = serial_column(&conn),
       ))
       .await
@@ -775,7 +775,7 @@ mod tests {
 
           INSERT INTO "table" (id, "index", nullable) VALUES (1, '1', 1), (2, '2', NULL), (3, '3', NULL);
         "#,
-        strict = strict2(conn),
+        strict = strict(conn),
       ))
       .await
       .unwrap();
@@ -1295,7 +1295,7 @@ mod tests {
             FROM data AS d
             WHERE d.flag > 0;
         "#,
-        strict = strict2(conn),
+        strict = strict(conn),
       ))
       .await
       .unwrap();
@@ -1406,8 +1406,8 @@ mod tests {
             ( 8, 'br-quadrant',  ST_MakeEnvelope(0, -0, 180, -90)),
             (21, 'null',         NULL);
         "#,
-        strict = strict2(conn),
-        blob = blob_column2(conn),
+        strict = strict(conn),
+        blob = blob_column(conn),
       ))
       .await
       .unwrap();

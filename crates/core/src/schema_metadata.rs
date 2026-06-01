@@ -403,7 +403,7 @@ mod tests {
 
           INSERT INTO test (a, b, c) VALUES (5, NULL, NULL), (6, 1, 2);
         ",
-        strict = strict2(conn),
+        strict = strict(conn),
         serial = serial_column(conn),
       ))
       .await
@@ -491,7 +491,7 @@ mod tests {
             ) {strict};
           ",
           table_name = table_name.escaped_string(),
-          strict = strict2(&conn),
+          strict = strict(&conn),
         ))
         .await
         .unwrap();
@@ -754,7 +754,7 @@ mod tests {
 
           INSERT INTO {table_name} (id, fk0, fk0_null, fk1) VALUES (1, 1, NULL, 1);
         "#,
-        strict = strict2(conn),
+        strict = strict(conn),
       ))
       .await
       .unwrap();

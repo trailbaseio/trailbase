@@ -338,8 +338,8 @@ async fn create_chat_message_app_tables(
           FOREIGN KEY("user") REFERENCES _user(id) ON DELETE CASCADE
         ) {strict};
       "#,
-      strict = strict2(conn),
-      uuid = uuid_column2(conn),
+      strict = strict(conn),
+      uuid = uuid_column(conn),
     ))
     .await?;
 

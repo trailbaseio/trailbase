@@ -244,8 +244,8 @@ mod test {
             value   INTEGER
           ) {strict};
         "#,
-        strict = strict2(conn),
-        uuid = uuid_column2(conn),
+        strict = strict(conn),
+        uuid = uuid_column(conn),
       ))
       .await
       .unwrap();

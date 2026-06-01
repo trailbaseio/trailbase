@@ -117,7 +117,7 @@ mod test {
             "text"    TEXT
           ) {strict};
         "#,
-        strict = strict2(conn)
+        strict = strict(conn)
       ))
       .await
       .unwrap();
@@ -355,8 +355,8 @@ mod test {
 
           INSERT INTO test ("user", data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
         "#,
-        strict = strict2(conn),
-        uuid = uuid_column2(conn),
+        strict = strict(conn),
+        uuid = uuid_column(conn),
       ))
       .await
       .unwrap();
