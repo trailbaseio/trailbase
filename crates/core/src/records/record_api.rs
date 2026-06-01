@@ -1,5 +1,4 @@
 use askama::Template;
-use parking_lot::RwLock;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,12 +16,8 @@ use crate::records::params::{LazyParams, Params};
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
 
-#[derive(Clone)]
-pub struct RecordApi {
-  state: Arc<RecordApiState>,
-}
-
-struct RecordApiSchema {
+#[derive(Debug)]
+pub(crate) struct RecordApiSchema {
   /// Schema metadata
   qualified_name: QualifiedName,
   table_name: QualifiedNameEscaped,
@@ -130,10 +125,16 @@ impl RecordApiSchema {
   }
 }
 
+#[derive(Clone)]
+pub struct RecordApi {
+  state: Arc<RecordApiState>,
+}
+
 struct RecordApiState {
-  /// Database connection for access checks.
+  /// Cached connection for access checks and subscription state construction.
   conn: Arc<trailbase_sqlite::Connection>,
-  metadata: RwLock<Arc<ConnectionMetadata>>,
+  /// Cached connection metadata.
+  metadata: Arc<ConnectionMetadata>,
 
   /// Schema metadata
   schema: RecordApiSchema,
@@ -165,19 +166,6 @@ struct RecordApiState {
 }
 
 impl RecordApiState {
-  #[inline]
-  fn cached_access_query(&self, p: Permission) -> Option<Arc<str>> {
-    return match p {
-      Permission::Create => self.create_access_query.clone(),
-      Permission::Read => self.read_access_query.clone(),
-      Permission::Update => self.update_access_query.clone(),
-      Permission::Delete => self.delete_access_query.clone(),
-      Permission::Schema => self.schema_access_query.clone(),
-    };
-  }
-}
-
-impl RecordApi {
   pub(crate) fn from_table(
     conn: Arc<Connection>,
     metadata: Arc<ConnectionMetadata>,
@@ -301,59 +289,102 @@ impl RecordApi {
       None => None,
     };
 
-    return Ok(RecordApi {
-      state: Arc::new(RecordApiState {
-        conn,
-        metadata: RwLock::new(metadata),
+    return Ok(RecordApiState {
+      conn,
+      metadata,
 
-        schema,
+      schema,
 
-        // proto::RecordApiConfig properties below:
-        api_name,
+      // proto::RecordApiConfig properties below:
+      api_name,
 
-        // Insert- specific options.
-        insert_conflict_resolution_strategy: config
-          .conflict_resolution
-          .and_then(|cr| cr.try_into().ok()),
-        insert_autofill_missing_user_id_columns: config
-          .autofill_missing_user_id_columns
-          .unwrap_or(false),
-        enable_subscriptions: config.enable_subscriptions.unwrap_or(false),
+      // Insert- specific options.
+      insert_conflict_resolution_strategy: config
+        .conflict_resolution
+        .and_then(|cr| cr.try_into().ok()),
+      insert_autofill_missing_user_id_columns: config
+        .autofill_missing_user_id_columns
+        .unwrap_or(false),
+      enable_subscriptions: config.enable_subscriptions.unwrap_or(false),
 
-        expand: if config.expand.is_empty() {
-          None
-        } else {
-          Some(
-            config
-              .expand
-              .iter()
-              .map(|col_name| (col_name.to_string(), serde_json::Value::Null))
-              .collect(),
-          )
-        },
+      expand: if config.expand.is_empty() {
+        None
+      } else {
+        Some(
+          config
+            .expand
+            .iter()
+            .map(|col_name| (col_name.to_string(), serde_json::Value::Null))
+            .collect(),
+        )
+      },
 
-        listing_hard_limit: config.listing_hard_limit.map(|l| l as usize),
+      listing_hard_limit: config.listing_hard_limit.map(|l| l as usize),
 
-        // Access control lists.
-        acl: [
-          convert_acl(&config.acl_world),
-          convert_acl(&config.acl_authenticated),
-        ],
-        // Access rules.
-        //
-        // Create:
+      // Access control lists.
+      acl: [
+        convert_acl(&config.acl_world),
+        convert_acl(&config.acl_authenticated),
+      ],
+      // Access rules.
+      //
+      // Create:
 
-        // The raw read rule is needed to construct list queries.
-        read_access_rule: config.read_access_rule,
-        read_access_query,
-        subscription_read_access_query,
+      // The raw read rule is needed to construct list queries.
+      read_access_rule: config.read_access_rule,
+      read_access_query,
+      subscription_read_access_query,
 
-        create_access_query,
-        update_access_query,
-        delete_access_query,
-        schema_access_query,
-      }),
+      create_access_query,
+      update_access_query,
+      delete_access_query,
+      schema_access_query,
     });
+  }
+
+  #[inline]
+  fn cached_access_query(&self, p: Permission) -> Option<Arc<str>> {
+    return match p {
+      Permission::Create => self.create_access_query.clone(),
+      Permission::Read => self.read_access_query.clone(),
+      Permission::Update => self.update_access_query.clone(),
+      Permission::Delete => self.delete_access_query.clone(),
+      Permission::Schema => self.schema_access_query.clone(),
+    };
+  }
+}
+
+impl RecordApi {
+  pub(crate) fn build(
+    conn: Arc<trailbase_sqlite::Connection>,
+    metadata: Arc<trailbase_schema::metadata::ConnectionMetadata>,
+    config: RecordApiConfig,
+  ) -> Result<Self, String> {
+    let table_name = QualifiedName::parse(config.table_name()).map_err(|err| err.to_string())?;
+
+    if let Some(table_metadata) = metadata.get_table(&table_name) {
+      return Ok(Self {
+        state: Arc::new(RecordApiState::from_table(
+          conn,
+          metadata.clone(),
+          table_metadata,
+          config,
+        )?),
+      });
+    } else if let Some(view_metadata) = metadata.get_view(&table_name) {
+      return Ok(Self {
+        state: Arc::new(RecordApiState::from_view(
+          conn,
+          metadata.clone(),
+          view_metadata,
+          config,
+        )?),
+      });
+    }
+
+    return Err(format!(
+      "RecordApi references missing table/view: {config:?}"
+    ));
   }
 
   #[inline]
@@ -379,18 +410,10 @@ impl RecordApi {
     return &self.state.conn;
   }
 
-  pub fn connection_metadata(&self) -> Arc<ConnectionMetadata> {
-    return self.state.metadata.read().clone();
-  }
-
-  pub(crate) async fn rebuild_connection_metadata(
-    &self,
-    json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  ) -> Result<(), crate::connection::ConnectionError> {
-    let metadata =
-      crate::schema_metadata::build_metadata(&self.state.conn, json_schema_registry).await?;
-    *self.state.metadata.write() = Arc::new(metadata);
-    return Ok(());
+  // NOTE: We use this for expansions when we follow FKs (read, list, json schema) as well as
+  // constructing per-connection subscription state (though this could probably be untangled).
+  pub(crate) fn connection_metadata(&self) -> &Arc<ConnectionMetadata> {
+    return &self.state.metadata;
   }
 
   #[inline]
@@ -896,7 +919,7 @@ fn filter_excluded_columns(
 
 #[inline]
 fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
-  // QUESTION: Should this be disabled in prod? This can only triger during start and config
+  // QUESTION: Should this be disabled in prod? This can only trigger during start and config
   // reload.
   match name.database_schema.as_deref() {
     Some(db) if db != "main" && db != "public" => {

@@ -405,12 +405,17 @@ fn escape_and_join_column_names(names: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
+  use axum::extract::{Path, Query, State};
   use trailbase_schema::parse::parse_into_statement;
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
 
   use super::*;
   use crate::admin::table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
+  use crate::config::proto::{PermissionFlag, RecordApiConfig};
+  use crate::connection::ConnectionEntry;
+  use crate::records::read_record::{ReadRecordQuery, read_record_handler};
+  use crate::records::test_utils::*;
 
   fn parse_create_table(create_table_sql: &str) -> Table {
     let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
@@ -696,6 +701,133 @@ mod tests {
         .read_query_rows(format!("SELECT {pk_col} FROM bar"), ())
         .await
         .unwrap();
+    }
+  }
+
+  #[tokio::test]
+  async fn test_alter_table_updates_apis() {
+    if cfg!(feature = "pg-test") {
+      log::warn!("`test_alter_table_updates_apis()` disabled for PG");
+      return;
+    }
+
+    let state = test_state(None).await.unwrap();
+    let conn = state.conn();
+
+    const TABLE_NAME: &str = "test_table";
+    const API_NAME: &str = "test_api";
+
+    conn
+      .execute_batch(
+        // NOTE: The PK isn't auto-incrementing on PG, that's fine.
+        format!(
+          r#"
+            CREATE TABLE {TABLE_NAME} (
+              id          INTEGER PRIMARY KEY,
+              data        TEXT
+            ) {strict};
+
+            INSERT INTO test_table (id, data) VALUES (1, 'test');
+          "#,
+          strict = strict2(conn)
+        ),
+      )
+      .await
+      .unwrap();
+
+    state.rebuild_connection_metadata().await.unwrap();
+
+    add_record_api_config(
+      &state,
+      RecordApiConfig {
+        name: Some(API_NAME.to_string()),
+        table_name: Some(TABLE_NAME.to_string()),
+        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        ..Default::default()
+      },
+    )
+    .await
+    .unwrap();
+
+    {
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path((API_NAME.to_string(), "1".to_string())),
+        Query(ReadRecordQuery::default()),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!("test", value.get("data").unwrap());
+      assert!(value.get("new").is_none());
+    }
+
+    let ConnectionEntry {
+      metadata,
+      connection: _,
+    } = state.connection_manager().main_entry();
+
+    let table_metadata = metadata
+      .get_table(&QualifiedName {
+        name: TABLE_NAME.to_string(),
+        database_schema: None,
+      })
+      .unwrap();
+
+    // Add column.
+    let alter_table_request = AlterTableRequest {
+      source_schema: table_metadata.schema.clone(),
+      operations: vec![AlterTableOperation::AddColumn {
+        column: Column {
+          name: "new".to_string(),
+          type_name: "text".to_string(),
+          data_type: ColumnDataType::Text,
+          affinity_type: ColumnAffinityType::Text,
+          options: vec![
+            ColumnOption::NotNull,
+            ColumnOption::Default("'default'".to_string()),
+          ],
+        },
+      }],
+      dry_run: None,
+    };
+
+    let Json(response) =
+      alter_table_handler(State(state.clone()), Json(alter_table_request.clone()))
+        .await
+        .unwrap();
+    assert!(response.sql.contains("new"));
+
+    assert_eq!(
+      "default",
+      conn
+        .read_query_row_get::<String>(
+          format!("SELECT new FROM {TABLE_NAME} WHERE id = $1"),
+          (1,),
+          0,
+        )
+        .await
+        .unwrap()
+        .unwrap()
+    );
+
+    {
+      let Json(value) = read_record_handler(
+        State(state.clone()),
+        Path((API_NAME.to_string(), "1".to_string())),
+        Query(ReadRecordQuery::default()),
+        None,
+      )
+      .await
+      .unwrap();
+
+      assert_eq!("test", value.get("data").unwrap());
+      assert_eq!(
+        Some(&serde_json::Value::String("default".to_string())),
+        value.get("new"),
+        "Got: {value:?}"
+      );
     }
   }
 }

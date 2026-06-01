@@ -25,7 +25,7 @@ impl<T> Clone for AsyncReactive<T> {
 }
 
 // NOTE: This is currently a best effort implementation replicating of Reactive's API but async.
-// NOTE: T has to be sync to allow concurent reads via RwLock.
+// NOTE: T has to be sync to allow concurrent reads via RwLock.
 impl<T: Default + Send + Sync + 'static> AsyncReactive<T> {
   /// Constructs a new `Reactive<T>`
   pub fn new<F, Fut>(f: F) -> Self
@@ -86,15 +86,17 @@ impl<T: Default + Send + Sync + 'static> AsyncReactive<T> {
     let fut = h
       .spawn(async move {
         let old_value = old_fut.await;
-        return Arc::new(f(old_value).await);
+        let new_value = Arc::new(f(old_value).await);
+
+        *state.snapshot.write() = new_value.clone();
+        for obs in &mut *state.observers.lock() {
+          obs(&new_value);
+        }
+
+        return new_value;
       })
       .then(async move |maybe| {
-        let r = maybe.expect("spawn failed");
-        *state.snapshot.write() = r.clone();
-        for obs in &mut *state.observers.lock() {
-          obs(&r);
-        }
-        return r;
+        return maybe.expect("spawn failed");
       });
 
     lock.with_upgraded(|rw| {

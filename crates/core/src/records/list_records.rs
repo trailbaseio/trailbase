@@ -233,7 +233,7 @@ pub async fn list_records_handler(
         }
       }
 
-      expand_tables(&api, &metadata, &expand.columns)?
+      expand_tables(&api, metadata, &expand.columns)?
     }
     None => vec![],
   };
