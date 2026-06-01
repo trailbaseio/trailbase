@@ -292,13 +292,15 @@ impl AppState {
     // Rebuild RecordApi including schemas. This is necessary e.g. after schema changes.
     let connection_manager = self.state.connection_manager.clone();
     let record_api_config = Arc::new(config.record_apis.clone());
-    self.state.record_apis.update_unchecked(async |prev| {
-      let next = build_record_apis_impl(connection_manager, Some(prev), record_api_config).await;
+    self
+      .state
+      .record_apis
+      .update_unchecked(async |prev| {
+        let next = build_record_apis_impl(connection_manager, Some(prev), record_api_config).await;
 
-      return next;
-    });
-
-    let _wait_for_snapshot_update = self.state.record_apis.ptr().await;
+        return next;
+      })
+      .await;
 
     return Ok(());
   }
@@ -389,6 +391,7 @@ impl AppState {
     // Write new config to the file system.
     write_config_and_vault_textproto(self.data_dir(), &connection_manager, &new_config).await?;
 
+    // After updating the config we need to poll record apis to make sure they're up-to-date.
     let _wait_for_snapshot_update = self.state.record_apis.ptr().await;
 
     return Ok(());
@@ -644,16 +647,11 @@ async fn build_record_apis(
   connection_manager: ConnectionManager,
   record_api_configs: Reactive<Vec<RecordApiConfig>>,
 ) -> AsyncReactive<HashMap<String, RecordApi>> {
-  let derived =
-    record_api_configs.derive_unchecked_async(move |DeriveInput { prev, dep: configs }| {
+  return record_api_configs
+    .derive_unchecked_async(move |DeriveInput { prev, dep: configs }| {
       return build_record_apis_impl(connection_manager.clone(), prev.cloned(), configs.clone());
-    });
-
-  // Give the snapshot a chance to update, otherwise `derived.snapshot()` will return only the
-  // default empty map.
-  let _make_sure_snapshot_is_valid = derived.ptr().await;
-
-  return derived;
+    })
+    .await;
 }
 
 async fn build_record_apis_impl(

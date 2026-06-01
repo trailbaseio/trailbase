@@ -244,7 +244,6 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
 mod tests {
   use serde_json::json;
 
-  use super::*;
   use crate::app_state::*;
   use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
   use crate::test_utils::json_column;
@@ -340,7 +339,7 @@ mod tests {
 
       let parsed = rows
         .iter()
-        .map(|row| row_to_json_expand(&metadata.column_metadata, row, |_| true, None))
+        .map(|row| super::row_to_json_expand(&metadata.column_metadata, row, |_| true, None))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 

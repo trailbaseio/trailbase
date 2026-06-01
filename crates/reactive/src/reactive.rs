@@ -118,7 +118,7 @@ impl<T> Reactive<T> {
   }
 
   /// Will update the value eventually.
-  pub fn derive_unchecked_async<U, F>(
+  pub async fn derive_unchecked_async<U, F>(
     &self,
     f: impl (Fn(DeriveInput<'_, U, T>) -> F) + Send + Sync + 'static,
   ) -> AsyncReactive<U>
@@ -141,7 +141,8 @@ impl<T> Reactive<T> {
         })
         .await;
       }
-    });
+    })
+    .await;
 
     self.add_observer({
       let derived = derived.clone();
@@ -151,7 +152,7 @@ impl<T> Reactive<T> {
         let derived = derived.clone();
         let f = f.clone();
 
-        derived.update_unchecked(move |old: Arc<U>| {
+        let fut = derived.update_unchecked(move |old: Arc<U>| {
           return Box::pin(async move {
             let old = old.clone();
             (*f)(DeriveInput {
@@ -161,6 +162,10 @@ impl<T> Reactive<T> {
             .await
           });
         });
+
+        // If we wouldn't start a task here, aboe update_unchekced would be lazy and only
+        // materialize on first poll via `.ptr().await`.
+        tokio::spawn(fut);
       }
     });
 
@@ -303,14 +308,19 @@ mod tests {
   async fn derive_async_reactive_test() {
     let base = Reactive::new(0);
 
-    let derived = base.derive_unchecked_async(|input| {
-      let dep: i32 = **input.dep;
-      return Box::pin(async move { dep + 1 });
-    });
+    let derived = base
+      .derive_unchecked_async(|input| {
+        let dep: i32 = **input.dep;
+        return Box::pin(async move { dep + 1 });
+      })
+      .await;
 
     assert_eq!(1, *derived.ptr().await);
 
     base.set(5);
+
+    // NOTE: This is lazy, i.e. the `ptr().await` will trigger the update.
+    assert_eq!(1, *derived.snapshot());
     assert_eq!(6, *derived.ptr().await);
   }
 }
