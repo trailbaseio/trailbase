@@ -139,6 +139,54 @@ function renderCell(
   blobEncoding: BlobEncoding,
 ): JSX.Element {
   const value: SqlValue = context.getValue();
+
+  // Special handling for file columns.
+  if (cell.type === "File") {
+    let file: FileUpload | null;
+    if (value === "Null") {
+      file = null;
+    } else if ("Text" in value) {
+      file = JSON.parse(value.Text) as FileUpload;
+    } else {
+      throw new Error("expected JSON text");
+    }
+
+    const pkCol = columns[pkIndex].name;
+    const pkVal = context.row.original[pkIndex];
+
+    return (
+      <UploadedFile
+        file={file}
+        tableName={tableName}
+        columns={columns}
+        columnName={cell.column.name}
+        pk={{ columnName: pkCol, value: pkVal }}
+      />
+    );
+  } else if (cell.type === "File[]") {
+    let files: FileUploads;
+    if (value === "Null") {
+      files = [];
+    } else if ("Text" in value) {
+      files = JSON.parse(value.Text) as FileUploads;
+    } else {
+      throw new Error("expected JSON text");
+    }
+
+    const pkCol = columns[pkIndex].name;
+    const pkVal = context.row.original[pkIndex];
+
+    return (
+      <UploadedFiles
+        files={files}
+        tableName={tableName}
+        columns={columns}
+        columnName={cell.column.name}
+        pk={{ columnName: pkCol, value: pkVal }}
+      />
+    );
+  }
+
   if (value === "Null") {
     return "NULL";
   }
@@ -177,34 +225,6 @@ function renderCell(
   }
 
   if ("Text" in value) {
-    if (cell.type === "File") {
-      const file = JSON.parse(value.Text) as FileUpload;
-      const pkCol = columns[pkIndex].name;
-      const pkVal = context.row.original[pkIndex];
-
-      return (
-        <UploadedFile
-          file={file}
-          tableName={tableName}
-          columnName={cell.column.name}
-          pk={{ columnName: pkCol, value: pkVal }}
-        />
-      );
-    } else if (cell.type === "File[]") {
-      const files = JSON.parse(value.Text) as FileUploads;
-      const pkCol = columns[pkIndex].name;
-      const pkVal = context.row.original[pkIndex];
-
-      return (
-        <UploadedFiles
-          files={files}
-          tableName={tableName}
-          columnName={cell.column.name}
-          pk={{ columnName: pkCol, value: pkVal }}
-        />
-      );
-    }
-
     return value.Text;
   }
 

@@ -7,6 +7,7 @@ import {
 import type { Record } from "@/lib/record";
 
 import type { Table } from "@bindings/Table";
+import type { Column } from "@bindings/Column";
 import type { InsertRowRequest } from "@bindings/InsertRowRequest";
 import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
 import type { DeleteRowsRequest } from "@bindings/DeleteRowsRequest";
@@ -35,12 +36,20 @@ export async function insertRow(table: Table, row: Record) {
 }
 
 export async function updateRow(table: Table, row: Record) {
-  const tableName: string = prettyFormatQualifiedName(table.name);
-  const primaryKeyColumIndex = findPrimaryKeyColumnIndex(table.columns);
+  return await updateRowInternal(table.name, table.columns, row);
+}
+
+export async function updateRowInternal(
+  qualifiedTableName: QualifiedName,
+  columns: Column[],
+  row: Record,
+) {
+  const tableName: string = prettyFormatQualifiedName(qualifiedTableName);
+  const primaryKeyColumIndex = findPrimaryKeyColumnIndex(columns);
   if (primaryKeyColumIndex === undefined) {
     throw Error("No primary key column found.");
   }
-  const pkColName = table.columns[primaryKeyColumIndex].name;
+  const pkColName = columns[primaryKeyColumIndex].name;
 
   const pkValue = row[pkColName];
   if (pkValue === undefined) {

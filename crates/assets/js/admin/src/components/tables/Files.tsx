@@ -1,11 +1,13 @@
 import { For, Match, Switch, splitProps } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { TbOutlineDownload } from "solid-icons/tb";
+import { TbOutlineDownload, TbOutlineUpload } from "solid-icons/tb";
+import { urlSafeBase64Encode } from "trailbase";
 
 import { sqlValueToString } from "@/lib/value";
 import { adminFetch } from "@/lib/fetch";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { showSaveFileDialog } from "@/lib/utils";
+import { updateRowInternal } from "@/lib/api/row";
 
 import { Button } from "@/components/ui/button";
 import { showToast } from "@/components/ui/toast";
@@ -15,6 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+import { Column } from "@bindings/Column";
 import type { QualifiedName } from "@bindings/QualifiedName";
 import type { ReadFilesQuery } from "@bindings/ReadFilesQuery";
 import type { SqlValue } from "@bindings/SqlValue";
@@ -29,7 +32,122 @@ export type FileUpload = {
 
 export type FileUploads = FileUpload[];
 
-export function UploadedFile(props: {
+type FileUploadInput = {
+  name: string | undefined;
+  filename: string | undefined;
+  content_type: string | undefined;
+  data: string;
+};
+
+type FileUploadInputs = FileUploadInput[];
+
+async function uploadFiles(opts: {
+  tableName: QualifiedName;
+  columns: Column[];
+  columnName: string;
+  pk: {
+    columnName: string;
+    value: SqlValue;
+  };
+  multiple: boolean;
+  files: FileList;
+}) {
+  const files = opts.files;
+  if (files.length === 0) {
+    return;
+  }
+
+  if (opts.multiple) {
+    const inputs: FileUploadInputs = [];
+    for (let i = 0; i < files.length; ++i) {
+      inputs.push({
+        filename: files[i].name,
+        data: urlSafeBase64Encode(new Uint8Array(await files[i].arrayBuffer())),
+      } as FileUploadInput);
+    }
+
+    const record = {
+      [opts.pk.columnName]: opts.pk.value,
+      [opts.columnName]: {
+        Text: JSON.stringify(inputs),
+      },
+    };
+
+    await updateRowInternal(opts.tableName, opts.columns, record);
+  } else {
+    if (files.length > 1) {
+      throw new Error("got multiple files");
+    }
+
+    const file = files[0];
+    const record = {
+      [opts.pk.columnName]: opts.pk.value,
+      [opts.columnName]: {
+        Text: JSON.stringify({
+          filename: file.name,
+          data: urlSafeBase64Encode(new Uint8Array(await file.arrayBuffer())),
+        } as FileUploadInput),
+      },
+    };
+
+    await updateRowInternal(opts.tableName, opts.columns, record);
+  }
+}
+
+function FileUploadButton(props: {
+  tableName: QualifiedName;
+  columns: Column[];
+  columnName: string;
+  pk: {
+    columnName: string;
+    value: SqlValue;
+  };
+  multiple: boolean;
+}) {
+  let ref: HTMLInputElement | undefined;
+
+  return (
+    <div class="pointer-events-none">
+      <input
+        hidden={true}
+        type="file"
+        multiple={props.multiple}
+        ref={ref}
+        onClick={(e) => {
+          e.stopPropagation();
+        }}
+        onChange={(e) => {
+          const files = e.target.files;
+          if (files !== null && files.length > 0) {
+            uploadFiles({
+              tableName: props.tableName,
+              columns: props.columns,
+              columnName: props.columnName,
+              multiple: props.multiple,
+              pk: props.pk,
+              files,
+            });
+          }
+        }}
+      />
+
+      <Button
+        class="pointer-events-auto"
+        variant="outline"
+        size="icon"
+        onClick={(e) => {
+          e.stopPropagation();
+          ref?.click();
+        }}
+      >
+        <TbOutlineUpload />
+      </Button>
+    </div>
+  );
+}
+
+// TODO: Add a delete button.
+function SingleUploadedFile(props: {
   file: FileUpload;
   tableName: QualifiedName;
   columnName: string;
@@ -112,9 +230,39 @@ export function UploadedFile(props: {
   );
 }
 
+export function UploadedFile(props: {
+  file: FileUpload | null;
+  tableName: QualifiedName;
+  columns: Column[];
+  columnName: string;
+  pk: {
+    columnName: string;
+    value: SqlValue;
+  };
+}) {
+  return (
+    <Switch>
+      <Match when={props.file === null}>
+        <FileUploadButton
+          tableName={props.tableName}
+          columns={props.columns}
+          columnName={props.columnName}
+          pk={props.pk}
+          multiple={false}
+        />
+      </Match>
+
+      <Match when={props.file !== null}>
+        <SingleUploadedFile {...props} file={props.file!} />
+      </Match>
+    </Switch>
+  );
+}
+
 export function UploadedFiles(props: {
   files: FileUploads;
   tableName: QualifiedName;
+  columns: Column[];
   columnName: string;
   pk: {
     columnName: string;
@@ -127,9 +275,17 @@ export function UploadedFiles(props: {
     <div class="flex flex-col gap-2">
       <For each={local.files}>
         {(file: FileUpload) => {
-          return <UploadedFile file={file} {...others} />;
+          return <SingleUploadedFile file={file} {...others} />;
         }}
       </For>
+
+      <FileUploadButton
+        tableName={props.tableName}
+        columns={props.columns}
+        columnName={props.columnName}
+        pk={props.pk}
+        multiple={true}
+      />
     </div>
   );
 }
