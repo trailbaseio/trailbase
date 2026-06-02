@@ -105,6 +105,7 @@ impl ColumnAccessor for RecordApi {
 ///
 /// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
 /// be filtered out and the json values will be translated into SQLite values.
+#[derive(Debug)]
 pub enum Params {
   Insert {
     /// List of named params with their respective placeholders, e.g.:
@@ -339,15 +340,18 @@ impl Params {
 
   pub fn for_admin_update<S: ColumnAccessor>(
     accessor: &S,
+    json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
     row: indexmap::IndexMap<String, SqlValue>,
     pk_column_name: String,
     pk_column_value: SqlValue,
   ) -> Result<Self, ParamsError> {
+    let pk_column_param = pk_column_value.try_into()?;
+
     let mut named_params = NamedParams::with_capacity(row.len() + 1);
     let mut column_names = Vec::with_capacity(row.len() + 1);
     let mut column_indexes = Vec::with_capacity(row.len() + 1);
 
-    let pk_column_param = pk_column_value.try_into()?;
+    let mut files: FileMetadataContents = vec![];
 
     // Update parameters case.
     for (key, value) in row {
@@ -355,16 +359,69 @@ impl Params {
       // is similar in spirit to protobuf's unknown fields behavior.
       let Some(ColumnMetadata {
         index,
-        column: _,
-        json: _,
+        column,
+        json,
         is_file: _,
-        is_geometry: _,
+        is_geometry,
       }) = accessor.column_by_name(&key)
       else {
         continue;
       };
 
-      let param: Value = value.try_into()?;
+      // TODO: This is a C&P from record update above. Do we need this for admin APIs as well?
+      //
+      // For file upload columns in Update/`PATCH` requests: if the client echoes back the stored
+      // FileUpload/FileUploads format (no 'data' field), skip the column entirely rather
+      // than returning an error. This preserves the existing file without modification,
+      // which is the expected behavior when a client round-trips a record through the API.
+      // if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
+      //   match (schema_name.as_str(), &value) {
+      //     ("std.FileUpload", serde_json::Value::Object(map)) if !map.contains_key("data") => {
+      //       continue;
+      //     }
+      //     ("std.FileUploads", serde_json::Value::Array(items))
+      //       if items
+      //         .iter()
+      //         .all(|v| matches!(v, serde_json::Value::Object(m) if !m.contains_key("data"))) =>
+      //     {
+      //       // QUESTION: Right now one can update/preserve a `std.FileUploads` column
+      //       // as a whole. It may be worth to allow patching (adding, removing,
+      //       // updating) individual files.
+      //       continue;
+      //     }
+      //     _ => {}
+      //   };
+      // }
+
+      let param: Value = if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
+        match schema_name.as_str() {
+          "std.FileUpload" | "std.FileUploads" => {
+            let SqlValue::Text(text) = value else {
+              return Err(ParamsError::UnexpectedType("", format!("{value:?}")));
+            };
+
+            let json_value = serde_json::from_str(&text)?;
+
+            let (param, json_files) = extract_params_and_files_from_json(
+              &json_schema_registry.read(),
+              column,
+              json.as_ref(),
+              *is_geometry,
+              json_value,
+            )?;
+            if let Some(json_files) = json_files {
+              // Note: files provided as a multipart form upload are handled below. They need more
+              // special handling to establish the field.name to column mapping.
+              files.extend(json_files);
+            }
+
+            param
+          }
+          _ => value.try_into()?,
+        }
+      } else {
+        value.try_into()?
+      };
 
       if key == pk_column_name && pk_column_param != param {
         return Err(ParamsError::Column(
@@ -383,7 +440,7 @@ impl Params {
 
     return Ok(Params::Update {
       named_params,
-      files: vec![],
+      files,
       column_names,
       column_indexes,
       pk_column_name,

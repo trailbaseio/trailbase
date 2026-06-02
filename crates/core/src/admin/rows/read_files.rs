@@ -14,12 +14,12 @@ use crate::records::read_queries::run_get_files_query;
 
 #[derive(Debug, Deserialize, TS)]
 #[ts(export)]
-pub struct ReadFilesQuery {
-  pk_column: String,
-  pk_value: String,
+pub(crate) struct ReadFilesQuery {
+  pub pk_column: String,
+  pub pk_value: String,
 
-  file_column_name: String,
-  file_name: Option<String>,
+  pub file_column_name: String,
+  pub file_name: Option<String>,
 }
 
 pub async fn read_files_handler(
