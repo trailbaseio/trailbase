@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
-use serde::Deserialize;
+use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse as _};
+use serde::{Deserialize, Serialize};
 use url::Url;
 
+use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
@@ -77,8 +79,40 @@ impl OAuthProvider for TwitchOAuthProvider {
     });
   }
 
+  fn auth_type(&self) -> oauth2::AuthType {
+    return oauth2::AuthType::RequestBody;
+  }
+
   fn oauth_scopes(&self) -> Vec<&'static str> {
     return vec!["user:read:email"];
+  }
+
+  async fn get_token(
+    &self,
+    state: &AppState,
+    auth_code: String,
+    server_pkce_code_verifier: String,
+  ) -> Result<TokenResponse, AuthError> {
+    let http_client = reqwest::ClientBuilder::new()
+      // Following redirects might set us up for server-side request forgery (SSRF).
+      .redirect(reqwest::redirect::Policy::none())
+      .build()
+      .map_err(|err| AuthError::Internal(err.into()))?;
+
+    let client = self.oauth_client(state)?;
+    let token_response: TokenResponse = client
+      .exchange_code(AuthorizationCode::new(auth_code))
+      .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
+      .request_async(&ReqwestClient(http_client))
+      .await
+      .or_else(|err| match err {
+        // Twitch returns non-RFC-6749 compliant body: scopes are an array rather than space
+        // delimited list.
+        oauth2::RequestTokenError::Parse(_path, resp) => parse_twitch_token_response(&resp),
+        err => Err(AuthError::FailedDependency(err.into())),
+      })?;
+
+    return Ok(token_response);
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
@@ -96,21 +130,25 @@ impl OAuthProvider for TwitchOAuthProvider {
       .await
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
-    // Reference: https://dev.twitch.tv/docs/api/reference#get-users
-    #[derive(Default, Deserialize, Debug)]
-    struct TwitchUser {
-      id: String,
-      // According to reference above, email is implicitly verified.
-      email: String,
-      // login: String,
-      // display_name: String,
-      profile_image_url: Option<String>,
-    }
-
-    let user = response
-      .json::<TwitchUser>()
+    let mut users = response
+      .json::<TwitchUsersResponse>()
       .await
-      .map_err(|err| AuthError::Internal(err.into()))?;
+      .map_err(|err| AuthError::FailedDependency(err.into()))?
+      .data;
+
+    let user = match users.len() {
+      1 => users.swap_remove(0),
+      0 => {
+        return Err(AuthError::FailedDependency(
+          "Twitch user response had empty data".into(),
+        ));
+      }
+      n => {
+        return Err(AuthError::FailedDependency(
+          format!("Twitch user response contains {n} users").into(),
+        ));
+      }
+    };
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
@@ -119,5 +157,85 @@ impl OAuthProvider for TwitchOAuthProvider {
       verified: true,
       avatar: user.profile_image_url,
     });
+  }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct TwitchTokenResponse {
+  access_token: String,
+  token_type: String,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  expires_in: Option<u64>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  refresh_token: Option<String>,
+  #[serde(serialize_with = "self::serialize_space_delimited_vec")]
+  scopes: Option<Vec<String>>,
+}
+
+fn parse_twitch_token_response(body: &[u8]) -> Result<TokenResponse, AuthError> {
+  let token_response: TwitchTokenResponse = serde_json::from_slice(body).map_err(|err| {
+    #[cfg(debug_assertions)]
+    return AuthError::FailedDependency(
+      format!("Invalid twitch response: {}", String::from_utf8_lossy(body)).into(),
+    );
+
+    #[cfg(not(debug_assertions))]
+    return AuthError::FailedDependency("Invalid twitch response".into());
+  })?;
+
+  return serde_json::from_value(
+    serde_json::to_value(&token_response)
+      .map_err(|_err| AuthError::Internal("Failed to serialize".into()))?,
+  )
+  .map_err(|_err| AuthError::Internal("Failed to deserialize".into()));
+}
+
+// Reference: https://dev.twitch.tv/docs/api/reference#get-users
+#[derive(Default, Deserialize, Debug)]
+struct TwitchUser {
+  id: String,
+  // According to reference above, email is implicitly verified.
+  email: String,
+  // login: String,
+  // display_name: String,
+  profile_image_url: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct TwitchUsersResponse {
+  data: Vec<TwitchUser>,
+}
+
+pub fn serialize_space_delimited_vec<T, S>(
+  vec_opt: &Option<Vec<T>>,
+  serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+  T: AsRef<str>,
+  S: serde::ser::Serializer,
+{
+  if let Some(ref vec) = *vec_opt {
+    let space_delimited = vec.iter().map(|s| s.as_ref()).collect::<Vec<_>>().join(" ");
+    serializer.serialize_str(&space_delimited)
+  } else {
+    serializer.serialize_none()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn parse_twitch_token_response_test() {
+    let response = r#"{
+      "access_token": "xxx",
+      "expires_in": 13925,
+      "refresh_token": "yyy",
+      "scope": ["user:read:email"],
+      "token_type": "bearer"
+    }"#;
+
+    parse_twitch_token_response(response.as_bytes()).unwrap();
   }
 }

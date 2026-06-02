@@ -3,12 +3,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::Utc;
 use const_format::formatcp;
-use oauth2::{
-  AsyncHttpClient, AuthorizationCode, HttpClientError, HttpRequest, HttpResponse, PkceCodeVerifier,
-};
 use serde::Deserialize;
-use std::future::Future;
-use std::pin::Pin;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
 use utoipa::IntoParams;
@@ -16,7 +11,6 @@ use utoipa::IntoParams;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
@@ -242,33 +236,9 @@ async fn get_or_create_user(
   auth_code: String,
   server_pkce_code_verifier: String,
 ) -> Result<DbUser, AuthError> {
-  let http_client = reqwest::ClientBuilder::new()
-    // Following redirects might set us up for server-side request forgery (SSRF).
-    .redirect(reqwest::redirect::Policy::none())
-    .build()
-    .map_err(|err| AuthError::Internal(err.into()))?;
-
-  // Call provider's TOKEN endpoint to exchange auth_code + (server_)pkce_code_verifier
-  // for tokens. We then use these tokens to call the USER_INFO endpoint below to get
-  // information, such as email address, to create a local TrailBase user.
-  let client = provider.oauth_client(state)?;
-  let token_response: TokenResponse = client
-    .exchange_code(AuthorizationCode::new(auth_code))
-    .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-    .request_async(&ReqwestClient(http_client))
-    .await
-    .map_err(|err| {
-      return if cfg!(debug_assertions) {
-        match err {
-          oauth2::RequestTokenError::Parse(_path, resp) => {
-            AuthError::Internal(String::from_utf8_lossy(&resp).into())
-          }
-          err => AuthError::FailedDependency(format!("{err:?}").into()),
-        }
-      } else {
-        AuthError::FailedDependency(err.into())
-      };
-    })?;
+  let token_response = provider
+    .get_token(state, auth_code, server_pkce_code_verifier)
+    .await?;
 
   // Call provider's USER_INFO endpoint with the tokens acquired above.
   let oauth_user = provider.get_user(&token_response).await?;
@@ -352,41 +322,4 @@ async fn user_by_provider_id(
       .read_query_value::<DbUser>(QUERY, params!(provider_id as i64, provider_user_id))
       .await?,
   );
-}
-
-struct ReqwestClient(reqwest::Client);
-
-// Yanked from oauth2's `reqwest::Client` implementation.
-impl<'c> AsyncHttpClient<'c> for ReqwestClient {
-  type Error = HttpClientError<reqwest::Error>;
-
-  #[cfg(target_arch = "wasm32")]
-  type Future = Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + 'c>>;
-  #[cfg(not(target_arch = "wasm32"))]
-  type Future = Pin<Box<dyn Future<Output = Result<HttpResponse, Self::Error>> + Send + Sync + 'c>>;
-
-  fn call(&'c self, request: HttpRequest) -> Self::Future {
-    Box::pin(async move {
-      let response = self
-        .0
-        .execute(request.try_into().map_err(Box::new)?)
-        .await
-        .map_err(Box::new)?;
-
-      let mut builder = axum::http::Response::builder().status(response.status());
-
-      #[cfg(not(target_arch = "wasm32"))]
-      {
-        builder = builder.version(response.version());
-      }
-
-      for (name, value) in response.headers().iter() {
-        builder = builder.header(name, value);
-      }
-
-      builder
-        .body(response.bytes().await.map_err(Box::new)?.to_vec())
-        .map_err(HttpClientError::Http)
-    })
-  }
 }

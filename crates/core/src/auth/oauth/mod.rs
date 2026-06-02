@@ -4,6 +4,7 @@ pub(crate) mod providers;
 mod callback;
 mod list_providers;
 mod login;
+mod reqwest_client;
 mod state;
 
 #[cfg(test)]
@@ -14,6 +15,7 @@ use axum::routing::get;
 use utoipa::OpenApi;
 
 pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
+pub(crate) use reqwest_client::ReqwestClient;
 
 use crate::AppState;
 

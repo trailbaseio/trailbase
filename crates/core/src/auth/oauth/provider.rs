@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use oauth2::{
-  AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
-  StandardRevocableToken, TokenUrl,
+  AuthType, AuthUrl, AuthorizationCode, Client, ClientId, ClientSecret, EndpointNotSet,
+  EndpointSet, PkceCodeVerifier, RedirectUrl, StandardRevocableToken, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::oauth::ReqwestClient;
 use crate::config::proto::OAuthProviderId;
 use crate::constants::AUTH_API_PATH;
 
@@ -59,6 +60,7 @@ pub struct OAuthClientSettings {
   pub client_secret: String,
 }
 
+/// Common trait for OAuth providers like Discord, etc.
 #[async_trait]
 pub trait OAuthProvider {
   #[allow(unused)]
@@ -67,6 +69,10 @@ pub trait OAuthProvider {
   fn name(&self) -> &str;
 
   fn display_name(&self) -> &str;
+
+  fn auth_type(&self) -> AuthType {
+    AuthType::BasicAuth
+  }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
@@ -100,13 +106,47 @@ pub trait OAuthProvider {
       .set_client_secret(ClientSecret::new(settings.client_secret))
       .set_auth_uri(AuthUrl::from_url(settings.auth_url))
       .set_token_uri(TokenUrl::from_url(settings.token_url))
-      .set_redirect_uri(RedirectUrl::from_url(redirect_url));
+      .set_redirect_uri(RedirectUrl::from_url(redirect_url))
+      .set_auth_type(self.auth_type());
 
     return Ok(client);
   }
 
   fn oauth_scopes(&self) -> Vec<&'static str>;
 
-  //async fn get_user(&self, access_token: &oauth2::AccessToken) -> Result<OAuthUser, AuthError>;
+  async fn get_token(
+    &self,
+    state: &AppState,
+    auth_code: String,
+    server_pkce_code_verifier: String,
+  ) -> Result<TokenResponse, AuthError> {
+    let http_client = reqwest::ClientBuilder::new()
+      // Following redirects might set us up for server-side request forgery (SSRF).
+      .redirect(reqwest::redirect::Policy::none())
+      .build()
+      .map_err(|err| AuthError::Internal(err.into()))?;
+
+    let client = self.oauth_client(state)?;
+    let token_response: TokenResponse = client
+      .exchange_code(AuthorizationCode::new(auth_code))
+      .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
+      .request_async(&ReqwestClient(http_client))
+      .await
+      .map_err(|err| {
+        #[cfg(debug_assertions)]
+        return match err {
+          oauth2::RequestTokenError::Parse(_path, resp) => {
+            AuthError::Internal(String::from_utf8_lossy(&resp).into())
+          }
+          err => AuthError::FailedDependency(format!("{err:?}").into()),
+        };
+
+        #[cfg(not(debug_assertions))]
+        return AuthError::FailedDependency(err.into());
+      })?;
+
+    return Ok(token_response);
+  }
+
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError>;
 }
