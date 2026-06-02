@@ -173,7 +173,7 @@ pub struct TwitchTokenResponse {
 }
 
 fn parse_twitch_token_response(body: &[u8]) -> Result<TokenResponse, AuthError> {
-  let token_response: TwitchTokenResponse = serde_json::from_slice(body).map_err(|err| {
+  let token_response: TwitchTokenResponse = serde_json::from_slice(body).map_err(|_err| {
     #[cfg(debug_assertions)]
     return AuthError::FailedDependency(
       format!("Invalid twitch response: {}", String::from_utf8_lossy(body)).into(),
