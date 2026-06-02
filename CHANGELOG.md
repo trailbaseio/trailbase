@@ -1,3 +1,11 @@
+## v0.28.1
+
+- Fix life-cycle issue where RecordAPIs would not pick up new columns after schema alterations until next restart.
+- Add `IS [NOT] NULL` filter operations to all clients. Thanks @mogol.
+- Fix Twitch OAuth integration. Thanks @UnseenFaith.
+- Add CI for minimal builds.
+- Update dependencies.
+
 ## v0.28.0
 
 - Experimental Postgres support 🎉
