@@ -191,7 +191,7 @@ Lastly, we need to build the `.wasm` component that we can copy into
 
 export const tsBuild = `
 # Build a JavaScript library from our TypeScript endpoint:
-npx run vite build
+npx vite build
 
 # Build the WASM component:
 npx jco componentize dist/index.js -w node_modules/trailbase-wasm/wit -o dist/component.wasm
