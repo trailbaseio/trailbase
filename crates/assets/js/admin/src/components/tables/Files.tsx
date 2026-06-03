@@ -43,17 +43,6 @@ type FileUploadInput = {
   data: string | undefined;
 };
 
-type FileUploadInputs = FileUploadInput[];
-
-function fileUploadToInput(f: FileUpload): FileUploadInput {
-  return {
-    name: undefined,
-    filename: f.filename,
-    content_type: f.content_type,
-    data: undefined,
-  };
-}
-
 async function uploadSingleFile(opts: {
   tableName: QualifiedName;
   columns: Column[];
@@ -95,7 +84,7 @@ async function uploadMultipleFiles(opts: {
     return;
   }
 
-  const inputs: FileUploadInputs = [...opts.allFiles.map(fileUploadToInput)];
+  const inputs: (FileUploadInput | FileUpload)[] = [...opts.allFiles];
   for (let i = 0; i < files.length; ++i) {
     inputs.push({
       filename: files[i].name,

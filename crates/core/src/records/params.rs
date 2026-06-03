@@ -1,4 +1,5 @@
 use parking_lot::RwLock;
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
 use trailbase_schema::json::flat_json_to_value;
@@ -655,7 +656,7 @@ fn extract_param_and_file_from_json_value(
   // updates and partial deletions.
   //
   // IMPORTANT: order matters. Input needs to be first to make Metadata the fallback.
-  #[derive(serde::Deserialize)]
+  #[derive(Debug, Deserialize)]
   #[serde(untagged)]
   enum InputOrMetadata {
     Input(FileUploadInput),
