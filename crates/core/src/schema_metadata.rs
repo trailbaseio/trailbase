@@ -195,12 +195,15 @@ fn setup_file_deletion_triggers(
             "\
             CREATE OR REPLACE FUNCTION \"__{unqualified_name}__{column_name}__trigger_fun\"() RETURNS TRIGGER AS $$ \
               BEGIN \
-                INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
-                  ('{table_name}', OLD.ctid, '{column_name}', OLD.\"{column_name}\");
-
                 IF TG_OP = 'UPDATE' THEN
+                  INSERT INTO _file_deletions (table_name, record_rowid, column_name, json, updated_json) VALUES \
+                    ('{table_name}', OLD.ctid, '{column_name}', OLD.\"{column_name}\", NEW.\"{column_name}\");
+
                   RETURN NEW;
                 ELSE
+                  INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
+                    ('{table_name}', OLD.ctid, '{column_name}', OLD.\"{column_name}\");
+
                   RETURN OLD;
                 END IF;
               END; \
@@ -222,8 +225,8 @@ fn setup_file_deletion_triggers(
             CREATE TRIGGER IF NOT EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__update_trigger\" AFTER UPDATE ON {table_name} \
               WHEN OLD.\"{column_name}\" IS NOT NULL AND OLD.\"{column_name}\" != NEW.\"{column_name}\" \
               BEGIN \
-                INSERT INTO _file_deletions (table_name, record_rowid, column_name, json) VALUES \
-                  ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\"); \
+                INSERT INTO _file_deletions (table_name, record_rowid, column_name, json, updated_json) VALUES \
+                  ('{table_name}', OLD._rowid_, '{column_name}', OLD.\"{column_name}\", NEW.\"{column_name}\"); \
               END; \
             \
             DROP TRIGGER IF EXISTS \"{db}\".\"__{unqualified_name}__{column_name}__delete_trigger\"; \

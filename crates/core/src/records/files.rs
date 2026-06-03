@@ -5,6 +5,7 @@ use itertools::Itertools;
 use log::*;
 use object_store::{ObjectStore, ObjectStoreExt};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_schema::{FileUpload, FileUploads, QualifiedName, QualifiedNameEscaped};
@@ -70,9 +71,10 @@ pub(crate) struct FileDeletionsDb {
   record_rowid: i64,
   column_name: String,
   json: String,
+  updated_json: Option<String>,
 }
 
-// TODO: We need this right now because `pgrow2serde` can't currently desieralize FileDeletionsDb.
+// TODO: We need this right now because `pgrow2serde` can't currently deserialize FileDeletionsDb.
 #[cfg(feature = "pg")]
 fn file_deletions_from_row(
   row: trailbase_sqlite::Row,
@@ -86,6 +88,7 @@ fn file_deletions_from_row(
     record_rowid: row.get(5)?,
     column_name: row.get(6)?,
     json: row.get(7)?,
+    updated_json: row.get(8)?,
   });
 }
 
@@ -213,12 +216,35 @@ pub(crate) async fn delete_pending_files_impl(
 
   for pending_deletion in pending_deletions {
     let json = &pending_deletion.json;
+    let updated_json = pending_deletion.updated_json.as_ref();
 
     if let Ok(file) = serde_json::from_str::<FileUpload>(json) {
-      delete(&pending_deletion, file).await;
-    } else if let Ok(files) = serde_json::from_str::<FileUploads>(json) {
-      for file in files.0 {
+      if let Some(updated) =
+        updated_json.and_then(|json| serde_json::from_str::<FileUpload>(json).ok())
+      {
+        if file.objectstore_id() != updated.objectstore_id() {
+          // If the new entry references the same objectstore id, we must not delete.
+          delete(&pending_deletion, file).await;
+        }
+      } else {
         delete(&pending_deletion, file).await;
+      }
+    } else if let Ok(files) = serde_json::from_str::<FileUploads>(json) {
+      if let Some(updated) =
+        updated_json.and_then(|json| serde_json::from_str::<FileUploads>(json).ok())
+      {
+        let required: HashSet<&str> = updated.0.iter().map(|f| f.objectstore_id()).collect();
+        for file in files.0 {
+          // Only delete if the objectstore id isn't still referenced by the updated
+          // entry.
+          if !required.contains(file.objectstore_id()) {
+            delete(&pending_deletion, file).await;
+          }
+        }
+      } else {
+        for file in files.0 {
+          delete(&pending_deletion, file).await;
+        }
       }
     } else {
       error!("Pending file deletion w/o parsable contents: {json}");
