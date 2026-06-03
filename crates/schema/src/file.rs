@@ -23,9 +23,11 @@ pub struct FileUploadInput {
   ///
   /// Note that we're using a custom serializer to support denser base64 encoding for JSON when
   /// Vec<u8>, would otherwise be serialized as `"data": [0, 1, 1]`.
-  #[serde(with = "bytes_or_base64")]
-  pub data: Vec<u8>,
+  pub data: FileUploadData,
 }
+
+#[derive(Debug, Default, Clone, PartialEq, Deserialize, Serialize)]
+pub struct FileUploadData(#[serde(with = "bytes_or_base64")] pub Vec<u8>);
 
 mod bytes_or_base64 {
   use base64::prelude::*;
@@ -57,19 +59,26 @@ mod bytes_or_base64 {
 }
 
 impl FileUploadInput {
-  pub fn consume(self) -> Result<(Option<String>, FileUpload, Vec<u8>), Error> {
+  /// Returns (name, json, bytes).
+  ///
+  /// Note that the FileUploadInput may not contain `data`, e.g. if we're just round-tripping the
+  /// json stored in the DB. This is useful for updates and deletions, where we're manipulating
+  /// just retrieved file vectors.
+  pub fn consume(self) -> Result<(Option<String>, FileUpload, FileUploadData), Error> {
+    let Self {
+      name,
+      filename,
+      content_type,
+      data,
+    } = self;
+
     // We don't trust user provided type, we check ourselves.
-    let mime_type = infer::get(&self.data).map(|t| t.mime_type().to_string());
+    let mime_type = infer::get(&data.0).map(|t| t.mime_type().to_string());
 
     return Ok((
-      self.name,
-      FileUpload::new(
-        uuid::Uuid::new_v4(),
-        self.filename,
-        self.content_type,
-        mime_type,
-      ),
-      self.data,
+      name,
+      FileUpload::new(uuid::Uuid::new_v4(), filename, content_type, mime_type),
+      data,
     ));
   }
 }
@@ -174,6 +183,8 @@ fn build_unique_filename(original_filename: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
+  use base64::{Engine, prelude::BASE64_URL_SAFE};
+
   use super::*;
   use std::path::PathBuf;
 
@@ -205,5 +216,17 @@ mod tests {
         .to_string_lossy()
         .starts_with(".png")
     );
+  }
+
+  #[test]
+  fn test_file_upload_input_serialization() {
+    // Missing data.
+    assert!(serde_json::from_str::<FileUploadInput>("{}").is_err());
+
+    let data = BASE64_URL_SAFE.encode([0, 1]);
+    serde_json::from_str::<FileUploadInput>(&format!("{{ \"data\": \"{data}\" }}")).unwrap();
+
+    // NOTE: Currently we don't support arrays, see "QUESTION" above. Maybe we should :shrug:.
+    assert!(serde_json::from_str::<FileUploadInput>("{ \"data\": [0, 1] }").is_err());
   }
 }

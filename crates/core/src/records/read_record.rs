@@ -257,7 +257,7 @@ mod test {
   use serde_json::json;
   use std::io::Read;
   use std::sync::Arc;
-  use trailbase_schema::{FileUpload, FileUploadInput};
+  use trailbase_schema::{FileUpload, FileUploadData, FileUploadInput};
   use trailbase_sqlite::ConnectionType;
 
   use super::*;
@@ -574,7 +574,7 @@ mod test {
               name: Some("name".to_string()),
               filename: Some("bar".to_string()),
               content_type: Some("baz".to_string()),
-              data: bytes.clone(),
+              data: FileUploadData(bytes.clone()),
             },
           }))
           .unwrap()
@@ -603,7 +603,11 @@ mod test {
     };
 
     let file_upload: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
-    assert_eq!(file_upload.original_filename(), Some("bar"));
+    assert_eq!(
+      file_upload.original_filename(),
+      Some("bar"),
+      "{file_upload:?}"
+    );
     assert_eq!(file_upload.content_type(), Some("baz"));
 
     let record_file_path = Path((
@@ -679,20 +683,20 @@ mod test {
         name: Some("foo0".to_string()),
         filename: Some("bar0".to_string()),
         content_type: Some("baz0".to_string()),
-        data: bytes0.clone(),
+        data: FileUploadData(bytes0.clone()),
       },
       "files": vec![
           FileUploadInput {
             name: Some("foo1".to_string()),
             filename: Some("bar1".to_string()),
             content_type: Some("baz1".to_string()),
-            data: bytes1.clone(),
+            data: FileUploadData(bytes1.clone()),
           },
           FileUploadInput {
             name: Some("foo2".to_string()),
             filename: Some("bar2".to_string()),
             content_type: Some("baz2".to_string()),
-            data: bytes2.clone(),
+            data: FileUploadData(bytes2.clone()),
           },
       ],
     });

@@ -6,7 +6,7 @@ use axum::{
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use thiserror::Error;
-use trailbase_schema::FileUploadInput;
+use trailbase_schema::{FileUploadData, FileUploadInput};
 
 #[derive(Debug, Error)]
 pub enum Rejection {
@@ -37,8 +37,6 @@ where
 
   while let Some(mut field) = multipart.next_field().await? {
     if field.file_name().is_some() {
-      // We
-
       let content_type = field.content_type().map(|s| s.to_string());
       let name = field.name().map(|s| s.to_string());
       let filename = field.file_name().map(|s| s.to_string());
@@ -57,7 +55,7 @@ where
         name,
         filename,
         content_type,
-        data: buffer,
+        data: FileUploadData(buffer),
       });
     } else if let Some(name) = field.name() {
       coerce_and_push_array(&mut data, name.to_string(), json!(field.text().await?));
@@ -151,13 +149,13 @@ mod test {
           name: Some("file1".to_string()),
           filename: Some("a.txt".to_string()),
           content_type: Some("text/plain".to_string()),
-          data: Vec::from("Some text".as_bytes())
+          data: FileUploadData(Vec::from("Some text".as_bytes())),
         }),
         (FileUploadInput {
           name: Some("file2".to_string()),
           filename: Some("a.html".to_string()),
           content_type: Some("text/html".to_string()),
-          data: Vec::from("<b>Some html</b>".as_bytes())
+          data: FileUploadData(Vec::from("<b>Some html</b>".as_bytes())),
         }),
       ]
     );

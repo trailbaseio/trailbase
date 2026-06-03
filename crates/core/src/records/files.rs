@@ -265,14 +265,19 @@ impl FileManager {
   ) -> Result<Self, object_store::Error> {
     let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
     for (metadata, contents) in files {
-      // TODO: We could write files in parallel.
-      let path = object_store::path::Path::from(metadata.objectstore_id());
+      // TODO: In the content-less case, i.e. pure metadata (e.g. from round-tripping
+      // prior inputs) case, should we validate that the referenced data (still) exists and was
+      // previously associated with the record.
+      if let Some(contents) = contents {
+        // TODO: We could write files in parallel.
+        let path = object_store::path::Path::from(metadata.objectstore_id());
 
-      let mut writer = store.put_multipart(&path).await?;
-      writer.put_part(contents.into()).await?;
-      writer.complete().await?;
+        let mut writer = store.put_multipart(&path).await?;
+        writer.put_part(contents.into()).await?;
+        writer.complete().await?;
 
-      written_files.push(metadata);
+        written_files.push(metadata);
+      }
     }
 
     let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = if written_files.is_empty() {

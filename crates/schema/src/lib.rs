@@ -12,7 +12,7 @@ pub mod registry;
 pub mod sqlite;
 
 pub use error::Error;
-pub use file::{FileUpload, FileUploadInput, FileUploads};
+pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};
 pub use sqlite::QualifiedName;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]

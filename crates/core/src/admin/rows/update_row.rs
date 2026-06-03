@@ -87,7 +87,7 @@ mod tests {
   use std::collections::HashMap;
 
   use axum::extract::RawQuery;
-  use trailbase_schema::{FileUpload, FileUploadInput};
+  use trailbase_schema::{FileUpload, FileUploadData, FileUploadInput};
 
   use super::*;
   use crate::admin::rows::list_rows::{ListRowsResponse, list_rows_handler};
@@ -128,7 +128,7 @@ mod tests {
       name: Some("foo0".to_string()),
       filename: Some("bar0.png".to_string()),
       content_type: None,
-      data: bytes0.clone(),
+      data: FileUploadData(bytes0.clone()),
     };
 
     update_row_handler(

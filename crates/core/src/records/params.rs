@@ -77,7 +77,7 @@ impl From<trailbase_schema::json::JsonError> for ParamsError {
 }
 
 // Contains Metadata (i.e. column contents) and file contents.
-pub(crate) type FileMetadataContents = Vec<(FileUpload, Vec<u8>)>;
+pub(crate) type FileMetadataContents = Vec<(FileUpload, Option<Vec<u8>>)>;
 
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
@@ -267,29 +267,6 @@ impl Params {
         continue;
       };
 
-      // For file upload columns in Update/`PATCH` requests: if the client echoes back the stored
-      // FileUpload/FileUploads format (no 'data' field), skip the column entirely rather
-      // than returning an error. This preserves the existing file without modification,
-      // which is the expected behavior when a client round-trips a record through the API.
-      if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
-        match (schema_name.as_str(), &value) {
-          ("std.FileUpload", serde_json::Value::Object(map)) if !map.contains_key("data") => {
-            continue;
-          }
-          ("std.FileUploads", serde_json::Value::Array(items))
-            if items
-              .iter()
-              .all(|v| matches!(v, serde_json::Value::Object(m) if !m.contains_key("data"))) =>
-          {
-            // QUESTION: Right now one can update/preserve a `std.FileUploads` column
-            // as a whole. It may be worth to allow patching (adding, removing,
-            // updating) individual files.
-            continue;
-          }
-          _ => {}
-        };
-      }
-
       let (param, json_files) = extract_params_and_files_from_json(
         json_schema_registry,
         column,
@@ -371,49 +348,29 @@ impl Params {
       let param: Value = if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
         match schema_name.as_str() {
           "std.FileUpload" | "std.FileUploads" => {
-            let SqlValue::Text(text) = value else {
-              return Err(ParamsError::UnexpectedType("", format!("{value:?}")));
-            };
+            match value {
+              SqlValue::Text(text) => {
+                let (param, json_files) = extract_params_and_files_from_json(
+                  &json_schema_registry.read(),
+                  column,
+                  json.as_ref(),
+                  *is_geometry,
+                  serde_json::from_str(&text)?,
+                )?;
+                if let Some(json_files) = json_files {
+                  // Note: files provided as a multipart form upload are handled below. They need
+                  // more special handling to establish the field.name to column
+                  // mapping.
+                  files.extend(json_files);
+                }
 
-            let json_value = serde_json::from_str(&text)?;
-
-            // For file upload columns in Update/`PATCH` requests: if the client echoes back the
-            // stored FileUpload/FileUploads format (no 'data' field), skip the column
-            // entirely rather than returning an error. This preserves the existing file
-            // without modification, which is the expected behavior when a client
-            // round-trips a record through the API.
-            // if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
-            match &json_value {
-              serde_json::Value::Object(map) if !map.contains_key("data") => {
-                continue;
+                param
               }
-              serde_json::Value::Array(items)
-                if items.iter().all(
-                  |v| matches!(v, serde_json::Value::Object(m) if !m.contains_key("data")),
-                ) =>
-              {
-                // QUESTION: Right now one can update/preserve a `std.FileUploads` column
-                // as a whole. It may be worth to allow patching (adding, removing,
-                // updating) individual files.
-                continue;
+              SqlValue::Null => Value::Null,
+              _ => {
+                return Err(ParamsError::UnexpectedType("", format!("{value:?}")));
               }
-              _ => {}
-            };
-
-            let (param, json_files) = extract_params_and_files_from_json(
-              &json_schema_registry.read(),
-              column,
-              json.as_ref(),
-              *is_geometry,
-              json_value,
-            )?;
-            if let Some(json_files) = json_files {
-              // Note: files provided as a multipart form upload are handled below. They need more
-              // special handling to establish the field.name to column mapping.
-              files.extend(json_files);
             }
-
-            param
           }
           _ => value.try_into()?,
         }
@@ -529,7 +486,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
   column_names: &mut Vec<String>,
   column_indexes: &mut Vec<usize>,
 ) -> Result<FileMetadataContents, ParamsError> {
-  let files: Vec<(String, FileUpload, Vec<u8>)> = multipart_files
+  let files: Vec<(String, FileUpload, Option<Vec<u8>>)> = multipart_files
     .into_iter()
     .map(|file| {
       let (col_name, file_metadata, content) = file.consume()?;
@@ -538,7 +495,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
           "Multipart form upload missing name property",
         ));
       };
-      return Ok((col_name, file_metadata, content));
+      return Ok((col_name, file_metadata, Some(content.0)));
     })
     .collect::<Result<_, ParamsError>>()?;
 
@@ -639,21 +596,20 @@ fn extract_params_and_files_from_json(
   // Handle file columns specially, i.e. convert the JSON.
   match json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
-      let file_upload: FileUploadInput = serde_json::from_value(value)?;
-
-      let (_col_name, metadata, content) = file_upload.consume()?;
+      let (metadata, contents) = extract_param_and_file_from_json_value(value)?;
       let param = Value::Text(serde_json::to_string(&metadata)?);
-
-      return Ok((param, Some(vec![(metadata, content)])));
+      return Ok((param, Some(vec![(metadata, contents)])));
     }
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
-      let file_upload_vec: Vec<FileUploadInput> = serde_json::from_value(value)?;
+      let serde_json::Value::Array(array) = value else {
+        return Err(ParamsError::UnexpectedType("array", format!("{value:?}")));
+      };
 
-      let uploads: FileMetadataContents = file_upload_vec
+      let uploads: FileMetadataContents = array
         .into_iter()
-        .map(|file| {
-          let (_col_name, metadata, content) = file.consume()?;
-          return Ok((metadata, content));
+        .map(|value| {
+          let (metadata, contents) = extract_param_and_file_from_json_value(value)?;
+          return Ok((metadata, contents));
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
 
@@ -688,6 +644,30 @@ fn extract_params_and_files_from_json(
       json_metadata.validate(json_schema_registry, &value)?;
       Ok((Value::Text(value.to_string()), None))
     }
+  };
+}
+
+fn extract_param_and_file_from_json_value(
+  value: serde_json::Value,
+) -> Result<(FileUpload, Option<Vec<u8>>), ParamsError> {
+  // We allow inputs to either be "fresh" inputs containing actual data bytes or metadata
+  // round-tripped from prior reads (where the data is already stored). The latter is useful for
+  // updates and partial deletions.
+  //
+  // IMPORTANT: order matters. Input needs to be first to make Metadata the fallback.
+  #[derive(serde::Deserialize)]
+  #[serde(untagged)]
+  enum InputOrMetadata {
+    Input(FileUploadInput),
+    Metadata(FileUpload),
+  }
+
+  return match serde_json::from_value::<InputOrMetadata>(value)? {
+    InputOrMetadata::Input(file_upload_input) => {
+      let (_col_name, metadata, content) = file_upload_input.consume()?;
+      Ok((metadata, Some(content.0)))
+    }
+    InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
   };
 }
 
@@ -992,9 +972,6 @@ mod tests {
 
     let id: i64 = 5;
 
-    // Test: stored FileUpload format in PATCH body (no 'data' field) should be skipped.
-    // This happens when TanStack DB or any client reads a record and echoes back the stored
-    // file reference in a PATCH request without intending to upload a new file.
     {
       let value = json!({
         "name": "Alice",
@@ -1017,20 +994,18 @@ mod tests {
       .unwrap();
 
       let Params::Update {
-        named_params: _,
         column_names,
+        files,
         ..
       } = params
       else {
         panic!("Expected Update params");
       };
 
-      // Avatar file-column should be skipped, i.e. be absent in the UPDATE clause.
-      assert_eq!(
-        vec!["name"],
-        column_names,
-        "Stored FileUpload should be skipped in PATCH, but column_names = {column_names:?}"
-      );
+      // Avatar file-column should not be skipped but the file data is absent.
+      assert_eq!(vec!["avatar", "name"], column_names);
+      assert_eq!(1, files.len());
+      assert!(files[0].1.is_none());
     }
 
     // Test: FileUploadInput with 'data' field should NOT be skipped.
@@ -1055,7 +1030,12 @@ mod tests {
       )
       .unwrap();
 
-      let Params::Update { column_names, .. } = params_with_file else {
+      let Params::Update {
+        column_names,
+        files,
+        ..
+      } = params_with_file
+      else {
         panic!("Expected Update params");
       };
 
@@ -1065,6 +1045,8 @@ mod tests {
         column_names,
         "New FileUploadInput with data field must be included, but column_names = {column_names:?}"
       );
+      assert_eq!(1, files.len());
+      assert!(files[0].1.is_some());
     }
   }
 }
