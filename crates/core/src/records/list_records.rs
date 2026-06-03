@@ -61,6 +61,7 @@ pub struct ListRecordsQuery {
   /// If true, return GeoJSON FeatureCollection.
   ///
   /// Default: false.
+  #[allow(unused)]
   pub geojson: Option<String>,
   /// If true, return cursor if possible. Not all collections and PKs are cursorable.
   /// This may be useful for GeoJSON implementations that do not support `foreign_members`
@@ -100,6 +101,7 @@ pub async fn list_records_handler(
   let pk_column = &pk_meta.column;
   let is_table = api.is_table();
 
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
   let geojson_geometry_column = if let Some(column) = query.geojson {
     let meta = api.column_metadata_by_name(&column).ok_or_else(|| {
       return RecordError::BadRequest("Invalid geometry column");

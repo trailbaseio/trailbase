@@ -603,7 +603,7 @@ fn extract_params_and_files_from_json(
   json_schema_registry: &JsonSchemaRegistry,
   col: &Column,
   json_metadata: Option<&JsonColumnMetadata>,
-  is_geometry: bool,
+  #[allow(unused)] is_geometry: bool,
   value: serde_json::Value,
 ) -> Result<(Value, Option<FileMetadataContents>), ParamsError> {
   // If this is *not* a JSON column convert the value trivially.

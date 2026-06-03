@@ -438,7 +438,7 @@ async fn init_db_sqlite<'a>(
   fn build_connection(
     db_path: Option<PathBuf>,
     json_registry: Arc<RwLock<JsonSchemaRegistry>>,
-    runtimes: &Vec<(SqliteStore, SqliteFunctions)>,
+    #[allow(unused)] runtimes: &[(SqliteStore, SqliteFunctions)],
   ) -> Result<rusqlite::Connection, ConnectionError> {
     let conn = trailbase_extension::connect_sqlite(db_path, Some(json_registry))?;
 
