@@ -1,3 +1,8 @@
+## v0.28.2
+
+- Explicitly allow both: file inputs with bytes attached as well as pure file metadata. This allows for a wider range of differential updates and deletes on `std.FileUploads` columns.
+- Add a simple file upload/delete UI to the admin dash.
+
 ## v0.28.1
 
 - Fix life-cycle issue where RecordAPIs would not pick up new columns after schema alterations until next restart.
