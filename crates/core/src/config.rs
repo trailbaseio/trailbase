@@ -683,7 +683,7 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
   validate_email_template(email.password_reset_template.as_ref())?;
   validate_email_template(email.otp_template.as_ref())?;
 
-  let Some(_host) = &email.smtp_host else {
+  let Some(host) = &email.smtp_host else {
     match (email.smtp_port, &email.smtp_username, &email.smtp_password) {
       (None, None, None) => {
         // No SMTP configured
@@ -695,7 +695,12 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
     }
   };
 
-  // TODO: check that `_host` is a valid hostname or IP.
+  if host.is_empty() {
+    return ierr("SMTP host is empty.");
+  }
+  if !is_valid_smtp_host(host) {
+    return ierr(format!("Invalid SMTP host {host:?}: must be a hostname or IP address."));
+  }
 
   // NOTE: When no explicit sender is given, we fall back to noreply@host.
   if let Some(ref sender_address) = email.sender_address {
@@ -997,3 +1002,21 @@ mod test {
 
 const CONFIG_FILENAME: &str = "config.textproto";
 const VAULT_FILENAME: &str = "secrets.textproto";
+
+fn is_valid_smtp_host(host: &str) -> bool {
+  if host.parse::<std::net::IpAddr>().is_ok() {
+    return true;
+  }
+  // Reject anything outside RFC 952/1123 hostname characters, including any
+  // embedded scheme, port, or path. This is intentionally strict: SMTP hosts
+  // are bare hostnames (or IPs) and should not contain ':' or '/'.
+  if host.is_empty() || host.len() > 253 {
+    return false;
+  }
+  host
+    .chars()
+    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    && !host.starts_with('-')
+    && !host.ends_with('-')
+    && host.contains('.')
+}
