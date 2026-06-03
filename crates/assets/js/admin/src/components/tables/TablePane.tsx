@@ -137,6 +137,7 @@ function renderCell(
     type: CellType;
   },
   blobEncoding: BlobEncoding,
+  rowsRefetch: () => void,
 ): JSX.Element {
   const value: SqlValue = context.getValue();
 
@@ -161,6 +162,7 @@ function renderCell(
         columns={columns}
         columnName={cell.column.name}
         pk={{ columnName: pkCol, value: pkVal }}
+        rowsRefetch={rowsRefetch}
       />
     );
   } else if (cell.type === "File[]") {
@@ -183,6 +185,7 @@ function renderCell(
         columns={columns}
         columnName={cell.column.name}
         pk={{ columnName: pkCol, value: pkVal }}
+        rowsRefetch={rowsRefetch}
       />
     );
   }
@@ -517,6 +520,7 @@ function buildColumnDefs(
   columns: Column[] | undefined,
   pkColumnIndex: number,
   blobEncoding: BlobEncoding,
+  rowsRefetch: () => void,
 ): ColumnDef<ArrayRecord, SqlValue>[] {
   if (columns === undefined) {
     // Fallback to schema (rather than response) column defintions.
@@ -561,6 +565,7 @@ function buildColumnDefs(
             type,
           },
           blobEncoding,
+          rowsRefetch,
         ),
       accessorFn: (row: ArrayRecord) => row[idx],
     };
@@ -601,6 +606,7 @@ function RecordTable(props: {
       columns(),
       pkColumnIndex(),
       blobEncoding(),
+      props.rowsRefetch,
     );
 
     return buildTable(

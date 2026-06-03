@@ -1,6 +1,10 @@
 import { For, Match, Switch, splitProps } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { TbOutlineDownload, TbOutlineUpload } from "solid-icons/tb";
+import {
+  TbOutlineDownload,
+  TbOutlineUpload,
+  TbOutlineTrash,
+} from "solid-icons/tb";
 import { urlSafeBase64Encode } from "trailbase";
 
 import { sqlValueToString } from "@/lib/value";
@@ -36,12 +40,80 @@ type FileUploadInput = {
   name: string | undefined;
   filename: string | undefined;
   content_type: string | undefined;
-  data: string;
+  data: string | undefined;
 };
 
 type FileUploadInputs = FileUploadInput[];
 
-async function uploadFiles(opts: {
+function fileUploadToInput(f: FileUpload): FileUploadInput {
+  return {
+    name: undefined,
+    filename: f.filename,
+    content_type: f.content_type,
+    data: undefined,
+  };
+}
+
+async function uploadSingleFile(opts: {
+  tableName: QualifiedName;
+  columns: Column[];
+  columnName: string;
+  pk: {
+    columnName: string;
+    value: SqlValue;
+  };
+  file: File;
+}) {
+  const record = {
+    [opts.pk.columnName]: opts.pk.value,
+    [opts.columnName]: {
+      Text: JSON.stringify({
+        filename: opts.file.name,
+        data: urlSafeBase64Encode(
+          new Uint8Array(await opts.file.arrayBuffer()),
+        ),
+      } as FileUploadInput),
+    },
+  };
+
+  await updateRowInternal(opts.tableName, opts.columns, record);
+}
+
+async function uploadMultipleFiles(opts: {
+  tableName: QualifiedName;
+  columns: Column[];
+  columnName: string;
+  pk: {
+    columnName: string;
+    value: SqlValue;
+  };
+  files: FileList;
+  allFiles: FileUploads;
+}) {
+  const files = opts.files;
+  if (files.length === 0) {
+    return;
+  }
+
+  const inputs: FileUploadInputs = [...opts.allFiles.map(fileUploadToInput)];
+  for (let i = 0; i < files.length; ++i) {
+    inputs.push({
+      filename: files[i].name,
+      data: urlSafeBase64Encode(new Uint8Array(await files[i].arrayBuffer())),
+    } as FileUploadInput);
+  }
+
+  const record = {
+    [opts.pk.columnName]: opts.pk.value,
+    [opts.columnName]: {
+      Text: JSON.stringify(inputs),
+    },
+  };
+
+  await updateRowInternal(opts.tableName, opts.columns, record);
+}
+
+async function deleteSingleFile(opts: {
   tableName: QualifiedName;
   columns: Column[];
   columnName: string;
@@ -50,44 +122,26 @@ async function uploadFiles(opts: {
     value: SqlValue;
   };
   multiple: boolean;
-  files: FileList;
+  file: FileUpload;
+  allFiles: FileUploads;
 }) {
-  const files = opts.files;
-  if (files.length === 0) {
-    return;
-  }
-
   if (opts.multiple) {
-    const inputs: FileUploadInputs = [];
-    for (let i = 0; i < files.length; ++i) {
-      inputs.push({
-        filename: files[i].name,
-        data: urlSafeBase64Encode(new Uint8Array(await files[i].arrayBuffer())),
-      } as FileUploadInput);
-    }
+    // NOTE: We don't currently have the ability to delete individual files.
+    // Instead we override with the ones to keep.
+    const keep = opts.allFiles.filter((f) => f.filename !== opts.file.filename);
 
     const record = {
       [opts.pk.columnName]: opts.pk.value,
       [opts.columnName]: {
-        Text: JSON.stringify(inputs),
+        Text: JSON.stringify(keep),
       },
     };
 
     await updateRowInternal(opts.tableName, opts.columns, record);
   } else {
-    if (files.length > 1) {
-      throw new Error("got multiple files");
-    }
-
-    const file = files[0];
     const record = {
       [opts.pk.columnName]: opts.pk.value,
-      [opts.columnName]: {
-        Text: JSON.stringify({
-          filename: file.name,
-          data: urlSafeBase64Encode(new Uint8Array(await file.arrayBuffer())),
-        } as FileUploadInput),
-      },
+      [opts.columnName]: "Null" as SqlValue,
     };
 
     await updateRowInternal(opts.tableName, opts.columns, record);
@@ -103,8 +157,45 @@ function FileUploadButton(props: {
     value: SqlValue;
   };
   multiple: boolean;
+  allFiles: FileUploads;
+  rowsRefetch: () => void;
 }) {
   let ref: HTMLInputElement | undefined;
+
+  const uploadFiles = async (files: FileList) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    if (props.multiple) {
+      await uploadMultipleFiles({
+        tableName: props.tableName,
+        columns: props.columns,
+        columnName: props.columnName,
+        pk: props.pk,
+        files,
+        allFiles: props.allFiles,
+      });
+    } else {
+      if (files.length > 1) {
+        throw new Error("got multiple files");
+      }
+
+      await uploadSingleFile({
+        tableName: props.tableName,
+        columns: props.columns,
+        columnName: props.columnName,
+        pk: props.pk,
+        file: files[0],
+      });
+    }
+
+    showToast({
+      title: `Uploaded ${files.length} files`,
+      variant: "success",
+    });
+    props.rowsRefetch();
+  };
 
   return (
     <div class="pointer-events-none">
@@ -118,16 +209,11 @@ function FileUploadButton(props: {
         }}
         onChange={(e) => {
           const files = e.target.files;
-          if (files !== null && files.length > 0) {
-            uploadFiles({
-              tableName: props.tableName,
-              columns: props.columns,
-              columnName: props.columnName,
-              multiple: props.multiple,
-              pk: props.pk,
-              files,
-            });
+          if (files === null) {
+            return;
           }
+
+          uploadFiles(files);
         }}
       />
 
@@ -146,15 +232,18 @@ function FileUploadButton(props: {
   );
 }
 
-// TODO: Add a delete button.
 function SingleUploadedFile(props: {
   file: FileUpload;
+  allFiles: FileUploads;
   tableName: QualifiedName;
+  columns: Column[];
   columnName: string;
   pk: {
     columnName: string;
     value: SqlValue;
   };
+  multiple: boolean;
+  rowsRefetch: () => void;
 }) {
   const isImage = () =>
     isImageMime(props.file.mime_type ?? props.file.content_type);
@@ -168,6 +257,15 @@ function SingleUploadedFile(props: {
         file_name: props.file.filename ?? null,
       },
     });
+  const deleteFile = async () => {
+    await deleteSingleFile(props);
+
+    showToast({
+      title: `Deleted: ${props.file.filename}`,
+      variant: "success",
+    });
+    props.rowsRefetch();
+  };
 
   return (
     <button
@@ -224,6 +322,18 @@ function SingleUploadedFile(props: {
               </Button>
             </Match>
           </Switch>
+
+          <Button
+            as="div"
+            size="icon"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation();
+              deleteFile();
+            }}
+          >
+            <TbOutlineTrash />
+          </Button>
         </div>
       </div>
     </button>
@@ -239,6 +349,7 @@ export function UploadedFile(props: {
     columnName: string;
     value: SqlValue;
   };
+  rowsRefetch: () => void;
 }) {
   return (
     <Switch>
@@ -248,12 +359,19 @@ export function UploadedFile(props: {
           columns={props.columns}
           columnName={props.columnName}
           pk={props.pk}
+          allFiles={[props.file!]}
           multiple={false}
+          rowsRefetch={props.rowsRefetch}
         />
       </Match>
 
       <Match when={props.file !== null}>
-        <SingleUploadedFile {...props} file={props.file!} />
+        <SingleUploadedFile
+          {...props}
+          multiple={false}
+          file={props.file!}
+          allFiles={[props.file!]}
+        />
       </Match>
     </Switch>
   );
@@ -268,6 +386,7 @@ export function UploadedFiles(props: {
     columnName: string;
     value: SqlValue;
   };
+  rowsRefetch: () => void;
 }) {
   const [local, others] = splitProps(props, ["files"]);
 
@@ -275,7 +394,14 @@ export function UploadedFiles(props: {
     <div class="flex flex-col gap-2">
       <For each={local.files}>
         {(file: FileUpload) => {
-          return <SingleUploadedFile file={file} {...others} />;
+          return (
+            <SingleUploadedFile
+              multiple={true}
+              {...others}
+              file={file}
+              allFiles={props.files}
+            />
+          );
         }}
       </For>
 
@@ -284,7 +410,9 @@ export function UploadedFiles(props: {
         columns={props.columns}
         columnName={props.columnName}
         pk={props.pk}
+        allFiles={props.files}
         multiple={true}
+        rowsRefetch={props.rowsRefetch}
       />
     </div>
   );

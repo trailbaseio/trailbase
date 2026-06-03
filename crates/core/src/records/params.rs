@@ -368,31 +368,6 @@ impl Params {
         continue;
       };
 
-      // TODO: This is a C&P from record update above. Do we need this for admin APIs as well?
-      //
-      // For file upload columns in Update/`PATCH` requests: if the client echoes back the stored
-      // FileUpload/FileUploads format (no 'data' field), skip the column entirely rather
-      // than returning an error. This preserves the existing file without modification,
-      // which is the expected behavior when a client round-trips a record through the API.
-      // if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
-      //   match (schema_name.as_str(), &value) {
-      //     ("std.FileUpload", serde_json::Value::Object(map)) if !map.contains_key("data") => {
-      //       continue;
-      //     }
-      //     ("std.FileUploads", serde_json::Value::Array(items))
-      //       if items
-      //         .iter()
-      //         .all(|v| matches!(v, serde_json::Value::Object(m) if !m.contains_key("data"))) =>
-      //     {
-      //       // QUESTION: Right now one can update/preserve a `std.FileUploads` column
-      //       // as a whole. It may be worth to allow patching (adding, removing,
-      //       // updating) individual files.
-      //       continue;
-      //     }
-      //     _ => {}
-      //   };
-      // }
-
       let param: Value = if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
         match schema_name.as_str() {
           "std.FileUpload" | "std.FileUploads" => {
@@ -401,6 +376,29 @@ impl Params {
             };
 
             let json_value = serde_json::from_str(&text)?;
+
+            // For file upload columns in Update/`PATCH` requests: if the client echoes back the
+            // stored FileUpload/FileUploads format (no 'data' field), skip the column
+            // entirely rather than returning an error. This preserves the existing file
+            // without modification, which is the expected behavior when a client
+            // round-trips a record through the API.
+            // if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
+            match &json_value {
+              serde_json::Value::Object(map) if !map.contains_key("data") => {
+                continue;
+              }
+              serde_json::Value::Array(items)
+                if items.iter().all(
+                  |v| matches!(v, serde_json::Value::Object(m) if !m.contains_key("data")),
+                ) =>
+              {
+                // QUESTION: Right now one can update/preserve a `std.FileUploads` column
+                // as a whole. It may be worth to allow patching (adding, removing,
+                // updating) individual files.
+                continue;
+              }
+              _ => {}
+            };
 
             let (param, json_files) = extract_params_and_files_from_json(
               &json_schema_registry.read(),
