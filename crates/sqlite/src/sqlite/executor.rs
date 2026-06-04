@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use crate::error::Error;
 use crate::params::Params;
+
 pub use crate::sqlite::lock::{ArcLockGuard, LockError, LockGuard};
 
 #[derive(Default)]
@@ -170,9 +171,7 @@ impl Executor {
 
   #[inline]
   pub fn write_lock(&self) -> Result<LockGuard<'_>, LockError> {
-    return Ok(LockGuard {
-      guard: self.conns.write(),
-    });
+    return Ok(LockGuard::new(self.conns.write()));
   }
 
   #[inline]

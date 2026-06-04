@@ -10,22 +10,27 @@ pub enum LockError {
   NotSupported,
 }
 
-pub struct LockGuard<'a> {
-  pub(super) guard: parking_lot::RwLockWriteGuard<'a, ConnectionVec>,
+pub struct LockGuard<'a>(parking_lot::RwLockWriteGuard<'a, ConnectionVec>);
+
+impl<'a> LockGuard<'a> {
+  pub(super) fn new(guard: parking_lot::RwLockWriteGuard<'a, ConnectionVec>) -> Self {
+    return Self(guard);
+  }
 }
 
 impl Deref for LockGuard<'_> {
   type Target = rusqlite::Connection;
+
   #[inline]
-  fn deref(&self) -> &rusqlite::Connection {
-    return &self.guard.deref().0[0];
+  fn deref(&self) -> &Self::Target {
+    return &self.0.deref().0[0];
   }
 }
 
 impl DerefMut for LockGuard<'_> {
   #[inline]
-  fn deref_mut(&mut self) -> &mut rusqlite::Connection {
-    return &mut self.guard.deref_mut().0[0];
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    return &mut self.0.deref_mut().0[0];
   }
 }
 
@@ -35,15 +40,16 @@ pub struct ArcLockGuard {
 
 impl Deref for ArcLockGuard {
   type Target = rusqlite::Connection;
+
   #[inline]
-  fn deref(&self) -> &rusqlite::Connection {
+  fn deref(&self) -> &Self::Target {
     return &self.guard.deref().0[0];
   }
 }
 
 impl DerefMut for ArcLockGuard {
   #[inline]
-  fn deref_mut(&mut self) -> &mut rusqlite::Connection {
+  fn deref_mut(&mut self) -> &mut Self::Target {
     return &mut self.guard.deref_mut().0[0];
   }
 }

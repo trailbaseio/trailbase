@@ -1,25 +1,16 @@
 use bytes::Bytes;
 use http::Uri;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
-use rusqlite::Transaction;
-use self_cell::{MutBorrow, self_cell};
 use sqlite3_parser::ast::{OneSelect, Select, Stmt};
 use tokio::time::Duration;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::unquote_expr;
-use trailbase_sqlite::{ArcLockGuard, LockError, Rows};
+use trailbase_sqlite::{LockError, Rows};
 use trailbase_sqlvalue::{DecodeError, SqlValue};
 use trailbase_wasm_common::{SqliteRequest, SqliteResponse};
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
-self_cell!(
-  pub(crate) struct OwnedTx {
-    owner: MutBorrow<ArcLockGuard>,
-
-    #[covariant]
-    dependent: Transaction,
-  }
-);
+pub use trailbase_sqlite::OwnedTx;
 
 pub(crate) async fn acquire_transaction_lock_with_timeout(
   conn: trailbase_sqlite::Connection,
@@ -29,11 +20,8 @@ pub(crate) async fn acquire_transaction_lock_with_timeout(
   loop {
     match conn.try_write_arc_lock_for(Duration::from_micros(50)) {
       Ok(lock) => {
-        return OwnedTx::try_new(MutBorrow::new(lock), |owner| {
-          return owner.borrow_mut().transaction();
-        })
-        .map_err(|err| {
-          log::error!("{err}");
+        return OwnedTx::new(lock).map_err(|err| {
+          log::error!("Failed to construct OwnedTx: {err}");
           return LockError::NotSupported;
         });
       }

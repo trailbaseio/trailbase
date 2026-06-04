@@ -2,7 +2,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::time::Duration;
-use trailbase_sqlite::Params;
+use trailbase_sqlite::SyncConnectionTrait;
+use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
 use wasmtime::component::{HasData, Resource, ResourceTable};
@@ -57,9 +58,6 @@ wasmtime::component::bindgen!({
 });
 
 pub use self::trailbase::database::sqlite::{Transaction, TxError, Value};
-
-/// NOTE: This is needed due to State needing to be Send.
-unsafe impl Send for crate::sqlite::OwnedTx {}
 
 /// Shared state, which can be shared across multiple runtime instances.
 pub struct SharedState {
@@ -247,7 +245,7 @@ impl TransactionImpl {
     };
 
     // NOTE: this is the same as `tx.commit()` just w/o consuming.
-    if let Err(err) = tx.borrow_dependent().execute_batch("COMMIT") {
+    if let Err(err) = tx.commit() {
       return Err(TxError::Other(err.to_string()));
     }
 
@@ -260,30 +258,22 @@ impl TransactionImpl {
     };
 
     // NOTE: this is the same as `tx.rollback()` just w/o consuming.
-    tx.borrow_dependent()
-      .execute_batch("ROLLBACK")
+    tx.rollback()
       .map_err(|err| TxError::Other(err.to_string()))?;
 
     return Ok(());
   }
 
   async fn query(&self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>, TxError> {
-    let lock = self.tx.lock().await;
-    let Some(ref tx) = *lock else {
+    let mut lock = self.tx.lock().await;
+    let Some(ref mut tx) = *lock else {
       return Err(TxError::Other("No open transaction".to_string()));
     };
 
-    let mut stmt = tx
-      .borrow_dependent()
-      .prepare(&query)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
     let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-    params
-      .bind(&mut stmt)
-      .map_err(|err| TxError::Other(err.to_string()))?;
 
-    let rows = trailbase_sqlite::sqlite::from_rows(stmt.raw_query())
+    let rows = tx
+      .query_rows(query, params)
       .map_err(|err| TxError::Other(err.to_string()))?;
 
     return Ok(
@@ -297,25 +287,17 @@ impl TransactionImpl {
   }
 
   async fn execute(&self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
-    let lock = self.tx.lock().await;
-    let Some(ref tx) = *lock else {
+    let mut lock = self.tx.lock().await;
+    let Some(ref mut tx) = *lock else {
       return Err(TxError::Other("No open transaction".to_string()));
     };
 
-    let mut stmt = tx
-      .borrow_dependent()
-      .prepare(&query)
-      .map_err(|err| TxError::Other(err.to_string()))?;
-
     let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-    params
-      .bind(&mut stmt)
+    let n = tx
+      .execute(query, params)
       .map_err(|err| TxError::Other(err.to_string()))?;
 
-    return stmt
-      .raw_execute()
-      .map_err(|err| TxError::Other(err.to_string()))
-      .map(|n| n as u64);
+    return Ok(n as u64);
   }
 }
 

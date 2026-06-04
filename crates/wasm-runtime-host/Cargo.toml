@@ -22,7 +22,6 @@ hyper = "1.6.0"
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
 rusqlite = { workspace = true }
-self_cell = "1.2.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite3-parser = { workspace = true }

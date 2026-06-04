@@ -28,6 +28,7 @@ use crate::r#type::ConnectionType;
 
 // NOTE: We should probably decouple from the impl.
 pub use crate::sqlite::executor::{ArcLockGuard, LockError, LockGuard};
+pub use crate::sqlite::transaction::OwnedTx;
 
 #[derive(Clone, Debug)]
 pub enum PgConnection {
