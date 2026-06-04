@@ -683,7 +683,7 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
   validate_email_template(email.password_reset_template.as_ref())?;
   validate_email_template(email.otp_template.as_ref())?;
 
-  let Some(_host) = &email.smtp_host else {
+  let Some(host) = &email.smtp_host else {
     match (email.smtp_port, &email.smtp_username, &email.smtp_password) {
       (None, None, None) => {
         // No SMTP configured
@@ -695,7 +695,9 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
     }
   };
 
-  // TODO: check that `_host` is a valid hostname or IP.
+  if !is_valid_hostname_or_ip(host) {
+    return ierr(format!("SMTP host '{host}' is invalid."));
+  }
 
   // NOTE: When no explicit sender is given, we fall back to noreply@host.
   if let Some(ref sender_address) = email.sender_address {
@@ -805,6 +807,13 @@ mod test_env {
     ENV.lock().clear();
   }
 }
+
+fn is_valid_hostname_or_ip(host: &str) -> bool {
+  return url::Host::parse(host).is_ok();
+}
+
+const CONFIG_FILENAME: &str = "config.textproto";
+const VAULT_FILENAME: &str = "secrets.textproto";
 
 #[cfg(test)]
 mod test {
@@ -993,7 +1002,13 @@ mod test {
 
     assert_eq!(config, merged);
   }
-}
 
-const CONFIG_FILENAME: &str = "config.textproto";
-const VAULT_FILENAME: &str = "secrets.textproto";
+  #[test]
+  fn test_is_valid_hostname_or_ip() {
+    assert_eq!(false, is_valid_hostname_or_ip(""));
+    assert_eq!(true, is_valid_hostname_or_ip("0.0.0.0"));
+    assert_eq!(true, is_valid_hostname_or_ip("smtp.test.org"));
+    assert_eq!(false, is_valid_hostname_or_ip("smtp.test.org:4444"));
+    assert_eq!(false, is_valid_hostname_or_ip("http://example.com"));
+  }
+}
