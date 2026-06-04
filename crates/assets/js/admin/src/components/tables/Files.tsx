@@ -5,13 +5,13 @@ import {
   TbOutlineUpload,
   TbOutlineTrash,
 } from "solid-icons/tb";
-import { urlSafeBase64Encode } from "trailbase";
 
 import { sqlValueToString } from "@/lib/value";
 import { adminFetch } from "@/lib/fetch";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { showSaveFileDialog } from "@/lib/utils";
 import { updateRowInternal } from "@/lib/api/row";
+import { urlSafeBase64EncodeStream } from "@/lib/base64";
 
 import { Button } from "@/components/ui/button";
 import { showToast } from "@/components/ui/toast";
@@ -58,9 +58,7 @@ async function uploadSingleFile(opts: {
     [opts.columnName]: {
       Text: JSON.stringify({
         filename: opts.file.name,
-        data: urlSafeBase64Encode(
-          new Uint8Array(await opts.file.arrayBuffer()),
-        ),
+        data: await urlSafeBase64EncodeStream(opts.file.stream()),
       } as FileUploadInput),
     },
   };
@@ -88,7 +86,7 @@ async function uploadMultipleFiles(opts: {
   for (let i = 0; i < files.length; ++i) {
     inputs.push({
       filename: files[i].name,
-      data: urlSafeBase64Encode(new Uint8Array(await files[i].arrayBuffer())),
+      data: await urlSafeBase64EncodeStream(files[i].stream()),
     } as FileUploadInput);
   }
 
