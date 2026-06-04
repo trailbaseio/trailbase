@@ -1,3 +1,10 @@
+## v0.28.3
+
+- Stream-encode file contents with new admin dash file-upload UI.
+- Since we're not using multipart forms, there are hard limits on upload size - both on the server and browser. Warn for larger (> 5MB) files. The effective limit is around 10MB right now.
+- Minor: validate SMTP host as part of config validation.
+- Update Rust and JavaScript dependencies.
+
 ## v0.28.2
 
 - Explicitly allow both: file inputs with bytes attached as well as pure file metadata. This allows for a wider range of differential updates and deletes on `std.FileUploads` columns.
