@@ -478,171 +478,6 @@ pub(crate) fn update_json_schema_registry(
   return Ok(false);
 }
 
-/// Construct a fabricated config for tests and make sure it's valid.
-#[cfg(test)]
-pub fn test_config() -> Config {
-  use crate::auth::oauth::providers::test::TestOAuthProvider;
-  use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
-
-  let mut config = Config::new_with_custom_defaults();
-
-  config.server.site_url = Some("https://test.org".to_string());
-  config.email.smtp_host = Some("smtp.test.org".to_string());
-  config.email.smtp_port = Some(587);
-  config.email.smtp_username = Some("user".to_string());
-  config.email.smtp_password = Some("pass".to_string());
-  config.email.sender_address = Some("sender@test.org".to_string());
-  config.email.sender_name = Some("Mia Sender".to_string());
-
-  config.auth.oauth_providers.insert(
-    TestOAuthProvider::NAME.to_string(),
-    OAuthProviderConfig {
-      client_id: Some("test_client_id".to_string()),
-      client_secret: Some("test_client_secret".to_string()),
-      provider_id: Some(OAuthProviderId::Test as i32),
-      ..Default::default()
-    },
-  );
-  config
-    .auth
-    .custom_uri_schemes
-    .push("test-scheme".to_string());
-
-  return config;
-}
-
-#[cfg(test)]
-#[derive(Default)]
-pub struct TestStateOptions {
-  pub config: Option<Config>,
-  pub json_schema_registry: Option<JsonSchemaRegistry>,
-  pub(crate) mailer: Option<Mailer>,
-}
-
-#[cfg(test)]
-pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
-  let _ = env_logger::try_init_from_env(
-    env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,log::span=warn"),
-  );
-
-  let temp_dir = temp_dir::TempDir::new()?;
-  tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
-  let data_dir = DataDir(temp_dir.path().to_path_buf());
-
-  let (db, pg_uri) = if cfg!(feature = "pg-test") {
-    let extensions = [
-      // NOTE: pgcrypto and postgis are not currently supported:
-      //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-      // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
-      // Enabled UUIDv7 support.
-      pglite_oxide::extensions::PG_UUIDV7,
-    ];
-
-    // Start PgLite.
-    let sock = data_dir.main_db_path().join(".s.PGSQL.5432");
-
-    let db = pglite_oxide::PgliteServer::builder()
-      .fresh_temporary()
-      .extensions(extensions)
-      .unix(&sock)
-      .start()?;
-
-    // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
-    let pg_uri = format!(
-      "postgresql://postgres@/template1?host={}",
-      data_dir.main_db_path().to_string_lossy()
-    );
-
-    (Some(db), Some(pg_uri))
-  } else {
-    (None, None)
-  };
-
-  let TestStateOptions {
-    config,
-    mailer,
-    json_schema_registry,
-  } = options.unwrap_or_default();
-
-  let json_schema_registry = Arc::new(parking_lot::RwLock::new(
-    json_schema_registry
-      .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
-  ));
-
-  let config = config.unwrap_or_else(test_config);
-  update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
-
-  let logs_conn = crate::connection::init_logs_db(None)?;
-  let session_conn = crate::connection::init_session_db(None)?;
-
-  let connection_manager = ConnectionManager::new_for_test(
-    data_dir.clone(),
-    json_schema_registry.clone(),
-    vec![],
-    pg_uri.clone(),
-  )
-  .await;
-
-  let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
-    info!("Use S3 Storage for tests");
-
-    build_objectstore(
-      &data_dir,
-      Some(&S3StorageConfig {
-        endpoint: Some("http://127.0.0.1:9000".to_string()),
-        region: None,
-        bucket_name: Some("test".to_string()),
-        access_key: Some("minioadmin".to_string()),
-        secret_access_key: Some("minioadmin".to_string()),
-      }),
-    )
-    .unwrap()
-    .into()
-  } else {
-    build_objectstore(&data_dir, None).unwrap().into()
-  };
-
-  let config = Reactive::new(config);
-
-  let record_apis = build_record_apis(
-    connection_manager.clone(),
-    config.derive(|c| c.record_apis.clone()),
-  )
-  .await;
-
-  return Ok(AppState {
-    state: Arc::new(InternalState {
-      data_dir,
-      public_dir: None,
-      runtime_root_fs: None,
-      start_time: std::time::SystemTime::now(),
-      site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
-      dev: true,
-      demo: false,
-      auth: config.derive_unchecked(|c| Arc::new(AuthOptions::from_config(c.auth.clone()))),
-      jobs: config.derive_unchecked(|_c| Arc::new(JobRegistry::new())),
-      mailer: mailer.map_or_else(
-        || config.derive_unchecked(Mailer::new_from_config),
-        |m| Reactive::new(m),
-      ),
-      config,
-      json_schema_registry,
-      conn: (*connection_manager.main_entry().connection).clone(),
-      session_conn,
-      logs_conn,
-      connection_manager,
-      jwt: crate::auth::jwt::test_jwt_helper(),
-      record_apis: record_apis.clone(),
-      subscription_manager: SubscriptionManager::new(record_apis),
-      object_store,
-      wasm_runtimes: vec![],
-      wasm_runtimes_builder: Box::new(|| Ok(vec![])),
-      pg_uri,
-      test_cleanup: vec![Box::new(db), Box::new(temp_dir)],
-    }),
-  });
-}
-
 async fn build_record_apis(
   connection_manager: ConnectionManager,
   record_api_configs: Reactive<Vec<RecordApiConfig>>,
@@ -827,3 +662,200 @@ fn build_auth_config(config: &Config) -> AuthConfig {
 }
 
 const AUTH_CONFIG_KEY: &str = "config:auth";
+
+#[cfg(test)]
+mod test_utils {
+  use super::*;
+
+  struct Aborter {
+    handle: tokio::task::AbortHandle,
+  }
+
+  impl Drop for Aborter {
+    fn drop(&mut self) {
+      self.handle.abort();
+    }
+  }
+
+  /// Construct a fabricated config for tests and make sure it's valid.
+  pub fn test_config() -> Config {
+    use crate::auth::oauth::providers::test::TestOAuthProvider;
+    use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+
+    let mut config = Config::new_with_custom_defaults();
+
+    config.server.site_url = Some("https://test.org".to_string());
+    config.email.smtp_host = Some("smtp.test.org".to_string());
+    config.email.smtp_port = Some(587);
+    config.email.smtp_username = Some("user".to_string());
+    config.email.smtp_password = Some("pass".to_string());
+    config.email.sender_address = Some("sender@test.org".to_string());
+    config.email.sender_name = Some("Mia Sender".to_string());
+
+    config.auth.oauth_providers.insert(
+      TestOAuthProvider::NAME.to_string(),
+      OAuthProviderConfig {
+        client_id: Some("test_client_id".to_string()),
+        client_secret: Some("test_client_secret".to_string()),
+        provider_id: Some(OAuthProviderId::Test as i32),
+        ..Default::default()
+      },
+    );
+    config
+      .auth
+      .custom_uri_schemes
+      .push("test-scheme".to_string());
+
+    return config;
+  }
+
+  #[derive(Default)]
+  pub struct TestStateOptions {
+    pub config: Option<Config>,
+    pub json_schema_registry: Option<JsonSchemaRegistry>,
+    pub(crate) mailer: Option<Mailer>,
+  }
+
+  pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
+    let _ = env_logger::try_init_from_env(
+      env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,log::span=warn"),
+    );
+
+    let temp_dir = temp_dir::TempDir::new()?;
+    tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
+    let data_dir = DataDir(temp_dir.path().to_path_buf());
+
+    let (pg_aborter, pg_uri) = if cfg!(feature = "pg-test") {
+      let extensions = [
+        // NOTE: pgcrypto and postgis are not currently supported:
+        //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+        // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
+        // Enabled UUIDv7 support.
+        pglite_oxide::extensions::PG_UUIDV7,
+      ];
+
+      // Start PgLite.
+      let sock = data_dir.main_db_path().join(".s.PGSQL.5432");
+
+      let db = pglite_oxide::PgliteServer::builder()
+        .fresh_temporary()
+        .extensions(extensions)
+        .unix(&sock)
+        .start()?;
+
+      // NOTE: During CI, we have random tests occasionally time out. This is an attempt
+      // to get ahead of it.
+      let aborter = Aborter {
+        handle: tokio::spawn(async {
+          use tokio::time::*;
+
+          sleep(Duration::from_mins(30)).await;
+
+          let h = tokio::runtime::Handle::current();
+          let metrics = h.metrics();
+          println!("Tokio metrics: {metrics:?}");
+
+          db.shutdown().unwrap();
+        })
+        .abort_handle(),
+      };
+
+      // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
+      let pg_uri = format!(
+        "postgresql://postgres@/template1?host={}",
+        data_dir.main_db_path().to_string_lossy()
+      );
+
+      (Some(aborter), Some(pg_uri))
+    } else {
+      (None, None)
+    };
+
+    let TestStateOptions {
+      config,
+      mailer,
+      json_schema_registry,
+    } = options.unwrap_or_default();
+
+    let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+      json_schema_registry
+        .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
+    ));
+
+    let config = config.unwrap_or_else(test_config);
+    update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
+
+    let logs_conn = crate::connection::init_logs_db(None)?;
+    let session_conn = crate::connection::init_session_db(None)?;
+
+    let connection_manager = ConnectionManager::new_for_test(
+      data_dir.clone(),
+      json_schema_registry.clone(),
+      vec![],
+      pg_uri.clone(),
+    )
+    .await;
+
+    let object_store = if std::env::var("TEST_S3_OBJECT_STORE").map_or(false, |v| v == "TRUE") {
+      info!("Use S3 Storage for tests");
+
+      build_objectstore(
+        &data_dir,
+        Some(&S3StorageConfig {
+          endpoint: Some("http://127.0.0.1:9000".to_string()),
+          region: None,
+          bucket_name: Some("test".to_string()),
+          access_key: Some("minioadmin".to_string()),
+          secret_access_key: Some("minioadmin".to_string()),
+        }),
+      )
+      .unwrap()
+      .into()
+    } else {
+      build_objectstore(&data_dir, None).unwrap().into()
+    };
+
+    let config = Reactive::new(config);
+
+    let record_apis = build_record_apis(
+      connection_manager.clone(),
+      config.derive(|c| c.record_apis.clone()),
+    )
+    .await;
+
+    return Ok(AppState {
+      state: Arc::new(InternalState {
+        data_dir,
+        public_dir: None,
+        runtime_root_fs: None,
+        start_time: std::time::SystemTime::now(),
+        site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
+        dev: true,
+        demo: false,
+        auth: config.derive_unchecked(|c| Arc::new(AuthOptions::from_config(c.auth.clone()))),
+        jobs: config.derive_unchecked(|_c| Arc::new(JobRegistry::new())),
+        mailer: mailer.map_or_else(
+          || config.derive_unchecked(Mailer::new_from_config),
+          |m| Reactive::new(m),
+        ),
+        config,
+        json_schema_registry,
+        conn: (*connection_manager.main_entry().connection).clone(),
+        session_conn,
+        logs_conn,
+        connection_manager,
+        jwt: crate::auth::jwt::test_jwt_helper(),
+        record_apis: record_apis.clone(),
+        subscription_manager: SubscriptionManager::new(record_apis),
+        object_store,
+        wasm_runtimes: vec![],
+        wasm_runtimes_builder: Box::new(|| Ok(vec![])),
+        pg_uri,
+        test_cleanup: vec![Box::new(pg_aborter), Box::new(temp_dir)],
+      }),
+    });
+  }
+}
+
+#[cfg(test)]
+pub use test_utils::*;
