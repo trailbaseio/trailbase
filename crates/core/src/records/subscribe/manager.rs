@@ -76,6 +76,16 @@ impl SubscriptionManager {
     return Self { state };
   }
 
+  pub fn shutdown(&self) {
+    let connections = self.state.connections.write();
+    if !connections.is_empty() {
+      for (db, conn) in connections.iter() {
+        log::debug!("SubscriptionManager::shutdown (conn id = {db})");
+        conn.shutdown();
+      }
+    }
+  }
+
   pub async fn add_sse_table_subscription(
     &self,
     api: RecordApi,

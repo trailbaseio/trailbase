@@ -52,7 +52,7 @@ impl Drop for AutoCleanupEventStreamState {
         return;
       };
 
-      state.state.lock().remove_subscription2(id);
+      state.state.lock().remove_subscription(id);
     } else {
       debug!("Subscription cleaned up already by the sender side.");
     }
@@ -138,6 +138,18 @@ impl Subscriptions {
   fn is_empty(&self) -> bool {
     return self.table.is_empty() && self.record.is_empty();
   }
+
+  fn shutdown(&mut self) {
+    for sub in std::mem::take(&mut self.table) {
+      sub.sender.close();
+    }
+
+    for (_id, subs) in std::mem::take(&mut self.record) {
+      for sub in subs {
+        sub.sender.close();
+      }
+    }
+  }
 }
 
 pub struct PerConnectionStateInternal {
@@ -159,7 +171,7 @@ pub struct PerConnectionStateInternal {
 }
 
 impl PerConnectionStateInternal {
-  pub fn remove_subscription2(&mut self, id: SubscriptionId) {
+  pub fn remove_subscription(&mut self, id: SubscriptionId) {
     let Some(subscriptions) = self.subscriptions.get_mut(&id.table_name) else {
       return;
     };
@@ -194,6 +206,16 @@ pub struct PerConnectionState {
 }
 
 impl PerConnectionState {
+  pub fn shutdown(&self) {
+    let mut state = self.state.lock();
+
+    for subs in std::mem::take(&mut state.subscriptions).values_mut() {
+      subs.shutdown();
+    }
+
+    let _ = uninstall_hook(&state.conn);
+  }
+
   fn add_hook(self: &Arc<Self>, api: RecordApi) -> Result<(), RecordError> {
     let conn = api.conn().clone();
     let state = self.clone();
@@ -204,6 +226,8 @@ impl PerConnectionState {
     let _join_handle = std::thread::Builder::new()
       .name("subscriptions".to_string())
       .spawn(move || {
+        debug!("Subscription broker task started.");
+
         let mut expected = 1;
         loop {
           if receiver.sender_count() == 0 {

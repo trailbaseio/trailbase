@@ -219,6 +219,11 @@ impl Server {
       None
     };
 
+    let build_independent_admin_router = opts
+      .admin_address
+      .as_ref()
+      .is_some_and(|a| *a != opts.address);
+
     Ok(Self {
       state: state.clone(),
       main_router: Self::build_main_router(
@@ -226,13 +231,18 @@ impl Server {
         &opts,
         install_auth_rate_limiter.as_ref(),
         custom_routers,
+        !build_independent_admin_router,
       )
       .await?,
-      admin_router: Self::build_independent_admin_router(
-        &state,
-        &opts,
-        install_auth_rate_limiter.as_ref(),
-      ),
+      admin_router: if build_independent_admin_router {
+        Some(Self::build_independent_admin_router(
+          &state,
+          &opts,
+          install_auth_rate_limiter.as_ref(),
+        )?)
+      } else {
+        None
+      },
       tls: Self::load_tls(&opts),
     })
   }
@@ -364,8 +374,28 @@ impl Server {
       });
     }
 
+    let (cleanup_sender, cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
+
+    tokio::spawn(async move {
+      if cleanup_receiver.await.is_ok() {
+        log::debug!("cleanup started");
+
+        self.state.subscription_manager().shutdown();
+      }
+    });
+
     // Finally start serving.
-    return serve(self.main_router, self.admin_router, self.tls).await;
+    //
+    // NOTE: This will only return when graceful shutdown succeeded.
+    serve_impl(
+      self.main_router,
+      self.admin_router,
+      self.tls,
+      cleanup_sender,
+    )
+    .await?;
+
+    return Ok(());
   }
 
   pub fn load_tls(
@@ -435,11 +465,11 @@ impl Server {
     state: &AppState,
     opts: &ServerOptions,
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
-  ) -> Option<(String, Router<()>)> {
-    let address = opts.admin_address.as_ref()?;
-    if !has_indepenedent_admin_router(opts) {
-      return None;
-    }
+  ) -> Result<(String, Router<()>), InitError> {
+    let address = opts
+      .admin_address
+      .as_ref()
+      .ok_or_else(|| InitError::CreateAdmin("missing admin address".to_string()))?;
 
     let router = Router::new()
       .merge(
@@ -449,7 +479,7 @@ impl Server {
       )
       .merge(Self::build_admin_router(state));
 
-    return Some((
+    return Ok((
       address.clone(),
       Self::wrap_with_default_layers(state, opts, router),
     ));
@@ -460,6 +490,7 @@ impl Server {
     opts: &ServerOptions,
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
     custom_routers: Vec<Router<AppState>>,
+    build_admin_router: bool,
   ) -> Result<(String, Router<()>), InitError> {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
@@ -477,7 +508,7 @@ impl Server {
       ))
       .route("/api/healthcheck", get(healthcheck_handler));
 
-    if !has_indepenedent_admin_router(opts) {
+    if build_admin_router {
       router = router.merge(Self::build_admin_router(state));
     }
 
@@ -568,14 +599,6 @@ impl Server {
       ))
       .with_state(state.clone());
   }
-}
-
-fn has_indepenedent_admin_router(opts: &ServerOptions) -> bool {
-  return match opts.admin_address {
-    None => false,
-    Some(ref address) if *address == opts.address => false,
-    _ => true,
-  };
 }
 
 async fn healthcheck_handler() -> Response {
@@ -720,10 +743,11 @@ async fn shutdown_signal() {
   // Ready to shut down.
 }
 
-pub async fn serve(
+pub async fn serve_impl(
   main_router: (String, Router),
   admin_router: Option<(String, Router)>,
   tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
+  cleanup_sender: tokio::sync::oneshot::Sender<()>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   // Make sure TLS provider is installed (both for incoming and outgoing traffic, including traffic
   // from WASM components).
@@ -743,23 +767,21 @@ pub async fn serve(
     .as_ref()
     .map_or_else(|| addr.clone(), |(addr, _)| addr.clone());
 
-  let set = {
-    let mut set = JoinSet::new();
+  let mut set = JoinSet::new();
 
-    if let Some((addr, router)) = admin_router {
-      let tls_clone = tls
+  if let Some((addr, router)) = admin_router {
+    set.spawn({
+      let tls = tls
         .as_ref()
         .map(|(cert, key)| (cert.clone(), key.clone_key()));
-      set.spawn(async move { start_listen(&addr, router, tls_clone).await });
-    }
+      async move { start_listen(&addr, router, tls, None).await }
+    });
+  }
 
-    {
-      let (addr, router) = main_router;
-      set.spawn(async move { start_listen(&addr, router, tls).await });
-    }
-
-    set
-  };
+  set.spawn({
+    let (addr, router) = main_router;
+    async move { start_listen(&addr, router, tls, Some(cleanup_sender)).await }
+  });
 
   info!(
     "Listening on {protocol}://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
@@ -768,6 +790,8 @@ pub async fn serve(
 
   set.join_all().await;
 
+  println!("Shut down gracefully 👋");
+
   return Ok(());
 }
 
@@ -775,6 +799,7 @@ async fn start_listen(
   addr: &str,
   router: Router<()>,
   tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
+  cleanup_sender: Option<tokio::sync::oneshot::Sender<()>>,
 ) {
   let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
     Ok(listener) => listener,
@@ -800,7 +825,13 @@ async fn start_listen(
         },
         router.into_make_service_with_connect_info::<SocketAddr>(),
       )
-      .with_graceful_shutdown(shutdown_signal())
+      .with_graceful_shutdown(async {
+        shutdown_signal().await;
+
+        if let Some(cleanup) = cleanup_sender {
+          let _ = cleanup.send(());
+        }
+      })
       .await
     }
     _ => {
@@ -808,7 +839,13 @@ async fn start_listen(
         tcp_listener,
         router.into_make_service_with_connect_info::<SocketAddr>(),
       )
-      .with_graceful_shutdown(shutdown_signal())
+      .with_graceful_shutdown(async {
+        shutdown_signal().await;
+
+        if let Some(cleanup) = cleanup_sender {
+          let _ = cleanup.send(());
+        }
+      })
       .await
     }
   } {

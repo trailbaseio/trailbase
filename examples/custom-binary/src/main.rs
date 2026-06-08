@@ -73,7 +73,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     (main_router.0, custom_router)
   };
 
-  trailbase::api::serve(router, admin_router, tls).await?;
+  let (cleanup_sender, _cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
+  trailbase::api::serve(router, admin_router, tls, cleanup_sender).await?;
 
   Ok(())
 }
