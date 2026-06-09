@@ -569,6 +569,9 @@ fn build_cors(cors_allowed_origins: &[String], dev: bool) -> cors::CorsLayer {
   };
 
   // Cannot combine `Access-Control-Allow-Credentials: true` with `Access-Control-Allow-Methods: *`
+  //
+  // We cannot further limit the set of allowed methods or headers with routes potentially being
+  // provided by WASM components.
   return cors::CorsLayer::new()
     .allow_methods(cors::Any)
     .allow_headers(cors::Any)

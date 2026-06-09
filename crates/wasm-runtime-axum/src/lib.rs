@@ -147,15 +147,15 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   user_fn: for<'a> fn(&'a mut Parts, &'a S) -> BoxFuture<'a, Option<HttpContextUser>>,
   version: Option<String>,
 ) -> Result<InstallResult<S>, AnyError> {
-  let InitManifest {
-    metadata,
-    http_handlers,
-    job_handlers,
-    sqlite_functions: _,
-  } = {
-    let store = HttpStore::new(runtime).await?;
-    store.initialize(InitArgs { version }).await?
-  };
+  let (
+    store,
+    InitManifest {
+      metadata,
+      http_handlers,
+      job_handlers,
+      sqlite_functions: _,
+    },
+  ) = HttpStore::initialize(runtime, InitArgs { version }).await?;
 
   let http_handlers = http_handlers.unwrap_or_default();
   let job_handlers = job_handlers.unwrap_or_default();
@@ -172,8 +172,8 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
 
   let mut jobs: Vec<Job> = vec![];
   for JobManifest { name, spec } in job_handlers {
+    let store = store.clone();
     let schedule = cron::Schedule::from_str(&spec)?;
-    let store = HttpStore::new(runtime).await?;
 
     jobs.push(Job {
       name: name.clone(),
@@ -214,8 +214,8 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   for HttpRouteManifest { method, path } in http_handlers {
     debug!("Installing WASM route: {method:?}: {path}");
 
-    let store = HttpStore::new(runtime).await?;
     let registered_path = path.clone();
+    let store = store.clone();
 
     use axum::response::Response;
 
