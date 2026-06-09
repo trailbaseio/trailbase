@@ -667,16 +667,6 @@ const AUTH_CONFIG_KEY: &str = "config:auth";
 mod test_utils {
   use super::*;
 
-  struct Aborter {
-    handle: tokio::task::AbortHandle,
-  }
-
-  impl Drop for Aborter {
-    fn drop(&mut self) {
-      self.handle.abort();
-    }
-  }
-
   /// Construct a fabricated config for tests and make sure it's valid.
   pub fn test_config() -> Config {
     use crate::auth::oauth::providers::test::TestOAuthProvider;
@@ -725,7 +715,7 @@ mod test_utils {
     tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
     let data_dir = DataDir(temp_dir.path().to_path_buf());
 
-    let (pg_aborter, pg_uri) = if cfg!(feature = "pg-test") {
+    let pg_uri = if cfg!(feature = "pg-test") {
       let extensions = [
         // NOTE: pgcrypto and postgis are not currently supported:
         //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
@@ -743,22 +733,37 @@ mod test_utils {
         .unix(&sock)
         .start()?;
 
+      let handle = tokio::runtime::Handle::current();
+      let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+
       // NOTE: During CI, we have random tests occasionally time out. This is an attempt
       // to get ahead of it.
-      let aborter = Aborter {
-        handle: tokio::spawn(async {
+      let _ = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_current_thread()
+          .enable_time()
+          .build()
+          .unwrap();
+
+        rt.block_on(async move {
           use tokio::time::*;
+          let started = std::time::SystemTime::now();
 
-          sleep(Duration::from_mins(30)).await;
+          loop {
+            sleep(Duration::from_mins(2)).await;
 
-          let h = tokio::runtime::Handle::current();
-          let metrics = h.metrics();
-          println!("Tokio metrics: {metrics:?}");
+            let metrics = runtime_monitor.intervals();
 
-          db.shutdown().unwrap();
-        })
-        .abort_handle(),
-      };
+            let now = std::time::SystemTime::now();
+            if now.duration_since(started).unwrap_or_default() > Duration::from_mins(20) {
+              println!("Test expired. Metrics = {metrics:?}");
+              db.shutdown().unwrap();
+              panic!("test expired");
+            }
+
+            println!("metrics = {metrics:?}");
+          }
+        });
+      });
 
       // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
       let pg_uri = format!(
@@ -766,9 +771,9 @@ mod test_utils {
         data_dir.main_db_path().to_string_lossy()
       );
 
-      (Some(aborter), Some(pg_uri))
+      Some(pg_uri)
     } else {
-      (None, None)
+      None
     };
 
     let TestStateOptions {
@@ -851,7 +856,7 @@ mod test_utils {
         wasm_runtimes: vec![],
         wasm_runtimes_builder: Box::new(|| Ok(vec![])),
         pg_uri,
-        test_cleanup: vec![Box::new(pg_aborter), Box::new(temp_dir)],
+        test_cleanup: vec![Box::new(temp_dir)],
       }),
     });
   }

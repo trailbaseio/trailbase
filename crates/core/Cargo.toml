@@ -135,5 +135,6 @@ quoted_printable = "0.5.1"
 rcgen = "0.14.1"
 schemars = "1.0.0"
 temp-dir = "0.2.0"
+tokio-metrics = "0.5.0"
 tower = { version = "0.5.0", features = ["util"] }
 trailbase-extension = { workspace = true }
