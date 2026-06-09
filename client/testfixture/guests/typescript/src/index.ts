@@ -8,91 +8,107 @@ import {
 } from "trailbase-wasm/http";
 import { execute, query, Transaction } from "trailbase-wasm/db";
 
-export default defineConfig({
-  httpHandlers: [
-    HttpHandler.get("/js/method", (_: HttpRequest): string => "get"),
-    HttpHandler.post("/js/method", (_: HttpRequest): string => "post"),
-    HttpHandler.delete("/js/method", (_: HttpRequest): string => "delete"),
-    HttpHandler.get("/js/fibonacci", (req: HttpRequest): string => {
-      const n = req.getQueryParam("n");
-      return `${fibonacci(n ? parseInt(n) : 40)}\n`;
-    }),
-    HttpHandler.get("/js/json", jsonHandler),
-    HttpHandler.post("/js/json", jsonHandler),
-    HttpHandler.get("/js/fetch", async (req: HttpRequest): Promise<string> => {
-      const url = req.getQueryParam("url");
-      if (url) {
-        return await (await fetch(url)).text();
-      }
-      throw new HttpError(StatusCode.BAD_REQUEST, `Missing ?url param`);
-    }),
-    HttpHandler.get("/js/error", () => {
-      throw new HttpError(StatusCode.IM_A_TEAPOT, "I'm a teapot");
-    }),
-    HttpHandler.get("/js/await", async (req) => {
-      const ms = req.getQueryParam("ms");
-      await delay(ms ? parseInt(ms) : 10);
+const PREFIX = "";
+// const PREFIX = "/js";
 
-      // Bodies over 2kB/4kB are streamed.
-      return "A".repeat(5000);
-    }),
-    HttpHandler.get("/js/addDeletePost", async () => {
-      const userId = (
-        await query("SELECT id FROM _user WHERE email = 'admin@localhost'", [])
-      )[0][0];
+export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
+  defineConfig({
+    httpHandlers: [
+      HttpHandler.get(`${PREFIX}/method`, (_: HttpRequest): string => "get"),
+      HttpHandler.post(`${PREFIX}/method`, (_: HttpRequest): string => "post"),
+      HttpHandler.delete(
+        `${PREFIX}/method`,
+        (_: HttpRequest): string => "delete",
+      ),
+      HttpHandler.get(`${PREFIX}/fibonacci`, (req: HttpRequest): string => {
+        const n = req.getQueryParam("n");
+        return `${fibonacci(n ? parseInt(n) : 40)}\n`;
+      }),
+      HttpHandler.get(`${PREFIX}/json`, jsonHandler),
+      HttpHandler.post(`${PREFIX}/json`, jsonHandler),
+      HttpHandler.get(
+        `${PREFIX}/fetch`,
+        async (req: HttpRequest): Promise<string> => {
+          const url = req.getQueryParam("url");
+          if (url) {
+            return await (await fetch(url)).text();
+          }
+          throw new HttpError(StatusCode.BAD_REQUEST, `Missing ?url param`);
+        },
+      ),
+      HttpHandler.get(`${PREFIX}/error`, () => {
+        throw new HttpError(StatusCode.IM_A_TEAPOT, "I'm a teapot");
+      }),
+      HttpHandler.get(`${PREFIX}/await`, async (req) => {
+        const ms = req.getQueryParam("ms");
+        await delay(ms ? parseInt(ms) : 10);
 
-      console.info("[print from WASM JS guest] user id:", userId);
+        // Bodies over 2kB/4kB are streamed.
+        return "A".repeat(5000);
+      }),
+      HttpHandler.get(`${PREFIX}/addDeletePost`, async () => {
+        const userId = (
+          await query(
+            "SELECT id FROM _user WHERE email = 'admin@localhost'",
+            [],
+          )
+        )[0][0];
 
-      const body = `${Date.now()} - ${Math.random()}`;
-      const numInsertions = await execute(
-        `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
-        [userId, body],
-      );
+        console.info("[print from WASM JS guest] user id:", userId);
 
-      const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [
-        body,
-      ]);
+        const body = `${Date.now()} - ${Math.random()}`;
+        const numInsertions = await execute(
+          `INSERT INTO post (author, title, body) VALUES (?1, 'title' , ?2)`,
+          [userId, body],
+        );
 
-      return numInsertions === numDeletions ? "Ok" : "Fail";
-    }),
-    HttpHandler.get("/js/transaction", async () => {
-      const tx = new Transaction();
+        const numDeletions = await execute(`DELETE FROM post WHERE body = ?1`, [
+          body,
+        ]);
 
-      tx.execute("CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY)", []);
+        return numInsertions === numDeletions ? "Ok" : "Fail";
+      }),
+      HttpHandler.get(`${PREFIX}/transaction`, async () => {
+        const tx = new Transaction();
 
-      const rows = tx.query("SELECT COUNT(*) FROM tx", []);
-      const count = rows[0][0] as bigint;
-      console.assert(count >= 0);
+        tx.execute(
+          "CREATE TABLE IF NOT EXISTS tx (id INTEGER PRIMARY KEY)",
+          [],
+        );
 
-      const rowsAffected = tx.execute("INSERT INTO tx (id) VALUES (?1)", [
-        Number(count) + 1,
-      ]);
-      console.assert(rowsAffected == 1);
+        const rows = tx.query("SELECT COUNT(*) FROM tx", []);
+        const count = rows[0][0] as bigint;
+        console.assert(count >= 0);
 
-      tx.commit();
+        const rowsAffected = tx.execute("INSERT INTO tx (id) VALUES (?1)", [
+          Number(count) + 1,
+        ]);
+        console.assert(rowsAffected == 1);
 
-      return "Ok";
-    }),
-    HttpHandler.get("/js/set_interval", async (): Promise<string> => {
-      var cnt = 0;
+        tx.commit();
 
-      console.log(`Registering callback`);
-      const handle = setInterval(() => {
-        console.log(`Interval: ${cnt}`);
-        cnt += 1;
+        return "Ok";
+      }),
+      HttpHandler.get(`${PREFIX}/set_interval`, async (): Promise<string> => {
+        var cnt = 0;
 
-        if (cnt > 10) {
-          clearInterval(handle);
-        }
-      }, 300);
+        console.log(`Registering callback`);
+        const handle = setInterval(() => {
+          console.log(`Interval: ${cnt}`);
+          cnt += 1;
 
-      return `setInterval from Javascript`;
-    }),
-    HttpHandler.get("/js/random", async (): Promise<string> => {
-      return `${Math.random().toString()}\n`;
-    }),
-  ],
-});
+          if (cnt > 10) {
+            clearInterval(handle);
+          }
+        }, 300);
+
+        return `setInterval from Javascript`;
+      }),
+      HttpHandler.get(`${PREFIX}/random`, async (): Promise<string> => {
+        return `${Math.random().toString()}\n`;
+      }),
+    ],
+  });
 
 function jsonHandler(req: HttpRequest): HttpResponse {
   const json = req.json();
