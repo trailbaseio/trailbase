@@ -1,3 +1,6 @@
+// mem_forget is needed for self_cell macro expansions.
+#![allow(clippy::mem_forget)]
+
 use crate::error::Error;
 use crate::params::Params;
 use crate::rows::{Row, Rows};
@@ -122,7 +125,7 @@ impl OwnedTx {
   }
 }
 
-impl<'a> SyncConnection for OwnedTx {
+impl SyncConnection for OwnedTx {
   fn connection_type(&self) -> ConnectionType {
     return ConnectionType::Sqlite;
   }
