@@ -6780,16 +6780,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_bytes"
-version = "0.11.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
-dependencies = [
- "serde",
- "serde_core",
-]
-
-[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6869,12 +6859,12 @@ dependencies = [
 
 [[package]]
 name = "serde_rusqlite"
-version = "0.38.0"
+version = "0.43.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "44f51ff08953caf83bbd0d9be7ee58d41f1d1adc19a2e84c43f83ca50258571e"
 dependencies = [
  "rusqlite",
- "serde",
- "serde_bytes",
- "serde_derive",
+ "serde_core",
 ]
 
 [[package]]
@@ -7147,7 +7137,6 @@ name = "sqlite-vec"
 version = "0.1.10-alpha.4"
 dependencies = [
  "cc",
- "rusqlite",
 ]
 
 [[package]]
