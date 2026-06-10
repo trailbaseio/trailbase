@@ -111,7 +111,7 @@ pub async fn register_totp_confirm_handler(
   }
 
   const UPDATE_QUERY: &str =
-    formatcp!(r#"UPDATE \"{USER_TABLE}\" SET totp_secret = $1 WHERE id = $2"#);
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
 
   let user_id_bytes = user.uuid.into_bytes().to_vec();
   let secret = totp.get_secret_base32();
