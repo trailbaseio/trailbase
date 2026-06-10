@@ -64,7 +64,10 @@ pub struct AuthTokenClaims {
   pub provider: u8,
 
   /// E-mail address of the [sub].
-  pub email: String,
+  pub email: Option<String>,
+
+  /// Optional handle.
+  pub handle: Option<String>,
 
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
@@ -85,6 +88,7 @@ impl AuthTokenClaims {
       mfa: db_user.totp_secret.is_some(),
       provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
+      handle: db_user.handle.clone(),
       csrf_token: random_alphanumeric(20),
     };
   }
@@ -369,7 +373,7 @@ mod tests {
 
     let db_user = DbUser {
       id: uuid::Uuid::new_v4().into_bytes(),
-      email: "foo@bar.com".to_string(),
+      email: Some("foo@bar.com".to_string()),
       verified: true,
       admin: false,
       ..Default::default()

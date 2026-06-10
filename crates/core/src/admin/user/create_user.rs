@@ -74,12 +74,11 @@ pub async fn create_user_handler(
   };
 
   // Send an email
-  if !request.verified {
-    let claims = EmailVerificationTokenClaims::new(
-      &user.uuid(),
-      user.email.clone(),
-      chrono::Duration::hours(4),
-    );
+  if let Some(ref email) = user.email
+    && !request.verified
+  {
+    let claims =
+      EmailVerificationTokenClaims::new(&user.uuid(), email.clone(), chrono::Duration::hours(4));
 
     let token = state
       .jwt()
@@ -88,7 +87,7 @@ pub async fn create_user_handler(
 
     // NOTE: We cannot pass a valid redirect_uri, since we cannot be sure if auth UI is
     // installed.
-    Email::verification_email(&state, &user.email, &token, None)?
+    Email::verification_email(&state, &email, &token, None)?
       .send()
       .await?;
   }

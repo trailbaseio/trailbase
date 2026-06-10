@@ -231,7 +231,7 @@ async fn test_oauth_login_flow_without_pkce() {
     .await
     .unwrap()
     .unwrap();
-  assert_eq!(EXTERNAL_USER_EMAIL, db_user.email);
+  assert_eq!(EXTERNAL_USER_EMAIL, db_user.email.as_deref().unwrap());
 
   // Is logged in.
   assert!(session_exists(&state, db_user.uuid()).await);
@@ -342,7 +342,7 @@ async fn test_oauth_login_flow_with_pkce() {
     .await
     .unwrap()
     .unwrap();
-  assert_eq!(EXTERNAL_USER_EMAIL, db_user.email);
+  assert_eq!(EXTERNAL_USER_EMAIL, db_user.email.as_deref().unwrap());
 
   // And session does not yet exist before upgrading auth_code + verifier to tokens.
   assert!(!session_exists(&state, db_user.uuid()).await);
@@ -372,7 +372,10 @@ async fn test_oauth_login_flow_with_pkce() {
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
     db_user.uuid().into_bytes()
   );
-  assert_eq!(EXTERNAL_USER_EMAIL, decoded_claims.email);
+  assert_eq!(
+    EXTERNAL_USER_EMAIL,
+    decoded_claims.email.as_deref().unwrap()
+  );
 }
 
 fn get_redirect_location<T: IntoResponse>(response: T) -> Option<String> {

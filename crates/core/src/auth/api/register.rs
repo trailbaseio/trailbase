@@ -131,19 +131,25 @@ pub async fn register_user_handler(
     return Err(AuthError::Internal("Failed to get user".into()));
   };
 
-  let claims =
-    EmailVerificationTokenClaims::new(&user.uuid(), user.email.clone(), chrono::Duration::hours(4));
-  let token = state
-    .jwt()
-    .encode(&claims)
-    .map_err(|err| AuthError::Internal(err.into()))?;
+  if let Some(ref email) = user.email {
+    let claims =
+      EmailVerificationTokenClaims::new(&user.uuid(), email.clone(), chrono::Duration::hours(4));
+    let token = state
+      .jwt()
+      .encode(&claims)
+      .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let email = Email::verification_email(&state, &user.email, &token, redirect_uri.as_deref())
-    .map_err(|err| AuthError::Internal(err.into()))?;
-  email
-    .send()
-    .await
-    .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
+    let email = Email::verification_email(&state, &email, &token, redirect_uri.as_deref())
+      .map_err(|err| AuthError::Internal(err.into()))?;
+    email
+      .send()
+      .await
+      .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
+  } else {
+    return Err(AuthError::Internal(
+      "optional email not yet supported".into(),
+    ));
+  }
 
   return Ok(success_response());
 }

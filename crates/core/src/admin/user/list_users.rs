@@ -19,7 +19,8 @@ use crate::util::row_id_column;
 #[derive(Debug, Serialize, TS)]
 pub struct UserJson {
   pub id: String,
-  pub email: String,
+  pub email: Option<String>,
+  pub handle: Option<String>,
   pub verified: bool,
   pub admin: bool,
 
@@ -36,6 +37,7 @@ impl From<DbUser> for UserJson {
     UserJson {
       id: Uuid::from_bytes(value.id).to_string(),
       email: value.email,
+      handle: value.handle,
       verified: value.verified,
       admin: value.admin,
       provider_id: value.provider_id,

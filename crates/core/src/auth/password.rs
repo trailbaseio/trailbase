@@ -101,16 +101,26 @@ pub fn check_user_password(
   if !db_user.verified {
     return Err(AuthError::Unauthorized);
   }
-  let attempts = ATTEMPTS.get(&db_user.email);
+  let Some(password_hash) = db_user.password_hash.as_deref() else {
+    return Err(AuthError::Unauthorized);
+  };
+  let account = db_user
+    .email
+    .as_deref()
+    .or_else(|| db_user.handle.as_deref())
+    .unwrap_or_default()
+    .to_string();
+
+  let attempts = ATTEMPTS.get(&account);
 
   if !is_demo && attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= LOGIN_RATE_LIMIT {
     return Err(AuthError::TooManyRequests);
   }
 
-  trailbase_extension::password::verify_password(password.as_bytes(), &db_user.password_hash)
-    .map_err(|err| {
+  trailbase_extension::password::verify_password(password.as_bytes(), password_hash).map_err(
+    |err| {
       ATTEMPTS.insert(
-        db_user.email.to_string(),
+        account,
         attempts
           .map(|a| FailedAttempt { tries: a.tries + 1 })
           .unwrap_or_default(),
@@ -120,7 +130,8 @@ pub fn check_user_password(
         trailbase_extension::password::PasswordError::InvalidPassword => AuthError::Unauthorized,
         err => AuthError::Internal(err.to_string().into()),
       };
-    })?;
+    },
+  )?;
 
   return Ok(());
 }

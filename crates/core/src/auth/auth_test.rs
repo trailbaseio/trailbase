@@ -160,7 +160,7 @@ async fn register_test_user(
 
     (
       db_user.verified.clone(),
-      User::from_unverified(db_user.uuid(), &db_user.email),
+      User::from_unverified(db_user.uuid(), db_user.email.as_deref().unwrap()),
     )
   };
 
@@ -278,7 +278,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
     user.uuid.into_bytes()
   );
-  assert_eq!(decoded_claims.email, email);
+  assert_eq!(decoded_claims.email, Some(email));
 
   assert!(session_exists(&state, user.uuid).await);
   let _ = logout_handler(
@@ -368,7 +368,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
     user.uuid.into_bytes()
   );
-  assert_eq!(decoded_claims.email, email);
+  assert_eq!(decoded_claims.email, Some(email));
 
   let refresh_token: String = state
     .session_conn()
@@ -732,7 +732,7 @@ async fn test_auth_otp_flow() {
     State(state.clone()),
     Query(Default::default()),
     Either::Form(otp::RequestOtpRequest {
-      email: user.email.clone(),
+      email: user.email.as_ref().unwrap().clone(),
       ..Default::default()
     }),
   )
@@ -758,7 +758,7 @@ async fn test_auth_otp_flow() {
       Cookies::default(),
       Query(Default::default()),
       Either::Form(otp::LoginOtpRequest {
-        email: Some(user.email.clone()),
+        email: user.email.clone(),
         code: Some("InvalidCode".to_string()),
         ..Default::default()
       }),
@@ -783,7 +783,7 @@ async fn test_auth_otp_flow() {
     Cookies::default(),
     Query(Default::default()),
     Either::Json(otp::LoginOtpRequest {
-      email: Some(user.email.clone()),
+      email: user.email.clone(),
       code: Some(otp_email_code.clone()),
       ..Default::default()
     }),

@@ -127,7 +127,13 @@ pub async fn request_otp_handler(
     return Err(AuthError::Internal("Failed to insert OTP code".into()));
   }
 
-  let email = Email::otp_email(&state, &db_user.email, &otp_code, redirect_uri.as_deref())
+  let Some(email) = db_user.email.as_deref() else {
+    return Err(AuthError::Internal(
+      "optional email not yet supported".into(),
+    ));
+  };
+
+  let email = Email::otp_email(&state, email, &otp_code, redirect_uri.as_deref())
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()

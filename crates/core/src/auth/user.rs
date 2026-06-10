@@ -13,10 +13,13 @@ use crate::{app_state::AppState, util::b64_to_uuid};
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 pub(crate) struct DbUser {
   pub id: [u8; 16],
-  pub email: String,
-  pub password_hash: String,
+  pub email: Option<String>,
+  pub handle: Option<String>,
+  pub password_hash: Option<String>,
   pub verified: bool,
   pub admin: bool,
+
+  // TOTP secret for multi-factor.
   pub totp_secret: Option<String>,
 
   pub created: i64,
@@ -48,8 +51,9 @@ impl DbUser {
         0,
       ))
       .into_bytes(),
-      email: email.to_string(),
-      password_hash: crate::auth::password::hash_password(password).unwrap(),
+      email: Some(email.to_string()),
+      handle: None,
+      password_hash: Some(crate::auth::password::hash_password(password).unwrap()),
       verified: true,
       admin: false,
       totp_secret: None,
@@ -69,7 +73,9 @@ pub struct User {
   /// Url-safe Base64 encoded id of the current user.
   pub id: String,
   /// E-mail of the current user.
-  pub email: String,
+  pub email: Option<String>,
+  /// Handle of the current user.
+  pub handle: Option<String>,
   /// Convenience UUID representation of [id] above.
   pub uuid: Uuid,
 
@@ -92,6 +98,7 @@ impl User {
     return Ok(Self {
       id: claims.sub,
       email: claims.email,
+      handle: claims.handle,
       uuid,
       csrf_token: claims.csrf_token,
     });
@@ -109,7 +116,8 @@ impl User {
   pub(crate) fn from_unverified(user_id: Uuid, email: &str) -> Self {
     return Self {
       id: crate::util::uuid_to_b64(&user_id),
-      email: email.to_string(),
+      email: Some(email.to_string()),
+      handle: None,
       uuid: user_id,
       csrf_token: crate::rand::random_alphanumeric(20),
     };

@@ -88,7 +88,13 @@ pub async fn reset_password_request_handler(
     .encode(&password_reset_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let email = Email::password_reset_email(&state, &user.email, &token)
+  let Some(email_address) = user.email.as_deref() else {
+    return Err(AuthError::FailedDependency(
+      "no email address associdated".into(),
+    ));
+  };
+
+  let email = Email::password_reset_email(&state, email_address, &token)
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()

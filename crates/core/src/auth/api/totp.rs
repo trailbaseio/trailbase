@@ -55,7 +55,9 @@ pub async fn register_totp_request_handler(
     .access_config(|c| c.server.application_name.clone())
     .unwrap_or_else(|| "TrailBase".to_string());
 
-  let totp = new_totp(&secret, Some(&app_name), Some(&user.email))?;
+  let account = user.email.as_deref().or_else(|| user.handle.as_deref());
+
+  let totp = new_totp(&secret, Some(&app_name), account)?;
 
   return Ok(
     Json(RegisterTotpResponse {
@@ -150,7 +152,14 @@ pub async fn unregister_totp_handler(
     Either::Form(req) => (req, false),
   };
 
-  let db_user = user_by_email(&state, &user.email).await?;
+  let Some(email) = user.email.as_deref() else {
+    return Err(AuthError::FailedDependency("No email associated".into()));
+  };
+
+  let db_user = user_by_email(&state, email).await?;
+
+  // TODO: add user_by_handle.
+
   let Some(secret) = db_user.totp_secret.map(Secret::Encoded) else {
     return Err(AuthError::BadRequest("TOTP not enabled for this user"));
   };

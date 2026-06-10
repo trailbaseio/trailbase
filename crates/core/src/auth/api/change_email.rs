@@ -84,11 +84,13 @@ pub async fn change_email_request_handler(
     return Err(AuthError::Forbidden);
   };
 
+  let old_email = db_user.email.as_deref().unwrap_or_default();
+
   // NOTE: Require `old_email` in form-mode. This is pretty arbitrary, we could do away with this
   // entirely :shrug:.
   if !json {
-    let Some(ref old_email) = request.old_email else {
-      const MSG: &str = "`old_email` missing";
+    let Some(ref old_email_req) = request.old_email else {
+      const MSG: &str = "`old_email` missing from request";
       if let Some(ref redirect_uri) = err_redirect_uri.or(redirect_uri) {
         return Ok(
           Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG)))
@@ -98,7 +100,7 @@ pub async fn change_email_request_handler(
       return Err(AuthError::BadRequest(MSG));
     };
 
-    if validate_and_normalize_email_address(old_email)? != db_user.email {
+    if validate_and_normalize_email_address(old_email_req)? != old_email {
       const MSG: &str = "`old_email` does not match";
       if let Some(ref redirect_uri) = err_redirect_uri.or(redirect_uri) {
         return Ok(
@@ -112,7 +114,7 @@ pub async fn change_email_request_handler(
 
   let claims = EmailChangeTokenClaims::new(
     &db_user.uuid(),
-    db_user.email,
+    old_email.to_string(),
     new_email.clone(),
     chrono::Duration::hours(4),
   );
