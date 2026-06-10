@@ -129,10 +129,12 @@ async fn register_test_user(
       State(state.clone()),
       Query(LoginInputParams::default()),
       Cookies::default(),
-      Either::Json(LoginRequest {
+      Either::Json(LoginRequest::Email {
         email: email.to_string(),
         password: password.to_string(),
-        ..Default::default()
+        params: LoginInputParams {
+          ..Default::default()
+        },
       })
     )
     .await,
@@ -193,13 +195,15 @@ async fn test_auth_password_login_flow_with_pkce() {
 
   // Missing code challenge.
   assert!(matches!(
-    login_helper(Either::Json(LoginRequest {
+    login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: password.clone(),
-      response_type: Some(ResponseType::Code),
-      redirect_uri: Some(redirect_uri.clone()),
-      pkce_code_challenge: None,
-      ..Default::default()
+      params: LoginInputParams {
+        response_type: Some(ResponseType::Code),
+        redirect_uri: Some(redirect_uri.clone()),
+        pkce_code_challenge: None,
+        ..Default::default()
+      },
     }))
     .await,
     Err(AuthError::BadRequest(_)),
@@ -207,13 +211,15 @@ async fn test_auth_password_login_flow_with_pkce() {
 
   // Missing redirect.
   assert!(matches!(
-    login_helper(Either::Json(LoginRequest {
+    login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: password.clone(),
-      response_type: Some(ResponseType::Code),
-      redirect_uri: None,
-      pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
-      ..Default::default()
+      params: LoginInputParams {
+        response_type: Some(ResponseType::Code),
+        redirect_uri: None,
+        pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+        ..Default::default()
+      }
     }))
     .await,
     Err(AuthError::BadRequest(_)),
@@ -221,26 +227,30 @@ async fn test_auth_password_login_flow_with_pkce() {
 
   // Bad password.
   assert!(matches!(
-    &login_helper(Either::Json(LoginRequest {
+    &login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
-      response_type: Some(ResponseType::Code),
-      redirect_uri: Some(redirect_uri.clone()),
-      pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
-      ..Default::default()
+      params: LoginInputParams {
+        response_type: Some(ResponseType::Code),
+        redirect_uri: Some(redirect_uri.clone()),
+        pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+        ..Default::default()
+      }
     }))
     .await,
     Err(AuthError::Unauthorized),
   ));
 
   // Finally let's log in successfully.
-  let login_response = login_helper(Either::Json(LoginRequest {
+  let login_response = login_helper(Either::Json(LoginRequest::Email {
     email: email.clone(),
     password: password.clone(),
-    response_type: Some(ResponseType::Code),
-    redirect_uri: Some(redirect_uri.clone()),
-    pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
-    ..Default::default()
+    params: LoginInputParams {
+      response_type: Some(ResponseType::Code),
+      redirect_uri: Some(redirect_uri.clone()),
+      pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+      ..Default::default()
+    },
   }))
   .await
   .unwrap();
@@ -311,10 +321,12 @@ async fn test_auth_password_login_flow_without_pkce() {
 
   // Test login using non-PKCE flow
   assert!(matches!(
-    login_helper(Either::Json(LoginRequest {
+    login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
-      ..Default::default()
+      params: LoginInputParams {
+        ..Default::default()
+      }
     }))
     .await,
     Err(AuthError::Unauthorized),
@@ -322,11 +334,13 @@ async fn test_auth_password_login_flow_without_pkce() {
 
   {
     // Assert that form-based login yields a redirect.
-    let response = login_helper(Either::Form(LoginRequest {
+    let response = login_helper(Either::Form(LoginRequest::Email {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
-      redirect_uri: Some("/_/auth/login".to_string()),
-      ..Default::default()
+      params: LoginInputParams {
+        redirect_uri: Some("/_/auth/login".to_string()),
+        ..Default::default()
+      },
     }))
     .await
     .unwrap();
@@ -341,10 +355,12 @@ async fn test_auth_password_login_flow_without_pkce() {
 
   // Finally, let's try logging in with the correct password.
   let login_response: LoginResponse = {
-    let response = login_helper(Either::Json(LoginRequest {
+    let response = login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: password.clone(),
-      ..Default::default()
+      params: LoginInputParams {
+        ..Default::default()
+      },
     }))
     .await
     .unwrap();
@@ -439,9 +455,9 @@ async fn test_auth_reset_password_flow() {
   let _ = reset_password_request_handler(
     State(state.clone()),
     Query(Default::default()),
-    Either::Form(ResetPasswordRequest {
+    Either::Form(ResetPasswordRequest::Email {
       email: email.clone(),
-      ..Default::default()
+      redirect_uri: None,
     }),
   )
   .await
@@ -455,9 +471,9 @@ async fn test_auth_reset_password_flow() {
     reset_password_request_handler(
       State(state.clone()),
       Query(Default::default()),
-      Either::Json(ResetPasswordRequest {
+      Either::Json(ResetPasswordRequest::Email {
         email: email.clone(),
-        ..Default::default()
+        redirect_uri: None,
       }),
     )
     .await

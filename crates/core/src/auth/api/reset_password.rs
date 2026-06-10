@@ -25,10 +25,17 @@ pub struct ResetPasswordQuery {
   redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
-pub struct ResetPasswordRequest {
-  pub email: String,
-  pub redirect_uri: Option<String>,
+#[derive(Debug, Deserialize, TS, ToSchema)]
+#[serde(untagged)]
+pub enum ResetPasswordRequest {
+  Email {
+    email: String,
+    redirect_uri: Option<String>,
+  },
+  Handle {
+    handle: String,
+    redirect_uri: Option<String>,
+  },
 }
 
 /// Request a password reset.
@@ -55,8 +62,16 @@ pub async fn reset_password_request_handler(
     Either::Form(req) => req,
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
-  let normalized_email = validate_and_normalize_email_address(&request.email)?;
+  let ResetPasswordRequest::Email {
+    email,
+    redirect_uri,
+  } = request
+  else {
+    return Err(AuthError::BadRequest("handle not yet supported"));
+  };
+
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(redirect_uri))?;
+  let normalized_email = validate_and_normalize_email_address(&email)?;
 
   {
     // Rate limit.

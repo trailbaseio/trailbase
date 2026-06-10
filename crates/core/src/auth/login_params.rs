@@ -18,7 +18,7 @@ pub enum ResponseType {
   Code,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, IntoParams, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize, IntoParams, ToSchema, TS)]
 pub(crate) struct LoginInputParams {
   pub redirect_uri: Option<String>,
   pub mfa_redirect_uri: Option<String>,

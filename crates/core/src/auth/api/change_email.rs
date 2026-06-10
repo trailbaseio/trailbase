@@ -32,6 +32,7 @@ pub struct ChangeEmailRequest {
   pub csrf_token: String,
   /// Old email address. Only required in form mode.
   pub old_email: Option<String>,
+  /// TODO: We should allow unsetting the email?
   pub new_email: String,
 
   /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.

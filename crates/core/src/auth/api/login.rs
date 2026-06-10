@@ -30,17 +30,23 @@ use crate::{
   util,
 };
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[derive(Debug, Deserialize, TS, ToSchema)]
 #[ts(export)]
-pub struct LoginRequest {
-  pub email: String,
-  pub password: String,
+pub enum LoginRequest {
+  Email {
+    email: String,
+    password: String,
 
-  // Mirror of LoginInputParams.
-  pub redirect_uri: Option<String>,
-  pub mfa_redirect_uri: Option<String>,
-  pub response_type: Option<ResponseType>,
-  pub pkce_code_challenge: Option<String>,
+    #[serde(flatten)]
+    params: LoginInputParams,
+  },
+  Handle {
+    handle: String,
+    password: String,
+
+    #[serde(flatten)]
+    params: LoginInputParams,
+  },
 }
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
@@ -77,20 +83,25 @@ pub(crate) async fn login_handler(
   cookies: Cookies,
   either_request: Either<LoginRequest>,
 ) -> Result<Response, AuthError> {
-  let (
-    LoginRequest {
-      email,
-      password,
-      response_type,
-      pkce_code_challenge,
-      redirect_uri,
-      mfa_redirect_uri,
-    },
-    json,
-  ) = match either_request {
+  let (request, json) = match either_request {
     Either::Json(req) => (req, true),
     Either::Form(req) => (req, false),
     Either::Multipart(req, _) => (req, false),
+  };
+
+  let LoginRequest::Email {
+    email,
+    password,
+    params:
+      LoginInputParams {
+        response_type,
+        pkce_code_challenge,
+        redirect_uri,
+        mfa_redirect_uri,
+      },
+  } = request
+  else {
+    return Err(AuthError::BadRequest("Handle not yet supported"));
   };
 
   // Validate input params.

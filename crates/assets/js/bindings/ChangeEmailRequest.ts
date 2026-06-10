@@ -4,7 +4,11 @@ export type ChangeEmailRequest = { csrf_token: string,
 /**
  * Old email address. Only required in form mode.
  */
-old_email: string | null, new_email: string, 
+old_email: string | null, 
+/**
+ * TODO: We should allow unsetting the email?
+ */
+new_email: string, 
 /**
  * Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
  */

@@ -25,6 +25,7 @@ pub struct RegisterQuery {
 #[derive(Debug, Default, Deserialize, ToSchema)]
 pub struct RegisterUserRequest {
   pub email: String,
+  pub handle: Option<String>,
   pub password: String,
   pub password_repeat: String,
 
@@ -61,6 +62,8 @@ pub async fn register_user_handler(
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
+  // TODO: validate handle.
+  let handle = request.handle;
 
   let auth_options = state.auth_options();
   if let Err(err) = validate_password_policy(
@@ -103,9 +106,9 @@ pub async fn register_user_handler(
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
       INSERT INTO \"{USER_TABLE}\" \
-        (email, password_hash) \
+        (email, handle, password_hash) \
       VALUES \
-        (:email, :password_hash) \
+        (:email, :handle, :password_hash) \
       RETURNING * \
     "
   );
@@ -116,6 +119,7 @@ pub async fn register_user_handler(
       INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email.clone(),
+        ":handle": handle,
         ":password_hash": hashed_password,
       },
     )
