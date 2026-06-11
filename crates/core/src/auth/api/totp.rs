@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use totp_rs::{Algorithm, Secret, TOTP};
 use trailbase_sqlite::params;
 use ts_rs::TS;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::util::user_by_email;
@@ -17,8 +17,8 @@ use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
 
-#[derive(Debug, Deserialize, Serialize, ToSchema, TS)]
-pub struct RegisterTotpQuery {
+#[derive(Debug, Default, Deserialize, Serialize, IntoParams)]
+pub struct RegisterTotpParams {
   pub png: Option<bool>,
 }
 
@@ -35,13 +35,14 @@ pub struct RegisterTotpResponse {
   get,
   path = "/totp/register",
   tag = "auth",
+  params(RegisterTotpParams),
   responses(
     (status = 200, description = "TOTP secret and QR code URI.", body = RegisterTotpResponse)
   )
 )]
 pub async fn register_totp_request_handler(
   State(state): State<AppState>,
-  Query(query): Query<RegisterTotpQuery>,
+  Query(query): Query<RegisterTotpParams>,
   user: User,
 ) -> Result<Response, AuthError> {
   if state.demo_mode() {

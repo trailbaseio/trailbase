@@ -14,7 +14,7 @@ use crate::auth::util::{
 };
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct LogoutQuery {
+pub struct LogoutParams {
   redirect_uri: Option<String>,
 }
 
@@ -26,14 +26,14 @@ pub struct LogoutQuery {
   get,
   path = "/logout",
   tag = "auth",
-  params(LogoutQuery),
+  params(LogoutParams),
   responses(
     (status = 200, description = "Auth & refresh tokens.")
   )
 )]
 pub async fn logout_handler(
   State(state): State<AppState>,
-  Query(query): Query<LogoutQuery>,
+  Query(query): Query<LogoutParams>,
   user: Option<User>,
   cookies: Cookies,
 ) -> Result<Response, AuthError> {

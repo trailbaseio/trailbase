@@ -20,7 +20,7 @@ const TTL_SEC: i64 = 3600;
 const RATE_LIMIT_SEC: i64 = 4 * 3600;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct EmailVerificationQuery {
+pub struct EmailVerificationParams {
   pub email: String,
   pub redirect_uri: Option<String>,
 }
@@ -30,7 +30,7 @@ pub struct EmailVerificationQuery {
   get,
   path = "/verify_email/trigger",
   tag = "auth",
-  params(EmailVerificationQuery),
+  params(EmailVerificationParams),
   responses(
     (status = 200, description = "Email verification sent or user not found, when redirect_uri not present."),
     (status = 303, description = "Email verification sent or user not found, when redirect_uri present."),
@@ -39,7 +39,7 @@ pub struct EmailVerificationQuery {
 )]
 pub async fn request_email_verification_handler(
   State(state): State<AppState>,
-  Query(query): Query<EmailVerificationQuery>,
+  Query(query): Query<EmailVerificationParams>,
 ) -> Result<Response, AuthError> {
   let normalized_email = validate_and_normalize_email_address(&query.email)?;
   let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
@@ -94,7 +94,7 @@ pub async fn request_email_verification_handler(
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
-pub(crate) struct VerifyEmailQuery {
+pub(crate) struct VerifyEmailParams {
   redirect_uri: Option<String>,
 }
 
@@ -113,7 +113,7 @@ pub(crate) struct VerifyEmailQuery {
 pub(crate) async fn verify_email_handler(
   State(state): State<AppState>,
   Path(email_verification_token): Path<String>,
-  Query(query): Query<VerifyEmailQuery>,
+  Query(query): Query<VerifyEmailParams>,
 ) -> Result<Response, AuthError> {
   let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
 

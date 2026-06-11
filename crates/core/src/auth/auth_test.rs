@@ -12,22 +12,22 @@ use crate::AppState;
 use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_config, test_state};
 use crate::auth::AuthError;
-use crate::auth::api::change_email::{self, ChangeEmailConfigQuery};
+use crate::auth::api::change_email::{self, ChangeEmailConfigParams};
 use crate::auth::api::change_password::{
-  ChangePasswordQuery, ChangePasswordRequest, change_password_handler,
+  ChangePasswordParams, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::{LoginRequest, LoginResponse, login_handler};
-use crate::auth::api::logout::{LogoutQuery, logout_handler};
+use crate::auth::api::logout::{LogoutParams, logout_handler};
 use crate::auth::api::otp;
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
-use crate::auth::api::register::{RegisterQuery, RegisterUserRequest, register_user_handler};
+use crate::auth::api::register::{RegisterUserParams, RegisterUserRequest, register_user_handler};
 use crate::auth::api::reset_password::{
   ResetPasswordRequest, ResetPasswordUpdateRequest, reset_password_request_handler,
   reset_password_update_handler,
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
-use crate::auth::api::verify_email::{VerifyEmailQuery, verify_email_handler};
+use crate::auth::api::verify_email::{VerifyEmailParams, verify_email_handler};
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
@@ -95,7 +95,7 @@ async fn register_test_user(
 
   let _ = register_user_handler(
     State(state.clone()),
-    Query(RegisterQuery::default()),
+    Query(RegisterUserParams::default()),
     Either::Form(request),
   )
   .await
@@ -144,7 +144,7 @@ async fn register_test_user(
   let _ = verify_email_handler(
     State(state.clone()),
     Path(verification_email_token.clone()),
-    Query(VerifyEmailQuery::default()),
+    Query(VerifyEmailParams::default()),
   )
   .await
   .unwrap();
@@ -293,7 +293,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   assert!(session_exists(&state, user.uuid).await);
   let _ = logout_handler(
     State(state.clone()),
-    Query(LogoutQuery::default()),
+    Query(LogoutParams::default()),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -401,7 +401,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   assert!(session_exists(&state, user.uuid).await);
   let _ = logout_handler(
     State(state.clone()),
-    Query(LogoutQuery::default()),
+    Query(LogoutParams::default()),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -457,7 +457,7 @@ async fn test_auth_reset_password_flow() {
     Query(Default::default()),
     Either::Form(ResetPasswordRequest::Email {
       email: email.clone(),
-      redirect_uri: None,
+      params: Default::default(),
     }),
   )
   .await
@@ -473,7 +473,7 @@ async fn test_auth_reset_password_flow() {
       Query(Default::default()),
       Either::Json(ResetPasswordRequest::Email {
         email: email.clone(),
-        redirect_uri: None,
+        params: Default::default(),
       }),
     )
     .await
@@ -514,7 +514,7 @@ async fn test_auth_reset_password_flow() {
       password: new_password.clone(),
       password_repeat: new_password.clone(),
       password_reset_token: password_reset_token,
-      redirect_uri: None,
+      ..Default::default()
     }),
   )
   .await
@@ -540,7 +540,7 @@ async fn test_auth_reset_password_flow() {
   assert!(session_exists(&state, user.uuid).await);
   let _ = logout_handler(
     State(state.clone()),
-    Query(LogoutQuery::default()),
+    Query(LogoutParams::default()),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -622,7 +622,7 @@ async fn test_auth_change_email_flow() {
   let _ = change_email::change_email_confirm_handler(
     State(state.clone()),
     Path(change_email_token.clone()),
-    Query(ChangeEmailConfigQuery { redirect_uri: None }),
+    Query(ChangeEmailConfigParams { redirect_uri: None }),
   )
   .await
   .expect(&format!("CODE: '{change_email_token}'"));
@@ -660,7 +660,7 @@ async fn test_auth_change_password_flow() {
 
   let _ = change_password_handler(
     State(state.clone()),
-    Query(ChangePasswordQuery::default()),
+    Query(ChangePasswordParams::default()),
     user.clone(),
     Either::Json(ChangePasswordRequest {
       old_password: password.clone(),
@@ -735,7 +735,7 @@ async fn test_auth_otp_flow() {
     Query(Default::default()),
     Either::Form(otp::RequestOtpRequest {
       email: "unknown@user.org".to_string(),
-      ..Default::default()
+      params: Default::default(),
     }),
   )
   .await
@@ -749,7 +749,7 @@ async fn test_auth_otp_flow() {
     Query(Default::default()),
     Either::Form(otp::RequestOtpRequest {
       email: user.email.as_ref().unwrap().clone(),
-      ..Default::default()
+      params: Default::default(),
     }),
   )
   .await
@@ -774,9 +774,11 @@ async fn test_auth_otp_flow() {
       Cookies::default(),
       Query(Default::default()),
       Either::Form(otp::LoginOtpRequest {
-        email: user.email.clone(),
-        code: Some("InvalidCode".to_string()),
-        ..Default::default()
+        params: otp::LoginOtpParams {
+          email: user.email.clone(),
+          code: Some("InvalidCode".to_string()),
+          ..Default::default()
+        }
       }),
     )
     .await
@@ -799,9 +801,11 @@ async fn test_auth_otp_flow() {
     Cookies::default(),
     Query(Default::default()),
     Either::Json(otp::LoginOtpRequest {
-      email: user.email.clone(),
-      code: Some(otp_email_code.clone()),
-      ..Default::default()
+      params: otp::LoginOtpParams {
+        email: user.email.clone(),
+        code: Some(otp_email_code.clone()),
+        ..Default::default()
+      },
     }),
   )
   .await

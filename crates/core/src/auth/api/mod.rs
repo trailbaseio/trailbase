@@ -2,6 +2,7 @@ pub(crate) mod register;
 
 pub(super) mod avatar;
 pub(super) mod change_email;
+pub(super) mod change_handle;
 pub(super) mod change_password;
 pub(super) mod delete;
 pub(super) mod login;

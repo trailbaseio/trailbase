@@ -7,33 +7,31 @@ use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
+use crate::app_state::AppState;
 use crate::auth::password::{check_user_password, hash_password, validate_password_policy};
-use crate::auth::util::validate_redirect;
+use crate::auth::util::{user_by_id, validate_redirect};
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
 use crate::util::urlencode;
-use crate::{app_state::AppState, auth::util::user_by_id};
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub(crate) struct ChangePasswordQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+pub(crate) struct ChangePasswordParams {
   /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
   pub redirect_uri: Option<String>,
   /// Error redirect target for non-JSON requests.
   pub err_redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct ChangePasswordRequest {
   pub old_password: String,
   pub new_password: String,
   pub new_password_repeat: String,
 
-  /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
-  pub redirect_uri: Option<String>,
-  /// Error redirect target for non-JSON requests.
-  pub err_redirect_uri: Option<String>,
+  #[serde(flatten)]
+  pub params: ChangePasswordParams,
 }
 
 /// Request a change of password.
@@ -41,7 +39,7 @@ pub struct ChangePasswordRequest {
   post,
   path = "/change_password",
   tag = "auth",
-  params(ChangePasswordQuery),
+  params(ChangePasswordParams),
   request_body = ChangePasswordRequest,
   responses(
     (status = 200, description = "Success, when redirect_uri not present."),
@@ -50,7 +48,7 @@ pub struct ChangePasswordRequest {
 )]
 pub async fn change_password_handler(
   State(state): State<AppState>,
-  Query(query): Query<ChangePasswordQuery>,
+  Query(query): Query<ChangePasswordParams>,
   user: User,
   either_request: Either<ChangePasswordRequest>,
 ) -> Result<Response, AuthError> {
@@ -64,9 +62,11 @@ pub async fn change_password_handler(
     Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
-  let err_redirect_uri =
-    validate_redirect(&state, query.err_redirect_uri.or(request.err_redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
+  let err_redirect_uri = validate_redirect(
+    &state,
+    query.err_redirect_uri.or(request.params.err_redirect_uri),
+  )?;
 
   if let Err(err) = validate_password_policy(
     &request.new_password,

@@ -20,21 +20,23 @@ use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct ResetPasswordQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+pub struct ResetPasswordParams {
   redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Deserialize, TS, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
 #[serde(untagged)]
 pub enum ResetPasswordRequest {
   Email {
     email: String,
-    redirect_uri: Option<String>,
+    #[serde(flatten)]
+    params: ResetPasswordParams,
   },
   Handle {
     handle: String,
-    redirect_uri: Option<String>,
+    #[serde(flatten)]
+    params: ResetPasswordParams,
   },
 }
 
@@ -43,7 +45,7 @@ pub enum ResetPasswordRequest {
   post,
   path = "/reset_password/request",
   tag = "auth",
-  params(ResetPasswordQuery),
+  params(ResetPasswordParams),
   request_body = ResetPasswordRequest,
   responses(
     (status = 200, description = "Success or user not found, when redirect_uri not present."),
@@ -53,7 +55,7 @@ pub enum ResetPasswordRequest {
 )]
 pub async fn reset_password_request_handler(
   State(state): State<AppState>,
-  Query(query): Query<ResetPasswordQuery>,
+  Query(query): Query<ResetPasswordParams>,
   either_request: Either<ResetPasswordRequest>,
 ) -> Result<Response, AuthError> {
   let request = match either_request {
@@ -62,15 +64,11 @@ pub async fn reset_password_request_handler(
     Either::Form(req) => req,
   };
 
-  let ResetPasswordRequest::Email {
-    email,
-    redirect_uri,
-  } = request
-  else {
+  let ResetPasswordRequest::Email { email, params } = request else {
     return Err(AuthError::BadRequest("handle not yet supported"));
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&email)?;
 
   {
@@ -119,8 +117,8 @@ pub async fn reset_password_request_handler(
   return Ok(success_response());
 }
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct ResetPasswordUpdateQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema)]
+pub struct ResetPasswordUpdateParams {
   redirect_uri: Option<String>,
 }
 
@@ -133,7 +131,8 @@ pub struct ResetPasswordUpdateRequest {
   #[serde(alias = "password_reset_code")]
   pub password_reset_token: String,
 
-  pub redirect_uri: Option<String>,
+  #[serde(flatten)]
+  pub params: ResetPasswordUpdateParams,
 }
 
 /// Endpoint for setting a new password after the user has requested a reset and provided a
@@ -142,7 +141,7 @@ pub struct ResetPasswordUpdateRequest {
   post,
   path = "/reset_password/update",
   tag = "auth",
-  params(ResetPasswordUpdateQuery),
+  params(ResetPasswordUpdateParams),
   request_body = ResetPasswordUpdateRequest,
   responses(
     (status = 303, description = "Success. Redirect to provided `redirect_uri` or login page."),
@@ -152,7 +151,7 @@ pub struct ResetPasswordUpdateRequest {
 )]
 pub async fn reset_password_update_handler(
   State(state): State<AppState>,
-  Query(query): Query<ResetPasswordUpdateQuery>,
+  Query(query): Query<ResetPasswordUpdateParams>,
   either_request: Either<ResetPasswordUpdateRequest>,
 ) -> Result<Response, AuthError> {
   let request = match either_request {
@@ -161,7 +160,7 @@ pub async fn reset_password_update_handler(
     Either::Form(req) => req,
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
 
   let auth_options = state.auth_options();
   validate_password_policy(

@@ -24,23 +24,24 @@ use crate::extract::Either;
 use crate::rand::random_numeric_and_uppercase;
 use crate::util::urlencode;
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct RequestOtpQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+pub struct RequestOtpParams {
   pub redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct RequestOtpRequest {
   pub email: String,
-  pub redirect_uri: Option<String>,
+  #[serde(flatten)]
+  pub params: RequestOtpParams,
 }
 
 #[utoipa::path(
   post,
   path = "/otp/request",
   tag = "auth",
-  params(RequestOtpQuery),
+  params(RequestOtpParams),
   request_body = RequestOtpRequest,
   responses(
     (status = 200, description = "OTP sent or user not found, when redirect_uri not present."),
@@ -52,7 +53,7 @@ pub struct RequestOtpRequest {
 
 pub async fn request_otp_handler(
   State(state): State<AppState>,
-  Query(query): Query<RequestOtpQuery>,
+  Query(query): Query<RequestOtpParams>,
   either_request: Either<RequestOtpRequest>,
 ) -> Result<Response, AuthError> {
   if !state.access_config(|c| c.auth.enable_otp_signin()) {
@@ -65,7 +66,7 @@ pub async fn request_otp_handler(
     Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
 
   {
@@ -143,26 +144,25 @@ pub async fn request_otp_handler(
   return Ok(success_response());
 }
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct LoginOtpQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+pub struct LoginOtpParams {
   pub email: Option<String>,
   pub code: Option<String>,
   pub redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct LoginOtpRequest {
-  pub email: Option<String>,
-  pub code: Option<String>,
-  pub redirect_uri: Option<String>,
+  #[serde(flatten)]
+  pub params: LoginOtpParams,
 }
 
 #[utoipa::path(
   post,
   path = "/otp/login",
   tag = "auth",
-  params(LoginOtpQuery),
+  params(LoginOtpParams),
   request_body = LoginOtpRequest,
   responses(
     (status = 200, description = "Auth tokens for JSONl logins.", body = LoginResponse),
@@ -173,7 +173,7 @@ pub struct LoginOtpRequest {
 pub async fn login_otp_handler(
   State(state): State<AppState>,
   cookies: Cookies,
-  Query(query): Query<LoginOtpQuery>,
+  Query(query): Query<LoginOtpParams>,
   either_request: Either<LoginOtpRequest>,
 ) -> Result<Response, AuthError> {
   if !state.access_config(|c| c.auth.enable_otp_signin()) {
@@ -185,10 +185,11 @@ pub async fn login_otp_handler(
     Either::Multipart(req, _) => (req, false),
     Either::Form(req) => (req, false),
   };
+  let request_params = request.params;
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request_params.redirect_uri))?;
 
-  let Some(email) = query.email.as_deref().or(request.email.as_deref()) else {
+  let Some(email) = query.email.as_deref().or(request_params.email.as_deref()) else {
     // TODO: Add redirect for non-json
     return Err(AuthError::BadRequest("missing email"));
   };
@@ -197,7 +198,7 @@ pub async fn login_otp_handler(
   let Some(otp_code) = query
     .code
     .as_deref()
-    .or(request.code.as_deref())
+    .or(request_params.code.as_deref())
     .map(|c| c.trim())
   else {
     // TODO: Add redirect for non-json

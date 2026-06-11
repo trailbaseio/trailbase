@@ -4,6 +4,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::named_params;
+use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
@@ -17,19 +18,20 @@ use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct RegisterQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+pub struct RegisterUserParams {
   redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, ToSchema)]
+#[derive(Debug, Default, Deserialize, ToSchema, TS)]
 pub struct RegisterUserRequest {
   pub email: String,
   pub handle: Option<String>,
   pub password: String,
   pub password_repeat: String,
 
-  pub redirect_uri: Option<String>,
+  #[serde(flatten)]
+  pub params: RegisterUserParams,
 }
 
 /// Registers a new user with email and password.
@@ -37,7 +39,7 @@ pub struct RegisterUserRequest {
   post,
   path = "/register",
   tag = "auth",
-  params(RegisterQuery),
+  params(RegisterUserParams),
   request_body = RegisterUserRequest,
   responses(
     (status = 303, description = "Form fail OR success, new user registered, or user already exists."),
@@ -46,7 +48,7 @@ pub struct RegisterUserRequest {
 )]
 pub async fn register_user_handler(
   State(state): State<AppState>,
-  Query(query): Query<RegisterQuery>,
+  Query(query): Query<RegisterUserParams>,
   either_request: Either<RegisterUserRequest>,
 ) -> Result<Response, AuthError> {
   let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
@@ -60,7 +62,7 @@ pub async fn register_user_handler(
     Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
   // TODO: validate handle.
   let handle = request.handle;

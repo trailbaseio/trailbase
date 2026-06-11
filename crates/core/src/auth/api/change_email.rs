@@ -18,15 +18,15 @@ use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
 
-#[derive(Debug, Default, Deserialize, IntoParams)]
-pub struct ChangeEmailQuery {
+#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+pub struct ChangeEmailParams {
   /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
   pub redirect_uri: Option<String>,
   /// Error redirect target for non-JSON requests.
   pub err_redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, TS, ToSchema)]
+#[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct ChangeEmailRequest {
   pub csrf_token: String,
@@ -35,10 +35,8 @@ pub struct ChangeEmailRequest {
   /// TODO: We should allow unsetting the email?
   pub new_email: String,
 
-  /// Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.
-  pub redirect_uri: Option<String>,
-  /// Error redirect target for non-JSON requests.
-  pub err_redirect_uri: Option<String>,
+  #[serde(flatten)]
+  pub params: ChangeEmailParams,
 }
 
 /// Request an email change.
@@ -46,7 +44,7 @@ pub struct ChangeEmailRequest {
   post,
   path = "/change_email/request",
   tag = "auth",
-  params(ChangeEmailQuery),
+  params(ChangeEmailParams),
   request_body = ChangeEmailRequest,
   responses(
     (status = 200, description = "Success, when redirect_uri is not present and JSON input"),
@@ -59,7 +57,7 @@ pub struct ChangeEmailRequest {
 pub async fn change_email_request_handler(
   State(state): State<AppState>,
   user: User,
-  Query(query): Query<ChangeEmailQuery>,
+  Query(query): Query<ChangeEmailParams>,
   either_request: Either<ChangeEmailRequest>,
 ) -> Result<Response, AuthError> {
   if state.demo_mode() {
@@ -76,9 +74,11 @@ pub async fn change_email_request_handler(
     return Err(AuthError::BadRequest("Invalid CSRF token"));
   }
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.redirect_uri))?;
-  let err_redirect_uri =
-    validate_redirect(&state, query.err_redirect_uri.or(request.err_redirect_uri))?;
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
+  let err_redirect_uri = validate_redirect(
+    &state,
+    query.err_redirect_uri.or(request.params.err_redirect_uri),
+  )?;
   let new_email = validate_and_normalize_email_address(&request.new_email)?;
 
   let Ok(db_user) = user_by_id(&state, &user.uuid).await else {
@@ -147,7 +147,7 @@ pub async fn change_email_request_handler(
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
-pub(crate) struct ChangeEmailConfigQuery {
+pub(crate) struct ChangeEmailConfigParams {
   pub redirect_uri: Option<String>,
 }
 
@@ -164,7 +164,7 @@ pub(crate) struct ChangeEmailConfigQuery {
 pub async fn change_email_confirm_handler(
   State(state): State<AppState>,
   Path(email_verification_token): Path<String>,
-  Query(query): Query<ChangeEmailConfigQuery>,
+  Query(query): Query<ChangeEmailConfigParams>,
   // user: Option<User>,
 ) -> Result<Response, AuthError> {
   if state.demo_mode() {

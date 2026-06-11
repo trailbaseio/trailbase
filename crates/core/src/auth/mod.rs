@@ -40,6 +40,7 @@ use api::*;
     verify_email::verify_email_handler,
     change_email::change_email_request_handler,
     change_email::change_email_confirm_handler,
+    change_handle::change_user_handle_handler,
     reset_password::reset_password_request_handler,
     reset_password::reset_password_update_handler,
     change_password::change_password_handler,
@@ -108,6 +109,13 @@ pub(super) fn router(config: &Config) -> Router<crate::AppState> {
     .route(
       &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_token}}"),
       get(api::change_email::change_email_confirm_handler),
+    )
+    // User handle flows
+    // QUESTION: Only conditionally register? Would require a server restart since we don't rebuild
+    // routers during config reload.
+    .route(
+      &format!("/{AUTH_API_PATH}/change_handlej"),
+      get(api::change_handle::change_user_handle_handler),
     )
     // Password-reset flow.
     .route(
