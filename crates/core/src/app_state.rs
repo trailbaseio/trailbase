@@ -715,7 +715,7 @@ mod test_utils {
     tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
     let data_dir = DataDir(temp_dir.path().to_path_buf());
 
-    let pg_uri = if cfg!(feature = "pg-test") {
+    let (pg_db, pg_uri) = if cfg!(feature = "pg-test") {
       let extensions = [
         // NOTE: pgcrypto and postgis are not currently supported:
         //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
@@ -727,42 +727,49 @@ mod test_utils {
       // Start PgLite.
       let sock = data_dir.main_db_path().join(".s.PGSQL.5432");
 
-      let db = pglite_oxide::PgliteServer::builder()
-        .fresh_temporary()
-        .extensions(extensions)
-        .unix(&sock)
-        .start()?;
+      let db = Arc::new(parking_lot::Mutex::new(Some(
+        pglite_oxide::PgliteServer::builder()
+          .fresh_temporary()
+          .extensions(extensions)
+          .unix(&sock)
+          .start()?,
+      )));
 
       let handle = tokio::runtime::Handle::current();
       let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
 
       // NOTE: During CI, we have random tests occasionally time out. This is an attempt
       // to get ahead of it.
-      let _ = std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
-          .enable_time()
-          .build()
-          .unwrap();
+      let _ = std::thread::spawn({
+        let db = Arc::downgrade(&db);
+        move || {
+          let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+            .unwrap();
 
-        rt.block_on(async move {
-          use tokio::time::*;
-          let started = std::time::SystemTime::now();
+          rt.block_on(async move {
+            use tokio::time::*;
+            let started = std::time::SystemTime::now();
 
-          loop {
-            sleep(Duration::from_mins(2)).await;
+            loop {
+              sleep(Duration::from_mins(2)).await;
 
-            let metrics = runtime_monitor.intervals();
+              let metrics = runtime_monitor.intervals();
 
-            let now = std::time::SystemTime::now();
-            if now.duration_since(started).unwrap_or_default() > Duration::from_mins(20) {
-              println!("Test expired. Metrics = {metrics:?}");
-              db.shutdown().unwrap();
-              panic!("test expired");
+              let now = std::time::SystemTime::now();
+              if now.duration_since(started).unwrap_or_default() > Duration::from_mins(20) {
+                println!("Test expired. Metrics = {metrics:?}");
+                if let Some(db) = db.upgrade().and_then(|arc| arc.lock().take()) {
+                  db.shutdown().unwrap();
+                }
+                panic!("test expired");
+              }
+
+              println!("metrics = {metrics:?}");
             }
-
-            println!("metrics = {metrics:?}");
-          }
-        });
+          });
+        }
       });
 
       // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
@@ -771,9 +778,9 @@ mod test_utils {
         data_dir.main_db_path().to_string_lossy()
       );
 
-      Some(pg_uri)
+      (Some(db), Some(pg_uri))
     } else {
-      None
+      (None, None)
     };
 
     let TestStateOptions {
@@ -856,7 +863,9 @@ mod test_utils {
         wasm_runtimes: vec![],
         wasm_runtimes_builder: Box::new(|| Ok(vec![])),
         pg_uri,
-        test_cleanup: vec![Box::new(temp_dir)],
+        // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
+        // write new artifacts to the already deleted dir.
+        test_cleanup: vec![Box::new(pg_db), Box::new(temp_dir)],
       }),
     });
   }
