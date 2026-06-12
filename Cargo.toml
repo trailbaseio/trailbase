@@ -72,7 +72,7 @@ serde = { version = "^1.0.203", features = ["derive", "rc"] }
 serde_json = { version = "^1.0.117" }
 serde_qs = { version = "1.0.0", default-features = false, features = [] }
 serde_rusqlite = "0.43.0"
-sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", rev = "v0.1.10-alpha.4-fork", default-features = false }
+sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-alpha.4-fork", default-features = false }
 sqlite3-parser = "0.16.0"
 tokio = { version = "^1.38.0", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-rustls = { version = "0.26.1", default-features = false }
@@ -84,7 +84,7 @@ trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.8.0" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
 trailbase-pg-schema = { path = "crates/pg-schema", version = "0.0.1" }
-trailbase-pgrow2serde = { git = "https://github.com/ignatz/pgrow2serde", rev = "main" }
+trailbase-pgrow2serde = { git = "https://github.com/ignatz/pgrow2serde", branch = "main" }
 trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-reactive = { path = "crates/reactive", version = "0.1.0" }
 trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
