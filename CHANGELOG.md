@@ -1,3 +1,9 @@
+## v0.28.5
+
+- Fix TOTP update query - thanks @zyrakq 🙏. This was a regression from the PG work.
+- Point vendored dependencies at git to simplify library builds of TB itself - thanks @zyrakq 🙏.
+- Update dependencies. Also point `serde_rusqlite` back at upstream.
+
 ## v0.28.4
 
 - Wire up graceful server shutdown with realtime subscriptions, i.e. actively cancel established streams to prevent graceful shutdown from timing out.
