@@ -234,6 +234,7 @@ pub enum ColumnOption {
     expr: String,
     mode: Option<GeneratedExpressionMode>,
   },
+  Collate(String),
 }
 
 impl ColumnOption {
@@ -283,6 +284,7 @@ impl ColumnOption {
           None => "",
         }
       ),
+      Self::Collate(name) => format!("COLLATE {name}"),
     };
   }
 }
@@ -344,7 +346,10 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
           }
         }),
       },
-      Constraint::Collate { .. } | Constraint::Defer(_) => {
+      Constraint::Collate { collation_name } => {
+        ColumnOption::Collate(unquote_name(&collation_name))
+      }
+      Constraint::Defer(_) => {
         panic!("Not implemented: {constraint:?}");
       }
     };

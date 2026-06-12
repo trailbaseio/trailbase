@@ -90,7 +90,7 @@ pub async fn request_otp_handler(
 
   let Ok(db_user) = user_by_email(&state, &normalized_email).await else {
     // In case we don't find a user we still reply with a success to avoid leaking
-    // users' email addresses.
+    // email addresses of registered users.
     return Ok(success_response());
   };
 
@@ -128,14 +128,13 @@ pub async fn request_otp_handler(
     return Err(AuthError::Internal("Failed to insert OTP code".into()));
   }
 
-  let Some(email) = db_user.email.as_deref() else {
-    return Err(AuthError::Internal(
-      "optional email not yet supported".into(),
-    ));
-  };
-
-  let email = Email::otp_email(&state, email, &otp_code, redirect_uri.as_deref())
-    .map_err(|err| AuthError::Internal(err.into()))?;
+  let email = Email::otp_email(
+    &state,
+    &normalized_email,
+    &otp_code,
+    redirect_uri.as_deref(),
+  )
+  .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
     .await

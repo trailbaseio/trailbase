@@ -65,6 +65,8 @@ pub async fn reset_password_request_handler(
   };
 
   let ResetPasswordRequest::Email { email, params } = request else {
+    // FIXME: Lookup user by handle and use stored email.
+    // NOTE: We could also allow password reset for users w/o email but second factor.
     return Err(AuthError::BadRequest("handle not yet supported"));
   };
 
@@ -101,13 +103,7 @@ pub async fn reset_password_request_handler(
     .encode(&password_reset_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let Some(email_address) = user.email.as_deref() else {
-    return Err(AuthError::FailedDependency(
-      "no email address associdated".into(),
-    ));
-  };
-
-  let email = Email::password_reset_email(&state, email_address, &token)
+  let email = Email::password_reset_email(&state, &normalized_email, &token)
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()

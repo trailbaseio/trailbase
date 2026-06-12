@@ -278,6 +278,27 @@ pub async fn get_user_by_email(
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
 
+pub async fn user_by_handle(state: &AppState, handle: &str) -> Result<DbUser, AuthError> {
+  return get_user_by_handle(state.user_conn(), handle).await;
+}
+
+pub async fn get_user_by_handle(
+  user_conn: &trailbase_sqlite::Connection,
+  handle: &str,
+) -> Result<DbUser, AuthError> {
+  const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE handle = $1"#);
+  let db_user = user_conn
+    .read_query_value::<DbUser>(QUERY, params!(handle.to_string()))
+    .await
+    .map_err(|err| {
+      debug_assert!(false, "GET USER BY HANDLE query failed: {err}");
+
+      return AuthError::NotFound;
+    })?;
+
+  return db_user.ok_or_else(|| AuthError::NotFound);
+}
+
 pub async fn user_by_id(state: &AppState, id: &uuid::Uuid) -> Result<DbUser, AuthError> {
   return get_user_by_id(state.user_conn(), id).await;
 }

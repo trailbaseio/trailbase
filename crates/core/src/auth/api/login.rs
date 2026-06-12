@@ -31,6 +31,7 @@ use crate::{
 };
 
 #[derive(Debug, Deserialize, TS, ToSchema)]
+#[serde(untagged)]
 #[ts(export)]
 pub enum LoginRequest {
   Email {
@@ -101,6 +102,7 @@ pub(crate) async fn login_handler(
       },
   } = request
   else {
+    // FIXME:
     return Err(AuthError::BadRequest("Handle not yet supported"));
   };
 

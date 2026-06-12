@@ -79,7 +79,7 @@ impl<'a> postgres::types::FromSql<'a> for Value {
       "int8" => Ok(Value::Integer(i64::from_sql(ty, raw)?)),
       "float4" => Ok(Value::Real(f32::from_sql(ty, raw)? as f64)),
       "float8" => Ok(Value::Real(f64::from_sql(ty, raw)?)),
-      "text" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?)),
+      "text" | "citext" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?)),
       "json" => Ok(Value::Text(String::from_sql(ty, raw)?)),
       "jsonb" => {
         let value = serde_json::Value::from_sql(ty, raw)?;
@@ -131,6 +131,7 @@ fn accepts_impl(ty: &postgres::types::Type) -> bool {
       | "json"
       | "jsonb"
       | "text"
+      | "citext"
       | "name"
       | "varchar"
       | "bytea"

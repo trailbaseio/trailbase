@@ -3,4 +3,4 @@ import type { ConflictResolution } from "./ConflictResolution";
 import type { GeneratedExpressionMode } from "./GeneratedExpressionMode";
 import type { ReferentialAction } from "./ReferentialAction";
 
-export type ColumnOption = "Null" | "NotNull" | { "Default": string } | { "Unique": { is_primary: boolean, conflict_clause: ConflictResolution | null, } } | { "ForeignKey": { foreign_table: string, referred_columns: Array<string>, on_delete: ReferentialAction | null, on_update: ReferentialAction | null, } } | { "Check": string } | { "OnUpdate": string } | { "Generated": { expr: string, mode: GeneratedExpressionMode | null, } };
+export type ColumnOption = "Null" | "NotNull" | { "Default": string } | { "Unique": { is_primary: boolean, conflict_clause: ConflictResolution | null, } } | { "ForeignKey": { foreign_table: string, referred_columns: Array<string>, on_delete: ReferentialAction | null, on_update: ReferentialAction | null, } } | { "Check": string } | { "OnUpdate": string } | { "Generated": { expr: string, mode: GeneratedExpressionMode | null, } } | { "Collate": string };

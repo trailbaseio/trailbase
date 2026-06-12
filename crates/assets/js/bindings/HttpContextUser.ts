@@ -8,7 +8,11 @@ id: string,
 /**
  * E-mail of the current user.
  */
-email: string, 
+email: string | null, 
+/**
+ * Handle of the current user.
+ */
+handle: string | null, 
 /**
  * The "expected" CSRF token as included in the auth token claims [User] was constructed from.
  */

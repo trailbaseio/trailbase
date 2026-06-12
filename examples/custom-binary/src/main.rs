@@ -19,7 +19,14 @@ impl FromRef<CustomState> for AppState {
 
 async fn hello_world_handler(State(state): State<CustomState>, user: Option<User>) -> Response {
   let greeting = state.greeting.as_deref().unwrap_or("Hello");
-  let subject = user.map_or("World".to_string(), |user| user.email);
+  let subject = match user {
+    Some(ref user) => user
+      .email
+      .as_deref()
+      .or(user.handle.as_deref())
+      .unwrap_or("World"),
+    None => "World",
+  };
 
   Html(format!("<p>{greeting}, {subject}!</p>")).into_response()
 }

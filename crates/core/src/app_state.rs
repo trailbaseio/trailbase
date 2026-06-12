@@ -717,11 +717,12 @@ mod test_utils {
 
     let (pg_db, pg_uri) = if cfg!(feature = "pg-test") {
       let extensions = [
-        // NOTE: pgcrypto and postgis are not currently supported:
-        //   https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-        // pglite_oxide::extensions::by_sql_name("pgcrypto").unwrap()
-        // Enabled UUIDv7 support.
+        // Enable case-insensitive text columns.
+        pglite_oxide::extensions::CITEXT,
+        // Enable UUIDv7 support.
         pglite_oxide::extensions::PG_UUIDV7,
+        // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
+        // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
       ];
 
       // Start PgLite.

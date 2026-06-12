@@ -4,9 +4,9 @@ CREATE TABLE IF NOT EXISTS _new_with_handle_and_opt_email (
   -- We only check `is_uuid` rather than `is_uuid_v4` to preserve user
   -- previously created as uuiv7.
   id                               BLOB PRIMARY KEY NOT NULL CHECK(is_uuid(id)) DEFAULT (uuid_v4()),
-  email                            TEXT CHECK(is_email(email)),
+  email                            TEXT COLLATE NOCASE CHECK(is_email(email)),
   -- Optional user-handle, e.g. a username.
-  handle                           TEXT,
+  handle                           TEXT COLLATE NOCASE,
   password_hash                    TEXT,
   -- Whether email was verified.
   verified                         INTEGER DEFAULT FALSE NOT NULL,

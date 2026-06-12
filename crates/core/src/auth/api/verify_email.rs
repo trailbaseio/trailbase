@@ -69,13 +69,11 @@ pub async fn request_email_verification_handler(
     return Ok(success_response());
   };
 
-  let Some(ref email) = user.email else {
-    return Err(AuthError::Internal("expected email".into()));
-  };
+  debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
 
   let claims = EmailVerificationTokenClaims::new(
     &user.uuid(),
-    email.clone(),
+    normalized_email.clone(),
     chrono::Duration::seconds(TTL_SEC),
   );
   let token = state
@@ -83,7 +81,7 @@ pub async fn request_email_verification_handler(
     .encode(&claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let email = Email::verification_email(&state, &email, &token, redirect_uri.as_deref())
+  let email = Email::verification_email(&state, &normalized_email, &token, redirect_uri.as_deref())
     .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()

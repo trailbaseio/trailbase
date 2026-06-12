@@ -12,7 +12,7 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
-use crate::auth::util::user_by_email;
+use crate::auth::util::{user_by_email, user_by_handle};
 use crate::auth::{AuthError, User};
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
@@ -56,7 +56,7 @@ pub async fn register_totp_request_handler(
     .access_config(|c| c.server.application_name.clone())
     .unwrap_or_else(|| "TrailBase".to_string());
 
-  let account = user.email.as_deref().or_else(|| user.handle.as_deref());
+  let account = user.email.as_deref().or(user.handle.as_deref());
 
   let totp = new_totp(&secret, Some(&app_name), account)?;
 
@@ -153,13 +153,15 @@ pub async fn unregister_totp_handler(
     Either::Form(req) => (req, false),
   };
 
-  let Some(email) = user.email.as_deref() else {
-    return Err(AuthError::FailedDependency("No email associated".into()));
+  let db_user = if let Some(ref email) = user.email {
+    user_by_email(&state, email).await?
+  } else if let Some(ref handle) = user.handle {
+    user_by_handle(&state, handle).await?
+  } else {
+    return Err(AuthError::Internal(
+      "Neither handle nor email associated".into(),
+    ));
   };
-
-  let db_user = user_by_email(&state, email).await?;
-
-  // TODO: add user_by_handle.
 
   let Some(secret) = db_user.totp_secret.map(Secret::Encoded) else {
     return Err(AuthError::BadRequest("TOTP not enabled for this user"));

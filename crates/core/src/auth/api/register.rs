@@ -64,7 +64,9 @@ pub async fn register_user_handler(
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
-  // TODO: validate handle.
+
+  // FIXME: validate handle. e.g. starts alphanumerical. What should we do about capitalization,
+  // case insensitive index? Disallow capital? Two columns?
   let handle = request.handle;
 
   let auth_options = state.auth_options();
@@ -145,13 +147,14 @@ pub async fn register_user_handler(
       .encode(&claims)
       .map_err(|err| AuthError::Internal(err.into()))?;
 
-    let email = Email::verification_email(&state, &email, &token, redirect_uri.as_deref())
+    let email = Email::verification_email(&state, email, &token, redirect_uri.as_deref())
       .map_err(|err| AuthError::Internal(err.into()))?;
     email
       .send()
       .await
       .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
   } else {
+    // FIXME
     return Err(AuthError::Internal(
       "optional email not yet supported".into(),
     ));
