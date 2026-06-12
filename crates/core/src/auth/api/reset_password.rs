@@ -97,6 +97,8 @@ pub async fn reset_password_request_handler(
     return Ok(success_response());
   };
 
+  debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+
   let password_reset_claims = PasswordResetTokenClaims::new(&normalized_email, TTL);
   let token = state
     .jwt()

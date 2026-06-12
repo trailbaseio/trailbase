@@ -11,7 +11,7 @@ use utoipa::ToSchema;
 
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  new_cookie, remove_cookie, user_by_email, validate_and_normalize_email_address,
+  new_cookie, remove_cookie, user_by_email, user_by_handle, validate_and_normalize_email_address,
 };
 use crate::auth::{AuthError, util::user_by_id};
 use crate::auth::{password::check_user_password, totp::new_totp};
@@ -90,54 +90,76 @@ pub(crate) async fn login_handler(
     Either::Multipart(req, _) => (req, false),
   };
 
-  let LoginRequest::Email {
-    email,
-    password,
-    params:
-      LoginInputParams {
-        response_type,
-        pkce_code_challenge,
-        redirect_uri,
-        mfa_redirect_uri,
-      },
-  } = request
-  else {
-    // FIXME:
-    return Err(AuthError::BadRequest("Handle not yet supported"));
+  type CheckFuture = futures_util::future::BoxFuture<'static, Result<DbUser, AuthError>>;
+  type CheckFn = Box<dyn FnOnce() -> CheckFuture + Send>;
+
+  let (check_credentials, params): (CheckFn, LoginInputParams) = match request {
+    LoginRequest::Email {
+      email,
+      password,
+      params,
+    } => {
+      let state = state.clone();
+      let check_credentials = move || -> CheckFuture {
+        return Box::pin(async move {
+          let normalized_email = validate_and_normalize_email_address(&email)?;
+          let db_user: DbUser = user_by_email(&state, &normalized_email)
+            .await
+            .map_err(|_| {
+              // Don't leak if user wasn't found or password was wrong.
+              return AuthError::Unauthorized;
+            })?;
+
+          // Check password and rate limits attempts.
+          check_user_password(&db_user, &password, state.demo_mode())?;
+
+          Ok(db_user)
+        });
+      };
+
+      (Box::new(check_credentials), params)
+    }
+    LoginRequest::Handle {
+      handle,
+      password,
+      params,
+    } => {
+      let state = state.clone();
+      let check_credentials = move || -> CheckFuture {
+        return Box::pin(async move {
+          let db_user: DbUser = user_by_handle(&state, &handle).await.map_err(|_| {
+            // Don't leak if user wasn't found or password was wrong.
+            return AuthError::Unauthorized;
+          })?;
+
+          // Check password and rate limits attempts.
+          check_user_password(&db_user, &password, state.demo_mode())?;
+
+          Ok(db_user)
+        });
+      };
+
+      (Box::new(check_credentials), params)
+    }
   };
 
   // Validate input params.
-  let params = build_and_validate_input_params(
+  let login_params = build_and_validate_input_params(
     &state,
     // NOTE: Merge form and query input but prioritize explicit query parameters over hidden form
     // inputs etc.
     query_login_input.merge(LoginInputParams {
-      redirect_uri: redirect_uri.clone(),
-      mfa_redirect_uri: mfa_redirect_uri.clone(),
-      response_type,
-      pkce_code_challenge,
+      redirect_uri: params.redirect_uri.clone(),
+      mfa_redirect_uri: params.mfa_redirect_uri.clone(),
+      response_type: params.response_type,
+      pkce_code_challenge: params.pkce_code_challenge,
     }),
   )?;
 
   // Check credentials.
-  let check_credentials = async || -> Result<DbUser, AuthError> {
-    let normalized_email = validate_and_normalize_email_address(&email)?;
-    let db_user: DbUser = user_by_email(&state, &normalized_email)
-      .await
-      .map_err(|_| {
-        // Don't leak if user wasn't found or password was wrong.
-        return AuthError::Unauthorized;
-      })?;
-
-    // Check password and rate limits attempts.
-    check_user_password(&db_user, &password, state.demo_mode())?;
-
-    return Ok(db_user);
-  };
-
   let db_user = match check_credentials().await {
     Err(err) => {
-      if !json && let Some(redirect_uri) = redirect_uri.as_deref() {
+      if !json && let Some(redirect_uri) = params.redirect_uri.as_deref() {
         return Ok(auth_error_to_response(err, &cookies, Some(redirect_uri)));
       }
 
@@ -159,7 +181,7 @@ pub(crate) async fn login_handler(
     if json {
       return Ok((StatusCode::FORBIDDEN, Json(MfaTokenResponse { mfa_token })).into_response());
     } else {
-      let Some(mfa_redirect) = mfa_redirect_uri else {
+      let Some(mfa_redirect) = params.mfa_redirect_uri else {
         return Err(AuthError::BadRequest("?mfa_redirect required"));
       };
 
@@ -168,7 +190,7 @@ pub(crate) async fn login_handler(
   }
 
   // Otherwise build auth token or authorization code responses.
-  return match params {
+  return match login_params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
       build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json).await
