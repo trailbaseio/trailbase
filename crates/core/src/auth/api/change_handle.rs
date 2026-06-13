@@ -1,12 +1,16 @@
 use axum::extract::{Query, State};
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
+use const_format::formatcp;
 use serde::Deserialize;
+use trailbase_sqlite::named_params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
+use crate::auth::util::{validate_and_normalize_handle, validate_redirect};
 use crate::auth::{AuthError, User};
+use crate::constants::USER_TABLE;
 use crate::extract::Either;
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
@@ -40,8 +44,8 @@ pub struct ChangeHandleRequest {
 )]
 pub async fn change_user_handle_handler(
   State(state): State<AppState>,
-  Query(_query): Query<ChangeHandleParams>,
-  _user: User,
+  Query(query): Query<ChangeHandleParams>,
+  user: User,
   either_request: Either<ChangeHandleRequest>,
 ) -> Result<Response, AuthError> {
   if state.demo_mode() {
@@ -53,12 +57,47 @@ pub async fn change_user_handle_handler(
     return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
   }
 
-  let (_request, _json) = match either_request {
+  let (ChangeHandleRequest { new_handle, params }, json) = match either_request {
     Either::Json(req) => (req, true),
     Either::Multipart(req, _) => (req, false),
     Either::Form(req) => (req, false),
   };
 
-  // FIXME
-  return Err(AuthError::Internal("Not implemented".into()));
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+  let new_handle = validate_and_normalize_handle(&new_handle)?;
+
+  const UPDATE_HANDLE_QUERY: &str = formatcp!(
+    "\
+      UPDATE \"{USER_TABLE}\" \
+        SET handle = :new_handle \
+      WHERE \
+        handle = :old_handle AND email = :email; \
+    "
+  );
+
+  let rows_affected = state
+    .user_conn()
+    .execute(
+      UPDATE_HANDLE_QUERY,
+      named_params! {
+        ":old_handle": user.handle,
+        ":new_handle": new_handle,
+        ":email": user.email,
+      },
+    )
+    .await?;
+
+  return match rows_affected {
+    0 => Err(AuthError::Internal("update failed".into())),
+    1 => {
+      if !json && let Some(redirect_uri) = redirect_uri {
+        Ok(Redirect::to(&redirect_uri).into_response())
+      } else {
+        Ok(StatusCode::OK.into_response())
+      }
+    }
+    _ => {
+      panic!("handle update affected multiple users: {rows_affected}");
+    }
+  };
 }

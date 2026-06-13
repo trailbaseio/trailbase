@@ -12,6 +12,7 @@ use utoipa::ToSchema;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, user_by_handle, validate_and_normalize_email_address,
+  validate_and_normalize_handle,
 };
 use crate::auth::{AuthError, util::user_by_id};
 use crate::auth::{password::check_user_password, totp::new_totp};
@@ -34,6 +35,14 @@ use crate::{
 #[serde(untagged)]
 #[ts(export)]
 pub enum LoginRequest {
+  EmailOrHandle {
+    email_or_handle: String,
+    password: String,
+
+    #[serde(flatten)]
+    params: LoginInputParams,
+  },
+  // QUESTION: Should we remove the options below in favor of always deriving it?
   Email {
     email: String,
     password: String,
@@ -48,6 +57,11 @@ pub enum LoginRequest {
     #[serde(flatten)]
     params: LoginInputParams,
   },
+}
+
+enum UserIdentifier {
+  Email(String),
+  Handle(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
@@ -90,19 +104,54 @@ pub(crate) async fn login_handler(
     Either::Multipart(req, _) => (req, false),
   };
 
-  type CheckFuture = futures_util::future::BoxFuture<'static, Result<DbUser, AuthError>>;
-  type CheckFn = Box<dyn FnOnce() -> CheckFuture + Send>;
-
-  let (check_credentials, params): (CheckFn, LoginInputParams) = match request {
+  let (user_identifier, password, params) = match request {
+    LoginRequest::EmailOrHandle {
+      email_or_handle,
+      password,
+      params,
+    } => {
+      if email_or_handle.contains('@') {
+        (
+          UserIdentifier::Email(validate_and_normalize_email_address(&email_or_handle)?),
+          password,
+          params,
+        )
+      } else {
+        (
+          UserIdentifier::Handle(validate_and_normalize_handle(&email_or_handle)?),
+          password,
+          params,
+        )
+      }
+    }
     LoginRequest::Email {
       email,
       password,
       params,
-    } => {
+    } => (
+      UserIdentifier::Email(validate_and_normalize_email_address(&email)?),
+      password,
+      params,
+    ),
+    LoginRequest::Handle {
+      handle,
+      password,
+      params,
+    } => (
+      UserIdentifier::Handle(validate_and_normalize_handle(&handle)?),
+      password,
+      params,
+    ),
+  };
+
+  type CheckFuture = futures_util::future::BoxFuture<'static, Result<DbUser, AuthError>>;
+  type CheckFn = Box<dyn FnOnce() -> CheckFuture + Send>;
+
+  let check_credentials: CheckFn = match user_identifier {
+    UserIdentifier::Email(normalized_email) => {
       let state = state.clone();
-      let check_credentials = move || -> CheckFuture {
+      Box::new(move || -> CheckFuture {
         return Box::pin(async move {
-          let normalized_email = validate_and_normalize_email_address(&email)?;
           let db_user: DbUser = user_by_email(&state, &normalized_email)
             .await
             .map_err(|_| {
@@ -115,17 +164,11 @@ pub(crate) async fn login_handler(
 
           Ok(db_user)
         });
-      };
-
-      (Box::new(check_credentials), params)
+      })
     }
-    LoginRequest::Handle {
-      handle,
-      password,
-      params,
-    } => {
+    UserIdentifier::Handle(handle) => {
       let state = state.clone();
-      let check_credentials = move || -> CheckFuture {
+      Box::new(|| -> CheckFuture {
         return Box::pin(async move {
           let db_user: DbUser = user_by_handle(&state, &handle).await.map_err(|_| {
             // Don't leak if user wasn't found or password was wrong.
@@ -137,9 +180,7 @@ pub(crate) async fn login_handler(
 
           Ok(db_user)
         });
-      };
-
-      (Box::new(check_credentials), params)
+      })
     }
   };
 

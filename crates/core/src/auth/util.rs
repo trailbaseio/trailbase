@@ -52,6 +52,26 @@ pub fn validate_and_normalize_email_address(email_address: &str) -> Result<Strin
   return Ok(email_address.to_string());
 }
 
+/// Validate that handles are at least 3 characters, start with a character and other wise
+/// alphanumeric.
+pub fn validate_and_normalize_handle(handle: &str) -> Result<String, AuthError> {
+  let trimmed = handle.trim();
+  if trimmed.len() < 3 {
+    return Err(AuthError::BadRequest("Invalid handle"));
+  }
+
+  if trimmed.chars().enumerate().all(|(i, c)| {
+    return match i {
+      0 => c.is_alphabetic(),
+      _ => c.is_alphanumeric(),
+    };
+  }) {
+    return Ok(trimmed.to_string());
+  }
+
+  return Err(AuthError::BadRequest("Invalid handle"));
+}
+
 #[inline]
 fn validate_redirect_impl(
   site: Option<&url::Url>,

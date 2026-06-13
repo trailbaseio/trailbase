@@ -12,7 +12,10 @@ use crate::auth::AuthError;
 use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
-use crate::auth::util::{user_exists, validate_and_normalize_email_address, validate_redirect};
+use crate::auth::util::{
+  user_exists, validate_and_normalize_email_address, validate_and_normalize_handle,
+  validate_redirect,
+};
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
@@ -25,6 +28,7 @@ pub struct RegisterUserParams {
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 pub struct RegisterUserRequest {
+  // TODO: Should be optional depending on policy.
   pub email: String,
   pub handle: Option<String>,
   pub password: String,
@@ -64,10 +68,11 @@ pub async fn register_user_handler(
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
   let normalized_email = validate_and_normalize_email_address(&request.email)?;
-
-  // FIXME: validate handle. e.g. starts alphanumerical. What should we do about capitalization,
-  // case insensitive index? Disallow capital? Two columns?
-  let handle = request.handle;
+  let handle = if let Some(ref handle) = request.handle {
+    Some(validate_and_normalize_handle(handle)?)
+  } else {
+    None
+  };
 
   let auth_options = state.auth_options();
   if let Err(err) = validate_password_policy(
