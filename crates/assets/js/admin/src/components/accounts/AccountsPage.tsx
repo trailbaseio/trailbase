@@ -150,7 +150,8 @@ function buildColumns(): ColumnDef<UserJson>[] {
 
 function DeleteUserButton(props: {
   userId: string;
-  email: string;
+  email: string | null;
+  handle: string | null;
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
@@ -167,7 +168,7 @@ function DeleteUserButton(props: {
 
         <p>
           Are you sure you want to permanently delete{" "}
-          <span class="font-bold">{props.email}</span>?
+          <span class="font-bold">{props.email ?? props.handle}</span>?
         </p>
 
         <DialogFooter>
@@ -291,6 +292,7 @@ function EditSheetContent(props: {
                   <DeleteUserButton
                     userId={props.user.id}
                     email={props.user.email}
+                    handle={props.user.handle}
                     onDelete={() => {
                       props.close();
                       props.refetch();

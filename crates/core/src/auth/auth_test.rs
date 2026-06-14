@@ -87,7 +87,7 @@ async fn register_test_user(
 ) -> User {
   // Register new user and email verification flow.
   let request = RegisterUserRequest {
-    email: email.to_string(),
+    email: Some(email.to_string()),
     password: password.to_string(),
     password_repeat: password.to_string(),
     ..Default::default()
@@ -575,7 +575,7 @@ async fn test_auth_change_email_flow() {
       Either::Form(change_email::ChangeEmailRequest {
         csrf_token: user.csrf_token.clone(),
         old_email: None,
-        new_email: new_email.clone(),
+        new_email: Some(new_email.clone()),
         ..Default::default()
       }),
     )
@@ -590,7 +590,7 @@ async fn test_auth_change_email_flow() {
     Either::Form(change_email::ChangeEmailRequest {
       csrf_token: user.csrf_token.clone(),
       old_email: Some(email.clone()),
-      new_email: new_email.clone(),
+      new_email: Some(new_email.clone()),
       ..Default::default()
     }),
   )

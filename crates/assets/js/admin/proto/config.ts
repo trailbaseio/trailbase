@@ -147,6 +147,74 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
   }
 }
 
+/**
+ * What user identifier to use for new user registrations as well as
+ * change-(email|handle).
+ *
+ * NOTE: W/o email there's no way to contact users.
+ */
+export enum UserIdentifier {
+  USER_IDENTIFIER_UNDEFINED = 0,
+  /** ONLY_EMAIL - / Only email. Doesn't work for anonymous login. */
+  ONLY_EMAIL = 1,
+  /** ONLY_HANDLE - / Only handle. No email allowed. */
+  ONLY_HANDLE = 2,
+  /** REQUIRE_EMAIL - / Requires email and allows an optional handle. */
+  REQUIRE_EMAIL = 3,
+  /** REQUIRE_HANDLE - / Requires handle and allows an optional email. */
+  REQUIRE_HANDLE = 4,
+  /** REQUIRE_EMAIL_AND_HANDLE - / Requires both email and handle. */
+  REQUIRE_EMAIL_AND_HANDLE = 5,
+  UNRECOGNIZED = -1,
+}
+
+export function userIdentifierFromJSON(object: any): UserIdentifier {
+  switch (object) {
+    case 0:
+    case "USER_IDENTIFIER_UNDEFINED":
+      return UserIdentifier.USER_IDENTIFIER_UNDEFINED;
+    case 1:
+    case "ONLY_EMAIL":
+      return UserIdentifier.ONLY_EMAIL;
+    case 2:
+    case "ONLY_HANDLE":
+      return UserIdentifier.ONLY_HANDLE;
+    case 3:
+    case "REQUIRE_EMAIL":
+      return UserIdentifier.REQUIRE_EMAIL;
+    case 4:
+    case "REQUIRE_HANDLE":
+      return UserIdentifier.REQUIRE_HANDLE;
+    case 5:
+    case "REQUIRE_EMAIL_AND_HANDLE":
+      return UserIdentifier.REQUIRE_EMAIL_AND_HANDLE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return UserIdentifier.UNRECOGNIZED;
+  }
+}
+
+export function userIdentifierToJSON(object: UserIdentifier): string {
+  switch (object) {
+    case UserIdentifier.USER_IDENTIFIER_UNDEFINED:
+      return "USER_IDENTIFIER_UNDEFINED";
+    case UserIdentifier.ONLY_EMAIL:
+      return "ONLY_EMAIL";
+    case UserIdentifier.ONLY_HANDLE:
+      return "ONLY_HANDLE";
+    case UserIdentifier.REQUIRE_EMAIL:
+      return "REQUIRE_EMAIL";
+    case UserIdentifier.REQUIRE_HANDLE:
+      return "REQUIRE_HANDLE";
+    case UserIdentifier.REQUIRE_EMAIL_AND_HANDLE:
+      return "REQUIRE_EMAIL_AND_HANDLE";
+    case UserIdentifier.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
 export enum SystemJobId {
   SYSTEM_JOB_ID_UNDEFINED = 0,
   BACKUP = 1,
@@ -417,6 +485,7 @@ export interface AuthConfig {
   customUriSchemes: string[];
   /** / List of explicitly allowed redirect uris. */
   redirectUriAllowlist: string[];
+  userIdentifier?: UserIdentifier | undefined;
 }
 
 export interface AuthConfig_OauthProvidersEntry {
@@ -1205,6 +1274,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     for (const v of message.redirectUriAllowlist) {
       writer.uint32(178).string(v!);
     }
+    if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
+      writer.uint32(248).int32(message.userIdentifier);
+    }
     return writer;
   },
 
@@ -1306,6 +1378,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
           message.redirectUriAllowlist.push(reader.string());
           continue;
         }
+        case 31: {
+          if (tag !== 248) {
+            break;
+          }
+
+          message.userIdentifier = reader.int32() as any;
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1384,6 +1464,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : globalThis.Array.isArray(object?.redirect_uri_allowlist)
         ? object.redirect_uri_allowlist.map((e: any) => globalThis.String(e))
         : [],
+      userIdentifier: isSet(object.userIdentifier)
+        ? userIdentifierFromJSON(object.userIdentifier)
+        : isSet(object.user_identifier)
+        ? userIdentifierFromJSON(object.user_identifier)
+        : undefined,
     };
   },
 
@@ -1434,6 +1519,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.redirectUriAllowlist?.length) {
       obj.redirectUriAllowlist = message.redirectUriAllowlist;
     }
+    if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
+      obj.userIdentifier = userIdentifierToJSON(message.userIdentifier);
+    }
     return obj;
   },
 
@@ -1459,6 +1547,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
       }, {});
     message.customUriSchemes = object.customUriSchemes?.map((e) => e) || [];
     message.redirectUriAllowlist = object.redirectUriAllowlist?.map((e) => e) || [];
+    message.userIdentifier = object.userIdentifier ?? 0;
     return message;
   },
 };

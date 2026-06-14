@@ -13,9 +13,9 @@ use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  user_exists, validate_and_normalize_email_address, validate_and_normalize_handle,
-  validate_redirect,
+  validate_and_normalize_email_address, validate_and_normalize_handle, validate_redirect,
 };
+use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
@@ -28,8 +28,7 @@ pub struct RegisterUserParams {
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 pub struct RegisterUserRequest {
-  // TODO: Should be optional depending on policy.
-  pub email: String,
+  pub email: Option<String>,
   pub handle: Option<String>,
   pub password: String,
   pub password_repeat: String,
@@ -55,7 +54,12 @@ pub async fn register_user_handler(
   Query(query): Query<RegisterUserParams>,
   either_request: Either<RegisterUserRequest>,
 ) -> Result<Response, AuthError> {
-  let disabled = state.access_config(|c| c.auth.disable_password_auth.unwrap_or(false));
+  let (disabled, user_identifier) = state.access_config(|c| {
+    (
+      c.auth.disable_password_auth.unwrap_or(false),
+      c.auth.user_identifier,
+    )
+  });
   if disabled {
     return Err(AuthError::Forbidden);
   }
@@ -67,12 +71,11 @@ pub async fn register_user_handler(
   };
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
-  let normalized_email = validate_and_normalize_email_address(&request.email)?;
-  let handle = if let Some(ref handle) = request.handle {
-    Some(validate_and_normalize_handle(handle)?)
-  } else {
-    None
-  };
+  let (normalized_email, handle) = validate_email_and_handler(
+    user_identifier.and_then(|ui| ui.try_into().ok()),
+    request.email.as_deref(),
+    request.handle.as_deref(),
+  )?;
 
   let auth_options = state.auth_options();
   if let Err(err) = validate_password_policy(
@@ -93,22 +96,26 @@ pub async fn register_user_handler(
     return Err(err);
   }
 
-  let success_response = || {
-    if let Some(ref redirect) = redirect_uri {
-      return Redirect::to(&format!(
+  let success_response = {
+    let normalized_email = normalized_email.clone();
+    let redirect_uri = redirect_uri.clone();
+    || {
+      return match (redirect_uri, normalized_email) {
+            (Some(ref redirect), Some(ref normalized_email)) => {
+Redirect::to(&format!(
       "{redirect}?alert={msg}",
       msg = urlencode(&format!(
         "Registered {normalized_email}. Email verification is needed before signing in. Check your inbox."
       ))
-    )).into_response();
+    )).into_response()
+            },
+            (Some(ref redirect), None) => {
+Redirect::to(redirect).into_response()
+            },
+            _ =>(StatusCode::OK, "registered").into_response(),
+        };
     }
-    return (StatusCode::OK, "registered").into_response();
   };
-
-  if user_exists(&state, &normalized_email).await {
-    // In case the user already exists, we claim success to avoid leaking users' email addresses.
-    return Ok(success_response());
-  }
 
   let hashed_password = hash_password(&request.password)?;
 
@@ -122,7 +129,7 @@ pub async fn register_user_handler(
     "
   );
 
-  let Some(user) = state
+  let user = match state
     .user_conn()
     .write_query_value::<DbUser>(
       INSERT_USER_QUERY,
@@ -133,15 +140,18 @@ pub async fn register_user_handler(
       },
     )
     .await
-    .map_err(|_err| {
+  {
+    Ok(Some(user)) => user,
+    Err(_err) => {
       #[cfg(debug_assertions)]
-      log::debug!("Failed to register new user {normalized_email}: {_err:?}");
+      log::debug!("Failed to register new user {normalized_email:?}: {_err:?}");
 
-      // The insert will fail if the user is already registered
-      AuthError::Conflict
-    })?
-  else {
-    return Err(AuthError::Internal("Failed to get user".into()));
+      // In case the user already exists, we claim success to avoid leaking users' email addresses.
+      return Ok(success_response());
+    }
+    Ok(None) => {
+      return Err(AuthError::Internal("Failed to get user".into()));
+    }
   };
 
   if let Some(ref email) = user.email {
@@ -166,4 +176,38 @@ pub async fn register_user_handler(
   }
 
   return Ok(success_response());
+}
+
+fn validate_email_and_handler(
+  user_identifier: Option<UserIdentifier>,
+  email: Option<&str>,
+  handle: Option<&str>,
+) -> Result<(Option<String>, Option<String>), AuthError> {
+  return match (
+    user_identifier.unwrap_or(UserIdentifier::Undefined),
+    email,
+    handle,
+  ) {
+    (
+      UserIdentifier::Undefined
+      | UserIdentifier::OnlyEmail
+      | UserIdentifier::RequireEmail
+      | UserIdentifier::RequireEmailAndHandle,
+      None,
+      _,
+    ) => Err(AuthError::BadRequest("Missing email")),
+    (
+      UserIdentifier::OnlyHandle
+      | UserIdentifier::RequireHandle
+      | UserIdentifier::RequireEmailAndHandle,
+      _,
+      None,
+    ) => Err(AuthError::BadRequest("Missing handle")),
+    (_, Some(email), None) => Ok((Some(validate_and_normalize_email_address(email)?), None)),
+    (_, None, Some(handle)) => Ok((None, Some(validate_and_normalize_handle(handle)?))),
+    (_, Some(email), Some(handle)) => Ok((
+      Some(validate_and_normalize_email_address(email)?),
+      Some(validate_and_normalize_handle(handle)?),
+    )),
+  };
 }

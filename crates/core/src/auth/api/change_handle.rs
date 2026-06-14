@@ -24,7 +24,7 @@ pub(crate) struct ChangeHandleParams {
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct ChangeHandleRequest {
-  pub new_handle: String,
+  pub new_handle: Option<String>,
 
   #[serde(flatten)]
   pub params: ChangeHandleParams,
@@ -64,7 +64,13 @@ pub async fn change_user_handle_handler(
   };
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
-  let new_handle = validate_and_normalize_handle(&new_handle)?;
+  let new_handle = if let Some(new_handle) = new_handle {
+    validate_and_normalize_handle(&new_handle)?
+  } else {
+    return Err(AuthError::FailedDependency(
+      "Un-setting not yet implemented".into(),
+    ));
+  };
 
   const UPDATE_HANDLE_QUERY: &str = formatcp!(
     "\

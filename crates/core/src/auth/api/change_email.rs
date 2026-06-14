@@ -32,8 +32,7 @@ pub struct ChangeEmailRequest {
   pub csrf_token: String,
   /// Old email address. Only required in form mode.
   pub old_email: Option<String>,
-  /// TODO: We should allow unsetting the email?
-  pub new_email: String,
+  pub new_email: Option<String>,
 
   #[serde(flatten)]
   pub params: ChangeEmailParams,
@@ -79,7 +78,13 @@ pub async fn change_email_request_handler(
     &state,
     query.err_redirect_uri.or(request.params.err_redirect_uri),
   )?;
-  let new_email = validate_and_normalize_email_address(&request.new_email)?;
+  let new_email = if let Some(new_email) = request.new_email {
+    validate_and_normalize_email_address(&new_email)?
+  } else {
+    return Err(AuthError::FailedDependency(
+      "Un-setting not yet implemented".into(),
+    ));
+  };
 
   let Ok(db_user) = user_by_id(&state, &user.uuid).await else {
     return Err(AuthError::Forbidden);
