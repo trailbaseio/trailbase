@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::AppState;
 use crate::api::AuthTokenClaims;
-use crate::app_state::{TestStateOptions, test_config, test_state};
+use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::AuthError;
 use crate::auth::api::change_email::{self, ChangeEmailConfigParams};
 use crate::auth::api::change_handle::{
@@ -40,6 +40,23 @@ use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::Either;
 
+fn build_test_config_with_trivial_tokens() -> Config {
+  let mut config = crate::app_state::test_config();
+  config.email.password_reset_template = Some(EmailTemplate {
+    subject: None,
+    body: Some("{{ TOKEN }}".to_string()),
+  });
+  config.email.change_email_template = Some(EmailTemplate {
+    subject: None,
+    body: Some("{{ TOKEN }}".to_string()),
+  });
+  config.email.user_verification_template = Some(EmailTemplate {
+    subject: None,
+    body: Some("{{ TOKEN }}".to_string()),
+  });
+  return config;
+}
+
 async fn setup_state_and_test_user(
   email: &str,
   password: &str,
@@ -54,19 +71,7 @@ async fn setup_state_and_test_user(
   let state = test_state(Some(TestStateOptions {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
-      let mut config = config.unwrap_or_else(test_config);
-      config.email.password_reset_template = Some(EmailTemplate {
-        subject: None,
-        body: Some("{{ TOKEN }}".to_string()),
-      });
-      config.email.change_email_template = Some(EmailTemplate {
-        subject: None,
-        body: Some("{{ TOKEN }}".to_string()),
-      });
-      config.email.user_verification_template = Some(EmailTemplate {
-        subject: None,
-        body: Some("{{ TOKEN }}".to_string()),
-      });
+      let mut config = config.unwrap_or_else(build_test_config_with_trivial_tokens);
 
       config.auth.enable_otp_signin = Some(true);
 
@@ -77,19 +82,42 @@ async fn setup_state_and_test_user(
   .await
   .unwrap();
 
-  let user = register_test_user(&state, &mailer, email, password).await;
+  let user = register_test_user(
+    &state,
+    &mailer,
+    Identifier::Email(email.to_string()),
+    password,
+  )
+  .await
+  .unwrap();
+
   return (state, mailer, user);
+}
+
+enum Identifier {
+  Email(String),
+  Handle(String),
+  EmailAndHandle(String, String),
 }
 
 async fn register_test_user(
   state: &AppState,
   mailer: &TestAsyncSmtpTransport,
-  email: &str,
+  identifier: Identifier,
   password: &str,
-) -> User {
+) -> Result<User, anyhow::Error> {
   // Register new user and email verification flow.
   let request = RegisterUserRequest {
-    email: Some(email.to_string()),
+    email: match identifier {
+      Identifier::Email(ref email) => Some(email.clone()),
+      Identifier::EmailAndHandle(ref email, _) => Some(email.clone()),
+      _ => None,
+    },
+    handle: match identifier {
+      Identifier::Handle(ref handle) => Some(handle.clone()),
+      Identifier::EmailAndHandle(_, ref handle) => Some(handle.clone()),
+      _ => None,
+    },
     password: password.to_string(),
     password_repeat: password.to_string(),
     ..Default::default()
@@ -100,20 +128,16 @@ async fn register_test_user(
     Query(RegisterUserParams::default()),
     Either::Form(request),
   )
-  .await
-  .unwrap();
+  .await?;
 
   // Assert that a verification email was sent.
   assert_eq!(mailer.get_logs().len(), 1);
 
   // Then steal the verification code from the DB and verify.
-  let verification_email_body: String = String::from_utf8_lossy(
-    &quoted_printable::decode(
-      mailer.get_logs()[0].1.as_bytes(),
-      quoted_printable::ParseMode::Robust,
-    )
-    .unwrap(),
-  )
+  let verification_email_body: String = String::from_utf8_lossy(&quoted_printable::decode(
+    mailer.get_logs()[0].1.as_bytes(),
+    quoted_printable::ParseMode::Robust,
+  )?)
   .to_string();
 
   let verification_email_re = Regex::new(r"\n(ey.*)$").unwrap();
@@ -131,11 +155,21 @@ async fn register_test_user(
       State(state.clone()),
       Query(LoginInputParams::default()),
       Cookies::default(),
-      Either::Json(LoginRequest::Email {
-        email: email.to_string(),
-        password: password.to_string(),
-        params: LoginInputParams {
-          ..Default::default()
+      Either::Json(match identifier {
+        Identifier::Email(ref email) | Identifier::EmailAndHandle(ref email, _) =>
+          LoginRequest::Email {
+            email: email.clone(),
+            password: password.to_string(),
+            params: LoginInputParams {
+              ..Default::default()
+            },
+          },
+        Identifier::Handle(ref handle) => LoginRequest::Handle {
+          handle: handle.clone(),
+          password: password.to_string(),
+          params: LoginInputParams {
+            ..Default::default()
+          },
         },
       })
     )
@@ -148,30 +182,42 @@ async fn register_test_user(
     Path(verification_email_token.clone()),
     Query(VerifyEmailParams::default()),
   )
-  .await
-  .unwrap();
+  .await?;
 
   let (verified, user) = {
-    let db_user = state
-      .user_conn()
-      .read_query_value::<DbUser>(
-        format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
-        params!(email.to_string()),
-      )
-      .await
-      .unwrap()
-      .unwrap();
+    let db_user = match identifier {
+      Identifier::Email(email) | Identifier::EmailAndHandle(email, _) => state
+        .user_conn()
+        .read_query_value::<DbUser>(
+          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+          params!(email.clone()),
+        )
+        .await?
+        .unwrap(),
+      Identifier::Handle(handle) => state
+        .user_conn()
+        .read_query_value::<DbUser>(
+          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE handle = $1"#),
+          params!(handle.to_string()),
+        )
+        .await?
+        .unwrap(),
+    };
 
     (
       db_user.verified.clone(),
-      User::from_unverified(db_user.uuid(), db_user.email.as_deref().unwrap()),
+      User::from_unverified(
+        db_user.uuid(),
+        db_user.email.as_deref(),
+        db_user.handle.as_deref(),
+      ),
     )
   };
 
   // User should now be verified.
   assert!(verified);
 
-  return user;
+  return Ok(user);
 }
 
 #[tokio::test]
@@ -699,7 +745,7 @@ async fn test_auth_change_handle_flow() {
     &email,
     &password,
     Some({
-      let mut config = test_config();
+      let mut config = build_test_config_with_trivial_tokens();
       config.auth.user_identifier = Some(UserIdentifier::RequireEmail.into());
       config
     }),
@@ -739,6 +785,63 @@ async fn test_auth_change_handle_flow() {
     Either::Json(ChangeHandleRequest {
       new_handle: None,
       params: ChangeHandleParams::default(),
+    }),
+  )
+  .await
+  .unwrap();
+}
+
+#[tokio::test]
+async fn test_auth_change_handle_and_unset_email_flow() {
+  let email = "user@test.org".to_string();
+  let handle = "foo".to_string();
+  let password = "secret123".to_string();
+
+  let mailer = TestAsyncSmtpTransport::new();
+  let state = test_state(Some(TestStateOptions {
+    mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some({
+      let mut config = build_test_config_with_trivial_tokens();
+      config.auth.user_identifier = Some(UserIdentifier::RequireHandle.into());
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  assert!(
+    register_test_user(&state, &mailer, Identifier::Email(email.clone()), &password)
+      .await
+      .is_err()
+  );
+
+  let user = register_test_user(
+    &state,
+    &mailer,
+    Identifier::EmailAndHandle(email, handle),
+    &password,
+  )
+  .await
+  .unwrap();
+
+  println!("USER: {user:?}");
+
+  let rows = state
+    .user_conn()
+    .read_query_rows("SELECT * FROM _user;", ())
+    .await
+    .unwrap();
+  println!("ROWS: {rows:?}");
+
+  change_email::change_email_request_handler(
+    State(state.clone()),
+    user.clone(),
+    Query(Default::default()),
+    Either::Json(change_email::ChangeEmailRequest {
+      csrf_token: user.csrf_token.clone(),
+      new_email: None,
+      ..Default::default()
     }),
   )
   .await

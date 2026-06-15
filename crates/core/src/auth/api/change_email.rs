@@ -90,9 +90,25 @@ pub async fn change_email_request_handler(
       user.handle.as_ref(),
     ) {
       (UserIdentifier::RequireHandle | UserIdentifier::OnlyHandle, Some(h)) if !h.is_empty() => {
-        return Err(AuthError::FailedDependency(
-          "Unsetting email not yet implemented".into(),
-        ));
+        const UNSET_EMAIL_QUERY: &str = formatcp!(
+          "\
+            UPDATE \"{USER_TABLE}\" \
+              SET email = NULL, verified = 0 \
+            WHERE \
+              id = $1; \
+          "
+        );
+
+        let _rows_affected = state
+          .user_conn()
+          .execute(UNSET_EMAIL_QUERY, params!(user.id.as_bytes().to_vec()))
+          .await?;
+
+        if !json && let Some(ref redirect_uri) = redirect_uri {
+          return Ok(Redirect::to(redirect_uri).into_response());
+        }
+
+        return Ok(StatusCode::OK.into_response());
       }
       _ => {
         return Err(AuthError::BadRequest("Cannot unset email"));

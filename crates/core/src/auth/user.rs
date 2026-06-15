@@ -113,11 +113,11 @@ impl User {
   }
 
   #[cfg(test)]
-  pub(crate) fn from_unverified(user_id: Uuid, email: &str) -> Self {
+  pub(crate) fn from_unverified(user_id: Uuid, email: Option<&str>, handle: Option<&str>) -> Self {
     return Self {
       id: crate::util::uuid_to_b64(&user_id),
-      email: Some(email.to_string()),
-      handle: None,
+      email: email.map(|s| s.to_string()),
+      handle: handle.map(|s| s.to_string()),
       uuid: user_id,
       csrf_token: crate::rand::random_alphanumeric(20),
     };
