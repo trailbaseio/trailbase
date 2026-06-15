@@ -87,6 +87,13 @@ function buildColumns(): ColumnDef<UserJson>[] {
       },
     },
     {
+      accessorKey: "handle",
+      size: 220,
+      cell: (ctx) => {
+        return ctx.row.original.handle ?? "NULL";
+      },
+    },
+    {
       accessorKey: "email",
       size: 220,
     },
@@ -217,6 +224,7 @@ function EditSheetContent(props: {
     defaultValues: {
       id: props.user.id,
       email: props.user.email,
+      handle: props.user.handle,
       password: null,
       verified: props.user.verified,
     } as UpdateUserRequest,
@@ -258,6 +266,13 @@ function EditSheetContent(props: {
             {buildTextFormField({
               label: () => <FixedWidthLabel children="Email" />,
               type: "email",
+            })}
+          </form.Field>
+
+          <form.Field name={"handle"}>
+            {buildTextFormField({
+              label: () => <FixedWidthLabel children="Handle" />,
+              type: "text",
             })}
           </form.Field>
 

@@ -183,10 +183,10 @@ function PasswordLoginForm(props: {
       }}
     >
       <TextField class="flex items-center gap-2">
-        <TextFieldLabel class="w-[108px]">Email</TextFieldLabel>
+        <TextFieldLabel class="w-[108px]">Email or Username</TextFieldLabel>
 
         <TextFieldInput
-          type="email"
+          type="text"
           placeholder="Email"
           autocomplete="username"
           required={true}

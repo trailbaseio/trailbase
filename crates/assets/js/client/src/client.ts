@@ -294,7 +294,7 @@ class ClientImpl implements Client {
       const response = await this.fetch(`${authApiBasePath}/login`, {
         method: "POST",
         body: JSON.stringify({
-          email,
+          email_or_handle: email,
           password,
         } as LoginRequest),
       });
