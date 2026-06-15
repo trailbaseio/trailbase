@@ -13,6 +13,7 @@ use crate::app_state::AppState;
 use crate::auth::jwt::EmailChangeTokenClaims;
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
+use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
@@ -81,9 +82,22 @@ pub async fn change_email_request_handler(
   let new_email = if let Some(new_email) = request.new_email {
     validate_and_normalize_email_address(&new_email)?
   } else {
-    return Err(AuthError::FailedDependency(
-      "Un-setting not yet implemented".into(),
-    ));
+    let user_identifier = state.access_config(|c| c.auth.user_identifier);
+    match (
+      user_identifier
+        .and_then(|ui| ui.try_into().ok())
+        .unwrap_or(UserIdentifier::Undefined),
+      user.handle.as_ref(),
+    ) {
+      (UserIdentifier::RequireHandle | UserIdentifier::OnlyHandle, Some(h)) if !h.is_empty() => {
+        return Err(AuthError::FailedDependency(
+          "Unsetting email not yet implemented".into(),
+        ));
+      }
+      _ => {
+        return Err(AuthError::BadRequest("Cannot unset email"));
+      }
+    }
   };
 
   let Ok(db_user) = user_by_id(&state, &user.uuid).await else {

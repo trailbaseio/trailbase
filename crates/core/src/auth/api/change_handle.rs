@@ -10,6 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::util::{validate_and_normalize_handle, validate_redirect};
 use crate::auth::{AuthError, User};
+use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
 
@@ -52,11 +53,6 @@ pub async fn change_user_handle_handler(
     return Err(AuthError::BadRequest("Disallowed in demo"));
   }
 
-  let config_handles_allowed = false;
-  if !config_handles_allowed {
-    return Ok(StatusCode::METHOD_NOT_ALLOWED.into_response());
-  }
-
   let (ChangeHandleRequest { new_handle, params }, json) = match either_request {
     Either::Json(req) => (req, true),
     Either::Multipart(req, _) => (req, false),
@@ -64,12 +60,31 @@ pub async fn change_user_handle_handler(
   };
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
-  let new_handle = if let Some(new_handle) = new_handle {
-    validate_and_normalize_handle(&new_handle)?
-  } else {
-    return Err(AuthError::FailedDependency(
-      "Un-setting not yet implemented".into(),
-    ));
+  let user_identifier = state
+    .access_config(|c| c.auth.user_identifier)
+    .and_then(|ui| ui.try_into().ok())
+    .unwrap_or(UserIdentifier::Undefined);
+
+  let new_handle = match (new_handle, user_identifier, user.email.as_ref()) {
+    (
+      Some(new_handle),
+      UserIdentifier::RequireEmail
+      | UserIdentifier::RequireHandle
+      | UserIdentifier::OnlyHandle
+      | UserIdentifier::RequireEmailAndHandle,
+      _email,
+    ) => Some(validate_and_normalize_handle(&new_handle)?),
+    (Some(_), _, _) => {
+      return Err(AuthError::BadRequest("Cannot change handle"));
+    }
+    (
+      None,
+      UserIdentifier::Undefined | UserIdentifier::OnlyEmail | UserIdentifier::RequireEmail,
+      Some(email),
+    ) if !email.is_empty() => None,
+    (None, _, _) => {
+      return Err(AuthError::BadRequest("Cannot unset user handle"));
+    }
   };
 
   const UPDATE_HANDLE_QUERY: &str = formatcp!(
@@ -77,7 +92,7 @@ pub async fn change_user_handle_handler(
       UPDATE \"{USER_TABLE}\" \
         SET handle = :new_handle \
       WHERE \
-        handle = :old_handle AND email = :email; \
+        id = :id; \
     "
   );
 
@@ -86,9 +101,8 @@ pub async fn change_user_handle_handler(
     .execute(
       UPDATE_HANDLE_QUERY,
       named_params! {
-        ":old_handle": user.handle,
         ":new_handle": new_handle,
-        ":email": user.email,
+        ":id": user.uuid.as_bytes().to_vec(),
       },
     )
     .await?;

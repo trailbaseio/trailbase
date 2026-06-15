@@ -13,6 +13,9 @@ use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_config, test_state};
 use crate::auth::AuthError;
 use crate::auth::api::change_email::{self, ChangeEmailConfigParams};
+use crate::auth::api::change_handle::{
+  ChangeHandleParams, ChangeHandleRequest, change_user_handle_handler,
+};
 use crate::auth::api::change_password::{
   ChangePasswordParams, ChangePasswordRequest, change_password_handler,
 };
@@ -32,7 +35,7 @@ use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::login_with_password;
-use crate::config::proto::EmailTemplate;
+use crate::config::proto::{Config, EmailTemplate, UserIdentifier};
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::Either;
@@ -40,6 +43,7 @@ use crate::extract::Either;
 async fn setup_state_and_test_user(
   email: &str,
   password: &str,
+  config: Option<Config>,
 ) -> (AppState, TestAsyncSmtpTransport, User) {
   let _ = env_logger::try_init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn"),
@@ -47,29 +51,27 @@ async fn setup_state_and_test_user(
 
   let mailer = TestAsyncSmtpTransport::new();
 
-  let config = {
-    let mut config = test_config();
-    config.email.password_reset_template = Some(EmailTemplate {
-      subject: None,
-      body: Some("{{ TOKEN }}".to_string()),
-    });
-    config.email.change_email_template = Some(EmailTemplate {
-      subject: None,
-      body: Some("{{ TOKEN }}".to_string()),
-    });
-    config.email.user_verification_template = Some(EmailTemplate {
-      subject: None,
-      body: Some("{{ TOKEN }}".to_string()),
-    });
-
-    config.auth.enable_otp_signin = Some(true);
-
-    config
-  };
-
   let state = test_state(Some(TestStateOptions {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
-    config: Some(config),
+    config: Some({
+      let mut config = config.unwrap_or_else(test_config);
+      config.email.password_reset_template = Some(EmailTemplate {
+        subject: None,
+        body: Some("{{ TOKEN }}".to_string()),
+      });
+      config.email.change_email_template = Some(EmailTemplate {
+        subject: None,
+        body: Some("{{ TOKEN }}".to_string()),
+      });
+      config.email.user_verification_template = Some(EmailTemplate {
+        subject: None,
+        body: Some("{{ TOKEN }}".to_string()),
+      });
+
+      config.auth.enable_otp_signin = Some(true);
+
+      config
+    }),
     ..Default::default()
   }))
   .await
@@ -177,7 +179,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   let login_helper = async |request| {
     return login_handler(
@@ -307,7 +309,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   let login_helper = async |request| {
     return login_handler(
@@ -415,7 +417,7 @@ async fn test_auth_token_refresh_flow() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, _user) = setup_state_and_test_user(&email, &password).await;
+  let (state, _mailer, _user) = setup_state_and_test_user(&email, &password, None).await;
 
   // Test refresh flow.
   let tokens = login_with_password(&state, &email, &password)
@@ -449,7 +451,7 @@ async fn test_auth_reset_password_flow() {
   let password = "secret123".to_string();
   let reset_password = "new_password!";
 
-  let (state, mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   // Reset (forgotten) password flow.
   let _ = reset_password_request_handler(
@@ -564,7 +566,7 @@ async fn test_auth_change_email_flow() {
   let new_email = "new_addresses@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   // Form requests require old email
   assert!(
@@ -656,7 +658,7 @@ async fn test_auth_change_password_flow() {
   let password = "secret123".to_string();
   let new_password = "new_secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   let _ = change_password_handler(
     State(state.clone()),
@@ -689,11 +691,66 @@ async fn test_auth_change_password_flow() {
 }
 
 #[tokio::test]
+async fn test_auth_change_handle_flow() {
+  let email = "user@test.org".to_string();
+  let password = "secret123".to_string();
+
+  let (state, _mailer, user) = setup_state_and_test_user(
+    &email,
+    &password,
+    Some({
+      let mut config = test_config();
+      config.auth.user_identifier = Some(UserIdentifier::RequireEmail.into());
+      config
+    }),
+  )
+  .await;
+
+  assert!(
+    change_user_handle_handler(
+      State(state.clone()),
+      Query(ChangeHandleParams::default()),
+      user.clone(),
+      Either::Json(ChangeHandleRequest {
+        new_handle: Some("!invalid_handle".to_string()),
+        params: ChangeHandleParams::default(),
+      }),
+    )
+    .await
+    .is_err()
+  );
+
+  let _ = change_user_handle_handler(
+    State(state.clone()),
+    Query(ChangeHandleParams::default()),
+    user.clone(),
+    Either::Json(ChangeHandleRequest {
+      new_handle: Some("Foo".to_string()),
+      params: ChangeHandleParams::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  let _ = change_user_handle_handler(
+    State(state.clone()),
+    Query(ChangeHandleParams::default()),
+    user.clone(),
+    Either::Json(ChangeHandleRequest {
+      new_handle: None,
+      params: ChangeHandleParams::default(),
+    }),
+  )
+  .await
+  .unwrap();
+}
+
+#[tokio::test]
 async fn test_auth_delete_user_flow() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   let _tokens = login_with_password(&state, &email, &password)
     .await
@@ -727,7 +784,7 @@ async fn test_auth_otp_flow() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, mailer, user) = setup_state_and_test_user(&email, &password).await;
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
   // NOTE: We return a success response on unknown user to avoid leaks.
   otp::request_otp_handler(
