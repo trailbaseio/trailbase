@@ -168,11 +168,6 @@ Redirect::to(redirect).into_response()
       .send()
       .await
       .map_err(|err| AuthError::FailedDependency(format!("Failed to send Email {err}.").into()))?;
-  } else {
-    // FIXME
-    return Err(AuthError::Internal(
-      "optional email not yet supported".into(),
-    ));
   }
 
   return Ok(success_response());

@@ -14,7 +14,10 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
-use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
+use crate::auth::util::{
+  user_by_email, user_by_handle, validate_and_normalize_email_address,
+  validate_and_normalize_handle, validate_redirect,
+};
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
@@ -64,24 +67,7 @@ pub async fn reset_password_request_handler(
     Either::Form(req) => req,
   };
 
-  let ResetPasswordRequest::Email { email, params } = request else {
-    // FIXME: Lookup user by handle and use stored email.
-    // NOTE: We could also allow password reset for users w/o email but second factor.
-    return Err(AuthError::BadRequest("handle not yet supported"));
-  };
-
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
-  let normalized_email = validate_and_normalize_email_address(&email)?;
-
-  {
-    // Rate limit.
-    if ATTEMPTS.get(&normalized_email).is_some() {
-      return Err(AuthError::TooManyRequests);
-    }
-    ATTEMPTS.insert(normalized_email.clone(), ());
-  }
-
-  let success_response = || {
+  fn success_response(redirect_uri: Option<String>) -> Response {
     if let Some(redirect) = redirect_uri {
       return Redirect::to(&format!(
         "{redirect}?alert={msg}",
@@ -90,14 +76,60 @@ pub async fn reset_password_request_handler(
       .into_response();
     }
     return (StatusCode::OK, "Password reset email sent").into_response();
-  };
-  let Ok(user) = user_by_email(&state, &normalized_email).await else {
-    // In case we don't find a user we still reply with a success to avoid leaking
-    // users' email addresses.
-    return Ok(success_response());
-  };
+  }
 
-  debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+  let (normalized_email, redirect_uri) = match request {
+    ResetPasswordRequest::Email { email, params } => {
+      let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+      let normalized_email = validate_and_normalize_email_address(&email)?;
+
+      {
+        // Rate limit.
+        if ATTEMPTS.get(&normalized_email).is_some() {
+          return Err(AuthError::TooManyRequests);
+        }
+        ATTEMPTS.insert(normalized_email.clone(), ());
+      }
+
+      // We need to check the email is associated with actual user to not just send emails to
+      // anyone.
+      let Ok(user) = user_by_email(&state, &normalized_email).await else {
+        // In case we don't find a user we still reply with a success to avoid leaking
+        // users' email addresses.
+        return Ok(success_response(redirect_uri));
+      };
+
+      debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+
+      (normalized_email, redirect_uri)
+    }
+    ResetPasswordRequest::Handle { handle, params } => {
+      let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+      let normalized_handle = validate_and_normalize_handle(&handle)?;
+
+      {
+        // Rate limit.
+        if ATTEMPTS.get(&normalized_handle).is_some() {
+          return Err(AuthError::TooManyRequests);
+        }
+        ATTEMPTS.insert(normalized_handle.clone(), ());
+      }
+
+      let Ok(user) = user_by_handle(&state, &normalized_handle).await else {
+        // In case we don't find a user we still reply with a success to avoid leaking
+        // users' handles.
+        return Ok(success_response(redirect_uri));
+      };
+
+      let Some(email) = user.email else {
+        // In case the user doesn't have an email address, there's no way to reset the
+        // password right now. Reply with success to avoid leaking this fact.
+        return Ok(success_response(redirect_uri));
+      };
+
+      (email, redirect_uri)
+    }
+  };
 
   let password_reset_claims = PasswordResetTokenClaims::new(&normalized_email, TTL);
   let token = state
@@ -112,7 +144,7 @@ pub async fn reset_password_request_handler(
     .await
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  return Ok(success_response());
+  return Ok(success_response(redirect_uri));
 }
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema)]
