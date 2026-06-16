@@ -678,10 +678,19 @@ pub async fn validate_config(
 }
 
 pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), ConfigError> {
-  validate_email_template(email.user_verification_template.as_ref())?;
-  validate_email_template(email.change_email_template.as_ref())?;
-  validate_email_template(email.password_reset_template.as_ref())?;
-  validate_email_template(email.otp_template.as_ref())?;
+  validate_email_template(
+    email.user_verification_template.as_ref(),
+    &["VERIFICATION_URL", "CODE", "TOKEN"],
+  )?;
+  validate_email_template(
+    email.change_email_template.as_ref(),
+    &["VERIFICATION_URL", "CODE", "TOKEN"],
+  )?;
+  validate_email_template(
+    email.password_reset_template.as_ref(),
+    &["TOKEN", "CODE"],
+  )?;
+  validate_email_template(email.otp_template.as_ref(), &["CODE"])?;
 
   let Some(host) = &email.smtp_host else {
     match (email.smtp_port, &email.smtp_username, &email.smtp_password) {
@@ -750,22 +759,26 @@ pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), Co
   };
 }
 
-fn validate_email_template(template: Option<&EmailTemplate>) -> Result<(), ConfigError> {
+fn validate_email_template(
+  template: Option<&EmailTemplate>,
+  acceptable_vars: &[&str],
+) -> Result<(), ConfigError> {
   // NOTE: It's ok for either subject or body to be empty, we'll simply fall back to the
   // defaults.
 
-  // Check that VERIFICATION_URL is present.
+  // Check that at least one of the acceptable template variables is present.
   if let Some(ref body) = template.as_ref().and_then(|t| t.body.as_ref()) {
-    lazy_static! {
-      static ref URL_PATTERN: regex::Regex =
-        regex::Regex::new(r#"\{\{[ ]*VERIFICATION_URL[ ]*\}\}"#).expect("static");
-      static ref CODE_PATTERN: regex::Regex =
-        regex::Regex::new(r#"\{\{[ ]*CODE[ ]*\}\}"#).expect("static");
-    };
+    let any_match = acceptable_vars.iter().any(|var| {
+      let pattern = format!(r"\{{\{{[ ]*{}[ ]*\}}\}}", var);
+      regex::Regex::new(&pattern)
+        .expect("static")
+        .is_match(body)
+    });
 
-    if !(URL_PATTERN.is_match(body) || CODE_PATTERN.is_match(body)) {
+    if !any_match {
       return ierr(format!(
-        "Body needs to contain '{{{{ VERIFICATION_URL }}}}, got: {body}'"
+        "Body needs to contain one of: {vars}. Got: {body}",
+        vars = acceptable_vars.join(", "),
       ));
     }
   }
@@ -1010,5 +1023,46 @@ mod test {
     assert_eq!(true, is_valid_hostname_or_ip("smtp.test.org"));
     assert_eq!(false, is_valid_hostname_or_ip("smtp.test.org:4444"));
     assert_eq!(false, is_valid_hostname_or_ip("http://example.com"));
+  }
+
+  #[test]
+  fn test_validate_email_template_password_reset_with_token_passes() {
+    let template = proto::EmailTemplate {
+      body: Some("Your token is: {{ TOKEN }}".to_string()),
+      ..Default::default()
+    };
+    validate_email_template(Some(&template), &["TOKEN"]).unwrap();
+  }
+
+  #[test]
+  fn test_validate_email_template_password_reset_with_code_passes() {
+    let template = proto::EmailTemplate {
+      body: Some("Your code is: {{ CODE }}".to_string()),
+      ..Default::default()
+    };
+    validate_email_template(Some(&template), &["TOKEN", "CODE"]).unwrap();
+  }
+
+  #[test]
+  fn test_validate_email_template_without_acceptable_var_fails() {
+    let template = proto::EmailTemplate {
+      body: Some("Just a static message with no params.".to_string()),
+      ..Default::default()
+    };
+    let err =
+      validate_email_template(Some(&template), &["TOKEN", "CODE"]).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("TOKEN"), "error must list TOKEN, got: {msg}");
+    assert!(msg.contains("CODE"), "error must list CODE, got: {msg}");
+  }
+
+  #[test]
+  fn test_validate_email_template_empty_or_none_body_passes() {
+    validate_email_template(None, &["TOKEN"]).unwrap();
+    let template = proto::EmailTemplate {
+      body: None,
+      ..Default::default()
+    };
+    validate_email_template(Some(&template), &["TOKEN"]).unwrap();
   }
 }
