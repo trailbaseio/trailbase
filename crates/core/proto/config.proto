@@ -128,6 +128,8 @@ message AuthConfig {
   /// List of explicitly allowed redirect uris.
   repeated string redirect_uri_allowlist = 22;
 
+  /// Policy covering user registration and change (handle|email) flows around
+  /// what user identifier is expected and accepted. Default: ONLY_EMAIL.
   optional UserIdentifier user_identifier = 31;
 }
 

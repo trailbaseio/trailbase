@@ -27,6 +27,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TextField } from "@/components/ui/text-field";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -37,6 +45,7 @@ import {
   Config,
   OAuthProviderConfig,
   OAuthProviderId,
+  UserIdentifier,
 } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { adminFetch } from "@/lib/fetch";
@@ -57,6 +66,7 @@ import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
 import twitch from "@shared/assets/oauth2/twitch.svg";
 import yandex from "@shared/assets/oauth2/yandex.svg";
+import { User } from "trailbase";
 
 export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.OIDC0, openIdConnect],
@@ -377,45 +387,37 @@ function AuthSettingsForm(props: {
       <div class="flex flex-col gap-4">
         <Card>
           <CardHeader>
-            <h2>Token Settings</h2>
+            <h2>Password & User Settings</h2>
           </CardHeader>
 
           <CardContent>
             <div class="flex flex-col gap-4">
-              <form.Field name="authTokenTtlSec">
-                {buildOptionalIntegerFormField({
-                  placeholder: `${60 * 60}`,
-                  label: () => (
-                    <InfoTooltip label="Auth TTL [sec]">
-                      Tokens older than this TTL are considered invalid. A new
-                      AuthToken can be minted given a valid refresh Token.
-                    </InfoTooltip>
-                  ),
-                })}
+              <form.Field name="userIdentifier">
+                {(field) => {
+                  return (
+                    <TextField class="w-full">
+                      <div
+                        class="grid items-center gap-x-2 gap-y-1"
+                        style={{ "grid-template-columns": "auto 1fr" }}
+                      >
+                        <InfoTooltip label="User Identifier">
+                          Controls what identifiers (Email and/or Handle) are
+                          required during sign-up (and change email/handle
+                          flows). Does not affect existing users.
+                        </InfoTooltip>
+
+                        <div class="w-full">
+                          <UserIdentifierSelect
+                            value={field().state.value}
+                            handleChange={field().handleChange}
+                          />
+                        </div>
+                      </div>
+                    </TextField>
+                  );
+                }}
               </form.Field>
 
-              <form.Field name="refreshTokenTtlSec">
-                {buildOptionalIntegerFormField({
-                  placeholder: `${30 * 24 * 60 * 60}`,
-                  label: () => (
-                    <InfoTooltip label="Refresh TTL [sec]">
-                      Refresh tokens older than this TTL are considered invalid.
-                      A refresh token can be renewed by users logging in again.
-                    </InfoTooltip>
-                  ),
-                })}
-              </form.Field>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <h2>Password Settings</h2>
-          </CardHeader>
-
-          <CardContent>
-            <div class="flex flex-col gap-4">
               <form.Field name="disablePasswordAuth">
                 {buildOptionalBoolFormField({
                   label: () => (
@@ -503,6 +505,40 @@ function AuthSettingsForm(props: {
               <form.Field name="enableOtpSignin">
                 {buildOptionalBoolFormField({
                   label: () => <L>Enable OTP Sign-in</L>,
+                })}
+              </form.Field>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <h2>Token Settings</h2>
+          </CardHeader>
+
+          <CardContent>
+            <div class="flex flex-col gap-4">
+              <form.Field name="authTokenTtlSec">
+                {buildOptionalIntegerFormField({
+                  placeholder: `${60 * 60}`,
+                  label: () => (
+                    <InfoTooltip label="Auth TTL [sec]">
+                      Tokens older than this TTL are considered invalid. A new
+                      AuthToken can be minted given a valid refresh Token.
+                    </InfoTooltip>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="refreshTokenTtlSec">
+                {buildOptionalIntegerFormField({
+                  placeholder: `${30 * 24 * 60 * 60}`,
+                  label: () => (
+                    <InfoTooltip label="Refresh TTL [sec]">
+                      Refresh tokens older than this TTL are considered invalid.
+                      A refresh token can be renewed by users logging in again.
+                    </InfoTooltip>
+                  ),
                 })}
               </form.Field>
             </div>
@@ -723,6 +759,61 @@ function InfoTooltip(props: {
       </TooltipContent>
     </Tooltip>
   );
+}
+
+function UserIdentifierSelect(props: {
+  value: UserIdentifier | undefined;
+  handleChange: (v: UserIdentifier | undefined) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Select<UserIdentifier | undefined>
+      value={props.value}
+      disabled={props.disabled}
+      options={[
+        // undefined,
+        UserIdentifier.ONLY_EMAIL,
+        UserIdentifier.REQUIRE_EMAIL,
+        UserIdentifier.ONLY_HANDLE,
+        UserIdentifier.REQUIRE_HANDLE,
+        UserIdentifier.REQUIRE_EMAIL_AND_HANDLE,
+      ]}
+      placeholder={userIdentifierLabel(undefined)}
+      itemComponent={(props) => (
+        <SelectItem item={props.item}>
+          {userIdentifierLabel(props.item.rawValue)}
+        </SelectItem>
+      )}
+      onChange={(value) => {
+        props.handleChange(value ?? UserIdentifier.USER_IDENTIFIER_UNDEFINED);
+      }}
+    >
+      <SelectTrigger>
+        <SelectValue<UserIdentifier>>
+          {(_state) => userIdentifierLabel(props.value)}
+        </SelectValue>
+      </SelectTrigger>
+
+      <SelectContent />
+    </Select>
+  );
+}
+
+function userIdentifierLabel(ui: UserIdentifier | undefined): string {
+  switch (ui) {
+    case UserIdentifier.REQUIRE_EMAIL:
+      return "Email + optional Handle";
+    case UserIdentifier.ONLY_HANDLE:
+      return "Only Handle";
+    case UserIdentifier.REQUIRE_HANDLE:
+      return "Handle + optional Email";
+    case UserIdentifier.REQUIRE_EMAIL_AND_HANDLE:
+      return "Email + Handle";
+    case UserIdentifier.ONLY_EMAIL:
+    case UserIdentifier.USER_IDENTIFIER_UNDEFINED:
+    default:
+      return "Only Email (Default)";
+  }
 }
 
 function L(props: { children: JSX.Element }) {

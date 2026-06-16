@@ -485,6 +485,10 @@ export interface AuthConfig {
   customUriSchemes: string[];
   /** / List of explicitly allowed redirect uris. */
   redirectUriAllowlist: string[];
+  /**
+   * / Policy covering user registration and change (handle|email) flows around
+   * / what user identifier is expected and accepted. Default: ONLY_EMAIL.
+   */
   userIdentifier?: UserIdentifier | undefined;
 }
 
