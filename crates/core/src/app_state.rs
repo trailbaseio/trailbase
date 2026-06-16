@@ -1,17 +1,17 @@
 use log::*;
 use object_store::ObjectStore;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider};
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
 use crate::config::proto::{
-  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
+  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, UserIdentifier, hash_config,
 };
 use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
 use crate::connection::{BuildOptions, ConnectionEntry, ConnectionError, ConnectionManager};
@@ -604,20 +604,6 @@ fn build_site_url(c: &Config) -> Result<Option<url::Url>, url::ParseError> {
   return Ok(None);
 }
 
-#[derive(Serialize)]
-pub struct OAuthProvider {
-  pub name: String,
-  pub display_name: String,
-  pub img_name: String,
-}
-
-#[derive(Serialize)]
-struct AuthConfig {
-  disable_password_auth: bool,
-  enable_otp_signin: bool,
-  oauth_providers: Vec<OAuthProvider>,
-}
-
 fn build_auth_config(config: &Config) -> AuthConfig {
   let oauth_providers: Vec<_> = config
     .auth
@@ -658,6 +644,16 @@ fn build_auth_config(config: &Config) -> AuthConfig {
     disable_password_auth: config.auth.disable_password_auth(),
     enable_otp_signin: config.auth.enable_otp_signin(),
     oauth_providers,
+    login_identifier: match config
+      .auth
+      .user_identifier
+      .and_then(|i| i.try_into().ok())
+      .unwrap_or(UserIdentifier::Undefined)
+    {
+      UserIdentifier::OnlyEmail | UserIdentifier::Undefined => vec![LoginIdentifier::Email],
+      UserIdentifier::OnlyHandle => vec![LoginIdentifier::Handle],
+      _ => vec![LoginIdentifier::Email, LoginIdentifier::Handle],
+    },
   };
 }
 

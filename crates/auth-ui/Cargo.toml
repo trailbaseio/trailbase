@@ -1,5 +1,5 @@
 [package]
-name = "auth-ui-component"
+name = "trailbase-auth-ui-component"
 version = "0.0.0"
 edition = "2024"
 license = "OSL-3.0"
@@ -17,6 +17,7 @@ itertools = "0.15.0"
 rust-embed = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+trailbase-auth-config = { workspace = true }
 trailbase-wasm = { workspace = true }
 
 [build-dependencies]

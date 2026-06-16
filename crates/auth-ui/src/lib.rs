@@ -4,6 +4,7 @@
 
 use askama::Template;
 use serde::Deserialize;
+use trailbase_auth_config::AuthConfig;
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -23,7 +24,7 @@ impl Guest for Endpoints {
         LOGIN_UI,
         async |req: Request| -> Result<Response, HttpError> {
           // Read auth config. It may be a bit hacky using KVStore :shrug:.
-          let auth_config: auth::AuthConfig = {
+          let auth_config: AuthConfig = {
             let store = Store::open().map_err(internal)?;
             let value = store
               .get("config:auth")
@@ -124,7 +125,7 @@ pub struct LoginQuery {
 }
 
 async fn ui_login_handler(
-  config: auth::AuthConfig,
+  config: AuthConfig,
   user: Option<&User>,
   query: LoginQuery,
 ) -> Result<Response, HttpError> {

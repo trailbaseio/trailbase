@@ -103,6 +103,7 @@ tracing = { workspace = true }
 tracing-opentelemetry-instrumentation-sdk = "0.38.0"
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
+trailbase-auth-config = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-pg-schema = { workspace = true, optional = true }
