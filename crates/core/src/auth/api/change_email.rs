@@ -79,6 +79,7 @@ pub async fn change_email_request_handler(
     &state,
     query.err_redirect_uri.or(request.params.err_redirect_uri),
   )?;
+
   let new_email = if let Some(new_email) = request.new_email {
     validate_and_normalize_email_address(&new_email)?
   } else {

@@ -13,6 +13,7 @@ use crate::auth::{AuthError, User};
 use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
+use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub(crate) struct ChangeHandleParams {
@@ -41,6 +42,8 @@ pub struct ChangeHandleRequest {
   responses(
     (status = 200, description = "Success, when redirect_uri not present."),
     (status = 303, description = "Success, when redirect_uri present."),
+    (status = 409, description = "Fail, user handle already taken."),
+    (status = 500, description = "Fail, something went wrong."),
   )
 )]
 pub async fn change_user_handle_handler(
@@ -60,6 +63,9 @@ pub async fn change_user_handle_handler(
   };
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+  let err_redirect_uri =
+    validate_redirect(&state, query.err_redirect_uri.or(params.err_redirect_uri))?;
+
   let user_identifier = state
     .access_config(|c| c.auth.user_identifier)
     .and_then(|ui| ui.try_into().ok())
@@ -96,7 +102,7 @@ pub async fn change_user_handle_handler(
     "
   );
 
-  let rows_affected = state
+  let Ok(rows_affected) = state
     .user_conn()
     .execute(
       UPDATE_HANDLE_QUERY,
@@ -105,10 +111,25 @@ pub async fn change_user_handle_handler(
         ":id": user.uuid.as_bytes().to_vec(),
       },
     )
-    .await?;
+    .await
+  else {
+    const MSG: &str = "Handle already taken";
+    if !json && let Some(ref redirect_uri) = err_redirect_uri.or(redirect_uri) {
+      return Ok(
+        Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG))).into_response(),
+      );
+    }
+    // Insert will fail if the handle isn't unique.
+    return Err(AuthError::Conflict);
+  };
 
   return match rows_affected {
-    0 => Err(AuthError::Internal("update failed".into())),
+    0 => {
+      // No need to redirect, this is a freak error.
+      Err(AuthError::Internal(
+        "update failed, invalid user id?".into(),
+      ))
+    }
     1 => {
       if !json && let Some(redirect_uri) = redirect_uri {
         Ok(Redirect::to(&redirect_uri).into_response())
