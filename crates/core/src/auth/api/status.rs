@@ -1,11 +1,14 @@
 use axum::extract::{Json, State};
 use serde::{Deserialize, Serialize};
+use tower_cookies::Cookies;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{Tokens, reauth_with_refresh_token};
+use crate::auth::util::new_cookie;
+use crate::constants::COOKIE_AUTH_TOKEN;
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -27,6 +30,7 @@ pub struct LoginStatusResponse {
 pub(crate) async fn login_status_handler(
   State(state): State<AppState>,
   tokens: Option<Tokens>,
+  cookies: Cookies,
 ) -> Result<Json<LoginStatusResponse>, AuthError> {
   let Some(Tokens {
     auth_token_claims,
@@ -45,12 +49,21 @@ pub(crate) async fn login_status_handler(
   // time (exp). But rather than just re-encoding it, we refresh it. This ensures that the
   // session is still alive.
   if let Some(refresh_token) = refresh_token {
-    let (claims, _ttl) = reauth_with_refresh_token(&state, refresh_token.clone()).await?;
+    let (claims, ttl) = reauth_with_refresh_token(&state, refresh_token.clone()).await?;
 
     let auth_token = state
       .jwt()
       .encode(&claims)
       .map_err(|err| AuthError::Internal(err.into()))?;
+
+    if cookies.get(COOKIE_AUTH_TOKEN).is_some() {
+      cookies.add(new_cookie(
+        &state,
+        COOKIE_AUTH_TOKEN,
+        auth_token.clone(),
+        ttl,
+      ));
+    }
 
     return Ok(Json(LoginStatusResponse {
       auth_token: Some(auth_token),
