@@ -170,11 +170,13 @@ async fn async_main(
         Some(AdminSubCommands::Demote { user }) => {
           let id =
             api::cli::demote_admin_to_user(state.user_conn(), to_user_reference(user)).await?;
+
           println!("Demoted admin to user for '{id}'");
         }
         Some(AdminSubCommands::Promote { user }) => {
           let id =
             api::cli::promote_user_to_admin(state.user_conn(), to_user_reference(user)).await?;
+
           println!("Promoted user to admin for '{id}'");
         }
         None => {
@@ -196,24 +198,32 @@ async fn async_main(
         Some(UserSubCommands::ChangePassword { user, password }) => {
           let id = api::cli::change_password(state.user_conn(), to_user_reference(user), &password)
             .await?;
+
           println!("Updated password for '{id}'");
         }
         Some(UserSubCommands::ChangeEmail { user, new_email }) => {
           let id =
             api::cli::change_email(state.user_conn(), to_user_reference(user), &new_email).await?;
+
           println!("Updated email for '{id}'");
+        }
+        Some(UserSubCommands::ChangeHandle { user, new_handle }) => {
+          api::cli::change_handle(state.user_conn(), to_user_reference(user), &new_handle).await?;
         }
         Some(UserSubCommands::Add { email, password }) => {
           api::cli::add_user(state.user_conn(), &email, &password).await?;
+
           println!("Added user '{email}'");
         }
         Some(UserSubCommands::Delete { user }) => {
           api::cli::delete_user(state.user_conn(), to_user_reference(user.clone())).await?;
+
           println!("Deleted user '{user}'");
         }
         Some(UserSubCommands::Verify { user, verified }) => {
           let id =
             api::cli::set_verified(state.user_conn(), to_user_reference(user), verified).await?;
+
           println!("Set verified={verified} for '{id}'");
         }
         Some(UserSubCommands::InvalidateSession { user }) => {
@@ -223,6 +233,7 @@ async fn async_main(
             to_user_reference(user.clone()),
           )
           .await?;
+
           println!("Sessions invalidated for '{user}'");
         }
         Some(UserSubCommands::MintToken { user }) => {

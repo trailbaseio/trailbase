@@ -208,6 +208,13 @@ pub enum UserSubCommands {
     /// New email address to set for user.
     new_email: String,
   },
+  /// Change Handle.
+  ChangeHandle {
+    /// User in question, either email or UUID.
+    user: String,
+    /// New handle
+    new_handle: String,
+  },
   /// Adds a new and verified user.
   Add {
     /// Email address of the new user.

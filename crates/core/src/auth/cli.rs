@@ -9,7 +9,10 @@ use crate::auth::AuthError;
 use crate::auth::password::hash_password;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
-use crate::auth::util::{get_user_by_email, get_user_by_id, validate_and_normalize_email_address};
+use crate::auth::util::{
+  get_user_by_email, get_user_by_id, validate_and_normalize_email_address,
+  validate_and_normalize_handle,
+};
 use crate::constants::USER_TABLE;
 
 pub enum UserReference {
@@ -67,6 +70,23 @@ pub async fn change_email(
 
   return user_conn
     .write_query_value(UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id))
+    .await?
+    .ok_or(AuthError::NotFound);
+}
+
+pub async fn change_handle(
+  user_conn: &trailbase_sqlite::Connection,
+  user: UserReference,
+  new_handle: &str,
+) -> Result<Uuid, AuthError> {
+  let normalized_handle = validate_and_normalize_handle(new_handle)?;
+  let db_user = user.lookup_user(user_conn).await?;
+
+  const UPDATE_HANDLE_QUERY: &str =
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET handle = $1 WHERE id = $2 RETURNING id"#);
+
+  return user_conn
+    .write_query_value(UPDATE_HANDLE_QUERY, params!(normalized_handle, db_user.id))
     .await?
     .ok_or(AuthError::NotFound);
 }
