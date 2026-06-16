@@ -377,7 +377,9 @@ class ClientImpl implements Client {
   }
 
   public async deleteUser(): Promise<void> {
-    await this.fetch(`${authApiBasePath}/delete`);
+    await this.fetch(`${authApiBasePath}/delete`, {
+      method: "DELETE",
+    });
     this.setTokenState(buildTokenState(undefined));
   }
 
