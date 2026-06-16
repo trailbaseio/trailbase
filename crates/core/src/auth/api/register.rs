@@ -200,6 +200,12 @@ fn validate_email_and_handler(
     ) => Err(AuthError::BadRequest("Missing handle")),
     (_, Some(email), None) => Ok((Some(validate_and_normalize_email_address(email)?), None)),
     (_, None, Some(handle)) => Ok((None, Some(validate_and_normalize_handle(handle)?))),
+    (UserIdentifier::OnlyEmail, _, Some(_handle)) => {
+      Err(AuthError::BadRequest("Handle not allowed"))
+    }
+    (UserIdentifier::OnlyHandle, Some(_email), _) => {
+      Err(AuthError::BadRequest("Email not allowed"))
+    }
     (_, Some(email), Some(handle)) => Ok((
       Some(validate_and_normalize_email_address(email)?),
       Some(validate_and_normalize_handle(handle)?),

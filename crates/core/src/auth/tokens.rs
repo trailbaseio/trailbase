@@ -171,8 +171,7 @@ pub(crate) async fn mint_new_tokens(
   auth_token_ttl: &Duration,
   refresh_token_ttl: &Duration,
 ) -> Result<FreshTokens, AuthError> {
-  let verified = db_user.verified;
-  if !verified {
+  if db_user.email.is_some() && !db_user.verified {
     return Err(AuthError::Internal(
       "Cannot mint tokens for unverified user".into(),
     ));

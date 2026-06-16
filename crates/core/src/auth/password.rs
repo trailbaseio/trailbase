@@ -98,12 +98,14 @@ pub fn check_user_password(
   password: &str,
   is_demo: bool,
 ) -> Result<(), AuthError> {
-  if !db_user.verified {
+  if db_user.email.is_some() && !db_user.verified {
     return Err(AuthError::Unauthorized);
   }
+
   let Some(password_hash) = db_user.password_hash.as_deref() else {
     return Err(AuthError::Unauthorized);
   };
+
   let account = db_user
     .email
     .as_deref()

@@ -107,21 +107,32 @@ async fn register_test_user(
   password: &str,
 ) -> Result<User, anyhow::Error> {
   // Register new user and email verification flow.
-  let request = RegisterUserRequest {
-    email: match identifier {
-      Identifier::Email(ref email) => Some(email.clone()),
-      Identifier::EmailAndHandle(ref email, _) => Some(email.clone()),
-      _ => None,
+
+  let request = match identifier {
+    Identifier::Email(ref email) => RegisterUserRequest {
+      email: Some(email.clone()),
+      handle: None,
+      password: password.to_string(),
+      password_repeat: password.to_string(),
+      ..Default::default()
     },
-    handle: match identifier {
-      Identifier::Handle(ref handle) => Some(handle.clone()),
-      Identifier::EmailAndHandle(_, ref handle) => Some(handle.clone()),
-      _ => None,
+    Identifier::EmailAndHandle(ref email, ref handle) => RegisterUserRequest {
+      email: Some(email.clone()),
+      handle: Some(handle.clone()),
+      password: password.to_string(),
+      password_repeat: password.to_string(),
+      ..Default::default()
     },
-    password: password.to_string(),
-    password_repeat: password.to_string(),
-    ..Default::default()
+    Identifier::Handle(ref handle) => RegisterUserRequest {
+      email: None,
+      handle: Some(handle.clone()),
+      password: password.to_string(),
+      password_repeat: password.to_string(),
+      ..Default::default()
+    },
   };
+
+  let has_email = request.email.is_some();
 
   let _ = register_user_handler(
     State(state.clone()),
@@ -131,93 +142,92 @@ async fn register_test_user(
   .await?;
 
   // Assert that a verification email was sent.
-  assert_eq!(mailer.get_logs().len(), 1);
+  if has_email {
+    assert_eq!(mailer.get_logs().len(), 1);
 
-  // Then steal the verification code from the DB and verify.
-  let verification_email_body: String = String::from_utf8_lossy(&quoted_printable::decode(
-    mailer.get_logs()[0].1.as_bytes(),
-    quoted_printable::ParseMode::Robust,
-  )?)
-  .to_string();
-
-  let verification_email_re = Regex::new(r"\n(ey.*)$").unwrap();
-  let verification_email_token: String = verification_email_re
-    .captures(&verification_email_body)
-    .unwrap()
-    .get(1)
-    .unwrap()
-    .as_str()
+    // Then steal the verification code from the DB and verify.
+    let verification_email_body: String = String::from_utf8_lossy(&quoted_printable::decode(
+      mailer.get_logs()[0].1.as_bytes(),
+      quoted_printable::ParseMode::Robust,
+    )?)
     .to_string();
 
-  // Check that login before email verification fails.
-  assert!(matches!(
-    login_handler(
-      State(state.clone()),
-      Query(LoginInputParams::default()),
-      Cookies::default(),
-      Either::Json(match identifier {
-        Identifier::Email(ref email) | Identifier::EmailAndHandle(ref email, _) =>
-          LoginRequest::Email {
-            email: email.clone(),
+    let verification_email_re = Regex::new(r"\n(ey.*)$").unwrap();
+    let verification_email_token: String = verification_email_re
+      .captures(&verification_email_body)
+      .unwrap()
+      .get(1)
+      .unwrap()
+      .as_str()
+      .to_string();
+
+    // Check that login before email verification fails.
+    assert!(matches!(
+      login_handler(
+        State(state.clone()),
+        Query(LoginInputParams::default()),
+        Cookies::default(),
+        Either::Json(match identifier {
+          Identifier::Email(ref email) | Identifier::EmailAndHandle(ref email, _) =>
+            LoginRequest::Email {
+              email: email.clone(),
+              password: password.to_string(),
+              params: LoginInputParams {
+                ..Default::default()
+              },
+            },
+          Identifier::Handle(ref handle) => LoginRequest::Handle {
+            handle: handle.clone(),
             password: password.to_string(),
             params: LoginInputParams {
               ..Default::default()
             },
           },
-        Identifier::Handle(ref handle) => LoginRequest::Handle {
-          handle: handle.clone(),
-          password: password.to_string(),
-          params: LoginInputParams {
-            ..Default::default()
-          },
-        },
-      })
+        })
+      )
+      .await,
+      Err(AuthError::Unauthorized),
+    ));
+
+    let _ = verify_email_handler(
+      State(state.clone()),
+      Path(verification_email_token.clone()),
+      Query(VerifyEmailParams::default()),
     )
-    .await,
-    Err(AuthError::Unauthorized),
-  ));
+    .await?;
+  }
 
-  let _ = verify_email_handler(
-    State(state.clone()),
-    Path(verification_email_token.clone()),
-    Query(VerifyEmailParams::default()),
-  )
-  .await?;
-
-  let (verified, user) = {
-    let db_user = match identifier {
-      Identifier::Email(email) | Identifier::EmailAndHandle(email, _) => state
+  let db_user = match identifier {
+    Identifier::Email(email) | Identifier::EmailAndHandle(email, _) => {
+      let db_user = state
         .user_conn()
         .read_query_value::<DbUser>(
           format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
           params!(email.clone()),
         )
         .await?
-        .unwrap(),
-      Identifier::Handle(handle) => state
-        .user_conn()
-        .read_query_value::<DbUser>(
-          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE handle = $1"#),
-          params!(handle.to_string()),
-        )
-        .await?
-        .unwrap(),
-    };
+        .unwrap();
 
-    (
-      db_user.verified.clone(),
-      User::from_unverified(
-        db_user.uuid(),
-        db_user.email.as_deref(),
-        db_user.handle.as_deref(),
-      ),
-    )
+      // User should now be verified.
+      assert!(db_user.verified);
+
+      db_user
+    }
+    Identifier::Handle(handle) => state
+      .user_conn()
+      .read_query_value::<DbUser>(
+        format!(r#"SELECT * FROM "{USER_TABLE}" WHERE handle = $1"#),
+        params!(handle.to_string()),
+      )
+      .await?
+      .unwrap(),
   };
 
-  // User should now be verified.
-  assert!(verified);
-
-  return Ok(user);
+  return Ok(User::from_unverified(
+    db_user.uuid(),
+    db_user.email.as_deref(),
+    db_user.handle.as_deref(),
+  ));
 }
 
 #[tokio::test]
@@ -785,6 +795,63 @@ async fn test_auth_change_handle_flow() {
     Either::Json(ChangeHandleRequest {
       new_handle: None,
       params: ChangeHandleParams::default(),
+    }),
+  )
+  .await
+  .unwrap();
+}
+
+#[tokio::test]
+async fn test_auth_register_handle_only() {
+  let handle = "foo".to_string();
+  let password = "secret123".to_string();
+
+  let mailer = TestAsyncSmtpTransport::new();
+  let state = test_state(Some(TestStateOptions {
+    mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some({
+      let mut config = build_test_config_with_trivial_tokens();
+      config.auth.user_identifier = Some(UserIdentifier::OnlyHandle.into());
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  assert!(
+    register_test_user(
+      &state,
+      &mailer,
+      Identifier::EmailAndHandle("user@test.org".to_string(), handle.clone()),
+      &password,
+    )
+    .await
+    .is_err()
+  );
+
+  let user = register_test_user(
+    &state,
+    &mailer,
+    Identifier::Handle(handle.clone()),
+    &password,
+  )
+  .await
+  .unwrap();
+
+  assert!(user.email.is_none());
+  assert_eq!(Some(&handle), user.handle.as_ref());
+
+  login_handler(
+    State(state.clone()),
+    Query(LoginInputParams::default()),
+    Cookies::default(),
+    Either::Json(LoginRequest::Handle {
+      handle: handle.clone(),
+      password: password.to_string(),
+      params: LoginInputParams {
+        ..Default::default()
+      },
     }),
   )
   .await

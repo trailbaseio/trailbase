@@ -76,7 +76,7 @@ pub struct AuthTokenClaims {
 
 impl AuthTokenClaims {
   pub(crate) fn new(db_user: &DbUser, auth_token_ttl: &chrono::Duration) -> Self {
-    assert!(db_user.verified);
+    assert!(db_user.email.is_none() || db_user.verified);
 
     let now = chrono::Utc::now();
     return AuthTokenClaims {
