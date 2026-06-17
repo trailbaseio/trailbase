@@ -36,6 +36,7 @@ export type User = {
   email: string;
   admin?: boolean;
   mfa?: boolean;
+  provider?: number;
 };
 
 export interface MultiFactorAuthToken {
@@ -58,6 +59,7 @@ type TokenClaims = {
   csrf_token: string;
   admin?: boolean;
   mfa?: boolean;
+  provider?: number;
 };
 
 type TokenState = {
@@ -86,6 +88,7 @@ function buildUser(state: TokenState): User | undefined {
       email: claims.email,
       admin: claims.admin,
       mfa: claims.mfa,
+      provider: claims.provider,
     };
   }
 }

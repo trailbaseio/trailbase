@@ -174,6 +174,7 @@ function Avatar(props: { client: Client; user: User }) {
 function ProfileTable(props: { client: Client; user: User }) {
   const alert = () => new URL(location.href).searchParams.get("alert");
   const [deleteAccountOpen, setDeleteAccountOpen] = createSignal(false);
+  const isOAuth = () => (props.user.provider ?? 0) > 0;
 
   return (
     <>
@@ -192,9 +193,11 @@ function ProfileTable(props: { client: Client; user: User }) {
                   <DropdownMenuItem>Change Email</DropdownMenuItem>
                 </a>
 
-                <a href="/_/auth/change_password">
-                  <DropdownMenuItem>Change Password</DropdownMenuItem>
-                </a>
+                <Show when={!isOAuth()}>
+                  <a href="/_/auth/change_password">
+                    <DropdownMenuItem>Change Password</DropdownMenuItem>
+                  </a>
+                </Show>
 
                 <DropdownMenuSeparator />
 
@@ -240,7 +243,9 @@ function ProfileTable(props: { client: Client; user: User }) {
         </div>
 
         <div class="my-4 flex w-full flex-col items-end gap-2">
-          <TotpToggleButton {...props} />
+          <Show when={!isOAuth()}>
+            <TotpToggleButton {...props} />
+          </Show>
         </div>
       </Card>
 

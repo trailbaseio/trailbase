@@ -46,6 +46,7 @@ pub struct AuthTokenClaims {
   /// Expiration timestamp
   pub exp: i64,
 
+  /// Token type, e.g. auth, change password, ... see `TokenType`.
   pub r#type: u8,
 
   /// Is admin user.
@@ -57,6 +58,10 @@ pub struct AuthTokenClaims {
   #[serde(default)]
   #[serde(skip_serializing_if = "std::ops::Not::not")]
   pub mfa: bool,
+
+  // OAuth provider: e.g. discord, gitlab, ... .
+  #[serde(default)]
+  pub provider: u8,
 
   /// E-mail address of the [sub].
   pub email: String,
@@ -78,6 +83,7 @@ impl AuthTokenClaims {
       r#type: TokenType::Auth as u8,
       admin: db_user.admin,
       mfa: db_user.totp_secret.is_some(),
+      provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
       csrf_token: random_alphanumeric(20),
     };
