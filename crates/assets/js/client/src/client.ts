@@ -33,7 +33,8 @@ import type { RefreshResponse } from "@bindings/RefreshResponse";
 
 export type User = {
   id: string;
-  email: string;
+  email: string | null;
+  handle: string | null;
   admin?: boolean;
   mfa?: boolean;
   provider?: number;
@@ -55,7 +56,8 @@ type TokenClaims = {
   sub: string;
   iat: number;
   exp: number;
-  email: string;
+  email: string | null;
+  handle: string | null;
   csrf_token: string;
   admin?: boolean;
   mfa?: boolean;
@@ -86,6 +88,7 @@ function buildUser(state: TokenState): User | undefined {
     return {
       id: claims.sub,
       email: claims.email,
+      handle: claims.handle,
       admin: claims.admin,
       mfa: claims.mfa,
       provider: claims.provider,
@@ -176,15 +179,18 @@ export interface Client {
   avatarUrl(userId?: string): string | undefined;
 
   login(
-    email: string,
+    emailOrHandle: string,
     password: string,
   ): Promise<MultiFactorAuthToken | undefined>;
   loginSecond(opts: {
     mfaToken: MultiFactorAuthToken;
     totpCode: string;
   }): Promise<void>;
-  requestOtp(email: string, opts?: { redirectUri?: string }): Promise<void>;
-  loginOtp(email: string, code: string): Promise<void>;
+  requestOtp(
+    emailOrHandle: string,
+    opts?: { redirectUri?: string },
+  ): Promise<void>;
+  loginOtp(emailOrHandle: string, code: string): Promise<void>;
   logout(): Promise<boolean>;
 
   registerTOTP(opts?: { png: boolean }): Promise<RegisterTotp>;
@@ -287,14 +293,14 @@ class ClientImpl implements Client {
   }
 
   public async login(
-    email: string,
+    emailOrHandle: string,
     password: string,
   ): Promise<MultiFactorAuthToken | undefined> {
     try {
       const response = await this.fetch(`${authApiBasePath}/login`, {
         method: "POST",
         body: JSON.stringify({
-          email_or_handle: email,
+          email_or_handle: emailOrHandle,
           password,
         } as LoginRequest),
       });
@@ -332,26 +338,42 @@ class ClientImpl implements Client {
   }
 
   public async requestOtp(
-    email: string,
+    emailOrHandle: string,
     opts?: { redirectUri?: string },
   ): Promise<void> {
     const redirect = opts?.redirectUri;
     const params = redirect ? `?redirect_uri=${redirect}` : "";
+
+    const request =
+      emailOrHandle.indexOf("@") === -1
+        ? {
+            handle: emailOrHandle,
+          }
+        : ({
+            email: emailOrHandle,
+          } as RequestOtpRequest);
+
     await this.fetch(`${authApiBasePath}/otp/request${params}`, {
       method: "POST",
-      body: JSON.stringify({
-        email,
-      } as RequestOtpRequest),
+      body: JSON.stringify(request),
     });
   }
 
-  public async loginOtp(email: string, code: string): Promise<void> {
+  public async loginOtp(emailOrHandle: string, code: string): Promise<void> {
+    const request =
+      emailOrHandle.indexOf("@") === -1
+        ? {
+            handle: emailOrHandle,
+            code,
+          }
+        : ({
+            email: emailOrHandle,
+            code,
+          } as LoginOtpRequest);
+
     const response = await this.fetch(`${authApiBasePath}/otp/login`, {
       method: "POST",
-      body: JSON.stringify({
-        email,
-        code,
-      } as LoginOtpRequest),
+      body: JSON.stringify(request),
     });
 
     this.setTokenState(

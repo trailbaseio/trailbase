@@ -246,6 +246,7 @@ async fn ui_otp_request_handler(
 #[derive(Debug, Default, Deserialize)]
 pub struct OtpLoginQuery {
   email: Option<String>,
+  handle: Option<String>,
   code: Option<String>,
   redirect_uri: Option<String>,
   alert: Option<String>,
@@ -274,6 +275,7 @@ async fn ui_otp_login_handler(
   let html = auth::OtpLoginTemplate {
     state: [
       auth::hidden_input("email", query.email),
+      auth::hidden_input("handle", query.handle),
       auth::redirect_uri(Some(redirect_uri)),
     ]
     .join("\n"),

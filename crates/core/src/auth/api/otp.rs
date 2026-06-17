@@ -15,8 +15,10 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::api::login::{LoginResponse, build_auth_token_flow_response};
+use crate::auth::user::DbUser;
 use crate::auth::util::{
-  get_user_by_id, user_by_email, validate_and_normalize_email_address, validate_redirect,
+  get_user_by_id, user_by_email, user_by_handle, validate_and_normalize_email_address,
+  validate_and_normalize_handle, validate_redirect,
 };
 use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
@@ -29,12 +31,20 @@ pub struct RequestOtpParams {
   pub redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, ToSchema, TS)]
+#[derive(Debug, Deserialize, ToSchema, TS)]
+#[serde(untagged)]
 #[ts(export)]
-pub struct RequestOtpRequest {
-  pub email: String,
-  #[serde(flatten)]
-  pub params: RequestOtpParams,
+pub enum RequestOtpRequest {
+  Email {
+    email: String,
+    #[serde(flatten)]
+    params: RequestOtpParams,
+  },
+  Handle {
+    handle: String,
+    #[serde(flatten)]
+    params: RequestOtpParams,
+  },
 }
 
 #[utoipa::path(
@@ -60,41 +70,70 @@ pub async fn request_otp_handler(
     return Err(AuthError::MethodNotAllowed);
   }
 
-  let (request, json) = match either_request {
+  let (request, _json) = match either_request {
     Either::Json(req) => (req, true),
     Either::Multipart(req, _) => (req, false),
     Either::Form(req) => (req, false),
   };
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
-  let normalized_email = validate_and_normalize_email_address(&request.email)?;
+  let (user, redirect_uri, success_response): (
+    DbUser,
+    Option<String>,
+    Box<dyn FnOnce() -> Response + Send>,
+  ) = match request {
+    RequestOtpRequest::Email { email, params } => {
+      let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+      let normalized_email = validate_and_normalize_email_address(&email)?;
 
-  {
-    // Rate limit.
-    if REQUEST_ATTEMPTS.get(&normalized_email).is_some() {
-      return Err(AuthError::TooManyRequests);
-    }
-    REQUEST_ATTEMPTS.insert(normalized_email.clone(), ());
-  }
+      rate_limit_otp_requests(normalized_email.clone())?;
 
-  let success_response = || {
-    if !json && let Some(ref redirect) = redirect_uri {
-      return Redirect::to(&format!(
-        "{redirect}?email={normalized_email}&alert={msg}",
-        msg = urlencode("OTP sent")
-      ))
-      .into_response();
+      let success_response = {
+        let redirect_uri = redirect_uri.clone();
+        let email = normalized_email.clone();
+        move || success_response_impl(redirect_uri.as_deref(), Some(&email), None)
+      };
+
+      // We need to check the email is associated with actual user to not just send emails to
+      // anyone.
+      let Ok(user) = user_by_email(&state, &normalized_email).await else {
+        // In case we don't find a user we still reply with a success to avoid leaking
+        // users' email addresses.
+        return Ok(success_response());
+      };
+
+      debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+
+      (user, redirect_uri, Box::new(success_response))
     }
-    return (StatusCode::OK, "OTP sent").into_response();
+    RequestOtpRequest::Handle { handle, params } => {
+      let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+      let normalized_handle = validate_and_normalize_handle(&handle)?;
+
+      rate_limit_otp_requests(normalized_handle.clone())?;
+
+      let success_response = {
+        let redirect_uri = redirect_uri.clone();
+        let handle = normalized_handle.clone();
+        move || success_response_impl(redirect_uri.as_deref(), None, Some(&handle))
+      };
+
+      let Ok(user) = user_by_handle(&state, &normalized_handle).await else {
+        // In case we don't find a user we still reply with a success to avoid leaking
+        // users' handles.
+        return Ok(success_response());
+      };
+
+      (user, redirect_uri, Box::new(success_response))
+    }
   };
 
-  let Ok(db_user) = user_by_email(&state, &normalized_email).await else {
-    // In case we don't find a user we still reply with a success to avoid leaking
-    // email addresses of registered users.
+  let Some(ref normalized_email) = user.email else {
+    // In case the user doesn't have an email address, there's no way to send an OTP code right
+    // now. Reply with success to avoid leaking this fact.
     return Ok(success_response());
   };
 
-  if db_user.totp_secret.is_some() {
+  if user.totp_secret.is_some() {
     // If the user has two/multi-factor-auth enabled, allowing OTP-only login would be a break of
     // contract. We may want to support OTP + TOTP going forward.
     #[cfg(debug_assertions)]
@@ -116,7 +155,7 @@ pub async fn request_otp_handler(
     .execute(
       UPDATE_OTP_QUERY,
       params!(
-        db_user.id,
+        user.id,
         normalized_email.clone(),
         otp_code.clone(),
         (Utc::now() + OTP_TTL).timestamp(),
@@ -128,13 +167,8 @@ pub async fn request_otp_handler(
     return Err(AuthError::Internal("Failed to insert OTP code".into()));
   }
 
-  let email = Email::otp_email(
-    &state,
-    &normalized_email,
-    &otp_code,
-    redirect_uri.as_deref(),
-  )
-  .map_err(|err| AuthError::Internal(err.into()))?;
+  let email = Email::otp_email(&state, normalized_email, &otp_code, redirect_uri.as_deref())
+    .map_err(|err| AuthError::Internal(err.into()))?;
   email
     .send()
     .await
@@ -146,6 +180,7 @@ pub async fn request_otp_handler(
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub struct LoginOtpParams {
   pub email: Option<String>,
+  pub handle: Option<String>,
   pub code: Option<String>,
   pub redirect_uri: Option<String>,
 }
@@ -184,58 +219,80 @@ pub async fn login_otp_handler(
     Either::Multipart(req, _) => (req, false),
     Either::Form(req) => (req, false),
   };
-  let request_params = request.params;
 
-  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request_params.redirect_uri))?;
+  let LoginOtpRequest { params } = request;
 
-  let Some(email) = query.email.as_deref().or(request_params.email.as_deref()) else {
-    // TODO: Add redirect for non-json
-    return Err(AuthError::BadRequest("missing email"));
-  };
-  let normalized_email = validate_and_normalize_email_address(email)?;
-
-  let Some(otp_code) = query
-    .code
-    .as_deref()
-    .or(request_params.code.as_deref())
-    .map(|c| c.trim())
-  else {
+  let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
+  let Some(otp_code) = query.code.as_deref().or(params.code.as_deref()) else {
     // TODO: Add redirect for non-json
     return Err(AuthError::BadRequest("missing code"));
   };
 
-  {
-    // Rate limit.
-    if let Some(attempts) = LOGIN_ATTEMPTS.get(&normalized_email) {
-      if attempts >= 3 {
-        return Err(AuthError::TooManyRequests);
-      }
-      LOGIN_ATTEMPTS.insert(normalized_email.clone(), attempts + 1);
-    } else {
-      LOGIN_ATTEMPTS.insert(normalized_email.clone(), 1);
+  let email = query.email.as_deref().or(params.email.as_deref());
+  let handle = query.handle.as_deref().or(params.handle.as_deref());
+
+  let user_id = match (email, handle) {
+    (Some(email), _) => {
+      let normalized_email = validate_and_normalize_email_address(email)?;
+
+      rate_limit_otp_logins(normalized_email.clone())?;
+
+      const LOOKUP_OTP_QUERY: &str = formatcp!(
+        "\
+          SELECT user FROM '{OTP_CODE_TABLE}' \
+          WHERE  \
+            email = $1 AND \
+            otp_code = $2 AND \
+            UNIXEPOCH() < expires \
+        "
+      );
+
+      state
+        .session_conn()
+        .read_query_row_get(
+          LOOKUP_OTP_QUERY,
+          params!(normalized_email, otp_code.trim().to_string()),
+          0,
+        )
+        .await?
+        .ok_or(AuthError::Unauthorized)?
     }
-  }
 
-  const LOOKUP_OTP_QUERY: &str = formatcp!(
-    "\
-      SELECT user FROM '{OTP_CODE_TABLE}' \
-      WHERE  \
-        email = $1 AND \
-        otp_code = $2 AND \
-        expires > UNIXEPOCH() \
-    "
-  );
+    (None, Some(handle)) => {
+      let normalized_handle = validate_and_normalize_handle(handle)?;
 
-  let Some(user_id) = state
-    .session_conn()
-    .read_query_row_get(
-      LOOKUP_OTP_QUERY,
-      params!(normalized_email, otp_code.to_string()),
-      0,
-    )
-    .await?
-  else {
-    return Err(AuthError::Unauthorized);
+      rate_limit_otp_logins(normalized_handle.clone())?;
+
+      let Ok(DbUser {
+        email: Some(email), ..
+      }) = user_by_handle(&state, &normalized_handle).await
+      else {
+        return Err(AuthError::Unauthorized);
+      };
+
+      const LOOKUP_OTP_QUERY: &str = formatcp!(
+        "\
+          SELECT user FROM '{OTP_CODE_TABLE}' \
+          WHERE  \
+            email = $1 AND \
+            otp_code = $2 AND \
+            UNIXEPOCH() < expires \
+        "
+      );
+
+      state
+        .session_conn()
+        .read_query_row_get(
+          LOOKUP_OTP_QUERY,
+          params!(email, otp_code.trim().to_string()),
+          0,
+        )
+        .await?
+        .ok_or(AuthError::Unauthorized)?
+    }
+    _ => {
+      return Err(AuthError::BadRequest("missing email or handle"));
+    }
   };
 
   let db_user = get_user_by_id(state.user_conn(), &Uuid::from_bytes(user_id)).await?;
@@ -250,21 +307,64 @@ pub async fn login_otp_handler(
   .await;
 }
 
+fn success_response_impl(
+  redirect_uri: Option<&str>,
+  normalized_email: Option<&str>,
+  normalized_handle: Option<&str>,
+) -> Response {
+  const MSG: &str = "OTP sent";
+  return match (redirect_uri, normalized_email, normalized_handle) {
+    (Some(redirect), Some(email), _) => Redirect::to(&format!(
+      "{redirect}?email={email}&alert={msg}",
+      msg = urlencode(MSG)
+    ))
+    .into_response(),
+    (Some(redirect), None, Some(handle)) => Redirect::to(&format!(
+      "{redirect}?handle={handle}&alert={msg}",
+      msg = urlencode(MSG)
+    ))
+    .into_response(),
+    _ => (StatusCode::OK, "OTP sent").into_response(),
+  };
+}
+
 const OTP_CODE_LENGTH: usize = 6;
 const OTP_TTL: Duration = Duration::minutes(5);
 
 // Track attempts to request OTP codes for abuse prevention.
-static REQUEST_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
-  Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(OTP_TTL.num_seconds() as u64))
-    .max_capacity(2048)
-    .build()
-});
+fn rate_limit_otp_requests(id: String) -> Result<(), AuthError> {
+  static REQUEST_ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+    Cache::builder()
+      .time_to_live(std::time::Duration::from_secs(OTP_TTL.num_seconds() as u64))
+      .max_capacity(2048)
+      .build()
+  });
+
+  if REQUEST_ATTEMPTS.get(&id).is_some() {
+    return Err(AuthError::TooManyRequests);
+  }
+
+  REQUEST_ATTEMPTS.insert(id, ());
+
+  return Ok(());
+}
 
 // Track login attempts for abuse prevention.
-static LOGIN_ATTEMPTS: LazyLock<Cache<String, usize>> = LazyLock::new(|| {
-  Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(60))
-    .max_capacity(2048)
-    .build()
-});
+fn rate_limit_otp_logins(id: String) -> Result<(), AuthError> {
+  static LOGIN_ATTEMPTS: LazyLock<Cache<String, usize>> = LazyLock::new(|| {
+    Cache::builder()
+      .time_to_live(std::time::Duration::from_secs(60))
+      .max_capacity(2048)
+      .build()
+  });
+
+  if let Some(attempts) = LOGIN_ATTEMPTS.get(&id) {
+    if attempts >= 3 {
+      return Err(AuthError::TooManyRequests);
+    }
+    LOGIN_ATTEMPTS.insert(id, attempts + 1);
+  } else {
+    LOGIN_ATTEMPTS.insert(id, 1);
+  }
+  return Ok(());
+}

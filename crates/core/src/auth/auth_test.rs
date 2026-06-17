@@ -950,17 +950,19 @@ async fn test_auth_delete_user_flow() {
 }
 
 #[tokio::test]
-async fn test_auth_otp_flow() {
+async fn test_auth_otp_flow_using_email() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
 
+  assert_eq!(Some(&email), user.email.as_ref());
+
   // NOTE: We return a success response on unknown user to avoid leaks.
   otp::request_otp_handler(
     State(state.clone()),
     Query(Default::default()),
-    Either::Form(otp::RequestOtpRequest {
+    Either::Form(otp::RequestOtpRequest::Email {
       email: "unknown@user.org".to_string(),
       params: Default::default(),
     }),
@@ -974,7 +976,7 @@ async fn test_auth_otp_flow() {
   otp::request_otp_handler(
     State(state.clone()),
     Query(Default::default()),
-    Either::Form(otp::RequestOtpRequest {
+    Either::Form(otp::RequestOtpRequest::Email {
       email: user.email.as_ref().unwrap().clone(),
       params: Default::default(),
     }),
@@ -1029,8 +1031,130 @@ async fn test_auth_otp_flow() {
     Query(Default::default()),
     Either::Json(otp::LoginOtpRequest {
       params: otp::LoginOtpParams {
-        email: user.email.clone(),
-        code: Some(otp_email_code.clone()),
+        // Make sure trimming/normalization works.
+        email: Some("useR@test.org ".to_string()),
+        code: Some(format!("{otp_email_code} ")),
+        ..Default::default()
+      },
+    }),
+  )
+  .await
+  .unwrap();
+
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+
+  let _login_response: LoginResponse = serde_json::from_slice(&body).unwrap();
+}
+
+#[tokio::test]
+async fn test_auth_otp_flow_using_handle() {
+  let email = "user@test.org".to_string();
+  let handle = "foo".to_string();
+  let password = "secret123".to_string();
+
+  let mailer = TestAsyncSmtpTransport::new();
+  let state = test_state(Some(TestStateOptions {
+    mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some({
+      let mut config = build_test_config_with_trivial_tokens();
+      config.auth.user_identifier = Some(UserIdentifier::RequireHandle.into());
+      config.auth.enable_otp_signin = Some(true);
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  let user = register_test_user(
+    &state,
+    &mailer,
+    Identifier::EmailAndHandle(email, handle.clone()),
+    &password,
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(Some(&handle), user.handle.as_ref());
+
+  // NOTE: We return a success response on unknown user to avoid leaks.
+  otp::request_otp_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Either::Form(otp::RequestOtpRequest::Handle {
+      handle: "unknown".to_string(),
+      params: Default::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  // Only verify-email email for "user@test.org"
+  assert_eq!(mailer.get_logs().len(), 1, "{:?}", mailer.get_logs());
+
+  otp::request_otp_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Either::Form(otp::RequestOtpRequest::Handle {
+      handle: handle.clone(),
+      params: Default::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  // Assert that a verification email was sent.
+  assert_eq!(mailer.get_logs().len(), 2);
+
+  // Then steal the verification code from the DB and verify.
+  let otp_email_body: String = String::from_utf8_lossy(
+    &quoted_printable::decode(
+      mailer.get_logs()[1].1.as_bytes(),
+      quoted_printable::ParseMode::Robust,
+    )
+    .unwrap(),
+  )
+  .to_string();
+
+  assert!(
+    otp::login_otp_handler(
+      State(state.clone()),
+      Cookies::default(),
+      Query(Default::default()),
+      Either::Form(otp::LoginOtpRequest {
+        params: otp::LoginOtpParams {
+          handle: Some(handle.clone()),
+          code: Some("InvalidCode".to_string()),
+          ..Default::default()
+        }
+      }),
+    )
+    .await
+    .is_err()
+  );
+
+  let otp_email_re = Regex::new(r"code=([a-zA-Z0-9]*)").unwrap();
+  let otp_email_code: String = otp_email_re
+    .captures(&otp_email_body)
+    .expect(&format!("{otp_email_body}"))
+    .get(1)
+    .unwrap()
+    .as_str()
+    .to_string();
+
+  assert_eq!(otp_email_code.len(), 6, "Got: '{otp_email_code}'");
+
+  let response = otp::login_otp_handler(
+    State(state.clone()),
+    Cookies::default(),
+    Query(Default::default()),
+    Either::Json(otp::LoginOtpRequest {
+      params: otp::LoginOtpParams {
+        // Make sure trimming/normalization works.
+        handle: Some(format!(" {handle} ")),
+        code: Some(format!(" {otp_email_code} ")),
         ..Default::default()
       },
     }),

@@ -83,13 +83,7 @@ pub async fn reset_password_request_handler(
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
       let normalized_email = validate_and_normalize_email_address(&email)?;
 
-      {
-        // Rate limit.
-        if ATTEMPTS.get(&normalized_email).is_some() {
-          return Err(AuthError::TooManyRequests);
-        }
-        ATTEMPTS.insert(normalized_email.clone(), ());
-      }
+      rate_limit_reset_attempts(normalized_email.clone())?;
 
       // We need to check the email is associated with actual user to not just send emails to
       // anyone.
@@ -107,13 +101,7 @@ pub async fn reset_password_request_handler(
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
       let normalized_handle = validate_and_normalize_handle(&handle)?;
 
-      {
-        // Rate limit.
-        if ATTEMPTS.get(&normalized_handle).is_some() {
-          return Err(AuthError::TooManyRequests);
-        }
-        ATTEMPTS.insert(normalized_handle.clone(), ());
-      }
+      rate_limit_reset_attempts(normalized_handle.clone())?;
 
       let Ok(user) = user_by_handle(&state, &normalized_handle).await else {
         // In case we don't find a user we still reply with a success to avoid leaking
@@ -242,12 +230,21 @@ pub async fn reset_password_update_handler(
 }
 
 const TTL: Duration = Duration::minutes(60);
-const RATE_LIMIT: Duration = Duration::minutes(60);
 
 // Track login attempts for abuse prevention.
-static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
-  Cache::builder()
-    .time_to_live(RATE_LIMIT.to_std().expect("const"))
-    .max_capacity(2048)
-    .build()
-});
+fn rate_limit_reset_attempts(id: String) -> Result<(), AuthError> {
+  const RATE_LIMIT: Duration = Duration::minutes(60);
+  static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+    Cache::builder()
+      .time_to_live(RATE_LIMIT.to_std().expect("const"))
+      .max_capacity(2048)
+      .build()
+  });
+
+  if ATTEMPTS.get(&id).is_some() {
+    return Err(AuthError::TooManyRequests);
+  }
+  ATTEMPTS.insert(id, ());
+
+  return Ok(());
+}

@@ -16,9 +16,6 @@ use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::util::urlencode;
 
-const TTL_SEC: i64 = 3600;
-const RATE_LIMIT_SEC: i64 = 4 * 3600;
-
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct EmailVerificationParams {
   pub email: String,
@@ -41,16 +38,10 @@ pub async fn request_email_verification_handler(
   State(state): State<AppState>,
   Query(query): Query<EmailVerificationParams>,
 ) -> Result<Response, AuthError> {
-  let normalized_email = validate_and_normalize_email_address(&query.email)?;
   let redirect_uri = validate_redirect(&state, query.redirect_uri)?;
+  let normalized_email = validate_and_normalize_email_address(&query.email)?;
 
-  {
-    // Rate limit.
-    if ATTEMPTS.get(&normalized_email).is_some() {
-      return Err(AuthError::TooManyRequests);
-    }
-    ATTEMPTS.insert(normalized_email.clone(), ());
-  }
+  rate_limit_verify_email_attempts(normalized_email.clone())?;
 
   let success_response = || {
     if let Some(ref redirect) = redirect_uri {
@@ -150,10 +141,22 @@ pub(crate) async fn verify_email_handler(
   };
 }
 
+const TTL_SEC: i64 = 3600;
+
 // Track login attempts for abuse prevention.
-static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
-  Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(RATE_LIMIT_SEC as u64))
-    .max_capacity(2048)
-    .build()
-});
+fn rate_limit_verify_email_attempts(id: String) -> Result<(), AuthError> {
+  const RATE_LIMIT_SEC: i64 = 4 * 3600;
+  static ATTEMPTS: LazyLock<Cache<String, ()>> = LazyLock::new(|| {
+    Cache::builder()
+      .time_to_live(std::time::Duration::from_secs(RATE_LIMIT_SEC as u64))
+      .max_capacity(2048)
+      .build()
+  });
+
+  if ATTEMPTS.get(&id).is_some() {
+    return Err(AuthError::TooManyRequests);
+  }
+  ATTEMPTS.insert(id, ());
+
+  return Ok(());
+}
