@@ -4,7 +4,7 @@
 
 use askama::Template;
 use serde::Deserialize;
-use trailbase_auth_config::AuthConfig;
+use trailbase_auth_config::{AuthConfig, LoginIdentifier};
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -23,7 +23,7 @@ impl Guest for Endpoints {
       routing::get(
         LOGIN_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          // Read auth config. It may be a bit hacky using KVStore :shrug:.
+          // Read auth config. It may be a bit hacky using KVStore :shrug:. We could cache here.
           let auth_config: AuthConfig = {
             let store = Store::open().map_err(internal)?;
             let value = store
@@ -38,7 +38,7 @@ impl Guest for Endpoints {
             serde_json::from_slice(&value).map_err(internal)?
           };
 
-          return ui_login_handler(auth_config, req.user(), req.query_parse()?).await;
+          return ui_login_handler(&auth_config, req.user(), req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -125,7 +125,7 @@ pub struct LoginQuery {
 }
 
 async fn ui_login_handler(
-  config: AuthConfig,
+  config: &AuthConfig,
   user: Option<&User>,
   query: LoginQuery,
 ) -> Result<Response, HttpError> {
@@ -169,6 +169,9 @@ async fn ui_login_handler(
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !config.disable_password_auth,
     enable_otp: config.enable_otp_signin,
+    show_email: config.login_identifier.is_empty()
+      || config.login_identifier.contains(&LoginIdentifier::Email),
+    show_handle: config.login_identifier.contains(&LoginIdentifier::Handle),
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
   }

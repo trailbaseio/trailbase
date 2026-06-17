@@ -27,20 +27,34 @@ const formBaseAction = `${AUTH_API}/login`;
         class="grid grid-cols-2 items-center gap-4"
         style={{"grid-template-columns": "auto 1fr"}}
       >
-        <TextFieldLabel>User:</TextFieldLabel>
+
+        {"{% if show_email -%}"}
+        <TextFieldLabel>Email:</TextFieldLabel>
         <TextFieldInput
           required
           tabindex="1"
           type="email"
           name="email"
-          placeholder="Email"
+          placeholder="you@example.org"
           autocomplete="username"
         />
+        {"{% endif %}"}
+
+        {"{% if show_handle -%}"}
+        <TextFieldLabel>Username:</TextFieldLabel>
+        <TextFieldInput
+          required
+          tabindex="2"
+          type="text"
+          name="handle"
+          autocomplete="username"
+        />
+        {"{% endif %}"}
 
         <TextFieldLabel>Password:</TextFieldLabel>
         <TextFieldInput
           required
-          tabindex="2"
+          tabindex="3"
           type="password"
           name="password"
           placeholder="Password"
@@ -50,24 +64,24 @@ const formBaseAction = `${AUTH_API}/login`;
 
       <div class="flex justify-center gap-1 text-sm">
         <span>Forgot your password?</span>
-        <a tabindex="5" href={`${BASE_URL}/reset_password/request`} class="text-primary">Reset</a>
+        <a tabindex="6" href={`${BASE_URL}/reset_password/request`} class="text-primary">Reset</a>
       </div>
 
       <div class="flex justify-between gap-2 my-2">
         {"{% if enable_registration -%}"}
-          <a tabindex="4" type="button" href={`${BASE_URL}/register`} class:list={buttonVariants({ variant: "default" })}>
+          <a tabindex="5" type="button" href={`${BASE_URL}/register`} class:list={buttonVariants({ variant: "default" })}>
             Register
           </a>
         {"{%- endif %}"}
 
         <div class="flex gap-2">
           {"{% if enable_otp -%}"}
-            <a tabindex="4" type="button" href={`${BASE_URL}/otp/request`} class:list={buttonVariants({ variant: "outline" })}>
+            <a tabindex="5" type="button" href={`${BASE_URL}/otp/request`} class:list={buttonVariants({ variant: "outline" })}>
               OTP
             </a>
           {"{%- endif %}"}
 
-          <Button tabindex="3" variant="default" type="submit">
+          <Button tabindex="4" variant="default" type="submit">
             Sign In
           </Button>
         </div>

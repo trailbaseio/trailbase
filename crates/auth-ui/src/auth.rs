@@ -29,6 +29,8 @@ pub struct LoginTemplate<'a> {
   pub alert: &'a str,
   pub enable_registration: bool,
   pub enable_otp: bool,
+  pub show_email: bool,
+  pub show_handle: bool,
   pub oauth_providers: &'a [OAuthProvider],
   pub oauth_query_params: &'a [(&'a str, &'a str)],
 }
@@ -125,6 +127,8 @@ mod tests {
       alert,
       enable_registration: true,
       enable_otp: true,
+      show_email: true,
+      show_handle: true,
       oauth_providers: &[],
       oauth_query_params: &[("redirect_uri", redirect_uri)],
     }
@@ -142,6 +146,8 @@ mod tests {
       alert: "",
       enable_registration: false,
       enable_otp: false,
+      show_email: true,
+      show_handle: false,
       oauth_providers: &[OAuthProvider {
         name: "name".to_string(),
         display_name: "Fancy Name".to_string(),
