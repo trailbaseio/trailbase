@@ -1,3 +1,10 @@
+## v0.28.6
+
+- Fix: custom password reset email verification - thanks @zyrakq 🙏.
+- Fix: update auth token cookie on auth status requests - thanks @zyrakq 🙏.
+- Remove unnecessary buttons (e.g. change password, register TOTP) from auth UI's profile page when user is authenticated via OAuth - thanks @zyrakq 🙏.
+- Update Dependencies.
+
 ## v0.28.5
 
 - Fix TOTP update query - thanks @zyrakq 🙏. This was a regression from the PG work.
