@@ -20,7 +20,9 @@ use crate::auth::api::change_password::{
   ChangePasswordParams, ChangePasswordRequest, change_password_handler,
 };
 use crate::auth::api::delete::delete_handler;
-use crate::auth::api::login::{LoginRequest, LoginResponse, login_handler};
+use crate::auth::api::login::{
+  LoginMfaRequest, LoginRequest, LoginResponse, MfaTokenResponse, login_handler, login_mfa_handler,
+};
 use crate::auth::api::logout::{LogoutParams, logout_handler};
 use crate::auth::api::otp;
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
@@ -30,6 +32,7 @@ use crate::auth::api::reset_password::{
   reset_password_update_handler,
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
+use crate::auth::api::totp;
 use crate::auth::api::verify_email::{VerifyEmailParams, verify_email_handler};
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
@@ -466,6 +469,88 @@ async fn test_auth_password_login_flow_without_pkce() {
   .await
   .unwrap();
   assert!(!session_exists(&state, user.uuid).await);
+}
+
+#[tokio::test]
+async fn test_auth_password_login_flow_with_totp() {
+  let email = "user@test.org".to_string();
+  let password = "secret123".to_string();
+
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+
+  let login_helper = async |request| {
+    return login_handler(
+      State(state.clone()),
+      Query(LoginInputParams::default()),
+      Cookies::default(),
+      request,
+    )
+    .await;
+  };
+
+  let response = totp::register_totp_request_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    user.clone(),
+  )
+  .await
+  .unwrap();
+  assert_eq!(200, response.status());
+
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+
+  let totp::RegisterTotpResponse { totp_url, .. } = serde_json::from_slice(&body).unwrap();
+
+  let t = totp_rs::TOTP::from_url(&totp_url).unwrap();
+
+  let response = totp::register_totp_confirm_handler(
+    State(state.clone()),
+    user.clone(),
+    Either::Json(totp::ConfirmRegisterTotpRequest {
+      totp_url: totp_url.clone(),
+      totp: t.generate_current().unwrap(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(200, response.status());
+
+  let response = login_helper(Either::Json(LoginRequest::Email {
+    email: email.clone(),
+    password: password.clone(),
+    params: LoginInputParams {
+      ..Default::default()
+    },
+  }))
+  .await
+  .unwrap();
+
+  // Make sure it's a MFA response.
+  assert_eq!(403, response.status());
+
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+
+  let MfaTokenResponse { mfa_token, .. } = serde_json::from_slice(&body).unwrap();
+
+  let response = login_mfa_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Cookies::default(),
+    Either::Json(LoginMfaRequest {
+      mfa_token,
+      totp: Some(t.generate_current().unwrap()),
+      params: Default::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(200, response.status());
 }
 
 #[tokio::test]

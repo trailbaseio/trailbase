@@ -9,27 +9,24 @@ use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
+use crate::app_state::AppState;
+use crate::auth::AuthError;
+use crate::auth::jwt::PendingAuthTokenClaims;
+use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
+use crate::auth::password::check_user_password;
+use crate::auth::totp::new_totp;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  new_cookie, remove_cookie, user_by_email, user_by_handle, validate_and_normalize_email_address,
-  validate_and_normalize_handle,
+  new_cookie, remove_cookie, user_by_email, user_by_handle, user_by_id,
+  validate_and_normalize_email_address, validate_and_normalize_handle,
 };
-use crate::auth::{AuthError, util::user_by_id};
-use crate::auth::{password::check_user_password, totp::new_totp};
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::extract::Either;
 use crate::rand::random_alphanumeric;
-use crate::util::urlencode;
-use crate::{app_state::AppState, auth::jwt::PendingAuthTokenClaims};
-use crate::{
-  auth::login_params::{
-    LoginInputParams, LoginParams, ResponseType, build_and_validate_input_params,
-  },
-  util,
-};
+use crate::util::{b64_to_uuid, urlencode};
 
 #[derive(Debug, Deserialize, TS, ToSchema)]
 #[serde(untagged)]
@@ -75,7 +72,7 @@ pub struct LoginResponse {
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
 pub struct MfaTokenResponse {
-  mfa_token: String,
+  pub mfa_token: String,
 }
 
 /// Log in users by email and password.
@@ -387,11 +384,8 @@ pub struct LoginMfaRequest {
   pub mfa_token: String,
   pub totp: Option<String>,
 
-  // Mirror of LoginInputParams.
-  pub redirect_uri: Option<String>,
-  pub mfa_redirect_uri: Option<String>,
-  pub response_type: Option<ResponseType>,
-  pub pkce_code_challenge: Option<String>,
+  #[serde(flatten)]
+  pub params: LoginInputParams,
 }
 
 /// Log in users by email and password.
@@ -415,10 +409,13 @@ pub(crate) async fn login_mfa_handler(
     LoginMfaRequest {
       mfa_token,
       totp,
-      response_type,
-      pkce_code_challenge,
-      redirect_uri,
-      mfa_redirect_uri,
+      params:
+        LoginInputParams {
+          response_type,
+          pkce_code_challenge,
+          redirect_uri,
+          mfa_redirect_uri,
+        },
     },
     json,
   ) = match either_request {
@@ -451,7 +448,7 @@ pub(crate) async fn login_mfa_handler(
   // Check credentials.
   let db_user: DbUser = user_by_id(
     &state,
-    &util::b64_to_uuid(&sub).map_err(|_err| AuthError::Unauthorized)?,
+    &b64_to_uuid(&sub).map_err(|_err| AuthError::Unauthorized)?,
   )
   .await
   .map_err(|_| {
