@@ -3,9 +3,10 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use askama::Template;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use trailbase_wasm::db;
 use trailbase_wasm::http::{
-  Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
+  Html, HttpError, HttpRoute, IntoBody, IntoResponse, Json, Redirect, Request, Response, StatusCode,
   User, header, routing,
 };
 use trailbase_wasm::kv::Store;
@@ -98,6 +99,15 @@ impl Guest for Endpoints {
             .user()
             .ok_or_else(|| HttpError::status(StatusCode::UNAUTHORIZED))?;
           return ui_change_email_handler(req.query_parse()?, user).await;
+        },
+      ),
+      routing::get(
+        &format!("{AUTH_API}/profile"),
+        async |req: Request| -> Result<Response, HttpError> {
+          let user = req
+            .user()
+            .ok_or_else(|| HttpError::status(StatusCode::UNAUTHORIZED))?;
+          return profile_capabilities_handler(user).await;
         },
       ),
       routing::get("/_/auth/{*wildcard}", async |req: Request| {
@@ -397,7 +407,6 @@ async fn ui_change_email_handler(
 }
 
 async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
-  // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is
   // profile, so we when hitting /profile or /profile, we want actually want to serve
   // the static profile/index.html.
   let file = match path {
@@ -420,6 +429,54 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
 #[allow(unused)]
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
+}
+
+#[derive(Serialize)]
+struct ProfileResponse {
+  show_otp_section: bool,
+  show_change_password: bool,
+}
+
+async fn profile_capabilities_handler(user: &User) -> Result<Response, HttpError> {
+  let rows = db::query(
+    r#"SELECT provider_id, password_hash FROM "_user" WHERE email = ?"#,
+    vec![db::Value::Text(user.email.clone())],
+  )
+  .await
+  .map_err(internal)?;
+
+  let is_oauth_only = rows
+    .first()
+    .and_then(|row| {
+      let is_oauth = match row.first()? {
+        db::Value::Integer(n) => *n != 0,
+        _ => false,
+      };
+      let no_password = match row.get(1)? {
+        db::Value::Text(s) => s.is_empty(),
+        _ => true,
+      };
+      Some(is_oauth && no_password)
+    })
+    .unwrap_or(false);
+
+  let password_auth_enabled = {
+    let store = Store::open().map_err(internal)?;
+    match store.get("config:auth").map_err(internal)? {
+      Some(bytes) if !bytes.is_empty() => serde_json::from_slice::<auth::AuthConfig>(&bytes)
+        .map(|c| !c.disable_password_auth)
+        .unwrap_or(true),
+      _ => true,
+    }
+  };
+
+  return Ok(
+    Json(ProfileResponse {
+      show_otp_section: !is_oauth_only && password_auth_enabled,
+      show_change_password: !is_oauth_only && password_auth_enabled,
+    })
+    .into_response(),
+  );
 }
 
 const AUTH_API: &str = "/api/auth/v1";

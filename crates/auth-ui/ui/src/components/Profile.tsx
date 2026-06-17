@@ -1,4 +1,4 @@
-import { createSignal, Switch, Show, Match } from "solid-js";
+import { createSignal, createResource, Switch, Show, Match } from "solid-js";
 import type { Signal } from "solid-js";
 import {
   TbFillUser,
@@ -175,6 +175,23 @@ function ProfileTable(props: { client: Client; user: User }) {
   const alert = () => new URL(location.href).searchParams.get("alert");
   const [deleteAccountOpen, setDeleteAccountOpen] = createSignal(false);
 
+  const [profileData] = createResource(
+    () => props.user,
+    async () => {
+      try {
+        const resp = await fetch("/api/auth/v1/profile", {
+          credentials: "include",
+        });
+        if (!resp.ok) return null;
+        return (await resp.json()) as { show_otp_section: boolean; show_change_password: boolean };
+      } catch {
+        return null;
+      }
+    },
+  );
+  const showOtpSection = () => profileData()?.show_otp_section ?? false;
+  const showChangePassword = () => profileData()?.show_change_password ?? false;
+
   return (
     <>
       <Card class="w-[80dvw] max-w-[540px] p-8">
@@ -188,13 +205,15 @@ function ProfileTable(props: { client: Client; user: User }) {
               </DropdownMenuTrigger>
 
               <DropdownMenuContent>
-                <a href="/_/auth/change_email">
-                  <DropdownMenuItem>Change Email</DropdownMenuItem>
-                </a>
+                 <a href="/_/auth/change_email">
+                   <DropdownMenuItem>Change Email</DropdownMenuItem>
+                 </a>
 
-                <a href="/_/auth/change_password">
-                  <DropdownMenuItem>Change Password</DropdownMenuItem>
-                </a>
+                 <Show when={showChangePassword()}>
+                   <a href="/_/auth/change_password">
+                     <DropdownMenuItem>Change Password</DropdownMenuItem>
+                   </a>
+                 </Show>
 
                 <DropdownMenuSeparator />
 
@@ -240,7 +259,9 @@ function ProfileTable(props: { client: Client; user: User }) {
         </div>
 
         <div class="my-4 flex w-full flex-col items-end gap-2">
-          <TotpToggleButton {...props} />
+          <Show when={showOtpSection()}>
+            <TotpToggleButton {...props} />
+          </Show>
         </div>
       </Card>
 
