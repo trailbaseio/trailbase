@@ -196,7 +196,7 @@ async fn login_test() {
   assert!(tokens.refresh_token.is_some());
 
   let user = client.user().unwrap();
-  assert_eq!(user.email, "admin@localhost");
+  assert_eq!(Some("admin@localhost"), user.email.as_deref());
 
   client.refresh().await.unwrap();
 
@@ -209,12 +209,8 @@ async fn login_otp() {
   let client = Client::new(&*site(), None).unwrap();
 
   // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint
-  // responds ok.
-  client.request_otp("fake0@localhost", None).await.unwrap();
-  client
-    .request_otp("fake1@localhost", Some("/target"))
-    .await
-    .unwrap();
+  // responds ok even for invalid users.
+  client.request_otp("fake0@localhost").await.unwrap();
 }
 
 async fn login_multi_factor_test() {
@@ -241,7 +237,10 @@ async fn login_multi_factor_test() {
   client.login_second(&mfa_token, &code).await.unwrap();
 
   assert!(client.tokens().is_some());
-  assert_eq!(client.user().unwrap().email, "alice@trailbase.io");
+  assert_eq!(
+    Some("alice@trailbase.io"),
+    client.user().unwrap().email.as_deref()
+  );
 }
 
 async fn records_test() {

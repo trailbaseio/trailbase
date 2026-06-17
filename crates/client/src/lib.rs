@@ -59,7 +59,8 @@ impl From<reqwest::Error> for Error {
 #[derive(Clone, Debug)]
 pub struct User {
   pub sub: String,
-  pub email: String,
+  pub email: Option<String>,
+  pub handle: Option<String>,
 }
 
 /// Holds the tokens minted by the server on login.
@@ -250,7 +251,11 @@ pub struct DefaultTransport {
 impl DefaultTransport {
   pub fn new(url: url::Url) -> Self {
     return Self {
-      client: reqwest::Client::new(),
+      // QUESTION: Should we follow redirects?
+      client: reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("like reqwest::Client::new()"),
       url,
     };
   }
@@ -330,7 +335,8 @@ struct JwtTokenClaims {
   sub: String,
   iat: i64,
   exp: i64,
-  email: String,
+  email: Option<String>,
+  handle: Option<String>,
   csrf_token: String,
 }
 
@@ -902,6 +908,7 @@ impl Client {
       return Some(User {
         sub: state.1.sub.clone(),
         email: state.1.email.clone(),
+        handle: state.1.handle.clone(),
       });
     }
     return None;
@@ -996,7 +1003,7 @@ impl Client {
     return Ok(());
   }
 
-  pub async fn request_otp(&self, email: &str, redirect_uri: Option<&str>) -> Result<(), Error> {
+  pub async fn request_otp(&self, email: &str) -> Result<(), Error> {
     #[derive(Serialize)]
     struct Credentials<'a> {
       email: &'a str,
@@ -1011,7 +1018,7 @@ impl Client {
         Some(
           serde_json::to_vec(&Credentials {
             email,
-            redirect_uri,
+            redirect_uri: None,
           })
           .map_err(Error::RecordSerialization)?,
         ),
