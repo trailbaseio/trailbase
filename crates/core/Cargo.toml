@@ -60,7 +60,7 @@ hyper = "1.6.0"
 hyper-util = "0.1.7"
 indexmap = "2.11.4"
 init-tracing-opentelemetry = { version = "0.38.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
-itertools = "0.14.0"
+itertools = "0.15.0"
 jsonschema = { version = "0.46.0", default-features = false }
 jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 lazy_static = "1.4.0"
@@ -96,7 +96,7 @@ tokio-rustls = { workspace = true }
 totp-rs = { version = "5.7.0", features = ["gen_secret", "qr", "otpauth"] }
 tower = "0.5.0"
 tower-cookies = "0.11.0"
-tower-http = { version = "^0.6.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
+tower-http = { version = "^0.7.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tracing = { workspace = true }

@@ -25,7 +25,7 @@ bytes = "1.11.0"
 chrono = "^0.4.38"
 clap = { version = "^4.4.11", features=["derive", "env"] }
 env_logger = { workspace = true }
-itertools = "0.14.0"
+itertools = "0.15.0"
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 minijinja = { workspace = true }
@@ -45,7 +45,7 @@ url = "2.5.4"
 utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
 uuid = { workspace = true }
-wit-component = "0.251.0"
+wit-component = "0.252.0"
 zip = { version = "8.1.0", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
