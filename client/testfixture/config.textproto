@@ -9,13 +9,6 @@ server {
 auth {
   enable_otp_signin: true
   oauth_providers: [{
-    key: "discord"
-    value {
-      client_id: "invalid_discord_id"
-      client_secret: "<REDACTED>"
-      provider_id: DISCORD
-    }
-  }, {
     key: "oidc0"
     value {
       client_id: "invalid_client_id"
@@ -26,8 +19,16 @@ auth {
       token_url: "http://localhost:9088/token"
       user_api_url: "http://localhost:9088/userinfo"
     }
+  }, {
+    key: "discord"
+    value {
+      client_id: "invalid_discord_id"
+      client_secret: "<REDACTED>"
+      provider_id: DISCORD
+    }
   }]
   redirect_uri_allowlist: ["https://allowlisted.example.com"]
+  user_identifier: REQUIRE_EMAIL
 }
 jobs {}
 databases: [{

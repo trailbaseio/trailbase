@@ -62,6 +62,8 @@ pub struct OtpLoginTemplate<'a> {
 pub struct RegisterTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
+  pub show_email: bool,
+  pub show_handle: bool,
 }
 
 #[derive(Template)]
@@ -191,6 +193,8 @@ mod tests {
     let template = RegisterTemplate {
       state: state.clone(),
       alert,
+      show_email: true,
+      show_handle: true,
     }
     .render()
     .unwrap();

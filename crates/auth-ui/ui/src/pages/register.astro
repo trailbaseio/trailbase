@@ -22,6 +22,7 @@ import { AUTH_API } from "@/lib/constants";
       class="my-4 grid grid-cols-2 items-center gap-4"
       style={{ "grid-template-columns": "auto 1fr" }}
     >
+      {"{% if show_email -%}"}
       <TextFieldLabel>Email:</TextFieldLabel>
       <TextFieldInput
         required
@@ -30,11 +31,23 @@ import { AUTH_API } from "@/lib/constants";
         name="email"
         placeholder="Email"
       />
+      {"{% endif %}"}
+
+      {"{% if show_handle -%}"}
+      <TextFieldLabel>Username:</TextFieldLabel>
+      <TextFieldInput
+        required
+        tabindex="2"
+        type="text"
+        name="handle"
+        autocomplete="username"
+      />
+      {"{% endif %}"}
 
       <TextFieldLabel>Password:</TextFieldLabel>
       <TextFieldInput
         required
-        tabindex="2"
+        tabindex="3"
         type="password"
         name="password"
         placeholder="Password"

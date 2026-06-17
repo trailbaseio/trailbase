@@ -4,6 +4,7 @@
 
 use askama::Template;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use trailbase_auth_config::{AuthConfig, LoginIdentifier};
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
@@ -23,22 +24,8 @@ impl Guest for Endpoints {
       routing::get(
         LOGIN_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          // Read auth config. It may be a bit hacky using KVStore :shrug:. We could cache here.
-          let auth_config: AuthConfig = {
-            let store = Store::open().map_err(internal)?;
-            let value = store
-              .get("config:auth")
-              .map_err(internal)?
-              .ok_or_else(|| internal("missing config"))?;
-
-            if value.is_empty() {
-              return Err(internal("empty config"));
-            }
-
-            serde_json::from_slice(&value).map_err(internal)?
-          };
-
-          return ui_login_handler(&auth_config, req.user(), req.query_parse()?).await;
+          let config: &AuthConfig = AUTH_CONFIG.as_ref().map_err(|err| err.clone())?;
+          return ui_login_handler(config, req.user(), req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -68,7 +55,8 @@ impl Guest for Endpoints {
       routing::get(
         REGISTER_USER_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          return ui_register_handler(req.query_parse()?).await;
+          let config: &AuthConfig = AUTH_CONFIG.as_ref().map_err(|err| err.clone())?;
+          return ui_register_handler(config, req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -303,11 +291,17 @@ pub struct RegisterQuery {
   alert: Option<String>,
 }
 
-async fn ui_register_handler(query: RegisterQuery) -> Result<Response, HttpError> {
+async fn ui_register_handler(
+  config: &AuthConfig,
+  query: RegisterQuery,
+) -> Result<Response, HttpError> {
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let html = auth::RegisterTemplate {
     state: auth::redirect_uri(Some(redirect_uri)),
     alert: query.alert.as_deref().unwrap_or_default(),
+    show_email: config.login_identifier.is_empty()
+      || config.login_identifier.contains(&LoginIdentifier::Email),
+    show_handle: config.login_identifier.contains(&LoginIdentifier::Handle),
   }
   .render();
 
@@ -427,6 +421,22 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
 }
+
+// Read auth config. It may be a bit hacky to use KVStore :shrug:. Should we add a TTL
+// here to allow more flexible config updates?
+static AUTH_CONFIG: LazyLock<Result<AuthConfig, HttpError>> = LazyLock::new(|| {
+  let store = Store::open().map_err(internal)?;
+  let value = store
+    .get("config:auth")
+    .map_err(internal)?
+    .ok_or_else(|| internal("missing config"))?;
+
+  if value.is_empty() {
+    return Err(internal("empty config"));
+  }
+
+  return serde_json::from_slice(&value).map_err(internal);
+});
 
 const AUTH_API: &str = "/api/auth/v1";
 
