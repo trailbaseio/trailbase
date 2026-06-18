@@ -44,7 +44,7 @@ fn strip_plus_email_addressing(email_address: &str) -> String {
 /// Instead, for critical use-cases one should rely on stronger IDs such as phone numbers or better
 /// photo ids.
 pub fn validate_and_normalize_email_address(email_address: &str) -> Result<String, AuthError> {
-  let email_address = email_address.trim().to_ascii_lowercase();
+  let email_address = email_address.trim();
   if !email_address.validate_email() {
     return Err(AuthError::BadRequest("Invalid email"));
   }
@@ -430,7 +430,7 @@ mod tests {
   #[test]
   fn test_validate_email() {
     let normalized = validate_and_normalize_email_address(" fOO@test.org   ").unwrap();
-    assert_eq!("foo@test.org", normalized);
+    assert_eq!("fOO@test.org", normalized);
 
     assert!(validate_and_normalize_email_address("foo!test.org").is_err());
 

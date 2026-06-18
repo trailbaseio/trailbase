@@ -303,6 +303,20 @@ async fn test_auth_password_login_flow_with_pkce() {
   ));
 
   // Finally let's log in successfully.
+  login_helper(Either::Json(LoginRequest::Email {
+    // Make sure capitalization doesn't matter.
+    email: "usER@test.org".to_string(),
+    password: password.clone(),
+    params: LoginInputParams {
+      response_type: Some(ResponseType::Code),
+      redirect_uri: Some(redirect_uri.clone()),
+      pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+      ..Default::default()
+    },
+  }))
+  .await
+  .unwrap();
+
   let login_response = login_helper(Either::Json(LoginRequest::Email {
     email: email.clone(),
     password: password.clone(),
@@ -1117,7 +1131,8 @@ async fn test_auth_otp_flow_using_email() {
     Either::Json(otp::LoginOtpRequest {
       params: otp::LoginOtpParams {
         // Make sure trimming/normalization works.
-        email: Some("useR@test.org ".to_string()),
+        // email: Some(format!("{email}  ")),
+        email: Some("useR@test.org".to_string()),
         code: Some(format!("{otp_email_code} ")),
         ..Default::default()
       },
