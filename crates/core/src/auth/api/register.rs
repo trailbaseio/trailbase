@@ -71,7 +71,7 @@ pub async fn register_user_handler(
   };
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
-  let (normalized_email, handle) = validate_email_and_handler(
+  let (normalized_email, handle) = validate_email_and_handle(
     user_identifier.and_then(|ui| ui.try_into().ok()),
     request.email.as_deref(),
     request.handle.as_deref(),
@@ -173,42 +173,53 @@ Redirect::to(redirect).into_response()
   return Ok(success_response());
 }
 
-fn validate_email_and_handler(
+fn validate_email_and_handle(
   user_identifier: Option<UserIdentifier>,
   email: Option<&str>,
   handle: Option<&str>,
 ) -> Result<(Option<String>, Option<String>), AuthError> {
-  return match (
-    user_identifier.unwrap_or(UserIdentifier::Undefined),
-    email,
-    handle,
-  ) {
-    (
-      UserIdentifier::Undefined
-      | UserIdentifier::OnlyEmail
-      | UserIdentifier::RequireEmail
-      | UserIdentifier::RequireEmailAndHandle,
-      None,
-      _,
-    ) => Err(AuthError::BadRequest("Missing email")),
-    (
-      UserIdentifier::OnlyHandle
-      | UserIdentifier::RequireHandle
-      | UserIdentifier::RequireEmailAndHandle,
-      _,
-      None,
-    ) => Err(AuthError::BadRequest("Missing handle")),
-    (_, Some(email), None) => Ok((Some(validate_and_normalize_email_address(email)?), None)),
-    (_, None, Some(handle)) => Ok((None, Some(validate_and_normalize_handle(handle)?))),
-    (UserIdentifier::OnlyEmail, _, Some(_handle)) => {
-      Err(AuthError::BadRequest("Handle not allowed"))
-    }
-    (UserIdentifier::OnlyHandle, Some(_email), _) => {
-      Err(AuthError::BadRequest("Email not allowed"))
-    }
-    (_, Some(email), Some(handle)) => Ok((
-      Some(validate_and_normalize_email_address(email)?),
-      Some(validate_and_normalize_handle(handle)?),
-    )),
+  return match user_identifier.unwrap_or(UserIdentifier::Undefined) {
+    UserIdentifier::OnlyEmail | UserIdentifier::Undefined => match (email, handle) {
+      (_, handle) if handle.is_some_and(|h| !h.is_empty()) => {
+        Err(AuthError::BadRequest("Handle not allowed"))
+      }
+      (None, _) | (Some(""), _) => Err(AuthError::BadRequest("Missing email")),
+      (Some(email), _) => Ok((Some(validate_and_normalize_email_address(email)?), None)),
+    },
+    UserIdentifier::RequireEmail => match (email, handle) {
+      (None, _) | (Some(""), _) => Err(AuthError::BadRequest("Missing email")),
+      (Some(email), None) | (Some(email), Some("")) => {
+        Ok((Some(validate_and_normalize_email_address(email)?), None))
+      }
+      (Some(email), Some(handle)) => Ok((
+        Some(validate_and_normalize_email_address(email)?),
+        Some(validate_and_normalize_handle(handle)?),
+      )),
+    },
+    UserIdentifier::OnlyHandle => match (email, handle) {
+      (email, _) if email.is_some_and(|e| !e.is_empty()) => {
+        Err(AuthError::BadRequest("Email not allowed"))
+      }
+      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing handle")),
+      (_, Some(handle)) => Ok((None, Some(validate_and_normalize_handle(handle)?))),
+    },
+    UserIdentifier::RequireHandle => match (email, handle) {
+      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing handle")),
+      (None, Some(handle)) | (Some(""), Some(handle)) => {
+        Ok((None, Some(validate_and_normalize_handle(handle)?)))
+      }
+      (Some(email), Some(handle)) => Ok((
+        Some(validate_and_normalize_email_address(email)?),
+        Some(validate_and_normalize_handle(handle)?),
+      )),
+    },
+    UserIdentifier::RequireEmailAndHandle => match (email, handle) {
+      (None, _) | (Some(""), _) => Err(AuthError::BadRequest("Missing Email")),
+      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing handle")),
+      (Some(email), Some(handle)) => Ok((
+        Some(validate_and_normalize_email_address(email)?),
+        Some(validate_and_normalize_handle(handle)?),
+      )),
+    },
   };
 }
