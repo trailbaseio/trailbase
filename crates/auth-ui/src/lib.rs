@@ -5,7 +5,7 @@
 use askama::Template;
 use serde::Deserialize;
 use std::sync::LazyLock;
-use trailbase_auth_config::{AuthConfig, LoginIdentifier};
+use trailbase_auth_config::AuthConfig;
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -157,9 +157,7 @@ async fn ui_login_handler(
     alert: query.alert.as_deref().unwrap_or_default(),
     enable_registration: !config.disable_password_auth,
     enable_otp: config.enable_otp_signin,
-    show_email: config.login_identifier.is_empty()
-      || config.login_identifier.contains(&LoginIdentifier::Email),
-    show_handle: config.login_identifier.contains(&LoginIdentifier::Handle),
+    login_identifier: config.login_identifier,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
   }
@@ -299,9 +297,7 @@ async fn ui_register_handler(
   let html = auth::RegisterTemplate {
     state: auth::redirect_uri(Some(redirect_uri)),
     alert: query.alert.as_deref().unwrap_or_default(),
-    show_email: config.login_identifier.is_empty()
-      || config.login_identifier.contains(&LoginIdentifier::Email),
-    show_handle: config.login_identifier.contains(&LoginIdentifier::Handle),
+    registration_identifier: config.registration_identifier,
   }
   .render();
 

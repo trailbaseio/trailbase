@@ -4,6 +4,8 @@ use itertools::Itertools;
 use rust_embed::RustEmbed;
 use trailbase_auth_config::OAuthProvider;
 
+pub use trailbase_auth_config::{LoginIdentifier, RegistrationIdentifier};
+
 #[derive(RustEmbed, Clone)]
 #[folder = "ui/dist/"]
 pub struct AuthAssets;
@@ -29,8 +31,7 @@ pub struct LoginTemplate<'a> {
   pub alert: &'a str,
   pub enable_registration: bool,
   pub enable_otp: bool,
-  pub show_email: bool,
-  pub show_handle: bool,
+  pub login_identifier: LoginIdentifier,
   pub oauth_providers: &'a [OAuthProvider],
   pub oauth_query_params: &'a [(&'a str, &'a str)],
 }
@@ -62,8 +63,7 @@ pub struct OtpLoginTemplate<'a> {
 pub struct RegisterTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
-  pub show_email: bool,
-  pub show_handle: bool,
+  pub registration_identifier: RegistrationIdentifier,
 }
 
 #[derive(Template)]
@@ -129,8 +129,7 @@ mod tests {
       alert,
       enable_registration: true,
       enable_otp: true,
-      show_email: true,
-      show_handle: true,
+      login_identifier: LoginIdentifier::EmailOrHandle,
       oauth_providers: &[],
       oauth_query_params: &[("redirect_uri", redirect_uri)],
     }
@@ -148,8 +147,7 @@ mod tests {
       alert: "",
       enable_registration: false,
       enable_otp: false,
-      show_email: true,
-      show_handle: false,
+      login_identifier: LoginIdentifier::OnlyEmail,
       oauth_providers: &[OAuthProvider {
         name: "name".to_string(),
         display_name: "Fancy Name".to_string(),
@@ -193,8 +191,7 @@ mod tests {
     let template = RegisterTemplate {
       state: state.clone(),
       alert,
-      show_email: true,
-      show_handle: true,
+      registration_identifier: RegistrationIdentifier::OnlyEmail,
     }
     .render()
     .unwrap();

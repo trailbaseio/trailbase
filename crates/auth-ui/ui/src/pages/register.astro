@@ -22,7 +22,8 @@ import { AUTH_API } from "@/lib/constants";
       class="my-4 grid grid-cols-2 items-center gap-4"
       style={{ "grid-template-columns": "auto 1fr" }}
     >
-      {"{% if show_email -%}"}
+      {"{% match registration_identifier -%}"}
+      {"{% when RegistrationIdentifier::OnlyEmail -%}"}
       <TextFieldLabel>Email:</TextFieldLabel>
       <TextFieldInput
         required
@@ -31,18 +32,68 @@ import { AUTH_API } from "@/lib/constants";
         name="email"
         placeholder="Email"
       />
-      {"{% endif %}"}
-
-      {"{% if show_handle -%}"}
-      <TextFieldLabel>Username:</TextFieldLabel>
+      {"{% when RegistrationIdentifier::RequireEmail -%}"}
+      <TextFieldLabel>Email:</TextFieldLabel>
       <TextFieldInput
         required
-        tabindex="2"
+        tabindex="1"
+        type="text"
+        name="email"
+        placeholder="Email"
+      />
+
+      <TextFieldLabel>Username:</TextFieldLabel>
+      <TextFieldInput
+        tabindex="1"
         type="text"
         name="handle"
         autocomplete="username"
       />
-      {"{% endif %}"}
+      {"{% when RegistrationIdentifier::OnlyHandle -%}"}
+      <TextFieldLabel>Username:</TextFieldLabel>
+      <TextFieldInput
+        required
+        tabindex="1"
+        type="text"
+        name="handle"
+        autocomplete="username"
+      />
+      {"{% when RegistrationIdentifier::RequireHandle -%}"}
+      <TextFieldLabel>Email:</TextFieldLabel>
+      <TextFieldInput
+        tabindex="1"
+        type="text"
+        name="email"
+        placeholder="Email"
+      />
+
+      <TextFieldLabel>Username:</TextFieldLabel>
+      <TextFieldInput
+        required
+        tabindex="1"
+        type="text"
+        name="handle"
+        autocomplete="username"
+      />
+      {"{% when RegistrationIdentifier::EmailAndHandle -%}"}
+      <TextFieldLabel>Email:</TextFieldLabel>
+      <TextFieldInput
+        required
+        tabindex="1"
+        type="text"
+        name="email"
+        placeholder="Email"
+      />
+
+      <TextFieldLabel>Username:</TextFieldLabel>
+      <TextFieldInput
+        required
+        tabindex="1"
+        type="text"
+        name="handle"
+        autocomplete="username"
+      />
+      {"{% endmatch %}"}
 
       <TextFieldLabel>Password:</TextFieldLabel>
       <TextFieldInput

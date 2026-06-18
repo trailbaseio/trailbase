@@ -28,7 +28,8 @@ const formBaseAction = `${AUTH_API}/login`;
         style={{"grid-template-columns": "auto 1fr"}}
       >
 
-        {"{% if show_email -%}"}
+        {"{% match login_identifier -%}"}
+        {"{% when LoginIdentifier::OnlyEmail -%}"}
         <TextFieldLabel>Email:</TextFieldLabel>
         <TextFieldInput
           required
@@ -38,18 +39,26 @@ const formBaseAction = `${AUTH_API}/login`;
           placeholder="you@example.org"
           autocomplete="username"
         />
-        {"{% endif %}"}
-
-        {"{% if show_handle -%}"}
+        {"{% when LoginIdentifier::OnlyHandle -%}"}
         <TextFieldLabel>Username:</TextFieldLabel>
         <TextFieldInput
           required
-          tabindex="2"
+          tabindex="1"
           type="text"
           name="handle"
           autocomplete="username"
         />
-        {"{% endif %}"}
+        {"{% else %}"}
+        <TextFieldLabel>Email or User:</TextFieldLabel>
+        <TextFieldInput
+          required
+          tabindex="1"
+          type="text"
+          name="email_or_handle"
+          placeholder="you@example.org or alice"
+          autocomplete="username"
+        />
+        {"{% endmatch %}"}
 
         <TextFieldLabel>Password:</TextFieldLabel>
         <TextFieldInput

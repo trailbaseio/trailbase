@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider};
+use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, RegistrationIdentifier};
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
 
@@ -640,19 +640,27 @@ fn build_auth_config(config: &Config) -> AuthConfig {
     })
     .collect();
 
+  let user_identifier = config
+    .auth
+    .user_identifier
+    .and_then(|i| i.try_into().ok())
+    .unwrap_or(UserIdentifier::Undefined);
+
   return AuthConfig {
     disable_password_auth: config.auth.disable_password_auth(),
     enable_otp_signin: config.auth.enable_otp_signin(),
     oauth_providers,
-    login_identifier: match config
-      .auth
-      .user_identifier
-      .and_then(|i| i.try_into().ok())
-      .unwrap_or(UserIdentifier::Undefined)
-    {
-      UserIdentifier::OnlyEmail | UserIdentifier::Undefined => vec![LoginIdentifier::Email],
-      UserIdentifier::OnlyHandle => vec![LoginIdentifier::Handle],
-      _ => vec![LoginIdentifier::Email, LoginIdentifier::Handle],
+    login_identifier: match user_identifier {
+      UserIdentifier::OnlyEmail | UserIdentifier::Undefined => LoginIdentifier::OnlyEmail,
+      UserIdentifier::OnlyHandle => LoginIdentifier::OnlyHandle,
+      _ => LoginIdentifier::EmailOrHandle,
+    },
+    registration_identifier: match user_identifier {
+      UserIdentifier::OnlyEmail | UserIdentifier::Undefined => RegistrationIdentifier::OnlyEmail,
+      UserIdentifier::OnlyHandle => RegistrationIdentifier::OnlyHandle,
+      UserIdentifier::RequireHandle => RegistrationIdentifier::RequireHandle,
+      UserIdentifier::RequireEmail => RegistrationIdentifier::RequireEmail,
+      UserIdentifier::RequireEmailAndHandle => RegistrationIdentifier::EmailAndHandle,
     },
   };
 }
