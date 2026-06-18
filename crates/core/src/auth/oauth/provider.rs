@@ -41,12 +41,13 @@ pub type OAuthClient<
   HasTokenUrl,
 >;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OAuthUser {
   pub provider_user_id: String,
   pub provider_id: OAuthProviderId,
 
   pub email: String,
+  pub username: Option<String>,
   pub verified: bool,
 
   pub avatar: Option<String>,

@@ -125,6 +125,7 @@ impl OAuthProvider for FacebookOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Facebook,
       email: user.email,
+      username: None,
       verified: true,
       avatar: user.picture.map(|p| p.data.url),
     });

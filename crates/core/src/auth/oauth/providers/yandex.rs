@@ -104,7 +104,7 @@ impl OAuthProvider for YandexOAuthProvider {
     struct YandexUser {
       id: String,
       // real_name: String,
-      // login: String,
+      login: Option<String>,
       default_email: String,
       is_avatar_empty: bool,
       default_avatar_id: String,
@@ -128,6 +128,7 @@ impl OAuthProvider for YandexOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Yandex,
       email: user.default_email,
+      username: user.login,
       verified: true,
       avatar,
     });

@@ -154,6 +154,7 @@ impl OAuthProvider for TwitchOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Twitch,
       email: user.email,
+      username: user.login,
       verified: true,
       avatar: user.profile_image_url,
     });
@@ -196,7 +197,7 @@ struct TwitchUser {
   id: String,
   // According to reference above, email is implicitly verified.
   email: String,
-  // login: String,
+  login: Option<String>,
   // display_name: String,
   profile_image_url: Option<String>,
 }

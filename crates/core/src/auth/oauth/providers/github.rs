@@ -93,7 +93,7 @@ impl OAuthProvider for GithubOAuthProvider {
     #[derive(Default, Deserialize, Debug)]
     struct GithubUser {
       id: i64,
-      // login: String,
+      login: Option<String>,
       // name: String,
       email: Option<String>,
       // verified: bool,
@@ -158,6 +158,7 @@ impl OAuthProvider for GithubOAuthProvider {
       provider_user_id: user.id.to_string(),
       provider_id: OAuthProviderId::Github,
       email,
+      username: user.login,
       verified: true,
       avatar: user.avatar_url,
     });

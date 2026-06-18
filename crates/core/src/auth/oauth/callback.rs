@@ -15,8 +15,10 @@ use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
-use crate::auth::util::{new_cookie, remove_cookie, validate_redirect};
-use crate::config::proto::OAuthProviderId;
+use crate::auth::util::{
+  new_cookie, remove_cookie, validate_and_normalize_handle, validate_redirect,
+};
+use crate::config::proto::{OAuthProviderId, UserIdentifier};
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
@@ -256,13 +258,19 @@ async fn get_or_create_user(
   {
     // If user already exists in the local DB, simply return it.
     //
-    // TODO: We should propably update the local user if got out of sync, e.g. email changed with
+    // TODO: We should probably update the local user if got out of sync, e.g. email changed with
     // external provider.
     return Ok(existing_user);
   };
 
+  let user_identifier = state
+    .access_config(|c| c.auth.user_identifier)
+    .and_then(|ui| ui.try_into().ok())
+    .unwrap_or(UserIdentifier::Undefined);
+
   // Otherwise, create a new user and return that.
-  let db_user = create_user_for_external_provider(state.user_conn(), &oauth_user).await?;
+  let db_user =
+    create_user_for_external_provider(state.user_conn(), user_identifier, oauth_user).await?;
 
   // This should never happen. We only ever create a new local user here for verified users above.
   if !db_user.verified {
@@ -276,18 +284,72 @@ async fn get_or_create_user(
 
 async fn create_user_for_external_provider(
   conn: &trailbase_sqlite::Connection,
-  user: &OAuthUser,
+  user_identifier: UserIdentifier,
+  user: OAuthUser,
 ) -> Result<DbUser, AuthError> {
-  if !user.verified {
+  let OAuthUser {
+    provider_user_id,
+    provider_id,
+    email,
+    username,
+    verified,
+    avatar,
+  } = user;
+
+  if !verified {
     return Err(AuthError::Unauthorized);
+  }
+
+  let mut handle: Option<String> = match (user_identifier, username) {
+    (UserIdentifier::OnlyEmail | UserIdentifier::Undefined, _) => None,
+    (
+      UserIdentifier::OnlyHandle
+      | UserIdentifier::RequireHandle
+      | UserIdentifier::RequireEmailAndHandle,
+      username,
+    ) => Some(
+      username
+        .and_then(|u| validate_and_normalize_handle(&u).ok())
+        .unwrap_or_else(|| {
+          // Since we strictly need a username, make one up.
+          format!(
+            "user{suffix}",
+            suffix = crate::rand::random_numeric_and_lowercase(6)
+          )
+        }),
+    ),
+    (UserIdentifier::RequireEmail, username) => username,
+  };
+
+  if let Some(handle) = handle.as_mut() {
+    // Check availability and potentially append randomness.
+    const EXISTS_QUERY: &str =
+      formatcp!("SELECT EXISTS(SELECT 1 FROM \"{USER_TABLE}\" WHERE handle = $1)");
+
+    // To be pedantic we check for collisions in a loop.
+    let mut i = 0;
+    while conn
+      .read_query_row_get::<bool>(EXISTS_QUERY, params!(handle.clone()), 0)
+      .await?
+      .unwrap_or(false)
+      && i < 5
+    {
+      *handle = format!(
+        "{handle}{suffix}",
+        suffix = crate::rand::random_numeric_and_lowercase(6)
+      );
+      i += 1;
+    }
+
+    debug_assert!(validate_and_normalize_handle(handle).is_ok());
   }
 
   const QUERY: &str = formatcp!(
     "\
       INSERT INTO \"{USER_TABLE}\" ( \
-        provider_id, provider_user_id, verified, email, provider_avatar_url \
+        provider_id, provider_user_id, verified, email, handle, provider_avatar_url \
       ) VALUES ( \
-        :provider_id, :provider_user_id, :verified, :email, :avatar \
+        :provider_id, :provider_user_id, :verified, :email, :handle, :avatar \
       ) RETURNING * \
     "
   );
@@ -296,15 +358,16 @@ async fn create_user_for_external_provider(
     .write_query_value(
       QUERY,
       named_params! {
-          ":provider_id": user.provider_id as i64,
-          ":provider_user_id": user.provider_user_id.clone(),
-          ":verified": user.verified as i64,
-          ":email": user.email.clone(),
-          ":avatar": user.avatar.clone(),
+          ":provider_id": provider_id as i64,
+          ":provider_user_id": provider_user_id,
+          ":verified": verified as i64,
+          ":email": email,
+          ":handle": handle,
+          ":avatar": avatar,
       },
     )
     .await?
-    .ok_or_else(|| AuthError::Internal("query should return".into()))?;
+    .ok_or_else(|| AuthError::Internal("insertion issue".into()))?;
 
   return Ok(db_user);
 }
@@ -322,4 +385,87 @@ async fn user_by_provider_id(
       .read_query_value::<DbUser>(QUERY, params!(provider_id as i64, provider_user_id))
       .await?,
   );
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::app_state::test_state;
+
+  #[tokio::test]
+  async fn test_oauth_create_user() {
+    let state = test_state(None).await.unwrap();
+
+    fn user(username: Option<String>) -> OAuthUser {
+      let rand = crate::rand::random_numeric_and_lowercase(20);
+      return OAuthUser {
+        provider_user_id: rand.clone(),
+        provider_id: OAuthProviderId::Test,
+        email: format!("email_{rand}@test.org"),
+        username,
+        verified: true,
+        avatar: None,
+      };
+    }
+
+    {
+      let created = create_user_for_external_provider(
+        state.user_conn(),
+        UserIdentifier::RequireEmail,
+        user(None),
+      )
+      .await
+      .unwrap();
+
+      assert!(created.handle.is_none());
+    }
+
+    {
+      let created = create_user_for_external_provider(
+        state.user_conn(),
+        UserIdentifier::OnlyEmail,
+        user(Some("test".to_string())),
+      )
+      .await
+      .unwrap();
+
+      assert!(created.handle.is_none());
+    }
+
+    {
+      let created = create_user_for_external_provider(
+        state.user_conn(),
+        UserIdentifier::RequireHandle,
+        user(None),
+      )
+      .await
+      .unwrap();
+
+      assert!(created.handle.is_some());
+    }
+
+    {
+      let username = "duplicate".to_string();
+      let created0 = create_user_for_external_provider(
+        state.user_conn(),
+        UserIdentifier::RequireHandle,
+        user(Some(username.clone())),
+      )
+      .await
+      .unwrap();
+
+      assert!(created0.handle.is_some());
+
+      let created1 = create_user_for_external_provider(
+        state.user_conn(),
+        UserIdentifier::RequireHandle,
+        user(Some(username.clone())),
+      )
+      .await
+      .unwrap();
+
+      assert!(created1.handle.is_some());
+      assert_ne!(created0.handle, created1.handle);
+    }
+  }
 }

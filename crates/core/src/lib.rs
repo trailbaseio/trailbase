@@ -198,6 +198,36 @@ pub(crate) mod rand {
     return NumericAndUpperCase.sample_string(&mut rng, length);
   }
 
+  struct NumericAndLowerCase;
+
+  impl SampleString for NumericAndLowerCase {
+    fn append_string<R: Rng + ?Sized>(&self, rng: &mut R, string: &mut String, len: usize) {
+      for c in self
+        .sample_iter(rng)
+        .take(len)
+        .inspect(|b| debug_assert!(b.is_ascii_alphanumeric()))
+      {
+        string.push(char::from_u32(c as u32).expect("invariant"));
+      }
+    }
+  }
+
+  impl Distribution<u8> for NumericAndLowerCase {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> u8 {
+      const GEN_ASCII_STR_CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+      const RANGE: u32 = GEN_ASCII_STR_CHARSET.len() as u32;
+
+      return GEN_ASCII_STR_CHARSET[(rng.next_u32() % RANGE) as usize];
+    }
+  }
+
+  pub fn random_numeric_and_lowercase(length: usize) -> String {
+    let mut rng = rand::rng();
+    let _: &dyn CryptoRng = &rng;
+
+    return NumericAndLowerCase.sample_string(&mut rng, length);
+  }
+
   #[cfg(test)]
   mod tests {
     use super::*;

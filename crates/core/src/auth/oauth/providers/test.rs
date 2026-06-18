@@ -95,6 +95,7 @@ impl OAuthProvider for TestOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Test,
       email: user.email,
+      username: None,
       verified: user.verified,
       avatar: None,
     });

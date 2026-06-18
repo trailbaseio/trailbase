@@ -100,7 +100,7 @@ impl OAuthProvider for GitlabOAuthProvider {
     struct GitlabUser {
       id: i64,
       // name: String,
-      // username: String,
+      username: Option<String>,
       email: String,
       avatar_url: Option<String>,
       state: String,
@@ -119,6 +119,7 @@ impl OAuthProvider for GitlabOAuthProvider {
       provider_user_id: user.id.to_string(),
       provider_id: OAuthProviderId::Gitlab,
       email: user.email,
+      username: user.username,
       verified,
       avatar: user.avatar_url,
     });

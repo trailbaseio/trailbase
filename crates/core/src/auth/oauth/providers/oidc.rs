@@ -70,8 +70,8 @@ pub struct OidcUser {
   pub email: String,
   pub email_verified: Option<bool>,
 
+  pub preferred_username: Option<String>,
   // pub name: Option<String>,
-  // pub preferred_username : Option<String>,
   pub picture: Option<String>,
 }
 
@@ -123,6 +123,7 @@ impl OAuthProvider for OidcProvider {
       provider_user_id: user.sub,
       provider_id: OAuthProviderId::Oidc0,
       email: user.email,
+      username: user.preferred_username,
       verified: user.email_verified.unwrap_or(true),
       avatar: user.picture,
     });

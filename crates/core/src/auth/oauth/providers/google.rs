@@ -119,6 +119,7 @@ impl OAuthProvider for GoogleOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Google,
       email: user.email,
+      username: None,
       verified: user.verified_email,
       avatar: user.picture,
     });

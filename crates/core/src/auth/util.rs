@@ -57,7 +57,10 @@ pub fn validate_and_normalize_email_address(email_address: &str) -> Result<Strin
 pub fn validate_and_normalize_handle(handle: &str) -> Result<String, AuthError> {
   let trimmed = handle.trim();
   if trimmed.len() < 3 {
-    return Err(AuthError::BadRequest("Invalid handle"));
+    return Err(AuthError::BadRequest("handle too short"));
+  }
+  if trimmed.len() > 32 {
+    return Err(AuthError::BadRequest("handle too long"));
   }
 
   if trimmed.chars().enumerate().all(|(i, c)| {
@@ -69,7 +72,7 @@ pub fn validate_and_normalize_handle(handle: &str) -> Result<String, AuthError> 
     return Ok(trimmed.to_string());
   }
 
-  return Err(AuthError::BadRequest("Invalid handle"));
+  return Err(AuthError::BadRequest("handle contains invalid characters"));
 }
 
 #[inline]

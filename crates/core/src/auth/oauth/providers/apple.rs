@@ -156,6 +156,7 @@ impl OAuthProvider for AppleOAuthProvider {
       provider_user_id: apple_id_token.sub,
       provider_id: OAuthProviderId::Apple,
       email,
+      username: None,
       verified: apple_id_token.email_verified.is_some_and(|v| v == "true"),
       avatar: None,
     });

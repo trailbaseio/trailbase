@@ -103,7 +103,7 @@ impl OAuthProvider for DiscordOAuthProvider {
       verified: bool,
 
       // discriminator: Option<String>,
-      // username: Option<String>,
+      username: Option<String>,
       avatar: Option<String>,
     }
 
@@ -133,6 +133,7 @@ impl OAuthProvider for DiscordOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Discord,
       email: user.email,
+      username: user.username,
       verified: user.verified,
       avatar,
     });

@@ -14,6 +14,7 @@ use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 struct MicrosoftUser {
   id: String,
   mail: String,
+  // displayName: String,
 }
 
 pub(crate) struct MicrosoftOAuthProvider {
@@ -113,6 +114,8 @@ impl OAuthProvider for MicrosoftOAuthProvider {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Microsoft,
       email: user.mail,
+      // username: Some(user.displayName),
+      username: None,
       verified: true,
       avatar: None,
     });
