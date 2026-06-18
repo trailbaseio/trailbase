@@ -60,7 +60,7 @@ impl From<reqwest::Error> for Error {
 pub struct User {
   pub sub: String,
   pub email: Option<String>,
-  pub handle: Option<String>,
+  pub username: Option<String>,
 }
 
 /// Holds the tokens minted by the server on login.
@@ -336,7 +336,7 @@ struct JwtTokenClaims {
   iat: i64,
   exp: i64,
   email: Option<String>,
-  handle: Option<String>,
+  username: Option<String>,
   csrf_token: String,
 }
 
@@ -908,7 +908,7 @@ impl Client {
       return Some(User {
         sub: state.1.sub.clone(),
         email: state.1.email.clone(),
-        handle: state.1.handle.clone(),
+        username: state.1.username.clone(),
       });
     }
     return None;
@@ -935,12 +935,12 @@ impl Client {
 
   pub async fn login(
     &self,
-    email: &str,
+    email_or_username: &str,
     password: &str,
   ) -> Result<Option<MultiFactorAuthToken>, Error> {
     #[derive(Serialize)]
     struct Credentials<'a> {
-      email: &'a str,
+      email_or_username: &'a str,
       password: &'a str,
     }
 
@@ -950,8 +950,11 @@ impl Client {
         &format!("/{AUTH_API}/login"),
         Method::POST,
         Some(
-          serde_json::to_vec(&Credentials { email, password })
-            .map_err(Error::RecordSerialization)?,
+          serde_json::to_vec(&Credentials {
+            email_or_username,
+            password,
+          })
+          .map_err(Error::RecordSerialization)?,
         ),
         None,
         /* error_for_status= */ false,
@@ -1003,10 +1006,10 @@ impl Client {
     return Ok(());
   }
 
-  pub async fn request_otp(&self, email: &str) -> Result<(), Error> {
+  pub async fn request_otp(&self, email_or_username: &str) -> Result<(), Error> {
     #[derive(Serialize)]
     struct Credentials<'a> {
-      email: &'a str,
+      email_or_username: &'a str,
       redirect_uri: Option<&'a str>,
     }
 
@@ -1017,7 +1020,7 @@ impl Client {
         Method::POST,
         Some(
           serde_json::to_vec(&Credentials {
-            email,
+            email_or_username,
             redirect_uri: None,
           })
           .map_err(Error::RecordSerialization)?,

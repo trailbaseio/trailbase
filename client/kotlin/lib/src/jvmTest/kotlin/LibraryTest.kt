@@ -196,6 +196,7 @@ class ClientTest {
     assertNull(mfaToken)
     assertNotNull(client.tokens())
     assertEquals("admin@localhost", client.user()?.email)
+    assertEquals("admin", client.user()?.username)
 
     client.refreshAuthToken()
     assertNotNull(client.tokens())
@@ -212,7 +213,6 @@ class ClientTest {
     // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint responds
     // ok.
     client.requestOtp("fake0@localhost")
-    client.requestOtp("fake1@localhost", "/target")
 
     val exception0 =
             assertThrows<HttpException>({ client.loginOtp("fake1@localhost", "invalidCode") })

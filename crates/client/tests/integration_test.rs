@@ -197,6 +197,7 @@ async fn login_test() {
 
   let user = client.user().unwrap();
   assert_eq!(Some("admin@localhost"), user.email.as_deref());
+  assert_eq!(Some("admin"), user.username.as_deref());
 
   client.refresh().await.unwrap();
 

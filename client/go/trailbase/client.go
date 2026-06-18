@@ -30,8 +30,9 @@ func (e *FetchError) Error() string {
 }
 
 type User struct {
-	Sub   string
-	Email string
+	Sub      string
+	Email    *string
+	Username *string
 }
 
 type Tokens struct {
@@ -45,11 +46,12 @@ type MultiFactorAuthToken struct {
 }
 
 type JwtTokenClaims struct {
-	Sub       string `json:"sub"`
-	Iat       int64  `json:"iat"`
-	Exp       int64  `json:"exp"`
-	Email     string `json:"email"`
-	CsrfToken string `json:"csrf_token"`
+	Sub       string  `json:"sub"`
+	Iat       int64   `json:"iat"`
+	Exp       int64   `json:"exp"`
+	Email     *string `json:"email,omitempty"`
+	Username  *string `json:"username,omitempty"`
+	CsrfToken string  `json:"csrf_token"`
 }
 
 type state struct {
@@ -142,25 +144,23 @@ func (c *Client) User() *User {
 	defer c.tokenMutex.Unlock()
 	if c.tokenState != nil && c.tokenState.s != nil {
 		claims := c.tokenState.s.claims
-		sub := claims.Sub
-		email := claims.Email
-
 		return &User{
-			Sub:   sub,
-			Email: email,
+			Sub:      claims.Sub,
+			Email:    claims.Email,
+			Username: claims.Username,
 		}
 	}
 	return nil
 }
 
-func (c *Client) Login(email string, password string) (*MultiFactorAuthToken, error) {
+func (c *Client) Login(emailOrUsername string, password string) (*MultiFactorAuthToken, error) {
 	type Credentials struct {
-		Email    string `json:"email"`
+		Email    string `json:"email_or_username"`
 		Password string `json:"password"`
 	}
 
 	reqBody, err := json.Marshal(Credentials{
-		Email:    email,
+		Email:    emailOrUsername,
 		Password: password,
 	})
 	if err != nil {
@@ -234,15 +234,15 @@ func (c *Client) LoginSecond(token *MultiFactorAuthToken, code string) error {
 	return nil
 }
 
-func (c *Client) RequestOtp(email string, redirectUri *string) error {
+func (c *Client) RequestOtp(emailOrUsername string) error {
 	type Request struct {
-		Email       string  `json:"email"`
-		RedirectUri *string `json:"redirect_uri,omitempty"`
+		EmailOrUsername string  `json:"email_or_username"`
+		RedirectUri     *string `json:"redirect_uri,omitempty"`
 	}
 
 	reqBody, err := json.Marshal(Request{
-		Email:       email,
-		RedirectUri: redirectUri,
+		EmailOrUsername: emailOrUsername,
+		RedirectUri:     nil,
 	})
 	if err != nil {
 		return err

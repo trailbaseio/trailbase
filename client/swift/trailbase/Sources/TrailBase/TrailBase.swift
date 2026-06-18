@@ -5,7 +5,8 @@ import Synchronization
 
 public struct User: Hashable, Equatable {
   let sub: String
-  let email: String
+  let email: String?
+  let username: String?
 }
 
 // NOTE: Making this explicitly public breaks compiler.
@@ -35,7 +36,8 @@ private struct JwtTokenClaims: Decodable, Hashable {
   let sub: String
   let iat: Int64
   let exp: Int64
-  let email: String
+  let email: String?
+  let username: String?
   let csrf_token: String
 }
 
@@ -328,7 +330,7 @@ public class Client {
   public var user: User? {
     return self.tokenState.withLock({ (state) in
       if let claims = state.state?.1 {
-        return User(sub: claims.sub, email: claims.email)
+        return User(sub: claims.sub, email: claims.email, username: claims.username)
       }
       return nil
     })
@@ -351,13 +353,16 @@ public class Client {
     })
   }
 
-  public func login(email: String, password: String) async throws -> MultiFactorAuthToken? {
+  public func login(emailOrUsername: String, password: String) async throws
+    -> MultiFactorAuthToken?
+  {
     struct Credentials: Codable {
-      let email: String
+      let email_or_username: String
       let password: String
     }
 
-    let body = try JSONEncoder().encode(Credentials(email: email, password: password))
+    let body = try JSONEncoder().encode(
+      Credentials(email_or_username: emailOrUsername, password: password))
     let (resp, data) = try await self.fetch(
       path: "/\(AUTH_API)/login", method: "POST", body: body, throwOnError: false)
 
@@ -375,6 +380,10 @@ public class Client {
     }
   }
 
+  public func login(email: String, password: String) async throws -> MultiFactorAuthToken? {
+    return try await login(emailOrUsername: email, password: password)
+  }
+
   public func loginSecond(mfaToken: MultiFactorAuthToken, totpCode: String) async throws {
     struct Credentials: Codable {
       let mfa_token: String
@@ -390,16 +399,20 @@ public class Client {
     let _ = try updateTokens(tokens: tokens)
   }
 
-  public func requestOtp(email: String, redirectUri: String? = nil) async throws {
+  public func requestOtp(emailOrUsername: String) async throws {
     struct Credentials: Codable {
-      let email: String
+      let email_or_username: String
       let redirect_uri: String?
     }
 
     let body = try JSONEncoder().encode(
-      Credentials(email: email, redirect_uri: redirectUri))
+      Credentials(email_or_username: emailOrUsername, redirect_uri: nil))
     let (_, _) = try await self.fetch(
       path: "/\(AUTH_API)/otp/request", method: "POST", body: body)
+  }
+
+  public func requestOtp(email: String) async throws {
+    return try await requestOtp(emailOrUsername: email)
   }
 
   public func loginOtp(email: String, code: String) async throws {

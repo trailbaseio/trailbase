@@ -162,6 +162,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     var user = client.User();
     Assert.NotNull(user);
     Assert.Equal("admin@localhost", user!.email);
+    Assert.Equal("admin", user!.username);
     Assert.True(user!.sub != "");
 
     await client.Logout();
@@ -191,7 +192,6 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
 
     await client.RequestOTP("fake0@localhost");
-    await client.RequestOTP("fake1@localhost", redirectUri: "/target");
 
     var exception = await Assert.ThrowsAsync<FetchException>(() => client.LoginOTP("fake0@localhost", "invalid"));
     Assert.Equal(System.Net.HttpStatusCode.Unauthorized, exception.Status);

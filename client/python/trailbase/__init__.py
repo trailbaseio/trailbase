@@ -52,20 +52,24 @@ def record_ids_from_json(json: JSON_OBJECT) -> list[RecordId]:
 
 class User:
     id: str
-    email: str
+    email: str | None
+    username: str | None
 
-    def __init__(self, id: str, email: str) -> None:
+    def __init__(self, id: str, email: str | None, username: str | None) -> None:
         self.id = id
         self.email = email
+        self.username = username
 
     @staticmethod
     def from_json(json: JSON_OBJECT) -> "User":
         sub = json["sub"]
         assert isinstance(sub, str)
         email = json["email"]
-        assert isinstance(email, str)
+        assert isinstance(email, str | None)
+        username = json["username"]
+        assert isinstance(username, str | None)
 
-        return User(sub, email)
+        return User(sub, email, username)
 
 
 class ListResponse:
@@ -133,14 +137,18 @@ class JwtToken:
     sub: str
     iat: int
     exp: int
-    email: str
+    email: str | None
+    username: str | None
     csrfToken: str
 
-    def __init__(self, sub: str, iat: int, exp: int, email: str, csrfToken: str) -> None:
+    def __init__(
+        self, sub: str, iat: int, exp: int, email: str | None, username: str | None, csrfToken: str
+    ) -> None:
         self.sub = sub
         self.iat = iat
         self.exp = exp
         self.email = email
+        self.username = username
         self.csrfToken = csrfToken
 
     @staticmethod
@@ -152,11 +160,13 @@ class JwtToken:
         exp = json["exp"]
         assert isinstance(exp, int)
         email = json["email"]
-        assert isinstance(email, str)
-        csrfToken = json["csrf_token"]
-        assert isinstance(csrfToken, str)
+        assert isinstance(email, str | None)
+        username = json["username"]
+        assert isinstance(username, str | None)
+        csrf_token = json["csrf_token"]
+        assert isinstance(csrf_token, str)
 
-        return JwtToken(sub, iat, exp, email, csrfToken)
+        return JwtToken(sub, iat, exp, email, username, csrf_token)
 
 
 class TokenState:
@@ -392,12 +402,12 @@ class Client:
     def site(self) -> str:
         return self._site
 
-    def login(self, email: str, password: str) -> MultiFactorAuthToken | None:
+    def login(self, email_or_username: str, password: str) -> MultiFactorAuthToken | None:
         response = self.fetch(
             f"{_AUTH_API}/login",
             method="POST",
             data={
-                "email": email,
+                "email_or_username": email_or_username,
                 "password": password,
             },
             throwOnError=False,
@@ -424,13 +434,13 @@ class Client:
 
         self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
 
-    def request_otp(self, email: str, redirect_uri: str | None = None) -> None:
+    def request_otp(self, email_or_username: str) -> None:
         self.fetch(
             f"{_AUTH_API}/otp/request",
             method="POST",
             data={
-                "email": email,
-                "redirect_uri": redirect_uri,
+                "email_or_username": email_or_username,
+                # "redirect_uri": redirect_uri,
             },
         )
 

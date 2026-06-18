@@ -36,6 +36,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // WARN: this test is not hermetic. I requires an appropriate TrailBase instance to be running.
 test("Auth integration tests", async () => {
   const client = await connect();
+  expect(client.user()?.email).toBe("admin@localhost");
+  expect(client.user()?.username).toBe("admin");
 
   const oldTokens = client.tokens();
   expect(oldTokens).not.undefined;

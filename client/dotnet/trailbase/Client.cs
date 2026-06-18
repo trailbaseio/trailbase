@@ -36,16 +36,20 @@ public class User {
   /// <summary>Auth subject, i.e. user id.</summary>
   public string sub { get; }
   /// <summary>The user's email address.</summary>
-  public string email { get; }
+  public string? email { get; }
+  /// <summary>The user's username.</summary>
+  public string? username { get; }
 
   /// <summary>
   /// User constructor.
   /// </summary>
   /// <param name="sub">Auth subject, i.e. user id.</param>
   /// <param name="email">User's email address</param>
-  public User(string sub, string email) {
+  /// <param name="username">User's username</param>
+  public User(string sub, string? email, string? username) {
     this.sub = sub;
     this.email = email;
+    this.username = username;
   }
 }
 
@@ -54,17 +58,17 @@ public class User {
 /// </summary>
 public class Credentials {
   /// <summary>The user's email address.</summary>
-  public string email { get; }
+  public string email_or_username { get; }
   /// <summary>The user's password.</summary>
   public string password { get; }
 
   /// <summary>
   /// Credentials constructor.
   /// </summary>
-  /// <param name="email">User's email address</param>
+  /// <param name="email_or_username">User's registered email address or username</param>
   /// <param name="password">User's password</param>
-  public Credentials(string email, string password) {
-    this.email = email;
+  public Credentials(string email_or_username, string password) {
+    this.email_or_username = email_or_username;
     this.password = password;
   }
 }
@@ -162,7 +166,9 @@ public class JwtToken {
   /// <summary>Expiration timestamp.</summary>
   public long exp { get; }
   /// <summary>User's email address.</summary>
-  public string email { get; }
+  public string? email { get; }
+  /// <summary>User's username.</summary>
+  public string? username { get; }
   /// <summary>Cross-site request forgery token.</summary>
   public string csrf_token { get; }
 
@@ -172,13 +178,15 @@ public class JwtToken {
     string sub,
     long iat,
     long exp,
-    string email,
+    string? email,
+    string? username,
     string csrf_token
   ) {
     this.sub = sub;
     this.iat = iat;
     this.exp = exp;
     this.email = email;
+    this.username = username;
     this.csrf_token = csrf_token;
   }
 }
@@ -389,11 +397,11 @@ public class Client {
   }
 
   /// <summary>Log in with the given credentials.</summary>
-  public async Task<MultiFactorAuthToken?> Login(string email, string password) {
+  public async Task<MultiFactorAuthToken?> Login(string emailOrUsername, string password) {
     var response = await Fetch(
       $"{_authApi}/login",
       HttpMethod.Post,
-      JsonContent.Create(new Credentials(email, password), SourceGenerationContext.Default.Credentials),
+      JsonContent.Create(new Credentials(emailOrUsername, password), SourceGenerationContext.Default.Credentials),
       null,
       throwOnError: false
     );
@@ -431,14 +439,10 @@ public class Client {
   }
 
   /// <summary>Request an OTP code via Email.</summary>
-  public async Task RequestOTP(string email, string? redirectUri = null) {
+  public async Task RequestOTP(string emailOrUsername) {
     var json = new Dictionary<string, string>() {
-      ["email"] = email,
+      ["email_or_username"] = emailOrUsername,
     };
-
-    if (redirectUri != null) {
-      json.Add("redirect_uri", redirectUri);
-    }
 
     await Fetch(
       $"{_authApi}/otp/request",

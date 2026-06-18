@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 
-@Serializable data class User(val id: String, val email: String)
+@Serializable data class User(val id: String, val email: String?, val username: String?)
 
 @Serializable
 data class Tokens(val auth_token: String, val refresh_token: String?, val csrf_token: String?)
@@ -28,7 +28,8 @@ data class JwtTokenClaims(
         val sub: String,
         val iat: Long,
         val exp: Long,
-        val email: String,
+        val email: String?,
+        val username: String?,
         val csrf_token: String
 )
 
@@ -95,7 +96,7 @@ class TokenState(val state: Pair<Tokens, JwtTokenClaims>?, val headers: Map<Stri
 
   fun user(): User? {
     val jwt = state?.second
-    return if (jwt != null) User(jwt.sub, jwt.email) else null
+    return if (jwt != null) User(jwt.sub, jwt.email, jwt.username) else null
   }
 
   @OptIn(kotlin.time.ExperimentalTime::class)
@@ -197,11 +198,11 @@ sealed class FilterBase {}
 
 class Filter(val column: String, val value: String, val op: CompareOp? = null) : FilterBase() {
   companion object {
-    /** Filter rows where [column] IS NULL. Wire: `filter[<column>][$is]=NULL`. */
+    ///  Filter rows where [column] IS NULL. Wire: `filter[<column>][$is]=NULL`.
     fun isNull(column: String): Filter =
         Filter(column = column, value = "NULL", op = CompareOp.isNull)
 
-    /** Filter rows where [column] IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`. */
+    /// Filter rows where [column] IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`.
     fun isNotNull(column: String): Filter =
         Filter(column = column, value = "!NULL", op = CompareOp.isNotNull)
   }
@@ -438,14 +439,14 @@ class Client(
     return RecordApi(name, this)
   }
 
-  suspend fun login(email: String, password: String): MultiFactorAuthToken? {
-    @Serializable data class Credentials(val email: String, val password: String)
+  suspend fun login(emailOrUsername: String, password: String): MultiFactorAuthToken? {
+    @Serializable data class Credentials(val email_or_username: String, val password: String)
 
     val response =
             fetch(
                     "${AUTH_API}/login",
                     Method.post,
-                    Credentials(email, password),
+                    Credentials(emailOrUsername, password),
                     throwOnError = false
             )
 
@@ -479,13 +480,13 @@ class Client(
     tokenState = TokenState.build(tokens)
   }
 
-  suspend fun requestOtp(email: String, redirectUri: String? = null) {
-    @Serializable data class Credentials(val email: String, val redirect_uri: String?)
+  suspend fun requestOtp(emailOrUsername: String) {
+    @Serializable data class Credentials(val email_or_username: String, val redirect_uri: String?)
 
     fetch(
             "${AUTH_API}/otp/request",
             Method.post,
-            Credentials(email, redirectUri),
+            Credentials(emailOrUsername, null),
     )
   }
 

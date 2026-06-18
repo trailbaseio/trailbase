@@ -135,12 +135,13 @@ func TestAuth(t *testing.T) {
 	client := connect(t)
 
 	user := client.User()
-	assertEqual(t, user.Email, "admin@localhost")
+	assertEqual(t, *user.Email, "admin@localhost")
+	assertEqual(t, *user.Username, "admin")
 	assert(t, client.Tokens().RefreshToken != nil, "missing token")
 
 	newClient, err := NewClientWithTokens(SITE, client.Tokens())
 	assertFine(t, err)
-	assertEqual(t, newClient.User().Email, "admin@localhost")
+	assertEqual(t, *newClient.User().Email, "admin@localhost")
 
 	client.Refresh()
 
@@ -177,9 +178,7 @@ func TestOtpLogin(t *testing.T) {
 		panic(err)
 	}
 
-	client.RequestOtp("fake0@localhost", nil)
-	requestUri := "/target"
-	client.RequestOtp("fake1@localhost", &requestUri)
+	client.RequestOtp("fake0@localhost")
 
 	err = client.LoginOtp("fake1@localhost", "invalid")
 	ferr, ok := err.(*FetchError)

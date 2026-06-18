@@ -123,6 +123,7 @@ extension Trait where Self == SetupTrailBaseTrait {
     let client = try await connect()
     #expect(client.tokens?.refresh_token != nil)
     #expect(client.user!.email == "admin@localhost")
+    #expect(client.user!.username == "admin")
 
     try await client.refresh()
 
@@ -151,7 +152,7 @@ extension Trait where Self == SetupTrailBaseTrait {
 
     // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint responds ok.
     try await client.requestOtp(email: "fake0@localhost")
-    try await client.requestOtp(email: "fake1@localhost", redirectUri: "/target")
+    try await client.requestOtp(email: "fake1@localhost")
   }
 
   @Test func recordTest() async throws {
@@ -255,7 +256,7 @@ func testIsNullCompareOp() {
 
 @Test()
 func testIsNullFactory() {
-  guard case let .Filter(column, op, value) = Filter.isNull(column: "col0") else {
+  guard case .Filter(let column, let op, let value) = Filter.isNull(column: "col0") else {
     Issue.record("Filter.isNull did not produce a .Filter case")
     return
   }

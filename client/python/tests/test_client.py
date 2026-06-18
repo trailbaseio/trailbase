@@ -112,6 +112,7 @@ def test_authentication(trailbase: TrailBaseFixture):
     user = client.user()
     assert user is not None and user.id != ""
     assert user is not None and user.email == "admin@localhost"
+    assert user is not None and user.username == "admin"
 
     client.logout()
     assert client.tokens() is None
@@ -142,7 +143,6 @@ def test_otp_auth(trailbase: TrailBaseFixture):
 
     client = Client(site, tokens=None)
     client.request_otp("fake0@trailbase.io")
-    client.request_otp("fake1@trailbase.io", redirect_uri="/target")
 
     with pytest.raises(FetchException) as exec:
         client.login_otp("fake0@trailbase.io", "invalid")

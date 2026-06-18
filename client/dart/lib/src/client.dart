@@ -11,23 +11,28 @@ import './transport.dart';
 
 class User {
   final String id;
-  final String email;
+  final String? email;
+  final String? username;
 
   const User({
     required this.id,
     required this.email,
+    required this.username,
   });
 
   @override
-  String toString() => 'User(id=${id}, email=${email})';
+  String toString() => 'User(id=${id}, email=${email}, username=${username})';
 
   @override
   bool operator ==(Object other) {
-    return other is User && id == other.id && email == other.email;
+    return other is User &&
+        id == other.id &&
+        email == other.email &&
+        username == other.username;
   }
 
   @override
-  int get hashCode => Object.hash(id, email);
+  int get hashCode => Object.hash(id, email, username);
 }
 
 /// Auth tokens: auth JWT, refresh & CSRF.
@@ -458,12 +463,15 @@ class Client {
   /// Accessor for Record APIs with given [name].
   RecordApi records(String name) => RecordApi(this, name);
 
-  Future<MultiFactorAuthToken?> login(String email, String password) async {
+  Future<MultiFactorAuthToken?> login(
+    String emailOrUsername,
+    String password,
+  ) async {
     final response = await fetch(
       '${_authApi}/login',
       method: Method.post,
       body: jsonEncode({
-        'email': email,
+        'email_or_username': emailOrUsername,
         'password': password,
       }),
       throwOnError: false,
@@ -511,13 +519,13 @@ class Client {
     _updateTokens(tokens);
   }
 
-  Future<void> requestOtp(String email, {String? redirectUri}) async {
+  Future<void> requestOtp(String emailOrUsername) async {
     await fetch(
       '${_authApi}/otp/request',
       method: Method.post,
       body: jsonEncode({
-        'email': email,
-        if (redirectUri != null) 'redirect_uri': redirectUri,
+        'email_or_username': emailOrUsername,
+        'redirect_uri': null,
       }),
     );
   }
@@ -654,7 +662,8 @@ class _JwtToken {
   final String sub;
   final int iat;
   final int exp;
-  final String email;
+  final String? email;
+  final String? username;
   final String csrfToken;
 
   const _JwtToken({
@@ -662,6 +671,7 @@ class _JwtToken {
     required this.iat,
     required this.exp,
     required this.email,
+    required this.username,
     required this.csrfToken,
   });
 
@@ -673,6 +683,7 @@ class _JwtToken {
         iat = json['iat'],
         exp = json['exp'],
         email = json['email'],
+        username = json['username'],
         csrfToken = json['csrf_token'];
 }
 
@@ -691,7 +702,9 @@ class _TokenState {
 
   User? user() {
     final jwt = state?.$2;
-    return (jwt != null) ? User(id: jwt.sub, email: jwt.email) : null;
+    return (jwt != null)
+        ? User(id: jwt.sub, email: jwt.email, username: jwt.username)
+        : null;
   }
 
   /// Returns refresh token if refresh is warranted.

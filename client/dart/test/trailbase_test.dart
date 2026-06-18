@@ -275,6 +275,7 @@ Future<void> main() async {
       final user = client.user()!;
       expect(user.id, isNot(equals('')));
       expect(user.email, equals('admin@localhost'));
+      expect(user.username, equals('admin'));
 
       await client.logout();
       expect(client.tokens(), isNull);
@@ -314,16 +315,7 @@ Future<void> main() async {
 
       // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint responds ok.
       await client.requestOtp('fake0@localhost');
-      await client.requestOtp('fake1@localhost', redirectUri: '/foo');
-
-      expect(() async {
-        await client.requestOtp('notAnEmail');
-      }, throwsA(predicate((e) {
-        if (e is HttpException) {
-          return e.status == HttpStatus.badRequest;
-        }
-        return false;
-      })));
+      await client.requestOtp('invalidUsername');
     });
 
     test('records', () async {

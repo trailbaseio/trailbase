@@ -124,7 +124,7 @@ class _LandingState extends State<Landing> {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(user.email),
+                    Text(user.email ?? user.username ?? '??'),
                     const Icon(Icons.account_box),
                   ],
                 );
