@@ -13,11 +13,11 @@ use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::AuthError;
 use crate::auth::api::change_email::{self, ChangeEmailConfigParams};
-use crate::auth::api::change_handle::{
-  ChangeHandleParams, ChangeHandleRequest, change_user_handle_handler,
-};
 use crate::auth::api::change_password::{
   ChangePasswordParams, ChangePasswordRequest, change_password_handler,
+};
+use crate::auth::api::change_username::{
+  ChangeUsernameParams, ChangeUsernameRequest, change_username_handler,
 };
 use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::{
@@ -99,8 +99,8 @@ async fn setup_state_and_test_user(
 
 enum Identifier {
   Email(String),
-  Handle(String),
-  EmailAndHandle(String, String),
+  Username(String),
+  EmailAndUsername(String, String),
 }
 
 async fn register_test_user(
@@ -114,21 +114,21 @@ async fn register_test_user(
   let request = match identifier {
     Identifier::Email(ref email) => RegisterUserRequest {
       email: Some(email.clone()),
-      handle: None,
+      username: None,
       password: password.to_string(),
       password_repeat: password.to_string(),
       ..Default::default()
     },
-    Identifier::EmailAndHandle(ref email, ref handle) => RegisterUserRequest {
+    Identifier::EmailAndUsername(ref email, ref username) => RegisterUserRequest {
       email: Some(email.clone()),
-      handle: Some(handle.clone()),
+      username: Some(username.clone()),
       password: password.to_string(),
       password_repeat: password.to_string(),
       ..Default::default()
     },
-    Identifier::Handle(ref handle) => RegisterUserRequest {
+    Identifier::Username(ref username) => RegisterUserRequest {
       email: None,
-      handle: Some(handle.clone()),
+      username: Some(username.clone()),
       password: password.to_string(),
       password_repeat: password.to_string(),
       ..Default::default()
@@ -171,7 +171,7 @@ async fn register_test_user(
         Query(LoginInputParams::default()),
         Cookies::default(),
         Either::Json(match identifier {
-          Identifier::Email(ref email) | Identifier::EmailAndHandle(ref email, _) =>
+          Identifier::Email(ref email) | Identifier::EmailAndUsername(ref email, _) =>
             LoginRequest::Email {
               email: email.clone(),
               password: password.to_string(),
@@ -179,8 +179,8 @@ async fn register_test_user(
                 ..Default::default()
               },
             },
-          Identifier::Handle(ref handle) => LoginRequest::Handle {
-            handle: handle.clone(),
+          Identifier::Username(ref username) => LoginRequest::Username {
+            username: username.clone(),
             password: password.to_string(),
             params: LoginInputParams {
               ..Default::default()
@@ -201,7 +201,7 @@ async fn register_test_user(
   }
 
   let db_user = match identifier {
-    Identifier::Email(email) | Identifier::EmailAndHandle(email, _) => {
+    Identifier::Email(email) | Identifier::EmailAndUsername(email, _) => {
       let db_user = state
         .user_conn()
         .read_query_value::<DbUser>(
@@ -216,11 +216,11 @@ async fn register_test_user(
 
       db_user
     }
-    Identifier::Handle(handle) => state
+    Identifier::Username(username) => state
       .user_conn()
       .read_query_value::<DbUser>(
-        format!(r#"SELECT * FROM "{USER_TABLE}" WHERE handle = $1"#),
-        params!(handle.to_string()),
+        format!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#),
+        params!(username.to_string()),
       )
       .await?
       .unwrap(),
@@ -229,7 +229,7 @@ async fn register_test_user(
   return Ok(User::from_unverified(
     db_user.uuid(),
     db_user.email.as_deref(),
-    db_user.handle.as_deref(),
+    db_user.username.as_deref(),
   ));
 }
 
@@ -846,7 +846,7 @@ async fn test_auth_change_password_flow() {
 }
 
 #[tokio::test]
-async fn test_auth_change_handle_flow() {
+async fn test_auth_change_username_flow() {
   let email = "user@test.org".to_string();
   let password = "secret123".to_string();
 
@@ -862,38 +862,38 @@ async fn test_auth_change_handle_flow() {
   .await;
 
   assert!(
-    change_user_handle_handler(
+    change_username_handler(
       State(state.clone()),
-      Query(ChangeHandleParams::default()),
+      Query(ChangeUsernameParams::default()),
       user.clone(),
-      Either::Json(ChangeHandleRequest {
-        new_handle: Some("!invalid_handle".to_string()),
-        params: ChangeHandleParams::default(),
+      Either::Json(ChangeUsernameRequest {
+        new_username: Some("!invalid_handle".to_string()),
+        params: ChangeUsernameParams::default(),
       }),
     )
     .await
     .is_err()
   );
 
-  let _ = change_user_handle_handler(
+  let _ = change_username_handler(
     State(state.clone()),
-    Query(ChangeHandleParams::default()),
+    Query(ChangeUsernameParams::default()),
     user.clone(),
-    Either::Json(ChangeHandleRequest {
-      new_handle: Some("Foo".to_string()),
-      params: ChangeHandleParams::default(),
+    Either::Json(ChangeUsernameRequest {
+      new_username: Some("Foo".to_string()),
+      params: ChangeUsernameParams::default(),
     }),
   )
   .await
   .unwrap();
 
-  let _ = change_user_handle_handler(
+  let _ = change_username_handler(
     State(state.clone()),
-    Query(ChangeHandleParams::default()),
+    Query(ChangeUsernameParams::default()),
     user.clone(),
-    Either::Json(ChangeHandleRequest {
-      new_handle: None,
-      params: ChangeHandleParams::default(),
+    Either::Json(ChangeUsernameRequest {
+      new_username: None,
+      params: ChangeUsernameParams::default(),
     }),
   )
   .await
@@ -902,7 +902,7 @@ async fn test_auth_change_handle_flow() {
 
 #[tokio::test]
 async fn test_auth_register_handle_only() {
-  let handle = "foo".to_string();
+  let username = "foo".to_string();
   let password = "secret123".to_string();
 
   let mailer = TestAsyncSmtpTransport::new();
@@ -910,7 +910,7 @@ async fn test_auth_register_handle_only() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::OnlyHandle.into());
+      config.auth.user_identifier = Some(UserIdentifier::OnlyUsername.into());
       config
     }),
     ..Default::default()
@@ -922,7 +922,7 @@ async fn test_auth_register_handle_only() {
     register_test_user(
       &state,
       &mailer,
-      Identifier::EmailAndHandle("user@test.org".to_string(), handle.clone()),
+      Identifier::EmailAndUsername("user@test.org".to_string(), username.clone()),
       &password,
     )
     .await
@@ -932,21 +932,21 @@ async fn test_auth_register_handle_only() {
   let user = register_test_user(
     &state,
     &mailer,
-    Identifier::Handle(handle.clone()),
+    Identifier::Username(username.clone()),
     &password,
   )
   .await
   .unwrap();
 
   assert!(user.email.is_none());
-  assert_eq!(Some(&handle), user.handle.as_ref());
+  assert_eq!(Some(&username), user.username.as_ref());
 
   login_handler(
     State(state.clone()),
     Query(LoginInputParams::default()),
     Cookies::default(),
-    Either::Json(LoginRequest::Handle {
-      handle: handle.clone(),
+    Either::Json(LoginRequest::Username {
+      username: username.clone(),
       password: password.to_string(),
       params: LoginInputParams {
         ..Default::default()
@@ -958,9 +958,9 @@ async fn test_auth_register_handle_only() {
 }
 
 #[tokio::test]
-async fn test_auth_change_handle_and_unset_email_flow() {
+async fn test_auth_change_username_and_unset_email_flow() {
   let email = "user@test.org".to_string();
-  let handle = "foo".to_string();
+  let username = "foo".to_string();
   let password = "secret123".to_string();
 
   let mailer = TestAsyncSmtpTransport::new();
@@ -968,7 +968,7 @@ async fn test_auth_change_handle_and_unset_email_flow() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireHandle.into());
+      config.auth.user_identifier = Some(UserIdentifier::RequireUsername.into());
       config
     }),
     ..Default::default()
@@ -985,7 +985,7 @@ async fn test_auth_change_handle_and_unset_email_flow() {
   let user = register_test_user(
     &state,
     &mailer,
-    Identifier::EmailAndHandle(email, handle),
+    Identifier::EmailAndUsername(email, username),
     &password,
   )
   .await
@@ -1149,9 +1149,9 @@ async fn test_auth_otp_flow_using_email() {
 }
 
 #[tokio::test]
-async fn test_auth_otp_flow_using_handle() {
+async fn test_auth_otp_flow_using_username() {
   let email = "user@test.org".to_string();
-  let handle = "foo".to_string();
+  let username = "foo".to_string();
   let password = "secret123".to_string();
 
   let mailer = TestAsyncSmtpTransport::new();
@@ -1159,7 +1159,7 @@ async fn test_auth_otp_flow_using_handle() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireHandle.into());
+      config.auth.user_identifier = Some(UserIdentifier::RequireUsername.into());
       config.auth.enable_otp_signin = Some(true);
       config
     }),
@@ -1171,20 +1171,20 @@ async fn test_auth_otp_flow_using_handle() {
   let user = register_test_user(
     &state,
     &mailer,
-    Identifier::EmailAndHandle(email, handle.clone()),
+    Identifier::EmailAndUsername(email, username.clone()),
     &password,
   )
   .await
   .unwrap();
 
-  assert_eq!(Some(&handle), user.handle.as_ref());
+  assert_eq!(Some(&username), user.username.as_ref());
 
   // NOTE: We return a success response on unknown user to avoid leaks.
   otp::request_otp_handler(
     State(state.clone()),
     Query(Default::default()),
-    Either::Form(otp::RequestOtpRequest::Handle {
-      handle: "unknown".to_string(),
+    Either::Form(otp::RequestOtpRequest::Username {
+      username: "unknown".to_string(),
       params: Default::default(),
     }),
   )
@@ -1197,8 +1197,8 @@ async fn test_auth_otp_flow_using_handle() {
   otp::request_otp_handler(
     State(state.clone()),
     Query(Default::default()),
-    Either::Form(otp::RequestOtpRequest::Handle {
-      handle: handle.clone(),
+    Either::Form(otp::RequestOtpRequest::Username {
+      username: username.clone(),
       params: Default::default(),
     }),
   )
@@ -1225,7 +1225,7 @@ async fn test_auth_otp_flow_using_handle() {
       Query(Default::default()),
       Either::Form(otp::LoginOtpRequest {
         params: otp::LoginOtpParams {
-          handle: Some(handle.clone()),
+          username: Some(username.clone()),
           code: Some("InvalidCode".to_string()),
           ..Default::default()
         }
@@ -1253,7 +1253,7 @@ async fn test_auth_otp_flow_using_handle() {
     Either::Json(otp::LoginOtpRequest {
       params: otp::LoginOtpParams {
         // Make sure trimming/normalization works.
-        handle: Some(format!(" {handle} ")),
+        username: Some(format!(" {username} ")),
         code: Some(format!(" {otp_email_code} ")),
         ..Default::default()
       },

@@ -70,22 +70,22 @@ message OAuthProviderConfig {
 }
 
 // What user identifier to use for new user registrations as well as
-// change-(email|handle).
+// change-(email|username).
 //
 // NOTE: W/o email there's no way to contact users.
 enum UserIdentifier {
   USER_IDENTIFIER_UNDEFINED = 0;
   /// Only email. Doesn't work for anonymous login.
   ONLY_EMAIL = 1;
-  /// Only handle. No email allowed.
-  ONLY_HANDLE = 2;
-  /// Requires email and allows an optional handle.
+  /// Only username. No email allowed.
+  ONLY_USERNAME = 2;
+  /// Requires email and allows an optional username.
   REQUIRE_EMAIL = 3;
-  /// Requires handle and allows an optional email.
-  REQUIRE_HANDLE = 4;
-  /// Requires both email and handle.
-  REQUIRE_EMAIL_AND_HANDLE = 5;
-  // QUESTION: Should we also support EMAIL OR HANDLE? The policy can always
+  /// Requires username and allows an optional email.
+  REQUIRE_USERNAME = 4;
+  /// Requires both email and username.
+  REQUIRE_EMAIL_AND_USERNAME = 5;
+  // QUESTION: Should we also support EMAIL OR USERNAME? The policy can always
   // change leading to a mix but it may not be a great policy to start out width
   // leading to inconsistency :shrug:.
 }
@@ -128,7 +128,7 @@ message AuthConfig {
   /// List of explicitly allowed redirect uris.
   repeated string redirect_uri_allowlist = 22;
 
-  /// Policy covering user registration and change (handle|email) flows around
+  /// Policy covering user registration and change (username|email) flows around
   /// what user identifier is expected and accepted. Default: ONLY_EMAIL.
   optional UserIdentifier user_identifier = 31;
 }

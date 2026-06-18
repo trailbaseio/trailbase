@@ -149,7 +149,7 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
 
 /**
  * What user identifier to use for new user registrations as well as
- * change-(email|handle).
+ * change-(email|username).
  *
  * NOTE: W/o email there's no way to contact users.
  */
@@ -157,14 +157,14 @@ export enum UserIdentifier {
   USER_IDENTIFIER_UNDEFINED = 0,
   /** ONLY_EMAIL - / Only email. Doesn't work for anonymous login. */
   ONLY_EMAIL = 1,
-  /** ONLY_HANDLE - / Only handle. No email allowed. */
-  ONLY_HANDLE = 2,
-  /** REQUIRE_EMAIL - / Requires email and allows an optional handle. */
+  /** ONLY_USERNAME - / Only username. No email allowed. */
+  ONLY_USERNAME = 2,
+  /** REQUIRE_EMAIL - / Requires email and allows an optional username. */
   REQUIRE_EMAIL = 3,
-  /** REQUIRE_HANDLE - / Requires handle and allows an optional email. */
-  REQUIRE_HANDLE = 4,
-  /** REQUIRE_EMAIL_AND_HANDLE - / Requires both email and handle. */
-  REQUIRE_EMAIL_AND_HANDLE = 5,
+  /** REQUIRE_USERNAME - / Requires username and allows an optional email. */
+  REQUIRE_USERNAME = 4,
+  /** REQUIRE_EMAIL_AND_USERNAME - / Requires both email and username. */
+  REQUIRE_EMAIL_AND_USERNAME = 5,
   UNRECOGNIZED = -1,
 }
 
@@ -177,17 +177,17 @@ export function userIdentifierFromJSON(object: any): UserIdentifier {
     case "ONLY_EMAIL":
       return UserIdentifier.ONLY_EMAIL;
     case 2:
-    case "ONLY_HANDLE":
-      return UserIdentifier.ONLY_HANDLE;
+    case "ONLY_USERNAME":
+      return UserIdentifier.ONLY_USERNAME;
     case 3:
     case "REQUIRE_EMAIL":
       return UserIdentifier.REQUIRE_EMAIL;
     case 4:
-    case "REQUIRE_HANDLE":
-      return UserIdentifier.REQUIRE_HANDLE;
+    case "REQUIRE_USERNAME":
+      return UserIdentifier.REQUIRE_USERNAME;
     case 5:
-    case "REQUIRE_EMAIL_AND_HANDLE":
-      return UserIdentifier.REQUIRE_EMAIL_AND_HANDLE;
+    case "REQUIRE_EMAIL_AND_USERNAME":
+      return UserIdentifier.REQUIRE_EMAIL_AND_USERNAME;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -201,14 +201,14 @@ export function userIdentifierToJSON(object: UserIdentifier): string {
       return "USER_IDENTIFIER_UNDEFINED";
     case UserIdentifier.ONLY_EMAIL:
       return "ONLY_EMAIL";
-    case UserIdentifier.ONLY_HANDLE:
-      return "ONLY_HANDLE";
+    case UserIdentifier.ONLY_USERNAME:
+      return "ONLY_USERNAME";
     case UserIdentifier.REQUIRE_EMAIL:
       return "REQUIRE_EMAIL";
-    case UserIdentifier.REQUIRE_HANDLE:
-      return "REQUIRE_HANDLE";
-    case UserIdentifier.REQUIRE_EMAIL_AND_HANDLE:
-      return "REQUIRE_EMAIL_AND_HANDLE";
+    case UserIdentifier.REQUIRE_USERNAME:
+      return "REQUIRE_USERNAME";
+    case UserIdentifier.REQUIRE_EMAIL_AND_USERNAME:
+      return "REQUIRE_EMAIL_AND_USERNAME";
     case UserIdentifier.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -486,7 +486,7 @@ export interface AuthConfig {
   /** / List of explicitly allowed redirect uris. */
   redirectUriAllowlist: string[];
   /**
-   * / Policy covering user registration and change (handle|email) flows around
+   * / Policy covering user registration and change (username|email) flows around
    * / what user identifier is expected and accepted. Default: ONLY_EMAIL.
    */
   userIdentifier?: UserIdentifier | undefined;

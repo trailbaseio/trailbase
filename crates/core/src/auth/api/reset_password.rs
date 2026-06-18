@@ -15,8 +15,8 @@ use crate::auth::AuthError;
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::util::{
-  user_by_email, user_by_handle, validate_and_normalize_email_address,
-  validate_and_normalize_handle, validate_redirect,
+  user_by_email, user_by_username, validate_and_normalize_email_address,
+  validate_and_normalize_username, validate_redirect,
 };
 use crate::constants::USER_TABLE;
 use crate::email::Email;
@@ -36,8 +36,8 @@ pub enum ResetPasswordRequest {
     #[serde(flatten)]
     params: ResetPasswordParams,
   },
-  Handle {
-    handle: String,
+  Username {
+    username: String,
     #[serde(flatten)]
     params: ResetPasswordParams,
   },
@@ -97,15 +97,14 @@ pub async fn reset_password_request_handler(
 
       (normalized_email, redirect_uri)
     }
-    ResetPasswordRequest::Handle { handle, params } => {
+    ResetPasswordRequest::Username { username, params } => {
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
-      let normalized_handle = validate_and_normalize_handle(&handle)?;
+      let normalized_username = validate_and_normalize_username(&username)?;
 
-      rate_limit_reset_attempts(normalized_handle.clone())?;
+      rate_limit_reset_attempts(normalized_username.clone())?;
 
-      let Ok(user) = user_by_handle(&state, &normalized_handle).await else {
-        // In case we don't find a user we still reply with a success to avoid leaking
-        // users' handles.
+      let Ok(user) = user_by_username(&state, &normalized_username).await else {
+        // In case we don't find a user we still reply with a success to avoid leaking usernames.
         return Ok(success_response(redirect_uri));
       };
 

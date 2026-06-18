@@ -52,17 +52,19 @@ pub fn validate_and_normalize_email_address(email_address: &str) -> Result<Strin
   return Ok(email_address.to_string());
 }
 
-/// Validate that handles are at least 3 characters, start with a character and other wise
+/// Validate that username are at least 3 characters, start with a character and other wise
 /// alphanumeric.
-pub fn validate_and_normalize_handle(handle: &str) -> Result<String, AuthError> {
-  let trimmed = handle.trim();
+pub fn validate_and_normalize_username(username: &str) -> Result<String, AuthError> {
+  let trimmed = username.trim();
   if trimmed.len() < 3 {
-    return Err(AuthError::BadRequest("handle too short"));
+    return Err(AuthError::BadRequest("username too short"));
   }
   if trimmed.len() > 32 {
-    return Err(AuthError::BadRequest("handle too long"));
+    return Err(AuthError::BadRequest("username too long"));
   }
 
+  // TODO: We may want to make this more configurable and/or allow other word-chracters like '-'
+  // or '_'.
   if trimmed.chars().enumerate().all(|(i, c)| {
     return match i {
       0 => c.is_alphabetic(),
@@ -72,7 +74,9 @@ pub fn validate_and_normalize_handle(handle: &str) -> Result<String, AuthError> 
     return Ok(trimmed.to_string());
   }
 
-  return Err(AuthError::BadRequest("handle contains invalid characters"));
+  return Err(AuthError::BadRequest(
+    "username contains invalid characters",
+  ));
 }
 
 #[inline]
@@ -301,20 +305,20 @@ pub async fn get_user_by_email(
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
 
-pub async fn user_by_handle(state: &AppState, handle: &str) -> Result<DbUser, AuthError> {
-  return get_user_by_handle(state.user_conn(), handle).await;
+pub async fn user_by_username(state: &AppState, username: &str) -> Result<DbUser, AuthError> {
+  return get_user_by_username(state.user_conn(), username).await;
 }
 
-pub async fn get_user_by_handle(
+pub async fn get_user_by_username(
   user_conn: &trailbase_sqlite::Connection,
-  handle: &str,
+  username: &str,
 ) -> Result<DbUser, AuthError> {
-  const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE handle = $1"#);
+  const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#);
   let db_user = user_conn
-    .read_query_value::<DbUser>(QUERY, params!(handle.to_string()))
+    .read_query_value::<DbUser>(QUERY, params!(username.to_string()))
     .await
     .map_err(|err| {
-      debug_assert!(false, "GET USER BY HANDLE query failed: {err}");
+      debug_assert!(false, "GET USER BY USERNAME query failed: {err}");
 
       return AuthError::NotFound;
     })?;

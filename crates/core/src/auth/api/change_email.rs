@@ -88,9 +88,11 @@ pub async fn change_email_request_handler(
       user_identifier
         .and_then(|ui| ui.try_into().ok())
         .unwrap_or(UserIdentifier::Undefined),
-      user.handle.as_ref(),
+      user.username.as_ref(),
     ) {
-      (UserIdentifier::RequireHandle | UserIdentifier::OnlyHandle, Some(h)) if !h.is_empty() => {
+      (UserIdentifier::RequireUsername | UserIdentifier::OnlyUsername, Some(u))
+        if !u.is_empty() =>
+      {
         const UNSET_EMAIL_QUERY: &str = formatcp!(
           "\
             UPDATE \"{USER_TABLE}\" \

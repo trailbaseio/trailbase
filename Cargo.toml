@@ -18,6 +18,7 @@ default-members = [
   "crates/qs",
   "crates/schema",
   "crates/sqlite",
+  "crates/wasm-runtime-common",
   "crates/wasm-runtime-host",
 ]
 exclude = [

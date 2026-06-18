@@ -90,12 +90,12 @@ impl Guest for Endpoints {
         },
       ),
       routing::get(
-        CHANGE_HANDLE_UI,
+        CHANGE_USERNAME_UI,
         async |req: Request| -> Result<Response, HttpError> {
           let user = req
             .user()
             .ok_or_else(|| HttpError::status(StatusCode::UNAUTHORIZED))?;
-          return ui_change_handle_handler(req.query_parse()?, user).await;
+          return ui_change_username_handler(req.query_parse()?, user).await;
         },
       ),
       routing::get("/_/auth/{*wildcard}", async |req: Request| {
@@ -241,7 +241,7 @@ async fn ui_otp_request_handler(
 #[derive(Debug, Default, Deserialize)]
 pub struct OtpLoginQuery {
   email: Option<String>,
-  handle: Option<String>,
+  username: Option<String>,
   code: Option<String>,
   redirect_uri: Option<String>,
   alert: Option<String>,
@@ -270,7 +270,7 @@ async fn ui_otp_login_handler(
   let html = auth::OtpLoginTemplate {
     state: [
       auth::hidden_input("email", query.email),
-      auth::hidden_input("handle", query.handle),
+      auth::hidden_input("username", query.username),
       auth::redirect_uri(Some(redirect_uri)),
     ]
     .join("\n"),
@@ -401,15 +401,15 @@ async fn ui_change_email_handler(
   return Ok(Html(html.map_err(internal)?).into_response());
 }
 
-async fn ui_change_handle_handler(
+async fn ui_change_username_handler(
   query: ChangeEmailQuery,
   user: &User,
 ) -> Result<Response, HttpError> {
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
-  let html = auth::ChangeHandleTemplate {
+  let html = auth::ChangeUsernameTemplate {
     state: [
       auth::redirect_uri(Some(redirect_uri)),
-      auth::hidden_input("err_redirect_uri", Some(CHANGE_HANDLE_UI)),
+      auth::hidden_input("err_redirect_uri", Some(CHANGE_USERNAME_UI)),
       auth::hidden_input("csrf_token", Some(&user.csrf_token)),
     ]
     .join("\n"),
@@ -472,4 +472,4 @@ const PROFILE_UI: &str = "/_/auth/profile";
 const REGISTER_USER_UI: &str = "/_/auth/register";
 const CHANGE_PASSWORD_UI: &str = "/_/auth/change_password";
 const CHANGE_EMAIL_UI: &str = "/_/auth/change_email";
-const CHANGE_HANDLE_UI: &str = "/_/auth/change_handle";
+const CHANGE_USERNAME_UI: &str = "/_/auth/change_username";

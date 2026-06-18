@@ -193,8 +193,8 @@ function ProfileTable(props: { client: Client; user: User }) {
                   <DropdownMenuItem>Change Email</DropdownMenuItem>
                 </a>
 
-                <Show when={props.user.handle !== null}>
-                  <a href="/_/auth/change_handle">
+                <Show when={props.user.username !== null}>
+                  <a href="/_/auth/change_username">
                     <DropdownMenuItem>Change Username</DropdownMenuItem>
                   </a>
                 </Show>
@@ -242,9 +242,9 @@ function ProfileTable(props: { client: Client; user: User }) {
           <Avatar client={props.client} user={props.user} />
 
           <div class="flex flex-col gap-2">
-            <Show when={props.user.handle !== null}>
+            <Show when={props.user.username !== null}>
               <div>
-                Username: <strong>{props.user.handle}</strong>
+                Username: <strong>{props.user.username}</strong>
               </div>
             </Show>
 

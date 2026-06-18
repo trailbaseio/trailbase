@@ -17,8 +17,8 @@ use crate::auth::AuthError;
 use crate::auth::api::login::{LoginResponse, build_auth_token_flow_response};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  get_user_by_id, user_by_email, user_by_handle, validate_and_normalize_email_address,
-  validate_and_normalize_handle, validate_redirect,
+  get_user_by_id, user_by_email, user_by_username, validate_and_normalize_email_address,
+  validate_and_normalize_username, validate_redirect,
 };
 use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
@@ -35,16 +35,27 @@ pub struct RequestOtpParams {
 #[serde(untagged)]
 #[ts(export)]
 pub enum RequestOtpRequest {
+  EmailOrUsername {
+    email_or_username: String,
+
+    #[serde(flatten)]
+    params: RequestOtpParams,
+  },
   Email {
     email: String,
     #[serde(flatten)]
     params: RequestOtpParams,
   },
-  Handle {
-    handle: String,
+  Username {
+    username: String,
     #[serde(flatten)]
     params: RequestOtpParams,
   },
+}
+
+enum UserIdentifier {
+  Email(String),
+  Username(String),
 }
 
 #[utoipa::path(
@@ -60,7 +71,6 @@ pub enum RequestOtpRequest {
     (status = 429, description = "Too many attempts"),
   )
 )]
-
 pub async fn request_otp_handler(
   State(state): State<AppState>,
   Query(query): Query<RequestOtpParams>,
@@ -76,12 +86,35 @@ pub async fn request_otp_handler(
     Either::Form(req) => (req, false),
   };
 
+  let (user_identifier, params) = match request {
+    RequestOtpRequest::EmailOrUsername {
+      email_or_username,
+      params,
+    } => {
+      if email_or_username.contains('@') {
+        (
+          UserIdentifier::Email(validate_and_normalize_email_address(&email_or_username)?),
+          params,
+        )
+      } else {
+        (
+          UserIdentifier::Username(validate_and_normalize_username(&email_or_username)?),
+          params,
+        )
+      }
+    }
+    RequestOtpRequest::Email { email, params } => (UserIdentifier::Email(email), params),
+    RequestOtpRequest::Username { username, params } => {
+      (UserIdentifier::Username(username), params)
+    }
+  };
+
   let (user, redirect_uri, success_response): (
     DbUser,
     Option<String>,
     Box<dyn FnOnce() -> Response + Send>,
-  ) = match request {
-    RequestOtpRequest::Email { email, params } => {
+  ) = match user_identifier {
+    UserIdentifier::Email(email) => {
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
       let normalized_email = validate_and_normalize_email_address(&email)?;
 
@@ -105,21 +138,21 @@ pub async fn request_otp_handler(
 
       (user, redirect_uri, Box::new(success_response))
     }
-    RequestOtpRequest::Handle { handle, params } => {
+    UserIdentifier::Username(username) => {
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
-      let normalized_handle = validate_and_normalize_handle(&handle)?;
+      let normalized_username = validate_and_normalize_username(&username)?;
 
-      rate_limit_otp_requests(normalized_handle.clone())?;
+      rate_limit_otp_requests(normalized_username.clone())?;
 
       let success_response = {
         let redirect_uri = redirect_uri.clone();
-        let handle = normalized_handle.clone();
-        move || success_response_impl(redirect_uri.as_deref(), None, Some(&handle))
+        let username = normalized_username.clone();
+        move || success_response_impl(redirect_uri.as_deref(), None, Some(&username))
       };
 
-      let Ok(user) = user_by_handle(&state, &normalized_handle).await else {
+      let Ok(user) = user_by_username(&state, &normalized_username).await else {
         // In case we don't find a user we still reply with a success to avoid leaking
-        // users' handles.
+        // users' username.
         return Ok(success_response());
       };
 
@@ -180,7 +213,7 @@ pub async fn request_otp_handler(
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub struct LoginOtpParams {
   pub email: Option<String>,
-  pub handle: Option<String>,
+  pub username: Option<String>,
   pub code: Option<String>,
   pub redirect_uri: Option<String>,
 }
@@ -229,9 +262,9 @@ pub async fn login_otp_handler(
   };
 
   let email = query.email.as_deref().or(params.email.as_deref());
-  let handle = query.handle.as_deref().or(params.handle.as_deref());
+  let username = query.username.as_deref().or(params.username.as_deref());
 
-  let user_id = match (email, handle) {
+  let user_id = match (email, username) {
     (Some(email), _) => {
       let normalized_email = validate_and_normalize_email_address(email)?;
 
@@ -258,14 +291,14 @@ pub async fn login_otp_handler(
         .ok_or(AuthError::Unauthorized)?
     }
 
-    (None, Some(handle)) => {
-      let normalized_handle = validate_and_normalize_handle(handle)?;
+    (None, Some(username)) => {
+      let normalized_username = validate_and_normalize_username(username)?;
 
-      rate_limit_otp_logins(normalized_handle.clone())?;
+      rate_limit_otp_logins(normalized_username.clone())?;
 
       let Ok(DbUser {
         email: Some(email), ..
-      }) = user_by_handle(&state, &normalized_handle).await
+      }) = user_by_username(&state, &normalized_username).await
       else {
         return Err(AuthError::Unauthorized);
       };
@@ -291,7 +324,7 @@ pub async fn login_otp_handler(
         .ok_or(AuthError::Unauthorized)?
     }
     _ => {
-      return Err(AuthError::BadRequest("missing email or handle"));
+      return Err(AuthError::BadRequest("missing email or username"));
     }
   };
 
@@ -310,17 +343,17 @@ pub async fn login_otp_handler(
 fn success_response_impl(
   redirect_uri: Option<&str>,
   normalized_email: Option<&str>,
-  normalized_handle: Option<&str>,
+  normalized_username: Option<&str>,
 ) -> Response {
   const MSG: &str = "OTP sent";
-  return match (redirect_uri, normalized_email, normalized_handle) {
+  return match (redirect_uri, normalized_email, normalized_username) {
     (Some(redirect), Some(email), _) => Redirect::to(&format!(
       "{redirect}?email={email}&alert={msg}",
       msg = urlencode(MSG)
     ))
     .into_response(),
-    (Some(redirect), None, Some(handle)) => Redirect::to(&format!(
-      "{redirect}?handle={handle}&alert={msg}",
+    (Some(redirect), None, Some(username)) => Redirect::to(&format!(
+      "{redirect}?username={username}&alert={msg}",
       msg = urlencode(MSG)
     ))
     .into_response(),

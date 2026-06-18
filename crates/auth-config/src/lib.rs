@@ -3,17 +3,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 pub enum LoginIdentifier {
   OnlyEmail,
-  OnlyHandle,
-  EmailOrHandle,
+  OnlyUsername,
+  EmailOrUsername,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq)]
 pub enum RegistrationIdentifier {
   OnlyEmail,
   RequireEmail,
-  OnlyHandle,
-  RequireHandle,
-  EmailAndHandle,
+  OnlyUsername,
+  RequireUsername,
+  RequireEmailAndUsername,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

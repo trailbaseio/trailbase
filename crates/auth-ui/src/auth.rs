@@ -95,8 +95,8 @@ pub struct ChangeEmailTemplate<'a> {
 }
 
 #[derive(Template)]
-#[template(path = "change_handle/index.html")]
-pub struct ChangeHandleTemplate<'a> {
+#[template(path = "change_username/index.html")]
+pub struct ChangeUsernameTemplate<'a> {
   pub state: String,
   pub alert: &'a str,
 }
@@ -136,7 +136,7 @@ mod tests {
       alert,
       enable_registration: true,
       enable_otp: true,
-      login_identifier: LoginIdentifier::EmailOrHandle,
+      login_identifier: LoginIdentifier::EmailOrUsername,
       oauth_providers: &[],
       oauth_query_params: &[("redirect_uri", redirect_uri)],
     }

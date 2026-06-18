@@ -14,7 +14,7 @@ use crate::{app_state::AppState, util::b64_to_uuid};
 pub(crate) struct DbUser {
   pub id: [u8; 16],
   pub email: Option<String>,
-  pub handle: Option<String>,
+  pub username: Option<String>,
   pub password_hash: Option<String>,
   pub verified: bool,
   pub admin: bool,
@@ -52,7 +52,7 @@ impl DbUser {
       ))
       .into_bytes(),
       email: Some(email.to_string()),
-      handle: None,
+      username: None,
       password_hash: Some(crate::auth::password::hash_password(password).unwrap()),
       verified: true,
       admin: false,
@@ -74,8 +74,8 @@ pub struct User {
   pub id: String,
   /// E-mail of the current user.
   pub email: Option<String>,
-  /// Handle of the current user.
-  pub handle: Option<String>,
+  /// Username of the current user.
+  pub username: Option<String>,
   /// Convenience UUID representation of [id] above.
   pub uuid: Uuid,
 
@@ -98,7 +98,7 @@ impl User {
     return Ok(Self {
       id: claims.sub,
       email: claims.email,
-      handle: claims.handle,
+      username: claims.username,
       uuid,
       csrf_token: claims.csrf_token,
     });
@@ -113,11 +113,15 @@ impl User {
   }
 
   #[cfg(test)]
-  pub(crate) fn from_unverified(user_id: Uuid, email: Option<&str>, handle: Option<&str>) -> Self {
+  pub(crate) fn from_unverified(
+    user_id: Uuid,
+    email: Option<&str>,
+    username: Option<&str>,
+  ) -> Self {
     return Self {
       id: crate::util::uuid_to_b64(&user_id),
       email: email.map(|s| s.to_string()),
-      handle: handle.map(|s| s.to_string()),
+      username: username.map(|s| s.to_string()),
       uuid: user_id,
       csrf_token: crate::rand::random_alphanumeric(20),
     };

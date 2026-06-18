@@ -87,10 +87,10 @@ function buildColumns(): ColumnDef<UserJson>[] {
       },
     },
     {
-      accessorKey: "handle",
+      accessorKey: "username",
       size: 220,
       cell: (ctx) => {
-        return ctx.row.original.handle ?? "NULL";
+        return ctx.row.original.username ?? "NULL";
       },
     },
     {
@@ -158,7 +158,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
 function DeleteUserButton(props: {
   userId: string;
   email: string | null;
-  handle: string | null;
+  username: string | null;
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
@@ -175,7 +175,7 @@ function DeleteUserButton(props: {
 
         <p>
           Are you sure you want to permanently delete{" "}
-          <span class="font-bold">{props.email ?? props.handle}</span>?
+          <span class="font-bold">{props.email ?? props.username}</span>?
         </p>
 
         <DialogFooter>
@@ -224,7 +224,7 @@ function EditSheetContent(props: {
     defaultValues: {
       id: props.user.id,
       email: props.user.email,
-      handle: props.user.handle,
+      username: props.user.username,
       password: null,
       verified: props.user.verified,
     } as UpdateUserRequest,
@@ -269,9 +269,9 @@ function EditSheetContent(props: {
             })}
           </form.Field>
 
-          <form.Field name={"handle"}>
+          <form.Field name={"username"}>
             {buildTextFormField({
-              label: () => <FixedWidthLabel children="Handle" />,
+              label: () => <FixedWidthLabel children="Username" />,
               type: "text",
             })}
           </form.Field>
@@ -307,7 +307,7 @@ function EditSheetContent(props: {
                   <DeleteUserButton
                     userId={props.user.id}
                     email={props.user.email}
-                    handle={props.user.handle}
+                    username={props.user.username}
                     onDelete={() => {
                       props.close();
                       props.refetch();

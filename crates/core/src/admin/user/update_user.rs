@@ -14,7 +14,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::password::hash_password;
 use crate::auth::util::is_admin;
-use crate::auth::util::validate_and_normalize_handle;
+use crate::auth::util::validate_and_normalize_username;
 use crate::constants::USER_TABLE;
 
 /// Request changes to user with given `id`.
@@ -28,7 +28,7 @@ pub struct UpdateUserRequest {
   id: uuid::Uuid,
 
   email: Option<String>,
-  handle: Option<String>,
+  username: Option<String>,
 
   password: Option<String>,
   verified: Option<bool>,
@@ -41,7 +41,7 @@ pub async fn update_user_handler(
   let UpdateUserRequest {
     id: user_id,
     email,
-    handle,
+    username,
     password,
     verified,
   } = request;
@@ -58,7 +58,7 @@ pub async fn update_user_handler(
     None => None,
   };
 
-  // NOTE: Empty string for handle/email is used to unset ''.
+  // NOTE: Empty string for username/email is used to unset ''.
   const UPDATE_QUERY: &str = formatcp!(
     "\
     UPDATE {USER_TABLE} SET \
@@ -66,14 +66,14 @@ pub async fn update_user_handler(
         WHEN '' THEN NULL \
         ELSE COALESCE(:email, prev.email) \
       END, \
-      handle = CASE :handle \
+      username = CASE :username \
         WHEN '' THEN NULL \
-        ELSE COALESCE(:handle, prev.handle) \
+        ELSE COALESCE(:username, prev.username) \
       END, \
       password_hash = COALESCE(:password_hash, prev.password_hash), \
       verified = COALESCE(:verified, prev.verified) \
     FROM \
-      (SELECT email, handle, password_hash, verified FROM {USER_TABLE} WHERE id = :id) AS prev \
+      (SELECT email, username, password_hash, verified FROM {USER_TABLE} WHERE id = :id) AS prev \
     WHERE id = :id \
     "
   );
@@ -89,11 +89,11 @@ pub async fn update_user_handler(
           } else {
               Value::Null
           },
-          ":handle": if let Some(handle) = handle {
-              if !handle.is_empty() {
-              Value::Text(validate_and_normalize_handle(&handle)?)
+          ":username": if let Some(username) = username{
+              if !username.is_empty() {
+              Value::Text(validate_and_normalize_username(&username)?)
               } else {
-              Value::Text(handle)
+              Value::Text(username)
               }
           } else {
               Value::Null

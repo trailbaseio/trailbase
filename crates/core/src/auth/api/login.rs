@@ -17,8 +17,8 @@ use crate::auth::password::check_user_password;
 use crate::auth::totp::new_totp;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  new_cookie, remove_cookie, user_by_email, user_by_handle, user_by_id,
-  validate_and_normalize_email_address, validate_and_normalize_handle,
+  new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
+  validate_and_normalize_email_address, validate_and_normalize_username,
 };
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
@@ -32,8 +32,8 @@ use crate::util::{b64_to_uuid, urlencode};
 #[serde(untagged)]
 #[ts(export)]
 pub enum LoginRequest {
-  EmailOrHandle {
-    email_or_handle: String,
+  EmailOrUsername {
+    email_or_username: String,
     password: String,
 
     #[serde(flatten)]
@@ -47,8 +47,8 @@ pub enum LoginRequest {
     #[serde(flatten)]
     params: LoginInputParams,
   },
-  Handle {
-    handle: String,
+  Username {
+    username: String,
     password: String,
 
     #[serde(flatten)]
@@ -58,7 +58,7 @@ pub enum LoginRequest {
 
 enum UserIdentifier {
   Email(String),
-  Handle(String),
+  Username(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
@@ -102,20 +102,20 @@ pub(crate) async fn login_handler(
   };
 
   let (user_identifier, password, params) = match request {
-    LoginRequest::EmailOrHandle {
-      email_or_handle,
+    LoginRequest::EmailOrUsername {
+      email_or_username,
       password,
       params,
     } => {
-      if email_or_handle.contains('@') {
+      if email_or_username.contains('@') {
         (
-          UserIdentifier::Email(validate_and_normalize_email_address(&email_or_handle)?),
+          UserIdentifier::Email(validate_and_normalize_email_address(&email_or_username)?),
           password,
           params,
         )
       } else {
         (
-          UserIdentifier::Handle(validate_and_normalize_handle(&email_or_handle)?),
+          UserIdentifier::Username(validate_and_normalize_username(&email_or_username)?),
           password,
           params,
         )
@@ -130,12 +130,12 @@ pub(crate) async fn login_handler(
       password,
       params,
     ),
-    LoginRequest::Handle {
-      handle,
+    LoginRequest::Username {
+      username,
       password,
       params,
     } => (
-      UserIdentifier::Handle(validate_and_normalize_handle(&handle)?),
+      UserIdentifier::Username(validate_and_normalize_username(&username)?),
       password,
       params,
     ),
@@ -163,11 +163,11 @@ pub(crate) async fn login_handler(
         });
       })
     }
-    UserIdentifier::Handle(handle) => {
+    UserIdentifier::Username(username) => {
       let state = state.clone();
       Box::new(|| -> CheckFuture {
         return Box::pin(async move {
-          let db_user: DbUser = user_by_handle(&state, &handle).await.map_err(|_| {
+          let db_user: DbUser = user_by_username(&state, &username).await.map_err(|_| {
             // Don't leak if user wasn't found or password was wrong.
             return AuthError::Unauthorized;
           })?;

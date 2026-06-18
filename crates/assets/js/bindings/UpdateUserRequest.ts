@@ -7,4 +7,4 @@
  * abused. Instead we relegate such critical actions to the CLI, which limits them to sys
  * admins over mere TrailBase admins.
  */
-export type UpdateUserRequest = { id: string, email: string | null, handle: string | null, password: string | null, verified: boolean | null, };
+export type UpdateUserRequest = { id: string, email: string | null, username: string | null, password: string | null, verified: boolean | null, };

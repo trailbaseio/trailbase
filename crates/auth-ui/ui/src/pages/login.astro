@@ -39,13 +39,13 @@ const formBaseAction = `${AUTH_API}/login`;
           placeholder="you@example.org"
           autocomplete="username"
         />
-        {"{% when LoginIdentifier::OnlyHandle -%}"}
+        {"{% when LoginIdentifier::OnlyUsername -%}"}
         <TextFieldLabel>Username:</TextFieldLabel>
         <TextFieldInput
           required
           tabindex="1"
           type="text"
-          name="handle"
+          name="username"
           autocomplete="username"
         />
         {"{% else %}"}
@@ -54,7 +54,7 @@ const formBaseAction = `${AUTH_API}/login`;
           required
           tabindex="1"
           type="text"
-          name="email_or_handle"
+          name="email_or_username"
           placeholder="you@example.org or alice"
           autocomplete="username"
         />

@@ -48,8 +48,8 @@ pub struct HttpContextUser {
   pub id: String,
   /// E-mail of the current user.
   pub email: Option<String>,
-  /// Handle of the current user.
-  pub handle: Option<String>,
+  /// Username of the current user.
+  pub username: Option<String>,
   /// The "expected" CSRF token as included in the auth token claims [User] was constructed from.
   pub csrf_token: String,
 }

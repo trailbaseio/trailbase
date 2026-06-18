@@ -652,15 +652,15 @@ fn build_auth_config(config: &Config) -> AuthConfig {
     oauth_providers,
     login_identifier: match user_identifier {
       UserIdentifier::OnlyEmail | UserIdentifier::Undefined => LoginIdentifier::OnlyEmail,
-      UserIdentifier::OnlyHandle => LoginIdentifier::OnlyHandle,
-      _ => LoginIdentifier::EmailOrHandle,
+      UserIdentifier::OnlyUsername => LoginIdentifier::OnlyUsername,
+      _ => LoginIdentifier::EmailOrUsername,
     },
     registration_identifier: match user_identifier {
       UserIdentifier::OnlyEmail | UserIdentifier::Undefined => RegistrationIdentifier::OnlyEmail,
-      UserIdentifier::OnlyHandle => RegistrationIdentifier::OnlyHandle,
-      UserIdentifier::RequireHandle => RegistrationIdentifier::RequireHandle,
+      UserIdentifier::OnlyUsername => RegistrationIdentifier::OnlyUsername,
+      UserIdentifier::RequireUsername => RegistrationIdentifier::RequireUsername,
       UserIdentifier::RequireEmail => RegistrationIdentifier::RequireEmail,
-      UserIdentifier::RequireEmailAndHandle => RegistrationIdentifier::EmailAndHandle,
+      UserIdentifier::RequireEmailAndUsername => RegistrationIdentifier::RequireEmailAndUsername,
     },
   };
 }

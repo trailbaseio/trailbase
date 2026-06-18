@@ -16,7 +16,7 @@ const profilePageUrl = `${base}/profile`;
   <form
     id="reset-update-form"
     class="flex flex-col gap-2"
-    action={`${AUTH_API}/change_handle`}
+    action={`${AUTH_API}/change_username`}
     method="post"
     enctype="application/x-www-form-urlencoded"
   >
@@ -31,7 +31,7 @@ const profilePageUrl = `${base}/profile`;
         tabindex="2"
         class={textFieldInputStyle}
         type="text"
-        name="new_handle"
+        name="new_username"
         placeholder="alice"
       />
     </div>

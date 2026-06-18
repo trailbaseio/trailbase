@@ -201,7 +201,7 @@ pub(crate) async fn install_routes_and_jobs(
           user: user.map(|u| HttpContextUser {
             id: u.id,
             email: u.email,
-            handle: u.handle,
+            username: u.username,
             csrf_token: u.csrf_token,
           }),
         }) else {

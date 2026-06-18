@@ -66,8 +66,8 @@ pub struct AuthTokenClaims {
   /// E-mail address of the [sub].
   pub email: Option<String>,
 
-  /// Optional handle.
-  pub handle: Option<String>,
+  /// Optional username.
+  pub username: Option<String>,
 
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
@@ -88,7 +88,7 @@ impl AuthTokenClaims {
       mfa: db_user.totp_secret.is_some(),
       provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
-      handle: db_user.handle.clone(),
+      username: db_user.username.clone(),
       csrf_token: random_alphanumeric(20),
     };
   }

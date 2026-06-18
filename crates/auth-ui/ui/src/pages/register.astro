@@ -46,19 +46,19 @@ import { AUTH_API } from "@/lib/constants";
       <TextFieldInput
         tabindex="1"
         type="text"
-        name="handle"
+        name="username"
         autocomplete="username"
       />
-      {"{% when RegistrationIdentifier::OnlyHandle -%}"}
+      {"{% when RegistrationIdentifier::OnlyUsername -%}"}
       <TextFieldLabel>Username:</TextFieldLabel>
       <TextFieldInput
         required
         tabindex="1"
         type="text"
-        name="handle"
+        name="username"
         autocomplete="username"
       />
-      {"{% when RegistrationIdentifier::RequireHandle -%}"}
+      {"{% when RegistrationIdentifier::RequireUsername -%}"}
       <TextFieldLabel>Email:</TextFieldLabel>
       <TextFieldInput
         tabindex="1"
@@ -72,10 +72,10 @@ import { AUTH_API } from "@/lib/constants";
         required
         tabindex="1"
         type="text"
-        name="handle"
+        name="username"
         autocomplete="username"
       />
-      {"{% when RegistrationIdentifier::EmailAndHandle -%}"}
+      {"{% when RegistrationIdentifier::RequireEmailAndUsername -%}"}
       <TextFieldLabel>Email:</TextFieldLabel>
       <TextFieldInput
         required
@@ -90,7 +90,7 @@ import { AUTH_API } from "@/lib/constants";
         required
         tabindex="1"
         type="text"
-        name="handle"
+        name="username"
         autocomplete="username"
       />
       {"{% endmatch %}"}

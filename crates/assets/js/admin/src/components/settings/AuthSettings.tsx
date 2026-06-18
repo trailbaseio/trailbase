@@ -401,8 +401,8 @@ function AuthSettingsForm(props: {
                         style={{ "grid-template-columns": "auto 1fr" }}
                       >
                         <InfoTooltip label="User Identifier">
-                          Controls what identifiers (Email and/or Handle) are
-                          required during sign-up (and change email/handle
+                          Controls what identifiers (email and/or username) are
+                          required during sign-up (and change email/username
                           flows). Does not affect existing users.
                         </InfoTooltip>
 
@@ -774,9 +774,9 @@ function UserIdentifierSelect(props: {
         // undefined,
         UserIdentifier.ONLY_EMAIL,
         UserIdentifier.REQUIRE_EMAIL,
-        UserIdentifier.ONLY_HANDLE,
-        UserIdentifier.REQUIRE_HANDLE,
-        UserIdentifier.REQUIRE_EMAIL_AND_HANDLE,
+        UserIdentifier.ONLY_USERNAME,
+        UserIdentifier.REQUIRE_USERNAME,
+        UserIdentifier.REQUIRE_EMAIL_AND_USERNAME,
       ]}
       placeholder={userIdentifierLabel(undefined)}
       itemComponent={(props) => (
@@ -802,17 +802,17 @@ function UserIdentifierSelect(props: {
 function userIdentifierLabel(ui: UserIdentifier | undefined): string {
   switch (ui) {
     case UserIdentifier.REQUIRE_EMAIL:
-      return "Email + optional Handle";
-    case UserIdentifier.ONLY_HANDLE:
-      return "Only Handle";
-    case UserIdentifier.REQUIRE_HANDLE:
-      return "Handle + optional Email";
-    case UserIdentifier.REQUIRE_EMAIL_AND_HANDLE:
-      return "Email + Handle";
+      return "Email + optional username";
+    case UserIdentifier.ONLY_USERNAME:
+      return "Only username";
+    case UserIdentifier.REQUIRE_USERNAME:
+      return "Username + optional email";
+    case UserIdentifier.REQUIRE_EMAIL_AND_USERNAME:
+      return "Email + username";
     case UserIdentifier.ONLY_EMAIL:
     case UserIdentifier.USER_IDENTIFIER_UNDEFINED:
     default:
-      return "Only Email (Default)";
+      return "Only email (Default)";
   }
 }
 

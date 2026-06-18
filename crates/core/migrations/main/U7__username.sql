@@ -1,12 +1,11 @@
--- Add `handle` column and make emails/password_hash nullable.
+-- Add `username` column and make emails/password_hash nullable.
 
-CREATE TABLE IF NOT EXISTS _new_with_handle_and_opt_email (
+CREATE TABLE IF NOT EXISTS _new_with_username_and_opt_email (
   -- We only check `is_uuid` rather than `is_uuid_v4` to preserve user
   -- previously created as uuiv7.
   id                               BLOB PRIMARY KEY NOT NULL CHECK(is_uuid(id)) DEFAULT (uuid_v4()),
   email                            TEXT COLLATE NOCASE CHECK(is_email(email)),
-  -- Optional user-handle, e.g. a username.
-  handle                           TEXT COLLATE NOCASE,
+  username                         TEXT COLLATE NOCASE,
   password_hash                    TEXT,
   -- Whether email was verified.
   verified                         INTEGER DEFAULT FALSE NOT NULL,
@@ -31,7 +30,7 @@ CREATE TABLE IF NOT EXISTS _new_with_handle_and_opt_email (
   -- anonymous or OTP.
 ) STRICT;
 
-INSERT INTO _new_with_handle_and_opt_email (
+INSERT INTO _new_with_username_and_opt_email (
     id,
     email,
     password_hash,
@@ -61,14 +60,14 @@ INSERT INTO _new_with_handle_and_opt_email (
 PRAGMA legacy_alter_table=ON;
 
 DROP TABLE _user;
-ALTER TABLE _new_with_handle_and_opt_email RENAME TO _user;
+ALTER TABLE _new_with_username_and_opt_email RENAME TO _user;
 
 -- Turn OFF legacy behavior.
 PRAGMA legacy_alter_table=OFF;
 
 -- Re-create INDEXes and TRIGGERs removed by `DROP TABLE`.
 CREATE UNIQUE INDEX __user__email_index ON _user (email);
-CREATE UNIQUE INDEX __user__handle_index ON _user (handle);
+CREATE UNIQUE INDEX __user__username_index ON _user (username);
 CREATE UNIQUE INDEX __user__provider_ids_index ON _user (provider_id, provider_user_id);
 
 CREATE TRIGGER __user__updated_trigger AFTER UPDATE ON _user FOR EACH ROW

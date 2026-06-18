@@ -13,7 +13,7 @@ use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  validate_and_normalize_email_address, validate_and_normalize_handle, validate_redirect,
+  validate_and_normalize_email_address, validate_and_normalize_username, validate_redirect,
 };
 use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
@@ -29,7 +29,7 @@ pub struct RegisterUserParams {
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 pub struct RegisterUserRequest {
   pub email: Option<String>,
-  pub handle: Option<String>,
+  pub username: Option<String>,
   pub password: String,
   pub password_repeat: String,
 
@@ -71,10 +71,10 @@ pub async fn register_user_handler(
   };
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
-  let (normalized_email, handle) = validate_email_and_handle(
+  let (normalized_email, username) = validate_email_and_username(
     user_identifier.and_then(|ui| ui.try_into().ok()),
     request.email.as_deref(),
-    request.handle.as_deref(),
+    request.username.as_deref(),
   )?;
 
   let auth_options = state.auth_options();
@@ -122,9 +122,9 @@ Redirect::to(redirect).into_response()
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
       INSERT INTO \"{USER_TABLE}\" \
-        (email, handle, password_hash) \
+        (email, username, password_hash) \
       VALUES \
-        (:email, :handle, :password_hash) \
+        (:email, :username, :password_hash) \
       RETURNING * \
     "
   );
@@ -135,7 +135,7 @@ Redirect::to(redirect).into_response()
       INSERT_USER_QUERY,
       named_params! {
         ":email": normalized_email.clone(),
-        ":handle": handle,
+        ":username": username,
         ":password_hash": hashed_password,
       },
     )
@@ -173,52 +173,52 @@ Redirect::to(redirect).into_response()
   return Ok(success_response());
 }
 
-fn validate_email_and_handle(
+fn validate_email_and_username(
   user_identifier: Option<UserIdentifier>,
   email: Option<&str>,
-  handle: Option<&str>,
+  username: Option<&str>,
 ) -> Result<(Option<String>, Option<String>), AuthError> {
   return match user_identifier.unwrap_or(UserIdentifier::Undefined) {
-    UserIdentifier::OnlyEmail | UserIdentifier::Undefined => match (email, handle) {
-      (_, handle) if handle.is_some_and(|h| !h.is_empty()) => {
-        Err(AuthError::BadRequest("Handle not allowed"))
+    UserIdentifier::OnlyEmail | UserIdentifier::Undefined => match (email, username) {
+      (_, u) if u.is_some_and(|u| !u.is_empty()) => {
+        Err(AuthError::BadRequest("username not allowed"))
       }
       (None, _) | (Some(""), _) => Err(AuthError::BadRequest("Missing email")),
       (Some(email), _) => Ok((Some(validate_and_normalize_email_address(email)?), None)),
     },
-    UserIdentifier::RequireEmail => match (email, handle) {
+    UserIdentifier::RequireEmail => match (email, username) {
       (None, _) | (Some(""), _) => Err(AuthError::BadRequest("Missing email")),
       (Some(email), None) | (Some(email), Some("")) => {
         Ok((Some(validate_and_normalize_email_address(email)?), None))
       }
-      (Some(email), Some(handle)) => Ok((
+      (Some(email), Some(username)) => Ok((
         Some(validate_and_normalize_email_address(email)?),
-        Some(validate_and_normalize_handle(handle)?),
+        Some(validate_and_normalize_username(username)?),
       )),
     },
-    UserIdentifier::OnlyHandle => match (email, handle) {
+    UserIdentifier::OnlyUsername => match (email, username) {
       (email, _) if email.is_some_and(|e| !e.is_empty()) => {
         Err(AuthError::BadRequest("Email not allowed"))
       }
-      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing handle")),
-      (_, Some(handle)) => Ok((None, Some(validate_and_normalize_handle(handle)?))),
+      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing username")),
+      (_, Some(username)) => Ok((None, Some(validate_and_normalize_username(username)?))),
     },
-    UserIdentifier::RequireHandle => match (email, handle) {
-      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing handle")),
-      (None, Some(handle)) | (Some(""), Some(handle)) => {
-        Ok((None, Some(validate_and_normalize_handle(handle)?)))
+    UserIdentifier::RequireUsername => match (email, username) {
+      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing username")),
+      (None, Some(username)) | (Some(""), Some(username)) => {
+        Ok((None, Some(validate_and_normalize_username(username)?)))
       }
-      (Some(email), Some(handle)) => Ok((
+      (Some(email), Some(username)) => Ok((
         Some(validate_and_normalize_email_address(email)?),
-        Some(validate_and_normalize_handle(handle)?),
+        Some(validate_and_normalize_username(username)?),
       )),
     },
-    UserIdentifier::RequireEmailAndHandle => match (email, handle) {
+    UserIdentifier::RequireEmailAndUsername => match (email, username) {
       (None, _) | (Some(""), _) => Err(AuthError::BadRequest("Missing Email")),
-      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing handle")),
-      (Some(email), Some(handle)) => Ok((
+      (_, None) | (_, Some("")) => Err(AuthError::BadRequest("Missing username")),
+      (Some(email), Some(username)) => Ok((
         Some(validate_and_normalize_email_address(email)?),
-        Some(validate_and_normalize_handle(handle)?),
+        Some(validate_and_normalize_username(username)?),
       )),
     },
   };

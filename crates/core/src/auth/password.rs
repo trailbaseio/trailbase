@@ -109,7 +109,7 @@ pub fn check_user_password(
   let account = db_user
     .email
     .as_deref()
-    .or(db_user.handle.as_deref())
+    .or(db_user.username.as_deref())
     .unwrap_or_default()
     .to_string();
 

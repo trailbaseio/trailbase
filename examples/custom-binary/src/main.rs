@@ -23,7 +23,7 @@ async fn hello_world_handler(State(state): State<CustomState>, user: Option<User
     Some(ref user) => user
       .email
       .as_deref()
-      .or(user.handle.as_deref())
+      .or(user.username.as_deref())
       .unwrap_or("World"),
     None => "World",
   };

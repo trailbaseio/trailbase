@@ -207,8 +207,9 @@ async fn async_main(
 
           println!("Updated email for '{id}'");
         }
-        Some(UserSubCommands::ChangeHandle { user, new_handle }) => {
-          api::cli::change_handle(state.user_conn(), to_user_reference(user), &new_handle).await?;
+        Some(UserSubCommands::ChangeUsername { user, new_username }) => {
+          api::cli::change_username(state.user_conn(), to_user_reference(user), &new_username)
+            .await?;
         }
         Some(UserSubCommands::Add { email, password }) => {
           api::cli::add_user(state.user_conn(), &email, &password).await?;
