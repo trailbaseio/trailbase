@@ -89,6 +89,15 @@ impl Guest for Endpoints {
           return ui_change_email_handler(req.query_parse()?, user).await;
         },
       ),
+      routing::get(
+        CHANGE_HANDLE_UI,
+        async |req: Request| -> Result<Response, HttpError> {
+          let user = req
+            .user()
+            .ok_or_else(|| HttpError::status(StatusCode::UNAUTHORIZED))?;
+          return ui_change_handle_handler(req.query_parse()?, user).await;
+        },
+      ),
       routing::get("/_/auth/{*wildcard}", async |req: Request| {
         return static_assets_handler(
           req
@@ -392,6 +401,25 @@ async fn ui_change_email_handler(
   return Ok(Html(html.map_err(internal)?).into_response());
 }
 
+async fn ui_change_handle_handler(
+  query: ChangeEmailQuery,
+  user: &User,
+) -> Result<Response, HttpError> {
+  let redirect_uri = query.redirect_uri.as_deref().unwrap_or(PROFILE_UI);
+  let html = auth::ChangeHandleTemplate {
+    state: [
+      auth::redirect_uri(Some(redirect_uri)),
+      auth::hidden_input("err_redirect_uri", Some(CHANGE_HANDLE_UI)),
+      auth::hidden_input("csrf_token", Some(&user.csrf_token)),
+    ]
+    .join("\n"),
+    alert: query.alert.as_deref().unwrap_or_default(),
+  }
+  .render();
+
+  return Ok(Html(html.map_err(internal)?).into_response());
+}
+
 async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
   // We want as little magic as possible. The only /_/auth/subpath that isn't SSR, is
   // profile, so we when hitting /profile or /profile, we want actually want to serve
@@ -444,3 +472,4 @@ const PROFILE_UI: &str = "/_/auth/profile";
 const REGISTER_USER_UI: &str = "/_/auth/register";
 const CHANGE_PASSWORD_UI: &str = "/_/auth/change_password";
 const CHANGE_EMAIL_UI: &str = "/_/auth/change_email";
+const CHANGE_HANDLE_UI: &str = "/_/auth/change_handle";

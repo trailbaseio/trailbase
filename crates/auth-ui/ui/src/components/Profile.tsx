@@ -94,7 +94,7 @@ function Avatar(props: { client: Client; user: User }) {
       ref={formRef}
       method="dialog"
       enctype="multipart/form-data"
-      class="my-4 flex items-center justify-between"
+      class="flex items-center justify-between"
       onSubmit={async (ev: SubmitEvent) => {
         ev.preventDefault();
 
@@ -193,6 +193,12 @@ function ProfileTable(props: { client: Client; user: User }) {
                   <DropdownMenuItem>Change Email</DropdownMenuItem>
                 </a>
 
+                <Show when={props.user.handle !== null}>
+                  <a href="/_/auth/change_handle">
+                    <DropdownMenuItem>Change Username</DropdownMenuItem>
+                  </a>
+                </Show>
+
                 <Show when={!isOAuth()}>
                   <a href="/_/auth/change_password">
                     <DropdownMenuItem>Change Password</DropdownMenuItem>
@@ -232,13 +238,25 @@ function ProfileTable(props: { client: Client; user: User }) {
           </div>
         </div>
 
-        <div class="flex w-full items-center gap-4">
+        <div class="my-4 flex w-full items-center gap-4">
           <Avatar client={props.client} user={props.user} />
 
           <div class="flex flex-col gap-2">
-            <strong>{props.user.email}</strong>
+            <Show when={props.user.handle !== null}>
+              <div>
+                Username: <strong>{props.user.handle}</strong>
+              </div>
+            </Show>
 
-            <div>Id: {props.user.id}</div>
+            <Show when={props.user.email !== null}>
+              <div>
+                Email: <strong>{props.user.email}</strong>
+              </div>
+            </Show>
+
+            <Show when={import.meta.env.DEV}>
+              <div>Id: {props.user.id}</div>
+            </Show>
           </div>
         </div>
 

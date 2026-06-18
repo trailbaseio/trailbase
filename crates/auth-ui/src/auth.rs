@@ -94,6 +94,13 @@ pub struct ChangeEmailTemplate<'a> {
   pub alert: &'a str,
 }
 
+#[derive(Template)]
+#[template(path = "change_handle/index.html")]
+pub struct ChangeHandleTemplate<'a> {
+  pub state: String,
+  pub alert: &'a str,
+}
+
 pub fn hidden_input<T>(name: &str, value: Option<T>) -> String
 where
   T: AsRef<str>,

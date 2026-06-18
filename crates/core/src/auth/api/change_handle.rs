@@ -79,7 +79,25 @@ pub async fn change_user_handle_handler(
       | UserIdentifier::OnlyHandle
       | UserIdentifier::RequireEmailAndHandle,
       _email,
-    ) => Some(validate_and_normalize_handle(&new_handle)?),
+    ) => match validate_and_normalize_handle(&new_handle) {
+      Ok(handle) => Some(handle),
+      Err(_err)
+        if new_handle.is_empty() && matches!(user_identifier, UserIdentifier::RequireEmail) =>
+      {
+        None
+      }
+      Err(err) => {
+        if !json && let Some(ref redirect_uri) = err_redirect_uri.or(redirect_uri) {
+          const MSG: &str = "Invalid handle";
+          return Ok(
+            Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG)))
+              .into_response(),
+          );
+        }
+
+        return Err(err);
+      }
+    },
     (Some(_), _, _) => {
       return Err(AuthError::BadRequest("Cannot change handle"));
     }
@@ -113,8 +131,8 @@ pub async fn change_user_handle_handler(
     )
     .await
   else {
-    const MSG: &str = "Handle already taken";
     if !json && let Some(ref redirect_uri) = err_redirect_uri.or(redirect_uri) {
+      const MSG: &str = "Handle already taken";
       return Ok(
         Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG))).into_response(),
       );

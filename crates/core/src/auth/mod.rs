@@ -110,12 +110,10 @@ pub(super) fn router(config: &Config) -> Router<crate::AppState> {
       &format!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_token}}"),
       get(api::change_email::change_email_confirm_handler),
     )
-    // User handle flows
-    // QUESTION: Only conditionally register? Would require a server restart since we don't rebuild
-    // routers during config reload.
+    // Change user handle flow.
     .route(
-      &format!("/{AUTH_API_PATH}/change_handlej"),
-      get(api::change_handle::change_user_handle_handler),
+      &format!("/{AUTH_API_PATH}/change_handle"),
+      post(api::change_handle::change_user_handle_handler),
     )
     // Password-reset flow.
     .route(
