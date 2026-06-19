@@ -441,6 +441,25 @@ function AuthSettingsForm(props: {
                 })}
               </form.Field>
 
+              <form.Field name="enableAnonymousSignin">
+                {buildOptionalBoolFormField({
+                  label: () => (
+                    <InfoTooltip label="Enable Anonymous Sign-in">
+                      When enabled, clients can create signed-in "ephemeral"
+                      anonymous users, which may be useful for app trials, e.g.
+                      signing up users w/o yet requiring proper registration.
+                      Refresh tokens of anonymous users currently have a
+                      hard-coded TTL of 90 days, after which the user becomes
+                      inaccessible and will eventually be cleaned up. Anonymous
+                      users can be promoted to "proper" users, i.e. associated
+                      with a password, email and/or username. After that, users
+                      can properly re-authenticate and share their access across
+                      devices.
+                    </InfoTooltip>
+                  ),
+                })}
+              </form.Field>
+
               <form.Field name="passwordMinimalLength">
                 {buildOptionalNumberFormField({
                   integer: true,
