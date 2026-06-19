@@ -160,6 +160,7 @@ pub async fn register_user_handler(
 
     let email = Email::verification_email(&state, email, &token, redirect_uri.as_deref())
       .map_err(|err| AuthError::Internal(err.into()))?;
+
     email
       .send()
       .await
@@ -169,7 +170,7 @@ pub async fn register_user_handler(
   return Ok(success_response());
 }
 
-fn validate_email_and_username(
+pub(super) fn validate_email_and_username(
   user_identifier: Option<UserIdentifier>,
   email: Option<&str>,
   username: Option<&str>,

@@ -191,6 +191,7 @@ export interface Client {
     opts?: { redirectUri?: string },
   ): Promise<void>;
   loginOtp(emailOrUsername: string, code: string): Promise<void>;
+  loginAnonymously(): Promise<void>;
   logout(): Promise<boolean>;
 
   registerTOTP(opts?: { png: boolean }): Promise<RegisterTotp>;
@@ -347,11 +348,11 @@ class ClientImpl implements Client {
     const request =
       emailOrUsername.indexOf("@") === -1
         ? {
-            username: emailOrUsername,
-          }
+          username: emailOrUsername,
+        }
         : ({
-            email: emailOrUsername,
-          } as RequestOtpRequest);
+          email: emailOrUsername,
+        } as RequestOtpRequest);
 
     await this.fetch(`${authApiBasePath}/otp/request${params}`, {
       method: "POST",
@@ -363,17 +364,27 @@ class ClientImpl implements Client {
     const request =
       emailOrUsername.indexOf("@") >= 0
         ? {
-            email: emailOrUsername,
-            code,
-          }
+          email: emailOrUsername,
+          code,
+        }
         : ({
-            username: emailOrUsername,
-            code,
-          } as LoginOtpRequest);
+          username: emailOrUsername,
+          code,
+        } as LoginOtpRequest);
 
     const response = await this.fetch(`${authApiBasePath}/otp/login`, {
       method: "POST",
       body: JSON.stringify(request),
+    });
+
+    this.setTokenState(
+      buildTokenState((await response.json()) as LoginResponse),
+    );
+  }
+
+  public async loginAnonymously(): Promise<void> {
+    const response = await this.fetch(`${authApiBasePath}/login_anonymous`, {
+      method: "POST",
     });
 
     this.setTokenState(

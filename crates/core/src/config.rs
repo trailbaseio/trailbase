@@ -3,7 +3,7 @@ use log::*;
 use prost_reflect::{
   DynamicMessage, ExtensionDescriptor, FieldDescriptor, Kind, MapKey, ReflectMessage, Value,
 };
-use proto::{EmailTemplate, OAuthProviderId, SmtpEncryption, UserIdentifier};
+use proto::{EmailTemplate, OAuthProviderId, SmtpEncryption};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fs;
@@ -562,26 +562,6 @@ pub async fn validate_config(
     info!(
       "OAuth requires a public URL for redirects from external auth providers but `config.server.site_url` not set. May have been provided via `--public-url` instead"
     );
-  }
-
-  if config.auth.enable_anonymous_signin() {
-    let user_identifier = config
-      .auth
-      .user_identifier
-      .and_then(|ui| ui.try_into().ok())
-      .unwrap_or(UserIdentifier::Undefined);
-
-    match user_identifier {
-      UserIdentifier::Undefined | UserIdentifier::OnlyEmail => {
-        return ierr("anonymous sign-in requires a user-identifier policy that allows usernames.");
-      }
-      UserIdentifier::RequireEmail | UserIdentifier::RequireEmailAndUsername => {
-        return ierr(
-          "anonymous sign-in requires a user-identifier policy that does not require verified email addresses",
-        );
-      }
-      _ => {}
-    };
   }
 
   for (name, provider) in &config.auth.oauth_providers {

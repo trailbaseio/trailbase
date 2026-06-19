@@ -7,6 +7,7 @@ pub(super) mod login;
 pub(crate) mod login_anonymous;
 pub(super) mod logout;
 pub(super) mod otp;
+pub(super) mod promote_anonymous;
 pub(super) mod refresh;
 pub(super) mod register;
 pub(super) mod reset_password;

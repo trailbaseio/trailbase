@@ -64,6 +64,9 @@ test("Auth integration tests", async () => {
 
   const headers1 = client.headers();
   expect(headers1["Authorization"]).toBeUndefined();
+
+  await client.loginAnonymously();
+  expect(client.user()?.username).not.toBe(undefined);
 });
 
 test("Multi-factor auth integration tests", async () => {
@@ -483,12 +486,12 @@ test("Subscribe to Record with specific id", async () => {
   expect(events).toHaveLength(2);
   expect(
     ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(updatedMessage);
   expect(
     ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(updatedMessage);
 });
@@ -524,17 +527,17 @@ test("Subscribe to entire table", async () => {
   expect(events).toHaveLength(3);
   expect(
     ((events[0] as ChangeInsertEvent)["Insert"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(createMessage);
   expect(
     ((events[1] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(updatedMessage);
   expect(
     ((events[2] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(updatedMessage);
 });
@@ -580,12 +583,12 @@ test("Subscribe to table with record filters", async () => {
   expect(events).toHaveLength(2);
   expect(
     ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(updatedMessage);
   expect(
     ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-      "text_not_null"
+    "text_not_null"
     ],
   ).equals(updatedMessage);
 });

@@ -198,10 +198,15 @@ pub(super) fn router(config: &Config) -> Router<crate::AppState> {
     .nest(&format!("/{AUTH_API_PATH}/oauth"), oauth::oauth_router());
 
   if config.auth.enable_anonymous_signin() {
-    router = router.route(
-      &format!("/{AUTH_API_PATH}/login_anonymous"),
-      post(api::login_anonymous::login_anonymous_user_handler),
-    )
+    router = router
+      .route(
+        &format!("/{AUTH_API_PATH}/login_anonymous"),
+        post(api::login_anonymous::login_anonymous_user_handler),
+      )
+      .route(
+        &format!("/{AUTH_API_PATH}/promote_anonymous"),
+        post(api::promote_anonymous::promote_anonymous_user_handler),
+      );
   }
 
   if config.auth.enable_otp_signin() {

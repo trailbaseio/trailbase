@@ -28,6 +28,9 @@ use crate::auth::api::login_anonymous::{
 };
 use crate::auth::api::logout::{LogoutParams, logout_handler};
 use crate::auth::api::otp;
+use crate::auth::api::promote_anonymous::{
+  PromoteAnonymousRequest, promote_anonymous_user_handler,
+};
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
 use crate::auth::api::register::{RegisterUserParams, RegisterUserRequest, register_user_handler};
 use crate::auth::api::reset_password::{
@@ -823,9 +826,9 @@ async fn test_auth_change_password_flow() {
     Query(ChangePasswordParams::default()),
     user.clone(),
     Either::Json(ChangePasswordRequest {
-      old_password: Some(password.clone()),
+      old_password: password.clone(),
       new_password: new_password.clone(),
-      new_password_repeat: new_password.clone(),
+      new_password_repeat: Some(new_password.clone()),
       ..Default::default()
     }),
   )
@@ -1318,26 +1321,59 @@ async fn test_auth_annonymous_signin() {
   assert!(username.starts_with("anon"));
 
   let password = "secret123".to_string();
-  change_password_handler(
+  let new_username = "user".to_string();
+
+  assert_eq!(mailer.get_logs().len(), 0);
+
+  promote_anonymous_user_handler(
     State(state.clone()),
-    Query(ChangePasswordParams::default()),
+    Query(Default::default()),
     user.clone(),
-    Either::Json(ChangePasswordRequest {
-      old_password: None,
+    Either::Json(PromoteAnonymousRequest {
       new_password: password.clone(),
-      new_password_repeat: password.clone(),
-      ..Default::default()
+      new_password_repeat: Some(password.clone()),
+      new_username: Some(new_username.clone()),
+      new_email: Some("user@test.org".to_string()),
+      params: Default::default(),
     }),
   )
   .await
   .unwrap();
+
+  // Assert that a verification email was sent.
+  assert_eq!(mailer.get_logs().len(), 1);
+
+  assert!(
+    login_handler(
+      State(state.clone()),
+      Query(LoginInputParams::default()),
+      Cookies::default(),
+      Either::Json(LoginRequest::Username {
+        username: new_username.clone(),
+        password: password.clone(),
+        params: LoginInputParams {
+          ..Default::default()
+        },
+      }),
+    )
+    .await
+    .is_err()
+  );
+
+  state
+    .user_conn()
+    .execute_batch(format!(
+      "UPDATE {USER_TABLE} SET verified = 1 WHERE username = \"user\";"
+    ))
+    .await
+    .unwrap();
 
   login_handler(
     State(state.clone()),
     Query(LoginInputParams::default()),
     Cookies::default(),
     Either::Json(LoginRequest::Username {
-      username: username.clone(),
+      username: new_username.clone(),
       password: password.clone(),
       params: LoginInputParams {
         ..Default::default()

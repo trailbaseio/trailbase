@@ -8,6 +8,7 @@ server {
 }
 auth {
   enable_otp_signin: true
+  enable_anonymous_signin: true
   oauth_providers: [{
     key: "oidc0"
     value {
