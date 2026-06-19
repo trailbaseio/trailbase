@@ -866,15 +866,22 @@ impl ClientState {
   }
 }
 
-#[derive(Clone)]
-pub struct Client {
-  state: Arc<ClientState>,
+#[derive(Default)]
+pub struct PromoteOptions {
+  pub password: String,
+  pub email: Option<String>,
+  pub username: Option<String>,
 }
 
 #[derive(Default)]
 pub struct ClientOptions {
   pub tokens: Option<Tokens>,
   pub transport: Option<Box<dyn Transport + Send + Sync>>,
+}
+
+#[derive(Clone)]
+pub struct Client {
+  state: Arc<ClientState>,
 }
 
 impl Client {
@@ -1057,6 +1064,24 @@ impl Client {
     return Ok(());
   }
 
+  pub async fn login_anonymously(&self) -> Result<(), Error> {
+    let response = self
+      .state
+      .fetch(
+        &format!("/{AUTH_API}/login_anonymous"),
+        Method::POST,
+        Some(b"{}".into()),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    let tokens: Tokens = json(error_for_status_unpack(response)?).await?;
+    self.update_tokens(Some(&tokens));
+
+    return Ok(());
+  }
+
   pub async fn logout(&self) -> Result<(), Error> {
     #[derive(Serialize)]
     struct LogoutRequest {
@@ -1096,6 +1121,35 @@ impl Client {
     self.update_tokens(None);
 
     return response_or.map(|_| ());
+  }
+
+  pub async fn promote_anonymous(&self, opts: PromoteOptions) -> Result<(), Error> {
+    #[derive(Serialize)]
+    struct Request<'a> {
+      new_password: &'a str,
+      new_email: Option<&'a str>,
+      new_username: Option<&'a str>,
+    }
+
+    self
+      .state
+      .fetch(
+        &format!("/{AUTH_API}/promote_anonymous"),
+        Method::POST,
+        Some(
+          serde_json::to_vec(&Request {
+            new_password: &opts.password,
+            new_email: opts.email.as_deref(),
+            new_username: opts.username.as_deref(),
+          })
+          .map_err(Error::RecordSerialization)?,
+        ),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    return Ok(());
   }
 
   fn update_tokens(&self, tokens: Option<&Tokens>) -> TokenState {

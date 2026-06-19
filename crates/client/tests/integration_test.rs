@@ -206,6 +206,24 @@ async fn login_test() {
   client.refresh().await.unwrap();
 }
 
+async fn login_anonymous_test() {
+  let client = Client::new(&*site(), None).unwrap();
+
+  client.login_anonymously().await.unwrap();
+  assert!(client.user().unwrap().username.is_some());
+
+  let now = now();
+
+  client
+    .promote_anonymous(trailbase_client::PromoteOptions {
+      password: "Secret123.".to_string(),
+      email: Some(format!("test_rust_{now}@test.org")),
+      ..Default::default()
+    })
+    .await
+    .unwrap();
+}
+
 async fn login_otp() {
   let client = Client::new(&*site(), None).unwrap();
 
@@ -914,6 +932,9 @@ fn integration_test() {
 
   runtime.block_on(login_test());
   println!("Ran login tests");
+
+  runtime.block_on(login_anonymous_test());
+  println!("Ran login anonymous tests");
 
   runtime.block_on(login_otp());
   println!("Ran login OTP tests");
