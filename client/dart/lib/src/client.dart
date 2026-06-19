@@ -544,6 +544,17 @@ class Client {
     _updateTokens(tokens);
   }
 
+  Future<void> loginAnonymously() async {
+    final response = await fetch(
+      '${_authApi}/login_anonymous',
+      method: Method.post,
+      body: jsonEncode({}),
+    );
+
+    final tokens = Tokens.fromJson(jsonDecode(response.body));
+    _updateTokens(tokens);
+  }
+
   Future<void> logout() async {
     try {
       final refreshToken = _tokenState.state?.$1.refresh;
@@ -559,6 +570,22 @@ class Client {
     } finally {
       _updateTokens(null);
     }
+  }
+
+  Future<void> promoteAnonymous({
+    required String password,
+    String? email,
+    String? username,
+  }) async {
+    await fetch(
+      '${_authApi}/promote_anonymous',
+      method: Method.post,
+      body: jsonEncode({
+        'new_password': password,
+        'new_email': email,
+        'new_username': username,
+      }),
+    );
   }
 
   Future<void> refreshAuthToken() async {

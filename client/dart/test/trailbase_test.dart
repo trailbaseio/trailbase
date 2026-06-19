@@ -296,6 +296,20 @@ Future<void> main() async {
       expect(newTokens, equals(client.tokens()));
     });
 
+    test('anonymous auth', () async {
+      final client = Client('http://${address}');
+
+      await client.loginAnonymously();
+      final username = client.user()?.username;
+      expect(username, isNotNull);
+
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      await client.promoteAnonymous(
+        password: 'secret123.',
+        email: 'test_dart_${now}@test.org',
+      );
+    });
+
     test('multi-factor-auth', () async {
       final client = Client('http://${address}');
       final mfaToken = await client.login('alice@trailbase.io', 'secret');
