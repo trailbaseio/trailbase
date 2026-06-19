@@ -23,7 +23,9 @@ use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::{
   LoginMfaRequest, LoginRequest, LoginResponse, MfaTokenResponse, login_handler, login_mfa_handler,
 };
-use crate::auth::api::login_anonymous::{LoginAnonymousRequest, login_anonymous_user_handler};
+use crate::auth::api::login_anonymous::{
+  LoginAnonymousRequest, cleanup_anonymous_users, login_anonymous_user_handler,
+};
 use crate::auth::api::logout::{LogoutParams, logout_handler};
 use crate::auth::api::otp;
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
@@ -938,6 +940,8 @@ async fn test_auth_register_handle_only() {
   )
   .await
   .unwrap();
+
+  cleanup_anonymous_users(state.user_conn()).await.unwrap();
 
   assert!(user.email.is_none());
   assert_eq!(Some(&username), user.username.as_ref());

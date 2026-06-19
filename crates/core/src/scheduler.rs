@@ -432,6 +432,26 @@ fn build_job(
         }),
       }
     }
+    SystemJobId::AnonymousCleaner => {
+      let main_conn = connection_manager.main_entry().connection.clone();
+
+      DefaultSystemJob {
+        name: "Anonymous User Cleanup",
+        default: SystemJob {
+          id: Some(id as i32),
+          schedule: Some("@daily".into()),
+          disabled: Some(false),
+        },
+        callback: build_callback(move || {
+          let main_conn = main_conn.clone();
+          return async move {
+            crate::auth::api::login_anonymous::cleanup_anonymous_users(&main_conn).await?;
+
+            Ok::<(), trailbase_sqlite::Error>(())
+          };
+        }),
+      }
+    }
   };
 }
 

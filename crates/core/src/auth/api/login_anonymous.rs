@@ -98,7 +98,7 @@ pub async fn login_anonymous_user_handler(
           json,
           // TODO: Separate config setting for anonymous token TTLs. Folks may want this to be
           // longer than normal refresh token TTL in the absence of re-sign-in.
-          (auth_token_ttl, Duration::days(90)),
+          (auth_token_ttl, REFRESH_TTL),
         )
         .await;
       }
@@ -111,3 +111,24 @@ pub async fn login_anonymous_user_handler(
     }
   }
 }
+
+pub(crate) async fn cleanup_anonymous_users(
+  user_conn: &trailbase_sqlite::Connection,
+) -> Result<(), trailbase_sqlite::Error> {
+  const TTL_SECONDS: i64 = REFRESH_TTL.num_seconds();
+  const QUERY: &str = formatcp!(
+    "\
+      DELETE FROM \"{USER_TABLE}\" \
+      WHERE  \
+        password_hash IS NULL AND \
+        provider_id = 0 AND \
+        UNIXEPOCH() > (created + {TTL_SECONDS}) \
+      "
+  );
+
+  user_conn.execute(QUERY, ()).await?;
+
+  return Ok(());
+}
+
+const REFRESH_TTL: Duration = Duration::days(90);
