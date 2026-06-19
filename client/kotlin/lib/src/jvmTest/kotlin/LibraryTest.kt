@@ -207,6 +207,17 @@ class ClientTest {
   }
 
   @Test
+  fun `client authentication anonymous`() = runTest {
+    val client = Client("http://${address}")
+
+    client.loginAnonymously()
+    assertNotNull(client.user()?.username)
+
+    val now = Clock.System.now().toEpochMilliseconds() / 1000
+    client.promoteAnonymous(password = "secret123.", email = "test_kotlin_${now}@test.org")
+  }
+
+  @Test
   fun `client OTP authentication`() = runTest {
     val client = Client("http://${address}")
 

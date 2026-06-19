@@ -504,6 +504,18 @@ class Client(
     tokenState = TokenState.build(tokens)
   }
 
+  suspend fun loginAnonymously() {
+    val response =
+            fetch(
+                    "${AUTH_API}/login_anonymous",
+                    Method.post,
+                    "{}",
+            )
+
+     val tokens: Tokens = response.body()
+     tokenState = TokenState.build(tokens)
+  }
+
   suspend fun logout() {
     try {
       val refreshToken = tokenState.state?.first?.refresh_token
@@ -517,6 +529,20 @@ class Client(
     } finally {
       tokenState = TokenState.build(null)
     }
+  }
+
+  suspend fun promoteAnonymous(
+          password: String,
+          email: String? = null,
+          username: String? = null,
+  ) {
+    @Serializable data class Request(val new_password: String, val new_email: String?, val new_username: String?)
+
+            fetch(
+                    "${AUTH_API}/promote_anonymous",
+                    Method.post,
+                    Request(password, email, username),
+            )
   }
 
   suspend fun refreshAuthToken() {
