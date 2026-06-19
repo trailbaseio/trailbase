@@ -42,15 +42,10 @@ pub async fn login_anonymous_user_handler(
   cookies: Cookies,
   either_request: Either<LoginAnonymousRequest>,
 ) -> Result<Response, AuthError> {
-  let (disabled, enable_anonymous, user_identifier) = state.access_config(|c| {
-    let auth = &c.auth;
-    (
-      auth.disable_password_auth.unwrap_or(false),
-      auth.enable_anonymous_signin.unwrap_or(false),
-      auth.user_identifier,
-    )
-  });
-  if disabled && !enable_anonymous {
+  if !state
+    .access_config(|c| c.auth.enable_anonymous_signin)
+    .unwrap_or(false)
+  {
     return Err(AuthError::Forbidden);
   }
 
@@ -62,67 +57,50 @@ pub async fn login_anonymous_user_handler(
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
 
-  match user_identifier
-    .and_then(|ui| ui.try_into().ok())
-    .unwrap_or(UserIdentifier::Undefined)
-  {
-    UserIdentifier::Undefined
-    | UserIdentifier::OnlyEmail
-    | UserIdentifier::RequireEmail
-    | UserIdentifier::RequireEmailAndUsername => {
-      if !json && let Some(redirect_uri) = redirect_uri {
-        return Ok(
-          Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(""))).into_response(),
-        );
+  let create_user = async || -> Result<DbUser, trailbase_sqlite::Error> {
+    const INSERT_USER_QUERY: &str =
+      formatcp!("INSERT INTO \"{USER_TABLE}\" (username) VALUES (:username) RETURNING * ");
+
+    let username = format!(
+      "anon{suffix}",
+      suffix = crate::rand::random_numeric_and_lowercase(6)
+    );
+
+    return match state
+      .user_conn()
+      .write_query_value::<DbUser>(
+        INSERT_USER_QUERY,
+        named_params! {
+          ":username": username.clone(),
+        },
+      )
+      .await
+    {
+      Ok(Some(user)) => Ok(user),
+      Ok(None) => Err(trailbase_sqlite::Error::Other("Failed to get user".into())),
+      Err(err) => Err(err),
+    };
+  };
+
+  let mut i = 0;
+  loop {
+    match create_user().await {
+      Ok(user) => {
+        return crate::auth::api::login::build_auth_token_flow_response(
+          &state,
+          &user,
+          &cookies,
+          redirect_uri,
+          json,
+        )
+        .await;
       }
-      return Err(AuthError::FailedDependency("not supported".into()));
+      Err(_err) => {
+        i += 1;
+        if i >= 5 {
+          return Err(AuthError::Conflict);
+        }
+      }
     }
-    _ => {}
-  };
-
-  // let success_response = {
-  //   let redirect_uri = redirect_uri.clone();
-  //   move || {
-  //     return match redirect_uri {
-  //       Some(ref redirect) => Redirect::to(redirect).into_response(),
-  //       _ => (StatusCode::OK, "registered").into_response(),
-  //     };
-  //   }
-  // };
-
-  let username = format!(
-    "anon{suffix}",
-    suffix = crate::rand::random_numeric_and_lowercase(6)
-  );
-
-  const INSERT_USER_QUERY: &str =
-    formatcp!("INSERT INTO \"{USER_TABLE}\" (username) VALUES (:username) RETURNING * ");
-
-  let user = match state
-    .user_conn()
-    .write_query_value::<DbUser>(
-      INSERT_USER_QUERY,
-      named_params! {
-        ":username": username,
-      },
-    )
-    .await
-  {
-    Ok(Some(user)) => user,
-    Err(err) => {
-      return Err(AuthError::Internal(err.into()));
-    }
-    Ok(None) => {
-      return Err(AuthError::Internal("Failed to get user".into()));
-    }
-  };
-
-  return crate::auth::api::login::build_auth_token_flow_response(
-    &state,
-    &user,
-    &cookies,
-    redirect_uri,
-    json,
-  )
-  .await;
+  }
 }
