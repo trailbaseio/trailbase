@@ -23,7 +23,7 @@ use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub struct RegisterUserParams {
-  redirect_uri: Option<String>,
+  pub redirect_uri: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
@@ -101,19 +101,15 @@ pub async fn register_user_handler(
     let redirect_uri = redirect_uri.clone();
     || {
       return match (redirect_uri, normalized_email) {
-            (Some(ref redirect), Some(ref normalized_email)) => {
-Redirect::to(&format!(
-      "{redirect}?alert={msg}",
-      msg = urlencode(&format!(
-        "Registered {normalized_email}. Email verification is needed before signing in. Check your inbox."
-      ))
-    )).into_response()
-            },
-            (Some(ref redirect), None) => {
-Redirect::to(redirect).into_response()
-            },
-            _ =>(StatusCode::OK, "registered").into_response(),
-        };
+        (Some(ref redirect), Some(ref normalized_email)) => Redirect::to(&format!(
+            "{redirect}?alert={msg}",
+            msg = urlencode(&format!(
+              "Registered {normalized_email}. Email verification is needed before signing in. Check your inbox."
+            ))
+          )).into_response(),
+        (Some(ref redirect), None) => Redirect::to(redirect).into_response(),
+        _ => (StatusCode::OK, "registered").into_response(),
+      };
     }
   };
 

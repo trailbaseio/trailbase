@@ -87,7 +87,7 @@ pub(super) fn router(config: &Config) -> Router<crate::AppState> {
   //
   //  TODO: We should have periodic task to vacuum expired auth, validate-email, reset-password
   //  codes and pending registrations.
-  let router = Router::new()
+  let mut router = Router::new()
     // Sign-up new users.
     .route(
       &format!("/{AUTH_API_PATH}/register"),
@@ -197,8 +197,15 @@ pub(super) fn router(config: &Config) -> Router<crate::AppState> {
     // OAuth flows: list providers, login+callback
     .nest(&format!("/{AUTH_API_PATH}/oauth"), oauth::oauth_router());
 
+  if config.auth.enable_anonymous_signin() {
+    router = router.route(
+      &format!("/{AUTH_API_PATH}/login_anonymous"),
+      post(api::login_anonymous::login_anonymous_user_handler),
+    )
+  }
+
   if config.auth.enable_otp_signin() {
-    return router
+    router = router
       // OTP flow
       .route(
         &format!("/{AUTH_API_PATH}/otp/request"),

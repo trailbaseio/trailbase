@@ -104,6 +104,10 @@ message AuthConfig {
   /// security to a user's inbox.
   optional bool enable_otp_signin = 8;
 
+  /// Allow the creation of ephemeral user-accounts, e.g. for a frictionless
+  /// trial.
+  optional bool enable_anonymous_signin = 12;
+
   /// Minimal password length. Defaults to 8.
   optional uint32 password_minimal_length = 4;
 
