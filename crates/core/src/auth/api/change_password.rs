@@ -26,7 +26,7 @@ pub(crate) struct ChangePasswordParams {
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct ChangePasswordRequest {
-  pub old_password: String,
+  pub old_password: Option<String>,
   pub new_password: String,
   pub new_password_repeat: String,
 
@@ -87,18 +87,21 @@ pub async fn change_password_handler(
 
   let db_user = user_by_id(&state, &user.uuid).await?;
 
-  // Validate old password.
-  //
-  // TODO: It would probably be good practice to check TOTP as well for users of multi-factor auth.
-  if let Err(_err) = check_user_password(&db_user, &request.old_password, state.demo_mode()) {
-    const MSG: &str = "invalid `old_password`";
-    if !json && let Some(redirect_uri) = err_redirect_uri.or(redirect_uri) {
-      return Ok(
-        Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG))).into_response(),
-      );
-    }
-    return Err(AuthError::BadRequest(MSG));
-  };
+  // Optionally validate old password.
+  if let Some(old_password) = request.old_password {
+    // TODO: It would probably be good practice to check TOTP as well for users of multi-factor
+    // auth.
+    if let Err(_err) = check_user_password(&db_user, &old_password, state.demo_mode()) {
+      const MSG: &str = "invalid `old_password`";
+      if !json && let Some(redirect_uri) = err_redirect_uri.or(redirect_uri) {
+        return Ok(
+          Redirect::to(&format!("{redirect_uri}?alert={msg}", msg = urlencode(MSG)))
+            .into_response(),
+        );
+      }
+      return Err(AuthError::BadRequest(MSG));
+    };
+  }
 
   // NOTE: we're using the old_password_hash to prevent races between concurrent change requests
   // for the same user.
@@ -109,7 +112,9 @@ pub async fn change_password_handler(
     "\
       UPDATE \"{USER_TABLE}\" \
       SET password_hash = :new_password_hash \
-      WHERE id = :user_id AND password_hash = :old_password_hash \
+      WHERE  \
+        id = :user_id AND \
+        (:old_password_hash IS NULL OR password_hash = :old_password_hash)
     "
   );
 

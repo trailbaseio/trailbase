@@ -573,14 +573,12 @@ pub async fn validate_config(
 
     match user_identifier {
       UserIdentifier::Undefined | UserIdentifier::OnlyEmail => {
-        return ierr(format!(
-          "anonymous sign-in requires a user-identifier policy that allows usernames."
-        ));
+        return ierr("anonymous sign-in requires a user-identifier policy that allows usernames.");
       }
       UserIdentifier::RequireEmail | UserIdentifier::RequireEmailAndUsername => {
-        return ierr(format!(
-          "anonymous sign-in requires a user-identifier policy that does not require verified email addresses"
-        ));
+        return ierr(
+          "anonymous sign-in requires a user-identifier policy that does not require verified email addresses",
+        );
       }
       _ => {}
     };

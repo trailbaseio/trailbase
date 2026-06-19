@@ -1,6 +1,5 @@
 use axum::extract::{Query, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::Response;
 use const_format::formatcp;
 use serde::Deserialize;
 use tower_cookies::Cookies;
@@ -13,10 +12,8 @@ use crate::auth::AuthError;
 use crate::auth::api::register::RegisterUserParams;
 use crate::auth::user::DbUser;
 use crate::auth::util::validate_redirect;
-use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::extract::Either;
-use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 pub struct LoginAnonymousRequest {

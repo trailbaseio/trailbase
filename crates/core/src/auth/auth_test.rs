@@ -23,6 +23,7 @@ use crate::auth::api::delete::delete_handler;
 use crate::auth::api::login::{
   LoginMfaRequest, LoginRequest, LoginResponse, MfaTokenResponse, login_handler, login_mfa_handler,
 };
+use crate::auth::api::login_anonymous::{LoginAnonymousRequest, login_anonymous_user_handler};
 use crate::auth::api::logout::{LogoutParams, logout_handler};
 use crate::auth::api::otp;
 use crate::auth::api::refresh::{RefreshRequest, refresh_handler};
@@ -820,7 +821,7 @@ async fn test_auth_change_password_flow() {
     Query(ChangePasswordParams::default()),
     user.clone(),
     Either::Json(ChangePasswordRequest {
-      old_password: password.clone(),
+      old_password: Some(password.clone()),
       new_password: new_password.clone(),
       new_password_repeat: new_password.clone(),
       ..Default::default()
@@ -1267,6 +1268,80 @@ async fn test_auth_otp_flow_using_username() {
     .unwrap();
 
   let _login_response: LoginResponse = serde_json::from_slice(&body).unwrap();
+}
+
+#[tokio::test]
+async fn test_auth_annonymous_signin() {
+  // let email = "user@test.org".to_string();
+  // let username = "foo".to_string();
+
+  let mailer = TestAsyncSmtpTransport::new();
+  let state = test_state(Some(TestStateOptions {
+    mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some({
+      let mut config = build_test_config_with_trivial_tokens();
+      config.auth.user_identifier = Some(UserIdentifier::RequireUsername.into());
+      config.auth.enable_anonymous_signin = Some(true);
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  let response = login_anonymous_user_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Cookies::default(),
+    Either::Json(LoginAnonymousRequest {
+      params: Default::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(StatusCode::OK, response.status());
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+
+  let login_response: LoginResponse = serde_json::from_slice(&body).unwrap();
+
+  let user = User::from_auth_token(&state, &login_response.auth_token).unwrap();
+  let Some(ref username) = user.username else {
+    panic!("missing username");
+  };
+  assert!(username.starts_with("anon"));
+
+  let password = "secret123".to_string();
+  change_password_handler(
+    State(state.clone()),
+    Query(ChangePasswordParams::default()),
+    user.clone(),
+    Either::Json(ChangePasswordRequest {
+      old_password: None,
+      new_password: password.clone(),
+      new_password_repeat: password.clone(),
+      ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  login_handler(
+    State(state.clone()),
+    Query(LoginInputParams::default()),
+    Cookies::default(),
+    Either::Json(LoginRequest::Username {
+      username: username.clone(),
+      password: password.clone(),
+      params: LoginInputParams {
+        ..Default::default()
+      },
+    }),
+  )
+  .await
+  .unwrap();
 }
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
