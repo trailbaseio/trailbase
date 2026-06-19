@@ -401,9 +401,20 @@ function AuthSettingsForm(props: {
                         style={{ "grid-template-columns": "auto 1fr" }}
                       >
                         <InfoTooltip label="User Identifier">
-                          Controls what identifiers (email and/or username) are
-                          required during sign-up (and change email/username
-                          flows). Does not affect existing users.
+                          <div>
+                            Controls whether email and/or username are required
+                            during user registration and change-email/username
+                            flows. Does not affect existing users, i.e. user
+                            registered before a change can still sign-in using
+                            their respective method. However it also affects the
+                            appearance of the first-party auth UI, so previous
+                            methods may not be visible. Changing this in
+                            production on an established user-base can lead to
+                            confusion and should be avoided.
+                            <br />
+                            Note further, that not requiring a verified email
+                            means you may not have the ability to contact users.
+                          </div>
                         </InfoTooltip>
 
                         <div class="w-full">
@@ -741,7 +752,7 @@ export function AuthSettings(props: {
 
 function InfoTooltip(props: {
   label: string;
-  children: string;
+  children: JSX.Element;
   class?: string;
 }) {
   return (
