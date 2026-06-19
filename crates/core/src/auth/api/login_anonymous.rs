@@ -1,5 +1,6 @@
 use axum::extract::{Query, State};
 use axum::response::Response;
+use chrono::Duration;
 use const_format::formatcp;
 use serde::Deserialize;
 use tower_cookies::Cookies;
@@ -12,7 +13,7 @@ use crate::auth::AuthError;
 use crate::auth::api::register::RegisterUserParams;
 use crate::auth::user::DbUser;
 use crate::auth::util::validate_redirect;
-use crate::constants::USER_TABLE;
+use crate::constants::{DEFAULT_AUTH_TOKEN_TTL, USER_TABLE};
 use crate::extract::Either;
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
@@ -39,10 +40,16 @@ pub async fn login_anonymous_user_handler(
   cookies: Cookies,
   either_request: Either<LoginAnonymousRequest>,
 ) -> Result<Response, AuthError> {
-  if !state
-    .access_config(|c| c.auth.enable_anonymous_signin)
-    .unwrap_or(false)
-  {
+  let (enabled, auth_token_ttl) = state.access_config(|c| {
+    (
+      c.auth.enable_anonymous_signin.unwrap_or(false),
+      c.auth
+        .auth_token_ttl_sec
+        .map_or(DEFAULT_AUTH_TOKEN_TTL, Duration::seconds),
+    )
+  });
+
+  if !enabled {
     return Err(AuthError::Forbidden);
   }
 
@@ -83,12 +90,15 @@ pub async fn login_anonymous_user_handler(
   loop {
     match create_user().await {
       Ok(user) => {
-        return crate::auth::api::login::build_auth_token_flow_response(
+        return crate::auth::api::login::build_auth_token_flow_response_with_ttl(
           &state,
           &user,
           &cookies,
           redirect_uri,
           json,
+          // TODO: Separate config setting for anonymous token TTLs. Folks may want this to be
+          // longer than normal refresh token TTL in the absence of re-sign-in.
+          (auth_token_ttl, Duration::days(90)),
         )
         .await;
       }

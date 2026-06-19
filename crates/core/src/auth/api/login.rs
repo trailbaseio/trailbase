@@ -1,7 +1,7 @@
 use axum::extract::{Json, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
@@ -259,14 +259,14 @@ pub(crate) async fn login_handler(
 /// cookie-based approach only works for web-apps hosted with the same origin like the admin UI.
 /// Otherwise, the cookies will be inaccessible and the "authentication code" flow below is needed
 /// to get the tokens to your app.
-pub(crate) async fn build_auth_token_flow_response(
+pub(crate) async fn build_auth_token_flow_response_with_ttl(
   state: &AppState,
   db_user: &DbUser,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
+  (auth_token_ttl, refresh_token_ttl): (Duration, Duration),
 ) -> Result<Response, AuthError> {
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let build_new_tokens = async || {
     let tokens = crate::auth::tokens::mint_new_tokens(
       state.session_conn(),
@@ -313,6 +313,24 @@ pub(crate) async fn build_auth_token_flow_response(
     Err(err) if is_json => Err(err),
     Err(err) => Ok(auth_error_to_response(err, cookies, redirect.as_deref())),
   };
+}
+
+pub(crate) async fn build_auth_token_flow_response(
+  state: &AppState,
+  db_user: &DbUser,
+  cookies: &Cookies,
+  redirect: Option<String>,
+  is_json: bool,
+) -> Result<Response, AuthError> {
+  return build_auth_token_flow_response_with_ttl(
+    state,
+    db_user,
+    cookies,
+    redirect,
+    is_json,
+    state.access_config(|c| c.auth.token_ttls()),
+  )
+  .await;
 }
 
 /// Password-based login using "authentication code flow" and required Proof-Key-for-Key-Exchange
