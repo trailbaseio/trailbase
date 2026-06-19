@@ -223,6 +223,7 @@ export enum SystemJobId {
   AUTH_CLEANER = 4,
   QUERY_OPTIMIZER = 5,
   FILE_DELETIONS = 6,
+  ANONYMOUS_CLEANER = 7,
   UNRECOGNIZED = -1,
 }
 
@@ -249,6 +250,9 @@ export function systemJobIdFromJSON(object: any): SystemJobId {
     case 6:
     case "FILE_DELETIONS":
       return SystemJobId.FILE_DELETIONS;
+    case 7:
+    case "ANONYMOUS_CLEANER":
+      return SystemJobId.ANONYMOUS_CLEANER;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -272,6 +276,8 @@ export function systemJobIdToJSON(object: SystemJobId): string {
       return "QUERY_OPTIMIZER";
     case SystemJobId.FILE_DELETIONS:
       return "FILE_DELETIONS";
+    case SystemJobId.ANONYMOUS_CLEANER:
+      return "ANONYMOUS_CLEANER";
     case SystemJobId.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -456,6 +462,13 @@ export interface AuthConfig {
    * / security to a user's inbox.
    */
   enableOtpSignin?:
+    | boolean
+    | undefined;
+  /**
+   * / Allow the creation of ephemeral user-accounts, e.g. for a frictionless
+   * / trial.
+   */
+  enableAnonymousSignin?:
     | boolean
     | undefined;
   /** / Minimal password length. Defaults to 8. */
@@ -1251,6 +1264,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.enableOtpSignin !== undefined && message.enableOtpSignin !== false) {
       writer.uint32(64).bool(message.enableOtpSignin);
     }
+    if (message.enableAnonymousSignin !== undefined && message.enableAnonymousSignin !== false) {
+      writer.uint32(96).bool(message.enableAnonymousSignin);
+    }
     if (message.passwordMinimalLength !== undefined && message.passwordMinimalLength !== 0) {
       writer.uint32(32).uint32(message.passwordMinimalLength);
     }
@@ -1321,6 +1337,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
           }
 
           message.enableOtpSignin = reader.bool();
+          continue;
+        }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.enableAnonymousSignin = reader.bool();
           continue;
         }
         case 4: {
@@ -1421,6 +1445,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : isSet(object.enable_otp_signin)
         ? globalThis.Boolean(object.enable_otp_signin)
         : undefined,
+      enableAnonymousSignin: isSet(object.enableAnonymousSignin)
+        ? globalThis.Boolean(object.enableAnonymousSignin)
+        : isSet(object.enable_anonymous_signin)
+        ? globalThis.Boolean(object.enable_anonymous_signin)
+        : undefined,
       passwordMinimalLength: isSet(object.passwordMinimalLength)
         ? globalThis.Number(object.passwordMinimalLength)
         : isSet(object.password_minimal_length)
@@ -1490,6 +1519,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.enableOtpSignin !== undefined && message.enableOtpSignin !== false) {
       obj.enableOtpSignin = message.enableOtpSignin;
     }
+    if (message.enableAnonymousSignin !== undefined && message.enableAnonymousSignin !== false) {
+      obj.enableAnonymousSignin = message.enableAnonymousSignin;
+    }
     if (message.passwordMinimalLength !== undefined && message.passwordMinimalLength !== 0) {
       obj.passwordMinimalLength = Math.round(message.passwordMinimalLength);
     }
@@ -1538,6 +1570,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.refreshTokenTtlSec = object.refreshTokenTtlSec ?? 0n;
     message.disablePasswordAuth = object.disablePasswordAuth ?? false;
     message.enableOtpSignin = object.enableOtpSignin ?? false;
+    message.enableAnonymousSignin = object.enableAnonymousSignin ?? false;
     message.passwordMinimalLength = object.passwordMinimalLength ?? 0;
     message.passwordMustContainUpperAndLowerCase = object.passwordMustContainUpperAndLowerCase ?? false;
     message.passwordMustContainDigits = object.passwordMustContainDigits ?? false;

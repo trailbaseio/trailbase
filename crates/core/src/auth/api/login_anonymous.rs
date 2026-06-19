@@ -17,6 +17,7 @@ use crate::constants::{DEFAULT_AUTH_TOKEN_TTL, USER_TABLE};
 use crate::extract::Either;
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct LoginAnonymousRequest {
   #[serde(flatten)]
   pub params: RegisterUserParams,

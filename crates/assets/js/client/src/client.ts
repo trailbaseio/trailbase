@@ -17,19 +17,21 @@ import { DefaultTransport, Transport } from "./transport";
 export type { Transport } from "./transport";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
-import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
-import type { LoginOtpRequest } from "@bindings/LoginOtpRequest";
-import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
 import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
 import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
-import type { MfaTokenResponse } from "@bindings/MfaTokenResponse";
-import type { LoginRequest } from "@bindings/LoginRequest";
+import type { LoginAnonymousRequest } from "@bindings/LoginAnonymousRequest";
 import type { LoginMfaRequest } from "@bindings/LoginMfaRequest";
+import type { LoginOtpRequest } from "@bindings/LoginOtpRequest";
+import type { LoginRequest } from "@bindings/LoginRequest";
 import type { LoginResponse } from "@bindings/LoginResponse";
 import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
 import type { LogoutRequest } from "@bindings/LogoutRequest";
+import type { MfaTokenResponse } from "@bindings/MfaTokenResponse";
+import type { PromoteAnonymousRequest } from "@bindings/PromoteAnonymousRequest";
 import type { RefreshRequest } from "@bindings/RefreshRequest";
 import type { RefreshResponse } from "@bindings/RefreshResponse";
+import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
+import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
 
 export type User = {
   id: string;
@@ -70,6 +72,12 @@ type TokenState = {
     claims: TokenClaims;
   };
   headers: HeadersInit;
+};
+
+type PromotionOptions = {
+  username?: string;
+  email?: string;
+  password: string;
 };
 
 function buildTokenState(tokens?: Tokens): TokenState {
@@ -120,12 +128,14 @@ export type FetchOptions = RequestInit & {
   throwOnError?: boolean;
 };
 
-export class FetchError extends Error {
-  public status: number;
-  public url: string | URL | undefined;
+export class FetchError implements Error {
+  public readonly status: number;
+  public readonly url: string | URL | undefined;
+  public readonly message: string;
+  public readonly name: string = "FetchError";
 
   constructor(status: number, msg: string, url?: string | URL) {
-    super(msg);
+    this.message = msg;
     this.status = status;
     this.url = url;
   }
@@ -198,8 +208,15 @@ export interface Client {
   confirmTOTP(totpUrl: string, totp: string): Promise<void>;
   unregisterTOTP(totp: string): Promise<void>;
 
+  /// Promote an anonymous user to "proper" user. If an email is provided, a verification
+  /// email will be sent out.
+  promoteAnonymous(opts: PromotionOptions): Promise<void>;
+  /// Deletes the current user.
   deleteUser(): Promise<void>;
+  /// Checks status endpoint. Can be used in Browser environments to promote token
+  /// cookies to tokens.
   checkCookies(): Promise<Tokens | undefined>;
+  /// Update auth token using longer-lived refresh tokens.
   refreshAuthToken(opts?: { force?: boolean }): Promise<void>;
 
   /// Fetches data from TrailBase endpoints, e.g.:
@@ -348,11 +365,11 @@ class ClientImpl implements Client {
     const request =
       emailOrUsername.indexOf("@") === -1
         ? {
-          username: emailOrUsername,
-        }
+            username: emailOrUsername,
+          }
         : ({
-          email: emailOrUsername,
-        } as RequestOtpRequest);
+            email: emailOrUsername,
+          } as RequestOtpRequest);
 
     await this.fetch(`${authApiBasePath}/otp/request${params}`, {
       method: "POST",
@@ -364,13 +381,13 @@ class ClientImpl implements Client {
     const request =
       emailOrUsername.indexOf("@") >= 0
         ? {
-          email: emailOrUsername,
-          code,
-        }
+            email: emailOrUsername,
+            code,
+          }
         : ({
-          username: emailOrUsername,
-          code,
-        } as LoginOtpRequest);
+            username: emailOrUsername,
+            code,
+          } as LoginOtpRequest);
 
     const response = await this.fetch(`${authApiBasePath}/otp/login`, {
       method: "POST",
@@ -385,6 +402,7 @@ class ClientImpl implements Client {
   public async loginAnonymously(): Promise<void> {
     const response = await this.fetch(`${authApiBasePath}/login_anonymous`, {
       method: "POST",
+      body: JSON.stringify({} as LoginAnonymousRequest),
     });
 
     this.setTokenState(
@@ -410,6 +428,17 @@ class ClientImpl implements Client {
     }
     this.setTokenState(buildTokenState(undefined));
     return true;
+  }
+
+  public async promoteAnonymous(opts: PromotionOptions): Promise<void> {
+    await this.fetch(`${authApiBasePath}/promote_anonymous`, {
+      method: "POST",
+      body: JSON.stringify({
+        new_password: opts.password,
+        new_email: opts.email,
+        new_username: opts.username,
+      } as PromoteAnonymousRequest),
+    });
   }
 
   public async deleteUser(): Promise<void> {

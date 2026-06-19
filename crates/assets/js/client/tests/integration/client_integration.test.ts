@@ -64,9 +64,23 @@ test("Auth integration tests", async () => {
 
   const headers1 = client.headers();
   expect(headers1["Authorization"]).toBeUndefined();
+});
+
+test("Auth anonymous tests", async () => {
+  const client = initClient(new URL(`http://${serverAddress()}`));
 
   await client.loginAnonymously();
   expect(client.user()?.username).not.toBe(undefined);
+
+  const now = new Date().getTime();
+  const password = "secret123.";
+
+  client.promoteAnonymous({
+    password,
+    email: `test_${now}@test.org`,
+  });
+
+  // NOTE: To test login afterwards, we'd have to verify the email first.
 });
 
 test("Multi-factor auth integration tests", async () => {
@@ -486,12 +500,12 @@ test("Subscribe to Record with specific id", async () => {
   expect(events).toHaveLength(2);
   expect(
     ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(updatedMessage);
   expect(
     ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(updatedMessage);
 });
@@ -527,17 +541,17 @@ test("Subscribe to entire table", async () => {
   expect(events).toHaveLength(3);
   expect(
     ((events[0] as ChangeInsertEvent)["Insert"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(createMessage);
   expect(
     ((events[1] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(updatedMessage);
   expect(
     ((events[2] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(updatedMessage);
 });
@@ -583,12 +597,12 @@ test("Subscribe to table with record filters", async () => {
   expect(events).toHaveLength(2);
   expect(
     ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(updatedMessage);
   expect(
     ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-    "text_not_null"
+      "text_not_null"
     ],
   ).equals(updatedMessage);
 });
