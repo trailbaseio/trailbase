@@ -34,6 +34,7 @@ pub(crate) const DEFAULT_AUTHORIZATION_CODE_TTL: Duration = Duration::minutes(5)
 
 pub(crate) const DEFAULT_MFA_TOKEN_TTL: Duration = Duration::minutes(2);
 pub(crate) const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
+pub(crate) const DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL: Duration = Duration::days(90);
 
 pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;
 pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;

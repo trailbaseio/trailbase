@@ -136,8 +136,6 @@ pub async fn promote_anonymous_user_handler(
     )
     .await?;
 
-  // FIXME: Send validation email.
-
   return match rows_affected {
     0 => Err(AuthError::BadRequest("Invalid old password")),
     1 => {

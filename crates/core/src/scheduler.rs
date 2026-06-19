@@ -13,13 +13,14 @@ use std::sync::{
   atomic::{AtomicI32, Ordering},
 };
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, params};
+use trailbase_sqlite::{Connection, named_params, params};
 
 use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::{BuildOptions, ConnectionManager};
 use crate::constants::{
-  AUTHORIZATION_CODE_TABLE, LOGS_RETENTION_DEFAULT, OTP_CODE_TABLE, SESSION_TABLE,
+  AUTHORIZATION_CODE_TABLE, DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
+  OTP_CODE_TABLE, SESSION_TABLE, USER_TABLE,
 };
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
 
@@ -445,9 +446,7 @@ fn build_job(
         callback: build_callback(move || {
           let main_conn = main_conn.clone();
           return async move {
-            crate::auth::api::login_anonymous::cleanup_anonymous_users(&main_conn).await?;
-
-            Ok::<(), trailbase_sqlite::Error>(())
+            return cleanup_anonymous_users(&main_conn).await;
           };
         }),
       }
@@ -549,6 +548,33 @@ pub fn build_job_registry_from_config(
   }
 
   return Ok(jobs);
+}
+
+pub(crate) async fn cleanup_anonymous_users(
+  user_conn: &trailbase_sqlite::Connection,
+) -> Result<(), trailbase_sqlite::Error> {
+  const QUERY: &str = formatcp!(
+    "\
+      DELETE FROM \"{USER_TABLE}\" \
+      WHERE  \
+        password_hash IS NULL AND \
+        provider_id = 0 AND \
+        UNIXEPOCH() > (created + :ttl_seconds) \
+      "
+  );
+
+  let affected_rows = user_conn
+    .execute(
+      QUERY,
+      named_params! {
+          ":ttl_seconds":DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL.num_seconds(),
+      },
+    )
+    .await?;
+
+  log::debug!("Cleaned up {affected_rows} anonymous users.");
+
+  return Ok(());
 }
 
 #[cfg(test)]

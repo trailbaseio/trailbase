@@ -13,7 +13,7 @@ use crate::auth::AuthError;
 use crate::auth::api::register::RegisterUserParams;
 use crate::auth::user::DbUser;
 use crate::auth::util::validate_redirect;
-use crate::constants::{DEFAULT_AUTH_TOKEN_TTL, USER_TABLE};
+use crate::constants::{DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, DEFAULT_AUTH_TOKEN_TTL, USER_TABLE};
 use crate::extract::Either;
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
@@ -99,7 +99,7 @@ pub async fn login_anonymous_user_handler(
           json,
           // TODO: Separate config setting for anonymous token TTLs. Folks may want this to be
           // longer than normal refresh token TTL in the absence of re-sign-in.
-          (auth_token_ttl, REFRESH_TTL),
+          (auth_token_ttl, DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL),
         )
         .await;
       }
@@ -112,24 +112,3 @@ pub async fn login_anonymous_user_handler(
     }
   }
 }
-
-pub(crate) async fn cleanup_anonymous_users(
-  user_conn: &trailbase_sqlite::Connection,
-) -> Result<(), trailbase_sqlite::Error> {
-  const TTL_SECONDS: i64 = REFRESH_TTL.num_seconds();
-  const QUERY: &str = formatcp!(
-    "\
-      DELETE FROM \"{USER_TABLE}\" \
-      WHERE  \
-        password_hash IS NULL AND \
-        provider_id = 0 AND \
-        UNIXEPOCH() > (created + {TTL_SECONDS}) \
-      "
-  );
-
-  user_conn.execute(QUERY, ()).await?;
-
-  return Ok(());
-}
-
-const REFRESH_TTL: Duration = Duration::days(90);

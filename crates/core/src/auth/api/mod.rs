@@ -4,7 +4,7 @@ pub(super) mod change_password;
 pub(super) mod change_username;
 pub(super) mod delete;
 pub(super) mod login;
-pub(crate) mod login_anonymous;
+pub(super) mod login_anonymous;
 pub(super) mod logout;
 pub(super) mod otp;
 pub(super) mod promote_anonymous;
