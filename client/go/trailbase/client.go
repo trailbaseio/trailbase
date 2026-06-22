@@ -291,6 +291,34 @@ func (c *Client) LoginOtp(email string, code string) error {
 	return nil
 }
 
+func (c *Client) LoginAnonymously() error {
+	type Request struct{}
+
+	reqBody, err := json.Marshal(Request{})
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do("POST", authApi+"/login_anonymous", reqBody, nil)
+	if err != nil {
+		return err
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var tokens Tokens
+	err = json.Unmarshal(respBody, &tokens)
+	if err != nil {
+		return err
+	}
+	c.updateTokens(&tokens)
+
+	return nil
+}
+
 func (c *Client) Logout() error {
 	url := c.BaseUrl().JoinPath(authApi, "logout").String()
 	r := c.getHeadersAndRefreshToken()
@@ -319,6 +347,30 @@ func (c *Client) Logout() error {
 
 	_, err := c.updateTokens(nil)
 	return err
+}
+
+func (c *Client) PromoteAnonymous(password string, email *string, username *string) error {
+	type Request struct {
+		NewPassword string  `json:"new_password"`
+		NewEmail    *string `json:"new_email,omitempty"`
+		NewUsername *string `json:"new_username,omitempty"`
+	}
+
+	reqBody, err := json.Marshal(Request{
+		NewPassword: password,
+		NewEmail:    email,
+		NewUsername: username,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = c.do("POST", authApi+"/promote_anonymous", reqBody, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *Client) Refresh() error {

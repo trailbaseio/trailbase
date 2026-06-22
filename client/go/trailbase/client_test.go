@@ -151,6 +151,27 @@ func TestAuth(t *testing.T) {
 	assert(t, client.User() == nil, "should be nil")
 }
 
+func TestAnonymousAuth(t *testing.T) {
+	client, err := NewClient(SITE)
+	assertFine(t, err)
+
+	assertEqual(t, nil, client.User())
+
+	client.LoginAnonymously()
+	client.Refresh()
+
+	assert(t, client.User() != nil, "expected user")
+
+	now := time.Now().Unix()
+	email := fmt.Sprintf("test_go_%d@test.org", now)
+
+	client.PromoteAnonymous("secret123.", &email, nil)
+
+	// NOTE: to actually login, we'd first have to verify the email address.
+
+	err = client.Logout()
+}
+
 func TestMultiFactorAuth(t *testing.T) {
 	client, err := NewClient(SITE)
 	if err != nil {
