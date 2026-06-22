@@ -39,3 +39,15 @@ runs:
         toolchain: 1.95.0
         components: rustfmt, clippy
         default: true
+
+    - name: Install fake sendmail
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/fakebin"
+        cat > "$RUNNER_TEMP/fakebin/sendmail" <<'EOF'
+        #!/usr/bin/env bash
+        cat >/dev/null
+        exit 0
+        EOF
+        chmod +x "$RUNNER_TEMP/fakebin/sendmail"
+        echo "$RUNNER_TEMP/fakebin" >> "$GITHUB_PATH"
