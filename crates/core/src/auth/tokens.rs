@@ -250,8 +250,8 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
-  assert!(
-    db_user.verified,
+  debug_assert!(
+    db_user.email.is_none() || db_user.verified,
     "unverified user, should have been caught by above query"
   );
 

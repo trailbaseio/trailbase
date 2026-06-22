@@ -132,6 +132,24 @@ extension Trait where Self == SetupTrailBaseTrait {
     #expect(client.user == nil)
   }
 
+  @Test("Test Anonymous Authentication") func testAnonymousAuth() async throws {
+    let client = try Client(site: URL(string: "http://127.0.0.1:\(PORT)")!, tokens: nil)
+    #expect(client.user == nil)
+
+    try await client.loginAnonymously()
+    #expect(client.user != nil)
+
+    try await client.refresh()
+    #expect(client.user != nil)
+
+    let now = NSDate().timeIntervalSince1970
+    let email = "test_swift_\(now)@test.org"
+    try await client.promoteAnonymous(password: "secret123.", email: email)
+
+    try await client.logout()
+    #expect(client.user == nil)
+  }
+
   @Test("Test Multi-Factor Authentication") func testMultiFactorAuth() async throws {
     let client = try Client(site: URL(string: "http://127.0.0.1:\(PORT)")!, tokens: nil)
     let mfaToken = try await client.login(email: "alice@trailbase.io", password: "secret")

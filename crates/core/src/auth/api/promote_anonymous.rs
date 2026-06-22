@@ -150,9 +150,10 @@ pub async fn promote_anonymous_user_handler(
         let email = Email::verification_email(&state, email, &token, redirect_uri.as_deref())
           .map_err(|err| AuthError::Internal(err.into()))?;
 
-        email.send().await.map_err(|err| {
-          AuthError::FailedDependency(format!("Failed to send Email {err}.").into())
-        })?;
+        email
+          .send()
+          .await
+          .map_err(|err| AuthError::Internal(format!("Failed to send Email {err}.").into()))?;
       }
 
       if let Some(ref redirect) = redirect_uri {

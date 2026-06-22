@@ -426,6 +426,14 @@ public class Client {
       path: "/\(AUTH_API)/otp/login", method: "POST", body: body)
   }
 
+  public func loginAnonymously() async throws {
+    let (_, data) = try await self.fetch(
+      path: "/\(AUTH_API)/login_anonymous", method: "POST", body: Data("{}".utf8))
+
+    let tokens = try JSONDecoder().decode(Tokens.self, from: data)
+    let _ = try updateTokens(tokens: tokens)
+  }
+
   public func logout() async throws {
     struct LogoutRequest: Encodable {
       let refresh_token: String
@@ -441,6 +449,21 @@ public class Client {
     }
 
     let _ = try self.updateTokens(tokens: nil)
+  }
+
+  public func promoteAnonymous(password: String, email: String? = nil, username: String? = nil)
+    async throws
+  {
+    struct Request: Codable {
+      let new_password: String
+      let new_email: String?
+      let new_username: String?
+    }
+
+    let body = try JSONEncoder().encode(
+      Request(new_password: password, new_email: email, new_username: username))
+    let (_, _) = try await self.fetch(
+      path: "/\(AUTH_API)/promote_anonymous", method: "POST", body: body)
   }
 
   private func updateTokens(tokens: Tokens?) throws -> TokenState {
