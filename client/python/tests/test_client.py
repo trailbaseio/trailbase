@@ -120,6 +120,25 @@ def test_authentication(trailbase: TrailBaseFixture):
     client.refresh_auth_tokens()
 
 
+def test_anonymous_auth(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    client = Client(site, tokens=None)
+    assert client.user() is None
+
+    client.login_anonymously()
+    assert client.user() is not None
+
+    now = int(time())
+    email = f"test_py_{now}@test.org"
+    client.promote_anonymous(password="secret123.", email=email)
+
+    # Note: to actually login we'd need to verify the email first.
+
+    client.logout()
+    assert client.user() is None
+
+
 def test_second_factor_authentication(trailbase: TrailBaseFixture):
     assert trailbase.isUp()
 

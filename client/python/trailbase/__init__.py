@@ -456,6 +456,15 @@ class Client:
 
         self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
 
+    def login_anonymously(self) -> None:
+        response = self.fetch(
+            f"{_AUTH_API}/login_anonymous",
+            method="POST",
+            data={},
+        )
+
+        self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
+
     def logout(self) -> None:
         state = self._tokenState.state
         refreshToken = state[0].refresh if state else None
@@ -473,6 +482,19 @@ class Client:
                 self.fetch(f"{_AUTH_API}/logout")
         finally:
             self._set_token_state(TokenState.build(None))
+
+    def promote_anonymous(
+        self, password: str, email: str | None = None, username: str | None = None
+    ) -> None:
+        self.fetch(
+            f"{_AUTH_API}/login_anonymous",
+            method="POST",
+            data={
+                "new_password": password,
+                "new_email": email,
+                "new_username": username,
+            },
+        )
 
     def records(self, name: str) -> "RecordApi":
         return RecordApi(name, self)
