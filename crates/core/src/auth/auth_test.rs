@@ -999,15 +999,6 @@ async fn test_auth_change_username_and_unset_email_flow() {
   .await
   .unwrap();
 
-  println!("USER: {user:?}");
-
-  let rows = state
-    .user_conn()
-    .read_query_rows("SELECT * FROM _user;", ())
-    .await
-    .unwrap();
-  println!("ROWS: {rows:?}");
-
   change_email::change_email_request_handler(
     State(state.clone()),
     user.clone(),
@@ -1363,7 +1354,7 @@ async fn test_auth_annonymous_signin() {
   state
     .user_conn()
     .execute_batch(format!(
-      "UPDATE {USER_TABLE} SET verified = 1 WHERE username = \"user\";"
+      "UPDATE {USER_TABLE} SET verified = TRUE WHERE username = 'user';"
     ))
     .await
     .unwrap();

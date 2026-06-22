@@ -96,22 +96,29 @@ pub async fn change_email_request_handler(
         const UNSET_EMAIL_QUERY: &str = formatcp!(
           "\
             UPDATE \"{USER_TABLE}\" \
-              SET email = NULL, verified = 0 \
+              SET email = NULL, \
+              verified = FALSE \
             WHERE \
               id = $1; \
           "
         );
 
-        let _rows_affected = state
+        let rows_affected = state
           .user_conn()
-          .execute(UNSET_EMAIL_QUERY, params!(user.id.as_bytes().to_vec()))
+          .execute(UNSET_EMAIL_QUERY, params!(user.uuid.into_bytes()))
           .await?;
 
-        if !json && let Some(ref redirect_uri) = redirect_uri {
-          return Ok(Redirect::to(redirect_uri).into_response());
-        }
-
-        return Ok(StatusCode::OK.into_response());
+        return match rows_affected {
+          0 => Err(AuthError::Conflict),
+          1 => {
+            if !json && let Some(ref redirect_uri) = redirect_uri {
+              Ok(Redirect::to(redirect_uri).into_response())
+            } else {
+              Ok(StatusCode::OK.into_response())
+            }
+          }
+          _ => unreachable!("affected multiple users?"),
+        };
       }
       _ => {
         return Err(AuthError::BadRequest("Cannot unset email"));

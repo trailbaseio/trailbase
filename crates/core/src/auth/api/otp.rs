@@ -109,7 +109,7 @@ pub async fn request_otp_handler(
     }
   };
 
-  let (user, redirect_uri, success_response): (
+  let (db_user, redirect_uri, success_response): (
     DbUser,
     Option<String>,
     Box<dyn FnOnce() -> Response + Send>,
@@ -128,15 +128,15 @@ pub async fn request_otp_handler(
 
       // We need to check the email is associated with actual user to not just send emails to
       // anyone.
-      let Ok(user) = user_by_email(&state, &normalized_email).await else {
+      let Ok(db_user) = user_by_email(&state, &normalized_email).await else {
         // In case we don't find a user we still reply with a success to avoid leaking
         // users' email addresses.
         return Ok(success_response());
       };
 
-      debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+      debug_assert_eq!(Some(&normalized_email), db_user.email.as_ref());
 
-      (user, redirect_uri, Box::new(success_response))
+      (db_user, redirect_uri, Box::new(success_response))
     }
     UserIdentifier::Username(username) => {
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
@@ -150,23 +150,23 @@ pub async fn request_otp_handler(
         move || success_response_impl(redirect_uri.as_deref(), None, Some(&username))
       };
 
-      let Ok(user) = user_by_username(&state, &normalized_username).await else {
+      let Ok(db_user) = user_by_username(&state, &normalized_username).await else {
         // In case we don't find a user we still reply with a success to avoid leaking
         // users' username.
         return Ok(success_response());
       };
 
-      (user, redirect_uri, Box::new(success_response))
+      (db_user, redirect_uri, Box::new(success_response))
     }
   };
 
-  let Some(ref normalized_email) = user.email else {
+  let Some(ref normalized_email) = db_user.email else {
     // In case the user doesn't have an email address, there's no way to send an OTP code right
     // now. Reply with success to avoid leaking this fact.
     return Ok(success_response());
   };
 
-  if user.totp_secret.is_some() {
+  if db_user.totp_secret.is_some() {
     // If the user has two/multi-factor-auth enabled, allowing OTP-only login would be a break of
     // contract. We may want to support OTP + TOTP going forward.
     #[cfg(debug_assertions)]
@@ -188,7 +188,7 @@ pub async fn request_otp_handler(
     .execute(
       UPDATE_OTP_QUERY,
       params!(
-        user.id,
+        db_user.id,
         normalized_email.clone(),
         otp_code.clone(),
         (Utc::now() + OTP_TTL).timestamp(),

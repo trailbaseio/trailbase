@@ -117,7 +117,7 @@ pub async fn promote_anonymous_user_handler(
       SET \
         password_hash = :new_password_hash, \
         email = :email,
-        verified = 0,
+        verified = FALSE,
         username = :username
       WHERE id = :user_id \
     "
