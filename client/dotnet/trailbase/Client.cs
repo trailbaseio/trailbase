@@ -468,6 +468,19 @@ public class Client {
     updateTokens(tokens);
   }
 
+  /// <summary>Log in anonymously, i.e. create an ephemeral user.</summary>
+  public async Task LoginAnonymously() {
+    var response = await Fetch(
+      $"{_authApi}/login_anonymous",
+      HttpMethod.Post,
+      JsonContent.Create(new Dictionary<string, string>() { }, SourceGenerationContext.Default.DictionaryStringString),
+      queryParams: null
+    );
+
+    Tokens tokens = JsonSerializer.Deserialize<Tokens>(await response.Content.ReadAsStringAsync(), SourceGenerationContext.Default.Tokens)!;
+    updateTokens(tokens);
+  }
+
   /// <summary>Log out the current user.</summary>
   public async Task<bool> Logout() {
     var refreshToken = tokenState.state?.Item1.refresh_token;
@@ -489,6 +502,27 @@ public class Client {
     }
     updateTokens(null);
     return true;
+  }
+
+  /// <summary>Promotes an anonymous, ephemeral user to a "real" user that can be used for re-authing in the future, on different devices, ... .</summary>
+  public async Task PromoteAnonymous(string password, string? email = null, string? username = null) {
+    var request = new Dictionary<string, string>() {
+      ["new_password"] = password,
+    };
+
+    if (email != null) {
+      request.Add("new_email", email);
+    }
+    if (username != null) {
+      request.Add("new_username", username);
+    }
+
+    await Fetch(
+      $"{_authApi}/promote_anonymous",
+      HttpMethod.Post,
+      JsonContent.Create(request, SourceGenerationContext.Default.DictionaryStringString),
+      queryParams: null
+    );
   }
 
   static string? shouldRefresh(TokenState tokenState) {

@@ -121,9 +121,9 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     }
     """) as ErrorEvent;
 
-    Assert.Equal(ErrorEvent.ErrorStatus.Forbidden, errEvent.Status);
-    Assert.Equal("test", errEvent.Message);
-    Assert.Equal(3, errEvent.Seq);
+    Assert.Equal(ErrorEvent.ErrorStatus.Forbidden, errEvent!.Status);
+    Assert.Equal("test", errEvent!.Message);
+    Assert.Equal(3, errEvent!.Seq);
 
     var updateEvent = Event.Parse("""
     {
@@ -135,7 +135,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     }
     """) as UpdateEvent;
 
-    Assert.Equal(4, updateEvent.Seq);
+    Assert.Equal(4, updateEvent!.Seq);
   }
 
   [Fact]
@@ -171,6 +171,20 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     await client.Login("admin@localhost", "secret");
 
     Assert.NotEqual(client.Tokens()?.auth_token, firstTokens?.auth_token);
+  }
+
+  [Fact]
+  public async Task AnonymousAuthTest() {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+    Assert.Null(client.Tokens());
+    Assert.Null(client.User());
+
+    await client.LoginAnonymously();
+    Assert.NotNull(client.Tokens());
+    Assert.NotNull(client.User());
+
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+    await client.PromoteAnonymous(password: "secret123.", email: $"test_dotnet_${now}@test.org");
   }
 
   [Fact]
