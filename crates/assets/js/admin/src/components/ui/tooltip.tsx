@@ -5,10 +5,20 @@ import * as TooltipPrimitive from "@kobalte/core/tooltip"
 
 import { cn } from "@/lib/utils"
 
-const TooltipTrigger = TooltipPrimitive.Trigger
-
 const Tooltip: Component<TooltipPrimitive.TooltipRootProps> = (props) => {
   return <TooltipPrimitive.Root gutter={4} {...props} />
+}
+
+type TooltipTriggerProps<T extends ValidComponent = "button"> = TooltipPrimitive.TooltipTriggerProps<T>
+
+// const TooltipTrigger = TooltipPrimitive.Trigger
+const TooltipTrigger = <T extends ValidComponent = "button">(
+  props: PolymorphicProps<T, TooltipTriggerProps<T>>
+) => {
+  // NOTE: We're setting `type="button"` to prevent the trigger from triggering form submissions.
+  return (
+    <TooltipPrimitive.Trigger type="button" {...props} />
+  )
 }
 
 type TooltipContentProps<T extends ValidComponent = "div"> =
