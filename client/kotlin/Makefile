@@ -13,7 +13,14 @@ build:
 # Setting up publishing requires extracting your private key into a binary
 # key-ring file with:
 #
-#   $ gpg --no-armor --export-secret-keys <key_id> > key.gpg
+#   $ gpg --no-armor --export-secret-keys contact@trailbase.io > key.gpg
+#
+# To get key id:
+#
+#   $ gpg --list-secret-keys --keyid-format LONG
+#
+#  For something like `sec   rsa4096/0123456789ABCDEF 2024-01-01 [SC]` the key
+#  id is the last 8 hex characters, i.e. `89ABCDEF`.
 #
 # Then generate a token on maven central and set the credentials:
 #

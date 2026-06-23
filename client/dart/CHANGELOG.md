@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.11.0
+
+- Add support for sign-in as an anonymous user + promotion.
+- Remove OTP redirect argument.
+
 ## 0.10.1
 
 - Log out if token refresh fails with an "unauthorized" error (401).
