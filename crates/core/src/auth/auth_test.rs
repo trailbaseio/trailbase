@@ -41,7 +41,7 @@ use crate::auth::api::verify_email::{VerifyEmailParams, verify_email_handler};
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
-use crate::auth::util::login_with_password;
+use crate::auth::util::{login_with_password, login_with_password_for_test};
 use crate::config::proto::{Config, EmailTemplate, UserIdentifier};
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
@@ -744,6 +744,23 @@ async fn test_auth_change_email_flow() {
     .is_err()
   );
 
+  // Assert require Email policy is enforced.
+  assert!(
+    change_email::change_email_request_handler(
+      State(state.clone()),
+      user.clone(),
+      Query(Default::default()),
+      Either::Json(change_email::ChangeEmailRequest {
+        csrf_token: user.csrf_token.clone(),
+        old_email: Some(email.clone()),
+        new_email: None,
+        ..Default::default()
+      }),
+    )
+    .await
+    .is_err()
+  );
+
   change_email::change_email_request_handler(
     State(state.clone()),
     user.clone(),
@@ -993,7 +1010,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
   let user = register_test_user(
     &state,
     &mailer,
-    Identifier::EmailAndUsername(email, username),
+    Identifier::EmailAndUsername(email, username.clone()),
     &password,
   )
   .await
@@ -1007,6 +1024,36 @@ async fn test_auth_change_username_and_unset_email_flow() {
       csrf_token: user.csrf_token.clone(),
       new_email: None,
       ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  let _ = logout_handler(
+    State(state.clone()),
+    Query(LogoutParams::default()),
+    Some(user.clone()),
+    Cookies::default(),
+  )
+  .await
+  .unwrap();
+
+  assert!(!session_exists(&state, user.uuid).await);
+
+  // Test refresh flow.
+  let tokens = login_with_password_for_test(
+    &state,
+    crate::auth::util::UserIdentifier::Username(username.clone()),
+    &password,
+  )
+  .await
+  .unwrap()
+  .unwrap();
+
+  let Json(_refreshed_tokens) = refresh_handler(
+    State(state.clone()),
+    Json(RefreshRequest {
+      refresh_token: tokens.refresh_token,
     }),
   )
   .await

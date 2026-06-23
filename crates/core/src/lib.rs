@@ -154,7 +154,7 @@ pub mod api {
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
 
-  pub use crate::auth::util::login_with_password_for_test;
+  pub use crate::auth::util::{UserIdentifier, login_with_password_for_test};
 }
 
 pub(crate) mod rand {

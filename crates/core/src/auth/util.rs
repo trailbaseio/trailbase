@@ -163,12 +163,21 @@ pub struct NewTokens {
   pub csrf_token: String,
 }
 
+pub enum UserIdentifier {
+  Email(String),
+  Username(String),
+}
+
 pub async fn login_with_password_for_test(
   state: &AppState,
-  normalized_email: &str,
+  id: UserIdentifier,
   password: &str,
 ) -> Result<Option<NewTokens>, AuthError> {
-  let db_user: DbUser = user_by_email(state, normalized_email).await.map_err(|_| {
+  let db_user: DbUser = match id {
+    UserIdentifier::Username(username) => user_by_username(state, &username).await,
+    UserIdentifier::Email(email) => user_by_email(state, &email).await,
+  }
+  .map_err(|_| {
     // Don't leak if user wasn't found or password was wrong.
     return AuthError::Unauthorized;
   })?;
@@ -204,9 +213,13 @@ pub async fn login_with_password(
   password: &str,
 ) -> Result<NewTokens, AuthError> {
   return Ok(
-    login_with_password_for_test(state, normalized_email, password)
-      .await?
-      .unwrap(),
+    login_with_password_for_test(
+      state,
+      UserIdentifier::Email(normalized_email.to_string()),
+      password,
+    )
+    .await?
+    .unwrap(),
   );
 }
 
