@@ -48,7 +48,7 @@ bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.2.1"
 const_format = "0.2.35"
-cron = "0.16.0"
+cron = "0.17.0"
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 flume = { workspace = true }
@@ -70,7 +70,7 @@ log = { version = "^0.4.21", default-features = false }
 mini-moka = "0.10.3"
 minijinja = { workspace = true }
 oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["rustls-tls"] }
-object_store = { version = "0.13.0", default-features = false, features = ["aws", "fs"] }
+object_store = { version = "0.14.0", default-features = false, features = ["aws", "fs"] }
 parking_lot = { workspace = true }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.14.1", default-features = false }
