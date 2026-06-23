@@ -91,6 +91,8 @@ pub struct AppState {
 
 impl AppState {
   pub(crate) async fn new(args: AppStateArgs) -> Self {
+    crate::records::set_expose_internal_errors(args.dev);
+
     let config = Reactive::new(args.config);
 
     let public_url = args.public_url.clone();

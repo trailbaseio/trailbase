@@ -510,7 +510,7 @@ impl RecordApi {
         access_query,
         self.build_named_params(p, record_id, request_params, user)?,
       )
-      .await
+      .await?
     {
       return Ok(());
     }
@@ -535,14 +535,28 @@ impl RecordApi {
 
     let params = self.build_named_params(p, record_id, request_params, user)?;
 
-    return match conn
+    let allowed = conn
       .query_row(access_query, params)
-      .ok()
-      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
-    {
-      Some(allowed) if allowed => Ok(()),
-      _ => Err(RecordError::Forbidden),
-    };
+      .map_err(|err| {
+        RecordError::AccessCheckFailed(
+          std::io::Error::other(format!(
+            "Failed to evaluate record-level access rule: {err}"
+          ))
+          .into(),
+        )
+      })?
+      .and_then(|r| r.get::<bool>(0).ok())
+      .ok_or_else(|| {
+        RecordError::AccessCheckFailed(
+          std::io::Error::other("Access rule query returned no boolean result").into(),
+        )
+      })?;
+
+    if allowed {
+      return Ok(());
+    }
+
+    return Err(RecordError::Forbidden);
   }
 
   #[inline]
@@ -550,22 +564,18 @@ impl RecordApi {
     &self,
     query: impl AsRef<str> + Send + 'static,
     params: impl trailbase_sqlite::Params + Send + 'static,
-  ) -> bool {
-    // TODO: Remove query from debug_assert and thus the extra allocation.
-    let q = query.as_ref().to_string();
-
+  ) -> Result<bool, RecordError> {
     return match self.state.conn.read_query_row_get(query, params, 0).await {
-      Ok(Some(allowed)) => allowed,
-      Ok(None) => {
-        debug_assert!(false, "RLA query '{q}' returned no result");
-
-        false
-      }
-      Err(err) => {
-        debug_assert!(false, "RLA query '{q}' failed: {err}");
-
-        false
-      }
+      Ok(Some(allowed)) => Ok(allowed),
+      Ok(None) => Err(RecordError::AccessCheckFailed(
+        std::io::Error::other("Access rule query returned no boolean result").into(),
+      )),
+      Err(err) => Err(RecordError::AccessCheckFailed(
+        std::io::Error::other(format!(
+          "Failed to evaluate record-level access rule: {err}"
+        ))
+        .into(),
+      )),
     };
   }
 
@@ -594,7 +604,7 @@ impl RecordApi {
 
     if self
       .check_record_level_access_impl(access_query.clone(), params)
-      .await
+      .await?
     {
       return Ok(());
     }
