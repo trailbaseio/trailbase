@@ -21,6 +21,7 @@ import {
   TbOutlineHelp,
   TbOutlinePencilPlus,
   TbOutlineX,
+  TbOutlineCopy,
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
@@ -81,6 +82,7 @@ import { createConfigQuery } from "@/lib/api/config";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
+import { copyToClipboard } from "@/lib/utils";
 import { sqlValueToString } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
@@ -110,6 +112,50 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
+function buildCsv(response: QueryResponse): string {
+  function escapeCsv(v: string): string {
+    return `"${v.replaceAll('"', '""')}"`;
+  }
+
+  const lines: string[] = [];
+
+  const columns = response.columns;
+  if (columns !== null) {
+    lines.push(columns.map((c) => escapeCsv(c.name)).join(", "));
+  }
+
+  for (const row of response.rows) {
+    lines.push(row.map((v) => escapeCsv(sqlValueToString(v))).join(", "));
+  }
+
+  return lines.join("\n");
+}
+
+function ResultsHeader(props: {
+  data: QueryResponse | undefined;
+  timestamp: number | undefined;
+}) {
+  return (
+    <div class="flex items-center justify-between text-sm">
+      <Button
+        variant="ghost"
+        size="icon"
+        disabled={props.data === undefined}
+        onClick={() => {
+          const data = props.data;
+          if (data !== undefined) {
+            copyToClipboard(buildCsv(data));
+          }
+        }}
+      >
+        <TbOutlineCopy />
+      </Button>
+
+      <ExecutionTime timestamp={props.timestamp} />
+    </div>
+  );
+}
+
 function ResultView(props: {
   script: Script;
   response: ExecutionResult | undefined;
@@ -121,18 +167,20 @@ function ResultView(props: {
     <Switch>
       <Match when={response()?.error}>
         <div class="flex flex-col gap-2 p-4">
-          <div class="flex justify-end text-sm">
-            <ExecutionTime timestamp={response()?.timestamp} />
-          </div>
+          <ResultsHeader
+            data={response()?.data}
+            timestamp={response()?.timestamp}
+          />
           Error: {response()?.error?.message}
         </div>
       </Match>
 
       <Match when={response()?.data === undefined}>
         <div class="flex flex-col gap-2 p-4">
-          <div class="flex justify-end text-sm">
-            <ExecutionTime timestamp={response()?.timestamp} />
-          </div>
+          <ResultsHeader
+            data={response()?.data}
+            timestamp={response()?.timestamp}
+          />
           No data
         </div>
       </Match>
@@ -197,9 +245,7 @@ function ResultViewImpl(props: {
       }}
     >
       <div class="flex flex-col gap-2 p-4">
-        <div class="flex justify-end text-sm">
-          <ExecutionTime timestamp={props.timestamp} />
-        </div>
+        <ResultsHeader data={props.data} timestamp={props.timestamp} />
 
         <Table table={dataTable()} loading={false} />
       </div>
