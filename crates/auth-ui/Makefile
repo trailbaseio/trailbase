@@ -7,7 +7,7 @@ DISTDIR := ${APPDIR}/dist
 ADDRESS := 127.0.0.1:4000
 
 deploy: ${TRAILDEPOT}/wasm/component.wasm
-	cp $< ../../client/testfixture/wasm/auth_ui_component.wasm
+	cp $< ../../client/testfixture/wasm/trailbase_auth_ui_component.wasm
 
 run: ${TRAILDEPOT}/wasm/component.wasm
 	${TRAILBIN} --data-dir=${TRAILDEPOT} run --address=${ADDRESS}

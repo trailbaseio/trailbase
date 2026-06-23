@@ -16,7 +16,11 @@ pub fn repo() -> HashMap<String, ComponentDefinition> {
   return HashMap::from([
         ("trailbase/auth_ui".to_string(), ComponentDefinition {
             url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_auth_ui.zip".to_string(),
-            wasm_filenames: vec!["auth_ui_component.wasm".to_string()],
+            wasm_filenames: vec![
+                "trailbase_auth_ui_component.wasm".to_string(),
+                // Old filename.
+                "auth_ui_component.wasm".to_string(),
+            ],
         })
     ]);
 }

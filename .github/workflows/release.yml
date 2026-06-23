@@ -274,7 +274,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUST_TARGET: wasm32-wasip2
-      BINARY_PATH: target/$RUST_TARGET/release/auth_ui_component.wasm
+      BINARY_PATH: target/$RUST_TARGET/release/trailbase_auth_ui_component.wasm
       ARCHIVE_NAME: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
     steps:
       - uses: actions/checkout@v6

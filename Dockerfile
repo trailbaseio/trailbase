@@ -47,7 +47,7 @@ RUN pnpm -r install --frozen-lockfile
 FROM base-builder AS auth-ui-builder
 
 RUN rustup target add wasm32-wasip2
-RUN RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target wasm32-wasip2 --release -p auth-ui-component
+RUN RUST_BACKTRACE=1 PNPM_OFFLINE="TRUE" cargo build --target wasm32-wasip2 --release -p trailbase-auth-ui-component
 
 
 FROM base-builder AS binary-builder
@@ -68,7 +68,7 @@ RUN apk add --no-cache tini curl
 RUN mkdir -p /app/traildepot/wasm
 
 COPY --from=binary-builder /app/trail.exe /app/trail
-COPY --from=auth-ui-builder /app/target/wasm32-wasip2/release/auth_ui_component.wasm /app/traildepot/wasm/
+COPY --from=auth-ui-builder /app/target/wasm32-wasip2/release/trailbase_auth_ui_component.wasm /app/traildepot/wasm/
 
 # When `docker run` is executed, launch the binary as unprivileged user.
 RUN adduser -D trailbase
