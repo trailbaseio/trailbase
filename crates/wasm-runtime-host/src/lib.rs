@@ -441,13 +441,19 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   // Execution settings:
   config.epoch_interruption(false);
   config.memory_reservation(64 * 1024 * 1024 /* bytes */);
+
   config.wasm_component_model(true);
+  // config.wasm_component_model_async(true);
+  // config.wasm_component_model_more_async_builtins(true);
+
   // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
 
   // Compilation settings.
   config.cache(cache);
 
-  if use_winch {
+  // FIXME: Winch doesn't currently support async components:
+  //   https://github.com/bytecodealliance/wasmtime/issues/12404
+  if false && use_winch {
     config.strategy(wasmtime::Strategy::Winch);
   } else {
     config.strategy(wasmtime::Strategy::Cranelift);

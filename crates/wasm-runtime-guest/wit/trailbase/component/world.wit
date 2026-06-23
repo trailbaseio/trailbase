@@ -25,7 +25,7 @@ world interfaces {
 
   // TrailBase's interfaces:
   @since(version = 0.1.0)
-  include trailbase:database/interfaces@0.1.1;
+  include trailbase:database/interfaces@0.1.2;
 
   @since(version = 0.1.0)
   export init-endpoint;
@@ -40,7 +40,7 @@ world init {
   //
   // Host interfaces to interact with host database.
   @since(version = 0.1.0)
-  include trailbase:database/interfaces@0.1.1;
+  include trailbase:database/interfaces@0.1.2;
 
   // Entry point for initialization and retrieving opaque component manifest.
   @since(version = 0.1.0)
