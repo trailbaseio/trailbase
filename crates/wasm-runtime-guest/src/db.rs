@@ -93,76 +93,87 @@ pub async fn query(
   query: impl std::string::ToString,
   params: impl Into<Vec<Value>>,
 ) -> Result<Vec<Vec<Value>>, Error> {
-  let r = SqliteRequest {
-    query: query.to_string(),
-    params: params.into().into_iter().map(to_sql_value).collect(),
-  };
-  let request = Request::builder()
-    .uri("http://__sqlite/query")
-    .method("POST")
-    .body(serde_json::to_vec(&r)?.into_body())
-    .map_err(|err| Error::Other(err.into()))?;
-
-  let client = Client::new();
-  let (_parts, mut body) = client
-    .send(request)
+  return crate::wit::trailbase::database::sqlite::query(&query.to_string(), &params.into())
     .await
-    .map_err(|err| Error::Other(err.into()))?
-    .into_parts();
+    .map_err(|tx_err| Error::Other(tx_err.into()));
 
-  let bytes = body.bytes().await.map_err(|err| Error::Other(err.into()))?;
-
-  return match serde_json::from_slice(&bytes) {
-    Ok(SqliteResponse::Query { rows }) => Ok(
-      rows
-        .into_iter()
-        .map(|row| {
-          row
-            .into_iter()
-            .map(from_sql_value)
-            .collect::<Result<Vec<_>, _>>()
-        })
-        .collect::<Result<Vec<_>, _>>()?,
-    ),
-    Ok(SqliteResponse::Error(err)) => Err(Error::Other(err.into())),
-    Ok(resp) => Err(Error::UnexpectedType(
-      format!("Expected QueryResponse, got: {resp:?}").into(),
-    )),
-    Err(err) => Err(Error::Other(err.into())),
-  };
+  // let r = SqliteRequest {
+  //   query: query.to_string(),
+  //   params: params.into().into_iter().map(to_sql_value).collect(),
+  // };
+  // let request = Request::builder()
+  //   .uri("http://__sqlite/query")
+  //   .method("POST")
+  //   .body(serde_json::to_vec(&r)?.into_body())
+  //   .map_err(|err| Error::Other(err.into()))?;
+  //
+  // let client = Client::new();
+  // let (_parts, mut body) = client
+  //   .send(request)
+  //   .await
+  //   .map_err(|err| Error::Other(err.into()))?
+  //   .into_parts();
+  //
+  // let bytes = body.bytes().await.map_err(|err| Error::Other(err.into()))?;
+  //
+  // return match serde_json::from_slice(&bytes) {
+  //   Ok(SqliteResponse::Query { rows }) => Ok(
+  //     rows
+  //       .into_iter()
+  //       .map(|row| {
+  //         row
+  //           .into_iter()
+  //           .map(from_sql_value)
+  //           .collect::<Result<Vec<_>, _>>()
+  //       })
+  //       .collect::<Result<Vec<_>, _>>()?,
+  //   ),
+  //   Ok(SqliteResponse::Error(err)) => Err(Error::Other(err.into())),
+  //   Ok(resp) => Err(Error::UnexpectedType(
+  //     format!("Expected QueryResponse, got: {resp:?}").into(),
+  //   )),
+  //   Err(err) => Err(Error::Other(err.into())),
+  // };
 }
 
 pub async fn execute(
   query: impl std::string::ToString,
   params: impl Into<Vec<Value>>,
 ) -> Result<usize, Error> {
-  let r = SqliteRequest {
-    query: query.to_string(),
-    params: params.into().into_iter().map(to_sql_value).collect(),
-  };
-  let request = Request::builder()
-    .uri("http://__sqlite/execute")
-    .method("POST")
-    .body(serde_json::to_vec(&r)?.into_body())
-    .map_err(|err| Error::Other(err.into()))?;
+  let affected_rows =
+    crate::wit::trailbase::database::sqlite::execute(&query.to_string(), &params.into())
+      .await
+      .map_err(|tx_err| Error::Other(tx_err.into()))?;
 
-  let client = Client::new();
-  let (_parts, mut body) = client
-    .send(request)
-    .await
-    .map_err(|err| Error::Other(err.into()))?
-    .into_parts();
+  return Ok(affected_rows as usize);
 
-  let bytes = body.bytes().await.map_err(|err| Error::Other(err.into()))?;
-
-  return match serde_json::from_slice(&bytes) {
-    Ok(SqliteResponse::Execute { rows_affected }) => Ok(rows_affected),
-    Ok(SqliteResponse::Error(err)) => Err(Error::Other(err.into())),
-    Ok(resp) => Err(Error::UnexpectedType(
-      format!("Expected ExecuteResponse, got: {resp:?}").into(),
-    )),
-    Err(err) => Err(Error::Other(err.into())),
-  };
+  // let r = SqliteRequest {
+  //   query: query.to_string(),
+  //   params: params.into().into_iter().map(to_sql_value).collect(),
+  // };
+  // let request = Request::builder()
+  //   .uri("http://__sqlite/execute")
+  //   .method("POST")
+  //   .body(serde_json::to_vec(&r)?.into_body())
+  //   .map_err(|err| Error::Other(err.into()))?;
+  //
+  // let client = Client::new();
+  // let (_parts, mut body) = client
+  //   .send(request)
+  //   .await
+  //   .map_err(|err| Error::Other(err.into()))?
+  //   .into_parts();
+  //
+  // let bytes = body.bytes().await.map_err(|err| Error::Other(err.into()))?;
+  //
+  // return match serde_json::from_slice(&bytes) {
+  //   Ok(SqliteResponse::Execute { rows_affected }) => Ok(rows_affected),
+  //   Ok(SqliteResponse::Error(err)) => Err(Error::Other(err.into())),
+  //   Ok(resp) => Err(Error::UnexpectedType(
+  //     format!("Expected ExecuteResponse, got: {resp:?}").into(),
+  //   )),
+  //   Err(err) => Err(Error::Other(err.into())),
+  // };
 }
 
 fn from_sql_value(value: SqlValue) -> Result<Value, DecodeError> {
