@@ -1,4 +1,4 @@
-package trailbase:database@0.1.1;
+package trailbase:database@0.1.2;
 
 interface sqlite {
   // WARNING: Evolving a variant currently breaks the ABI:
@@ -17,11 +17,11 @@ interface sqlite {
 
   // NOTE: Post WASIp3 (and guest support in place, e.g. wstd) with native
   // async/future support, DB queries should be routed through below functions.
-  //
-  // @since(version = 0.1.0)
-  // execute: func(query: string, params: list<value>) -> future<result<u64, tx-error>>;
-  // @since(version = 0.1.0)
-  // query: func(query: string, params: list<value>) -> future<result<list<list<value>>, tx-error>>;
+
+  @since(version = 0.1.2)
+  execute: func(query: string, params: list<value>) -> future<result<u64, tx-error>>;
+  @since(version = 0.1.2)
+  query: func(query: string, params: list<value>) -> future<result<list<list<value>>, tx-error>>;
 
   @since(version = 0.1.1)
   resource transaction {
