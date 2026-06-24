@@ -26,6 +26,7 @@ pub mod wit {
   });
 }
 
+pub mod auth;
 pub mod db;
 pub mod fetch;
 pub mod fs;
