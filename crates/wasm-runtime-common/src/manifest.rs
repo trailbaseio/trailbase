@@ -21,6 +21,7 @@ pub enum Subsystem {
   Http,
   Jobs,
   SqliteFunctions,
+  AdminModule,
   #[serde(other)]
   Unknown,
 }
@@ -79,6 +80,15 @@ pub enum SqliteFunction {
   Scalar(SqliteScalarFunction),
 }
 
+/// Metadata a component can self-report for display in the admin WASM modules page.
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+pub struct AdminModule {
+  pub display_name: String,
+  pub icon: Option<String>,
+  pub config_path: Option<String>,
+  pub description: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct InitArguments {
@@ -100,4 +110,7 @@ pub struct InitManifest {
 
   /// Registered Sqlite functions.
   pub sqlite_functions: Option<Vec<SqliteFunction>>,
+
+  /// Metadata for the admin WASM modules page.
+  pub admin_module: Option<AdminModule>,
 }
