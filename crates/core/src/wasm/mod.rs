@@ -39,8 +39,37 @@ pub(crate) async fn install_routes_and_jobs(
 
   let version = state.version().git_version_tag.clone();
 
-  let InstallResult { router, jobs } =
-    install_routes_and_jobs::<AppState>(runtime, extract_user, version).await?;
+  let component_name = runtime
+    .read()
+    .await
+    .component_path()
+    .file_stem()
+    .and_then(|s| s.to_str())
+    .unwrap_or("unknown")
+    .to_string();
+
+  let InstallResult {
+    router,
+    jobs,
+    admin_module,
+  } = install_routes_and_jobs::<AppState>(runtime, extract_user, version).await?;
+
+  if let Some(admin_module) = admin_module {
+    let wasm_manifest = crate::app_state::WasmManifest {
+      display_name: admin_module.display_name,
+      icon: admin_module.icon,
+      config_path: admin_module.config_path,
+      description: admin_module.description,
+    };
+    log::info!("Registering manifest for WASM component '{component_name}'");
+    state
+      .wasm_manifests()
+      .write()
+      .await
+      .insert(component_name, wasm_manifest);
+  } else {
+    log::debug!("Component '{component_name}' has no admin module manifest");
+  }
 
   for Job {
     name,

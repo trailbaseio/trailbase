@@ -14,7 +14,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::manifest::{
-  HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest,
+  AdminModule, HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest,
+  Job as JobManifest,
 };
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::{
@@ -140,6 +141,7 @@ pub struct Job {
 pub struct InstallResult<S: Clone + Send + Sync> {
   pub router: Option<Router<S>>,
   pub jobs: Vec<Job>,
+  pub admin_module: Option<AdminModule>,
 }
 
 pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
@@ -151,6 +153,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
     http_handlers,
     job_handlers,
     sqlite_functions: _,
+    admin_module,
   } = {
     let store = HttpStore::new(&*runtime.read().await).await?;
     store.initialize(InitArgs { version }).await?
@@ -280,7 +283,11 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
     );
   }
 
-  return Ok(InstallResult { router, jobs });
+  return Ok(InstallResult {
+    router,
+    jobs,
+    admin_module,
+  });
 }
 
 #[inline]
