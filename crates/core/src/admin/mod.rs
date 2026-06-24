@@ -1,3 +1,4 @@
+mod wasm_modules;
 mod config;
 mod email;
 mod error;
@@ -73,6 +74,7 @@ pub fn router() -> Router<AppState> {
     )
     .route("/public_key", get(jwt::get_public_key))
     .route("/info", get(info::info_handler))
+    .route("/wasm-modules", get(wasm_modules::list_wasm_modules_handler))
     .route("/jobs", get(jobs::list_jobs_handler))
     .route("/job/run", post(jobs::run_job_handler))
     .route("/email/test", post(email::test_email_handler))

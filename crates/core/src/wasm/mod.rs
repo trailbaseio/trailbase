@@ -115,6 +115,49 @@ pub(crate) fn wasm_runtimes_builder(
   }));
 }
 
+/// Probe a WASM component's manifest endpoint by calling it directly
+/// through the runtime's HTTP store. Returns the parsed manifest or None
+/// if the component doesn't expose one or the response is invalid.
+pub(crate) async fn probe_manifest(
+  runtime: &Runtime,
+  manifest_path: &str,
+) -> Option<crate::app_state::WasmManifest> {
+  let manifest_uri = format!("http://localhost{manifest_path}");
+
+  let manifest_store = HttpStore::new(runtime).await.ok()?;
+  let context_header = to_header_value(&HttpContext {
+    kind: HttpContextKind::Http,
+    registered_path: manifest_path.to_string(),
+    path_params: vec![],
+    user: None,
+  })
+  .ok()?;
+
+  let probe_req = hyper::Request::builder()
+    .method(hyper::Method::GET)
+    .uri(manifest_uri)
+    .header("__context", context_header)
+    .body(empty())
+    .ok()?;
+
+  let resp = manifest_store.call_incoming_http_handler(probe_req).await.ok()?;
+
+  if resp.status() != hyper::StatusCode::OK {
+    return None;
+  }
+
+  let (_, body) = resp.into_parts();
+  let collected = body.collect().await.ok()?;
+
+  match serde_json::from_slice::<crate::app_state::WasmManifest>(&collected.to_bytes()) {
+    Ok(manifest) => Some(manifest),
+    Err(err) => {
+      warn!("Manifest at '{manifest_path}' returned invalid JSON: {err}");
+      None
+    }
+  }
+}
+
 pub(crate) async fn install_routes_and_jobs(
   state: &AppState,
   runtime: Arc<RwLock<Runtime>>,
@@ -129,6 +172,27 @@ pub(crate) async fn install_routes_and_jobs(
       })
       .await?
   };
+
+  let component_name = runtime
+    .read()
+    .await
+    .component_path()
+    .file_stem()
+    .and_then(|s| s.to_str())
+    .unwrap_or("unknown")
+    .to_string();
+
+  // Convention: manifest is always at /_/wasm/<file-stem>/manifest.
+  // Components must register their routes under the same prefix as their file name.
+  let manifest_path = format!("/_/wasm/{component_name}/manifest");
+  if let Some(manifest) = probe_manifest(&*runtime.read().await, &manifest_path).await {
+    info!("Registering manifest for WASM component '{component_name}'");
+    state
+      .wasm_manifests()
+      .write()
+      .await
+      .insert(component_name, manifest);
+  }
 
   for (name, spec) in init_result.job_handlers {
     let schedule = cron::Schedule::from_str(&spec)?;
@@ -199,7 +263,10 @@ pub(crate) async fn install_routes_and_jobs(
             .map(|(name, value)| (name.to_string(), value.to_string()))
             .collect(),
           user: user.map(|u| HttpContextUser {
-            id: u.id,
+            // The host encodes user IDs with BASE64_URL_SAFE (with padding), but the
+            // wasm-runtime-guest's is_admin() decodes with URL_SAFE_NO_PAD. Strip the
+            // padding here so the guest receives the format it expects.
+            id: u.id.trim_end_matches('=').to_string(),
             email: u.email,
             username: u.username,
             csrf_token: u.csrf_token,

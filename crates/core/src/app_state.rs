@@ -22,6 +22,14 @@ use crate::records::subscribe::manager::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::wasm::Runtime;
 
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct WasmManifest {
+  pub display_name: String,
+  pub icon: Option<String>,
+  pub config_path: Option<String>,
+  pub description: Option<String>,
+}
+
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
@@ -57,6 +65,7 @@ struct InternalState {
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   wasm_runtimes_builder: crate::wasm::WasmRuntimeBuilder,
+  wasm_manifests: Arc<RwLock<HashMap<String, WasmManifest>>>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -203,8 +212,9 @@ impl AppState {
           .map(|rt| Arc::new(RwLock::new(rt)))
           .collect(),
         wasm_runtimes_builder,
-        #[cfg(test)]
-        pg_uri: None,
+        wasm_manifests: Arc::new(RwLock::new(HashMap::new())),
+      #[cfg(test)]
+      pg_uri: None,
         #[cfg(test)]
         test_cleanup: vec![],
       }),
@@ -399,6 +409,10 @@ impl AppState {
 
   pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
     return &self.state.wasm_runtimes;
+  }
+
+  pub(crate) fn wasm_manifests(&self) -> &Arc<RwLock<HashMap<String, WasmManifest>>> {
+    return &self.state.wasm_manifests;
   }
 
   pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
@@ -867,6 +881,7 @@ mod test_utils {
         object_store,
         wasm_runtimes: vec![],
         wasm_runtimes_builder: Box::new(|| Ok(vec![])),
+        wasm_manifests: Arc::new(RwLock::new(HashMap::new())),
         pg_uri,
         // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
         // write new artifacts to the already deleted dir.
