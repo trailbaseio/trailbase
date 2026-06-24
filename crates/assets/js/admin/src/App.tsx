@@ -40,7 +40,7 @@ function TopNav(props: RouteSectionProps) {
     <>
       <HorizontalNavbar height={48} location={props.location} />
 
-      <main class="max-h-[calc(100vh-48px)] w-screen">
+      <main class="max-h-[calc(100vh-48px)] w-screen overflow-y-auto">
         <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </>
