@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
 import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
+import { WasmModulesPage } from "@/components/wasm/WasmModulesPage";
+import { WasmModuleSettingsPage } from "@/components/wasm/WasmModuleSettingsPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
@@ -103,6 +105,8 @@ const App: Component = () => {
           <Route path="/" component={IndexPage} />
           <Route path="/table/:table?" component={TablePage} />
           <Route path="/auth" component={AccountsPage} />
+          <Route path="/wasm-modules" component={WasmModulesPage} />
+          <Route path="/wasm-modules/:name" component={WasmModuleSettingsPage} />
           <Route path="/editor" component={LazyEditorPage} />
           <Route path="/erd" component={LazyErdPage} />
           <Route path="/logs" component={LazyLogsPage} />

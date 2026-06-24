@@ -161,18 +161,37 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
     return &self.state.component_path;
   }
 
-  async fn new_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
+async fn new_bindings(
+    &self,
+  ) -> Result<(Store<State>, crate::host::Interfaces), Error> {
     let mut store = self.state.store_builder.new_store(&self.state.engine)?;
 
-    let bindings = crate::host::Interfaces::instantiate_async(
-      &mut store,
-      &self.state.component,
-      &self.state.linker,
-    )
-    .await
-    .map_err(|err| {
+    let instance_pre = self
+      .state
+      .linker
+      .instantiate_pre(&self.state.component)
+      .map_err(|err| {
+        log::error!(
+          "Failed to pre-instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.state.component_path
+        );
+        return err;
+      })?;
+
+    let instance = instance_pre
+      .instantiate_async(&mut store)
+      .await
+      .map_err(|err| {
+        log::error!(
+          "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.state.component_path
+        );
+        return err;
+      })?;
+
+    let bindings = crate::host::Interfaces::new(&mut store, &instance).map_err(|err| {
       log::error!(
-        "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+        "Failed to load WIT bindings for {path:?}: '{err}'.",
         path = self.state.component_path
       );
       return err;
@@ -270,6 +289,7 @@ impl HttpStore {
         subsystems: Some(vec![
           trailbase_wasm_common::manifest::Subsystem::Http,
           trailbase_wasm_common::manifest::Subsystem::Jobs,
+          trailbase_wasm_common::manifest::Subsystem::AdminModule,
         ]),
       })?;
 
