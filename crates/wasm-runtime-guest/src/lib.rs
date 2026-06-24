@@ -26,6 +26,7 @@ pub mod wit {
   });
 }
 
+pub mod auth;
 pub mod db;
 pub mod fetch;
 pub mod fs;
@@ -55,6 +56,10 @@ pub mod sqlite {
 pub mod rand {
   pub use wstd::rand::{get_insecure_random_bytes, get_random_bytes};
 }
+
+// Re-export AdminModule so guest crates can use it without depending on
+// trailbase-wasm-common directly.
+pub use trailbase_wasm_common::manifest::AdminModule;
 
 #[macro_export]
 macro_rules! export {
@@ -116,6 +121,10 @@ pub trait Guest {
   fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
     return vec![];
   }
+
+  fn admin_module() -> Option<AdminModule> {
+    return None;
+  }
 }
 
 pub struct TrailbaseHandler<T: Guest> {
@@ -140,10 +149,12 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
 {
   fn get_manifest(args: String) -> Result<String, String> {
     use trailbase_wasm_common::manifest::{
-      HttpRoute, InitArguments, InitManifest, Job, SqliteFunction, SqliteScalarFunction,
+      AdminModule, HttpRoute, InitArguments, InitManifest, Job, SqliteFunction,
+      SqliteScalarFunction,
     };
 
     let args: InitArguments = serde_json::from_str(&args).map_err(|err| err.to_string())?;
+
     Self::call_init_once(Args {
       version: args.version,
     });
@@ -220,10 +231,21 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
       None
     };
 
+    let admin_module: Option<AdminModule> = if args
+      .subsystems
+      .as_ref()
+      .is_none_or(|c| c.contains(&trailbase_wasm_common::manifest::Subsystem::AdminModule))
+    {
+      T::admin_module()
+    } else {
+      None
+    };
+
     let manifest = InitManifest {
       http_handlers,
       job_handlers,
       sqlite_functions,
+      admin_module,
     };
 
     return serde_json::to_string(&manifest).map_err(|err| err.to_string());
