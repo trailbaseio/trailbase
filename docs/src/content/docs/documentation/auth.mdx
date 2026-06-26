@@ -4,7 +4,8 @@ description: Managing Users and Access
 ---
 
 import { Image } from "astro:assets";
-import { Aside } from "@astrojs/starlight/components";
+import { Aside, Code } from "@astrojs/starlight/components";
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 import implementation from "./_auth.svg";
 
@@ -27,8 +28,9 @@ password, etc.
 ## Integrating Auth
 
 At an abstract level, whenever a user signs in, either directly with
-`email+password` or via an external OAuth2 provider (Google, Microsoft, ...),
-they receive a set of tokens minted by your TrailBase instance.
+(`email` and/or `username`) +`password` or via an external OAuth2 provider
+(Google, Microsoft, ...), they receive a set of tokens minted by your TrailBase
+instance.
 Users or a backend of yours should then attach the *auth* token to their
 TrailBase API requests to identify themselves. TrailBase will then accept or
 reject the request based on the user's authorization.
@@ -154,11 +156,13 @@ token.
 
 TrailBase currently implements the following auth flows:
 
-- Email + password based user registration and email verification.
+- (Email and/or username) + password based user registration and email verification.
 - User registration using social OAuth providers (Google, ...)
+- Anonymous sign-in (i.e. registration) as an ephemeral user and promotion to a full account.
 - Login & logout.
 - Change & reset password.
 - Change email.
+- Change username.
 - User deletion.
 - Avatar management.
 
@@ -168,40 +172,136 @@ support the above flows. By default it's accessible via the route:
 The built-in auth UIs can be disabled with `--disable-auth-ui` in case you
 prefer rolling your own or have no need web-based authentication.
 
-## Adding Usernames and Other Metadata
+## User Identifiers (Email and/or Username)
 
-Strictly speaking, authentication is merely responsible for uniquely
+Strictly speaking, authentication is only responsible for uniquely
 identifying who's on the other side.
-This only requires a __unique identifier__ and one or more __secrets__
-(e.g.  a password, hardware token, ...) for the peer to proof they're them.
+This requires a __unique identifier__ and one or more __secrets__
+(e.g.  a password, second factor, ...) for the peer to proof they're them.
 
 Any unique identifier will do: a random string (painful to remember), a phone
 number, a username, or an email address.
 Email addresses are a popular choice, since they do double duty as a
 communication channel letting you reach out to your users, e.g. to reset their
-password.
+password. Besides, for many products like online shops, email addresses are the natural
+choice: they remain private and allow sending order confirmations, etc.
+For more public uses, it may make sense to add a username to the mix or use
+usernames exclusively to avoid leaking your users' email addresses.
 
-Even from a product angle, building an online shop for example, email addresses
-are the natural choice.
-Asking your customers to think up and remember a globally unique username adds
-extra friction especially since you need their email address anyway to send
-receipts.
-Additional profile data, like a shipment address, is something you can ask for
-at a later time and is independent from auth.
-In contrast, when building a social network, chat app or messaging board, you
-typically don't want to leak everyone's email address.
-You will likely want an additional, more opaque identifier such as a username
-or handle.
+Which identifier users need to provide, i.e. email address and or username, is
+governed by a configurable policy, which can be set either via the admin
+dashboard (*Settings → Auth*) or configuration. The available policies are:
 
-Long story short, modeling __profile__ data is very product dependent.
-It's for you to figure out.
-That said, it is straight forward to join auth data, such as the user's email
-address, and custom custom profile data in TrailBase.
-We suggest creating a separate profile table with a `_user.id` `FOREIGN KEY`
-primary key column. You can then freely expose profiles as dedicated record API
-endpoints or join them with other data `_user.id`.
-The blog example in `<repo>/examples/blog` demonstrates this, joining blog
-posts with user profiles on the author id to get an author's name.
+<div style="overflow-x: auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>Policy</th>
+        <th>Behavior</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr>
+        <td>OnlyEmail *default*</td>
+        <td>Email required. Username not used.</td>
+      </tr>
+      <tr>
+        <td>RequireEmail</td>
+        <td>Email required. Username optional.</td>
+      </tr>
+      <tr>
+        <td>OnlyUsername</td>
+        <td>Email not used. Username required.</td>
+      </tr>
+      <tr>
+        <td>RequireUsername</td>
+        <td>Email optional. Username required.</td>
+      </tr>
+      <tr>
+        <td>RequireEmailAndUsername</td>
+        <td>Both, email and username required.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+Requiring an email address is encouraged. Choosing a policy that omits email means TrailBase cannot send
+password-reset emails and you don't have the means to contact your users (e.g. send an invoice, updated ToS, ...).
+
+The `auth-ui` login form adapts automatically to match the active policy.
+You should avoid changing the policy post launch.
+For example, switching from `OnlyUsername` to `OnlyEmail`
+will lead to an inconsistent user DB and when using the first-party auth UI
+leave username-only users w/o the means to re-authenticate.
+
+
+## Anonymous Authentication
+
+Anonymous sign-in can allow users to start using your app without creating a
+full account first, i.e. email sign-up, followed by verification, followed by
+sign-in.
+In the anonymous case, a password-less user is created behind the scenes and
+tokens are issued just like it would normally do when signing in.
+
+Anonymous auth must be explicitly enabled in the admin dashboard under
+*Settings → Auth* or via the configuration.
+
+#### Constraints:
+
+- **Single sign-in only.** Anonymous users cannot re-authenticate once their
+  refresh token expires. They are tied to a single token and cannot be shared
+  across devices.
+- **90-day TTL.** Ephemeral users are garbage-collected after approximately
+  3 months if they have not been promoted to a full account.
+- **No OAuth promotion yet.** Promoting an anonymous user to an OAuth-backed
+  account is not yet supported; only password-based promotion is available.
+
+#### Sign-In & Promotion
+
+All client libraries across all languages support anonymous login, here's a
+brief example to get you started.
+
+export const anonymousAuthTs = `
+await client.loginAnonymously();
+await client.promoteAnonymous({
+  new_password: "s3cr3t!",
+  new_email: "user@example.com"
+});
+
+// WARN: logging out will orphan the newly created anonymous user. Signing back into
+// the same account is impossible.
+client.logout()
+`;
+
+export const anonymousAuthCurl = `
+curl
+  --header "Content-Type: application/json"
+  --request POST
+  --data '{}'
+  http://localhost:4000/api/auth/v1/login_anonymous
+
+curl
+  --header "Content-Type: application/json"
+  --header "Authorization: Bearer \$\{AUTH_TOKEN\}"
+  --request POST
+  --data '{ "new_password": "s3cr3t!", "new_email": "alice@example.com", "new_username": "alice" }'
+  http://localhost:4000/api/auth/v1/promote_anonymous
+`;
+
+<Tabs>
+  <TabItem label="JS/TS/Dart">
+    <Code lang="ts" code={anonymousAuthTs} />
+  </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={anonymousAuthCurl} />
+  </TabItem>
+</Tabs>
+
+The response of the initial sign-in is the same token payload as for normal
+logins. The resulting user will have an auto-generated username of the form
+`anon<6-char-suffix>` and no email or password set.
 
 ## Lifetime Considerations when Persisting Tokens
 
@@ -215,6 +315,11 @@ Session invalidation results in the refresh token no longer being valid.
 However, the auth token will remain valid until it expires. In other words, to
 ensure that users don't appear as logged in anymore, any auth token you may
 have persisted should be dropped.
+
+This is especially relevant for anonymous users: once the anonymous session's
+refresh token expires (or is revoked at logout), there is no way to
+re-authenticate as that ephemeral user.
+Any protected, associated data will therefore become inaccessible.
 
 ---
 
