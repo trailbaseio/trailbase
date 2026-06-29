@@ -45,12 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .install_default()
     .expect("Failed to install rustls crypto");
 
-  let Server {
-    state,
-    main_router,
-    admin_router,
-    tls,
-  } = Server::init_with_custom_initializer(
+  let server = Server::init_with_custom_initializer(
     ServerOptions {
       data_dir: DataDir::default(),
       address: "localhost:4004".to_string(),
@@ -72,16 +67,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let custom_router = Router::new()
       .route("/", get(hello_world_handler))
       .with_state(CustomState {
-        state,
+        state: server.state.clone(),
         greeting: Some("Hi".to_string()),
       })
-      .merge(main_router.1);
+      .merge(server.main_router.1);
 
-    (main_router.0, custom_router)
+    (server.main_router.0, custom_router)
   };
 
-  let (cleanup_sender, _cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
-  trailbase::api::serve(router, admin_router, tls, cleanup_sender).await?;
+  let server = Server {
+    main_router: router,
+    ..server
+  };
+  server.serve().await?;
 
   Ok(())
 }
