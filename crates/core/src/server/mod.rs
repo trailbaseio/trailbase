@@ -559,12 +559,73 @@ impl Server {
         router
           .fallback_service(ServeDir::new(public_dir).not_found_service(handle_404.into_service()))
       };
+
+      router = Self::webdav_server(router, public_dir);
     }
 
     return Ok((
       opts.address.clone(),
       Self::wrap_with_default_layers(state, opts, router),
     ));
+  }
+
+  #[cfg(not(feature = "webdav"))]
+  fn webdav_server(router: axum::Router<AppState>, public_dir: &PathBuf) -> axum::Router<AppState> {
+    router
+  }
+
+  #[cfg(feature = "webdav")]
+  fn webdav_server(router: axum::Router<AppState>, public_dir: &PathBuf) -> axum::Router<AppState> {
+    async fn handle_dav(
+      axum::Extension(dav): axum::Extension<dav_server::DavHandler>,
+      State(state): State<AppState>,
+      headers: axum::http::HeaderMap,
+      req: Request,
+    ) -> Result<impl IntoResponse, axum::http::StatusCode> {
+      let token = state
+        .access_config(|config| config.auth.webdav_token.clone())
+        .unwrap_or_default();
+      if token.is_empty() {
+        log::debug!("Attempting to access webdav route without configured token");
+        return Err(axum::http::StatusCode::UNAUTHORIZED.into());
+      }
+
+      let auth_headers = headers.get(axum::http::header::AUTHORIZATION);
+      if auth_headers.is_none() {
+        log::debug!("Attempting to access webdav route without sending authorization token");
+        return Err(axum::http::StatusCode::UNAUTHORIZED.into());
+      }
+
+      let http_token = auth_headers
+        .and_then(|header| header.to_str().ok())
+        .and_then(|header| header.strip_prefix("Bearer "))
+        .unwrap_or_default();
+
+      if http_token != token {
+        return Err(axum::http::StatusCode::UNAUTHORIZED.into());
+      }
+
+      Ok(dav.handle(req).await)
+    }
+
+    let dav = dav_server::DavHandler::builder()
+      .filesystem(dav_server::localfs::LocalFs::new(
+        public_dir, false, false, false,
+      ))
+      .locksystem(dav_server::memls::MemLs::new())
+      .strip_prefix("/_/dav")
+      .autoindex(true)
+      .hide_symlinks(true)
+      .build_handler();
+    let dav_router = Router::new()
+      .route("/_/dav", axum::routing::any(handle_dav))
+      .route("/_/dav/", axum::routing::any(handle_dav))
+      .route("/_/dav/{*path}", axum::routing::any(handle_dav))
+      .layer(axum::Extension(dav));
+
+    log::info!("Registering WebDAV routes on /_/dav to upload assets to {} when token is configured in admin", &public_dir.display());
+
+    router.merge(dav_router)
   }
 
   pub fn wrap_with_default_layers(
