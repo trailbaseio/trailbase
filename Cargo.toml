@@ -79,7 +79,7 @@ tokio = { version = "^1.38.0", default-features = false, features = ["fs", "io-s
 tokio-rustls = { version = "0.26.1", default-features = false }
 tracing = { version = "0.1.40", default-features = false }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
-trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm", "pg"] }
+trailbase = { path = "crates/core", version = "0.2.0", default-features = false, features=["wasm", "pg", "webdav"] }
 trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-auth-config = { path = "crates/auth-config", version = "0.0.0" }
 trailbase-auth-ui-component = { path = "crates/auth-ui", version = "0.0.0" }
