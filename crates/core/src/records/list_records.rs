@@ -534,7 +534,7 @@ static EPHEMERAL_CURSOR_KEY: LazyLock<KeyType> = LazyLock::new(generate_random_k
 mod tests {
   use serde::Deserialize;
   use trailbase_schema::metadata::ColumnMetadata;
-  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::parse::{Bump, parse_into_statement};
   use trailbase_schema::sqlite::{Column, QualifiedName};
   use trailbase_sqlite::Value;
 
@@ -551,7 +551,11 @@ mod tests {
   use crate::util::urlencode;
 
   fn sanitize_template(template: &str) {
-    assert!(parse_into_statement(template).is_ok(), "{template}");
+    let allocator = Bump::new();
+    assert!(
+      parse_into_statement(&allocator, template).is_ok(),
+      "{template}"
+    );
     assert!(!template.contains("\n\n"), "{template}");
   }
 

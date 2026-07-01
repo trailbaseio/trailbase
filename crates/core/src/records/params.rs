@@ -677,7 +677,7 @@ mod tests {
   use base64::prelude::*;
   use schemars::{JsonSchema, schema_for};
   use serde_json::json;
-  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::parse::{Bump, parse_into_statement};
   use trailbase_schema::sqlite::Table;
 
   use super::*;
@@ -719,9 +719,8 @@ mod tests {
     "#
     );
 
-    let table: Table = parse_into_statement(&sql)
-      .unwrap()
-      .unwrap()
+    let allocator = Bump::new();
+    let table: Table = (&parse_into_statement(&allocator, &sql).unwrap().unwrap())
       .try_into()
       .unwrap();
 
@@ -954,7 +953,9 @@ mod tests {
 
   #[tokio::test]
   async fn test_for_update_skips_stored_file_upload() {
-    let table: Table = parse_into_statement(
+    let allocator = Bump::new();
+    let table: Table = (&parse_into_statement(
+      &allocator,
       "
       CREATE TABLE records (
         id      INTEGER PRIMARY KEY,
@@ -964,9 +965,9 @@ mod tests {
       ",
     )
     .unwrap()
-    .unwrap()
-    .try_into()
-    .unwrap();
+    .unwrap())
+      .try_into()
+      .unwrap();
 
     let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
     let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();

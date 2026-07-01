@@ -406,7 +406,7 @@ fn escape_and_join_column_names(names: &[String]) -> String {
 #[cfg(test)]
 mod tests {
   use axum::extract::{Path, Query, State};
-  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::parse::{Bump, parse_into_statement};
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
 
   use super::*;
@@ -418,8 +418,11 @@ mod tests {
   use crate::records::test_utils::*;
 
   fn parse_create_table(create_table_sql: &str) -> Table {
-    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
-    return create_table_statement.try_into().unwrap();
+    let allocator = Bump::new();
+    let create_table_statement = parse_into_statement(&allocator, create_table_sql)
+      .unwrap()
+      .unwrap();
+    return (&create_table_statement).try_into().unwrap();
   }
 
   #[test]

@@ -1,7 +1,7 @@
 use axum::{Json, extract::State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::parse::{Bump, parse_into_statement};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -44,7 +44,8 @@ pub async fn parse_handler(
     Mode::Expression => format!("SELECT {decoded}"),
   };
 
-  if let Err(err) = parse_into_statement(&query) {
+  let allocator = Bump::new();
+  if let Err(err) = parse_into_statement(&allocator, &query) {
     return Ok(Json(ParseResponse {
       ok: false,
       message: Some(err.to_string()),

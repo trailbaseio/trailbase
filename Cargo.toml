@@ -77,7 +77,7 @@ serde_json = { version = "^1.0.117" }
 serde_qs = { version = "1.0.0", default-features = false, features = [] }
 serde_rusqlite = "0.43.0"
 sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-alpha.4-fork", default-features = false }
-sqlite3-parser = "0.16.0"
+sqlite3-parser = "0.17.0"
 tokio = { version = "^1.38.0", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-rustls = { version = "0.26.1", default-features = false }
 tracing = { version = "0.1.40", default-features = false }

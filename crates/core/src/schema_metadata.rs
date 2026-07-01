@@ -113,11 +113,12 @@ async fn lookup_and_parse_table_schema_sqlite(
     .await?
     .ok_or(SchemaLookupError::QueryReturnedNoRows)?;
 
-  let Some(stmt) = parse_into_statement(&sql)? else {
+  let allocator = sqlite3_parser::Bump::new();
+  let Some(stmt) = parse_into_statement(&allocator, &sql)? else {
     return Err(SchemaLookupError::InvalidSqlStatement);
   };
 
-  let mut table: Table = stmt.try_into()?;
+  let mut table: Table = (&stmt).try_into()?;
   if let Some(database) = database {
     table.name.database_schema = Some(database.to_string());
   }
@@ -279,13 +280,14 @@ fn lookup_and_parse_all_table_schemas_sqlite(
       db = db.name
     );
 
+    let allocator = sqlite3_parser::Bump::new();
     for row in conn.query_rows(&query, ())? {
       let sql: String = row.get(0)?;
-      let Some(stmt) = parse_into_statement(&sql)? else {
+      let Some(stmt) = parse_into_statement(&allocator, &sql)? else {
         return Err(SchemaLookupError::InvalidSqlStatement);
       };
       tables.push({
-        let mut table: Table = stmt.try_into()?;
+        let mut table: Table = (&stmt).try_into()?;
         table.name.database_schema = Some(db.name.clone());
         table
       });
@@ -342,7 +344,8 @@ fn lookup_and_parse_all_view_schemas_sqlite(
 }
 
 fn sqlite3_parse_view(sql: &str, tables: &[Table]) -> Result<View, SchemaLookupError> {
-  let mut parser = sqlite3_parser::lexer::sql::Parser::new(sql.as_bytes());
+  let allocator = sqlite3_parser::Bump::new();
+  let mut parser = sqlite3_parser::lexer::sql::Parser::new(&allocator, sql.as_bytes());
   match parser.next()? {
     None => Err(SchemaLookupError::InvalidSqlStatement),
     Some(cmd) => {

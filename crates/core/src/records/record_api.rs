@@ -936,14 +936,16 @@ fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
 
 #[cfg(test)]
 mod tests {
-  use trailbase_schema::sqlite::QualifiedName;
-  use trailbase_schema::{parse::parse_into_statement, sqlite::Column};
+  use trailbase_schema::parse::{Bump, parse_into_statement};
+  use trailbase_schema::sqlite::{Column, QualifiedName};
 
   use super::*;
   use crate::{config::proto::PermissionFlag, records::Permission};
 
   fn sanitize_template(template: &str) {
-    assert!(parse_into_statement(template).is_ok(), "{template}");
+    let allocator = Bump::new();
+    let r = parse_into_statement(&allocator, template);
+    assert!(r.is_ok(), "{template}: {:?}", r.err());
     assert!(!template.contains("   "), "{template}");
     assert!(!template.contains("\n\n"), "{template}");
   }

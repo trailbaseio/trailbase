@@ -182,7 +182,7 @@ pub(crate) async fn execute_batch_impl(
 
             conn.execute_batch(head)?;
 
-            let row_iter = conn.query_raw(&format!("{}", &last[0]), [] as [i64; 0])?;
+            let row_iter = conn.query_raw(&format!("{}", last[0]), [] as [i64; 0])?;
 
             // Actually executes query.
             return Ok(from_rows(row_iter).ok());

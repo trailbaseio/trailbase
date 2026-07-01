@@ -691,17 +691,25 @@ fn builtin_pk_preserving_type(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+  use sqlite3_parser::Bump;
+
   use super::*;
   use crate::parse::parse_into_statement;
   use crate::sqlite::{SchemaError, Table};
 
   fn parse_create_table(create_table_sql: &str) -> Table {
-    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
-    return create_table_statement.try_into().unwrap();
+    let allocator = Bump::new();
+    let create_table_statement = parse_into_statement(&allocator, create_table_sql)
+      .unwrap()
+      .unwrap();
+    return (&create_table_statement).try_into().unwrap();
   }
 
   fn parse_create_view(create_view_sql: &str, tables: &[Table]) -> Result<View, SchemaError> {
-    let create_view_statement = parse_into_statement(create_view_sql).unwrap().unwrap();
+    let allocator = Bump::new();
+    let create_view_statement = parse_into_statement(&allocator, create_view_sql)
+      .unwrap()
+      .unwrap();
     return View::from(create_view_statement, tables);
   }
 

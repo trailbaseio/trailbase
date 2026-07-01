@@ -3,7 +3,7 @@ use http::Uri;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use sqlite3_parser::ast::{OneSelect, Select, Stmt};
 use tokio::time::Duration;
-use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::parse::{Bump, parse_into_statement};
 use trailbase_schema::sqlite::unquote_expr;
 use trailbase_sqlite::{LockError, Rows};
 use trailbase_sqlvalue::{DecodeError, SqlValue};
@@ -45,31 +45,54 @@ async fn handle_sqlite_execute(
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
-  // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
-  // this to more intelligently schedule requests based on whether they're reads or writes w/o
-  // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
-  // we believe it's worth it to allow cheap reads.
-  let rows_affected = match parse_into_statement(&request.query) {
+  // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
+  // apply to all internal read and write connections.
+  enum StatementKind {
+    Attach { expr: String, db_name: String },
+    Detach { db_name: String },
+    PlainExecute,
+  }
+
+  let kind = {
+    // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
+    // this to more intelligently schedule requests based on whether they're reads or writes w/o
+    // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
+    // we believe it's worth it to allow cheap reads.
+    let allocator = Bump::new();
+    let statement = match parse_into_statement(&allocator, &request.query) {
+      Ok(stmt) => stmt,
+      Err(err) => {
+        return Ok(SqliteResponse::Error(err.to_string()));
+      }
+    };
+
+    match statement.as_ref() {
+      Some(Stmt::Attach { expr, db_name, .. }) => StatementKind::Attach {
+        expr: unquote_expr(expr),
+        db_name: unquote_expr(db_name),
+      },
+      Some(Stmt::Detach(name)) => StatementKind::Detach {
+        db_name: unquote_expr(name),
+      },
+      _ => StatementKind::PlainExecute,
+    }
+  };
+
+  let rows_affected = match kind {
     // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
     // apply to all internal read and write connections.
-    Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
-      conn
-        .attach(&unquote_expr(&expr), &unquote_expr(&db_name))
-        .await
-        .map_err(sqlite_err)?;
+    StatementKind::Attach { expr, db_name } => {
+      conn.attach(&expr, &db_name).await.map_err(sqlite_err)?;
       0
     }
-    Ok(Some(Stmt::Detach(name))) => {
-      conn
-        .detach(&unquote_expr(&name))
-        .await
-        .map_err(sqlite_err)?;
+    StatementKind::Detach { db_name } => {
+      conn.detach(&db_name).await.map_err(sqlite_err)?;
       0
     }
-    _ => {
+    StatementKind::PlainExecute => {
       match conn
         .execute(
-          request.query,
+          request.query.clone(),
           sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
         )
         .await
@@ -89,6 +112,41 @@ async fn handle_sqlite_query(
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
+  // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
+  // apply to all internal read and write connections.
+  enum StatementKind {
+    Attach { expr: String, db_name: String },
+    Detach { db_name: String },
+    ReadQuery,
+    WriteQuery,
+  }
+
+  let kind = {
+    // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
+    // this to more intelligently schedule requests based on whether they're reads or writes w/o
+    // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
+    // we believe it's worth it to allow cheap reads.
+    let allocator = Bump::new();
+    let statement = match parse_into_statement(&allocator, &request.query) {
+      Ok(stmt) => stmt,
+      Err(err) => {
+        return Ok(SqliteResponse::Error(err.to_string()));
+      }
+    };
+
+    match statement.as_ref() {
+      Some(Stmt::Attach { expr, db_name, .. }) => StatementKind::Attach {
+        expr: unquote_expr(expr),
+        db_name: unquote_expr(db_name),
+      },
+      Some(Stmt::Detach(name)) => StatementKind::Detach {
+        db_name: unquote_expr(name),
+      },
+      Some(Stmt::Select(select)) if is_readonly_select(select) => StatementKind::ReadQuery,
+      _ => StatementKind::WriteQuery,
+    }
+  };
+
   // Handles write queries.
   async fn write(
     conn: trailbase_sqlite::Connection,
@@ -117,49 +175,43 @@ async fn handle_sqlite_query(
       .map_err(sqlite_err);
   }
 
-  // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
-  // this to more intelligently schedule requests based on whether they're reads or writes w/o
-  // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
-  // we believe it's worth it to allow cheap reads.
-  let rows = match parse_into_statement(&request.query) {
+  fn build_query_response(rows: Option<Rows>) -> Result<SqliteResponse, String> {
+    if let Some(rows) = rows {
+      let json_rows = rows
+        .iter()
+        .map(convert_values)
+        .collect::<Result<Vec<_>, _>>()?;
+
+      return Ok(SqliteResponse::Query { rows: json_rows });
+    }
+
+    return Ok(SqliteResponse::Query { rows: vec![] });
+  }
+
+  return match kind {
     // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
     // apply to all internal read and write connections.
-    Ok(Some(Stmt::Attach { expr, db_name, .. })) => {
-      conn
-        .attach(&unquote_expr(&expr), &unquote_expr(&db_name))
-        .await
-        .map_err(sqlite_err)?;
-      Rows::empty()
+    StatementKind::Attach { expr, db_name } => {
+      conn.attach(&expr, &db_name).await.map_err(sqlite_err)?;
+      build_query_response(None)
     }
-    Ok(Some(Stmt::Detach(name))) => {
-      conn
-        .detach(&unquote_expr(&name))
-        .await
-        .map_err(sqlite_err)?;
-      Rows::empty()
+    StatementKind::Detach { db_name } => {
+      conn.detach(&db_name).await.map_err(sqlite_err)?;
+      build_query_response(None)
     }
-    Ok(Some(Stmt::Select(select))) if is_readonly_select(&select) => {
-      match read(conn, request).await {
-        Ok(rows) => rows,
-        Err(err) => {
-          return Ok(SqliteResponse::Error(err));
-        }
+    StatementKind::ReadQuery => match read(conn, request).await {
+      Ok(rows) => build_query_response(Some(rows)),
+      Err(err) => {
+        return Ok(SqliteResponse::Error(err));
       }
-    }
-    _ => match write(conn, request).await {
-      Ok(rows) => rows,
+    },
+    StatementKind::WriteQuery => match write(conn, request).await {
+      Ok(rows) => build_query_response(Some(rows)),
       Err(err) => {
         return Ok(SqliteResponse::Error(err));
       }
     },
   };
-
-  let json_rows = rows
-    .iter()
-    .map(convert_values)
-    .collect::<Result<Vec<_>, _>>()?;
-
-  return Ok(SqliteResponse::Query { rows: json_rows });
 }
 
 pub(crate) async fn handle_sqlite_request(
@@ -274,8 +326,8 @@ fn is_readonly_select(select: &Select) -> bool {
   }
 
   if let Some(ref with) = select.with {
-    for cte in &with.ctes {
-      if !is_readonly_select(&cte.select) {
+    for cte in with.ctes {
+      if !is_readonly_select(cte.select) {
         return false;
       }
     }
@@ -370,10 +422,7 @@ mod tests {
       panic!("expected error, got: {response:?}");
     };
 
-    assert!(
-      err.contains("near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0"),
-      "Got: {err:?}"
-    );
+    assert!(err.contains("near \"NOT\": syntax error"), "Got: {err:?}");
   }
 
   #[tokio::test]
@@ -445,14 +494,11 @@ mod tests {
       panic!("expected error, got: {response:?}");
     };
 
-    assert!(
-      err.contains("near \"NOT\": syntax error in NOT A VALID QUERY :) at offset 0"),
-      "Got: {err:?}"
-    );
+    assert!(err.contains("near \"NOT\": syntax error"), "Got: {err:?}");
   }
 
-  fn parse_select(s: &str) -> Box<Select> {
-    let stmt = parse_into_statement(s).unwrap().unwrap();
+  fn parse_select<'b>(allocator: &'b Bump, s: &'b str) -> &'b Select<'b> {
+    let stmt = parse_into_statement(&allocator, s).unwrap().unwrap();
     if let Stmt::Select(select) = stmt {
       return select;
     }
@@ -461,6 +507,8 @@ mod tests {
 
   #[test]
   fn readonly_select_filter_test() {
-    assert!(is_readonly_select(&parse_select("SELECT * FROM test;")));
+    let allocator = Bump::new();
+    let select = parse_select(&allocator, "SELECT * FROM test;");
+    assert!(is_readonly_select(select));
   }
 }

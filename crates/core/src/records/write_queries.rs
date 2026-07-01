@@ -405,11 +405,13 @@ struct CreateOrReplaceRecordQueryTemplate<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use trailbase_schema::parse::parse_into_statement;
+  use trailbase_schema::parse::{Bump, parse_into_statement};
   use trailbase_schema::sqlite::QualifiedName;
 
   fn sanitize_template(template: &str) {
-    assert!(parse_into_statement(template).is_ok(), "{template}");
+    let allocator = Bump::new();
+    let r = parse_into_statement(&allocator, template);
+    assert!(r.is_ok(), "{template}: {:?}", r.err());
     assert!(!template.contains("\n\n"), "{template}");
     assert!(!template.contains("   "), "{template}");
   }

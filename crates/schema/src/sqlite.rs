@@ -289,9 +289,9 @@ impl ColumnOption {
   }
 }
 
-impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
-  fn from(constraint: sqlite3_parser::ast::ColumnConstraint) -> Self {
-    type Constraint = sqlite3_parser::ast::ColumnConstraint;
+impl<'b> From<&'b sqlite3_parser::ast::ColumnConstraint<'b>> for ColumnOption {
+  fn from(constraint: &'b sqlite3_parser::ast::ColumnConstraint) -> Self {
+    type Constraint<'b> = sqlite3_parser::ast::ColumnConstraint<'b>;
 
     return match constraint {
       Constraint::PrimaryKey {
@@ -314,7 +314,7 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
         clause,
         defer_clause,
       } => {
-        let fk = build_foreign_key(None, None, clause, defer_clause);
+        let fk = build_foreign_key(None, None, clause, defer_clause.as_ref());
 
         ColumnOption::ForeignKey {
           foreign_table: fk.foreign_table,
@@ -337,7 +337,7 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
       Constraint::Generated { expr, typ } => ColumnOption::Generated {
         // NOTE: This is not using unquote on purpose to avoid turning "AS ('')" into "AS ()".
         expr: expr.to_string(),
-        mode: typ.and_then(|t| match &*t.0 {
+        mode: typ.as_ref().and_then(|t| match t.0 {
           "VIRTUAL" => Some(GeneratedExpressionMode::Virtual),
           "STORED" => Some(GeneratedExpressionMode::Stored),
           x => {
@@ -346,9 +346,7 @@ impl From<sqlite3_parser::ast::ColumnConstraint> for ColumnOption {
           }
         }),
       },
-      Constraint::Collate { collation_name } => {
-        ColumnOption::Collate(unquote_name(&collation_name))
-      }
+      Constraint::Collate { collation_name } => ColumnOption::Collate(unquote_name(collation_name)),
       Constraint::Defer(_) => {
         panic!("Not implemented: {constraint:?}");
       }
@@ -600,7 +598,16 @@ impl Hash for QualifiedName {
   }
 }
 
-impl From<AstQualifiedName> for QualifiedName {
+impl<'b> From<&'b AstQualifiedName<'b>> for QualifiedName {
+  fn from(qn: &'b AstQualifiedName) -> Self {
+    return Self {
+      database_schema: unquote_db_name(qn),
+      name: unquote_qualified(qn),
+    };
+  }
+}
+
+impl<'b> From<AstQualifiedName<'b>> for QualifiedName {
   fn from(qn: AstQualifiedName) -> Self {
     return Self {
       database_schema: unquote_db_name(&qn),
@@ -659,10 +666,10 @@ impl Table {
   }
 }
 
-impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
+impl<'b> TryFrom<&'b sqlite3_parser::ast::Stmt<'b>> for Table {
   type Error = SchemaError;
 
-  fn try_from(value: sqlite3_parser::ast::Stmt) -> Result<Self, Self::Error> {
+  fn try_from(value: &'b sqlite3_parser::ast::Stmt) -> Result<Self, Self::Error> {
     return match value {
       Stmt::CreateTable {
         temporary,
@@ -686,17 +693,17 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         let mut checks: Vec<Check> = vec![];
 
         for constraint in constraints.unwrap_or_default() {
-          match constraint.constraint {
+          match &constraint.constraint {
             TableConstraint::ForeignKey {
               columns,
               clause,
               defer_clause,
             } => {
               foreign_keys.push(build_foreign_key(
-                constraint.name,
+                constraint.name.clone(),
                 Some(columns),
                 clause,
-                defer_clause,
+                defer_clause.as_ref(),
               ));
             }
             TableConstraint::Unique {
@@ -705,7 +712,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
             } => {
               unique.push(UniqueConstraint {
                 name: constraint.name.as_ref().map(unquote_name),
-                columns: columns.into_iter().map(|c| unquote_expr(&c.expr)).collect(),
+                columns: columns.iter().map(|c| unquote_expr(&c.expr)).collect(),
                 conflict_clause: conflict_clause.map(|c| c.into()),
               });
             }
@@ -722,17 +729,16 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
         }
 
         let columns: Vec<Column> = columns
-          .into_iter()
-          .map(|(name, def): (Name, ColumnDefinition)| {
+          .iter()
+          .map(|def: &ColumnDefinition| {
             let ColumnDefinition {
               col_name,
               col_type,
               constraints,
               flags: _,
             } = def;
-            assert_eq!(name, col_name);
 
-            let name = unquote_name(&col_name);
+            let name = unquote_name(col_name);
             assert!(!name.is_empty());
 
             let (type_name, affinity_type, data_type): (
@@ -741,9 +747,9 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
               ColumnDataType,
             ) = match col_type {
               Some(x) => (
-                x.name.clone(),
-                ColumnAffinityType::from_type_name(&x.name),
-                ColumnDataType::from_type_name(&x.name).unwrap_or(ColumnDataType::Any),
+                x.name.to_string(),
+                ColumnAffinityType::from_type_name(x.name),
+                ColumnDataType::from_type_name(x.name).unwrap_or(ColumnDataType::Any),
               ),
               None => (
                 "".to_string(),
@@ -753,8 +759,8 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
             };
 
             let options: Vec<ColumnOption> = constraints
-              .into_iter()
-              .map(|named_constraint| named_constraint.constraint.into())
+              .iter()
+              .map(|named_constraint| (&named_constraint.constraint).into())
               .collect();
 
             return Column {
@@ -775,7 +781,7 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for Table {
           unique,
           checks,
           virtual_table: false,
-          temporary,
+          temporary: *temporary,
         })
       }
       Stmt::CreateVirtualTable {
@@ -847,10 +853,10 @@ impl TableIndex {
   }
 }
 
-impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
+impl<'b> TryFrom<&'b sqlite3_parser::ast::Stmt<'b>> for TableIndex {
   type Error = SchemaError;
 
-  fn try_from(value: sqlite3_parser::ast::Stmt) -> Result<Self, Self::Error> {
+  fn try_from(value: &'b sqlite3_parser::ast::Stmt) -> Result<Self, Self::Error> {
     return match value {
       sqlite3_parser::ast::Stmt::CreateIndex {
         unique,
@@ -861,9 +867,9 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
         where_clause,
       } => Ok(TableIndex {
         name: idx_name.into(),
-        table_name: unquote_name(&tbl_name),
+        table_name: unquote_name(tbl_name),
         columns: columns
-          .into_iter()
+          .iter()
           .map(|order_expr| ColumnOrder {
             column_name: unquote_expr(&order_expr.expr),
             ascending: order_expr
@@ -874,12 +880,12 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
               .map(|order| order == sqlite3_parser::ast::NullsOrder::First),
           })
           .collect(),
-        unique,
-        predicate: where_clause.map(|clause| {
+        unique: *unique,
+        predicate: where_clause.as_ref().map(|clause| {
           // NOTE: this is deliberately not unquoting.
           clause.to_string()
         }),
-        if_not_exists,
+        if_not_exists: *if_not_exists,
       }),
       _ => Err(SchemaError::Precondition(
         format!("expected 'CREATE INDEX', got: {value:?}").into(),
@@ -888,9 +894,9 @@ impl TryFrom<sqlite3_parser::ast::Stmt> for TableIndex {
   }
 }
 
-struct SelectFormatter(sqlite3_parser::ast::Select);
+struct SelectFormatter<'b>(&'b sqlite3_parser::ast::Select<'b>);
 
-impl std::fmt::Display for SelectFormatter {
+impl<'b> std::fmt::Display for SelectFormatter<'b> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     self.0.to_fmt(f)
   }
@@ -947,7 +953,7 @@ impl View {
       // Try to parse columns very liberally. We don't want to disallow complex
       // VIEWs but returning a `View` with `None` columns, means it cannot be used
       // for APIs.
-      extract_column_mapping((*select).clone(), tables)
+      extract_column_mapping(select, tables)
         .map_err(|err| {
           debug!(
             "Failed to extract VIEW column mapping from '{:?}': {err}",
@@ -959,9 +965,9 @@ impl View {
     };
 
     return Ok(View {
-      name: view_name.into(),
+      name: (&view_name).into(),
       column_mapping,
-      query: SelectFormatter(*select).to_string(),
+      query: SelectFormatter(select).to_string(),
       temporary,
       if_not_exists,
     });
@@ -1001,12 +1007,12 @@ pub struct ColumnMapping {
   pub joins: Vec<u8>,
 }
 
-fn extract_column_mapping(
-  select: sqlite3_parser::ast::Select,
+fn extract_column_mapping<'b>(
+  select: &sqlite3_parser::ast::Select<'b>,
   tables: &[Table],
 ) -> Result<ColumnMapping, SchemaError> {
-  let result_columns = extract_result_columns(&select)?;
-  let group_by_key_candidate = extract_group_by_key_candidate(&select)?;
+  let result_columns = extract_result_columns(select)?;
+  let group_by_key_candidate = extract_group_by_key_candidate(select)?;
 
   let (joins, referenced_table_by_alias) =
     extract_joins_and_referenced_tables_by_alias(select, tables)?;
@@ -1048,7 +1054,7 @@ fn extract_column_mapping(
         }
       }
       ResultColumn::TableStar(name) => {
-        let name = unquote_name(&name);
+        let name = unquote_name(name);
         let referred_table = find_table_by_alias(&name)?;
 
         for c in &referred_table.table.columns {
@@ -1061,7 +1067,7 @@ fn extract_column_mapping(
       }
       ResultColumn::Expr(expr, alias) => match expr {
         Expr::Id(id) => {
-          let (referred_table, column) = find_column_by_unqualified_name(&unquote_id(&id))?;
+          let (referred_table, column) = find_column_by_unqualified_name(&unquote_id(id))?;
 
           mapping.push(ViewColumn {
             column: column_with_alias(
@@ -1073,10 +1079,10 @@ fn extract_column_mapping(
           });
         }
         Expr::Qualified(qualifier, name) => {
-          let qualifier = unquote_name(&qualifier);
+          let qualifier = unquote_name(qualifier);
           let referred_table = find_table_by_alias(&qualifier)?;
 
-          let col_name = unquote_name(&name);
+          let col_name = unquote_name(name);
           let column = referred_table
             .table
             .columns
@@ -1099,7 +1105,7 @@ fn extract_column_mapping(
               "Missing type_name in cast".into(),
             ));
           };
-          let Some(data_type) = ColumnDataType::from_type_name(&type_name.name) else {
+          let Some(data_type) = ColumnDataType::from_type_name(type_name.name) else {
             return Err(SchemaError::Precondition(
               "Missing type_name in cast".into(),
             ));
@@ -1109,7 +1115,7 @@ fn extract_column_mapping(
             column: Column {
               // NOTE: the sqlite3 CLI also simply uses the entire expr.
               name: to_alias(alias).unwrap_or_else(|| expr.to_string()),
-              type_name: type_name.name,
+              type_name: type_name.name.to_string(),
               data_type,
               affinity_type: ColumnAffinityType::from_data_type(data_type),
               options: vec![],
@@ -1127,7 +1133,7 @@ fn extract_column_mapping(
         }
         Expr::FunctionCall {
           name: fname, args, ..
-        } if builtin_function_preserving_type(&fname) => {
+        } if builtin_function_preserving_type(fname) => {
           // Handle type-inference of some built-in functions for convenience to reduce the need
           // for explicit CAST(expr AS type), e.g. `MAX(column)`.
           //
@@ -1150,7 +1156,7 @@ fn extract_column_mapping(
                   to_alias(alias).unwrap_or_else(|| column.name.to_string()),
                 ),
                 parent_name: get_parent_name(referred_table),
-                aggregation: Some(unquote_id(&fname)),
+                aggregation: Some(unquote_id(fname)),
               });
 
               continue;
@@ -1164,7 +1170,7 @@ fn extract_column_mapping(
                   to_alias(alias).unwrap_or_else(|| column.name.to_string()),
                 ),
                 parent_name: get_parent_name(referred_table),
-                aggregation: Some(unquote_id(&fname)),
+                aggregation: Some(unquote_id(fname)),
               });
 
               continue;
@@ -1213,7 +1219,7 @@ fn extract_column_mapping(
   });
 }
 
-fn literal_to_column(literal: Literal, alias: Option<String>) -> Column {
+fn literal_to_column(literal: &Literal, alias: Option<String>) -> Column {
   return match literal {
     Literal::Numeric(s) => {
       if s.parse::<i64>().is_ok() {
@@ -1235,7 +1241,7 @@ fn literal_to_column(literal: Literal, alias: Option<String>) -> Column {
       }
     }
     Literal::String(s) | Literal::Keyword(s) => Column {
-      name: alias.unwrap_or_else(|| unquote_string(&s)),
+      name: alias.unwrap_or_else(|| unquote_string(s)),
       type_name: "".to_string(),
       data_type: ColumnDataType::Text,
       affinity_type: ColumnAffinityType::Text,
@@ -1299,10 +1305,10 @@ pub(crate) struct ReferredTable {
 }
 
 fn extract_joins_and_referenced_tables_by_alias(
-  select: sqlite3_parser::ast::Select,
+  select: &sqlite3_parser::ast::Select,
   tables: &[Table],
 ) -> Result<(Vec<u8>, Vec<ReferredTable>), SchemaError> {
-  let body = select.body;
+  let body = &select.body;
   if body.compounds.is_some() {
     return Err(precondition("Compound queries not supported"));
   }
@@ -1310,7 +1316,7 @@ fn extract_joins_and_referenced_tables_by_alias(
   let sqlite3_parser::ast::OneSelect::Select {
     columns: _,
     distinctness,
-    from,
+    ref from,
     group_by: _,
     having: _,
     where_clause: _,
@@ -1368,7 +1374,7 @@ fn extract_joins_and_referenced_tables_by_alias(
     .unwrap_or_default();
 
   // List of referenced tables in insertion order (left-to-right).
-  let referenced_table_by_alias: Vec<ReferredTable> = match nested_select.map(|s| *s) {
+  let referenced_table_by_alias: Vec<ReferredTable> = match nested_select {
     Some(SelectTable::Table(fqn, alias, _indexed)) => {
       // Table itself
       let mut referenced_tables = vec![ReferredTable {
@@ -1377,35 +1383,37 @@ fn extract_joins_and_referenced_tables_by_alias(
       }];
 
       // // Plus possible joins.
-      for join in joins.unwrap_or_default() {
-        // We don't currently allow joining sub-queries, etc.
-        match join.table {
-          SelectTable::Table(fqn, alias, _indexed) => {
-            referenced_tables.push(ReferredTable {
-              alias: to_alias(alias),
-              table: find_table(&fqn.into())?.clone(),
-            });
-          }
-          SelectTable::Select(subselect, alias) => {
-            let alias = to_alias(alias);
+      if let Some(joins) = joins {
+        for join in joins {
+          // We don't currently allow joining sub-queries, etc.
+          match &join.table {
+            SelectTable::Table(fqn, alias, _indexed) => {
+              referenced_tables.push(ReferredTable {
+                alias: to_alias(alias),
+                table: find_table(&fqn.into())?.clone(),
+              });
+            }
+            SelectTable::Select(subselect, alias) => {
+              let alias = to_alias(alias);
 
-            let (joins_in_subselect, referenced_tables_in_subselect) =
-              extract_joins_and_referenced_tables_by_alias(*subselect, tables)?;
+              let (joins_in_subselect, referenced_tables_in_subselect) =
+                extract_joins_and_referenced_tables_by_alias(subselect, tables)?;
 
-            all_joins.extend(joins_in_subselect);
-            referenced_tables.extend(referenced_tables_in_subselect.into_iter().map(
-              |ReferredTable { table, .. }| -> ReferredTable {
-                return ReferredTable {
-                  alias: alias.clone(),
-                  table,
-                };
-              },
-            ));
-          }
-          _ => {
-            return Err(precondition("JOIN with TABLE expected"));
-          }
-        };
+              all_joins.extend(joins_in_subselect);
+              referenced_tables.extend(referenced_tables_in_subselect.into_iter().map(
+                |ReferredTable { table, .. }| -> ReferredTable {
+                  return ReferredTable {
+                    alias: alias.clone(),
+                    table,
+                  };
+                },
+              ));
+            }
+            _ => {
+              return Err(precondition("JOIN with TABLE expected"));
+            }
+          };
+        }
       }
 
       referenced_tables
@@ -1414,7 +1422,7 @@ fn extract_joins_and_referenced_tables_by_alias(
       // Simply recurse tu unnest the select.
       let alias = to_alias(alias);
       let (joins_in_nested_select, referenced_tables_in_nested_select) =
-        extract_joins_and_referenced_tables_by_alias(*nested_select, tables)?;
+        extract_joins_and_referenced_tables_by_alias(nested_select, tables)?;
 
       return Ok((
         joins_in_nested_select,
@@ -1446,7 +1454,7 @@ fn precondition(m: &str) -> SchemaError {
   return SchemaError::Precondition(m.into());
 }
 
-fn extract_single_arg(args: Option<Vec<Expr>>) -> Option<(Option<String>, String)> {
+fn extract_single_arg(args: &Option<&[Expr]>) -> Option<(Option<String>, String)> {
   return match args {
     Some(args) if args.len() == 1 => match &args[0] {
       Expr::Id(id) => Some((None, unquote_id(id))),
@@ -1464,13 +1472,13 @@ fn extract_join_type(op: JoinOperator) -> JoinType {
   };
 }
 
-fn extract_result_columns(
-  select: &sqlite3_parser::ast::Select,
-) -> Result<Vec<ResultColumn>, SchemaError> {
+fn extract_result_columns<'b>(
+  select: &'b sqlite3_parser::ast::Select,
+) -> Result<&'b [ResultColumn<'b>], SchemaError> {
   let sqlite3_parser::ast::OneSelect::Select { columns, .. } = &select.body.select else {
     return Err(precondition("VALUES not supported"));
   };
-  return Ok(columns.clone());
+  return Ok(columns);
 }
 
 struct GroupBy {
@@ -1515,29 +1523,29 @@ fn extract_group_by_key_candidate(
 
 fn build_foreign_key(
   name: Option<Name>,
-  columns: Option<Vec<IndexedColumn>>,
-  clause: ForeignKeyClause,
-  defer_clause: Option<DeferSubclause>,
+  columns: Option<&[IndexedColumn<'_>]>,
+  clause: &ForeignKeyClause,
+  defer_clause: Option<&DeferSubclause>,
 ) -> ForeignKey {
   if let Some(ref clause) = defer_clause {
     // TOOD: Parse DEFERRABLE.
     warn!("Unsupported DEFERRABLE in FK clause: {clause:?}");
   }
 
-  let (on_update, on_delete) = unparse_fk_trigger(&clause.args);
+  let (on_update, on_delete) = unparse_fk_trigger(clause.args);
 
   return ForeignKey {
     name: name.as_ref().map(unquote_name),
     foreign_table: unquote_name(&clause.tbl_name),
     columns: columns
       .unwrap_or_default()
-      .into_iter()
+      .iter()
       .map(|c| unquote_name(&c.col_name))
       .collect(),
     referred_columns: clause
       .columns
       .unwrap_or_default()
-      .into_iter()
+      .iter()
       .map(|c| unquote_name(&c.col_name))
       .collect(),
     on_update,
@@ -1546,7 +1554,7 @@ fn build_foreign_key(
 }
 
 fn unparse_fk_trigger(
-  args: &Vec<sqlite3_parser::ast::RefArg>,
+  args: &[sqlite3_parser::ast::RefArg],
 ) -> (Option<ReferentialAction>, Option<ReferentialAction>) {
   use sqlite3_parser::ast::RefArg;
 
@@ -1607,7 +1615,7 @@ fn unquote_string(s: &str) -> String {
 }
 
 fn unquote_name(name: &Name) -> String {
-  return unquote_string(&name.0);
+  return unquote_string(name.0);
 }
 
 fn unquote_qualified(name: &AstQualifiedName) -> String {
@@ -1619,7 +1627,7 @@ fn unquote_db_name(name: &AstQualifiedName) -> Option<String> {
 }
 
 fn unquote_id(id: &sqlite3_parser::ast::Id) -> String {
-  return unquote_string(&id.0);
+  return unquote_string(id.0);
 }
 
 pub fn unquote_expr(expr: &Expr) -> String {
@@ -1632,12 +1640,12 @@ pub fn unquote_expr(expr: &Expr) -> String {
   };
 }
 
-fn to_alias(alias: Option<sqlite3_parser::ast::As>) -> Option<String> {
-  return alias.map(|a| match a {
+fn to_alias(alias: &Option<sqlite3_parser::ast::As>) -> Option<String> {
+  return alias.as_ref().map(|a| match a {
     // "FROM table_name AS alias"
-    sqlite3_parser::ast::As::As(name) => unquote_name(&name),
+    sqlite3_parser::ast::As::As(name) => unquote_name(name),
     // "FROM table_name alias"
-    sqlite3_parser::ast::As::Elided(name) => unquote_name(&name),
+    sqlite3_parser::ast::As::Elided(name) => unquote_name(name),
   });
 }
 
@@ -1654,11 +1662,12 @@ pub fn lookup_and_parse_table_schema(
     |row| row.get(0),
   )?;
 
-  let Some(stmt) = crate::parse::parse_into_statement(&sql)? else {
+  let allocator = sqlite3_parser::Bump::new();
+  let Some(stmt) = crate::parse::parse_into_statement(&allocator, &sql)? else {
     anyhow::bail!("Not a statement");
   };
 
-  return Ok(stmt.try_into()?);
+  return Ok((&stmt).try_into()?);
 }
 
 fn builtin_function_preserving_type(name: &sqlite3_parser::ast::Id) -> bool {
@@ -1715,9 +1724,12 @@ mod tests {
       table_name = table_name.escaped_string(),
     );
 
-    let parsed = parse_into_statement(&statement).unwrap().unwrap();
+    let allocator = sqlite3_parser::Bump::new();
+    let parsed = parse_into_statement(&allocator, &statement)
+      .unwrap()
+      .unwrap();
 
-    let table: Table = parsed.try_into().unwrap();
+    let table: Table = (&parsed).try_into().unwrap();
     assert_eq!(table.name, table_name);
     let sql = table.create_table_statement();
 
@@ -1725,12 +1737,14 @@ mod tests {
       format!("CREATE TABLE \"table\" (\"index\" TEXT, \"delete\" TEXT, \"create\" TEXT) STRICT"),
       sql
     );
-    parse_into_statement(&sql).unwrap().unwrap();
+
+    let allocator = sqlite3_parser::Bump::new();
+    parse_into_statement(&allocator, &sql).unwrap().unwrap();
   }
 
-  struct StmtFormatter(Stmt);
+  struct StmtFormatter<'b>(Stmt<'b>);
 
-  impl std::fmt::Display for StmtFormatter {
+  impl<'b> std::fmt::Display for StmtFormatter<'b> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
       self.0.to_fmt(f)
     }
@@ -1767,8 +1781,11 @@ mod tests {
       conn.execute(&statement, ()).unwrap();
     }
 
-    let statement1 = parse_into_statement(&statement).unwrap().unwrap();
-    let table1: Table = statement1.clone().try_into().unwrap();
+    let allocator = sqlite3_parser::Bump::new();
+    let statement1 = parse_into_statement(&allocator, &statement)
+      .unwrap()
+      .unwrap();
+    let table1: Table = (&statement1).try_into().unwrap();
 
     let sql = table1.create_table_statement();
     {
@@ -1777,21 +1794,17 @@ mod tests {
       conn.execute(&sql, ()).unwrap();
     }
 
-    let statement2 = parse_into_statement(&sql).unwrap().unwrap();
+    let statement2 = parse_into_statement(&allocator, &sql).unwrap().unwrap();
 
-    let table2: Table = statement2.clone().try_into().unwrap();
+    let table2: Table = (&statement2).try_into().unwrap();
 
     // NOTE: Ideally we'd just compare the parsed sqlite3_parser ASTs, however it doesn't properly
     // parse out escape characters, so `statement1` and `statement2` will be escaped differently.
     // So we're matching on strings instead with all quoting removed.
     // assert_eq!(statement1, statement2, "Got: {sql2}\nExpected: {sql1}");
     let pattern = ['\'', '"', '[', ']', '`'];
-    let sql2 = StmtFormatter(statement2.clone())
-      .to_string()
-      .replace(&pattern, "");
-    let sql1 = StmtFormatter(statement1.clone())
-      .to_string()
-      .replace(&pattern, "");
+    let sql2 = StmtFormatter(statement2).to_string().replace(&pattern, "");
+    let sql1 = StmtFormatter(statement1).to_string().replace(&pattern, "");
     assert_eq!(sql2, sql1, "Got: {sql2}\nExpected: {sql1}");
 
     assert_eq!(table1, table2, "generated stmt: {sql}");
@@ -1802,13 +1815,13 @@ mod tests {
     const SQL: &str =
       r#"CREATE UNIQUE INDEX IF NOT EXISTS "index" ON "table" ("create") WHERE "create" != '';"#;
 
-    let statement1 = parse_into_statement(SQL).unwrap().unwrap();
-    let index1: TableIndex = statement1.clone().try_into().unwrap();
+    let allocator = sqlite3_parser::Bump::new();
+    let statement1 = parse_into_statement(&allocator, SQL).unwrap().unwrap();
+    let index1: TableIndex = (&statement1).try_into().unwrap();
 
-    let statement2 = parse_into_statement(&index1.create_index_statement())
-      .unwrap()
-      .unwrap();
-    let index2: TableIndex = statement2.clone().try_into().unwrap();
+    let sql = index1.create_index_statement();
+    let statement2 = parse_into_statement(&allocator, &sql).unwrap().unwrap();
+    let index2: TableIndex = (&statement2).try_into().unwrap();
 
     assert_eq!(statement1, statement2);
     assert_eq!(index1, index2);
@@ -1825,32 +1838,37 @@ mod tests {
       END
     "#;
 
-    parse_into_statement(SQL).unwrap().unwrap();
+    let allocator = sqlite3_parser::Bump::new();
+    parse_into_statement(&allocator, SQL).unwrap().unwrap();
   }
 
   #[test]
   fn test_parse_create_index() {
     let sql =
       r#"CREATE UNIQUE INDEX "main"."index_name" ON 'table_name' (a ASC, b DESC) WHERE x > 0"#;
-    let index: TableIndex = parse_into_statement(sql)
-      .unwrap()
-      .unwrap()
+
+    let allocator = sqlite3_parser::Bump::new();
+    let index: TableIndex = (&parse_into_statement(&allocator, sql).unwrap().unwrap())
       .try_into()
       .unwrap();
 
     let sql1 = index.create_index_statement();
-    let stmt1 = parse_into_statement(&sql1).unwrap().unwrap();
-    let index1: TableIndex = stmt1.try_into().unwrap();
+    let stmt1 = parse_into_statement(&allocator, &sql1).unwrap().unwrap();
+    let index1: TableIndex = (&stmt1).try_into().unwrap();
 
     assert_eq!(index, index1, "Parsed: {sql1}");
   }
 
-  fn parse_into_select(sql: &str) -> sqlite3_parser::ast::Select {
-    let sqlite3_parser::ast::Stmt::Select(select) = parse_into_statement(sql).unwrap().unwrap()
+  fn parse_into_select<'b>(
+    allocator: &'b sqlite3_parser::Bump,
+    sql: &'b str,
+  ) -> &'b sqlite3_parser::ast::Select<'b> {
+    let sqlite3_parser::ast::Stmt::Select(select) =
+      parse_into_statement(&allocator, sql).unwrap().unwrap()
     else {
       panic!("Not a select");
     };
-    return *select;
+    return select;
   }
 
   #[derive(Debug, PartialEq)]
@@ -1882,33 +1900,35 @@ mod tests {
       temporary: false,
     }];
 
+    let allocator = sqlite3_parser::Bump::new();
     {
       // No alias
-      let select = parse_into_select("SELECT column FROM table_name");
-      let _mapping = extract_column_mapping(select, &tables).unwrap();
+      let select = parse_into_select(&allocator, "SELECT column FROM table_name");
+      let _mapping = extract_column_mapping(&select, &tables).unwrap();
     }
 
     {
       // With alias
-      let select = parse_into_select("SELECT alias.column FROM table_name AS alias");
-      let _mapping = extract_column_mapping(select, &tables).unwrap();
+      let select = parse_into_select(&allocator, "SELECT alias.column FROM table_name AS alias");
+      let _mapping = extract_column_mapping(&select, &tables).unwrap();
     }
 
     {
       // With "elided" alias
-      let select = parse_into_select("SELECT alias.column FROM table_name alias");
-      let _mapping = extract_column_mapping(select, &tables).unwrap();
+      let select = parse_into_select(&allocator, "SELECT alias.column FROM table_name alias");
+      let _mapping = extract_column_mapping(&select, &tables).unwrap();
     }
 
     {
       // JOIN on a SELECT.
       let select = parse_into_select(
+        &allocator,
         "
           SELECT x.column, y.column AS foo, 'literal', 'literal' AS lit, X'aabb'
           FROM table_name AS x LEFT JOIN (SELECT * FROM table_name) AS y ON x.column = y.column
         ",
       );
-      let mapping = extract_column_mapping(select, &tables).unwrap();
+      let mapping = extract_column_mapping(&select, &tables).unwrap();
 
       let got: Vec<C> = mapping
         .columns
@@ -1954,9 +1974,11 @@ mod tests {
 
     {
       // Compound SELECT.
-      let select =
-        parse_into_select("SELECT column FROM table_name UNION SELECT column FROM table_name");
-      let err = extract_column_mapping(select, &tables)
+      let select = parse_into_select(
+        &allocator,
+        "SELECT column FROM table_name UNION SELECT column FROM table_name",
+      );
+      let err = extract_column_mapping(&select, &tables)
         .err()
         .unwrap()
         .to_string();
@@ -1965,17 +1987,23 @@ mod tests {
   }
 
   fn parse_create_table(create_table_sql: &str) -> Table {
-    let create_table_statement = parse_into_statement(create_table_sql).unwrap().unwrap();
-    return create_table_statement.try_into().unwrap();
+    let allocator = sqlite3_parser::Bump::new();
+    let create_table_statement = parse_into_statement(&allocator, create_table_sql)
+      .unwrap()
+      .unwrap();
+    return (&create_table_statement).try_into().unwrap();
   }
 
-  fn parse_create_view_select(sql: &str) -> sqlite3_parser::ast::Select {
+  fn parse_create_view_select<'b>(
+    allocator: &'b sqlite3_parser::Bump,
+    sql: &'b str,
+  ) -> &'b sqlite3_parser::ast::Select<'b> {
     let sqlite3_parser::ast::Stmt::CreateView { select, .. } =
-      parse_into_statement(sql).unwrap().unwrap()
+      parse_into_statement(&allocator, sql).unwrap().unwrap()
     else {
       panic!("Not a CREATE VIEW: {sql}");
     };
-    return *select;
+    return select;
   }
 
   #[test]
@@ -1986,15 +2014,20 @@ mod tests {
 
     let tables = [table_a];
 
-    let select =
-      parse_create_view_select("CREATE VIEW view0 AS SELECT x.id FROM a AS x GROUP BY x.id");
+    let allocator = sqlite3_parser::Bump::new();
+    let select = parse_create_view_select(
+      &allocator,
+      "CREATE VIEW view0 AS SELECT x.id FROM a AS x GROUP BY x.id",
+    );
     assert_eq!(
       Some(0),
       extract_column_mapping(select, &tables).unwrap().group_by
     );
 
-    let select =
-      parse_create_view_select("CREATE VIEW view1 AS SELECT x.id FROM a AS x GROUP BY id");
+    let select = parse_create_view_select(
+      &allocator,
+      "CREATE VIEW view1 AS SELECT x.id FROM a AS x GROUP BY id",
+    );
     assert_eq!(
       Some(0),
       extract_column_mapping(select, &tables).unwrap().group_by
@@ -2002,6 +2035,7 @@ mod tests {
 
     // With function
     let select = parse_create_view_select(
+      &allocator,
       "CREATE VIEW view2 AS SELECT min(id) AS id, data FROM a GROUP BY data",
     );
     let column_mapping = extract_column_mapping(select, &tables).unwrap();
@@ -2033,14 +2067,16 @@ mod tests {
 
     let tables = [profiles_table, articles_table];
 
+    let allocator = sqlite3_parser::Bump::new();
     let select = parse_into_select(
+      &allocator,
       "
         SELECT user, *, a.*, p.user AS foo
         FROM foo.articles AS a
         LEFT JOIN bar.profiles AS p ON p.user = a.author
       ",
     );
-    let mapping = extract_column_mapping(select, &tables).unwrap();
+    let mapping = extract_column_mapping(&select, &tables).unwrap();
 
     let got: Vec<C> = mapping
       .columns

@@ -3,7 +3,7 @@ use itertools::Itertools;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
-use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::parse::{Bump, parse_into_statement};
 use trailbase_schema::sqlite::{QualifiedName, Table, TableIndex, View};
 use ts_rs::TS;
 
@@ -185,16 +185,17 @@ async fn list_tables_handler_sqlite_impl(
             continue;
           };
 
+          let allocator = Bump::new();
           if let Some(create_table_statement) =
-            parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
+            parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
           {
             response.tables.push((
               {
-                let mut table: Table = create_table_statement.try_into()?;
+                let mut table: Table = (&create_table_statement).try_into()?;
                 table.name.database_schema = db_schema;
                 table
               },
-              sql,
+              sql.clone(),
             ));
           }
         }
@@ -208,16 +209,17 @@ async fn list_tables_handler_sqlite_impl(
             continue;
           };
 
+          let allocator = Bump::new();
           if let Some(create_index_statement) =
-            parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
+            parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
           {
             response.indexes.push((
               {
-                let mut index: TableIndex = create_index_statement.try_into()?;
+                let mut index: TableIndex = (&create_index_statement).try_into()?;
                 index.name.database_schema = db_schema;
                 index
               },
-              sql,
+              sql.clone(),
             ));
           }
         }
@@ -228,8 +230,9 @@ async fn list_tables_handler_sqlite_impl(
             continue;
           };
 
+          let allocator = Bump::new();
           if let Some(create_view_statement) =
-            parse_into_statement(&sql).map_err(|err| Error::Internal(err.into()))?
+            parse_into_statement(&allocator, &sql).map_err(|err| Error::Internal(err.into()))?
           {
             let tables: Vec<_> = response
               .tables
@@ -248,7 +251,7 @@ async fn list_tables_handler_sqlite_impl(
                 view.name.database_schema = db_schema;
                 view
               },
-              sql,
+              sql.clone(),
             ));
           }
         }
@@ -267,7 +270,7 @@ async fn list_tables_handler_sqlite_impl(
               },
               table_name: schema.tbl_name,
             },
-            sql,
+            sql.clone(),
           ));
         }
         ty => warn!("Unknown schema type for '{}': {ty}", schema.name),

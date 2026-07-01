@@ -3,11 +3,16 @@ use log::*;
 use sqlite3_parser::ast::{Cmd, Stmt};
 use sqlite3_parser::lexer::sql::{Error as Sqlite3Error, Parser};
 
-pub fn parse_into_statements(sql: &str) -> Result<Vec<Stmt>, Sqlite3Error> {
+pub use sqlite3_parser::Bump;
+
+pub fn parse_into_statements<'b>(
+  allocator: &'b Bump,
+  sql: &'b str,
+) -> Result<Vec<Stmt<'b>>, Sqlite3Error> {
   // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
   // Meanwhile we'll trap them here. We haven't seen any in practice yet.
-  let outer_result = std::panic::catch_unwind(|| {
-    let mut parser = Parser::new(sql.as_bytes());
+  let outer_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let mut parser = Parser::new(allocator, sql.as_bytes());
 
     let mut statements: Vec<Stmt> = vec![];
     while let Some(cmd) = parser.next()? {
@@ -19,7 +24,7 @@ pub fn parse_into_statements(sql: &str) -> Result<Vec<Stmt>, Sqlite3Error> {
       }
     }
     return Ok(statements);
-  });
+  }));
 
   return match outer_result {
     Ok(inner_result) => inner_result,
@@ -30,11 +35,14 @@ pub fn parse_into_statements(sql: &str) -> Result<Vec<Stmt>, Sqlite3Error> {
   };
 }
 
-pub fn parse_into_statement(sql: &str) -> Result<Option<Stmt>, Sqlite3Error> {
+pub fn parse_into_statement<'b>(
+  allocator: &'b Bump,
+  sql: &'b str,
+) -> Result<Option<Stmt<'b>>, Sqlite3Error> {
   // According to sqlite3_parser's docs they're working to remove panics in some edge cases.
   // Meanwhile we'll trap them here. We haven't seen any in practice yet.
-  let outer_result = std::panic::catch_unwind(|| {
-    let mut parser = Parser::new(sql.as_bytes());
+  let outer_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let mut parser = Parser::new(allocator, sql.as_bytes());
 
     while let Some(cmd) = parser.next()? {
       match cmd {
@@ -45,7 +53,7 @@ pub fn parse_into_statement(sql: &str) -> Result<Option<Stmt>, Sqlite3Error> {
       }
     }
     return Ok(None);
-  });
+  }));
 
   return match outer_result {
     Ok(inner_result) => inner_result,

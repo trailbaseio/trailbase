@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use trailbase_schema::QualifiedName;
 use trailbase_schema::metadata::TableOrViewMetadata;
-use trailbase_schema::parse::parse_into_statement;
+use trailbase_schema::parse::{Bump, parse_into_statement};
 use trailbase_schema::sqlite::ColumnOption;
 use trailbase_sqlite::ConnectionType;
 
@@ -283,7 +283,9 @@ fn validate_rule(kind: AccessKind, rule: &str) -> Result<(), ConfigError> {
     }
   }
 
-  let stmt = parse_into_statement(&format!("SELECT {rule}"))
+  let allocator = Bump::new();
+  let sql = format!("SELECT {rule}");
+  let stmt = parse_into_statement(&allocator, &sql)
     .map_err(|err| invalid(format!("'{rule}' not a valid SQL expression: {err}")))?;
 
   let Some(sqlite3_parser::ast::Stmt::Select(select)) = stmt else {
@@ -292,7 +294,7 @@ fn validate_rule(kind: AccessKind, rule: &str) -> Result<(), ConfigError> {
     )));
   };
 
-  let sqlite3_parser::ast::OneSelect::Select { mut columns, .. } = select.body.select else {
+  let sqlite3_parser::ast::OneSelect::Select { columns, .. } = select.body.select else {
     return Err(invalid(format!(
       "Access rule '{rule}' not a select statement"
     )));
@@ -302,11 +304,11 @@ fn validate_rule(kind: AccessKind, rule: &str) -> Result<(), ConfigError> {
     return Err(invalid("Expected single column"));
   }
 
-  let sqlite3_parser::ast::ResultColumn::Expr(expr, _) = columns.swap_remove(0) else {
+  let sqlite3_parser::ast::ResultColumn::Expr(ref expr, _) = columns[0] else {
     return Err(invalid("Expected expr"));
   };
 
-  validate_expr_recursively(&expr)?;
+  validate_expr_recursively(expr)?;
 
   return Ok(());
 }
@@ -329,7 +331,7 @@ fn validate_expr_recursively(expr: &sqlite3_parser::ast::Expr) -> Result<(), Con
         ast::QualifiedName {
           name: ast::Name(name),
           ..
-        } if name.as_ref() == "_REQ_FIELDS_"
+        } if *name == "_REQ_FIELDS_"
           && !matches!(**lhs, ast::Expr::Literal(ast::Literal::String(_))) =>
         {
           return Err(invalid(format!(

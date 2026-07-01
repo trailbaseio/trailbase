@@ -45,7 +45,7 @@ impl SubscriptionManager {
 
         let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
 
-        for (_name, api) in record_apis.iter() {
+        for api in record_apis.values() {
           if !api.enable_subscriptions() {
             continue;
           }

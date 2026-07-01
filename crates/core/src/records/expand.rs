@@ -196,7 +196,8 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
     let Some(ColumnOption::ForeignKey {
       foreign_table: foreign_table_name,
       referred_columns: _,
-      ..
+      on_delete: _,
+      on_update: _,
     }) = meta
       .column
       .options

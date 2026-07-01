@@ -45,7 +45,7 @@ async fn main() {
   });
 
   let runtimes_builder =
-    wasm_runtime_builder(args.path, shared_state, None, None, /*dev=*/ false);
+    wasm_runtime_builder(args.path, shared_state, None, None, /* dev= */ false);
   let runtime = Arc::new(tokio::sync::RwLock::new(runtimes_builder().unwrap()));
 
   let mut router = Router::new();
