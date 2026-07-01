@@ -30,7 +30,6 @@ fn test_admin_permissions() {
     } = Server::init(
       state,
       ServerOptions {
-        // data_dir: DataDir(data_dir.path().to_path_buf()),
         address: "localhost:4040".to_string(),
         admin_address: None,
         public_dir: None,

@@ -75,16 +75,6 @@ async fn test_record_apis() {
 
   let options = ServerOptions {
     address: "localhost:4041".to_string(),
-    admin_address: None,
-    public_dir: None,
-    cors_allowed_origins: vec![],
-
-    // #[cfg(feature = "pg-test")]
-    // pg_uri: Some(if let Some(db) = db.as_ref() {
-    //   db.connection_uri()
-    // } else {
-    //   "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
-    // }),
     ..Default::default()
   };
 

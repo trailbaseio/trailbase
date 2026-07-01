@@ -47,12 +47,6 @@ use crate::records;
 /// arguments.
 #[derive(Clone, Debug, Default)]
 pub struct ServerOptions {
-  // /// Optional path to static assets that will be served at the HTTP root.
-  // pub data_dir: DataDir,
-  //
-  // /// Optional public url
-  // pub public_url: Option<url::Url>,
-
   // Authority (<host>:<port>) the HTTP server binds to, e.g. "localhost:4000".
   pub address: String,
 
@@ -65,12 +59,6 @@ pub struct ServerOptions {
   /// Enable SPA fallback mode for public_dir.
   pub public_dir_spa: bool,
 
-  // /// Optional path to sandboxed FS root for WASM runtime.
-  // pub runtime_root_fs: Option<PathBuf>,
-  //
-  // /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
-  // pub geoip_db_path: Option<PathBuf>,
-  /// We trace the request->response flow to generate a server log. Setting this to true will also
   /// log an event to stdout.
   pub log_responses: bool,
 
@@ -111,14 +99,10 @@ impl Server {
   /// schemas.
   pub async fn init(state: AppState, opts: ServerOptions) -> Result<Self, InitError> {
     let ServerOptions {
-      // data_dir,
-      // public_url,
       address,
       admin_address,
       public_dir,
       public_dir_spa,
-      // runtime_root_fs,
-      // geoip_db_path,
       log_responses,
       cors_allowed_origins,
       tls_cert,
@@ -190,7 +174,28 @@ impl Server {
       None
     };
 
-    let build_independent_admin_router = admin_address.as_ref().is_some_and(|a| *a != address);
+    let admin_router = Self::build_admin_router(&state);
+    let independent_admin_router = if let Some(admin_address) = admin_address
+      && admin_address != address
+    {
+      let router = Router::new()
+        .merge(
+          install_auth_rate_limiter
+            .as_ref()
+            .map_or_else(auth::admin_auth_router, |inst| {
+              inst(auth::admin_auth_router())
+            }),
+        )
+        .merge(admin_router);
+
+      Some((
+        admin_address.to_string(),
+        Self::wrap_with_default_layers(&state, router, &cors_allowed_origins),
+      ))
+    } else {
+      custom_routers.push(admin_router);
+      None
+    };
 
     Ok(Self {
       state: state.clone(),
@@ -202,21 +207,9 @@ impl Server {
         &cors_allowed_origins,
         install_auth_rate_limiter.as_ref(),
         custom_routers,
-        !build_independent_admin_router,
       )
       .await?,
-      admin_router: if build_independent_admin_router
-        && let Some(admin_address) = admin_address.as_deref()
-      {
-        Some(Self::build_independent_admin_router(
-          &state,
-          admin_address,
-          &cors_allowed_origins,
-          install_auth_rate_limiter.as_ref(),
-        )?)
-      } else {
-        None
-      },
+      admin_router: independent_admin_router,
       tls: load_tls(state.data_dir(), tls_cert, tls_key),
     })
   }
@@ -400,26 +393,6 @@ impl Server {
       );
   }
 
-  fn build_independent_admin_router(
-    state: &AppState,
-    admin_address: &str,
-    cors_allowed_origins: &[String],
-    install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
-  ) -> Result<(String, Router<()>), InitError> {
-    let router = Router::new()
-      .merge(
-        install_auth_rate_limiter.map_or_else(auth::admin_auth_router, |inst| {
-          inst(auth::admin_auth_router())
-        }),
-      )
-      .merge(Self::build_admin_router(state));
-
-    return Ok((
-      admin_address.to_string(),
-      Self::wrap_with_default_layers(state, router, cors_allowed_origins),
-    ));
-  }
-
   async fn build_main_router(
     state: &AppState,
     address: &str,
@@ -428,7 +401,6 @@ impl Server {
     cors_allowed_origins: &[String],
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
     custom_routers: Vec<Router<AppState>>,
-    build_admin_router: bool,
   ) -> Result<(String, Router<()>), InitError> {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
@@ -445,10 +417,6 @@ impl Server {
         |inst| inst(auth::router(&state.get_config())),
       ))
       .route("/api/healthcheck", get(healthcheck_handler));
-
-    if build_admin_router {
-      router = router.merge(Self::build_admin_router(state));
-    }
 
     for custom_router in custom_routers {
       router = router.merge(custom_router);
