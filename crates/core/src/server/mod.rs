@@ -49,11 +49,11 @@ pub use init::{InitArgs, InitError, init_app_state};
 /// arguments.
 #[derive(Clone, Debug, Default)]
 pub struct ServerOptions {
-  /// Optional path to static assets that will be served at the HTTP root.
-  pub data_dir: DataDir,
-
-  /// Optional public url
-  pub public_url: Option<url::Url>,
+  // /// Optional path to static assets that will be served at the HTTP root.
+  // pub data_dir: DataDir,
+  //
+  // /// Optional public url
+  // pub public_url: Option<url::Url>,
 
   // Authority (<host>:<port>) the HTTP server binds to, e.g. "localhost:4000".
   pub address: String,
@@ -67,22 +67,14 @@ pub struct ServerOptions {
   /// Enable SPA fallback mode for public_dir.
   pub public_dir_spa: bool,
 
-  /// Optional path to sandboxed FS root for WASM runtime.
-  pub runtime_root_fs: Option<PathBuf>,
-
-  /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
-  pub geoip_db_path: Option<PathBuf>,
-
+  // /// Optional path to sandboxed FS root for WASM runtime.
+  // pub runtime_root_fs: Option<PathBuf>,
+  //
+  // /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
+  // pub geoip_db_path: Option<PathBuf>,
   /// We trace the request->response flow to generate a server log. Setting this to true will also
   /// log an event to stdout.
   pub log_responses: bool,
-
-  /// In dev mode CORS and cookies will be more permissive to allow development with externally
-  /// hosted UIs, e.g. using a dev serer.
-  pub dev: bool,
-
-  // Enabling demo mode, e.g. to redact PII from Admin UI.
-  pub demo: bool,
 
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
@@ -119,7 +111,23 @@ impl Server {
   /// Note, however, that for a multi-stage deployment (dev, test, staging, prod, ...) or prod
   /// setups migrations are a more robust approach to consistent and continuous management of
   /// schemas.
-  pub async fn init(state: AppState, mut opts: ServerOptions) -> Result<Self, InitError> {
+  pub async fn init(state: AppState, opts: ServerOptions) -> Result<Self, InitError> {
+    let ServerOptions {
+      // data_dir,
+      // public_url,
+      address,
+      admin_address,
+      public_dir,
+      public_dir_spa,
+      // runtime_root_fs,
+      // geoip_db_path,
+      log_responses,
+      cors_allowed_origins,
+      tls_cert,
+      tls_key,
+      custom_router,
+    } = opts;
+
     let version_info = trailbase_build::get_version_info!();
     info!(
       "Initializing server version: {version} {date}",
@@ -127,10 +135,9 @@ impl Server {
       date = version_info.git_commit_date.unwrap_or_default(),
     );
 
-    Self::build_tracing(&state, opts.log_responses).init();
+    Self::build_tracing(&state, log_responses).init();
 
-    let mut custom_routers: Vec<Router<AppState>> =
-      Vec::from_iter(opts.custom_router.take().into_iter());
+    let mut custom_routers: Vec<Router<AppState>> = Vec::from_iter(custom_router.into_iter());
 
     for rt in state.wasm_runtimes() {
       if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
@@ -147,7 +154,7 @@ impl Server {
     // "x-forwarded-for" header correctly to ensure ip-based rate limiting and request logging
     // works correctly.
     // NOTE: We're using a closure here because of the awkward typing.
-    let install_auth_rate_limiter = if !opts.dev
+    let install_auth_rate_limiter = if !state.dev_mode()
       && let Some(rate_limit) = state.get_config().server.auth_ip_rate_limit
       && rate_limit > 0
     {
@@ -185,20 +192,17 @@ impl Server {
       None
     };
 
-    let build_independent_admin_router = opts
-      .admin_address
-      .as_ref()
-      .is_some_and(|a| *a != opts.address);
+    let build_independent_admin_router = admin_address.as_ref().is_some_and(|a| *a != address);
 
     Ok(Self {
       state: state.clone(),
       main_router: Self::build_main_router(
         &state,
-        &opts.address,
-        opts.public_dir.as_ref(),
-        opts.public_dir_spa,
-        &opts.cors_allowed_origins,
-        opts.dev,
+        &address,
+        public_dir.as_ref(),
+        public_dir_spa,
+        &cors_allowed_origins,
+        state.dev_mode(),
         install_auth_rate_limiter.as_ref(),
         custom_routers,
         !build_independent_admin_router,
@@ -207,15 +211,15 @@ impl Server {
       admin_router: if build_independent_admin_router {
         Some(Self::build_independent_admin_router(
           &state,
-          opts.admin_address.as_deref(),
-          &opts.cors_allowed_origins,
-          opts.dev,
+          admin_address.as_deref(),
+          &cors_allowed_origins,
+          state.dev_mode(),
           install_auth_rate_limiter.as_ref(),
         )?)
       } else {
         None
       },
-      tls: Self::load_tls(&opts),
+      tls: load_tls(state.data_dir(), tls_cert, tls_key),
     })
   }
 
@@ -368,41 +372,6 @@ impl Server {
     .await?;
 
     return Ok(());
-  }
-
-  pub fn load_tls(
-    opts: &ServerOptions,
-  ) -> Option<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
-    let data_dir = &opts.data_dir;
-    let tls_cert = opts.tls_cert.clone().map_or_else(
-      || {
-        std::fs::read(data_dir.secrets_path().join("certs").join("cert.pem"))
-          .ok()
-          .and_then(|cert| CertificateDer::from_pem_slice(&cert).ok())
-      },
-      Some,
-    );
-    let tls_key = opts.tls_key.as_ref().map_or_else(
-      || {
-        std::fs::read(data_dir.secrets_path().join("certs").join("key.pem"))
-          .ok()
-          .and_then(|key| PrivateKeyDer::from_pem_slice(&key).ok())
-      },
-      |key| Some(key.clone_key()),
-    );
-
-    return match (tls_cert, tls_key) {
-      (Some(cert), Some(key)) => Some((cert, key)),
-      (Some(_cert), None) => {
-        warn!("TLS cert provided but key missing");
-        None
-      }
-      (None, Some(_key)) => {
-        warn!("TLS key provided but cert missing");
-        None
-      }
-      (None, None) => None,
-    };
   }
 
   fn build_admin_router(state: &AppState) -> Router<AppState> {
@@ -835,4 +804,40 @@ fn cow_to_bytes(cow: Cow<'static, [u8]>) -> Bytes {
     Cow::Borrowed(x) => Bytes::from(x),
     Cow::Owned(x) => Bytes::from(x),
   }
+}
+
+fn load_tls(
+  data_dir: &DataDir,
+  tls_cert: Option<CertificateDer<'static>>,
+  tls_key: Option<Arc<PrivateKeyDer<'static>>>,
+) -> Option<(CertificateDer<'static>, PrivateKeyDer<'static>)> {
+  let tls_cert = tls_cert.map_or_else(
+    || {
+      std::fs::read(data_dir.secrets_path().join("certs").join("cert.pem"))
+        .ok()
+        .and_then(|cert| CertificateDer::from_pem_slice(&cert).ok())
+    },
+    Some,
+  );
+  let tls_key = tls_key.map_or_else(
+    || {
+      std::fs::read(data_dir.secrets_path().join("certs").join("key.pem"))
+        .ok()
+        .and_then(|key| PrivateKeyDer::from_pem_slice(&key).ok())
+    },
+    |key| Some(key.clone_key()),
+  );
+
+  return match (tls_cert, tls_key) {
+    (Some(cert), Some(key)) => Some((cert, key)),
+    (Some(_cert), None) => {
+      warn!("TLS cert provided but key missing");
+      None
+    }
+    (None, Some(_key)) => {
+      warn!("TLS key provided but cert missing");
+      None
+    }
+    (None, None) => None,
+  };
 }

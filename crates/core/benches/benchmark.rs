@@ -117,7 +117,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   let app = Server::init(
     state,
     ServerOptions {
-      data_dir: DataDir(data_dir.path().to_path_buf()),
+      // data_dir: DataDir(data_dir.path().to_path_buf()),
       address: "localhost".to_string(),
       ..Default::default()
     },

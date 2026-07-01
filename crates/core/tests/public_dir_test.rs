@@ -29,12 +29,10 @@ async fn test_without_spa_fallback() {
 
   // Test SPA mode disabled - non-existent routes return 404
   let options = ServerOptions {
-    data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "localhost:4052".to_string(),
     admin_address: None,
     public_dir: Some(public_dir.path().to_path_buf()),
     public_dir_spa: false,
-    dev: false,
     cors_allowed_origins: vec![],
     ..Default::default()
   };

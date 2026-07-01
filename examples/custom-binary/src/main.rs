@@ -61,12 +61,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
   let server = Server::init(
     state.clone(),
     ServerOptions {
-      data_dir: DataDir::default(),
       address: "localhost:4004".to_string(),
       admin_address: None,
       public_dir: None,
       log_responses: true,
-      dev: false,
       cors_allowed_origins: vec![],
       custom_router: Some(
         Router::new()

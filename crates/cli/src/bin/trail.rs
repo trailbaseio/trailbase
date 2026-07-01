@@ -80,17 +80,11 @@ async fn async_main(
       let app = Server::init(
         state,
         ServerOptions {
-          data_dir,
-          public_url,
           address: cmd.address,
           admin_address: cmd.admin_address,
           public_dir: cmd.public_dir.map(|p| p.into()),
           public_dir_spa: cmd.spa,
-          runtime_root_fs: cmd.runtime_root_fs.map(|p| p.into()),
-          geoip_db_path: cmd.geoip_db_path.map(|p| p.into()),
           log_responses: cmd.dev || cmd.stderr_logging,
-          dev: cmd.dev,
-          demo: cmd.demo,
           cors_allowed_origins: cmd.cors_allowed_origins,
           tls_key: None,
           tls_cert: None,

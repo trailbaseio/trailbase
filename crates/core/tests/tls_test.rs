@@ -39,11 +39,9 @@ fn test_https_serving() {
     let app = Server::init(
       state,
       ServerOptions {
-        data_dir: DataDir(data_dir.path().to_path_buf()),
         address: address.to_string(),
         admin_address: None,
         public_dir: None,
-        dev: false,
         cors_allowed_origins: vec![],
         tls_key: Some(Arc::new(tls_key)),
         tls_cert: Some(cert.der().clone()),

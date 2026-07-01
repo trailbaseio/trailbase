@@ -75,11 +75,9 @@ async fn test_record_apis() {
   .unwrap();
 
   let options = ServerOptions {
-    data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "localhost:4041".to_string(),
     admin_address: None,
     public_dir: None,
-    dev: false,
     cors_allowed_origins: vec![],
 
     // #[cfg(feature = "pg-test")]
