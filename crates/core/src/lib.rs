@@ -20,6 +20,7 @@ mod data_dir;
 mod email;
 mod encryption;
 mod extract;
+mod init_error;
 mod listing;
 mod migrations;
 mod scheduler;
@@ -103,10 +104,11 @@ mod wasm {
 #[cfg(test)]
 mod test;
 
-pub use app_state::AppState;
+pub use app_state::{AppState, InitArgs};
 pub use auth::User;
 pub use data_dir::DataDir;
-pub use server::{InitError, Server, ServerOptions};
+pub use init_error::InitError;
+pub use server::{Server, ServerOptions};
 
 use prost_reflect::DescriptorPool;
 use std::sync::LazyLock;
@@ -138,13 +140,13 @@ pub mod openapi {
 
 pub mod api {
   pub use crate::admin::user::{CreateUserRequest, create_user_handler};
+  pub use crate::app_state::InitArgs;
   pub use crate::auth::{AuthTokenClaims, JwtHelper, cli};
   pub use crate::connection::Connection;
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::records::json_schema::build_api_json_schema;
   pub use crate::schema_metadata::ConnectionMetadata;
-  pub use crate::server::{InitArgs, init_app_state};
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
 

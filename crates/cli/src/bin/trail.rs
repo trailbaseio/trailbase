@@ -8,8 +8,9 @@ use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use serde::Deserialize;
 use std::io::Write;
-use trailbase::api::{self, Email, InitArgs, JsonSchemaMode, init_app_state};
-use trailbase::{DataDir, Server, ServerOptions, constants::USER_TABLE};
+use trailbase::api::{self, Email, JsonSchemaMode};
+use trailbase::constants::USER_TABLE;
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
 use trailbase_cli::wasm::{
   download_component, find_component, find_component_by_filename, install_wasm_component,
   list_installed_wasm_components, repo,
@@ -63,7 +64,7 @@ async fn async_main(
         return Err("Failed to load extensions".into());
       }
 
-      let (_new, state) = init_app_state(InitArgs {
+      let (_new, state) = AppState::init(InitArgs {
         data_dir: data_dir.clone(),
         public_url: public_url.clone(),
         public_dir: cmd.public_dir.as_ref().map(|p| p.into()).clone(),
@@ -73,7 +74,6 @@ async fn async_main(
         demo: cmd.demo,
         wasm_tokio_runtime,
         pg_uri: cmd.experimental_pg.clone(),
-        ..Default::default()
       })
       .await?;
 
@@ -116,7 +116,7 @@ async fn async_main(
       }
     },
     SubCommands::Schema(cmd) => {
-      let (_new_db, state) = init_app_state(InitArgs {
+      let (_new_db, state) = AppState::init(InitArgs {
         data_dir,
         public_url,
         ..Default::default()
@@ -151,7 +151,7 @@ async fn async_main(
       println!("Created empty migration file: {path:?}");
     }
     SubCommands::Admin { cmd } => {
-      let (_new_db, state) = init_app_state(InitArgs {
+      let (_new_db, state) = AppState::init(InitArgs {
         data_dir,
         public_url,
         ..Default::default()
@@ -197,7 +197,7 @@ async fn async_main(
       };
     }
     SubCommands::User { cmd } => {
-      let (_new_db, state) = init_app_state(InitArgs {
+      let (_new_db, state) = AppState::init(InitArgs {
         data_dir,
         public_url,
         ..Default::default()
@@ -282,7 +282,7 @@ async fn async_main(
       };
     }
     SubCommands::Email(cmd) => {
-      let (_new_db, state) = init_app_state(InitArgs {
+      let (_new_db, state) = AppState::init(InitArgs {
         data_dir,
         public_url,
         ..Default::default()

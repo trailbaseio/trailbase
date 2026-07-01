@@ -1,4 +1,3 @@
-mod init;
 mod serve;
 
 use axum::body::Body;
@@ -39,10 +38,9 @@ use crate::connection::ConnectionEntry;
 use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
 use crate::extract::ip::RealIpKeyExtractor;
+use crate::init_error::InitError;
 use crate::logging;
 use crate::records;
-
-pub use init::{InitArgs, InitError, init_app_state};
 
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
@@ -137,7 +135,7 @@ impl Server {
 
     Self::build_tracing(&state, log_responses).init();
 
-    let mut custom_routers: Vec<Router<AppState>> = Vec::from_iter(custom_router.into_iter());
+    let mut custom_routers: Vec<Router<AppState>> = Vec::from_iter(custom_router);
 
     for rt in state.wasm_runtimes() {
       if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
@@ -202,18 +200,18 @@ impl Server {
         public_dir.as_ref(),
         public_dir_spa,
         &cors_allowed_origins,
-        state.dev_mode(),
         install_auth_rate_limiter.as_ref(),
         custom_routers,
         !build_independent_admin_router,
       )
       .await?,
-      admin_router: if build_independent_admin_router {
+      admin_router: if build_independent_admin_router
+        && let Some(admin_address) = admin_address.as_deref()
+      {
         Some(Self::build_independent_admin_router(
           &state,
-          admin_address.as_deref(),
+          admin_address,
           &cors_allowed_origins,
-          state.dev_mode(),
           install_auth_rate_limiter.as_ref(),
         )?)
       } else {
@@ -404,14 +402,10 @@ impl Server {
 
   fn build_independent_admin_router(
     state: &AppState,
-    admin_address: Option<&str>,
+    admin_address: &str,
     cors_allowed_origins: &[String],
-    dev: bool,
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
   ) -> Result<(String, Router<()>), InitError> {
-    let address =
-      admin_address.ok_or_else(|| InitError::CreateAdmin("missing admin address".to_string()))?;
-
     let router = Router::new()
       .merge(
         install_auth_rate_limiter.map_or_else(auth::admin_auth_router, |inst| {
@@ -421,8 +415,8 @@ impl Server {
       .merge(Self::build_admin_router(state));
 
     return Ok((
-      address.to_string(),
-      Self::wrap_with_default_layers(state, router, cors_allowed_origins, dev),
+      admin_address.to_string(),
+      Self::wrap_with_default_layers(state, router, cors_allowed_origins),
     ));
   }
 
@@ -432,7 +426,6 @@ impl Server {
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,
     cors_allowed_origins: &[String],
-    dev: bool,
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
     custom_routers: Vec<Router<AppState>>,
     build_admin_router: bool,
@@ -508,7 +501,7 @@ impl Server {
 
     return Ok((
       address.to_string(),
-      Self::wrap_with_default_layers(state, router, cors_allowed_origins, dev),
+      Self::wrap_with_default_layers(state, router, cors_allowed_origins),
     ));
   }
 
@@ -516,7 +509,6 @@ impl Server {
     state: &AppState,
     router: Router<AppState>,
     cors_allowed_origins: &[String],
-    dev: bool,
   ) -> Router<()> {
     #[cfg(feature = "otel")]
     let router = router
@@ -525,7 +517,7 @@ impl Server {
 
     return router
       .layer(CookieManagerLayer::new())
-      .layer(build_cors(cors_allowed_origins, dev))
+      .layer(build_cors(cors_allowed_origins, state.dev_mode()))
       .layer(
         // This declares: **what information** is logged at what level in to events and spans.
         TraceLayer::new_for_http()

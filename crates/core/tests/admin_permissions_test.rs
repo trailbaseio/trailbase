@@ -1,8 +1,7 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
 
-use trailbase::api::{InitArgs, init_app_state};
-use trailbase::{DataDir, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
 
 #[test]
 fn test_admin_permissions() {
@@ -14,7 +13,7 @@ fn test_admin_permissions() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
   let _ = runtime.block_on(async move {
-    let (_new, state) = init_app_state(InitArgs {
+    let (_new, state) = AppState::init(InitArgs {
       data_dir: DataDir(data_dir.path().to_path_buf()),
       public_dir: None,
       dev: false,

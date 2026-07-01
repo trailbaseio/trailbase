@@ -2,8 +2,7 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use std::io::Write;
 
-use trailbase::api::{InitArgs, init_app_state};
-use trailbase::{DataDir, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
 
 #[tokio::test]
 async fn test_without_spa_fallback() {
@@ -18,7 +17,7 @@ async fn test_without_spa_fallback() {
   let mut index_file = std::fs::File::create(&index_path).unwrap();
   index_file.write_all(index_html_content.as_bytes()).unwrap();
 
-  let (_new, state) = init_app_state(InitArgs {
+  let (_new, state) = AppState::init(InitArgs {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     public_dir: Some(public_dir.path().to_path_buf()),
     dev: false,

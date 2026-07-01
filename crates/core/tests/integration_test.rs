@@ -9,8 +9,7 @@ use trailbase_sqlite::params;
 
 use trailbase::AppState;
 use trailbase::api::{
-  CreateUserRequest, InitArgs, UserIdentifier, create_user_handler, init_app_state,
-  login_with_password_for_test,
+  CreateUserRequest, InitArgs, UserIdentifier, create_user_handler, login_with_password_for_test,
 };
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
@@ -58,7 +57,7 @@ async fn test_record_apis() {
    _ => None::<()>,
   };
 
-  let (_new, state) = init_app_state(InitArgs {
+  let (_new, state) = AppState::init(InitArgs {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     public_dir: None,
     dev: false,
@@ -174,8 +173,8 @@ async fn test_record_apis() {
     // NOTE: the wrapping is needed to have the OTEL layers touch the route.
     router = router.merge(Server::wrap_with_default_layers(
       &state,
-      &options,
       axum::Router::new().route("/trace", axum::routing::get(trace_id)),
+      &options.cors_allowed_origins,
     ));
   }
 

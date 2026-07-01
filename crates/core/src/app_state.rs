@@ -13,14 +13,35 @@ use crate::auth::options::AuthOptions;
 use crate::config::proto::{
   Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, UserIdentifier, hash_config,
 };
-use crate::config::{ConfigError, validate_config, write_config_and_vault_textproto};
+use crate::config::{
+  ConfigError, load_or_init_config_textproto, validate_config, write_config_and_vault_textproto,
+};
 use crate::connection::{BuildOptions, ConnectionEntry, ConnectionError, ConnectionManager};
+use crate::constants::USER_TABLE;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
+use crate::init_error::InitError;
+use crate::metadata::load_or_init_metadata_textproto;
+use crate::rand::random_alphanumeric;
 use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 use crate::wasm::Runtime;
+
+#[derive(Default)]
+pub struct InitArgs {
+  pub data_dir: DataDir,
+  pub public_url: Option<url::Url>,
+  pub public_dir: Option<PathBuf>,
+  pub runtime_root_fs: Option<PathBuf>,
+  pub geoip_db_path: Option<PathBuf>,
+
+  pub dev: bool,
+  pub demo: bool,
+  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
+
+  pub pg_uri: Option<String>,
+}
 
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
@@ -90,7 +111,11 @@ pub struct AppState {
 }
 
 impl AppState {
-  pub(crate) async fn new(args: AppStateArgs) -> Self {
+  pub async fn init(args: InitArgs) -> Result<(bool, Self), InitError> {
+    return init_app_state(args).await;
+  }
+
+  async fn new(args: AppStateArgs) -> Self {
     let config = Reactive::new(args.config);
 
     let public_url = args.public_url.clone();
@@ -874,6 +899,135 @@ mod test_utils {
       }),
     });
   }
+}
+
+async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
+  validate_path(args.public_dir.as_ref())?;
+  validate_path(args.runtime_root_fs.as_ref())?;
+  validate_path(args.geoip_db_path.as_ref())?;
+
+  // First create directory structure.
+  args.data_dir.ensure_directory_structure().await?;
+
+  // Then open or init new databases.
+  let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
+  let session_conn = crate::connection::init_session_db(Some(&args.data_dir))?;
+
+  let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+    trailbase_schema::registry::build_json_schema_registry(vec![])?,
+  ));
+
+  if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
+    update_json_schema_registry(&config.schemas, &json_schema_registry)?;
+  }
+
+  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
+    args.data_dir.root().join("wasm"),
+    args.runtime_root_fs.as_deref(),
+    args.dev,
+  )
+  .await
+  .map_err(|err| InitError::ScriptError(err.to_string()))?;
+
+  let (connection_manager, new_db) = ConnectionManager::new(crate::connection::Options {
+    data_dir: args.data_dir.clone(),
+    json_schema_registry: json_schema_registry.clone(),
+    sqlite_function_runtimes: sync_wasm_runtimes,
+    // TODO: Wire up from config, if/when PG is supported.
+    pg_uri: cfg_select! {
+        feature = "pg" => args.pg_uri,
+        _ => None,
+    },
+  })
+  .await?;
+
+  // Read config or write default one. Ensures config is validated.
+  let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
+
+  // Load the `<depot>/metadata.textproto`.
+  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
+
+  let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
+
+  // Init geoip if present.
+  let geoip_db_path = args
+    .geoip_db_path
+    .unwrap_or_else(|| args.data_dir.root().join("GeoLite2-Country.mmdb"));
+  if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
+    debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
+  }
+
+  let object_store = build_objectstore(&args.data_dir, config.server.s3_storage_config.as_ref())?;
+
+  let app_state = AppState::new(AppStateArgs {
+    data_dir: args.data_dir.clone(),
+    public_url: args.public_url,
+    public_dir: args.public_dir,
+    runtime_root_fs: args.runtime_root_fs,
+    dev: args.dev,
+    demo: args.demo,
+    config,
+    json_schema_registry,
+    session_conn,
+    logs_conn,
+    connection_manager,
+    jwt,
+    object_store,
+    wasm_tokio_runtime: args.wasm_tokio_runtime,
+  })
+  .await;
+
+  if new_db {
+    let num_admins: i64 = app_state
+      .user_conn()
+      .read_query_row_get(
+        format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
+        (),
+        0,
+      )
+      .await?
+      .unwrap_or(0);
+
+    if num_admins == 0 {
+      let email = "admin@localhost";
+      let username = "admin";
+      let password = random_alphanumeric(20);
+      let hashed_password = crate::auth::password::hash_password(&password)?;
+
+      app_state
+        .user_conn()
+        .execute(
+          format!(
+            r#"
+              INSERT INTO {USER_TABLE}
+                (email, username, password_hash, verified, admin)
+              VALUES
+                ($1, $2, $3, TRUE, TRUE)
+            "#
+          ),
+          trailbase_sqlite::params!(email.to_string(), username.to_string(), hashed_password),
+        )
+        .await?;
+
+      info!("Created new admin user:\n\temail: '{email}'\n\tpassword: '{password}'");
+    }
+  }
+
+  if cfg!(debug_assertions) {
+    let text_config = app_state.get_config().to_text()?;
+    debug!("Config: {text_config}");
+  }
+
+  return Ok((new_db, app_state));
+}
+
+fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
+  if let Some(path) = path
+    && !std::fs::exists(path)?
+  {
+    return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
+  }
+  return Ok(());
 }
 
 #[cfg(test)]

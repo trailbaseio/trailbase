@@ -3,8 +3,7 @@ use std::sync::Arc;
 use tokio_rustls::rustls::pki_types::{PrivateKeyDer, pem::PemObject};
 use tracing::*;
 
-use trailbase::api::{InitArgs, init_app_state};
-use trailbase::{DataDir, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
 
 #[test]
 fn test_https_serving() {
@@ -27,7 +26,7 @@ fn test_https_serving() {
     let tls_pem = signing_key.serialize_pem();
     let tls_key = PrivateKeyDer::from_pem_slice(tls_pem.as_bytes()).unwrap();
 
-    let (_new, state) = init_app_state(InitArgs {
+    let (_new, state) = AppState::init(InitArgs {
       data_dir: DataDir(data_dir.path().to_path_buf()),
       public_dir: None,
       dev: false,

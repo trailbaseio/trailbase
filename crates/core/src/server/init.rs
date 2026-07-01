@@ -2,44 +2,16 @@ use log::*;
 use parking_lot::RwLock;
 use std::path::PathBuf;
 use std::sync::Arc;
-use thiserror::Error;
 
 use crate::app_state::{AppState, AppStateArgs, build_objectstore, update_json_schema_registry};
-use crate::auth::jwt::{JwtHelper, JwtHelperError};
+use crate::auth::jwt::JwtHelper;
 use crate::config::load_or_init_config_textproto;
 use crate::connection::ConnectionManager;
 use crate::constants::USER_TABLE;
+use crate::init_error::InitError;
 use crate::metadata::load_or_init_metadata_textproto;
 use crate::rand::random_alphanumeric;
 use crate::server::DataDir;
-
-#[derive(Debug, Error)]
-pub enum InitError {
-  #[error("SQLite error: {0}")]
-  Sqlite(#[from] trailbase_sqlite::Error),
-  #[error("Connection error: {0}")]
-  Connection(#[from] crate::connection::ConnectionError),
-  #[error("IO error: {0}")]
-  IO(#[from] std::io::Error),
-  #[error("Config error: {0}")]
-  Config(#[from] crate::config::ConfigError),
-  #[error("JwtHelper error: {0}")]
-  JwtHelper(#[from] JwtHelperError),
-  #[error("CreateAdmin error: {0}")]
-  CreateAdmin(String),
-  #[error("Custom initializer error: {0}")]
-  CustomInit(String),
-  #[error("Table error: {0}")]
-  TableError(#[from] crate::schema_metadata::SchemaLookupError),
-  #[error("Schema error: {0}")]
-  SchemaError(#[from] trailbase_schema::Error),
-  #[error("Script error: {0}")]
-  ScriptError(String),
-  #[error("ObjectStore error: {0}")]
-  ObjectStore(#[from] object_store::Error),
-  #[error("Auth error: {0}")]
-  Auth(#[from] crate::auth::AuthError),
-}
 
 #[derive(Default)]
 pub struct InitArgs {
@@ -174,13 +146,4 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   }
 
   return Ok((new_db, app_state));
-}
-
-fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
-  if let Some(path) = path
-    && !std::fs::exists(path)?
-  {
-    return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
-  }
-  return Ok(());
 }

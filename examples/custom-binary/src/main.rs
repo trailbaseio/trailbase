@@ -3,8 +3,7 @@ use axum::{
   response::{Html, IntoResponse, Response},
   routing::{Router, get},
 };
-use trailbase::api::{InitArgs, init_app_state};
-use trailbase::{AppState, DataDir, Server, ServerOptions, User};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, User};
 
 #[derive(Clone)]
 struct CustomState {
@@ -46,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .install_default()
     .expect("Failed to install rustls crypto");
 
-  let (new_db, state) = init_app_state(InitArgs {
+  let (new_db, state) = AppState::init(InitArgs {
     data_dir: DataDir::default(),
     public_dir: None,
     dev: false,
