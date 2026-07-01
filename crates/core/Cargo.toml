@@ -75,7 +75,7 @@ parking_lot = { workspace = true }
 pin-project-lite = "0.2.16"
 prost = { version = "^0.14.1", default-features = false }
 prost-reflect = { version = "^0.16.0", default-features = false, features = ["derive", "text-format"] }
-quick_cache = "0.6.18"
+quick_cache = "0.7.0"
 rand = { workspace = true }
 regex = "1.11.0"
 reqwest = { workspace = true }
@@ -127,7 +127,7 @@ trailbase-build = { workspace = true }
 
 [dev-dependencies]
 anyhow = "^1.0.86"
-axum-test = "20.0.0"
+axum-test = "21.0.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 indoc = "2.0.5"

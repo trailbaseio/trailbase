@@ -49,7 +49,7 @@ pub enum DatabaseType {
 
 pub fn database_type() -> Option<DatabaseType> {
   if let Some(ref reader) = **READER.load() {
-    return Some(match reader.metadata.database_type.as_str() {
+    return Some(match reader.metadata().database_type.as_str() {
       "GeoLite2-Country" => DatabaseType::GeoLite2Country,
       "GeoLite2-City" => DatabaseType::GeoLite2City,
       // Autonomous system number.

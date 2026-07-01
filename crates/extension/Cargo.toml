@@ -17,9 +17,9 @@ argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "p
 base64 = { workspace = true }
 bcrypt = "0.19.0"
 jsonschema = { version = "0.46.0", default-features = false }
-maxminddb = "0.28.1"
+maxminddb = "0.29.0"
 parking_lot = { workspace = true }
-quick_cache = { version = "0.6.18", default-features = false }
+quick_cache = { version = "0.7.0", default-features = false }
 regex = "1.11.0"
 # NOTE: rusqlite must not enable "bundled" for the .so built to work.
 rusqlite = { version = "0.40.0", default-features = false, features = ["functions"] }
