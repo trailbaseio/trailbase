@@ -49,16 +49,18 @@ pub struct InitArgs {
   pub runtime_root_fs: Option<PathBuf>,
   pub geoip_db_path: Option<PathBuf>,
 
-  pub address: String,
   pub dev: bool,
   pub demo: bool,
   pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 
-  #[cfg(feature = "pg")]
   pub pg_uri: Option<String>,
 }
 
 pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
+  validate_path(args.public_dir.as_ref())?;
+  validate_path(args.runtime_root_fs.as_ref())?;
+  validate_path(args.geoip_db_path.as_ref())?;
+
   // First create directory structure.
   args.data_dir.ensure_directory_structure().await?;
 
@@ -172,4 +174,13 @@ pub async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitErro
   }
 
   return Ok((new_db, app_state));
+}
+
+fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
+  if let Some(path) = path
+    && !std::fs::exists(path)?
+  {
+    return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
+  }
+  return Ok(());
 }

@@ -3,6 +3,7 @@ use axum::{
   response::{Html, IntoResponse, Response},
   routing::{Router, get},
 };
+use trailbase::api::{InitArgs, init_app_state};
 use trailbase::{AppState, DataDir, Server, ServerOptions, User};
 
 #[derive(Clone)]
@@ -45,12 +46,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .install_default()
     .expect("Failed to install rustls crypto");
 
-  let Server {
-    state,
-    main_router,
-    admin_router,
-    tls,
-  } = Server::init_with_custom_initializer(
+  let (new_db, state) = init_app_state(InitArgs {
+    data_dir: DataDir::default(),
+    public_dir: None,
+    dev: false,
+    ..Default::default()
+  })
+  .await?;
+
+  if new_db {
+    println!("Fresh data dir initialized: {:?}", state.data_dir());
+  }
+
+  let server = Server::init(
+    state.clone(),
     ServerOptions {
       data_dir: DataDir::default(),
       address: "localhost:4004".to_string(),
@@ -59,29 +68,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
       log_responses: true,
       dev: false,
       cors_allowed_origins: vec![],
+      custom_router: Some(
+        Router::new()
+          .route("/", get(hello_world_handler))
+          .with_state(CustomState {
+            state: state.clone(),
+            greeting: Some("Hi".to_string()),
+          }),
+      ),
       ..Default::default()
-    },
-    |state: AppState| async move {
-      println!("Fresh data dir initialized: {:?}", state.data_dir());
-      Ok(())
     },
   )
   .await?;
 
-  let router = {
-    let custom_router = Router::new()
-      .route("/", get(hello_world_handler))
-      .with_state(CustomState {
-        state,
-        greeting: Some("Hi".to_string()),
-      })
-      .merge(main_router.1);
-
-    (main_router.0, custom_router)
-  };
-
-  let (cleanup_sender, _cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
-  trailbase::api::serve(router, admin_router, tls, cleanup_sender).await?;
+  server.serve().await?;
 
   Ok(())
 }

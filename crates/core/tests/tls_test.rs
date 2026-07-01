@@ -2,6 +2,8 @@ use rcgen::{CertifiedKey, generate_simple_self_signed};
 use std::sync::Arc;
 use tokio_rustls::rustls::pki_types::{PrivateKeyDer, pem::PemObject};
 use tracing::*;
+
+use trailbase::api::{InitArgs, init_app_state};
 use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
@@ -25,17 +27,29 @@ fn test_https_serving() {
     let tls_pem = signing_key.serialize_pem();
     let tls_key = PrivateKeyDer::from_pem_slice(tls_pem.as_bytes()).unwrap();
 
-    let app = Server::init(ServerOptions {
+    let (_new, state) = init_app_state(InitArgs {
       data_dir: DataDir(data_dir.path().to_path_buf()),
-      address: address.to_string(),
-      admin_address: None,
       public_dir: None,
       dev: false,
-      cors_allowed_origins: vec![],
-      tls_key: Some(Arc::new(tls_key)),
-      tls_cert: Some(cert.der().clone()),
       ..Default::default()
     })
+    .await
+    .unwrap();
+
+    let app = Server::init(
+      state,
+      ServerOptions {
+        data_dir: DataDir(data_dir.path().to_path_buf()),
+        address: address.to_string(),
+        admin_address: None,
+        public_dir: None,
+        dev: false,
+        cors_allowed_origins: vec![],
+        tls_key: Some(Arc::new(tls_key)),
+        tls_cert: Some(cert.der().clone()),
+        ..Default::default()
+      },
+    )
     .await
     .unwrap();
 

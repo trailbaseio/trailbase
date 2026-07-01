@@ -216,12 +216,12 @@ impl AppState {
     return &self.state.data_dir;
   }
 
-  /// Optional user-prvoided public directory from where static assets are served.
+  /// Optional user-provided public directory from where static assets are served.
   pub fn public_dir(&self) -> Option<&Path> {
     return self.state.public_dir.as_deref();
   }
 
-  /// Optional user-prvoided public directory from where static assets are served.
+  /// Optional user-provided public directory from where static assets are served.
   pub fn runtime_root_fs(&self) -> Option<&Path> {
     return self.state.runtime_root_fs.as_deref();
   }

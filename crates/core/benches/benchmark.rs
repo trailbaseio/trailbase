@@ -11,7 +11,9 @@ use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
 use trailbase::AppState;
-use trailbase::api::{CreateUserRequest, create_user_handler, login_with_password_for_test};
+use trailbase::api::{
+  CreateUserRequest, InitArgs, create_user_handler, init_app_state, login_with_password_for_test,
+};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::RECORD_API_PATH;
 use trailbase::{DataDir, Server, ServerOptions};
@@ -105,11 +107,21 @@ pub(crate) async fn add_record_api_config(
 async fn setup_app() -> Result<Setup, anyhow::Error> {
   let data_dir = temp_dir::TempDir::new()?;
 
-  let app = Server::init(ServerOptions {
+  let (_new, state) = init_app_state(InitArgs {
     data_dir: DataDir(data_dir.path().to_path_buf()),
-    address: "localhost".to_string(),
     ..Default::default()
   })
+  .await
+  .unwrap();
+
+  let app = Server::init(
+    state,
+    ServerOptions {
+      data_dir: DataDir(data_dir.path().to_path_buf()),
+      address: "localhost".to_string(),
+      ..Default::default()
+    },
+  )
   .await?;
 
   let main_conn = app.state.connection_manager().main_entry();
@@ -150,10 +162,14 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   .id
   .into_bytes();
 
-  let user_x_token = login_with_password_for_test(&app.state, email, password)
-    .await?
-    .unwrap()
-    .auth_token;
+  let user_x_token = login_with_password_for_test(
+    &app.state,
+    trailbase::api::UserIdentifier::Email(email.to_string()),
+    password,
+  )
+  .await?
+  .unwrap()
+  .auth_token;
 
   add_user_to_room(conn, user_x, room).await?;
 

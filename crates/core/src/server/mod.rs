@@ -88,15 +88,15 @@ pub struct ServerOptions {
   pub cors_allowed_origins: Vec<String>,
 
   /// Optional dedicated Tokio runtime to execute async WASM code on.
-  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
+  // pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
   /// TLS key path.
   pub tls_key: Option<Arc<PrivateKeyDer<'static>>>,
 
-  /// Postgres connection URI. Is ignored in default builds. PG support is optional.
-  pub pg_uri: Option<String>,
+  /// Custom axum router.
+  pub custom_router: Option<Router<AppState>>,
 }
 
 pub struct Server {
@@ -112,12 +112,6 @@ pub struct Server {
 
 impl Server {
   /// Initializes the server. Will create a new data directory on first start.
-  pub async fn init(opts: ServerOptions) -> Result<Self, InitError> {
-    return Self::init_with_custom_initializer(opts, |_| async { Ok(()) }).await;
-  }
-
-  /// Initializes the server in a more customizable manner. Will create a new data directory on
-  /// first start.
   ///
   /// The `custom_routes` will be registered with the http server and `on_first_init` will be
   /// called only when a new data directory and therefore databases are created. This hook can
@@ -125,10 +119,7 @@ impl Server {
   /// Note, however, that for a multi-stage deployment (dev, test, staging, prod, ...) or prod
   /// setups migrations are a more robust approach to consistent and continuous management of
   /// schemas.
-  pub async fn init_with_custom_initializer(
-    opts: ServerOptions,
-    on_first_init: impl AsyncFnOnce(AppState) -> Result<(), Box<dyn std::error::Error + Sync + Send>>,
-  ) -> Result<Self, InitError> {
+  pub async fn init(state: AppState, mut opts: ServerOptions) -> Result<Self, InitError> {
     let version_info = trailbase_build::get_version_info!();
     info!(
       "Initializing server version: {version} {date}",
@@ -136,35 +127,10 @@ impl Server {
       date = version_info.git_commit_date.unwrap_or_default(),
     );
 
-    validate_path(opts.public_dir.as_ref())?;
-    validate_path(opts.runtime_root_fs.as_ref())?;
-    validate_path(opts.geoip_db_path.as_ref())?;
-
-    let (new_data_dir, state) = init::init_app_state(InitArgs {
-      data_dir: opts.data_dir.clone(),
-      public_url: opts.public_url.clone(),
-      public_dir: opts.public_dir.clone(),
-      runtime_root_fs: opts.runtime_root_fs.clone(),
-      geoip_db_path: opts.geoip_db_path.clone(),
-      address: opts.address.clone(),
-      dev: opts.dev,
-      demo: opts.demo,
-      wasm_tokio_runtime: opts.wasm_tokio_runtime.clone(),
-
-      #[cfg(feature = "pg")]
-      pg_uri: opts.pg_uri.clone(),
-    })
-    .await?;
-
     Self::build_tracing(&state, opts.log_responses).init();
 
-    if new_data_dir {
-      on_first_init(state.clone())
-        .await
-        .map_err(|err| InitError::CustomInit(err.to_string()))?;
-    }
-
-    let mut custom_routers: Vec<Router<AppState>> = vec![];
+    let mut custom_routers: Vec<Router<AppState>> =
+      Vec::from_iter(opts.custom_router.take().into_iter());
 
     for rt in state.wasm_runtimes() {
       if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
@@ -228,7 +194,11 @@ impl Server {
       state: state.clone(),
       main_router: Self::build_main_router(
         &state,
-        &opts,
+        &opts.address,
+        opts.public_dir.as_ref(),
+        opts.public_dir_spa,
+        &opts.cors_allowed_origins,
+        opts.dev,
         install_auth_rate_limiter.as_ref(),
         custom_routers,
         !build_independent_admin_router,
@@ -237,7 +207,9 @@ impl Server {
       admin_router: if build_independent_admin_router {
         Some(Self::build_independent_admin_router(
           &state,
-          &opts,
+          opts.admin_address.as_deref(),
+          &opts.cors_allowed_origins,
+          opts.dev,
           install_auth_rate_limiter.as_ref(),
         )?)
       } else {
@@ -463,13 +435,13 @@ impl Server {
 
   fn build_independent_admin_router(
     state: &AppState,
-    opts: &ServerOptions,
+    admin_address: Option<&str>,
+    cors_allowed_origins: &[String],
+    dev: bool,
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
   ) -> Result<(String, Router<()>), InitError> {
-    let address = opts
-      .admin_address
-      .as_ref()
-      .ok_or_else(|| InitError::CreateAdmin("missing admin address".to_string()))?;
+    let address =
+      admin_address.ok_or_else(|| InitError::CreateAdmin("missing admin address".to_string()))?;
 
     let router = Router::new()
       .merge(
@@ -480,14 +452,18 @@ impl Server {
       .merge(Self::build_admin_router(state));
 
     return Ok((
-      address.clone(),
-      Self::wrap_with_default_layers(state, opts, router),
+      address.to_string(),
+      Self::wrap_with_default_layers(state, router, cors_allowed_origins, dev),
     ));
   }
 
   async fn build_main_router(
     state: &AppState,
-    opts: &ServerOptions,
+    address: &str,
+    public_dir: Option<&PathBuf>,
+    public_dir_spa: bool,
+    cors_allowed_origins: &[String],
+    dev: bool,
     install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
     custom_routers: Vec<Router<AppState>>,
     build_admin_router: bool,
@@ -516,7 +492,7 @@ impl Server {
       router = router.merge(custom_router);
     }
 
-    if let Some(public_dir) = &opts.public_dir {
+    if let Some(public_dir) = public_dir {
       if !tokio::fs::try_exists(public_dir).await.unwrap_or(false) {
         panic!("--public_dir={public_dir:?} path does not exist.")
       }
@@ -526,7 +502,7 @@ impl Server {
         (StatusCode::NOT_FOUND, NOT_FOUND)
       }
 
-      router = if opts.public_dir_spa {
+      router = if public_dir_spa {
         let spa_fallback = public_dir.join("index.html");
         if tokio::fs::try_exists(&spa_fallback).await.unwrap_or(false) {
           let mut index_file = ServeFile::new(spa_fallback);
@@ -562,15 +538,16 @@ impl Server {
     }
 
     return Ok((
-      opts.address.clone(),
-      Self::wrap_with_default_layers(state, opts, router),
+      address.to_string(),
+      Self::wrap_with_default_layers(state, router, cors_allowed_origins, dev),
     ));
   }
 
   pub fn wrap_with_default_layers(
     state: &AppState,
-    opts: &ServerOptions,
     router: Router<AppState>,
+    cors_allowed_origins: &[String],
+    dev: bool,
   ) -> Router<()> {
     #[cfg(feature = "otel")]
     let router = router
@@ -579,7 +556,7 @@ impl Server {
 
     return router
       .layer(CookieManagerLayer::new())
-      .layer(build_cors(opts))
+      .layer(build_cors(cors_allowed_origins, dev))
       .layer(
         // This declares: **what information** is logged at what level in to events and spans.
         TraceLayer::new_for_http()
@@ -637,28 +614,27 @@ async fn assert_admin_api_access(
   return Ok(next.run(req).await);
 }
 
-fn build_cors(opts: &ServerOptions) -> cors::CorsLayer {
-  if opts.dev {
+fn build_cors(cors_allowed_origins: &[String], dev: bool) -> cors::CorsLayer {
+  if dev {
     return cors::CorsLayer::very_permissive();
   }
 
-  let origin_strs = &opts.cors_allowed_origins;
-  let wildcard = origin_strs.iter().any(|s| s == "*");
+  let wildcard = cors_allowed_origins.iter().any(|s| s == "*");
 
   let origins = if wildcard {
     info!("CORS: allow any origin");
     // cors::AllowOrigin::any()
     cors::AllowOrigin::mirror_request()
   } else {
-    cors::AllowOrigin::list(origin_strs.iter().filter_map(|o| {
-      match HeaderValue::from_str(o.as_str()) {
+    cors::AllowOrigin::list(cors_allowed_origins.iter().filter_map(
+      |o| match HeaderValue::from_str(o.as_str()) {
         Ok(value) => Some(value),
         Err(err) => {
           error!("Invalid CORS origin {o}: {err}");
           None
         }
-      }
-    }))
+      },
+    ))
   };
 
   // Cannot combine `Access-Control-Allow-Credentials: true` with `Access-Control-Allow-Methods: *`
@@ -852,15 +828,6 @@ async fn start_listen(
     error!("Failed to start server: {err}");
     std::process::exit(1);
   }
-}
-
-fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
-  if let Some(path) = path
-    && !std::fs::exists(path)?
-  {
-    return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
-  }
-  return Ok(());
 }
 
 fn cow_to_bytes(cow: Cow<'static, [u8]>) -> Bytes {

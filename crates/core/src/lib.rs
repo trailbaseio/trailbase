@@ -144,13 +144,7 @@ pub mod api {
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::records::json_schema::build_api_json_schema;
   pub use crate::schema_metadata::ConnectionMetadata;
-  pub use crate::server::{
-    InitArgs,
-    init_app_state,
-    // TODO: Remove currently exposed for custom binary example. Should probably inject custom
-    // routes into server rather than pick it apart (see examples/custom-binary/src/main.rs).
-    serve_impl as serve,
-  };
+  pub use crate::server::{InitArgs, init_app_state};
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
 

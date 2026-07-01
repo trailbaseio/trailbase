@@ -1,6 +1,7 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
 
+use trailbase::api::{InitArgs, init_app_state};
 use trailbase::{DataDir, Server, ServerOptions};
 
 #[test]
@@ -13,20 +14,32 @@ fn test_admin_permissions() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
   let _ = runtime.block_on(async move {
+    let (_new, state) = init_app_state(InitArgs {
+      data_dir: DataDir(data_dir.path().to_path_buf()),
+      public_dir: None,
+      dev: false,
+      ..Default::default()
+    })
+    .await
+    .unwrap();
+
     let Server {
       state: _,
       main_router,
       admin_router,
       tls,
-    } = Server::init(ServerOptions {
-      data_dir: DataDir(data_dir.path().to_path_buf()),
-      address: "localhost:4040".to_string(),
-      admin_address: None,
-      public_dir: None,
-      dev: false,
-      cors_allowed_origins: vec![],
-      ..Default::default()
-    })
+    } = Server::init(
+      state,
+      ServerOptions {
+        data_dir: DataDir(data_dir.path().to_path_buf()),
+        address: "localhost:4040".to_string(),
+        admin_address: None,
+        public_dir: None,
+        dev: false,
+        cors_allowed_origins: vec![],
+        ..Default::default()
+      },
+    )
     .await
     .unwrap();
 

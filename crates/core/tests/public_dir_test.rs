@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use std::io::Write;
 
+use trailbase::api::{InitArgs, init_app_state};
 use trailbase::{DataDir, Server, ServerOptions};
 
 #[tokio::test]
@@ -17,6 +18,15 @@ async fn test_without_spa_fallback() {
   let mut index_file = std::fs::File::create(&index_path).unwrap();
   index_file.write_all(index_html_content.as_bytes()).unwrap();
 
+  let (_new, state) = init_app_state(InitArgs {
+    data_dir: DataDir(data_dir.path().to_path_buf()),
+    public_dir: Some(public_dir.path().to_path_buf()),
+    dev: false,
+    ..Default::default()
+  })
+  .await
+  .unwrap();
+
   // Test SPA mode disabled - non-existent routes return 404
   let options = ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
@@ -29,7 +39,7 @@ async fn test_without_spa_fallback() {
     ..Default::default()
   };
 
-  let Server { main_router, .. } = Server::init(options).await.unwrap();
+  let Server { main_router, .. } = Server::init(state, options).await.unwrap();
 
   let (_address, router) = main_router;
   let server = TestServer::new(router);

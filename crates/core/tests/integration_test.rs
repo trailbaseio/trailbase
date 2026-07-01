@@ -9,7 +9,8 @@ use trailbase_sqlite::params;
 
 use trailbase::AppState;
 use trailbase::api::{
-  CreateUserRequest, UserIdentifier, create_user_handler, login_with_password_for_test,
+  CreateUserRequest, InitArgs, UserIdentifier, create_user_handler, init_app_state,
+  login_with_password_for_test,
 };
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
@@ -57,6 +58,22 @@ async fn test_record_apis() {
    _ => None::<()>,
   };
 
+  let (_new, state) = init_app_state(InitArgs {
+    data_dir: DataDir(data_dir.path().to_path_buf()),
+    public_dir: None,
+    dev: false,
+
+    #[cfg(feature = "pg-test")]
+    pg_uri: Some(if let Some(db) = db.as_ref() {
+      db.connection_uri()
+    } else {
+      "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
+    }),
+    ..Default::default()
+  })
+  .await
+  .unwrap();
+
   let options = ServerOptions {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     address: "localhost:4041".to_string(),
@@ -65,13 +82,12 @@ async fn test_record_apis() {
     dev: false,
     cors_allowed_origins: vec![],
 
-    #[cfg(feature = "pg-test")]
-    pg_uri: Some(if let Some(db) = db.as_ref() {
-      db.connection_uri()
-    } else {
-      "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
-    }),
-
+    // #[cfg(feature = "pg-test")]
+    // pg_uri: Some(if let Some(db) = db.as_ref() {
+    //   db.connection_uri()
+    // } else {
+    //   "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
+    // }),
     ..Default::default()
   };
 
@@ -80,7 +96,7 @@ async fn test_record_apis() {
     main_router,
     admin_router,
     tls,
-  } = Server::init(options.clone()).await.unwrap();
+  } = Server::init(state, options.clone()).await.unwrap();
 
   assert!(admin_router.is_none());
   assert!(tls.is_none());

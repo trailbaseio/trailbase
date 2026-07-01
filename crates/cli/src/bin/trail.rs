@@ -63,24 +63,40 @@ async fn async_main(
         return Err("Failed to load extensions".into());
       }
 
-      let app = Server::init(ServerOptions {
-        data_dir,
-        public_url,
-        address: cmd.address,
-        admin_address: cmd.admin_address,
-        public_dir: cmd.public_dir.map(|p| p.into()),
-        public_dir_spa: cmd.spa,
-        runtime_root_fs: cmd.runtime_root_fs.map(|p| p.into()),
-        geoip_db_path: cmd.geoip_db_path.map(|p| p.into()),
-        log_responses: cmd.dev || cmd.stderr_logging,
+      let (_new, state) = init_app_state(InitArgs {
+        data_dir: data_dir.clone(),
+        public_url: public_url.clone(),
+        public_dir: cmd.public_dir.as_ref().map(|p| p.into()).clone(),
+        runtime_root_fs: cmd.runtime_root_fs.as_ref().map(|p| p.into()).clone(),
+        geoip_db_path: cmd.geoip_db_path.as_ref().map(|p| p.into()).clone().clone(),
         dev: cmd.dev,
         demo: cmd.demo,
-        cors_allowed_origins: cmd.cors_allowed_origins,
         wasm_tokio_runtime,
-        tls_key: None,
-        tls_cert: None,
-        pg_uri: cmd.experimental_pg,
+        pg_uri: cmd.experimental_pg.clone(),
+        ..Default::default()
       })
+      .await?;
+
+      let app = Server::init(
+        state,
+        ServerOptions {
+          data_dir,
+          public_url,
+          address: cmd.address,
+          admin_address: cmd.admin_address,
+          public_dir: cmd.public_dir.map(|p| p.into()),
+          public_dir_spa: cmd.spa,
+          runtime_root_fs: cmd.runtime_root_fs.map(|p| p.into()),
+          geoip_db_path: cmd.geoip_db_path.map(|p| p.into()),
+          log_responses: cmd.dev || cmd.stderr_logging,
+          dev: cmd.dev,
+          demo: cmd.demo,
+          cors_allowed_origins: cmd.cors_allowed_origins,
+          tls_key: None,
+          tls_cert: None,
+          custom_router: None,
+        },
+      )
       .await?;
 
       app.serve().await?;
