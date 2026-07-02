@@ -135,6 +135,9 @@ message AuthConfig {
   /// Policy covering user registration and change (username|email) flows around
   /// what user identifier is expected and accepted. Default: ONLY_EMAIL.
   optional UserIdentifier user_identifier = 31;
+
+  /// Configuration for enabling asset uploads to public_dir using WebDAV
+  optional string webdav_token = 32;
 }
 
 message S3StorageConfig {

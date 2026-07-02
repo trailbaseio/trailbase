@@ -502,7 +502,11 @@ export interface AuthConfig {
    * / Policy covering user registration and change (username|email) flows around
    * / what user identifier is expected and accepted. Default: ONLY_EMAIL.
    */
-  userIdentifier?: UserIdentifier | undefined;
+  userIdentifier?:
+    | UserIdentifier
+    | undefined;
+  /** / Configuration for enabling asset uploads to public_dir using WebDAV */
+  webdavToken?: string | undefined;
 }
 
 export interface AuthConfig_OauthProvidersEntry {
@@ -1297,6 +1301,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
       writer.uint32(248).int32(message.userIdentifier);
     }
+    if (message.webdavToken !== undefined && message.webdavToken !== "") {
+      writer.uint32(258).string(message.webdavToken);
+    }
     return writer;
   },
 
@@ -1414,6 +1421,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
           message.userIdentifier = reader.int32() as any;
           continue;
         }
+        case 32: {
+          if (tag !== 258) {
+            break;
+          }
+
+          message.webdavToken = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1502,6 +1517,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : isSet(object.user_identifier)
         ? userIdentifierFromJSON(object.user_identifier)
         : undefined,
+      webdavToken: isSet(object.webdavToken)
+        ? globalThis.String(object.webdavToken)
+        : isSet(object.webdav_token)
+        ? globalThis.String(object.webdav_token)
+        : undefined,
     };
   },
 
@@ -1558,6 +1578,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
       obj.userIdentifier = userIdentifierToJSON(message.userIdentifier);
     }
+    if (message.webdavToken !== undefined && message.webdavToken !== "") {
+      obj.webdavToken = message.webdavToken;
+    }
     return obj;
   },
 
@@ -1585,6 +1608,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.customUriSchemes = object.customUriSchemes?.map((e) => e) || [];
     message.redirectUriAllowlist = object.redirectUriAllowlist?.map((e) => e) || [];
     message.userIdentifier = object.userIdentifier ?? 0;
+    message.webdavToken = object.webdavToken ?? "";
     return message;
   },
 };

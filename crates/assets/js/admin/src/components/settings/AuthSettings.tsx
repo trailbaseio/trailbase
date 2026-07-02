@@ -650,6 +650,32 @@ function AuthSettingsForm(props: {
           </CardContent>
         </Card>
 
+        <Card>
+          <CardHeader>
+            <h2>WebDAV Settings</h2>
+          </CardHeader>
+
+          <CardContent>
+            <div class="flex flex-col gap-4">
+              <p class="mb-4 text-sm">
+                Enabling WebDAV allows publishing content to the <code>public_dir</code>
+                using different clients. This make it easier to update HTML, JavaScript
+                and CSS while the server is running.
+                <br />
+                <br />
+                To enable the server include a token. To diasble, keep empty.
+              </p>
+
+              <form.Field name="webdavToken">
+                {buildOptionalSecretFormField({
+                  label: () => <L>WebDAV Bearer Token</L>,
+                  autocomplete: "off",
+                })}
+              </form.Field>
+            </div>
+          </CardContent>
+        </Card>
+
         <div class="flex justify-end">
           <form.Subscribe
             selector={(state) => ({
