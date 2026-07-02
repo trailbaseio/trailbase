@@ -23,7 +23,7 @@ axum = { version = "^0.8.1", features=["multipart"] }
 bcrypt = "0.19.0"
 bytes = "1.11.0"
 chrono = "^0.4.38"
-clap = { version = "^4.4.11", features=["derive", "env"] }
+clap = { workspace = true }
 env_logger = { workspace = true }
 itertools = "0.15.0"
 log = "^0.4.21"

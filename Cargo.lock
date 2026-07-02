@@ -8106,6 +8106,7 @@ dependencies = [
  "trailbase-sqlite",
  "trailbase-sqlvalue",
  "trailbase-wasm-common",
+ "trailbase-wasm-runtime-axum",
  "trailbase-wasm-runtime-host",
  "ts-rs",
  "url",
@@ -8426,6 +8427,28 @@ dependencies = [
  "serde",
  "trailbase-sqlvalue",
  "ts-rs",
+]
+
+[[package]]
+name = "trailbase-wasm-runtime-axum"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "clap",
+ "cron",
+ "env_logger",
+ "form_urlencoded",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "log",
+ "serde",
+ "serde_json",
+ "tokio",
+ "trailbase-sqlite",
+ "trailbase-wasm-common",
+ "trailbase-wasm-runtime-host",
 ]
 
 [[package]]

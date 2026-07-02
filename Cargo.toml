@@ -18,6 +18,7 @@ default-members = [
   "crates/qs",
   "crates/schema",
   "crates/sqlite",
+  "crates/wasm-runtime-axum",
   "crates/wasm-runtime-common",
   "crates/wasm-runtime-host",
 ]
@@ -57,6 +58,8 @@ opt-level = 1
 askama = { version = "0.16.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
 base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
+clap = { version = "^4.4.11", features=["derive", "env"] }
+cron = "0.17.0"
 crossfire = { version = "3.1.16", default-features = false, features = ["tokio"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 flume = { version = "0.12.0", default-features = false, features = ["select", "async"] }
@@ -97,6 +100,7 @@ trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }
 trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.5.1" }
 trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.2.0" }
+trailbase-wasm-runtime-axum= { path = "crates/wasm-runtime-axum", version = "0.1.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }

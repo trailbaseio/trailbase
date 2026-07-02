@@ -30,7 +30,7 @@ geos = ["dep:litegis", "dep:geos"]
 geos-static = ["litegis/static", "dep:geos"]
 pg = ["dep:trailbase-pg-schema", "trailbase-sqlite/generic"]
 pg-test = ["pg"]
-wasm = ["dep:trailbase-wasm-runtime-host"]
+wasm = ["dep:trailbase-wasm-runtime-axum", "dep:trailbase-wasm-runtime-host"]
 # Enable axum's "ws" feature: https://doc.rust-lang.org/cargo/reference/features.html#dependency-features
 ws = ["axum/ws"]
 
@@ -48,7 +48,7 @@ bytes = { version = "1.8.0", features = ["serde"] }
 chrono = "^0.4.38"
 client-ip = "0.2.1"
 const_format = "0.2.35"
-cron = "0.17.0"
+cron = { workspace = true }
 ed25519-dalek = { version = "2.1.1", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 flume = { workspace = true }
@@ -114,6 +114,7 @@ trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true, default-features = false }
 trailbase-sqlvalue = { workspace = true, features = ["rusqlite"] }
 trailbase-wasm-common = { workspace = true }
+trailbase-wasm-runtime-axum = { workspace = true, optional = true }
 trailbase-wasm-runtime-host = { workspace = true, optional = true }
 ts-rs = { workspace = true }
 url = { version = "^2.4.1", default-features = false }
