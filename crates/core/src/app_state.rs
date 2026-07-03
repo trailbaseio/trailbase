@@ -77,7 +77,7 @@ struct InternalState {
   /// Actual WASM runtimes.
   wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
-  wasm_runtimes_builder: crate::wasm::WasmRuntimeBuilder,
+  wasm_runtime_builders: Vec<Box<crate::wasm::WasmRuntimeBuilder>>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -171,15 +171,14 @@ impl AppState {
       });
     }
 
-    let wasm_runtimes_builder = crate::wasm::wasm_runtimes_builder(
-      args.data_dir.clone(),
+    let wasm_runtime_builders = crate::wasm::wasm_runtime_builders(
+      args.data_dir.root().join("wasm"),
       (*main_conn).clone(),
       args.wasm_tokio_runtime,
       args.runtime_root_fs.clone(),
       Some(shared_kv_store),
       args.dev,
-    )
-    .expect("startup");
+    );
 
     AppState {
       state: Arc::new(InternalState {
@@ -222,12 +221,11 @@ impl AppState {
         record_apis: record_apis.clone(),
         subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
-        wasm_runtimes: wasm_runtimes_builder()
-          .expect("startup")
-          .into_iter()
-          .map(|rt| Arc::new(RwLock::new(rt)))
+        wasm_runtimes: wasm_runtime_builders
+          .iter()
+          .map(|builder| Arc::new(RwLock::new(builder().expect("startup"))))
           .collect(),
-        wasm_runtimes_builder,
+        wasm_runtime_builders,
         #[cfg(test)]
         pg_uri: None,
         #[cfg(test)]
@@ -427,13 +425,18 @@ impl AppState {
   }
 
   pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
-    let mut new_runtimes = (self.state.wasm_runtimes_builder)()?;
+    let mut new_runtimes = self
+      .state
+      .wasm_runtime_builders
+      .iter()
+      .map(|builder| builder())
+      .collect::<Result<Vec<_>, _>>()?;
     if new_runtimes.is_empty() {
       return Ok(());
     }
 
-    // TODO: Differentiate between an actual rebuild vs a cached re-build to warn users
-    // about routes not being able to be changed.
+    // TODO: We could also compare manifest of old and new runtime to warn/fail explicitly if
+    // routes and or jobs changed.
     info!("Reloading WASM components. New HTTP routes and Jobs require a server restart.");
 
     for old_rt in &self.state.wasm_runtimes {
@@ -891,7 +894,7 @@ mod test_utils {
         subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
         wasm_runtimes: vec![],
-        wasm_runtimes_builder: Box::new(|| Ok(vec![])),
+        wasm_runtime_builders: vec![],
         pg_uri,
         // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
         // write new artifacts to the already deleted dir.
