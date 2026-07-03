@@ -30,9 +30,9 @@ fn extract_user(_parts: &mut Parts, _state: &State) -> BoxFuture<'static, Option
 async fn main() {
   let args = CommandLineArgs::parse();
 
-  env_logger::Builder::from_env(
-    env_logger::Env::new().default_filter_or("debug,tracing::span=warn"),
-  )
+  env_logger::Builder::from_env(env_logger::Env::new().default_filter_or(
+    "debug,tracing::span=warn,cranelift_codegen=warn,wasmtime_internal_cranelift=warn",
+  ))
   .format_timestamp_micros()
   .init();
 
