@@ -6,7 +6,7 @@ use trailbase_sqlite::SyncConnectionTrait;
 use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
-use wasmtime::component::{Accessor, FutureReader, HasData, Resource, ResourceTable};
+use wasmtime::component::{Access, Accessor, FutureReader, HasData, Resource, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
@@ -153,73 +153,69 @@ impl HasData for State {
   type Data<'a> = &'a mut State;
 }
 
-impl<T> self::trailbase::database::sqlite::HostWithStore<T> for State {
+impl<T: Send> self::trailbase::database::sqlite::HostWithStore<T> for State {
   async fn execute(
-    accessor: &Accessor<T, Self>,
+    mut access: Access<'_, T, Self>,
     query: String,
     params: Vec<Value>,
   ) -> Result<FutureReader<Result<u64, TxError>>, wasmtime::Error> {
-    return accessor.with(move |mut access| {
-      let conn = access.get().shared.conn.clone();
+    let conn = access.get().shared.conn.clone();
 
-      let producer = async move || -> Result<u64, TxError> {
-        let Some(conn) = conn else {
-          return Err(TxError::Other("missing conn".into()));
-        };
-
-        let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
-        let affected_rows = conn
-          .execute(query, params)
-          .await
-          .map_err(|err| TxError::Other(err.to_string()))?;
-
-        return Ok(affected_rows as u64);
+    let producer = async move || -> Result<u64, TxError> {
+      let Some(conn) = conn else {
+        return Err(TxError::Other("missing conn".into()));
       };
 
-      return FutureReader::new(
-        &mut access,
-        // QUESTION: Why do we have to return a Result<Result<_, TxError>, TxError>?
-        async move { Ok::<_, TxError>(producer().await) },
-      );
-    });
+      let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+
+      let affected_rows = conn
+        .execute(query, params)
+        .await
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      return Ok(affected_rows as u64);
+    };
+
+    return FutureReader::new(
+      &mut access,
+      // QUESTION: Why do we have to return a Result<Result<_, TxError>, TxError>?
+      async move { Ok::<_, TxError>(producer().await) },
+    );
   }
 
   async fn query(
-    accessor: &Accessor<T, Self>,
+    mut access: Access<'_, T, Self>,
     query: String,
     params: Vec<Value>,
   ) -> Result<FutureReader<Result<Vec<Vec<Value>>, TxError>>, wasmtime::Error> {
-    return accessor.with(move |mut access| {
-      let conn = access.get().shared.conn.clone();
-      let producer = async move || -> Result<Vec<Vec<Value>>, TxError> {
-        let Some(conn) = conn else {
-          return Err(TxError::Other("missing conn".into()));
-        };
-
-        let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
-
-        let rows = conn
-          .write_query_rows(query, params)
-          .await
-          .map_err(|err| TxError::Other(err.to_string()))?;
-
-        return Ok(
-          rows
-            .into_iter()
-            .map(|trailbase_sqlite::Row(row, _col)| {
-              return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
-            })
-            .collect(),
-        );
+    let conn = access.get().shared.conn.clone();
+    let producer = async move || -> Result<Vec<Vec<Value>>, TxError> {
+      let Some(conn) = conn else {
+        return Err(TxError::Other("missing conn".into()));
       };
 
-      return FutureReader::new(
-        &mut access,
-        // QUESTION: Why do we have to return a Result<Result<_, TxError>, TxError>?
-        async move { Ok::<_, TxError>(producer().await) },
+      let params: Vec<_> = params.into_iter().map(to_sqlite_value).collect();
+
+      let rows = conn
+        .write_query_rows(query, params)
+        .await
+        .map_err(|err| TxError::Other(err.to_string()))?;
+
+      return Ok(
+        rows
+          .into_iter()
+          .map(|trailbase_sqlite::Row(row, _col)| {
+            return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+          })
+          .collect(),
       );
-    });
+    };
+
+    return FutureReader::new(
+      &mut access,
+      // QUESTION: Why do we have to return a Result<Result<_, TxError>, TxError>?
+      async move { Ok::<_, TxError>(producer().await) },
+    );
   }
 }
 
