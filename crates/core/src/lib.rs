@@ -38,7 +38,7 @@ mod wasm {
   use std::sync::Arc;
   use tokio::sync::RwLock;
 
-  use crate::{AppState, DataDir};
+  use crate::AppState;
 
   pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -59,23 +59,25 @@ mod wasm {
   pub(crate) struct Runtime;
 
   impl Runtime {
-    pub fn component_path(&self) -> std::path::PathBuf {
+    pub fn component_path(&self) -> PathBuf {
       return std::path::PathBuf::default();
     }
   }
 
-  pub(crate) type WasmRuntimeBuilder =
-    Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
+  // pub(crate) type WasmRuntimeBuilder =
+  //   Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
+  //
+  pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, AnyError> + Send + Sync;
 
-  pub(crate) fn wasm_runtimes_builder(
-    _data_dir: DataDir,
+  pub(crate) fn wasm_runtime_builders(
+    _path_to_components: PathBuf,
     _conn: trailbase_sqlite::Connection,
     _rt: Option<tokio::runtime::Handle>,
-    _runtime_root_fs: Option<std::path::PathBuf>,
+    _runtime_root_fs: Option<PathBuf>,
     _shared_kv_store: Option<KvStore>,
     _dev: bool,
-  ) -> Result<WasmRuntimeBuilder, AnyError> {
-    return Ok(Box::new(|| Ok(vec![])));
+  ) -> Vec<Box<WasmRuntimeBuilder>> {
+    return vec![];
   }
 
   #[derive(Clone)]

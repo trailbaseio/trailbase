@@ -4,31 +4,12 @@ use tokio::sync::RwLock;
 use trailbase_wasm_common::HttpContextUser;
 use trailbase_wasm_runtime_axum::Job;
 
-use crate::User;
-use crate::{AppState, DataDir};
+use crate::{AppState, User};
 
 pub(crate) use trailbase_wasm_runtime_axum::{
   AnyError, KvStore, Runtime, SqliteFunctions, SqliteStore, WasmRuntimeBuilder,
-  build_sync_wasm_runtimes_for_components,
+  build_sync_wasm_runtimes_for_components, wasm_runtime_builders,
 };
-
-pub(crate) fn wasm_runtimes_builder(
-  data_dir: DataDir,
-  conn: trailbase_sqlite::Connection,
-  rt: Option<tokio::runtime::Handle>,
-  runtime_root_fs: Option<std::path::PathBuf>,
-  shared_kv_store: Option<KvStore>,
-  dev: bool,
-) -> Result<WasmRuntimeBuilder, AnyError> {
-  return trailbase_wasm_runtime_axum::wasm_runtimes_builder(
-    data_dir.root().join("wasm"),
-    conn,
-    rt,
-    runtime_root_fs,
-    shared_kv_store,
-    dev,
-  );
-}
 
 pub(crate) async fn install_routes_and_jobs(
   state: &AppState,

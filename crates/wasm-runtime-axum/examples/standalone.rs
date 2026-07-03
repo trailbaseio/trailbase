@@ -5,15 +5,17 @@ use futures_util::future::BoxFuture;
 use std::sync::Arc;
 use trailbase_sqlite::Connection;
 use trailbase_wasm_common::HttpContextUser;
-use trailbase_wasm_runtime_axum::{InstallResult, install_routes_and_jobs, wasm_runtimes_builder};
+use trailbase_wasm_runtime_axum::{
+  InstallResult, SharedState, install_routes_and_jobs, wasm_runtime_builder,
+};
 
 #[derive(Debug, Clone)]
 pub struct State;
 
-#[derive(Parser, Debug, Clone, Default)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None, disable_version_flag = true)]
 pub struct CommandLineArgs {
-  #[arg(long, env, default_value = "wasm")]
+  #[arg(long, env)]
   pub path: std::path::PathBuf,
 
   #[arg(long, env, default_value = "3000")]
@@ -36,28 +38,28 @@ async fn main() {
 
   let conn = Connection::open_in_memory().unwrap();
 
+  let shared_state = Arc::new(SharedState {
+    conn: Some(conn),
+    kv_store: Default::default(),
+    fs_root_path: None,
+  });
+
   let runtimes_builder =
-    wasm_runtimes_builder(args.path, conn, None, None, None, /*dev=*/ false).unwrap();
-  let runtimes: Vec<_> = runtimes_builder()
-    .unwrap()
-    .into_iter()
-    .map(|rt| Arc::new(tokio::sync::RwLock::new(rt)))
-    .collect();
+    wasm_runtime_builder(args.path, shared_state, None, None, /*dev=*/ false);
+  let runtime = Arc::new(tokio::sync::RwLock::new(runtimes_builder().unwrap()));
 
   let mut router = Router::new();
-  for rt in runtimes {
-    let InstallResult { router: r, jobs }: InstallResult<State> =
-      install_routes_and_jobs::<State>(rt, extract_user, None)
-        .await
-        .unwrap();
+  let InstallResult { router: r, jobs }: InstallResult<State> =
+    install_routes_and_jobs::<State>(runtime, extract_user, None)
+      .await
+      .unwrap();
 
-    if let Some(routes) = r {
-      router = router.merge(routes);
-    }
+  if let Some(routes) = r {
+    router = router.merge(routes);
+  }
 
-    if !jobs.is_empty() {
-      log::info!("ignoring {} jobs", jobs.len());
-    }
+  if !jobs.is_empty() {
+    log::info!("ignoring {} jobs", jobs.len());
   }
 
   let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", args.port))

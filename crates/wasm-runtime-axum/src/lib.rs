@@ -68,51 +68,64 @@ pub async fn build_sync_wasm_runtimes_for_components(
   return Ok(sync_runtimes);
 }
 
-pub type WasmRuntimeBuilder = Box<dyn Fn() -> Result<Vec<Runtime>, AnyError> + Send + Sync>;
+pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, WasmError> + Send + Sync;
 
-pub fn wasm_runtimes_builder(
+pub fn wasm_runtime_builder(
+  path_to_component: PathBuf,
+  shared_state: Arc<SharedState>,
+  tokio_runtime: Option<tokio::runtime::Handle>,
+  runtime_root_fs: Option<PathBuf>,
+  dev: bool,
+) -> Box<WasmRuntimeBuilder> {
+  return Box::new(move || {
+    return Runtime::init(
+      path_to_component.clone(),
+      shared_state.clone(),
+      RuntimeOptions {
+        fs_root_path: runtime_root_fs.clone(),
+        // https://github.com/trailbaseio/trailbase/issues/206
+        use_winch: if cfg!(target_os = "macos") {
+          false
+        } else {
+          dev
+        },
+        tokio_runtime: tokio_runtime.clone(),
+      },
+    );
+  });
+}
+
+pub fn wasm_runtime_builders(
   path_to_components: PathBuf,
   conn: trailbase_sqlite::Connection,
-  rt: Option<tokio::runtime::Handle>,
+  tokio_runtime: Option<tokio::runtime::Handle>,
   runtime_root_fs: Option<PathBuf>,
   shared_kv_store: Option<KvStore>,
   dev: bool,
-) -> Result<WasmRuntimeBuilder, AnyError> {
+) -> Vec<Box<WasmRuntimeBuilder>> {
   let shared_state = Arc::new(SharedState {
     conn: Some(conn),
     kv_store: shared_kv_store.unwrap_or_default(),
     fs_root_path: runtime_root_fs.clone(),
   });
 
-  return Ok(Box::new(move || {
-    let components = find_wasm_components(&path_to_components);
-    if components.is_empty() {
-      debug!("No WASM component found in {path_to_components:?}");
-      return Ok(vec![]);
-    }
+  let components = find_wasm_components(&path_to_components);
+  if components.is_empty() {
+    debug!("No WASM component found in {path_to_components:?}");
+  }
 
-    let runtimes: Vec<Runtime> = components
-      .into_iter()
-      .map(|path| {
-        return Runtime::init(
-          path,
-          shared_state.clone(),
-          RuntimeOptions {
-            fs_root_path: runtime_root_fs.clone(),
-            // https://github.com/trailbaseio/trailbase/issues/206
-            use_winch: if cfg!(target_os = "macos") {
-              false
-            } else {
-              dev
-            },
-            tokio_runtime: rt.clone(),
-          },
-        );
-      })
-      .collect::<Result<Vec<_>, _>>()?;
-
-    return Ok(runtimes);
-  }));
+  return components
+    .into_iter()
+    .map(|path| {
+      return wasm_runtime_builder(
+        path,
+        shared_state.clone(),
+        tokio_runtime.clone(),
+        runtime_root_fs.clone(),
+        dev,
+      );
+    })
+    .collect();
 }
 
 pub struct Job {

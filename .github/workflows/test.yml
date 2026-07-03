@@ -51,7 +51,7 @@ jobs:
       - name: "Build With Minimal Features"
         env:
           RUST_BACKTRACE: 1
-        run: cargo build --no-default-features
+        run: cargo build --all-targets --no-default-features
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
