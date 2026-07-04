@@ -1,4 +1,4 @@
-package trailbase:component@0.1.1;
+package trailbase:component@0.1.2;
 
 @since(version = 0.1.0)
 interface init-endpoint {
@@ -69,4 +69,7 @@ interface init-endpoint {
 
   @since(version = 0.1.0)
   init-sqlite-functions : func(args: arguments) -> sqlite-functions;
+
+  @since(version = 0.1.2)
+  init-admin-handlers: func();
 }
