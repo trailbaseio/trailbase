@@ -8,21 +8,11 @@ import { Spinner } from "@/components/Spinner";
 
 import { fetchWasmModules } from "@/lib/api/wasm-modules";
 
-// Injects an HTML fragment string into a container element.
-// Script tags in the fragment do not execute when set via innerHTML; this
-// function clones each script element so the browser treats it as new and
-// executes it. Non-script nodes are inserted as-is.
-function injectFragment(container: HTMLDivElement, html: string): void {
-  container.innerHTML = html;
-  container.querySelectorAll("script").forEach((old) => {
-    const next = document.createElement("script");
-    Array.from(old.attributes).forEach((attr) => {
-      next.setAttribute(attr.name, attr.value);
-    });
-    next.textContent = old.textContent;
-    old.parentNode?.replaceChild(next, old);
-  });
-}
+// Side-effect import: registers the `tb-html-fragment` custom element via
+// `customElements.define`. Kept separate from the type-only import below so
+// bundlers never elide it as an unused import (it has no value usage here).
+import "./TbHtmlFragment";
+import type { TbHtmlFragment } from "./TbHtmlFragment";
 
 export function WasmModuleSettingsPage() {
   const params = useParams<{ name: string }>();
@@ -46,7 +36,7 @@ export function WasmModuleSettingsPage() {
     | { status: "ready" }
   >({ status: "idle" });
 
-  let containerRef: HTMLDivElement | undefined;
+  let fragmentRef: TbHtmlFragment | undefined;
   // Tracks the config_path that was last successfully injected so that
   // spurious re-runs of the effect (e.g. from an unrelated query refetch that
   // produces a new object reference) don't wipe and re-inject the fragment.
@@ -69,8 +59,8 @@ export function WasmModuleSettingsPage() {
         return res.text();
       })
       .then((html) => {
-        if (containerRef) {
-          injectFragment(containerRef, html);
+        if (fragmentRef) {
+          fragmentRef.html = html;
           loadedConfigPath = configPath;
           setFragmentState({ status: "ready" });
         }
@@ -137,7 +127,7 @@ export function WasmModuleSettingsPage() {
                 </div>
               </Show>
 
-              <div ref={containerRef} />
+              <tb-html-fragment ref={(el) => (fragmentRef = el)} />
             </div>
           </Match>
         </Switch>
