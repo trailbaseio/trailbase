@@ -30,7 +30,7 @@
     "build": "vite build",
     "check": "tsc --noEmit --skipLibCheck && eslint",
     "format": "prettier -w src tests",
-    "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/index.js",
+    "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/index.js && test -e ./dist/index.d.ts",
     "test": "vitest run && vite-node tests/integration_test_runner.ts"
   },
   "dependencies": {
@@ -42,6 +42,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@microsoft/api-extractor": "^7.58.9",
+    "ajv": "^8.20.0",
     "eslint": "^10.4.1",
     "globals": "^17.6.0",
     "http-status": "^2.1.0",

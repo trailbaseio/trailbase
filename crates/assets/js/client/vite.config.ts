@@ -36,7 +36,7 @@ export default defineConfig({
       // copyDtsFiles: true,
       // staticImport: true,
       // insertTypesEntry: true,
-      rollupTypes: true,
+      bundleTypes: true,
     }),
   ],
 })
