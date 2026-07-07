@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
+pub mod manifest;
+
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct SqliteRequest {
