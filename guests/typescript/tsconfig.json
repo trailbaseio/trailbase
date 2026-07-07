@@ -11,6 +11,7 @@
     "outDir": "./dist/",
     "paths": {
       "@common/*": ["./generated/common/*"],
+      "@bindings/*": ["../../crates/assets/js/bindings/*"],
 
       "wasi:http/types@0.2.3": [
         "./generated/types/interfaces/wasi-http-types.d.ts"
