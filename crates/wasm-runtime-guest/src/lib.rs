@@ -47,7 +47,7 @@ use crate::job::Job;
 pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
-pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
+// pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
 
 pub mod sqlite {
   pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
@@ -140,58 +140,120 @@ impl<T: Guest> TrailbaseHandler<T> {
 impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
   for TrailbaseHandler<T>
 {
-  fn init_http_handlers(
-    args: Arguments,
-  ) -> wit::exports::trailbase::component::init_endpoint::HttpHandlers {
+  // fn init_http_handlers(
+  //   args: Arguments,
+  // ) -> wit::exports::trailbase::component::init_endpoint::HttpHandlers {
+  //   Self::call_init_once(Args {
+  //     version: args.version,
+  //   });
+  //
+  //   return wit::exports::trailbase::component::init_endpoint::HttpHandlers {
+  //     handlers: T::http_handlers()
+  //       .into_iter()
+  //       .map(|route| (to_method_type(route.method), route.path))
+  //       .collect(),
+  //   };
+  // }
+  //
+  // fn init_job_handlers(
+  //   args: Arguments,
+  // ) -> wit::exports::trailbase::component::init_endpoint::JobHandlers {
+  //   Self::call_init_once(Args {
+  //     version: args.version,
+  //   });
+  //
+  //   return wit::exports::trailbase::component::init_endpoint::JobHandlers {
+  //     handlers: T::job_handlers()
+  //       .into_iter()
+  //       .map(|config| (config.name, config.spec))
+  //       .collect(),
+  //   };
+  // }
+  //
+  // fn init_sqlite_functions(
+  //   args: Arguments,
+  // ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
+  //   use wit::exports::trailbase::component::init_endpoint::{
+  //     SqliteFunctions, SqliteScalarFunction,
+  //   };
+  //
+  //   // QUESTION: Should we ensure that init is called only once?
+  //   Self::call_init_once(Args {
+  //     version: args.version,
+  //   });
+  //
+  //   return SqliteFunctions {
+  //     scalar_functions: Self::get_sqlite_scalar_functions()
+  //       .iter()
+  //       .map(|f| SqliteScalarFunction {
+  //         name: f.name.clone(),
+  //         num_args: f.num_args,
+  //         function_flags: f.flags.clone(),
+  //       })
+  //       .collect(),
+  //   };
+  // }
+
+  fn get_manifest(args: String) -> Result<String, String> {
+    use trailbase_wasm_common::manifest::{
+      HttpRoute, InitArguments, InitManifest, Job, SqliteFunction, SqliteScalarFunction,
+    };
+
+    let args: InitArguments = serde_json::from_str(&args).map_err(|err| err.to_string())?;
     Self::call_init_once(Args {
       version: args.version,
     });
 
-    return wit::exports::trailbase::component::init_endpoint::HttpHandlers {
-      handlers: T::http_handlers()
-        .into_iter()
-        .map(|route| (to_method_type(route.method), route.path))
-        .collect(),
-    };
-  }
+    let http_handlers: Vec<_> = T::http_handlers()
+      .into_iter()
+      .map(|route| HttpRoute {
+        method: to_method_type2(route.method),
+        path: route.path,
+      })
+      .collect();
 
-  fn init_job_handlers(
-    args: Arguments,
-  ) -> wit::exports::trailbase::component::init_endpoint::JobHandlers {
-    Self::call_init_once(Args {
-      version: args.version,
-    });
+    let job_handlers: Vec<_> = T::job_handlers()
+      .into_iter()
+      .map(|config| Job {
+        name: config.name,
+        spec: config.spec,
+      })
+      .collect();
 
-    return wit::exports::trailbase::component::init_endpoint::JobHandlers {
-      handlers: T::job_handlers()
-        .into_iter()
-        .map(|config| (config.name, config.spec))
-        .collect(),
-    };
-  }
-
-  fn init_sqlite_functions(
-    args: Arguments,
-  ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
-    use wit::exports::trailbase::component::init_endpoint::{
-      SqliteFunctions, SqliteScalarFunction,
-    };
-
-    // QUESTION: Should we ensure that init is called only once?
-    Self::call_init_once(Args {
-      version: args.version,
-    });
-
-    return SqliteFunctions {
-      scalar_functions: Self::get_sqlite_scalar_functions()
-        .iter()
-        .map(|f| SqliteScalarFunction {
+    let sqlite_functions: Vec<_> = Self::get_sqlite_scalar_functions()
+      .iter()
+      .map(|f| {
+        SqliteFunction::Scalar(SqliteScalarFunction {
           name: f.name.clone(),
-          num_args: f.num_args,
-          function_flags: f.flags.clone(),
+          num_args: f.num_args.clone(),
+          flags: f
+            .flags
+            .iter()
+            .map(|f| to_json_sqlite_function_flags(*f))
+            .collect(),
         })
-        .collect(),
+      })
+      .collect();
+
+    let manifest = InitManifest {
+      http_handlers: if http_handlers.is_empty() {
+        None
+      } else {
+        Some(http_handlers)
+      },
+      job_handlers: if job_handlers.is_empty() {
+        None
+      } else {
+        Some(job_handlers)
+      },
+      sqlite_functions: if sqlite_functions.is_empty() {
+        None
+      } else {
+        Some(sqlite_functions)
+      },
     };
+
+    return serde_json::to_string(&manifest).map_err(|err| err.to_string());
   }
 }
 
@@ -205,6 +267,8 @@ impl<T: Guest> crate::wit::exports::trailbase::component::sqlite_function_endpoi
     crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error,
   > {
     use crate::wit::exports::trailbase::component::sqlite_function_endpoint::Error;
+
+    // QUESTION: This now initializes everything :/ - Does this need fixing?
     let f = Self::get_sqlite_scalar_functions()
       .iter()
       .find(|f| f.name == args.function_name)
@@ -290,5 +354,41 @@ fn to_method_type(
     Method::TRACE => HttpMethodType::Trace,
     Method::CONNECT => HttpMethodType::Connect,
     _ => panic!("unknown http method type: {m}"),
+  };
+}
+
+fn to_method_type2(m: Method) -> trailbase_wasm_common::manifest::HttpMethodType {
+  use trailbase_wasm_common::manifest::HttpMethodType;
+
+  return match m {
+    Method::GET => HttpMethodType::Get,
+    Method::POST => HttpMethodType::Post,
+    Method::HEAD => HttpMethodType::Head,
+    Method::OPTIONS => HttpMethodType::Options,
+    Method::PATCH => HttpMethodType::Patch,
+    Method::DELETE => HttpMethodType::Delete,
+    Method::PUT => HttpMethodType::Put,
+    Method::TRACE => HttpMethodType::Trace,
+    Method::CONNECT => HttpMethodType::Connect,
+    _ => panic!("unknown http method type: {m}"),
+  };
+}
+
+fn to_json_sqlite_function_flags(
+  f: sqlite::SqliteFunctionFlags,
+) -> trailbase_wasm_common::manifest::SqliteFunctionFlag {
+  use trailbase_wasm_common::manifest::SqliteFunctionFlag;
+
+  return match f {
+    sqlite::SqliteFunctionFlags::Utf8 => SqliteFunctionFlag::Utf8,
+    sqlite::SqliteFunctionFlags::Utf16le => SqliteFunctionFlag::Utf16le,
+    sqlite::SqliteFunctionFlags::Utf16be => SqliteFunctionFlag::Utf16be,
+    sqlite::SqliteFunctionFlags::Utf16 => SqliteFunctionFlag::Utf16,
+    sqlite::SqliteFunctionFlags::Deterministic => SqliteFunctionFlag::Deterministic,
+    sqlite::SqliteFunctionFlags::DirectOnly => SqliteFunctionFlag::DirectOnly,
+    sqlite::SqliteFunctionFlags::Subtype => SqliteFunctionFlag::Subtype,
+    sqlite::SqliteFunctionFlags::Innocuous => SqliteFunctionFlag::Innocuous,
+    sqlite::SqliteFunctionFlags::ResultSubtype => SqliteFunctionFlag::ResultSubtype,
+    sqlite::SqliteFunctionFlags::Selforder1 => SqliteFunctionFlag::Selforder1,
   };
 }

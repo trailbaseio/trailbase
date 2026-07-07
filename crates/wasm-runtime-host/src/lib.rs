@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
+use trailbase_wasm_common::manifest::InitManifest;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Result, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
@@ -185,14 +186,6 @@ pub struct InitArgs {
   pub version: Option<String>,
 }
 
-pub struct InitResult {
-  /// Registered http handlers (method, path)[].
-  pub http_handlers: Vec<(HttpMethodType, String)>,
-
-  /// Registered jobs (name, spec)[].
-  pub job_handlers: Vec<(String, String)>,
-}
-
 impl StoreBuilder<State> for Arc<SharedState> {
   fn new_store(&self, engine: &Engine) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
@@ -265,28 +258,41 @@ impl HttpStore {
     });
   }
 
-  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+  pub async fn initialize(&self, args: InitArgs) -> Result<InitManifest, Error> {
     let state = self.state.clone();
 
     return Self::call(&self.state.runtime_state, async move {
       let (mut store, bindings) = state.rt.new_bindings().await?;
       let api = bindings.trailbase_component_init_endpoint();
 
-      let args = Arguments {
-        version: args.version,
-      };
+      let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
+        version: args.version.clone(),
+      })
+      .unwrap();
+
+      // let args = Arguments {
+      //   version: args.version,
+      // };
 
       // let mut store = state.store.lock().await;
       store
-        .run_concurrent(async |accessor| -> Result<InitResult, Error> {
-          let http = api.call_init_http_handlers(accessor, args.clone()).await?;
+        .run_concurrent(async |accessor| -> Result<InitManifest, Error> {
+          let manifest_json = api
+            .call_get_manifest(accessor, args)
+            .await?
+            .map_err(|err| Error::Other(err))?;
 
-          let job = api.call_init_job_handlers(accessor, args).await?;
+          let manifest: trailbase_wasm_common::manifest::InitManifest =
+            serde_json::from_str(&manifest_json).unwrap();
 
-          return Ok(InitResult {
-            http_handlers: http.handlers,
-            job_handlers: job.handlers,
-          });
+          return Ok(manifest);
+
+          // let http = api.call_init_http_handlers(accessor, args.clone()).await?;
+          // let job = api.call_init_job_handlers(accessor, args).await?;
+          // return Ok(InitResult {
+          //   http_handlers: http.handlers,
+          //   job_handlers: job.handlers,
+          // });
         })
         .await?
     })
@@ -629,7 +635,9 @@ mod tests {
       .await
       .unwrap();
 
-      assert_eq!(i, response_to_i64(resp).await);
+      // NOTE: The offset depends on what got initialized, e.g. http handlers, job handlers
+      // or just sqlite functions.
+      assert_eq!(5000 + i, response_to_i64(resp).await);
     }
   }
 
