@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, TS)]
-#[serde(rename_all_fields = "UPPERCASE")]
+#[serde(rename_all = "lowercase")]
 pub enum HttpMethodType {
   Get,
   Post,
