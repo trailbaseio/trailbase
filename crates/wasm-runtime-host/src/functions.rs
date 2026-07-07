@@ -62,7 +62,7 @@ impl SqliteStore {
             .map_err(|err| Error::Other(err))?;
 
           let manifest: trailbase_wasm_common::manifest::InitManifest =
-            serde_json::from_str(&manifest_json).unwrap();
+            serde_json::from_str(&manifest_json).expect(&manifest_json);
 
           return Ok(manifest);
         },
