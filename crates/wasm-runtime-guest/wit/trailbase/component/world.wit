@@ -1,4 +1,4 @@
-package trailbase:component@0.1.1;
+package trailbase:component@0.2.0;
 
 // Note, everything is from the guest's perspective, i.e.:
 //  * imports are provided by the host
