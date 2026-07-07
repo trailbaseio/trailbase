@@ -1,11 +1,28 @@
-declare module "trailbase:component/init-endpoint@0.1.1" {
-  export function initHttpHandlers(args: Arguments): HttpHandlers;
-  export function initJobHandlers(args: Arguments): JobHandlers;
-  export function initSqliteFunctions(args: Arguments): SqliteFunctions;
-  export interface Arguments {
-    version?: string;
-  }
+declare module "trailbase:component/init-endpoint@0.2.0" {
   /**
+   * record sqlite-scalar-function {
+   *   name: string,
+   *   num-args: u32,
+   *   function-flags: list<sqlite-function-flags>,
+   * }
+   * record sqlite-functions {
+   *   scalar-functions: list<sqlite-scalar-function>,
+   * }
+   * @since(version = 0.1.0)
+   * init-sqlite-functions : func(args: arguments) -> sqlite-functions;
+   * The main method to get a WASM component's manifest, self-describing what
+   * it needs and what it provides.
+   *
+   * NOTE: The inputs and outputs are opaque JSON (maybe Avro in the the
+   * future), since WIT type's versioning capabilities are insufficient to
+   * evolve this API w/o constantly breaking otherwise perfectly fine
+   * combinations of client and server.
+   */
+  export function getManifest(args: string): string;
+  /**
+   * record arguments {
+   *   version: option<string>,
+   * }
    * # Variants
    *
    * ## `"get"`
@@ -36,19 +53,19 @@ declare module "trailbase:component/init-endpoint@0.1.1" {
     | "put"
     | "trace"
     | "connect";
-  export interface HttpHandlers {
-    /**
-     * Registered http handlers (method, path)[].
-     */
-    handlers: Array<[HttpMethodType, string]>;
-  }
-  export interface JobHandlers {
-    /**
-     * Registered jobs (name, spec)[].
-     */
-    handlers: Array<[string, string]>;
-  }
   /**
+   * record http-handlers {
+   *   /// Registered http handlers (method, path)[].
+   *   handlers: list<tuple<http-method-type, string>>,
+   * }
+   * @since(version = 0.1.0)
+   * init-http-handlers: func(args: arguments) -> http-handlers;
+   * record job-handlers {
+   *   /// Registered jobs (name, spec)[].
+   *   handlers: list<tuple<string, string>>,
+   * }
+   * @since(version = 0.1.0)
+   * init-job-handlers: func(args: arguments) -> job-handlers;
    * # Variants
    *
    * ## `"utf8"`
@@ -93,12 +110,4 @@ declare module "trailbase:component/init-endpoint@0.1.1" {
     | "innocuous"
     | "result-subtype"
     | "selforder1";
-  export interface SqliteScalarFunction {
-    name: string;
-    numArgs: number;
-    functionFlags: Array<SqliteFunctionFlags>;
-  }
-  export interface SqliteFunctions {
-    scalarFunctions: Array<SqliteScalarFunction>;
-  }
 }
