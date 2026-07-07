@@ -2,9 +2,9 @@ package trailbase:component@0.2.0;
 
 @since(version = 0.1.0)
 interface init-endpoint {
-  record arguments {
-    version: option<string>,
-  }
+  // record arguments {
+  //   version: option<string>,
+  // }
 
   enum http-method-type {
     get,
