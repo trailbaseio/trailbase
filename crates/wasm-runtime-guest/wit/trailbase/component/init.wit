@@ -1,4 +1,4 @@
-package trailbase:component@0.1.1;
+package trailbase:component@0.2.0;
 
 @since(version = 0.1.0)
 interface init-endpoint {
@@ -18,21 +18,21 @@ interface init-endpoint {
     connect,
   }
 
-  record http-handlers {
-    /// Registered http handlers (method, path)[].
-    handlers: list<tuple<http-method-type, string>>,
-  }
+  // record http-handlers {
+  //   /// Registered http handlers (method, path)[].
+  //   handlers: list<tuple<http-method-type, string>>,
+  // }
 
-  @since(version = 0.1.0)
-  init-http-handlers: func(args: arguments) -> http-handlers;
+  // @since(version = 0.1.0)
+  // init-http-handlers: func(args: arguments) -> http-handlers;
 
-  record job-handlers {
-    /// Registered jobs (name, spec)[].
-    handlers: list<tuple<string, string>>,
-  }
+  // record job-handlers {
+  //   /// Registered jobs (name, spec)[].
+  //   handlers: list<tuple<string, string>>,
+  // }
 
-  @since(version = 0.1.0)
-  init-job-handlers: func(args: arguments) -> job-handlers;
+  // @since(version = 0.1.0)
+  // init-job-handlers: func(args: arguments) -> job-handlers;
 
   enum sqlite-function-flags {
     /// Specifies UTF-8 as the text encoding this SQL function prefers for its parameters.
@@ -57,16 +57,27 @@ interface init-endpoint {
     selforder1,
   }
 
-  record sqlite-scalar-function {
-    name: string,
-    num-args: u32,
-    function-flags: list<sqlite-function-flags>,
-  }
+  // record sqlite-scalar-function {
+  //   name: string,
+  //   num-args: u32,
+  //   function-flags: list<sqlite-function-flags>,
+  // }
 
-  record sqlite-functions {
-    scalar-functions: list<sqlite-scalar-function>,
-  }
+  // record sqlite-functions {
+  //   scalar-functions: list<sqlite-scalar-function>,
+  // }
 
-  @since(version = 0.1.0)
-  init-sqlite-functions : func(args: arguments) -> sqlite-functions;
+  // @since(version = 0.1.0)
+  // init-sqlite-functions : func(args: arguments) -> sqlite-functions;
+
+
+  /// The main method to get a WASM component's manifest, self-describing what
+  /// it needs and what it provides.
+  ///
+  /// NOTE: The inputs and outputs are opaque JSON (maybe Avro in the the
+  /// future), since WIT type's versioning capabilities are insufficient to
+  /// evolve this API w/o constantly breaking otherwise perfectly fine
+  /// combinations of client and server.
+  @since(version = 0.2.0)
+  get-manifest: func(args: string) -> result<string, string>;
 }
