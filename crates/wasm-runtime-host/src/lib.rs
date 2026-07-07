@@ -24,7 +24,6 @@ use wasmtime_wasi_http::p2::WasiHttpView;
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
 use crate::host::TransactionImpl;
-use crate::host::exports::trailbase::component::init_endpoint::Arguments;
 
 pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType;
 pub use crate::host::{SharedState, State};
