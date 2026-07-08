@@ -48,8 +48,8 @@ pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
 pub mod sqlite {
-  pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
   pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
+  pub use trailbase_wasm_common::manifest::SqliteFunctionFlag;
 }
 
 pub mod rand {
@@ -81,7 +81,7 @@ type SqliteFunctionHandler =
 pub struct SqliteFunction {
   name: String,
   num_args: u32,
-  flags: Vec<sqlite::SqliteFunctionFlags>,
+  flags: Vec<sqlite::SqliteFunctionFlag>,
   handler: SqliteFunctionHandler,
 }
 
@@ -89,7 +89,7 @@ impl SqliteFunction {
   pub fn new<const N: usize>(
     name: impl std::string::ToString,
     f: impl Fn([sqlite::Value; N]) -> Result<sqlite::Value, sqlite::Error> + Send + Sync + 'static,
-    flags: &[sqlite::SqliteFunctionFlags],
+    flags: &[sqlite::SqliteFunctionFlag],
   ) -> Self {
     return Self {
       name: name.to_string(),
@@ -209,12 +209,8 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
             .map(|f| {
               SqliteFunction::Scalar(SqliteScalarFunction {
                 name: f.name.clone(),
-                num_args: f.num_args.clone(),
-                flags: f
-                  .flags
-                  .iter()
-                  .map(|f| to_json_sqlite_function_flags(*f))
-                  .collect(),
+                num_args: f.num_args,
+                flags: f.flags.clone(),
               })
             })
             .collect(),
@@ -329,24 +325,5 @@ fn to_method_type(m: Method) -> trailbase_wasm_common::manifest::HttpMethodType 
     Method::TRACE => HttpMethodType::Trace,
     Method::CONNECT => HttpMethodType::Connect,
     _ => panic!("unknown http method type: {m}"),
-  };
-}
-
-fn to_json_sqlite_function_flags(
-  f: sqlite::SqliteFunctionFlags,
-) -> trailbase_wasm_common::manifest::SqliteFunctionFlag {
-  use trailbase_wasm_common::manifest::SqliteFunctionFlag;
-
-  return match f {
-    sqlite::SqliteFunctionFlags::Utf8 => SqliteFunctionFlag::Utf8,
-    sqlite::SqliteFunctionFlags::Utf16le => SqliteFunctionFlag::Utf16le,
-    sqlite::SqliteFunctionFlags::Utf16be => SqliteFunctionFlag::Utf16be,
-    sqlite::SqliteFunctionFlags::Utf16 => SqliteFunctionFlag::Utf16,
-    sqlite::SqliteFunctionFlags::Deterministic => SqliteFunctionFlag::Deterministic,
-    sqlite::SqliteFunctionFlags::DirectOnly => SqliteFunctionFlag::DirectOnly,
-    sqlite::SqliteFunctionFlags::Subtype => SqliteFunctionFlag::Subtype,
-    sqlite::SqliteFunctionFlags::Innocuous => SqliteFunctionFlag::Innocuous,
-    sqlite::SqliteFunctionFlags::ResultSubtype => SqliteFunctionFlag::ResultSubtype,
-    sqlite::SqliteFunctionFlags::Selforder1 => SqliteFunctionFlag::Selforder1,
   };
 }

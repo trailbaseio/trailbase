@@ -1,11 +1,5 @@
 import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.12";
 import type {
-  // Arguments,
-  // HttpHandlers,
-  // JobHandlers,
-  // SqliteFunctions,
-} from "trailbase:component/init-endpoint@0.2.0";
-import type {
   Arguments as SqliteArguments,
   Error as SqliteError,
   dispatchScalarFunction,
@@ -18,7 +12,6 @@ export { addPeriodicCallback } from "./timer";
 
 import type { InitArguments } from "@common/InitArguments";
 import type { InitManifest } from "@common/InitManifest";
-import { subscribeInstant } from "wasi:clocks/monotonic-clock@0.2.12";
 
 export * from "./util";
 
@@ -30,9 +23,6 @@ export interface Config {
     ) => Promise<void>;
   };
   initEndpoint: {
-    // initHttpHandlers: (args: Arguments) => HttpHandlers;
-    // initJobHandlers: (args: Arguments) => JobHandlers;
-    // initSqliteFunctions: (args: Arguments) => SqliteFunctions;
     getManifest: (args: string) => string;
   };
   sqliteFunctionEndpoint: {
@@ -54,7 +44,7 @@ export function defineConfig(opts: {
       handle: buildIncomingHttpHandler(opts),
     },
     initEndpoint: {
-      getManifest: function(jsonArgs: string): string {
+      getManifest: function (jsonArgs: string): string {
         const args: InitArguments = JSON.parse(jsonArgs);
 
         opts.init?.({
@@ -63,11 +53,17 @@ export function defineConfig(opts: {
 
         const subsystems = args.subsystems;
 
-        const http_handlers = subsystems?.find(v => v === "http") ?
-          opts.httpHandlers?.map((h) => ({ method: h.method, path: h.path })) ?? null : null;
+        const http_handlers = subsystems?.find((v) => v === "http")
+          ? (opts.httpHandlers?.map((h) => ({
+              method: h.method,
+              path: h.path,
+            })) ?? null)
+          : null;
 
-        const job_handlers = subsystems?.find(v => v === "jobs") ?
-          opts.jobHandlers?.map((h) => ({ name: h.name, spec: h.spec })) ?? null : null;
+        const job_handlers = subsystems?.find((v) => v === "jobs")
+          ? (opts.jobHandlers?.map((h) => ({ name: h.name, spec: h.spec })) ??
+            null)
+          : null;
 
         const manifest: InitManifest = {
           http_handlers,
@@ -79,7 +75,7 @@ export function defineConfig(opts: {
       },
     },
     sqliteFunctionEndpoint: {
-      dispatchScalarFunction: function(_args: SqliteArguments) {
+      dispatchScalarFunction: function (_args: SqliteArguments) {
         throw {
           tag: "other",
           val: "missing sqlite function",
