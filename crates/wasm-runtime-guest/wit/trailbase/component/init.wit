@@ -2,10 +2,6 @@ package trailbase:component@0.2.0;
 
 @since(version = 0.1.0)
 interface init-endpoint {
-  // record arguments {
-  //   version: option<string>,
-  // }
-
   enum http-method-type {
     get,
     post,
@@ -17,22 +13,6 @@ interface init-endpoint {
     trace,
     connect,
   }
-
-  // record http-handlers {
-  //   /// Registered http handlers (method, path)[].
-  //   handlers: list<tuple<http-method-type, string>>,
-  // }
-
-  // @since(version = 0.1.0)
-  // init-http-handlers: func(args: arguments) -> http-handlers;
-
-  // record job-handlers {
-  //   /// Registered jobs (name, spec)[].
-  //   handlers: list<tuple<string, string>>,
-  // }
-
-  // @since(version = 0.1.0)
-  // init-job-handlers: func(args: arguments) -> job-handlers;
 
   enum sqlite-function-flags {
     /// Specifies UTF-8 as the text encoding this SQL function prefers for its parameters.
@@ -56,20 +36,6 @@ interface init-endpoint {
     /// Indicates that the function is an aggregate that internally orders the values provided to the first argument.
     selforder1,
   }
-
-  // record sqlite-scalar-function {
-  //   name: string,
-  //   num-args: u32,
-  //   function-flags: list<sqlite-function-flags>,
-  // }
-
-  // record sqlite-functions {
-  //   scalar-functions: list<sqlite-scalar-function>,
-  // }
-
-  // @since(version = 0.1.0)
-  // init-sqlite-functions : func(args: arguments) -> sqlite-functions;
-
 
   /// The main method to get a WASM component's manifest, self-describing what
   /// it needs and what it provides.

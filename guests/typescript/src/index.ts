@@ -18,6 +18,7 @@ export { addPeriodicCallback } from "./timer";
 
 import type { InitArguments } from "@common/InitArguments";
 import type { InitManifest } from "@common/InitManifest";
+import { subscribeInstant } from "wasi:clocks/monotonic-clock@0.2.12";
 
 export * from "./util";
 
@@ -53,33 +54,6 @@ export function defineConfig(opts: {
       handle: buildIncomingHttpHandler(opts),
     },
     initEndpoint: {
-      // initHttpHandlers: function(args: Arguments): HttpHandlers {
-      //   opts.init?.({
-      //     version: args.version,
-      //   });
-      //
-      //   return {
-      //     handlers: (opts.httpHandlers ?? []).map((h) => [h.method, h.path]),
-      //   };
-      // },
-      // initJobHandlers: function(args: Arguments): JobHandlers {
-      //   opts.init?.({
-      //     version: args.version,
-      //   });
-      //
-      //   return {
-      //     handlers: (opts.jobHandlers ?? []).map((h) => [h.name, h.spec]),
-      //   };
-      // },
-      // initSqliteFunctions: function(args: Arguments): SqliteFunctions {
-      //   opts.init?.({
-      //     version: args.version,
-      //   });
-      //
-      //   return {
-      //     scalarFunctions: [],
-      //   };
-      // },
       getManifest: function(jsonArgs: string): string {
         const args: InitArguments = JSON.parse(jsonArgs);
 
@@ -87,9 +61,17 @@ export function defineConfig(opts: {
           version: args.version ?? undefined,
         });
 
+        const subsystems = args.subsystems;
+
+        const http_handlers = subsystems?.find(v => v === "http") ?
+          opts.httpHandlers?.map((h) => ({ method: h.method, path: h.path })) ?? null : null;
+
+        const job_handlers = subsystems?.find(v => v === "jobs") ?
+          opts.jobHandlers?.map((h) => ({ name: h.name, spec: h.spec })) ?? null : null;
+
         const manifest: InitManifest = {
-          http_handlers: opts.httpHandlers?.map((h) => ({ method: h.method, path: h.path })) ?? null,
-          job_handlers: opts.jobHandlers?.map((h) => ({ name: h.name, spec: h.spec })) ?? null,
+          http_handlers,
+          job_handlers,
           sqlite_functions: null,
         };
 

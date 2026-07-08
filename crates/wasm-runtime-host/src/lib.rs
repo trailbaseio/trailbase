@@ -266,6 +266,10 @@ impl HttpStore {
 
       let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
         version: args.version.clone(),
+        subsystems: Some(vec![
+          trailbase_wasm_common::manifest::Subsystem::Http,
+          trailbase_wasm_common::manifest::Subsystem::Jobs,
+        ]),
       })
       .unwrap();
 
@@ -636,7 +640,8 @@ mod tests {
 
       // NOTE: The offset depends on what got initialized, e.g. http handlers, job handlers
       // or just sqlite functions.
-      assert_eq!(5000 + i, response_to_i64(resp).await);
+      let offset = 0;
+      assert_eq!(offset + i, response_to_i64(resp).await);
     }
   }
 
