@@ -6,7 +6,7 @@ use trailbase_sqlite::SyncConnectionTrait;
 use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use wasmtime::Result;
-use wasmtime::component::{Access, Accessor, FutureReader, HasData, Resource, ResourceTable};
+use wasmtime::component::{Access, FutureReader, HasData, Resource, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
@@ -189,6 +189,7 @@ impl<T: Send> self::trailbase::database::sqlite::HostWithStore<T> for State {
     params: Vec<Value>,
   ) -> Result<FutureReader<Result<Vec<Vec<Value>>, TxError>>, wasmtime::Error> {
     let conn = access.get().shared.conn.clone();
+
     let producer = async move || -> Result<Vec<Vec<Value>>, TxError> {
       let Some(conn) = conn else {
         return Err(TxError::Other("missing conn".into()));
@@ -211,11 +212,11 @@ impl<T: Send> self::trailbase::database::sqlite::HostWithStore<T> for State {
       );
     };
 
-    return FutureReader::new(
-      &mut access,
-      // QUESTION: Why do we have to return a Result<Result<_, TxError>, TxError>?
-      async move { Ok::<_, TxError>(producer().await) },
-    );
+    // let r = producer().await;
+    // return FutureReader::new(&mut access, std::future::ready(Ok::<_, TxError>(r)));
+
+    let fut = wasmtime_wasi::runtime::spawn(producer());
+    return FutureReader::new(&mut access, async move { Ok::<_, TxError>(fut.await) });
   }
 }
 
