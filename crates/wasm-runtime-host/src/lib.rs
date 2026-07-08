@@ -25,7 +25,6 @@ use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
 use crate::host::TransactionImpl;
 
-pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType;
 pub use crate::host::{SharedState, State};
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
@@ -41,6 +40,8 @@ pub enum Error {
   HttpErrorCode(ErrorCode),
   #[error("Encoding")]
   Encoding,
+  #[error("Json")]
+  Json(#[from] serde_json::Error),
   #[error("Other: {0}")]
   Other(String),
 }
@@ -270,12 +271,7 @@ impl HttpStore {
           trailbase_wasm_common::manifest::Subsystem::Http,
           trailbase_wasm_common::manifest::Subsystem::Jobs,
         ]),
-      })
-      .unwrap();
-
-      // let args = Arguments {
-      //   version: args.version,
-      // };
+      })?;
 
       // let mut store = state.store.lock().await;
       store
@@ -283,19 +279,12 @@ impl HttpStore {
           let manifest_json = api
             .call_get_manifest(accessor, args)
             .await?
-            .map_err(|err| Error::Other(err))?;
+            .map_err(Error::Other)?;
 
           let manifest: trailbase_wasm_common::manifest::InitManifest =
-            serde_json::from_str(&manifest_json).unwrap();
+            serde_json::from_str(&manifest_json)?;
 
           return Ok(manifest);
-
-          // let http = api.call_init_http_handlers(accessor, args.clone()).await?;
-          // let job = api.call_init_job_handlers(accessor, args).await?;
-          // return Ok(InitResult {
-          //   http_handlers: http.handlers,
-          //   job_handlers: job.handlers,
-          // });
         })
         .await?
     })

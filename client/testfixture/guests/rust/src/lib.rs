@@ -9,8 +9,9 @@ use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::job::Job;
+use trailbase_wasm::sqlite::SqliteFunctionFlag;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
-use trailbase_wasm::{Guest, SqliteFunction, export, sqlite::SqliteFunctionFlags};
+use trailbase_wasm::{Guest, SqliteFunction, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -211,8 +212,8 @@ impl Guest for Endpoints {
           return Ok(args[0].clone());
         },
         &[
-          SqliteFunctionFlags::Deterministic,
-          SqliteFunctionFlags::Innocuous,
+          SqliteFunctionFlag::Deterministic,
+          SqliteFunctionFlag::Innocuous,
         ],
       ),
       SqliteFunction::new::<0>(
