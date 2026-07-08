@@ -30,9 +30,9 @@ fn extract_user(_parts: &mut Parts, _state: &State) -> BoxFuture<'static, Option
 async fn main() {
   let args = CommandLineArgs::parse();
 
-  env_logger::Builder::from_env(
-    env_logger::Env::new().default_filter_or("debug,tracing::span=warn"),
-  )
+  env_logger::Builder::from_env(env_logger::Env::new().default_filter_or(
+    "debug,tracing::span=warn,cranelift_codegen=warn,wasmtime_internal_cranelift=warn",
+  ))
   .format_timestamp_micros()
   .init();
 
@@ -62,9 +62,10 @@ async fn main() {
     log::info!("ignoring {} jobs", jobs.len());
   }
 
-  let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", args.port))
-    .await
-    .unwrap();
+  let address = format!("0.0.0.0:{}", args.port);
+  let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
+
+  log::info!("Listening: {address}");
 
   axum::serve(listener, router.with_state(State))
     .await
