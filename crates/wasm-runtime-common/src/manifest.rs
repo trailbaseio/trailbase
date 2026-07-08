@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, TS)]
+#[serde(rename_all = "snake_case")]
 pub enum HttpMethodType {
   Get,
   Post,
@@ -13,6 +13,14 @@ pub enum HttpMethodType {
   Put,
   Trace,
   Connect,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Subsystem {
+  Http,
+  Jobs,
+  SqliteFunctions,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
@@ -27,7 +35,7 @@ pub struct Job {
   pub spec: String,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, TS)]
 pub enum SqliteFunctionFlag {
   /// Specifies UTF-8 as the text encoding this SQL function prefers for its parameters.
   Utf8,
@@ -69,10 +77,14 @@ pub enum SqliteFunction {
   Scalar(SqliteScalarFunction),
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct InitArguments {
+  // Host version.
   pub version: Option<String>,
+
+  // List of subsystems to initialize.
+  pub subsystems: Option<Vec<Subsystem>>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
