@@ -17,13 +17,13 @@ wasmtime::component::bindgen!({
     world: "trailbase:component/interfaces",
     path: [
         // Order-sensitive: will import *.wit from the folder.
-        "wit/deps-0.2.6/random",
-        "wit/deps-0.2.6/io",
-        "wit/deps-0.2.6/clocks",
-        "wit/deps-0.2.6/filesystem",
-        "wit/deps-0.2.6/sockets",
-        "wit/deps-0.2.6/cli",
-        "wit/deps-0.2.6/http",
+        "wit/wasi-0.2.12/random",
+        "wit/wasi-0.2.12/io",
+        "wit/wasi-0.2.12/clocks",
+        "wit/wasi-0.2.12/filesystem",
+        "wit/wasi-0.2.12/sockets",
+        "wit/wasi-0.2.12/cli",
+        "wit/wasi-0.2.12/http",
         "wit/keyvalue-0.2.0-draft",
         // Ours:
         "wit/trailbase/database",

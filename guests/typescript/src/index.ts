@@ -1,4 +1,4 @@
-import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.3";
+import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.12";
 import type {
   // Arguments,
   // HttpHandlers,
@@ -16,8 +16,8 @@ import { buildIncomingHttpHandler } from "./http/incoming";
 
 export { addPeriodicCallback } from "./timer";
 
-import type { InitArguments } from "@bindings/InitArguments";
-import type { InitManifest } from "@bindings/InitManifest";
+import type { InitArguments } from "@common/InitArguments";
+import type { InitManifest } from "@common/InitManifest";
 
 export * from "./util";
 

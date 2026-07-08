@@ -1,4 +1,4 @@
-declare module "wasi:random/random@0.2.3" {
+declare module "wasi:random/random@0.2.12" {
   /**
    * Return `len` cryptographically-secure random or pseudo-random bytes.
    *
