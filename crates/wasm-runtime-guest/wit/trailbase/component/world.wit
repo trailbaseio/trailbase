@@ -9,15 +9,15 @@ package trailbase:component@0.2.0;
 world interfaces {
   // Pull in WASIp2 http interface for outbound requests.
   @since(version = 0.1.0)
-  import wasi:http/outgoing-handler@0.2.6;
+  import wasi:http/outgoing-handler@0.2.12;
 
   // Pull in WASIp2 filesystem interfaces.
   @since(version = 0.1.0)
-  include wasi:filesystem/imports@0.2.6;
+  include wasi:filesystem/imports@0.2.12;
 
   // Pull in WASI random interfaces.
   @since(version = 0.1.0)
-  include wasi:random/imports@0.2.6;
+  include wasi:random/imports@0.2.12;
 
   // Pull in WSAI Key-Value interfaces.
   @since(version = 0.1.0)
