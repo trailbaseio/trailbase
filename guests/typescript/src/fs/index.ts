@@ -1,8 +1,8 @@
 import {
   getDirectories,
   type Descriptor,
-} from "wasi:filesystem/preopens@0.2.3";
-import type { PathFlags } from "wasi:filesystem/types@0.2.3";
+} from "wasi:filesystem/preopens@0.2.12";
+import type { PathFlags } from "wasi:filesystem/types@0.2.12";
 
 // Override setInterval/setTimeout.
 import "../timer";

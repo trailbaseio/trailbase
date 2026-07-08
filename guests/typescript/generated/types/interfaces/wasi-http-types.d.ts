@@ -2,14 +2,14 @@
 /// <reference path="./wasi-io-error.d.ts" />
 /// <reference path="./wasi-io-poll.d.ts" />
 /// <reference path="./wasi-io-streams.d.ts" />
-declare module "wasi:http/types@0.2.3" {
+declare module "wasi:http/types@0.2.12" {
   /**
    * Attempts to extract a http-related `error` from the wasi:io `error`
    * provided.
    *
    * Stream operations which return
-   * `wasi:io/stream/stream-error::last-operation-failed` have a payload of
-   * type `wasi:io/error/error` with more information about the operation
+   * `wasi:io/stream.stream-error.last-operation-failed` have a payload of
+   * type `wasi:io/error.error` with more information about the operation
    * that failed. This payload can be passed through to this function to see
    * if there's http-related information about the error to return.
    *
@@ -17,11 +17,11 @@ declare module "wasi:http/types@0.2.3" {
    * http-related errors.
    */
   export function httpErrorCode(err: IoError): ErrorCode | undefined;
-  export type Duration = import("wasi:clocks/monotonic-clock@0.2.3").Duration;
-  export type InputStream = import("wasi:io/streams@0.2.3").InputStream;
-  export type OutputStream = import("wasi:io/streams@0.2.3").OutputStream;
-  export type IoError = import("wasi:io/error@0.2.3").Error;
-  export type Pollable = import("wasi:io/poll@0.2.3").Pollable;
+  export type Duration = import("wasi:clocks/monotonic-clock@0.2.12").Duration;
+  export type InputStream = import("wasi:io/streams@0.2.12").InputStream;
+  export type OutputStream = import("wasi:io/streams@0.2.12").OutputStream;
+  export type IoError = import("wasi:io/error@0.2.12").Error;
+  export type Pollable = import("wasi:io/poll@0.2.12").Pollable;
   /**
    * This type corresponds to HTTP standard Methods.
    */
