@@ -1,8 +1,8 @@
 /// <reference path="./wasi-io-error.d.ts" />
 /// <reference path="./wasi-io-poll.d.ts" />
-declare module "wasi:io/streams@0.2.3" {
-  export type Error = import("wasi:io/error@0.2.3").Error;
-  export type Pollable = import("wasi:io/poll@0.2.3").Pollable;
+declare module "wasi:io/streams@0.2.12" {
+  export type Error = import("wasi:io/error@0.2.12").Error;
+  export type Pollable = import("wasi:io/poll@0.2.12").Pollable;
   /**
    * An error for input-stream and output-stream operations.
    */
@@ -128,27 +128,13 @@ declare module "wasi:io/streams@0.2.3" {
      * Perform a write of up to 4096 bytes, and then flush the stream. Block
      * until all of these operations are complete, or an error occurs.
      *
-     * This is a convenience wrapper around the use of `check-write`,
-     * `subscribe`, `write`, and `flush`, and is implemented with the
-     * following pseudo-code:
-     *
-     * ```text
-     * let pollable = this.subscribe();
-     * while !contents.is_empty() {
-     *     // Wait for the stream to become writable
-     *     pollable.block();
-     *     let Ok(n) = this.check-write(); // eliding error handling
-     *     let len = min(n, contents.len());
-     *     let (chunk, rest) = contents.split_at(len);
-     *     this.write(chunk  );            // eliding error handling
-     *     contents = rest;
-     * }
-     * this.flush();
-     * // Wait for completion of `flush`
-     * pollable.block();
-     * // Check for any errors that arose during `flush`
-     * let _ = this.check-write();         // eliding error handling
-     * ```
+     * Returns success when all of the contents written are successfully
+     * flushed to output. If an error occurs at any point before all
+     * contents are successfully flushed, that error is returned as soon as
+     * possible. If writing and flushing the complete contents causes the
+     * stream to become closed, this call should return success, and
+     * subsequent calls to check-write or other interfaces should return
+     * stream-error::closed.
      */
     blockingWriteAndFlush(contents: Uint8Array): void;
     /**
@@ -196,26 +182,8 @@ declare module "wasi:io/streams@0.2.3" {
      * Block until all of these operations are complete, or an error
      * occurs.
      *
-     * This is a convenience wrapper around the use of `check-write`,
-     * `subscribe`, `write-zeroes`, and `flush`, and is implemented with
-     * the following pseudo-code:
-     *
-     * ```text
-     * let pollable = this.subscribe();
-     * while num_zeroes != 0 {
-     *     // Wait for the stream to become writable
-     *     pollable.block();
-     *     let Ok(n) = this.check-write(); // eliding error handling
-     *     let len = min(n, num_zeroes);
-     *     this.write-zeroes(len);         // eliding error handling
-     *     num_zeroes -= len;
-     * }
-     * this.flush();
-     * // Wait for completion of `flush`
-     * pollable.block();
-     * // Check for any errors that arose during `flush`
-     * let _ = this.check-write();         // eliding error handling
-     * ```
+     * Functionality is equivelant to `blocking-write-and-flush` with
+     * contents given as a list of len containing only zeroes.
      */
     blockingWriteZeroesAndFlush(len: bigint): void;
     /**

@@ -1,4 +1,4 @@
-import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.3";
+import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.12";
 import { StatusCode } from "./status";
 import { encodeBytes } from "./incoming";
 
@@ -7,7 +7,7 @@ export class HttpResponse {
     public readonly status: StatusCode,
     public body?: Uint8Array,
     public headers: [string, Uint8Array][] = [],
-  ) {}
+  ) { }
 
   public static status(
     status: StatusCode | number,

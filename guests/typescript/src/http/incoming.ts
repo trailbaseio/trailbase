@@ -3,7 +3,7 @@ import {
   OutgoingResponse,
   ResponseOutparam,
   Method as WasiMethod,
-} from "wasi:http/types@0.2.3";
+} from "wasi:http/types@0.2.12";
 
 import type { HttpContext } from "@common/HttpContext";
 import type { HttpHandlerInterface, ResponseType } from "./index";
@@ -78,7 +78,7 @@ export function buildIncomingHttpHandler(args: {
     }
   }
 
-  return async function (req: IncomingRequest, respOutparam: ResponseOutparam) {
+  return async function(req: IncomingRequest, respOutparam: ResponseOutparam) {
     try {
       const resp: ResponseType = await handle(req);
       const outgoingResp = responseToOutgoingResponse(resp);
