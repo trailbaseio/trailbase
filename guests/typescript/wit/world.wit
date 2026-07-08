@@ -28,11 +28,16 @@ world interfaces {
   export wasi:http/incoming-handler@0.2.12;
 
   // TrailBase's interfaces:
+  //
+  // Host interfaces to interact with host database.
   @since(version = 0.1.0)
   include trailbase:database/interfaces@0.1.1;
 
+  // Entry point for initialization and retrieving opaque component manifest.
   @since(version = 0.1.0)
   export init-endpoint;
+
+  // Entry-point for calling sqlite functions implemented in WASM.
   @since(version = 0.1.0)
   export sqlite-function-endpoint;
 }
