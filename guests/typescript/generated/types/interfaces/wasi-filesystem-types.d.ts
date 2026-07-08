@@ -1,6 +1,6 @@
 /// <reference path="./wasi-clocks-wall-clock.d.ts" />
 /// <reference path="./wasi-io-streams.d.ts" />
-declare module "wasi:filesystem/types@0.2.3" {
+declare module "wasi:filesystem/types@0.2.12" {
   /**
    * Attempts to extract a filesystem-related `error-code` from the stream
    * `error` provided.
@@ -14,10 +14,10 @@ declare module "wasi:filesystem/types@0.2.3" {
    * errors are filesystem-related errors.
    */
   export function filesystemErrorCode(err: Error): ErrorCode | undefined;
-  export type InputStream = import("wasi:io/streams@0.2.3").InputStream;
-  export type OutputStream = import("wasi:io/streams@0.2.3").OutputStream;
-  export type Error = import("wasi:io/streams@0.2.3").Error;
-  export type Datetime = import("wasi:clocks/wall-clock@0.2.3").Datetime;
+  export type InputStream = import("wasi:io/streams@0.2.12").InputStream;
+  export type OutputStream = import("wasi:io/streams@0.2.12").OutputStream;
+  export type Error = import("wasi:io/streams@0.2.12").Error;
+  export type Datetime = import("wasi:clocks/wall-clock@0.2.12").Datetime;
   /**
    * File size or length of a region within a file.
    */
@@ -623,6 +623,10 @@ declare module "wasi:filesystem/types@0.2.3" {
     ): void;
     /**
      * Create a hard link.
+     *
+     * Fails with `error-code::no-entry` if the old path does not exist,
+     * with `error-code::exist` if the new path already exists, and
+     * `error-code::not-permitted` if the old path is not a file.
      *
      * Note: This is similar to `linkat` in POSIX.
      */
