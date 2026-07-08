@@ -7,18 +7,6 @@ use crate::Error;
 pub use trailbase_wasm_common::manifest::{SqliteFunction, SqliteScalarFunction};
 pub type SqliteFunctions = Vec<SqliteFunction>;
 
-// #[derive(Clone)]
-// pub struct SqliteScalarFunction {
-//   pub name: String,
-//   pub num_args: u32,
-//   pub flags: Vec<rusqlite::functions::FunctionFlags>,
-// }
-//
-// #[derive(Clone)]
-// pub struct SqliteFunctions {
-//   pub scalar_functions: Vec<SqliteScalarFunction>,
-// }
-
 struct SqliteStoreInternal {
   store: Mutex<Store<crate::host::State>>,
   bindings: crate::host::Interfaces,
@@ -52,8 +40,7 @@ impl SqliteStore {
       subsystems: Some(vec![
         trailbase_wasm_common::manifest::Subsystem::SqliteFunctions,
       ]),
-    })
-    .unwrap();
+    })?;
 
     let mut store = self.state.store.lock().await;
     let manifest = store
@@ -62,10 +49,10 @@ impl SqliteStore {
           let manifest_json = api
             .call_get_manifest(accessor, args)
             .await?
-            .map_err(|err| Error::Other(err))?;
+            .map_err(Error::Other)?;
 
           let manifest: trailbase_wasm_common::manifest::InitManifest =
-            serde_json::from_str(&manifest_json).expect(&manifest_json);
+            serde_json::from_str(&manifest_json)?;
 
           return Ok(manifest);
         },

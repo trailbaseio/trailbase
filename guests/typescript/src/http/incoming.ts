@@ -78,7 +78,7 @@ export function buildIncomingHttpHandler(args: {
     }
   }
 
-  return async function(req: IncomingRequest, respOutparam: ResponseOutparam) {
+  return async function (req: IncomingRequest, respOutparam: ResponseOutparam) {
     try {
       const resp: ResponseType = await handle(req);
       const outgoingResp = responseToOutgoingResponse(resp);

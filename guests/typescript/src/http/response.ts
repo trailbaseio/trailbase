@@ -7,7 +7,7 @@ export class HttpResponse {
     public readonly status: StatusCode,
     public body?: Uint8Array,
     public headers: [string, Uint8Array][] = [],
-  ) { }
+  ) {}
 
   public static status(
     status: StatusCode | number,

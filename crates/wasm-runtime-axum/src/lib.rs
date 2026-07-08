@@ -14,7 +14,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::manifest::{
-  HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest,
+  HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest,
 };
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::{
@@ -276,7 +276,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
       router
         .take()
         .unwrap_or_else(|| Router::<S>::new())
-        .route(&path, axum::routing::on(axum_method2(method), handler)),
+        .route(&path, axum::routing::on(axum_method(method), handler)),
     );
   }
 
@@ -284,28 +284,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
 }
 
 #[inline]
-fn axum_method(method: trailbase_wasm_runtime_host::HttpMethodType) -> axum::routing::MethodFilter {
-  use trailbase_wasm_runtime_host::HttpMethodType;
-
-  return match method {
-    HttpMethodType::Delete => axum::routing::MethodFilter::DELETE,
-    HttpMethodType::Get => axum::routing::MethodFilter::GET,
-    HttpMethodType::Head => axum::routing::MethodFilter::HEAD,
-    HttpMethodType::Options => axum::routing::MethodFilter::OPTIONS,
-    HttpMethodType::Patch => axum::routing::MethodFilter::PATCH,
-    HttpMethodType::Post => axum::routing::MethodFilter::POST,
-    HttpMethodType::Put => axum::routing::MethodFilter::PUT,
-    HttpMethodType::Trace => axum::routing::MethodFilter::TRACE,
-    HttpMethodType::Connect => axum::routing::MethodFilter::CONNECT,
-  };
-}
-
-#[inline]
-fn axum_method2(
-  method: trailbase_wasm_common::manifest::HttpMethodType,
-) -> axum::routing::MethodFilter {
-  use trailbase_wasm_common::manifest::HttpMethodType;
-
+fn axum_method(method: HttpMethodType) -> axum::routing::MethodFilter {
   return match method {
     HttpMethodType::Delete => axum::routing::MethodFilter::DELETE,
     HttpMethodType::Get => axum::routing::MethodFilter::GET,
