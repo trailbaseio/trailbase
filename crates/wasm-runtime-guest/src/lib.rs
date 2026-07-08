@@ -47,8 +47,6 @@ use crate::job::Job;
 pub use static_assertions::assert_impl_all;
 pub use wstd::wasip2 as __wasi;
 
-// pub use crate::wit::exports::trailbase::component::init_endpoint::Arguments;
-
 pub mod sqlite {
   pub use crate::wit::exports::trailbase::component::init_endpoint::SqliteFunctionFlags;
   pub use crate::wit::exports::trailbase::component::sqlite_function_endpoint::{Error, Value};
@@ -140,60 +138,6 @@ impl<T: Guest> TrailbaseHandler<T> {
 impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
   for TrailbaseHandler<T>
 {
-  // fn init_http_handlers(
-  //   args: Arguments,
-  // ) -> wit::exports::trailbase::component::init_endpoint::HttpHandlers {
-  //   Self::call_init_once(Args {
-  //     version: args.version,
-  //   });
-  //
-  //   return wit::exports::trailbase::component::init_endpoint::HttpHandlers {
-  //     handlers: T::http_handlers()
-  //       .into_iter()
-  //       .map(|route| (to_method_type(route.method), route.path))
-  //       .collect(),
-  //   };
-  // }
-  //
-  // fn init_job_handlers(
-  //   args: Arguments,
-  // ) -> wit::exports::trailbase::component::init_endpoint::JobHandlers {
-  //   Self::call_init_once(Args {
-  //     version: args.version,
-  //   });
-  //
-  //   return wit::exports::trailbase::component::init_endpoint::JobHandlers {
-  //     handlers: T::job_handlers()
-  //       .into_iter()
-  //       .map(|config| (config.name, config.spec))
-  //       .collect(),
-  //   };
-  // }
-  //
-  // fn init_sqlite_functions(
-  //   args: Arguments,
-  // ) -> wit::exports::trailbase::component::init_endpoint::SqliteFunctions {
-  //   use wit::exports::trailbase::component::init_endpoint::{
-  //     SqliteFunctions, SqliteScalarFunction,
-  //   };
-  //
-  //   // QUESTION: Should we ensure that init is called only once?
-  //   Self::call_init_once(Args {
-  //     version: args.version,
-  //   });
-  //
-  //   return SqliteFunctions {
-  //     scalar_functions: Self::get_sqlite_scalar_functions()
-  //       .iter()
-  //       .map(|f| SqliteScalarFunction {
-  //         name: f.name.clone(),
-  //         num_args: f.num_args,
-  //         function_flags: f.flags.clone(),
-  //       })
-  //       .collect(),
-  //   };
-  // }
-
   fn get_manifest(args: String) -> Result<String, String> {
     use trailbase_wasm_common::manifest::{
       HttpRoute, InitArguments, InitManifest, Job, SqliteFunction, SqliteScalarFunction,
@@ -204,53 +148,86 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
       version: args.version,
     });
 
-    let http_handlers: Vec<_> = T::http_handlers()
-      .into_iter()
-      .map(|route| HttpRoute {
-        method: to_method_type2(route.method),
-        path: route.path,
-      })
-      .collect();
-
-    let job_handlers: Vec<_> = T::job_handlers()
-      .into_iter()
-      .map(|config| Job {
-        name: config.name,
-        spec: config.spec,
-      })
-      .collect();
-
-    let sqlite_functions: Vec<_> = Self::get_sqlite_scalar_functions()
-      .iter()
-      .map(|f| {
-        SqliteFunction::Scalar(SqliteScalarFunction {
-          name: f.name.clone(),
-          num_args: f.num_args.clone(),
-          flags: f
-            .flags
-            .iter()
-            .map(|f| to_json_sqlite_function_flags(*f))
+    let http_handlers: Option<Vec<_>> = if args
+      .subsystems
+      .as_ref()
+      .is_none_or(|c| c.contains(&trailbase_wasm_common::manifest::Subsystem::Http))
+    {
+      let handlers = T::http_handlers();
+      if handlers.is_empty() {
+        None
+      } else {
+        Some(
+          handlers
+            .into_iter()
+            .map(|route| HttpRoute {
+              method: to_method_type(route.method),
+              path: route.path,
+            })
             .collect(),
-        })
-      })
-      .collect();
+        )
+      }
+    } else {
+      None
+    };
+
+    let job_handlers: Option<Vec<_>> = if args
+      .subsystems
+      .as_ref()
+      .is_none_or(|c| c.contains(&trailbase_wasm_common::manifest::Subsystem::Jobs))
+    {
+      let handlers = T::job_handlers();
+      if handlers.is_empty() {
+        None
+      } else {
+        Some(
+          handlers
+            .into_iter()
+            .map(|config| Job {
+              name: config.name,
+              spec: config.spec,
+            })
+            .collect(),
+        )
+      }
+    } else {
+      None
+    };
+
+    let sqlite_functions: Option<Vec<_>> = if args
+      .subsystems
+      .as_ref()
+      .is_none_or(|c| c.contains(&trailbase_wasm_common::manifest::Subsystem::SqliteFunctions))
+    {
+      let handlers = Self::get_sqlite_scalar_functions();
+      if handlers.is_empty() {
+        None
+      } else {
+        Some(
+          handlers
+            .iter()
+            .map(|f| {
+              SqliteFunction::Scalar(SqliteScalarFunction {
+                name: f.name.clone(),
+                num_args: f.num_args.clone(),
+                flags: f
+                  .flags
+                  .iter()
+                  .map(|f| to_json_sqlite_function_flags(*f))
+                  .collect(),
+              })
+            })
+            .collect(),
+        )
+      }
+    } else {
+      None
+    };
 
     let manifest = InitManifest {
-      http_handlers: if http_handlers.is_empty() {
-        None
-      } else {
-        Some(http_handlers)
-      },
-      job_handlers: if job_handlers.is_empty() {
-        None
-      } else {
-        Some(job_handlers)
-      },
-      sqlite_functions: if sqlite_functions.is_empty() {
-        None
-      } else {
-        Some(sqlite_functions)
-      },
+      http_handlers,
+      job_handlers,
+      sqlite_functions,
     };
 
     return serde_json::to_string(&manifest).map_err(|err| err.to_string());
@@ -338,26 +315,7 @@ impl<T: Guest> ::wstd::wasip2::exports::http::incoming_handler::Guest for HttpIn
   }
 }
 
-fn to_method_type(
-  m: Method,
-) -> crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType {
-  use crate::wit::exports::trailbase::component::init_endpoint::HttpMethodType;
-
-  return match m {
-    Method::GET => HttpMethodType::Get,
-    Method::POST => HttpMethodType::Post,
-    Method::HEAD => HttpMethodType::Head,
-    Method::OPTIONS => HttpMethodType::Options,
-    Method::PATCH => HttpMethodType::Patch,
-    Method::DELETE => HttpMethodType::Delete,
-    Method::PUT => HttpMethodType::Put,
-    Method::TRACE => HttpMethodType::Trace,
-    Method::CONNECT => HttpMethodType::Connect,
-    _ => panic!("unknown http method type: {m}"),
-  };
-}
-
-fn to_method_type2(m: Method) -> trailbase_wasm_common::manifest::HttpMethodType {
+fn to_method_type(m: Method) -> trailbase_wasm_common::manifest::HttpMethodType {
   use trailbase_wasm_common::manifest::HttpMethodType;
 
   return match m {
