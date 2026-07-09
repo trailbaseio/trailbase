@@ -313,7 +313,7 @@ impl JwtHelper {
 }
 
 fn generate_new_key_pair() -> (SigningKey, VerifyingKey) {
-  let mut csprng = argon2::password_hash::rand_core::OsRng;
+  let mut csprng = getrandom::rand_core::UnwrapErr(getrandom::SysRng);
   let signing_key = SigningKey::generate(&mut csprng);
   let verifying_key = signing_key.verifying_key();
 
