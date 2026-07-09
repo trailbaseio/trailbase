@@ -119,10 +119,7 @@ export type ChangeDeleteEvent = {
 };
 
 export type ChangeEvent =
-  | ChangeInsertEvent
-  | ChangeUpdateEvent
-  | ChangeDeleteEvent
-  | ChangeErrorEvent;
+  ChangeInsertEvent | ChangeUpdateEvent | ChangeDeleteEvent | ChangeErrorEvent;
 
 // Re-export type publicly as `Event`. We cannot use `Event` to prevent rollup
 // from renaming to `Event_2` to avoid a possible collision with the DOM

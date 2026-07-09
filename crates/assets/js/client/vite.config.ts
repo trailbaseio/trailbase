@@ -18,17 +18,6 @@ export default defineConfig({
       fileName: "index",
       formats: ["es"],
     },
-    // rollupOptions: {
-    //   external: external,
-    //   plugins: [
-    //     dts({
-    //       copyDtsFiles: true,
-    //       staticImport: true,
-    //       insertTypesEntry: true,
-    //       rollupTypes: true,
-    //     }),
-    //   ],
-    // },
   },
   plugins: [
     dts({
@@ -36,7 +25,7 @@ export default defineConfig({
       // copyDtsFiles: true,
       // staticImport: true,
       // insertTypesEntry: true,
-      rollupTypes: true,
+      bundleTypes: true,
     }),
   ],
 })

@@ -237,8 +237,7 @@ class ClientImpl implements Client {
   private readonly _base: URL | undefined;
   private readonly _transport: Transport;
   private readonly _authChange:
-    | undefined
-    | ((client: Client, user?: User) => void);
+    undefined | ((client: Client, user?: User) => void);
   private _tokenState: TokenState;
 
   constructor(baseUrl: URL | string | undefined, opts?: ClientOptions) {
