@@ -1,3 +1,9 @@
+## v0.30.1
+
+- Fix trailbase JS client's type bundling - Thanks @bltavares 🙏.
+- Factor out WASM integration into separate crate and simplify WASM runtime construction.
+- Update Rust and JS dependencies.
+
 ## v0.30.0
 
 - Merge `api::serve()` and `Server::init*` APIs by pulling out `AppState` construction and allowing injection of custom axum routers. This facilitates greater re-use between the `trail` binary and custom binaries. This is a breaking API change for users with custom binaries.
