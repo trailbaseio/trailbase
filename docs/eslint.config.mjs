@@ -24,16 +24,17 @@ const ignoredStarlightCustomTailwindClasses = [
 export default [
   {
     ignores: [
-      "**/dist/",
-      "**/node_modules/",
+      "dist/",
+      "node_modules/",
       ".astro/",
       "src/env.d.ts",
+      "types/",
       "examples/",
     ],
   },
   jsPlugin.configs.recommended,
   ...tsPlugin.configs.recommended,
-  // tailwindPlugin.configs["flat/recommended"],
+  solidPlugin,
   ...astroPlugin.configs.recommended,
   {
     plugins: {
@@ -60,10 +61,6 @@ export default [
     },
   },
   {
-    files: ["**/*.{js,jsx,ts,tsx}"],
-    ...solidPlugin,
-  },
-  {
     files: ["**/*.{js,mjs,cjs,mts,ts,tsx,jsx,astro}"],
     rules: {
       // https://typescript-eslint.io/rules/no-explicit-any/
@@ -83,11 +80,14 @@ export default [
       "no-unassigned-vars": "warn",
       // Collides with astro, we'd have to configure the solid plugin to ignore astro files.
       "solid/no-unknown-namespaces": "off",
-      // Needed for astro.config.ts @ts-ignore in because @ts-expect-error doesn't work reliably across envs.
-      "@typescript-eslint/ban-ts-comment": "warn",
+      // Prettier prefers explicit closing.
+      "solid/self-closing-comp": "off",
+      // Warns for Astro's <Fragment>
+      "solid/jsx-no-undef": "warn",
+      "solid/prefer-for": "warn",
+      // FIXME:
+      "solid/no-destructure": "warn",
     },
-    languageOptions: {
-      globals: globals.browser,
-    },
+    languageOptions: { globals: globals.browser },
   },
 ];

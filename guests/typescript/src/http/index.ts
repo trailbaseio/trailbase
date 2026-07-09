@@ -13,11 +13,7 @@ export type { Method, HttpRequest, Scheme, User } from "./request";
 export { HttpResponse, HttpError } from "./response";
 
 export type ResponseType =
-  | string
-  | Uint8Array
-  | HttpResponse
-  | OutgoingResponse
-  | void;
+  string | Uint8Array | HttpResponse | OutgoingResponse | void;
 
 export type HttpHandlerCallback = (
   req: HttpRequest,

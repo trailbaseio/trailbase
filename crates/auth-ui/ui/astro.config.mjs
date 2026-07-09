@@ -2,6 +2,7 @@ import { defineConfig } from "astro/config";
 
 import solidJs from "@astrojs/solid-js";
 import icon from "astro-icon";
+import tailwindcss from "@tailwindcss/vite";
 
 // https://astro.build/config
 export default defineConfig({
@@ -9,9 +10,6 @@ export default defineConfig({
   base: "/_/auth",
   integrations: [icon(), solidJs()],
   vite: {
-    plugins: [
-      // Need to use PostCSS for now: https://github.com/withastro/astro/issues/16542
-      // tailwindcss(),
-    ],
+    plugins: [tailwindcss()],
   },
 });

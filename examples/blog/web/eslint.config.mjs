@@ -1,25 +1,28 @@
 import globals from "globals";
-import pluginJs from "@eslint/js";
-import tseslint from "typescript-eslint";
-import tailwind from "eslint-plugin-better-tailwindcss";
-import solid from "eslint-plugin-solid/configs/recommended";
-import astro from "eslint-plugin-astro";
+
+import jsPlugin from "@eslint/js";
+import tsPlugin from "typescript-eslint";
+import tailwindPlugin from "eslint-plugin-better-tailwindcss";
+import solidPlugin from "eslint-plugin-solid/configs/recommended";
+import astroPlugin from "eslint-plugin-astro";
+
+const ignoredCustomTailwindClasses = ["image-shine", "gradient-line"];
 
 export default [
   {
     ignores: ["dist/", "node_modules/", ".astro/", "src/env.d.ts", "types/"],
   },
-  pluginJs.configs.recommended,
-  ...tseslint.configs.recommended,
-  solid,
-  ...astro.configs.recommended,
+  jsPlugin.configs.recommended,
+  ...tsPlugin.configs.recommended,
+  solidPlugin,
+  ...astroPlugin.configs.recommended,
   {
     plugins: {
-      "better-tailwindcss": tailwind,
+      "better-tailwindcss": tailwindPlugin,
     },
     rules: {
-      ...tailwind.configs["recommended-warn"].rules,
-      ...tailwind.configs["recommended-error"].rules,
+      ...tailwindPlugin.configs["recommended-warn"].rules,
+      ...tailwindPlugin.configs["recommended-error"].rules,
 
       "better-tailwindcss/enforce-consistent-line-wrapping": "off",
       // Order is different from what prettier enforces.
@@ -27,7 +30,7 @@ export default [
       "better-tailwindcss/no-unknown-classes": [
         "error",
         {
-          ignore: ["image-shine", "gradient-line"],
+          ignore: ignoredCustomTailwindClasses,
         },
       ],
     },

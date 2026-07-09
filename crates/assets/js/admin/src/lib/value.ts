@@ -15,10 +15,7 @@ export type SqlTextValue = { Text: string };
 export type SqlBlobValue = { Blob: Blob };
 
 export type SqlNotNullValue =
-  | SqlIntegerValue
-  | SqlRealValue
-  | SqlTextValue
-  | SqlBlobValue;
+  SqlIntegerValue | SqlRealValue | SqlTextValue | SqlBlobValue;
 
 export function assert<_T extends never>() {}
 export type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;

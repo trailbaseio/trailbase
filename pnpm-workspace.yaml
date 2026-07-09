@@ -20,3 +20,5 @@ allowBuilds:
   esbuild: true
   protobufjs: true
   sharp: true
+minimumReleaseAgeExclude:
+  - trailbase@0.13.1

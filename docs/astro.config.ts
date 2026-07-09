@@ -6,6 +6,7 @@ import robotsTxt from "astro-robots-txt";
 import sitemap from "@astrojs/sitemap";
 import solid from "@astrojs/solid-js";
 import starlight from "@astrojs/starlight";
+import tailwindcss from "@tailwindcss/vite";
 import starlightLinksValidator from "starlight-links-validator";
 
 import config from "./src/config";
@@ -156,9 +157,6 @@ export default defineConfig({
     }),
   ],
   vite: {
-    plugins: [
-      // Need to use PostCSS for now: https://github.com/withastro/astro/issues/16542
-      // tailwindcss(),
-    ],
+    plugins: [tailwindcss()],
   },
 });

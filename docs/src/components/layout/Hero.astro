@@ -5,7 +5,7 @@ import { Image } from "astro:assets";
 import { Code, LinkButton, TabItem, Tabs } from "@astrojs/starlight/components";
 import type { ImageMetadata } from "astro";
 
-export const PAGE_TITLE_ID = "_top";
+const PAGE_TITLE_ID = "_top";
 const { data } = Astro.locals.starlightRoute.entry;
 const { title = data.title, image, actions = [] } = data.hero || {};
 

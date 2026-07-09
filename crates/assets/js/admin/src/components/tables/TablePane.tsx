@@ -487,12 +487,7 @@ function TableHeader(props: {
 }
 
 type CellType =
-  | "UUID"
-  | "JSON"
-  | "File"
-  | "File[]"
-  | "Geometry"
-  | ColumnDataType;
+  "UUID" | "JSON" | "File" | "File[]" | "Geometry" | ColumnDataType;
 
 function deriveCellType(column: Column): CellType {
   if (isUUIDColumn(column)) {
