@@ -55,14 +55,12 @@ pub async fn backup_all(
 
   let mut errors = vec![];
   for db in dbs {
+    let schema = if db == "main" { None } else { Some(db.clone()) };
+
     let entry = match mgr
       .get_entry(BuildOptions {
         is_main: db == "main",
-        attached_databases: if db == "main" {
-          None
-        } else {
-          Some([db.clone()].into())
-        },
+        attached_databases: schema.as_ref().map(|s| [s.clone()].into()),
         num_threads: Some(1),
       })
       .await
@@ -74,8 +72,11 @@ pub async fn backup_all(
       }
     };
 
-    // FIXME: This doesn't work the way we do attached databases.
-    if let Err(err) = entry.connection.backup_to_dir(&target_path, None).await {
+    if let Err(err) = entry
+      .connection
+      .backup_to_dir(&target_path, schema.as_deref())
+      .await
+    {
       log::warn!("backup failed for DB '{db}': {err}");
       errors.push(err)
     }
@@ -132,7 +133,7 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
       })
       .await?;
 
-    if let Err(err) = entry.connection.restore(backup.path.join(db)).await {
+    if let Err(err) = entry.connection.restore(backup.path.join(db), None).await {
       errors.push(err);
     }
   }
@@ -145,7 +146,7 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
 }
 
 pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), BackupError> {
-  let mut backups = find_backups(data_dir).await?;
+  let mut backups = find_backups(data_dir)?;
   backups.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
   let mut n = backups.len();
@@ -164,7 +165,7 @@ pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), Backu
   return Ok(());
 }
 
-async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
+fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
   let dir = std::fs::read_dir(data_dir.backup_path())?;
 
   return Ok(
@@ -219,5 +220,12 @@ mod tests {
     )
     .await
     .unwrap();
+
+    let backups = find_backups(state.data_dir()).unwrap();
+    assert_eq!(1, backups.len());
+
+    restore_all(&state.connection_manager(), &backups[0])
+      .await
+      .unwrap();
   }
 }

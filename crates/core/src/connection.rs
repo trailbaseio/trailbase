@@ -189,8 +189,8 @@ impl ConnectionManager {
         pg_uri.as_ref().expect("test").clone(),
       )
       .await,
-    _ =>init_db_sqlite(InitDbOptions {
-        data_path: None,
+    _ => init_db_sqlite(InitDbOptions {
+        data_path: Some(&data_dir.data_path()),
         migration_path: None,
         is_main_db: true,
         json_registry: &json_schema_registry,

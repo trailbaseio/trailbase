@@ -541,10 +541,11 @@ impl Connection {
   ) -> Result<(), Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => {
+        let schema = schema.map(|s| s.to_string());
         let mut dst = rusqlite::Connection::open(path)?;
         exec
           .call_reader(move |src_conn| -> Result<(), Error> {
-            return crate::sqlite::util::backup(src_conn, &mut dst, None);
+            return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
           })
           .await
       }
@@ -573,10 +574,11 @@ impl Connection {
           })
           .unwrap_or_else(|| ":memory:".to_string());
 
+        let schema = schema.map(|s| s.to_string());
         let mut dst = rusqlite::Connection::open(dir.as_ref().join(fname))?;
         exec
           .call_reader(move |src_conn| -> Result<(), Error> {
-            return crate::sqlite::util::backup(src_conn, &mut dst, None);
+            return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
           })
           .await
       }
@@ -588,13 +590,18 @@ impl Connection {
     };
   }
 
-  pub async fn restore(&self, path: impl AsRef<std::path::Path>) -> Result<(), Error> {
+  pub async fn restore(
+    &self,
+    path: impl AsRef<std::path::Path>,
+    schema: Option<&str>,
+  ) -> Result<(), Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => {
+        let schema = schema.map(|s| s.to_string());
         let mut src = rusqlite::Connection::open(path)?;
         exec
           .call_writer(move |conn| -> Result<(), Error> {
-            return crate::sqlite::util::backup(&src, conn, None);
+            return crate::sqlite::util::backup(&src, None, conn, schema.as_deref());
           })
           .await
       }
@@ -933,11 +940,13 @@ mod tests {
 
     conn
       .execute_batch(
-        "CREATE TABLE foo (
-        \"bool\" BOOLEAN,
-        \"uuid\" UUID,
-        \"text\" TEXT
-    );",
+        "
+          CREATE TABLE foo (
+            \"bool\" BOOLEAN,
+            \"uuid\" UUID,
+            \"text\" TEXT
+          );
+        ",
       )
       .await
       .unwrap();

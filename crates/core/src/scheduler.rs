@@ -277,8 +277,13 @@ fn build_job(
           let config = config.clone();
 
           return async move {
-            crate::backup::backup_all(&data_dir, &mgr, &config).await?;
-            return Ok::<(), CallbackError>(());
+            let result = crate::backup::backup_all(&data_dir, &mgr, &config).await;
+
+            if let Err(err) = crate::backup::delete_backups(&data_dir, 5).await {
+              log::warn!("Failed to clean-up backups: {err}");
+            }
+
+            return Ok::<(), CallbackError>(result?);
           };
         }),
       }

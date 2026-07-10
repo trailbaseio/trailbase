@@ -345,7 +345,7 @@ impl Connection {
     return self
       .exec
       .call_reader(move |src_conn| -> Result<(), Error> {
-        return crate::sqlite::util::backup(src_conn, &mut dst, schema.as_deref());
+        return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
       })
       .await;
   }
@@ -369,16 +369,21 @@ impl Connection {
     return self
       .exec
       .call_reader(move |src_conn| -> Result<(), Error> {
-        return crate::sqlite::util::backup(src_conn, &mut dst, schema.as_deref());
+        return crate::sqlite::util::backup(src_conn, schema.as_deref(), &mut dst, None);
       })
       .await;
   }
 
-  pub async fn restore(&self, path: impl AsRef<std::path::Path>) -> Result<(), Error> {
+  pub async fn restore(
+    &self,
+    path: impl AsRef<std::path::Path>,
+    schema: Option<&str>,
+  ) -> Result<(), Error> {
+    let schema = schema.map(|s| s.to_string());
     let src = rusqlite::Connection::open(&path)?;
     return self
       .exec
-      .call_writer(move |conn| crate::sqlite::util::backup(&src, conn, None))
+      .call_writer(move |conn| crate::sqlite::util::backup(&src, None, conn, schema.as_deref()))
       .await;
   }
 
