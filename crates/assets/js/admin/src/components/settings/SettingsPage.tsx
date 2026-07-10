@@ -11,13 +11,14 @@ import type { Component, JSX } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 import {
-  TbOutlineRefresh,
-  TbOutlineMail,
-  TbOutlineServer,
-  TbOutlineUser,
   TbOutlineBriefcase,
-  TbOutlineTable,
   TbOutlineDatabaseExport,
+  TbOutlineDeviceFloppy,
+  TbOutlineMail,
+  TbOutlineRefresh,
+  TbOutlineServer,
+  TbOutlineTable,
+  TbOutlineUser,
 } from "solid-icons/tb";
 import { IconProps } from "solid-icons";
 import { useQueryClient } from "@tanstack/solid-query";
@@ -59,6 +60,7 @@ import { DatabaseSettings } from "@/components/settings/DatabaseSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
 import { JobSettings } from "@/components/settings/JobSettings";
+import { BackupSettings } from "@/components/settings/BackupSettings";
 import { IconButton } from "@/components/IconButton";
 import { Version } from "@/components/Version";
 
@@ -440,6 +442,12 @@ const sites = [
     label: "Auth",
     child: AuthSettings,
     icon: TbOutlineUser,
+  },
+  {
+    route: "backup",
+    label: "Backups",
+    child: BackupSettings,
+    icon: TbOutlineDeviceFloppy,
   },
   {
     route: "jobs",

@@ -744,8 +744,8 @@ mod test_utils {
     );
 
     let temp_dir = temp_dir::TempDir::new()?;
-    tokio::fs::create_dir_all(temp_dir.child("uploads")).await?;
     let data_dir = DataDir(temp_dir.path().to_path_buf());
+    data_dir.ensure_directory_structure().await.unwrap();
 
     let (pg_db, pg_uri) = if cfg!(feature = "pg-test") {
       let extensions = [

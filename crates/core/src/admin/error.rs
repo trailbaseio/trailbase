@@ -56,8 +56,12 @@ pub enum AdminError {
   Record(#[from] crate::records::RecordError),
   #[error("File: {0}")]
   File(#[from] crate::records::files::FileError),
+  #[error("Backup: {0}")]
+  Backup(#[from] crate::backup::BackupError),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 impl IntoResponse for AdminError {

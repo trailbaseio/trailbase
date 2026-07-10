@@ -15,6 +15,7 @@ pub mod test_utils;
 
 mod admin;
 mod auth;
+mod backup;
 mod connection;
 mod data_dir;
 mod email;

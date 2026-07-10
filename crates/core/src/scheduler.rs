@@ -260,8 +260,9 @@ fn build_job(
       }),
     },
     SystemJobId::Backup => {
-      let backup_file = data_dir.backup_path().join("backup.db");
-      let main_conn = connection_manager.main_entry().connection.clone();
+      let data_dir = data_dir.clone();
+      let mgr = connection_manager.clone();
+      let config = config.clone();
 
       DefaultSystemJob {
         name: "Backup",
@@ -271,11 +272,18 @@ fn build_job(
           disabled: Some(true),
         },
         callback: build_callback(move || {
-          let conn = main_conn.clone();
-          let path = backup_file.clone();
+          let data_dir = data_dir.clone();
+          let mgr = mgr.clone();
+          let config = config.clone();
+
           return async move {
-            conn.backup(path).await?;
-            return Ok::<(), trailbase_sqlite::Error>(());
+            let result = crate::backup::backup_all(&data_dir, &mgr, &config).await;
+
+            if let Err(err) = crate::backup::delete_backups(&data_dir, 5).await {
+              log::warn!("Failed to clean-up backups: {err}");
+            }
+
+            return Ok::<(), CallbackError>(result?);
           };
         }),
       }

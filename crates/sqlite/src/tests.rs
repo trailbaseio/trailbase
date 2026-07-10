@@ -663,8 +663,10 @@ async fn test_execute_returning_rows() {
 #[tokio::test]
 async fn test_backup() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
+
   let src_path = tmp_dir.path().join("src.db");
   let dst_path = tmp_dir.path().join("dst.db");
+
   let aux_path = tmp_dir.path().join("aux.db");
 
   let conn = Connection::with_opts(
@@ -675,12 +677,18 @@ async fn test_backup() {
   )
   .unwrap();
 
+  let count = async |table: &str| -> i64 {
+    return conn
+      .write_query_row_get(format!("SELECT COUNT(*) FROM {table}"), (), 0)
+      .await
+      .unwrap()
+      .unwrap();
+  };
+
   conn
     .attach(aux_path.to_str().unwrap(), "aux")
     .await
     .unwrap();
-
-  assert!(conn.path().await.is_some());
 
   conn
     .execute_batch(
@@ -689,62 +697,52 @@ async fn test_backup() {
           id INTEGER PRIMARY KEY,
           data INTEGER NOT NULL
         );
-
         INSERT INTO test (data) VALUES (1), (2);
 
         CREATE TABLE aux.test (id INTEGER PRIMARY KEY);
+        INSERT INTO aux.test (id) VALUES (1);
       ",
     )
     .await
     .unwrap();
 
-  conn.backup(&dst_path).await.unwrap();
+  conn.backup(&dst_path, None).await.unwrap();
 
   // Change the state before restoring.
   conn
     .execute_batch(
       "
-        DROP TABLE test;
+        INSERT INTO test (data) VALUES (3), (4);
 
         CREATE TABLE other (
           id INTEGER PRIMARY KEY,
           data INTEGER NOT NULL
         );
-
         INSERT INTO other (data) VALUES (1), (2);
       ",
     )
     .await
     .unwrap();
 
-  let src = rusqlite::Connection::open(&dst_path).unwrap();
-  conn
-    .call_writer(move |sync_conn| crate::sqlite::util::backup(&src, sync_conn.conn))
-    .await
-    .unwrap();
+  assert_eq!(4, count("test").await);
+  assert_eq!(2, count("other").await);
 
-  assert_eq!(
-    2,
-    conn
-      .read_query_row_get::<i64>("SELECT COUNT(*) FROM test;", (), 0)
-      .await
-      .unwrap()
-      .unwrap()
-  );
+  conn.restore(&dst_path, None).await.unwrap();
 
-  assert_eq!(
-    0,
-    conn
-      .read_query_row_get::<i64>("SELECT COUNT(*) FROM aux.test;", (), 0)
-      .await
-      .unwrap()
-      .unwrap()
-  );
+  assert_eq!(2, count("test").await,);
+  assert_eq!(1, count("aux.test").await,);
 
+  // Make sure other no longer exists.
   assert!(
     conn
       .read_query_row_get::<i64>("SELECT COUNT(*) FROM other;", (), 0)
       .await
       .is_err()
   );
+
+  // Now backup aux and restore back to main
+  conn.backup(&dst_path, Some("aux")).await.unwrap();
+  conn.restore(&dst_path, None).await.unwrap();
+
+  assert_eq!(1, count("test").await);
 }

@@ -1,3 +1,4 @@
+mod backup;
 mod config;
 mod email;
 mod error;
@@ -23,7 +24,7 @@ use axum::{
 };
 
 pub fn router() -> Router<AppState> {
-  Router::new()
+  return Router::new()
     // Row actions.
     .route("/table/{table_name}/rows", get(rows::list_rows_handler))
     .route("/table/{table_name}/files", get(rows::read_files_handler))
@@ -75,5 +76,9 @@ pub fn router() -> Router<AppState> {
     .route("/info", get(info::info_handler))
     .route("/jobs", get(jobs::list_jobs_handler))
     .route("/job/run", post(jobs::run_job_handler))
-    .route("/email/test", post(email::test_email_handler))
+    .route("/backups", get(backup::list_backups_handler))
+    .route("/backups/trigger", get(backup::trigger_backup_handler))
+    .route("/backups/delete", delete(backup::delete_backups_handler))
+    .route("/backups/restore", patch(backup::restore_backup_handler))
+    .route("/email/test", post(email::test_email_handler));
 }
