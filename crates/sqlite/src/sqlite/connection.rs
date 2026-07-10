@@ -77,6 +77,14 @@ impl Connection {
     return ConnectionType::Sqlite;
   }
 
+  pub async fn path(&self) -> Option<String> {
+    return self
+      .exec
+      .call_reader(|conn| Ok::<_, Error>(conn.path().map(|p| p.to_string())))
+      .await
+      .expect("");
+  }
+
   /// Acquire write lock on the connections.
   ///
   /// NOTE: This should not be used for installing extension methods, since only the writer

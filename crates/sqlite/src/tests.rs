@@ -659,3 +659,92 @@ async fn test_execute_returning_rows() {
   let c = rusqlite::Connection::open_in_memory().unwrap();
   c.execute_batch("SELECT 4;").unwrap();
 }
+
+#[tokio::test]
+async fn test_backup() {
+  let tmp_dir = tempfile::TempDir::new().unwrap();
+  let src_path = tmp_dir.path().join("src.db");
+  let dst_path = tmp_dir.path().join("dst.db");
+  let aux_path = tmp_dir.path().join("aux.db");
+
+  let conn = Connection::with_opts(
+    || rusqlite::Connection::open(&src_path),
+    Options {
+      ..Default::default()
+    },
+  )
+  .unwrap();
+
+  conn
+    .attach(aux_path.to_str().unwrap(), "aux")
+    .await
+    .unwrap();
+
+  assert!(conn.path().await.is_some());
+
+  conn
+    .execute_batch(
+      "
+        CREATE TABLE test (
+          id INTEGER PRIMARY KEY,
+          data INTEGER NOT NULL
+        );
+
+        INSERT INTO test (data) VALUES (1), (2);
+
+        CREATE TABLE aux.test (id INTEGER PRIMARY KEY);
+      ",
+    )
+    .await
+    .unwrap();
+
+  conn.backup(&dst_path).await.unwrap();
+
+  // Change the state before restoring.
+  conn
+    .execute_batch(
+      "
+        DROP TABLE test;
+
+        CREATE TABLE other (
+          id INTEGER PRIMARY KEY,
+          data INTEGER NOT NULL
+        );
+
+        INSERT INTO other (data) VALUES (1), (2);
+      ",
+    )
+    .await
+    .unwrap();
+
+  let src = rusqlite::Connection::open(&dst_path).unwrap();
+  conn
+    .call_writer(move |sync_conn| crate::sqlite::util::backup(&src, sync_conn.conn))
+    .await
+    .unwrap();
+
+  assert_eq!(
+    2,
+    conn
+      .read_query_row_get::<i64>("SELECT COUNT(*) FROM test;", (), 0)
+      .await
+      .unwrap()
+      .unwrap()
+  );
+
+  assert_eq!(
+    0,
+    conn
+      .read_query_row_get::<i64>("SELECT COUNT(*) FROM aux.test;", (), 0)
+      .await
+      .unwrap()
+      .unwrap()
+  );
+
+  assert!(
+    conn
+      .read_query_row_get::<i64>("SELECT COUNT(*) FROM other;", (), 0)
+      .await
+      .is_err()
+  );
+}
