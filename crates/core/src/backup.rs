@@ -55,28 +55,17 @@ pub async fn backup_all(
 
   let mut errors = vec![];
   for db in dbs {
-    let schema = if db == "main" { None } else { Some(db.clone()) };
+    // let schema = if db == "main" { None } else { Some(db.clone()) };
 
-    let entry = match mgr
-      .get_entry(BuildOptions {
-        is_main: db == "main",
-        attached_databases: schema.as_ref().map(|s| [s.clone()].into()),
-        num_threads: Some(1),
-      })
-      .await
-    {
-      Ok(entry) => entry,
+    let conn = match connect_db(data_dir.data_path().join(format!("{db}.db"))) {
+      Ok(conn) => conn,
       Err(err) => {
         log::warn!("Failed open '{db}' for backup: {err}");
         continue;
       }
     };
 
-    if let Err(err) = entry
-      .connection
-      .backup_to_dir(&target_path, schema.as_deref())
-      .await
-    {
+    if let Err(err) = conn.backup_to_dir(&target_path, None).await {
       log::warn!("backup failed for DB '{db}': {err}");
       errors.push(err)
     }
@@ -116,7 +105,7 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
           return None;
         }
 
-        return Some(path.file_stem()?.to_string_lossy().to_string());
+        return Some(path);
       }
 
       return None;
@@ -125,15 +114,15 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
 
   let mut errors = vec![];
   for db in dbs {
-    let entry = mgr
-      .get_entry(BuildOptions {
-        is_main: db == "main",
-        attached_databases: None,
-        num_threads: Some(1),
-      })
-      .await?;
+    let conn = match connect_db(db.clone()) {
+      Ok(conn) => conn,
+      Err(err) => {
+        log::warn!("Failed open '{db:?}' for restore: {err}");
+        continue;
+      }
+    };
 
-    if let Err(err) = entry.connection.restore(backup.path.join(db), None).await {
+    if let Err(err) = conn.restore(backup.path.join(db), None).await {
       errors.push(err);
     }
   }
@@ -157,7 +146,7 @@ pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), Backu
     }
     return false;
   }) {
-    if let Err(err) = std::fs::remove_dir(&backup.path) {
+    if let Err(err) = std::fs::remove_dir_all(&backup.path) {
       log::warn!("Failed to delete {backup:?}: {err}");
     }
   }
@@ -202,6 +191,27 @@ fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
       })
       .collect(),
   );
+}
+
+fn connect_db(path: PathBuf) -> Result<trailbase_sqlite::Connection, ConnectionError> {
+  return trailbase_sqlite::Connection::with_opts(
+    || -> Result<_, trailbase_sqlite::Error> {
+      let conn = crate::connection::connect_rusqlite_without_default_extensions_and_schemas(Some(
+        path.clone(),
+      ))?;
+
+      // NOTE: The many DBs (main, logs, ...) need the trailbase extensions, e.g. for the maxminddb geoip lookup.
+      trailbase_extension::register_all_extension_functions(&conn, None)?;
+
+      return Ok(conn);
+    },
+    trailbase_sqlite::Options {
+      // Only using the writer, no readers (except for admin dash).
+      num_threads: Some(1),
+      ..Default::default()
+    },
+  )
+  .map_err(ConnectionError::Sql);
 }
 
 #[cfg(all(test, not(feature = "pg-test")))]
