@@ -149,10 +149,15 @@ pub(crate) fn list_databases(conn: &rusqlite::Connection) -> Result<Vec<Database
 pub(crate) fn backup(
   src: &rusqlite::Connection,
   dst: &mut rusqlite::Connection,
+  schema: Option<&str>,
 ) -> Result<(), Error> {
   use rusqlite::backup::{Backup, StepResult};
 
-  let backup = Backup::new(src, dst)?;
+  let backup = if let Some(schema) = schema {
+    Backup::new_with_names(src, schema, dst, "main")?
+  } else {
+    Backup::new(src, dst)?
+  };
   let mut retries = 0;
 
   loop {

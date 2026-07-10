@@ -15,7 +15,6 @@ use std::sync::{
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, named_params, params};
 
-use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::{BuildOptions, ConnectionManager};
 use crate::constants::{
@@ -23,6 +22,7 @@ use crate::constants::{
   OTP_CODE_TABLE, SESSION_TABLE, USER_TABLE,
 };
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
+use crate::{DataDir, data_dir};
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
 type CallbackFunction = dyn Fn() -> BoxFuture<'static, Result<(), CallbackError>> + Sync + Send;
@@ -260,8 +260,9 @@ fn build_job(
       }),
     },
     SystemJobId::Backup => {
-      let backup_file = data_dir.backup_path().join("backup.db");
-      let main_conn = connection_manager.main_entry().connection.clone();
+      let data_dir = data_dir.clone();
+      let mgr = connection_manager.clone();
+      let config = config.clone();
 
       DefaultSystemJob {
         name: "Backup",
@@ -271,11 +272,13 @@ fn build_job(
           disabled: Some(true),
         },
         callback: build_callback(move || {
-          let conn = main_conn.clone();
-          let path = backup_file.clone();
+          let data_dir = data_dir.clone();
+          let mgr = mgr.clone();
+          let config = config.clone();
+
           return async move {
-            conn.backup(path).await?;
-            return Ok::<(), trailbase_sqlite::Error>(());
+            crate::backup::backup_all(&data_dir, &mgr, &config).await?;
+            return Ok::<(), CallbackError>(());
           };
         }),
       }

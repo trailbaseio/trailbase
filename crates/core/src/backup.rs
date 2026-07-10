@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 use thiserror::Error;
 
-use crate::connection::{BuildOptions, ConnectionError};
+use crate::config::proto::Config;
+use crate::connection::{BuildOptions, ConnectionError, ConnectionManager};
 use crate::{AppState, DataDir};
 
 #[derive(Debug, Error)]
@@ -16,9 +17,11 @@ pub enum BackupError {
   Other(String),
 }
 
-async fn backup_all(state: &AppState) -> Result<(), BackupError> {
-  let config = state.get_config();
-  let mgr = state.connection_manager();
+pub async fn backup_all(
+  data_dir: &DataDir,
+  mgr: &ConnectionManager,
+  config: &Config,
+) -> Result<(), BackupError> {
   if !matches!(
     mgr.main_entry().connection.connection_type(),
     trailbase_sqlite::ConnectionType::Sqlite
@@ -46,19 +49,33 @@ async fn backup_all(state: &AppState) -> Result<(), BackupError> {
   .collect();
 
   let now = chrono::Utc::now();
-  let target_path = state.data_dir().backup_path().join(now.to_rfc3339());
+  let target_path = data_dir.backup_path().join(now.to_rfc3339());
+
+  std::fs::create_dir_all(&target_path)?;
 
   let mut errors = vec![];
   for db in dbs {
-    let entry = mgr
+    let entry = match mgr
       .get_entry(BuildOptions {
         is_main: db == "main",
-        attached_databases: None,
+        attached_databases: if db == "main" {
+          None
+        } else {
+          Some([db.clone()].into())
+        },
         num_threads: Some(1),
       })
-      .await?;
+      .await
+    {
+      Ok(entry) => entry,
+      Err(err) => {
+        log::warn!("Failed open '{db}' for backup: {err}");
+        continue;
+      }
+    };
 
-    if let Err(err) = entry.connection.backup_to_dir(&target_path).await {
+    // FIXME: This doesn't work the way we do attached databases.
+    if let Err(err) = entry.connection.backup_to_dir(&target_path, None).await {
       log::warn!("backup failed for DB '{db}': {err}");
       errors.push(err)
     }
@@ -72,32 +89,12 @@ async fn backup_all(state: &AppState) -> Result<(), BackupError> {
 }
 
 #[derive(Debug)]
-struct Backup {
-  path: PathBuf,
-  timestamp: chrono::DateTime<chrono::Utc>,
+pub struct Backup {
+  pub path: PathBuf,
+  pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
-async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), BackupError> {
-  let mut backups = find_backups(data_dir).await?;
-  backups.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
-
-  let mut n = backups.len();
-  for backup in backups.iter().take_while(|_| {
-    if n > keep {
-      n -= 1;
-      return true;
-    }
-    return false;
-  }) {
-    if let Err(err) = std::fs::remove_dir(&backup.path) {
-      log::warn!("Failed to delete {backup:?}: {err}");
-    }
-  }
-
-  return Ok(());
-}
-
-async fn restore_all(state: &AppState, backup: &Backup) -> Result<(), BackupError> {
+pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(), BackupError> {
   let dir = std::fs::read_dir(&backup.path)?;
 
   let dbs: Vec<_> = dir
@@ -125,7 +122,6 @@ async fn restore_all(state: &AppState, backup: &Backup) -> Result<(), BackupErro
     })
     .collect();
 
-  let mgr = state.connection_manager();
   let mut errors = vec![];
   for db in dbs {
     let entry = mgr
@@ -146,6 +142,26 @@ async fn restore_all(state: &AppState, backup: &Backup) -> Result<(), BackupErro
   }
 
   return Err(BackupError::Backups(errors));
+}
+
+pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), BackupError> {
+  let mut backups = find_backups(data_dir).await?;
+  backups.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+  let mut n = backups.len();
+  for backup in backups.iter().take_while(|_| {
+    if n > keep {
+      n -= 1;
+      return true;
+    }
+    return false;
+  }) {
+    if let Err(err) = std::fs::remove_dir(&backup.path) {
+      log::warn!("Failed to delete {backup:?}: {err}");
+    }
+  }
+
+  return Ok(());
 }
 
 async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
@@ -185,4 +201,23 @@ async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
       })
       .collect(),
   );
+}
+
+#[cfg(all(test, not(feature = "pg-test")))]
+mod tests {
+  use super::*;
+  use crate::app_state::test_state;
+
+  #[tokio::test]
+  async fn test_backup() {
+    let state = test_state(None).await.unwrap();
+
+    backup_all(
+      state.data_dir(),
+      &state.connection_manager(),
+      &state.get_config(),
+    )
+    .await
+    .unwrap();
+  }
 }

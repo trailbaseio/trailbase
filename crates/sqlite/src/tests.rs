@@ -663,8 +663,10 @@ async fn test_execute_returning_rows() {
 #[tokio::test]
 async fn test_backup() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
+
   let src_path = tmp_dir.path().join("src.db");
   let dst_path = tmp_dir.path().join("dst.db");
+
   let aux_path = tmp_dir.path().join("aux.db");
 
   let conn = Connection::with_opts(
@@ -687,16 +689,16 @@ async fn test_backup() {
           id INTEGER PRIMARY KEY,
           data INTEGER NOT NULL
         );
-
         INSERT INTO test (data) VALUES (1), (2);
 
         CREATE TABLE aux.test (id INTEGER PRIMARY KEY);
+        INSERT INTO aux.test (id) VALUES (1);
       ",
     )
     .await
     .unwrap();
 
-  conn.backup(&dst_path).await.unwrap();
+  conn.backup(&dst_path, None).await.unwrap();
 
   // Change the state before restoring.
   conn
@@ -708,7 +710,6 @@ async fn test_backup() {
           id INTEGER PRIMARY KEY,
           data INTEGER NOT NULL
         );
-
         INSERT INTO other (data) VALUES (1), (2);
       ",
     )
@@ -727,7 +728,7 @@ async fn test_backup() {
   );
 
   assert_eq!(
-    0,
+    1,
     conn
       .read_query_row_get::<i64>("SELECT COUNT(*) FROM aux.test;", (), 0)
       .await
@@ -740,5 +741,18 @@ async fn test_backup() {
       .read_query_row_get::<i64>("SELECT COUNT(*) FROM other;", (), 0)
       .await
       .is_err()
+  );
+
+  // Now backup aux and restore back to main
+  conn.backup(&dst_path, Some("aux")).await.unwrap();
+  conn.restore(&dst_path).await.unwrap();
+
+  assert_eq!(
+    1,
+    conn
+      .read_query_row_get::<i64>("SELECT COUNT(*) FROM test;", (), 0)
+      .await
+      .unwrap()
+      .unwrap()
   );
 }
