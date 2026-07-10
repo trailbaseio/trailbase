@@ -573,7 +573,25 @@ impl Connection {
           .await
       }
       Executor::Pg(_) => {
-        log::error!("Not implemented: backup");
+        log::error!("Not implemented: backup_to_dir");
+
+        Err(Error::NotImplemented)
+      }
+    };
+  }
+
+  pub async fn restore(&self, path: impl AsRef<std::path::Path>) -> Result<(), Error> {
+    return match self.exec {
+      Executor::Sqlite(ref exec) => {
+        let mut src = rusqlite::Connection::open(path)?;
+        exec
+          .call_writer(move |conn| -> Result<(), Error> {
+            return crate::sqlite::util::backup(&src, conn);
+          })
+          .await
+      }
+      Executor::Pg(_) => {
+        log::error!("Not implemented: restore");
 
         Err(Error::NotImplemented)
       }

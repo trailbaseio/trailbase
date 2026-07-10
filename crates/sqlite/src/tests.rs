@@ -715,11 +715,7 @@ async fn test_backup() {
     .await
     .unwrap();
 
-  let src = rusqlite::Connection::open(&dst_path).unwrap();
-  conn
-    .call_writer(move |sync_conn| crate::sqlite::util::backup(&src, sync_conn.conn))
-    .await
-    .unwrap();
+  conn.restore(&dst_path).await.unwrap();
 
   assert_eq!(
     2,

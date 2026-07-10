@@ -4,13 +4,6 @@ use thiserror::Error;
 use crate::connection::{BuildOptions, ConnectionError};
 use crate::{AppState, DataDir};
 
-// TODO: What's missing:
-//  * backup_all
-//  * restore_all
-//  * manage backup horizon, .i.e. read dir and delete oldest backups based on age or num backups.
-//  * admin UI
-//  * CLI UI
-
 #[derive(Debug, Error)]
 pub enum BackupError {
   #[error("Connection: {0}")]
@@ -143,8 +136,9 @@ async fn restore_all(state: &AppState, backup: &Backup) -> Result<(), BackupErro
       })
       .await?;
 
-    // TODO: Impl backup restore.
-    // entry.connection.
+    if let Err(err) = entry.connection.restore(backup.path.join(db)).await {
+      errors.push(err);
+    }
   }
 
   if errors.is_empty() {
