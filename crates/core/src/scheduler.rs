@@ -15,6 +15,7 @@ use std::sync::{
 use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, named_params, params};
 
+use crate::DataDir;
 use crate::config::proto::{Config, SystemJob, SystemJobId};
 use crate::connection::{BuildOptions, ConnectionManager};
 use crate::constants::{
@@ -22,7 +23,6 @@ use crate::constants::{
   OTP_CODE_TABLE, SESSION_TABLE, USER_TABLE,
 };
 use crate::records::files::{FileDeletionsDb, FileError, delete_pending_files_impl};
-use crate::{DataDir, data_dir};
 
 type CallbackError = Box<dyn std::error::Error + Sync + Send>;
 type CallbackFunction = dyn Fn() -> BoxFuture<'static, Result<(), CallbackError>> + Sync + Send;

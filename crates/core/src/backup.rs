@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 use thiserror::Error;
 
+use crate::DataDir;
 use crate::config::proto::Config;
-use crate::connection::{BuildOptions, ConnectionError, ConnectionManager};
-use crate::{AppState, DataDir};
+use crate::connection::{ConnectionError, ConnectionManager};
 
 #[derive(Debug, Error)]
 pub enum BackupError {
@@ -135,7 +135,7 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
 }
 
 pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), BackupError> {
-  let mut backups = find_backups(data_dir)?;
+  let mut backups = find_backups(data_dir).await?;
   backups.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
 
   let mut n = backups.len();
@@ -146,7 +146,7 @@ pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), Backu
     }
     return false;
   }) {
-    if let Err(err) = std::fs::remove_dir_all(&backup.path) {
+    if let Err(err) = tokio::fs::remove_dir_all(&backup.path).await {
       log::warn!("Failed to delete {backup:?}: {err}");
     }
   }
@@ -154,43 +154,34 @@ pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), Backu
   return Ok(());
 }
 
-fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
-  let dir = std::fs::read_dir(data_dir.backup_path())?;
+pub async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
+  let mut dir = tokio::fs::read_dir(data_dir.backup_path()).await?;
 
-  return Ok(
-    dir
-      .into_iter()
-      .flat_map(|entry| {
-        let Ok(entry) = entry else {
-          return None;
-        };
+  let mut backups: Vec<Backup> = vec![];
+  while let Some(entry) = dir.next_entry().await? {
+    let Ok(metadata) = entry.metadata().await else {
+      continue;
+    };
 
-        let Ok(metadata) = entry.metadata() else {
-          return None;
-        };
+    if metadata.is_dir() {
+      let path = entry.path();
+      let Some(last) = path.components().last() else {
+        continue;
+      };
 
-        if metadata.is_dir() {
-          let path = entry.path();
-          let Some(last) = path.components().last() else {
-            return None;
-          };
+      let Ok(timestamp) = chrono::DateTime::parse_from_rfc3339(&last.as_os_str().to_string_lossy())
+      else {
+        continue;
+      };
 
-          let Ok(timestamp) =
-            chrono::DateTime::parse_from_rfc3339(&last.as_os_str().to_string_lossy())
-          else {
-            return None;
-          };
+      backups.push(Backup {
+        path,
+        timestamp: timestamp.into(),
+      });
+    }
+  }
 
-          return Some(Backup {
-            path,
-            timestamp: timestamp.into(),
-          });
-        }
-
-        return None;
-      })
-      .collect(),
-  );
+  return Ok(backups);
 }
 
 fn connect_db(path: PathBuf) -> Result<trailbase_sqlite::Connection, ConnectionError> {
@@ -231,7 +222,7 @@ mod tests {
     .await
     .unwrap();
 
-    let backups = find_backups(state.data_dir()).unwrap();
+    let backups = find_backups(state.data_dir()).await.unwrap();
     assert_eq!(1, backups.len());
 
     restore_all(&state.connection_manager(), &backups[0])

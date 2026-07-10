@@ -10,7 +10,7 @@ use crate::email::Email;
 /// Request the delivery of a test email.
 ///
 /// NOTE: Email contents are deliberately not exposed to reduce opportunity for abuse. It's a
-/// priviledge for sys-admins using the CLI and the auth sub-system.
+/// privilege for sys-admins using the CLI and the auth sub-system.
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct TestEmailRequest {
