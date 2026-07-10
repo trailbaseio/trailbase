@@ -1,18 +1,36 @@
-use trailbase_sqlite::Error;
+use std::path::PathBuf;
+use thiserror::Error;
 
-use crate::AppState;
 use crate::connection::{BuildOptions, ConnectionError};
+use crate::{AppState, DataDir};
 
-async fn backup_all(state: &AppState) -> Result<(), ConnectionError> {
+// TODO: What's missing:
+//  * backup_all
+//  * restore_all
+//  * manage backup horizon, .i.e. read dir and delete oldest backups based on age or num backups.
+//  * admin UI
+//  * CLI UI
+
+#[derive(Debug, Error)]
+pub enum BackupError {
+  #[error("Connection: {0}")]
+  Connection(#[from] ConnectionError),
+  #[error("Filesystem: {0}")]
+  Filesystem(#[from] std::io::Error),
+  #[error("Backups: {0:?}")]
+  Backups(Vec<trailbase_sqlite::Error>),
+  #[error("Other: {0}")]
+  Other(String),
+}
+
+async fn backup_all(state: &AppState) -> Result<(), BackupError> {
   let config = state.get_config();
   let mgr = state.connection_manager();
   if !matches!(
     mgr.main_entry().connection.connection_type(),
     trailbase_sqlite::ConnectionType::Sqlite
   ) {
-    return Err(ConnectionError::InvalidSetting(
-      "Only sqlite supported for now",
-    ));
+    return Err(BackupError::Other("Only sqlite supported for now".into()));
   }
 
   let attached_dbs: Vec<String> = config
@@ -37,15 +55,140 @@ async fn backup_all(state: &AppState) -> Result<(), ConnectionError> {
   let now = chrono::Utc::now();
   let target_path = state.data_dir().backup_path().join(now.to_rfc3339());
 
+  let mut errors = vec![];
   for db in dbs {
-    let conn = mgr
+    let entry = mgr
       .get_entry(BuildOptions {
         is_main: db == "main",
         attached_databases: None,
         num_threads: Some(1),
       })
       .await?;
+
+    if let Err(err) = entry.connection.backup_to_dir(&target_path).await {
+      log::warn!("backup failed for DB '{db}': {err}");
+      errors.push(err)
+    }
+  }
+
+  if errors.is_empty() {
+    return Ok(());
+  }
+
+  return Err(BackupError::Backups(errors));
+}
+
+#[derive(Debug)]
+struct Backup {
+  path: PathBuf,
+  timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), BackupError> {
+  let mut backups = find_backups(data_dir).await?;
+  backups.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+
+  let mut n = backups.len();
+  for backup in backups.iter().take_while(|_| {
+    if n > keep {
+      n -= 1;
+      return true;
+    }
+    return false;
+  }) {
+    if let Err(err) = std::fs::remove_dir(&backup.path) {
+      log::warn!("Failed to delete {backup:?}: {err}");
+    }
   }
 
   return Ok(());
+}
+
+async fn restore_all(state: &AppState, backup: &Backup) -> Result<(), BackupError> {
+  let dir = std::fs::read_dir(&backup.path)?;
+
+  let dbs: Vec<_> = dir
+    .into_iter()
+    .flat_map(|entry| {
+      let Ok(entry) = entry else {
+        return None;
+      };
+
+      let Ok(metadata) = entry.metadata() else {
+        return None;
+      };
+
+      if metadata.is_file() && !metadata.is_symlink() {
+        let path = entry.path();
+        let extension = path.extension()?;
+        if extension == "db" {
+          return None;
+        }
+
+        return Some(path.file_stem()?.to_string_lossy().to_string());
+      }
+
+      return None;
+    })
+    .collect();
+
+  let mgr = state.connection_manager();
+  let mut errors = vec![];
+  for db in dbs {
+    let entry = mgr
+      .get_entry(BuildOptions {
+        is_main: db == "main",
+        attached_databases: None,
+        num_threads: Some(1),
+      })
+      .await?;
+
+    // TODO: Impl backup restore.
+    // entry.connection.
+  }
+
+  if errors.is_empty() {
+    return Ok(());
+  }
+
+  return Err(BackupError::Backups(errors));
+}
+
+async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError> {
+  let dir = std::fs::read_dir(data_dir.backup_path())?;
+
+  return Ok(
+    dir
+      .into_iter()
+      .flat_map(|entry| {
+        let Ok(entry) = entry else {
+          return None;
+        };
+
+        let Ok(metadata) = entry.metadata() else {
+          return None;
+        };
+
+        if metadata.is_dir() {
+          let path = entry.path();
+          let Some(last) = path.components().last() else {
+            return None;
+          };
+
+          let Ok(timestamp) =
+            chrono::DateTime::parse_from_rfc3339(&last.as_os_str().to_string_lossy())
+          else {
+            return None;
+          };
+
+          return Some(Backup {
+            path,
+            timestamp: timestamp.into(),
+          });
+        }
+
+        return None;
+      })
+      .collect(),
+  );
 }
