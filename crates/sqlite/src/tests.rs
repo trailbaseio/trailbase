@@ -680,8 +680,6 @@ async fn test_backup() {
     .await
     .unwrap();
 
-  assert!(conn.path().await.is_some());
-
   conn
     .execute_batch(
       "

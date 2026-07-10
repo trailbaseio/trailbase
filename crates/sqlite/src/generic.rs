@@ -533,10 +533,39 @@ impl Connection {
     };
   }
 
+  // TODO: We should probably remove this flavor in favor of backup_to_dir below.
   pub async fn backup(&self, path: impl AsRef<std::path::Path>) -> Result<(), Error> {
     return match self.exec {
       Executor::Sqlite(ref exec) => {
         let mut dst = rusqlite::Connection::open(path)?;
+        exec
+          .call_reader(move |src_conn| -> Result<(), Error> {
+            return crate::sqlite::util::backup(src_conn, &mut dst);
+          })
+          .await
+      }
+      Executor::Pg(_) => {
+        log::error!("Not implemented: backup");
+
+        Err(Error::NotImplemented)
+      }
+    };
+  }
+
+  pub async fn backup_to_dir(&self, dir: impl AsRef<std::path::Path>) -> Result<(), Error> {
+    return match self.exec {
+      Executor::Sqlite(ref exec) => {
+        let fname = exec
+          .path()
+          .await
+          .and_then(|p| {
+            std::path::PathBuf::from(p)
+              .file_name()
+              .map(|f| f.to_string_lossy().to_string())
+          })
+          .unwrap_or_else(|| ":memory:".to_string());
+
+        let mut dst = rusqlite::Connection::open(dir.as_ref().join(fname))?;
         exec
           .call_reader(move |src_conn| -> Result<(), Error> {
             return crate::sqlite::util::backup(src_conn, &mut dst);

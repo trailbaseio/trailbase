@@ -169,6 +169,13 @@ impl Executor {
     return self.conns.read().0.len();
   }
 
+  pub async fn path(&self) -> Option<String> {
+    return self
+      .call_reader(|conn| Ok::<_, Error>(conn.path().map(|p| p.to_string())))
+      .await
+      .expect("");
+  }
+
   #[inline]
   pub fn write_lock(&self) -> Result<LockGuard<'_>, LockError> {
     return Ok(LockGuard::new(self.conns.write()));
