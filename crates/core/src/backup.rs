@@ -32,8 +32,7 @@ pub async fn backup_all(
   let attached_dbs: Vec<String> = config
     .record_apis
     .iter()
-    .map(|c| c.attached_databases.clone())
-    .flatten()
+    .flat_map(|c| c.attached_databases.clone())
     .collect();
 
   let dbs: Vec<String> = [
@@ -136,7 +135,7 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
 
 pub async fn delete_backups(data_dir: &DataDir, keep: usize) -> Result<(), BackupError> {
   let mut backups = find_backups(data_dir).await?;
-  backups.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+  backups.sort_by_key(|a| a.timestamp);
 
   let mut n = backups.len();
   for backup in backups.iter().take_while(|_| {
@@ -165,7 +164,7 @@ pub async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError
 
     if metadata.is_dir() {
       let path = entry.path();
-      let Some(last) = path.components().last() else {
+      let Some(last) = path.components().next_back() else {
         continue;
       };
 

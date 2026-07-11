@@ -716,7 +716,7 @@ async fn test_backup() {
     .await
     .unwrap();
 
-  conn.restore(&dst_path).await.unwrap();
+  conn.restore(&dst_path, None).await.unwrap();
 
   assert_eq!(
     2,
@@ -745,7 +745,7 @@ async fn test_backup() {
 
   // Now backup aux and restore back to main
   conn.backup(&dst_path, Some("aux")).await.unwrap();
-  conn.restore(&dst_path).await.unwrap();
+  conn.restore(&dst_path, None).await.unwrap();
 
   assert_eq!(
     1,

@@ -60,6 +60,8 @@ pub enum AdminError {
   Backup(#[from] crate::backup::BackupError),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
+  #[error("Other: {0}")]
+  Other(String),
 }
 
 impl IntoResponse for AdminError {
