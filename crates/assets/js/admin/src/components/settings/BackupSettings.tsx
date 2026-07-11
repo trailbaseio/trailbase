@@ -1,7 +1,19 @@
 import { Switch, Match, For } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
-import { listBackups } from "@/lib/api/backups";
+import {
+  listBackups,
+  triggerBackup,
+  restoreBackup,
+  deleteBackups,
+} from "@/lib/api/backups";
+import {
+  TbOutlineRestore,
+  TbOutlineTrash,
+  TbOutlineDeviceFloppy,
+} from "solid-icons/tb";
 
+import { showToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Table,
@@ -11,6 +23,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+function Timestamp(props: { timestamp: string }) {
+  const time = (): Date => new Date(Date.parse(props.timestamp));
+
+  return <div>{time().toLocaleString()}</div>;
+}
 
 export function BackupSettings(props: {
   markDirty: () => void;
@@ -36,7 +54,8 @@ export function BackupSettings(props: {
           <Match when={backupsList.isSuccess}>
             <Table>
               <TableHeader>
-                <TableHead>Name</TableHead>
+                <TableHead>Time</TableHead>
+                <TableHead>Action</TableHead>
               </TableHeader>
 
               <TableBody>
@@ -44,13 +63,62 @@ export function BackupSettings(props: {
                   {(item) => {
                     return (
                       <TableRow>
-                        <TableCell>{item.timestamp}</TableCell>
+                        <TableCell>
+                          <Timestamp timestamp={item.timestamp} />
+                        </TableCell>
+                        <TableCell>
+                          <div class="flex gap-2">
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() => {
+                                (async () => {
+                                  await deleteBackups([item.timestamp]);
+                                  await backupsList.refetch();
+                                })();
+                              }}
+                            >
+                              <TbOutlineTrash />
+                            </Button>
+
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              onClick={() => {
+                                (async () => {
+                                  await restoreBackup(item.timestamp);
+
+                                  showToast({
+                                    title: "restored backup",
+                                    variant: "success",
+                                  });
+                                })();
+                              }}
+                            >
+                              <TbOutlineRestore />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   }}
                 </For>
               </TableBody>
             </Table>
+
+            <div class="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  (async () => {
+                    await triggerBackup();
+                    await backupsList.refetch();
+                  })();
+                }}
+              >
+                Trigger New Backup <TbOutlineDeviceFloppy />
+              </Button>
+            </div>
           </Match>
         </Switch>
       </CardContent>
