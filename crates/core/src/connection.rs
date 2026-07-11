@@ -190,7 +190,7 @@ impl ConnectionManager {
       )
       .await,
     _ => init_db_sqlite(InitDbOptions {
-        data_path: Some(&data_dir.data_path()),
+        data_path: Some(&data_dir.data_path().join("main.db")),
         migration_path: None,
         is_main_db: true,
         json_registry: &json_schema_registry,

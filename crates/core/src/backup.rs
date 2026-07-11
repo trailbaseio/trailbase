@@ -54,9 +54,8 @@ pub async fn backup_all(
 
   let mut errors = vec![];
   for db in dbs {
-    // let schema = if db == "main" { None } else { Some(db.clone()) };
-
-    let conn = match connect_db(data_dir.data_path().join(format!("{db}.db"))) {
+    let src_path = data_dir.data_path().join(format!("{db}.db"));
+    let conn = match connect_db(src_path.clone()) {
       Ok(conn) => conn,
       Err(err) => {
         log::warn!("Failed open '{db}' for backup: {err}");
@@ -68,6 +67,8 @@ pub async fn backup_all(
       log::warn!("backup failed for DB '{db}': {err}");
       errors.push(err)
     }
+
+    log::info!("Backed up {src_path:?} to {target_path:?}");
   }
 
   if errors.is_empty() {
@@ -83,10 +84,10 @@ pub struct Backup {
   pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
-pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(), BackupError> {
+pub async fn restore_all(data_dir: &DataDir, backup: &Backup) -> Result<(), BackupError> {
   let dir = std::fs::read_dir(&backup.path)?;
 
-  let dbs: Vec<_> = dir
+  let db_paths: Vec<_> = dir
     .into_iter()
     .flat_map(|entry| {
       let Ok(entry) = entry else {
@@ -99,31 +100,41 @@ pub async fn restore_all(mgr: &ConnectionManager, backup: &Backup) -> Result<(),
 
       if metadata.is_file() && !metadata.is_symlink() {
         let path = entry.path();
-        let extension = path.extension()?;
-        if extension == "db" {
-          return None;
+        if path.extension()? == "db" {
+          return Some(path);
         }
-
-        return Some(path);
+        return None;
       }
 
       return None;
     })
     .collect();
 
+  log::info!("Restoring from {:?} DBs: {db_paths:?}", backup.path);
+
+  if db_paths.is_empty() {
+    return Err(BackupError::Other("No DBs found".into()));
+  }
+
   let mut errors = vec![];
-  for db in dbs {
-    let conn = match connect_db(db.clone()) {
+  for path in db_paths {
+    let src_conn = match connect_db(path.clone()) {
       Ok(conn) => conn,
       Err(err) => {
-        log::warn!("Failed open '{db:?}' for restore: {err}");
+        log::warn!("Failed open '{path:?}' for restore: {err}");
         continue;
       }
     };
 
-    if let Err(err) = conn.restore(backup.path.join(db), None).await {
+    let filename = path
+      .file_name()
+      .ok_or_else(|| BackupError::Other("missing filename".into()))?;
+    let target_path = data_dir.data_path().join(filename);
+    if let Err(err) = src_conn.restore(&target_path, None).await {
       errors.push(err);
     }
+
+    log::info!("Restored {target_path:?} from {path:?}");
   }
 
   if errors.is_empty() {
@@ -190,7 +201,8 @@ fn connect_db(path: PathBuf) -> Result<trailbase_sqlite::Connection, ConnectionE
         path.clone(),
       ))?;
 
-      // NOTE: The many DBs (main, logs, ...) need the trailbase extensions, e.g. for the maxminddb geoip lookup.
+      // NOTE: The many DBs (main, logs, ...) need the trailbase extensions, e.g. for the maxminddb
+      // geoip lookup.
       trailbase_extension::register_all_extension_functions(&conn, None)?;
 
       return Ok(conn);
@@ -213,6 +225,12 @@ mod tests {
   async fn test_backup() {
     let state = test_state(None).await.unwrap();
 
+    state
+      .conn()
+      .read_query_row_get::<i64>("SELECT COUNT(*) FROM _user", (), 0)
+      .await
+      .unwrap();
+
     backup_all(
       state.data_dir(),
       &state.connection_manager(),
@@ -224,8 +242,6 @@ mod tests {
     let backups = find_backups(state.data_dir()).await.unwrap();
     assert_eq!(1, backups.len());
 
-    restore_all(&state.connection_manager(), &backups[0])
-      .await
-      .unwrap();
+    restore_all(state.data_dir(), &backups[0]).await.unwrap();
   }
 }

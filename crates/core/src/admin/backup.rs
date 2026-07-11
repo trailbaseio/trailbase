@@ -98,7 +98,7 @@ pub async fn restore_backup_handler(
     timestamp: timestamp.into(),
   };
 
-  backup::restore_all(&state.connection_manager(), &backup).await?;
+  backup::restore_all(state.data_dir(), &backup).await?;
 
   return Ok(());
 }

@@ -677,6 +677,14 @@ async fn test_backup() {
   )
   .unwrap();
 
+  let count_entries = async |table: &str| {
+    conn
+      .read_query_row_get::<i64>(format!("SELECT COUNT(*) FROM {table};"), (), 0)
+      .await
+      .unwrap()
+      .unwrap()
+  };
+
   conn
     .attach(aux_path.to_str().unwrap(), "aux")
     .await
@@ -704,7 +712,7 @@ async fn test_backup() {
   conn
     .execute_batch(
       "
-        DROP TABLE test;
+        INSERT INTO test (data) VALUES (3), (4);
 
         CREATE TABLE other (
           id INTEGER PRIMARY KEY,
@@ -716,26 +724,15 @@ async fn test_backup() {
     .await
     .unwrap();
 
+  assert_eq!(4, count_entries("test").await);
+  assert_eq!(2, count_entries("other").await);
+
   conn.restore(&dst_path, None).await.unwrap();
 
-  assert_eq!(
-    2,
-    conn
-      .read_query_row_get::<i64>("SELECT COUNT(*) FROM test;", (), 0)
-      .await
-      .unwrap()
-      .unwrap()
-  );
+  assert_eq!(2, count_entries("test").await,);
+  assert_eq!(1, count_entries("aux.test").await,);
 
-  assert_eq!(
-    1,
-    conn
-      .read_query_row_get::<i64>("SELECT COUNT(*) FROM aux.test;", (), 0)
-      .await
-      .unwrap()
-      .unwrap()
-  );
-
+  // Make sure other no longer exists.
   assert!(
     conn
       .read_query_row_get::<i64>("SELECT COUNT(*) FROM other;", (), 0)
@@ -747,12 +744,5 @@ async fn test_backup() {
   conn.backup(&dst_path, Some("aux")).await.unwrap();
   conn.restore(&dst_path, None).await.unwrap();
 
-  assert_eq!(
-    1,
-    conn
-      .read_query_row_get::<i64>("SELECT COUNT(*) FROM test;", (), 0)
-      .await
-      .unwrap()
-      .unwrap()
-  );
+  assert_eq!(1, count_entries("test").await);
 }
