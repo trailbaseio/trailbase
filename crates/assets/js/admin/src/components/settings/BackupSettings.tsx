@@ -24,13 +24,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function Timestamp(props: { timestamp: string }) {
-  const time = (): Date => new Date(Date.parse(props.timestamp));
+function Timestamp(props: { timestamp: BigInt }) {
+  const time = (): Date => new Date(Number(props.timestamp));
 
   return <div>{time().toLocaleString()}</div>;
 }
 
-export function BackupSettings(props: {
+export function BackupSettings(_props: {
   markDirty: () => void;
   postSubmit: () => void;
 }) {
@@ -52,72 +52,81 @@ export function BackupSettings(props: {
           </Match>
 
           <Match when={backupsList.isSuccess}>
-            <Table>
-              <TableHeader>
-                <TableHead>Time</TableHead>
-                <TableHead>Action</TableHead>
-              </TableHeader>
+            <div class="flex flex-col gap-4">
+              <p class="ml-4 text-sm">
+                TrailBase supports a rolling window of backups, which is
+                currently hard-coded to 5. Will be configurable in future
+                versions.
+              </p>
 
-              <TableBody>
-                <For each={backupsList.data?.backups ?? []}>
-                  {(item) => {
-                    return (
-                      <TableRow>
-                        <TableCell>
-                          <Timestamp timestamp={item.timestamp} />
-                        </TableCell>
-                        <TableCell>
-                          <div class="flex gap-2">
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={() => {
-                                (async () => {
-                                  await deleteBackups([item.timestamp]);
-                                  await backupsList.refetch();
-                                })();
-                              }}
-                            >
-                              <TbOutlineTrash />
-                            </Button>
+              {/* Should we use our Table component instead like for explorer and DB manager? */}
+              <Table>
+                <TableHeader>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableHeader>
 
-                            <Button
-                              size="icon"
-                              variant="outline"
-                              onClick={() => {
-                                (async () => {
-                                  await restoreBackup(item.timestamp);
+                <TableBody>
+                  <For each={backupsList.data?.backups ?? []}>
+                    {(item) => {
+                      return (
+                        <TableRow>
+                          <TableCell>
+                            <Timestamp timestamp={item.timestamp} />
+                          </TableCell>
+                          <TableCell>
+                            <div class="flex gap-2">
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() => {
+                                  (async () => {
+                                    await deleteBackups([item.timestamp]);
+                                    await backupsList.refetch();
+                                  })();
+                                }}
+                              >
+                                <TbOutlineTrash />
+                              </Button>
 
-                                  showToast({
-                                    title: "restored backup",
-                                    variant: "success",
-                                  });
-                                })();
-                              }}
-                            >
-                              <TbOutlineRestore />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
+                              <Button
+                                size="icon"
+                                variant="outline"
+                                onClick={() => {
+                                  (async () => {
+                                    await restoreBackup(item.timestamp);
+
+                                    showToast({
+                                      title: "restored backup",
+                                      variant: "success",
+                                    });
+                                  })();
+                                }}
+                              >
+                                <TbOutlineRestore />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }}
+                  </For>
+                </TableBody>
+              </Table>
+
+              <div class="flex justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    (async () => {
+                      await triggerBackup();
+                      await backupsList.refetch();
+                    })();
                   }}
-                </For>
-              </TableBody>
-            </Table>
-
-            <div class="flex justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  (async () => {
-                    await triggerBackup();
-                    await backupsList.refetch();
-                  })();
-                }}
-              >
-                Trigger New Backup <TbOutlineDeviceFloppy />
-              </Button>
+                >
+                  Trigger New Backup <TbOutlineDeviceFloppy />
+                </Button>
+              </div>
             </div>
           </Match>
         </Switch>

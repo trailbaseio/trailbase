@@ -13,6 +13,10 @@ pub enum BackupError {
   Filesystem(#[from] std::io::Error),
   #[error("Backups: {0:?}")]
   Backups(Vec<trailbase_sqlite::Error>),
+  #[error("Precondition: {0}")]
+  Precondition(String),
+  #[error("NotFound")]
+  NotFound,
   #[error("Other: {0}")]
   Other(String),
 }
@@ -48,7 +52,7 @@ pub async fn backup_all(
   .collect();
 
   let now = chrono::Utc::now();
-  let target_path = data_dir.backup_path().join(now.to_rfc3339());
+  let target_path = data_dir.backup_path().join(now.timestamp().to_string());
 
   std::fs::create_dir_all(&target_path)?;
 
@@ -180,15 +184,15 @@ pub async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError
         continue;
       };
 
-      let Ok(timestamp) = chrono::DateTime::parse_from_rfc3339(&last.as_os_str().to_string_lossy())
-      else {
+      let Ok(timestamp) = last.as_os_str().to_string_lossy().parse::<i64>() else {
+        log::warn!("Failed to parse: {path:?}");
+        continue;
+      };
+      let Some(timestamp) = chrono::DateTime::from_timestamp(timestamp, 0) else {
         continue;
       };
 
-      backups.push(Backup {
-        path,
-        timestamp: timestamp.into(),
-      });
+      backups.push(Backup { path, timestamp });
     }
   }
 

@@ -8,7 +8,7 @@ use crate::backup;
 
 #[derive(Debug, Deserialize, Serialize, TS)]
 pub struct Backup {
-  timestamp: String,
+  timestamp: i64,
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -26,7 +26,7 @@ pub async fn list_backups_handler(
       .into_iter()
       .map(|b| {
         return Backup {
-          timestamp: b.timestamp.to_rfc3339(),
+          timestamp: b.timestamp.timestamp(),
         };
       })
       .collect(),
@@ -53,7 +53,7 @@ pub async fn trigger_backup_handler(
       .into_iter()
       .map(|b| {
         return Backup {
-          timestamp: b.timestamp.to_rfc3339(),
+          timestamp: b.timestamp.timestamp(),
         };
       })
       .collect(),
@@ -63,7 +63,7 @@ pub async fn trigger_backup_handler(
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct DeleteBackupsRequest {
-  timestamps: Vec<String>,
+  timestamps: Vec<i64>,
 }
 
 pub async fn delete_backups_handler(
@@ -72,7 +72,10 @@ pub async fn delete_backups_handler(
 ) -> Result<(), Error> {
   let backup_dir = state.data_dir().backup_path();
   for ts in request.timestamps {
-    tokio::fs::remove_dir_all(backup_dir.join(ts))
+    let instant = chrono::DateTime::from_timestamp(ts, 0)
+      .ok_or_else(|| Error::Precondition("invalid timestamp".into()))?;
+
+    tokio::fs::remove_dir_all(backup_dir.join(instant.timestamp().to_string()))
       .await
       .map_err(|err| Error::Other(err.to_string()))?;
   }
@@ -83,19 +86,22 @@ pub async fn delete_backups_handler(
 #[derive(Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct RestoreBackupRequest {
-  timestamp: String,
+  timestamp: i64,
 }
 
 pub async fn restore_backup_handler(
   State(state): State<AppState>,
   Json(request): Json<RestoreBackupRequest>,
 ) -> Result<(), Error> {
-  let timestamp = chrono::DateTime::parse_from_rfc3339(&request.timestamp)
-    .map_err(|err| Error::Precondition(err.to_string()))?;
+  let instant = chrono::DateTime::from_timestamp(request.timestamp, 0)
+    .ok_or_else(|| Error::Precondition("invalid timestamp".into()))?;
 
   let backup = backup::Backup {
-    path: state.data_dir().backup_path().join(request.timestamp),
-    timestamp: timestamp.into(),
+    path: state
+      .data_dir()
+      .backup_path()
+      .join(instant.timestamp().to_string()),
+    timestamp: instant,
   };
 
   backup::restore_all(state.data_dir(), &backup).await?;

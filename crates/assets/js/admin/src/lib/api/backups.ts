@@ -11,7 +11,7 @@ export async function listBackups(): Promise<ListBackupsResponse> {
   return await response.json();
 }
 
-export async function deleteBackups(timestamps: string[]): Promise<void> {
+export async function deleteBackups(timestamps: bigint[]): Promise<void> {
   await adminFetch("/backups/delete", {
     method: "DELETE",
     body: JSON.stringify({
@@ -26,7 +26,7 @@ export async function triggerBackup(): Promise<void> {
   });
 }
 
-export async function restoreBackup(timestamp: string): Promise<void> {
+export async function restoreBackup(timestamp: bigint): Promise<void> {
   await adminFetch("/backups/restore", {
     method: "PATCH",
     body: JSON.stringify({
