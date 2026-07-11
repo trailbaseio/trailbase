@@ -677,12 +677,12 @@ async fn test_backup() {
   )
   .unwrap();
 
-  let count_entries = async |table: &str| {
-    conn
-      .read_query_row_get::<i64>(format!("SELECT COUNT(*) FROM {table};"), (), 0)
+  let count = async |table: &str| -> i64 {
+    return conn
+      .write_query_row_get(format!("SELECT COUNT(*) FROM {table}"), (), 0)
       .await
       .unwrap()
-      .unwrap()
+      .unwrap();
   };
 
   conn
@@ -724,13 +724,13 @@ async fn test_backup() {
     .await
     .unwrap();
 
-  assert_eq!(4, count_entries("test").await);
-  assert_eq!(2, count_entries("other").await);
+  assert_eq!(4, count("test").await);
+  assert_eq!(2, count("other").await);
 
   conn.restore(&dst_path, None).await.unwrap();
 
-  assert_eq!(2, count_entries("test").await,);
-  assert_eq!(1, count_entries("aux.test").await,);
+  assert_eq!(2, count("test").await,);
+  assert_eq!(1, count("aux.test").await,);
 
   // Make sure other no longer exists.
   assert!(
@@ -744,5 +744,5 @@ async fn test_backup() {
   conn.backup(&dst_path, Some("aux")).await.unwrap();
   conn.restore(&dst_path, None).await.unwrap();
 
-  assert_eq!(1, count_entries("test").await);
+  assert_eq!(1, count("test").await);
 }

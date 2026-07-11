@@ -118,19 +118,20 @@ pub async fn restore_all(data_dir: &DataDir, backup: &Backup) -> Result<(), Back
 
   let mut errors = vec![];
   for path in db_paths {
-    let src_conn = match connect_db(path.clone()) {
+    let filename = path
+      .file_name()
+      .ok_or_else(|| BackupError::Other("missing filename".into()))?;
+
+    let target_path = data_dir.data_path().join(filename);
+    let target_conn = match connect_db(target_path.clone()) {
       Ok(conn) => conn,
       Err(err) => {
-        log::warn!("Failed open '{path:?}' for restore: {err}");
+        log::warn!("Failed open '{target_path:?}' for restore: {err}");
         continue;
       }
     };
 
-    let filename = path
-      .file_name()
-      .ok_or_else(|| BackupError::Other("missing filename".into()))?;
-    let target_path = data_dir.data_path().join(filename);
-    if let Err(err) = src_conn.restore(&target_path, None).await {
+    if let Err(err) = target_conn.restore(&path, None).await {
       errors.push(err);
     }
 
@@ -224,12 +225,30 @@ mod tests {
   #[tokio::test]
   async fn test_backup() {
     let state = test_state(None).await.unwrap();
+    let conn = state.conn();
 
-    state
-      .conn()
-      .read_query_row_get::<i64>("SELECT COUNT(*) FROM _user", (), 0)
+    let count = async |table: &str| -> i64 {
+      return conn
+        .write_query_row_get(format!("SELECT COUNT(*) FROM {table}"), (), 0)
+        .await
+        .unwrap()
+        .unwrap();
+    };
+
+    conn
+      .execute_batch(
+        "
+        CREATE TABLE test (
+          id INTEGER PRIMARY KEY,
+          data INTEGER NOT NULL
+        );
+        INSERT INTO test (data) VALUES (1), (2);
+        ",
+      )
       .await
       .unwrap();
+
+    assert_eq!(2, count("test").await);
 
     backup_all(
       state.data_dir(),
@@ -239,9 +258,18 @@ mod tests {
     .await
     .unwrap();
 
+    conn
+      .execute_batch("INSERT INTO test (data) VALUES (3), (4);")
+      .await
+      .unwrap();
+
+    assert_eq!(4, count("test").await);
+
     let backups = find_backups(state.data_dir()).await.unwrap();
     assert_eq!(1, backups.len());
 
     restore_all(state.data_dir(), &backups[0]).await.unwrap();
+
+    assert_eq!(2, count("test").await);
   }
 }
