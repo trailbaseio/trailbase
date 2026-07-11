@@ -76,7 +76,7 @@ pub fn router() -> Router<AppState> {
     .route("/info", get(info::info_handler))
     .route("/jobs", get(jobs::list_jobs_handler))
     .route("/job/run", post(jobs::run_job_handler))
-    .route("/backups/list", get(backup::list_backups_handler))
+    .route("/backups", get(backup::list_backups_handler))
     .route("/backups/trigger", get(backup::trigger_backup_handler))
     .route("/backups/delete", delete(backup::delete_backups_handler))
     .route("/backups/restore", patch(backup::restore_backup_handler))
