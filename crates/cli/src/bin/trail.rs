@@ -18,8 +18,8 @@ use trailbase_cli::wasm::{
 use utoipa::OpenApi;
 
 use trailbase_cli::{
-  AdminSubCommands, CommandLineArgs, ComponentReference, ComponentSubCommands, OpenApiSubCommands,
-  SubCommands, UserSubCommands,
+  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentReference, ComponentSubCommands,
+  OpenApiSubCommands, SubCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -403,11 +403,56 @@ async fn async_main(
         }
         _ => {
           CommandLineArgs::command()
-            .find_subcommand_mut("component")
+            .find_subcommand_mut("components")
             .map(|cmd| cmd.print_help());
         }
       };
     }
+    SubCommands::Backups { cmd } => match cmd {
+      Some(BackupSubCommands::List) => {
+        let backups = api::find_backups(&data_dir).await?;
+        println!("Found {} backups", backups.len());
+
+        for backup in backups {
+          println!(
+            "{}: @{} ({:?})",
+            backup.timestamp.timestamp(),
+            backup.timestamp,
+            backup.path
+          );
+        }
+      }
+      Some(BackupSubCommands::Trigger) => {
+        let (_new_db, state) = AppState::init(InitArgs {
+          data_dir: data_dir.clone(),
+          public_url,
+          ..Default::default()
+        })
+        .await?;
+
+        api::backup_all(&data_dir, &state.connection_manager(), &state.get_config()).await?;
+        api::delete_backups(&data_dir, 5).await?;
+
+        println!("Backup succeeded.");
+      }
+      Some(BackupSubCommands::Restore { timestamp }) => {
+        let instant = chrono::DateTime::from_timestamp(timestamp, 0).ok_or("invalid timestamp")?;
+
+        let backup = api::Backup {
+          path: data_dir.backup_path().join(instant.timestamp().to_string()),
+          timestamp: instant,
+        };
+
+        api::restore_all(&data_dir, &backup).await?;
+
+        println!("Backup restored.");
+      }
+      _ => {
+        CommandLineArgs::command()
+          .find_subcommand_mut("backups")
+          .map(|cmd| cmd.print_help());
+      }
+    },
   }
 
   return Ok(());

@@ -145,6 +145,7 @@ pub mod api {
   pub use crate::admin::user::{CreateUserRequest, create_user_handler};
   pub use crate::app_state::InitArgs;
   pub use crate::auth::{AuthTokenClaims, JwtHelper, cli};
+  pub use crate::backup::{Backup, backup_all, delete_backups, find_backups, restore_all};
   pub use crate::connection::Connection;
   pub use crate::email::{Email, EmailError};
   pub use crate::migrations::new_unique_migration_filename;

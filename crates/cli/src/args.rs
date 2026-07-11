@@ -84,6 +84,11 @@ pub enum SubCommands {
     #[command(subcommand)]
     cmd: Option<ComponentSubCommands>,
   },
+  /// Manage Backups.
+  Backups {
+    #[command(subcommand)]
+    cmd: Option<BackupSubCommands>,
+  },
 }
 
 #[derive(Args, Clone, Debug)]
@@ -311,4 +316,14 @@ pub enum ComponentSubCommands {
   Installed,
   /// Update all installed first-party components.
   Update,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum BackupSubCommands {
+  /// List backups.
+  List,
+  /// Trigger a new backup
+  Trigger,
+  /// List available first-party components.
+  Restore { timestamp: i64 },
 }
