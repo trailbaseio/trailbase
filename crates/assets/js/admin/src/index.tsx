@@ -4,8 +4,11 @@ import { render } from "solid-js/web";
 import "./index.css";
 
 import App from "./App";
+import { $themePreference, applyThemePreference } from "./lib/theme";
 
 const root = document.getElementById("root");
+
+applyThemePreference($themePreference.get());
 
 if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   throw new Error(

@@ -1,4 +1,13 @@
-import { createSignal, lazy, Match, Show, Switch } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  lazy,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from "solid-js";
 import type { Component } from "solid-js";
 import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
@@ -18,6 +27,11 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import { $user } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
+import {
+  $themePreference,
+  applyThemePreference,
+  listenForSystemThemeChanges,
+} from "@/lib/theme";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +95,23 @@ const LazyErdPage = lazy(() => import("@/components/erd/ErdPage"));
 
 const App: Component = () => {
   const user = useStore($user);
+  const themePreference = useStore($themePreference);
+
+  createEffect(() => {
+    applyThemePreference(themePreference());
+  });
+
+  onMount(() => {
+    const unsubscribe = listenForSystemThemeChanges(() => {
+      if (themePreference() === "system") {
+        applyThemePreference("system");
+      }
+    });
+
+    if (unsubscribe) {
+      onCleanup(unsubscribe);
+    }
+  });
 
   const Login = () => (
     <ErrorBoundary>

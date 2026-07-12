@@ -2,6 +2,7 @@ import { onMount } from "solid-js";
 import { Graph, Cell, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 
 import { cn } from "@/lib/utils";
+import { currentTheme } from "@/lib/theme";
 
 export const ER_NODE_NAME = "er-rect";
 export const LINE_HEIGHT = 24;
@@ -11,8 +12,32 @@ const ACCENT_600 = "#0073aa";
 const GRAY_100 = "#f3f7f9";
 export const EDGE_COLOR = "#A2B1C3";
 
+type Theme = {
+  fill: string;
+  accent: string;
+  edge: string;
+  text: string;
+};
+
+export function erdTheme(dark: boolean): Theme {
+  return dark
+    ? {
+        fill: "black",
+        accent: ACCENT_600,
+        edge: "white",
+        text: "white",
+      }
+    : {
+        fill: GRAY_100,
+        accent: ACCENT_600,
+        edge: EDGE_COLOR,
+        text: "black",
+      };
+}
+
 (function setupGraph() {
   const ER_PORT_POSITION_NAME = "erPortPosition";
+  const theme = erdTheme(currentTheme() === "dark");
 
   Graph.registerPortLayout(
     ER_PORT_POSITION_NAME,
@@ -47,8 +72,8 @@ export const EDGE_COLOR = "#A2B1C3";
       attrs: {
         rect: {
           strokeWidth: 1,
-          stroke: ACCENT_600,
-          fill: ACCENT_600,
+          stroke: theme.accent,
+          fill: theme.accent,
         },
         label: {
           fontWeight: "bold",
@@ -78,8 +103,8 @@ export const EDGE_COLOR = "#A2B1C3";
                 width: NODE_WIDTH,
                 height: LINE_HEIGHT,
                 strokeWidth: 1,
-                stroke: ACCENT_600,
-                fill: GRAY_100,
+                stroke: theme.accent,
+                fill: theme.fill,
                 magnet: true,
               },
               portNameLabel: {
@@ -87,12 +112,14 @@ export const EDGE_COLOR = "#A2B1C3";
                 refX: 6,
                 refY: 6,
                 fontSize: 10,
+                fill: theme.text,
               },
               portTypeLabel: {
                 ref: "portBody",
                 refX: 95,
                 refY: 6,
                 fontSize: 10,
+                fill: theme.text,
               },
             },
             position: ER_PORT_POSITION_NAME,

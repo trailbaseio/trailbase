@@ -79,6 +79,7 @@ import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { SqlValue } from "@bindings/SqlValue";
 
 import { createConfigQuery } from "@/lib/api/config";
+import { currentTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
@@ -540,7 +541,7 @@ function EditorPanel(props: {
       return EditorState.create({
         doc: contents,
         extensions: [
-          myTheme,
+          editorTheme(currentTheme() === "dark"),
           customKeymap,
           lineNumbers(),
           // Let's you define your own custom CSS style for the line number gutter.
@@ -831,25 +832,27 @@ export function EditorPage() {
   );
 }
 
-const myTheme = EditorView.theme(
-  {
-    ".cm-gutters": {
-      backgroundColor: "#f3f7f9",
-      color: "#000",
-      border: "none",
-      borderRadius: "8px 0px 0px 8px",
+function editorTheme(dark: boolean) {
+  return EditorView.theme(
+    {
+      ".cm-gutters": {
+        backgroundColor: dark ? "#000" : "#f3f7f9",
+        color: dark ? "#FFFFFF" : "#000",
+        border: "none",
+        borderRadius: "8px 0px 0px 8px",
+      },
+      "&.cm-editor": {
+        outline: "1px solid #e4e4e7",
+        borderRadius: "8px",
+      },
+      // "&.cm-editor.cm-focused": {
+      //   outline: "1px solid gray",
+      //   borderRadius: "8px",
+      // },
     },
-    "&.cm-editor": {
-      outline: "1px solid #e4e4e7",
-      borderRadius: "8px",
-    },
-    // "&.cm-editor.cm-focused": {
-    //   outline: "1px solid gray",
-    //   borderRadius: "8px",
-    // },
-  },
-  { dark: false },
-);
+    { dark },
+  );
+}
 
 type Script = {
   name: string;

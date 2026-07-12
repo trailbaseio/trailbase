@@ -21,11 +21,11 @@ export function Header(props: {
         </Show>
 
         <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
-          <h2 class="text-accent-600 m-0">
+          <h2 class="m-0">
             <Show when={props.titleSelect} fallback={props.title}>
-              {props.title}
-              <span class="text-border mx-2 text-xs">‣</span>
-              <span class="font-normal text-black">{props.titleSelect}</span>
+              <span class="text-accent-600">{props.title}</span>
+              <span class="text-muted-foreground mx-2">‣</span>
+              <span class="font-normal">{props.titleSelect}</span>
             </Show>
           </h2>
 

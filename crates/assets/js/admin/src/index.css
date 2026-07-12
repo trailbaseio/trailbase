@@ -75,7 +75,9 @@
   --card: hsl(240 10% 3.9%);
   --card-foreground: hsl(0 0% 98%);
 
-  --primary: hsl(0 0% 98%);
+  /* --primary: hsl(0 0% 98%); */
+  --primary: hsl(199 100% 33%);
+  /* --primary: #92d1fe; */
   --primary-foreground: hsl(240 5.9% 10%);
 
   --secondary: hsl(240 3.7% 15.9%);

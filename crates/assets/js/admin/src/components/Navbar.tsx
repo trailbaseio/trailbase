@@ -1,6 +1,7 @@
 import { createContext, createSignal, useContext, For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
 import { useNavigate, Location } from "@solidjs/router";
+import { useStore } from "@nanostores/solid";
 import {
   TbOutlineDatabase,
   TbOutlineEdit,
@@ -8,6 +9,8 @@ import {
   TbOutlineChartDots3,
   TbOutlineTimeline,
   TbOutlineSettings,
+  TbOutlineMoon,
+  TbOutlineSun,
 } from "solid-icons/tb";
 
 import { AuthButton } from "@/components/auth/AuthButton";
@@ -27,6 +30,7 @@ import {
 import { Version } from "@/components/Version";
 
 import { createSystemInfoQuery } from "@/lib/api/info";
+import { $themePreference, resolveThemePreference } from "@/lib/theme";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -125,9 +129,39 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
 
 function NavFooter(props: { horizontal: boolean }) {
   const systemInfo = createSystemInfoQuery();
+  const themePreference = useStore($themePreference);
+  const theme = () => resolveThemePreference(themePreference());
 
   return (
     <div class="flex flex-col items-center">
+      <Tooltip>
+        <TooltipTrigger as="div">
+          <button
+            class={navbarIconStyle}
+            type="button"
+            onClick={() =>
+              $themePreference.set(theme() === "dark" ? "light" : "dark")
+            }
+            aria-label={
+              theme() === "dark"
+                ? "Switch to light mode"
+                : "Switch to dark mode"
+            }
+          >
+            <Show
+              when={theme() === "dark"}
+              fallback={<TbOutlineMoon size={iconSize(props.horizontal)} />}
+            >
+              <TbOutlineSun size={iconSize(props.horizontal)} />
+            </Show>
+          </button>
+        </TooltipTrigger>
+
+        <TooltipContent>
+          {theme() === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        </TooltipContent>
+      </Tooltip>
+
       <AuthButton iconSize={iconSize(props.horizontal)} />
 
       <Show when={!props.horizontal}>
@@ -146,7 +180,7 @@ export function HorizontalNavbar(props: {
   return (
     <nav
       style={{ height: `${props.height}px` }}
-      class="flex w-screen items-center justify-between gap-2 bg-gray-100 p-2"
+      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between gap-2 border-b p-2"
     >
       <NavbarItems location={props.location} horizontal={true} />
 
@@ -159,7 +193,7 @@ export function VerticalNavbar(props: { location: Location }) {
   return (
     <div
       class={
-        "flex h-dvh grow flex-col items-center justify-between gap-4 bg-gray-100 py-2"
+        "border-border bg-sidebar text-sidebar-foreground flex h-dvh grow flex-col items-center justify-between gap-4 border-r py-2"
       }
     >
       <nav class="flex flex-col items-center gap-4">
@@ -227,6 +261,6 @@ function iconSize(horizontal: boolean) {
 }
 
 export const navbarIconStyle =
-  "rounded-full transition-all p-2 hover:bg-gray-200 active:scale-90";
+  "rounded-full p-2 transition-all hover:bg-accent hover:text-accent-foreground active:scale-90";
 const navbarIconActiveStyle =
-  "rounded-full transition-all p-2 bg-accent-600 text-white active:scale-90";
+  "rounded-full bg-primary p-2 text-primary-foreground transition-all active:scale-90";

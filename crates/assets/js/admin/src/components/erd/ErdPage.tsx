@@ -12,7 +12,6 @@ import {
   ER_NODE_NAME,
   NODE_WIDTH,
   LINE_HEIGHT,
-  EDGE_COLOR,
 } from "@/components/erd/ErdGraph";
 
 import {
@@ -86,7 +85,7 @@ function buildErNode(
 ): [NodeMetadata, EdgeMetadata[]] {
   const BASE_EDGE = {
     shape: "edge",
-    attr: { line: { stroke: EDGE_COLOR, strokeWidth: 2 } },
+    // attr: { line: { stroke: edge_color, strokeWidth: 2 } },
     zIndex: 0,
   };
 
@@ -149,7 +148,7 @@ function buildErNode(
     width: NODE_WIDTH,
     height: LINE_HEIGHT,
     ports,
-    attr: { line: { stroke: EDGE_COLOR, strokeWidth: 2 } },
+    // attr: { line: { stroke: edge_color, strokeWidth: 2 } },
   };
 
   return [node, edges];

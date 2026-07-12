@@ -113,7 +113,9 @@ function FactCard(props: { title: string; content: string; href?: string }) {
       <CardContent>
         <CardTitle>{props.title}</CardTitle>
 
-        <div class="text-primary text-xl font-bold">{props.content}</div>
+        <div class="text-muted-foreground text-xl font-bold">
+          {props.content}
+        </div>
       </CardContent>
     </Card>
   );
@@ -171,7 +173,7 @@ export function IndexPage() {
     <div>
       <Header title="TrailBase" />
 
-      <div class="prose flex grow flex-col gap-4 p-4">
+      <div class="prose dark:prose-invert flex grow flex-col gap-4 p-4">
         {dashboardFetch.data && (
           <div class="flex shrink gap-4">
             <FactCard
