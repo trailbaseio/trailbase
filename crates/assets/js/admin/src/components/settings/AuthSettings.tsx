@@ -66,7 +66,6 @@ import google from "@shared/assets/oauth2/google.svg";
 import microsoft from "@shared/assets/oauth2/microsoft.svg";
 import twitch from "@shared/assets/oauth2/twitch.svg";
 import yandex from "@shared/assets/oauth2/yandex.svg";
-import { User } from "trailbase";
 
 export const assets = new Map<OAuthProviderId, string>([
   [OAuthProviderId.OIDC0, openIdConnect],

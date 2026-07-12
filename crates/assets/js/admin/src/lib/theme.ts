@@ -1,74 +1,56 @@
+import { createSignal, onMount, onCleanup } from "solid-js";
+import type { Accessor } from "solid-js";
 import { persistentAtom } from "@nanostores/persistent";
 
-export type ThemePreference = "light" | "dark" | "system";
-type ResolvedTheme = "light" | "dark";
+export type ResolvedTheme = "light" | "dark";
 
-function decodeThemePreference(value: string): ThemePreference {
-  if (value === "light" || value === "dark" || value === "system") {
-    return value;
-  }
-  return "system";
-}
-
-export const $themePreference = persistentAtom<ThemePreference>(
-  "theme_preference",
-  "system",
-  {
-    encode: (value) => value,
-    decode: decodeThemePreference,
-  },
-);
-
-function prefersSystemDarkMode(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia(DARK_MODE_QUERY).matches
-  );
-}
-
-export function resolveThemePreference(
-  preference: ThemePreference,
-): ResolvedTheme {
-  if (preference === "system") {
-    return prefersSystemDarkMode() ? "dark" : "light";
-  }
-  return preference;
-}
-
-function applyResolvedTheme(theme: ResolvedTheme) {
-  if (typeof document === "undefined") {
-    return;
-  }
-
+export function applyResolvedTheme(theme: ResolvedTheme) {
   const root = document.documentElement;
+
   root.classList.toggle("dark", theme === "dark");
   root.setAttribute("data-kb-theme", theme);
+  $themePreference.set(theme);
 }
 
 export function currentTheme(): ResolvedTheme {
-  const root = document.documentElement;
-  return root.classList.contains("dark") ? "dark" : "light";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
 }
 
-export function applyThemePreference(preference: ThemePreference) {
-  applyResolvedTheme(resolveThemePreference(preference));
-}
-
-export function listenForSystemThemeChanges(
-  onChange: () => void,
-): (() => void) | undefined {
-  if (
-    typeof window === "undefined" ||
-    typeof window.matchMedia !== "function"
-  ) {
-    return undefined;
+export function initializeTheme() {
+  function systemsPreferredTheme(): ResolvedTheme {
+    const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
+    return window.matchMedia(DARK_MODE_QUERY).matches ? "dark" : "light";
   }
 
-  const media = window.matchMedia(DARK_MODE_QUERY);
-  media.addEventListener("change", onChange);
-
-  return () => media.removeEventListener("change", onChange);
+  // Set theme based on stored preference (i.e. user selected it before) or
+  // system-wide preference.
+  applyResolvedTheme($themePreference.get() ?? systemsPreferredTheme());
 }
 
-const DARK_MODE_QUERY = "(prefers-color-scheme: dark)";
+export function createTheme(): Accessor<ResolvedTheme> {
+  const [theme, setTheme] = createSignal<ResolvedTheme>(currentTheme());
+
+  const attrObserver = new MutationObserver((mutations) => {
+    mutations.forEach((mu) => {
+      if (mu.type === "attributes" && mu.attributeName === "class") {
+        setTheme(currentTheme());
+      }
+    });
+  });
+
+  onMount(() =>
+    attrObserver.observe(document.documentElement, { attributes: true }),
+  );
+  onCleanup(() => attrObserver.disconnect());
+
+  return theme;
+}
+
+export const $themePreference = persistentAtom<ResolvedTheme | undefined>(
+  "theme:selected",
+  undefined,
+  {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+  },
+);

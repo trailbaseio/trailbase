@@ -1,16 +1,15 @@
-import { onMount } from "solid-js";
+import { createEffect, onMount } from "solid-js";
 import { Graph, Cell, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 
 import { cn } from "@/lib/utils";
-import { currentTheme } from "@/lib/theme";
+import type { ResolvedTheme } from "@/lib/theme";
 
-export const ER_NODE_NAME = "er-rect";
 export const LINE_HEIGHT = 24;
 export const NODE_WIDTH = 250;
 
 const ACCENT_600 = "#0073aa";
 const GRAY_100 = "#f3f7f9";
-export const EDGE_COLOR = "#A2B1C3";
+const EDGE_COLOR = "#A2B1C3";
 
 type Theme = {
   fill: string;
@@ -18,6 +17,24 @@ type Theme = {
   edge: string;
   text: string;
 };
+
+const lightTheme: Theme = {
+  fill: GRAY_100,
+  accent: ACCENT_600,
+  edge: EDGE_COLOR,
+  text: "black",
+};
+
+const darkTheme: Theme = {
+  fill: "black",
+  accent: ACCENT_600,
+  edge: "white",
+  text: "white",
+};
+
+export function nodeName(theme: ResolvedTheme): string {
+  return theme === "dark" ? "dark:er-rect" : "light:er-rect";
+}
 
 export function erdTheme(dark: boolean): Theme {
   return dark
@@ -35,9 +52,8 @@ export function erdTheme(dark: boolean): Theme {
       };
 }
 
-(function setupGraph() {
+function setupGraph() {
   const ER_PORT_POSITION_NAME = "erPortPosition";
-  const theme = erdTheme(currentTheme() === "dark");
 
   Graph.registerPortLayout(
     ER_PORT_POSITION_NAME,
@@ -55,81 +71,87 @@ export function erdTheme(dark: boolean): Theme {
     true,
   );
 
-  Graph.registerNode(
-    ER_NODE_NAME,
-    {
-      inherit: "rect",
-      markup: [
-        {
-          tagName: "rect",
-          selector: "body",
+  for (const themeName of ["light", "dark"] as ResolvedTheme[]) {
+    const theme = themeName === "light" ? lightTheme : darkTheme;
+
+    Graph.registerNode(
+      nodeName(themeName),
+      {
+        inherit: "rect",
+        markup: [
+          {
+            tagName: "rect",
+            selector: "body",
+          },
+          {
+            tagName: "text",
+            selector: "label",
+          },
+        ],
+        attrs: {
+          rect: {
+            strokeWidth: 1,
+            stroke: theme.accent,
+            fill: theme.accent,
+          },
+          label: {
+            fontWeight: "bold",
+            fill: "white",
+            fontSize: 12,
+          },
         },
-        {
-          tagName: "text",
-          selector: "label",
-        },
-      ],
-      attrs: {
-        rect: {
-          strokeWidth: 1,
-          stroke: theme.accent,
-          fill: theme.accent,
-        },
-        label: {
-          fontWeight: "bold",
-          fill: "white",
-          fontSize: 12,
-        },
-      },
-      ports: {
-        groups: {
-          list: {
-            markup: [
-              {
-                tagName: "rect",
-                selector: "portBody",
+        ports: {
+          groups: {
+            list: {
+              markup: [
+                {
+                  tagName: "rect",
+                  selector: "portBody",
+                },
+                {
+                  tagName: "text",
+                  selector: "portNameLabel",
+                },
+                {
+                  tagName: "text",
+                  selector: "portTypeLabel",
+                },
+              ],
+              attrs: {
+                portBody: {
+                  width: NODE_WIDTH,
+                  height: LINE_HEIGHT,
+                  strokeWidth: 1,
+                  stroke: theme.accent,
+                  fill: theme.fill,
+                  magnet: true,
+                },
+                portNameLabel: {
+                  ref: "portBody",
+                  refX: 6,
+                  refY: 6,
+                  fontSize: 10,
+                  fill: theme.text,
+                },
+                portTypeLabel: {
+                  ref: "portBody",
+                  refX: 95,
+                  refY: 6,
+                  fontSize: 10,
+                  fill: theme.text,
+                },
               },
-              {
-                tagName: "text",
-                selector: "portNameLabel",
-              },
-              {
-                tagName: "text",
-                selector: "portTypeLabel",
-              },
-            ],
-            attrs: {
-              portBody: {
-                width: NODE_WIDTH,
-                height: LINE_HEIGHT,
-                strokeWidth: 1,
-                stroke: theme.accent,
-                fill: theme.fill,
-                magnet: true,
-              },
-              portNameLabel: {
-                ref: "portBody",
-                refX: 6,
-                refY: 6,
-                fontSize: 10,
-                fill: theme.text,
-              },
-              portTypeLabel: {
-                ref: "portBody",
-                refX: 95,
-                refY: 6,
-                fontSize: 10,
-                fill: theme.text,
-              },
+              position: ER_PORT_POSITION_NAME,
             },
-            position: ER_PORT_POSITION_NAME,
           },
         },
       },
-    },
-    true,
-  );
-})();
+      true,
+    );
+  }
+}
+
+setupGraph();
 
 function createEdge(): Edge {
   return new Shape.Edge({
@@ -150,8 +172,11 @@ export function ErdGraph(props: {
 }) {
   let ref: HTMLDivElement | undefined;
 
-  onMount(() => {
-    const graph = new Graph({
+  let graph: Graph | undefined;
+  createEffect(() => {
+    graph?.dispose();
+
+    const g = (graph = new Graph({
       container: ref,
       grid: {
         visible: true,
@@ -181,7 +206,7 @@ export function ErdGraph(props: {
         minScale: 0.5,
         maxScale: 2,
       },
-    });
+    }));
 
     // Implement our own simple grid layout since @antv/layout seems to be out of sync:
     //
@@ -221,16 +246,16 @@ export function ErdGraph(props: {
           };
         }
 
-        return graph.createNode(n);
+        return g.createNode(n);
       }),
-      ...props.edges.map((e) => graph.createEdge(e)),
+      ...props.edges.map((e) => g.createEdge(e)),
     ];
 
-    graph.resetCells(cells);
+    g.resetCells(cells);
 
     if (cells.length > 0) {
       // The zoomToFit seems a bit buggy. It will happily cut off boxes at the bottom.
-      graph.zoomToRect({
+      g.zoomToRect({
         x: -20,
         y: -20,
         width: columns * width + 20,
@@ -238,7 +263,7 @@ export function ErdGraph(props: {
       });
     }
 
-    props.onMount?.(graph);
+    props.onMount?.(g);
   });
 
   return <div ref={ref} class={cn(props.class, "overflow-clip")} />;

@@ -1,7 +1,14 @@
-import { createContext, createSignal, useContext, For, Show } from "solid-js";
+import {
+  createContext,
+  createSignal,
+  useContext,
+  For,
+  Match,
+  Show,
+  Switch,
+} from "solid-js";
 import type { Accessor } from "solid-js";
 import { useNavigate, Location } from "@solidjs/router";
-import { useStore } from "@nanostores/solid";
 import {
   TbOutlineDatabase,
   TbOutlineEdit,
@@ -30,7 +37,7 @@ import {
 import { Version } from "@/components/Version";
 
 import { createSystemInfoQuery } from "@/lib/api/info";
-import { $themePreference, resolveThemePreference } from "@/lib/theme";
+import { currentTheme, applyResolvedTheme } from "@/lib/theme";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -129,8 +136,6 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
 
 function NavFooter(props: { horizontal: boolean }) {
   const systemInfo = createSystemInfoQuery();
-  const themePreference = useStore($themePreference);
-  const theme = () => resolveThemePreference(themePreference());
 
   return (
     <div class="flex flex-col items-center">
@@ -139,26 +144,31 @@ function NavFooter(props: { horizontal: boolean }) {
           <button
             class={navbarIconStyle}
             type="button"
-            onClick={() =>
-              $themePreference.set(theme() === "dark" ? "light" : "dark")
-            }
+            onClick={() => {
+              applyResolvedTheme(currentTheme() === "dark" ? "light" : "dark");
+            }}
             aria-label={
-              theme() === "dark"
+              currentTheme() === "dark"
                 ? "Switch to light mode"
                 : "Switch to dark mode"
             }
           >
-            <Show
-              when={theme() === "dark"}
-              fallback={<TbOutlineMoon size={iconSize(props.horizontal)} />}
-            >
-              <TbOutlineSun size={iconSize(props.horizontal)} />
-            </Show>
+            <Switch>
+              <Match when={currentTheme() === "dark"}>
+                <TbOutlineSun size={iconSize(props.horizontal)} />
+              </Match>
+
+              <Match when={currentTheme() === "light"}>
+                <TbOutlineMoon size={iconSize(props.horizontal)} />
+              </Match>
+            </Switch>
           </button>
         </TooltipTrigger>
 
         <TooltipContent>
-          {theme() === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          {currentTheme() === "dark"
+            ? "Switch to light mode"
+            : "Switch to dark mode"}
         </TooltipContent>
       </Tooltip>
 

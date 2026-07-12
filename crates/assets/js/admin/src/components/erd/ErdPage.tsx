@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import {
   ErdGraph,
-  ER_NODE_NAME,
+  nodeName,
   NODE_WIDTH,
   LINE_HEIGHT,
 } from "@/components/erd/ErdGraph";
@@ -24,6 +24,7 @@ import {
   ForeignKey,
 } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
+import { createTheme, type ResolvedTheme } from "@/lib/theme";
 
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
@@ -80,6 +81,7 @@ function findTargetPortName(
 }
 
 function buildErNode(
+  theme: ResolvedTheme,
   allTablesAndViews: (Table | View)[],
   tableOrView: Table | View,
 ): [NodeMetadata, EdgeMetadata[]] {
@@ -143,7 +145,7 @@ function buildErNode(
 
   const node: NodeMetadata = {
     id: name,
-    shape: ER_NODE_NAME,
+    shape: nodeName(theme),
     label: `${name} [${tableType(tableOrView)}]`,
     width: NODE_WIDTH,
     height: LINE_HEIGHT,
@@ -156,6 +158,7 @@ function buildErNode(
 
 function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
   const isMobile = createIsMobile();
+  const theme = createTheme();
 
   const nodesAndEdges = createMemo(() => {
     const nodes: NodeMetadata[] = [];
@@ -168,18 +171,21 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
 
     for (const tableOrView of allTablesAndViews) {
       if (hiddenTable(tableOrView) && !isUserTable(tableOrView.name)) {
-        console.debug("skipping:", tableOrView);
+        console.debug(
+          `skipping '${prettyFormatQualifiedName(tableOrView.name)}'`,
+          tableOrView,
+        );
         continue;
       }
 
-      const [n, e] = buildErNode(allTablesAndViews, tableOrView);
+      const [n, e] = buildErNode(theme(), allTablesAndViews, tableOrView);
       nodes.push(n);
       edges.push(...e);
     }
 
-    console.debug(
-      `ErdGraph: ${allTablesAndViews}, nodes: ${nodes}, edges: ${edges}`,
-    );
+    // console.debug(
+    //   `ErdGraph: ${allTablesAndViews}, nodes: ${nodes}, edges: ${edges}`,
+    // );
 
     return { nodes, edges };
   });
