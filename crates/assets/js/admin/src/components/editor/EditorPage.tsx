@@ -88,6 +88,8 @@ import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
+type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
+
 function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   const schema: {
     [name: string]: SQLNamespace;
@@ -436,7 +438,7 @@ type DirtyDialogState = {
 function EditorPanel(props: {
   schemas: ListSchemasResponse;
   script: Script;
-  selected: Signal<number>;
+  selected: SimpleSignal<number>;
   dirty: Signal<boolean>;
   dirtyDialog: Signal<DirtyDialogState | undefined>;
   deleteScript: () => void;
@@ -722,8 +724,18 @@ export function EditorPage() {
   // mobile rebuild EditorPage and reset the dirty state.
   const scripts = useStore($scripts);
   const isMobile = createIsMobile();
-  const [selected, setSelected] = createSignal<number>(0);
   const [dirty, setDirty] = createSignal<boolean>(false);
+
+  const [selected, setSelectedImpl] = createSignal<number>(
+    $uiState.get().selected ?? 0,
+  );
+  const setSelected = (idx: number) => {
+    $uiState.set({
+      ...$uiState.get(),
+      selected: idx,
+    });
+    return setSelectedImpl(idx);
+  };
 
   const navbar = useNavbar();
   createEffect(() => {
@@ -745,14 +757,12 @@ export function EditorPage() {
 
   const script = (idx?: number): Script => {
     const s = scripts();
-    const i = idx ?? selected();
-    if (i < s.length) {
-      return s[i];
-    }
     if (s.length === 0) {
       return defaultScript;
     }
-    return s[s.length - 1];
+
+    const i = idx ?? selected();
+    return s[i < s.length ? i : s.length - 1];
   };
 
   const deleteScriptByIdx = (idx?: number | undefined) => {
@@ -890,6 +900,7 @@ const $scripts = persistentAtom<Script[]>("scripts", [defaultScript], {
 
 type UiState = {
   showMigrationWarning?: boolean;
+  selected?: number;
 };
 
 const $uiState = persistentAtom<UiState>(

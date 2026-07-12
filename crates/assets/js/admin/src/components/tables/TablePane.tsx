@@ -7,7 +7,7 @@ import {
   createSignal,
   JSX,
 } from "solid-js";
-import type { Signal } from "solid-js";
+import type { Accessor, Signal } from "solid-js";
 import {
   TbOutlineRefresh,
   TbOutlineTable,
@@ -114,7 +114,7 @@ import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
 import { createWritableMemo } from "@solid-primitives/memo";
 
-export type SimpleSignal<T> = [get: () => T, set: (state: T) => void];
+type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
 
 const blobEncodings = ["base64", "hex", "mixed"] as const;
 type BlobEncoding = (typeof blobEncodings)[number];

@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-function Timestamp(props: { timestamp: BigInt }) {
+function Timestamp(props: { timestamp: bigint }) {
   const time = (): Date => new Date(Number(props.timestamp));
 
   return <div>{time().toLocaleString()}</div>;

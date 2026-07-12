@@ -60,6 +60,7 @@ function pickInitiallySelectedTable(
   }
 
   const candidate = qualifiedTableName ?? $explorerSettings.get().prevSelected;
+
   if (candidate) {
     for (const table of tables) {
       if (candidate === prettyFormatQualifiedName(table[0].name)) {
@@ -249,14 +250,17 @@ function TableSplitView(props: {
     return all.filter(([t, _]) => !hiddenTable(t)).sort(tableCompare);
   });
 
-  const params = useParams<{ table: string }>();
+  const params = useParams<{ table: string | undefined }>();
   const selectedTable = createMemo(() => {
     const filteredTables = filteredTablesAndViews();
-    // useParams returns undefined as a string.
-    const table =
-      params.table === "undefined"
+
+    // NOTE: useParams used to return undefined as a "undefined" string. Does no longer seem to be the case.
+    // We can probably simplify this.
+    const table: string | undefined =
+      params.table === undefined || params.table === "undefined"
         ? undefined
         : decodeURIComponent(params.table);
+
     return pickInitiallySelectedTable(filteredTables, table);
   });
 

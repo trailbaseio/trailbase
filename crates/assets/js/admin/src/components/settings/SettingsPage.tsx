@@ -1,3 +1,4 @@
+import { persistentAtom } from "@nanostores/persistent";
 import {
   createSignal,
   onMount,
@@ -6,6 +7,7 @@ import {
   Show,
   Switch,
   Match,
+  createEffect,
 } from "solid-js";
 import type { Component, JSX } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
@@ -485,8 +487,25 @@ export function SettingsPage() {
     if (g) {
       return sites.find((s) => s.route == g) ?? sites[0];
     }
-    return sites[0];
+
+    const index = $uiState.get().selected;
+    return sites[index === undefined || index >= sites.length ? 0 : index];
   };
+
+  createEffect(() => {
+    const g = params?.group;
+    if (!g) {
+      return;
+    }
+
+    const index = sites.findIndex((s) => s.route == g);
+    if (index >= 0) {
+      $uiState.set({
+        ...$uiState.get(),
+        selected: index,
+      });
+    }
+  });
 
   const p = () =>
     ({
@@ -577,5 +596,18 @@ export function SettingsPage() {
     </SidebarProvider>
   );
 }
+
+type SettingsUiState = {
+  selected?: number;
+};
+
+const $uiState = persistentAtom<SettingsUiState>(
+  "settings:state",
+  {},
+  {
+    encode: JSON.stringify,
+    decode: JSON.parse,
+  },
+);
 
 const labelWidth = "w-40";
