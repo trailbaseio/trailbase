@@ -1,3 +1,13 @@
+## v0.30.2
+
+- Better backups 🎉
+  - Backup all attached databases including logs and sessions. Longer term we should probably also backup and restore configuration/vault.
+  - Add backup UIs, both in the admin UI as well as the CLI.
+  - Allow restoring backups via the UI.
+  - Add a rolling and configurable backup horizon. By default keep 5 backups.
+- Admin UI: fix selected table memoization of explorer and add memoization to scripts and settings page.
+- Update dependencies
+
 ## v0.30.1
 
 - Fix trailbase JS client's type bundling - Thanks @bltavares 🙏.
