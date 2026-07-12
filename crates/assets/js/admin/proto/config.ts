@@ -444,11 +444,11 @@ export interface OAuthProviderConfig {
 }
 
 export interface AuthConfig {
-  /** / Time-to-live in seconds for auth tokens. Default: 1h. */
+  /** / Time-to-live in seconds for auth tokens. [Default: 1h]. */
   authTokenTtlSec?:
     | bigint
     | undefined;
-  /** / Time-to-live in seconds for refresh tokens. Default: 30 days. */
+  /** / Time-to-live in seconds for refresh tokens. [Default: 30 days] */
   refreshTokenTtlSec?:
     | bigint
     | undefined;
@@ -471,7 +471,7 @@ export interface AuthConfig {
   enableAnonymousSignin?:
     | boolean
     | undefined;
-  /** / Minimal password length. Defaults to 8. */
+  /** / Minimal password length. [Default: 8]. */
   passwordMinimalLength?:
     | number
     | undefined;
@@ -526,15 +526,15 @@ export interface S3StorageConfig {
 
 export interface ServerConfig {
   /**
-   * / Application name presented to users, e.g. when sending emails. Default:
-   * / "TrailBase".
+   * / Application name presented to users, e.g. when sending emails.
+   * / [Default: "TrailBase"]
    */
   applicationName?:
     | string
     | undefined;
   /**
    * / Your final, deployed URL. This url is used to build canonical urls
-   * / for emails, OAuth redirects, ... . Default: "http://localhost:4000".
+   * / for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
    */
   siteUrl?:
     | string
@@ -542,7 +542,7 @@ export interface ServerConfig {
   /**
    * /  Max age of logs that will be retained during period logs cleanup. Note
    * /  that this implies that some older logs may persist until the cleanup job
-   * /  reruns. Default: 7 days.
+   * /  reruns. [Default: 7 days]
    */
   logsRetentionSec?:
     | bigint
@@ -555,19 +555,23 @@ export interface ServerConfig {
   enableRecordTransactions?:
     | boolean
     | undefined;
-  /** / Request size limit, default: 10MB. */
+  /** / Request size limit. [Default: 10MB] */
   requestSizeLimitBytes?:
     | bigint
     | undefined;
   /**
    * / Limits the request per IP per second to auth POST APIs for abuse
    * / protection. If TrailBase is behind a proxy, make sure to set
-   * / "X-Forwarded-For". Default: disabled.
+   * / "X-Forwarded-For". [Default: disabled]
    * /
    * / Note that login endpoints have additional fixed rate limits
    * / on a per credentials level.
    */
-  authIpRateLimit?: number | undefined;
+  authIpRateLimit?:
+    | number
+    | undefined;
+  /** / Limits how many backups are kept at any time. [Default: 5] */
+  backupWindowSize?: bigint | undefined;
 }
 
 export interface SystemJob {
@@ -677,7 +681,7 @@ export interface RecordApiConfig {
    * / allowed to be expanded.
    */
   expand: string[];
-  /** / Hard limit for listing records (default: 1024). */
+  /** / Hard limit for listing records. [Default: 1024]. */
   listingHardLimit?: bigint | undefined;
 }
 
@@ -1842,6 +1846,12 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.authIpRateLimit !== undefined && message.authIpRateLimit !== 0) {
       writer.uint32(128).uint32(message.authIpRateLimit);
     }
+    if (message.backupWindowSize !== undefined && message.backupWindowSize !== 0n) {
+      if (BigInt.asUintN(64, message.backupWindowSize) !== message.backupWindowSize) {
+        throw new globalThis.Error("value provided for field message.backupWindowSize of type uint64 too large");
+      }
+      writer.uint32(136).uint64(message.backupWindowSize);
+    }
     return writer;
   },
 
@@ -1908,6 +1918,14 @@ export const ServerConfig: MessageFns<ServerConfig> = {
           message.authIpRateLimit = reader.uint32();
           continue;
         }
+        case 17: {
+          if (tag !== 136) {
+            break;
+          }
+
+          message.backupWindowSize = reader.uint64() as bigint;
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1954,6 +1972,11 @@ export const ServerConfig: MessageFns<ServerConfig> = {
         : isSet(object.auth_ip_rate_limit)
         ? globalThis.Number(object.auth_ip_rate_limit)
         : undefined,
+      backupWindowSize: isSet(object.backupWindowSize)
+        ? BigInt(object.backupWindowSize)
+        : isSet(object.backup_window_size)
+        ? BigInt(object.backup_window_size)
+        : undefined,
     };
   },
 
@@ -1980,6 +2003,9 @@ export const ServerConfig: MessageFns<ServerConfig> = {
     if (message.authIpRateLimit !== undefined && message.authIpRateLimit !== 0) {
       obj.authIpRateLimit = Math.round(message.authIpRateLimit);
     }
+    if (message.backupWindowSize !== undefined && message.backupWindowSize !== 0n) {
+      obj.backupWindowSize = message.backupWindowSize.toString();
+    }
     return obj;
   },
 
@@ -2002,6 +2028,9 @@ export const ServerConfig: MessageFns<ServerConfig> = {
         ? BigInt(object.requestSizeLimitBytes)
         : 0n;
     message.authIpRateLimit = object.authIpRateLimit ?? 0;
+    message.backupWindowSize = (object.backupWindowSize !== undefined && object.backupWindowSize !== null)
+      ? BigInt(object.backupWindowSize)
+      : 0n;
     return message;
   },
 };

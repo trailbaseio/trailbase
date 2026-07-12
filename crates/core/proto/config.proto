@@ -64,9 +64,6 @@ message OAuthProviderConfig {
   optional string auth_url = 12;
   optional string token_url = 13;
   optional string user_api_url = 14;
-
-  // TODO: Allow turning PKCE on/off. Currently on by default.
-  // optional bool pkce = 15;
 }
 
 // What user identifier to use for new user registrations as well as
@@ -91,9 +88,9 @@ enum UserIdentifier {
 }
 
 message AuthConfig {
-  /// Time-to-live in seconds for auth tokens. Default: 1h.
+  /// Time-to-live in seconds for auth tokens. [Default: 1h].
   optional int64 auth_token_ttl_sec = 1;
-  /// Time-to-live in seconds for refresh tokens. Default: 30 days.
+  /// Time-to-live in seconds for refresh tokens. [Default: 30 days]
   optional int64 refresh_token_ttl_sec = 2;
 
   /// Disables password-based sign-up. Does not affect already registered users.
@@ -108,7 +105,7 @@ message AuthConfig {
   /// trial.
   optional bool enable_anonymous_signin = 12;
 
-  /// Minimal password length. Defaults to 8.
+  /// Minimal password length. [Default: 8].
   optional uint32 password_minimal_length = 4;
 
   /// Password must contain lower and upper-case letters.
@@ -150,17 +147,17 @@ message S3StorageConfig {
 }
 
 message ServerConfig {
-  /// Application name presented to users, e.g. when sending emails. Default:
-  /// "TrailBase".
+  /// Application name presented to users, e.g. when sending emails.
+  /// [Default: "TrailBase"]
   optional string application_name = 1;
 
   /// Your final, deployed URL. This url is used to build canonical urls
-  /// for emails, OAuth redirects, ... . Default: "http://localhost:4000".
+  /// for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
   optional string site_url = 2;
 
   ///  Max age of logs that will be retained during period logs cleanup. Note
   ///  that this implies that some older logs may persist until the cleanup job
-  ///  reruns. Default: 7 days.
+  ///  reruns. [Default: 7 days]
   optional int64 logs_retention_sec = 11;
 
   /// If present will use S3 setup over local file-system based storage.
@@ -169,16 +166,19 @@ message ServerConfig {
   /// If enabled, batches of transactions can be submitted for atomic execution
   optional bool enable_record_transactions = 14;
 
-  /// Request size limit, default: 10MB.
+  /// Request size limit. [Default: 10MB]
   optional uint64 request_size_limit_bytes = 15;
 
   /// Limits the request per IP per second to auth POST APIs for abuse
   /// protection. If TrailBase is behind a proxy, make sure to set
-  /// "X-Forwarded-For". Default: disabled.
+  /// "X-Forwarded-For". [Default: disabled]
   ///
   /// Note that login endpoints have additional fixed rate limits
   /// on a per credentials level.
   optional uint32 auth_ip_rate_limit = 16;
+
+  /// Limits how many backups are kept at any time. [Default: 5]
+  optional uint64 backup_window_size = 17;
 }
 
 enum SystemJobId {
@@ -307,7 +307,7 @@ message RecordApiConfig {
   /// allowed to be expanded.
   repeated string expand = 21;
 
-  /// Hard limit for listing records (default: 1024).
+  /// Hard limit for listing records. [Default: 1024].
   optional uint64 listing_hard_limit = 22;
 }
 

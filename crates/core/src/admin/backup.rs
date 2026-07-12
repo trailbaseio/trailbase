@@ -36,12 +36,20 @@ pub async fn list_backups_handler(
 pub async fn trigger_backup_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListBackupsResponse>, Error> {
+  let backup_window_size =
+    state.access_config(|c| c.server.backup_window_size.unwrap_or(5)) as usize;
+  if backup_window_size == 0 {
+    return Err(Error::Precondition(
+      "Backups disabled. Window size explicitly set to 0".into(),
+    ));
+  }
+
   let data_dir = state.data_dir();
 
   let result =
     crate::backup::backup_all(data_dir, &state.connection_manager(), &state.get_config()).await;
 
-  if let Err(err) = crate::backup::delete_backups(data_dir, 5).await {
+  if let Err(err) = crate::backup::delete_backups(data_dir, backup_window_size).await {
     log::warn!("Failed to clean-up backups: {err}");
   }
 

@@ -12,8 +12,11 @@ import {
   TbOutlineDeviceFloppy,
 } from "solid-icons/tb";
 
+import { createConfigQuery } from "@/lib/api/config";
+
 import { showToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
+import { IconButton } from "@/components/IconButton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
   Table,
@@ -38,6 +41,7 @@ export function BackupSettings(_props: {
     queryKey: listBackupsKey,
     queryFn: listBackups,
   }));
+  const config = createConfigQuery();
 
   return (
     <Card>
@@ -45,25 +49,29 @@ export function BackupSettings(_props: {
         <h2>Backups</h2>
       </CardHeader>
 
-      <CardContent>
+      <CardContent class="flex flex-col gap-4">
+        <p class="text-sm">
+          You can backup and restore all registered databases. Additionally,
+          periodic backups can be configured via the Jobs tab. The oldest
+          backups exceeding a configurable rolling window are cleaned up
+          automatically. Note that the window size can currently only be
+          configured using the text configuration. Current window size:{" "}
+          {Number(config.data?.config?.server?.backupWindowSize ?? 5)}.
+        </p>
+
         <Switch fallback="Loading...">
           <Match when={backupsList.isError}>
             {backupsList.error?.toString()}
           </Match>
 
           <Match when={backupsList.isSuccess}>
-            <div class="flex flex-col gap-4">
-              <p class="ml-4 text-sm">
-                TrailBase supports a rolling window of backups, which is
-                currently hard-coded to 5. Will be configurable in future
-                versions.
-              </p>
-
-              {/* Should we use our Table component instead like for explorer and DB manager? */}
+            <div class="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableHead>Time</TableHead>
-                  <TableHead>Action</TableHead>
+                  <TableHead class="w-[120px]">
+                    <span class="flex justify-center">Actions</span>
+                  </TableHead>
                 </TableHeader>
 
                 <TableBody>
@@ -76,9 +84,8 @@ export function BackupSettings(_props: {
                           </TableCell>
                           <TableCell>
                             <div class="flex gap-2">
-                              <Button
-                                size="icon"
-                                variant="outline"
+                              <IconButton
+                                tooltip="Delete backup."
                                 onClick={() => {
                                   (async () => {
                                     await deleteBackups([item.timestamp]);
@@ -87,11 +94,10 @@ export function BackupSettings(_props: {
                                 }}
                               >
                                 <TbOutlineTrash />
-                              </Button>
+                              </IconButton>
 
-                              <Button
-                                size="icon"
-                                variant="outline"
+                              <IconButton
+                                tooltip="Restore backup."
                                 onClick={() => {
                                   (async () => {
                                     await restoreBackup(item.timestamp);
@@ -104,7 +110,7 @@ export function BackupSettings(_props: {
                                 }}
                               >
                                 <TbOutlineRestore />
-                              </Button>
+                              </IconButton>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -113,20 +119,21 @@ export function BackupSettings(_props: {
                   </For>
                 </TableBody>
               </Table>
+            </div>
 
-              <div class="flex justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    (async () => {
-                      await triggerBackup();
-                      await backupsList.refetch();
-                    })();
-                  }}
-                >
-                  Trigger New Backup <TbOutlineDeviceFloppy />
-                </Button>
-              </div>
+            <div class="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  (async () => {
+                    await triggerBackup();
+                    await backupsList.refetch();
+                  })();
+                }}
+              >
+                <TbOutlineDeviceFloppy />
+                Trigger Backup
+              </Button>
             </div>
           </Match>
         </Switch>

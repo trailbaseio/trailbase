@@ -430,8 +430,16 @@ async fn async_main(
         })
         .await?;
 
+        let backup_window_size =
+          state.access_config(|c| c.server.backup_window_size.unwrap_or(5)) as usize;
+
+        if backup_window_size == 0 {
+          println!("Skipping backup. Window size explicitly set to 0");
+          return Ok(());
+        }
+
         api::backup_all(&data_dir, &state.connection_manager(), &state.get_config()).await?;
-        api::delete_backups(&data_dir, 5).await?;
+        api::delete_backups(&data_dir, backup_window_size).await?;
 
         println!("Backup succeeded.");
       }
