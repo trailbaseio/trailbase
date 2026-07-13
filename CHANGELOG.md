@@ -1,3 +1,11 @@
+## v0.30.3
+
+- Add an initial version of admin UI dark mode support.
+  - The styling most certainly deserves more tweaking, feedback very welcome 🙏.
+  - Next, we should also add dark-mode to the auth UI.
+- Make ERD graph styling reactive.
+- Some more minor styling tweaks.
+
 ## v0.30.2
 
 - Better backups 🎉
