@@ -1,3 +1,9 @@
+## v0.30.4
+
+- Add dark mode to auth UI.
+- Fix mode switcher layout in admin UI on mobile.
+- Update dependencies.
+
 ## v0.30.3
 
 - Add an initial version of admin UI dark mode support.
