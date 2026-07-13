@@ -174,7 +174,6 @@ function RegisterTotpDialog(props: {
         <TextFieldLabel>Code</TextFieldLabel>
 
         <TextFieldInput
-          class="bg-white"
           required={true}
           type="text"
           autocomplete="new-password"

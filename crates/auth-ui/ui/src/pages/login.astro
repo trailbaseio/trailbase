@@ -5,6 +5,7 @@ import TextFieldInput from "@/components/TextFieldInput.astro";
 import TextFieldLabel from "@/components/TextFieldLabel.astro";
 
 import { buttonVariants } from "@/components/ui/button";
+import { SwitchThemeButton } from "@/components/ThemeSwitcher"
 import { AUTH_API } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,8 @@ const formBaseAction = `${AUTH_API}/login`;
 ---
 
 <Form title="Login">
+  <SwitchThemeButton slot="header" client:only="solid-js" />
+
   <div>
     <form
       id="login-form"

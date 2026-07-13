@@ -242,13 +242,11 @@
 @layer base {
   h1 {
     @apply text-2xl;
-    @apply mb-2;
     font-weight: 700;
   }
 
   h2 {
     @apply text-xl;
-    @apply mb-2;
     font-weight: 700;
   }
 

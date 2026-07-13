@@ -37,7 +37,7 @@ import {
 import { Version } from "@/components/Version";
 
 import { createSystemInfoQuery } from "@/lib/api/info";
-import { currentTheme, applyResolvedTheme } from "@/lib/theme";
+import { createTheme, currentTheme, applyResolvedTheme } from "@/lib/theme";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -138,31 +138,16 @@ function NavFooter(props: { horizontal: boolean }) {
   const systemInfo = createSystemInfoQuery();
 
   return (
-    <div class="flex flex-col items-center">
+    <div
+      class={
+        props.horizontal
+          ? "flex items-center gap-4"
+          : "flex flex-col items-center"
+      }
+    >
       <Tooltip>
         <TooltipTrigger as="div">
-          <button
-            class={navbarIconStyle}
-            type="button"
-            onClick={() => {
-              applyResolvedTheme(currentTheme() === "dark" ? "light" : "dark");
-            }}
-            aria-label={
-              currentTheme() === "dark"
-                ? "Switch to light mode"
-                : "Switch to dark mode"
-            }
-          >
-            <Switch>
-              <Match when={currentTheme() === "dark"}>
-                <TbOutlineSun size={iconSize(props.horizontal)} />
-              </Match>
-
-              <Match when={currentTheme() === "light"}>
-                <TbOutlineMoon size={iconSize(props.horizontal)} />
-              </Match>
-            </Switch>
-          </button>
+          <SwitchThemeButton horizontal={props.horizontal} />
         </TooltipTrigger>
 
         <TooltipContent>
@@ -263,6 +248,33 @@ export function DirtyDialog(props: {
         </div>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+export function SwitchThemeButton(props: { horizontal: boolean }) {
+  const theme = createTheme();
+
+  return (
+    <button
+      type="button"
+      class={navbarIconStyle}
+      onClick={() => {
+        applyResolvedTheme(currentTheme() === "dark" ? "light" : "dark");
+      }}
+      aria-label={
+        theme() === "dark" ? "Switch to light mode" : "Switch to dark mode"
+      }
+    >
+      <Switch>
+        <Match when={theme() === "dark"}>
+          <TbOutlineSun size={iconSize(props.horizontal)} />
+        </Match>
+
+        <Match when={theme() === "light"}>
+          <TbOutlineMoon size={iconSize(props.horizontal)} />
+        </Match>
+      </Switch>
+    </button>
   );
 }
 

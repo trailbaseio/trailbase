@@ -2,10 +2,13 @@ import { createSignal, Switch, Show, Match } from "solid-js";
 import type { Signal } from "solid-js";
 import {
   TbFillUser,
+  TbOutlineUser,
   TbOutlineMenu2,
   TbOutlineLogout,
   TbOutlineTrash,
   TbOutlineEdit,
+  TbOutlinePassword,
+  TbOutlineMailShare,
 } from "solid-icons/tb";
 import { useStore } from "@nanostores/solid";
 import type { Client, User } from "trailbase";
@@ -20,6 +23,7 @@ import { Card } from "@/components/ui/card";
 import { showToast } from "@/components/ui/toast";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { TotpToggleButton } from "@/components/Totp";
+import { SwitchThemeButton } from "@/components/ThemeSwitcher";
 import {
   Dialog,
   DialogContent,
@@ -126,7 +130,7 @@ function Avatar(props: { client: Client; user: User }) {
 
       <div class="relative">
         <button
-          class="rounded-sm bg-gray-100 p-2 hover:bg-gray-200"
+          class="bg-muted rounded-sm p-2 hover:bg-gray-200"
           onClick={() => fileRef!.click()}
         >
           <object
@@ -183,6 +187,12 @@ function ProfileTable(props: { client: Client; user: User }) {
           <h1>User Profile</h1>
 
           <div class="flex items-center gap-2">
+            <SwitchThemeButton />
+
+            <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
+              <TbOutlineLogout />
+            </a>
+
             <DropdownMenu>
               <DropdownMenuTrigger class={cn(ICON_STYLE, "size-[32px]")}>
                 <TbOutlineMenu2 />
@@ -190,18 +200,27 @@ function ProfileTable(props: { client: Client; user: User }) {
 
               <DropdownMenuContent>
                 <a href="/_/auth/change_email">
-                  <DropdownMenuItem>Change Email</DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <TbOutlineMailShare />
+                    Change Email
+                  </DropdownMenuItem>
                 </a>
 
                 <Show when={props.user.username !== null}>
                   <a href="/_/auth/change_username">
-                    <DropdownMenuItem>Change Username</DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <TbOutlineUser />
+                      Change Username
+                    </DropdownMenuItem>
                   </a>
                 </Show>
 
                 <Show when={!isOAuth()}>
                   <a href="/_/auth/change_password">
-                    <DropdownMenuItem>Change Password</DropdownMenuItem>
+                    <DropdownMenuItem>
+                      <TbOutlinePassword />
+                      Change Password
+                    </DropdownMenuItem>
                   </a>
                 </Show>
 
@@ -213,6 +232,14 @@ function ProfileTable(props: { client: Client; user: User }) {
                 >
                   <TbOutlineTrash /> Delete Account
                 </DropdownMenuItem>
+
+                <DropdownMenuSeparator />
+
+                <a href={`${HOST}/_/auth/logout`}>
+                  <DropdownMenuItem>
+                    <TbOutlineLogout /> Logout
+                  </DropdownMenuItem>
+                </a>
 
                 <Show when={import.meta.env.DEV}>
                   <DropdownMenuSeparator />
@@ -231,10 +258,6 @@ function ProfileTable(props: { client: Client; user: User }) {
               client={props.client}
               open={[deleteAccountOpen, setDeleteAccountOpen]}
             />
-
-            <a class={cn(ICON_STYLE)} href={`${HOST}/_/auth/logout`}>
-              <TbOutlineLogout />
-            </a>
           </div>
         </div>
 

@@ -15,6 +15,7 @@ const { title, level } = Astro.props;
 <BaseLayout title={title}>
   <div class="mx-auto flex h-dvh w-screen flex-col items-center justify-center">
     <Card title={title}>
+      <slot name="header" slot="header" />
       <slot />
     </Card>
 
