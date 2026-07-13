@@ -1,4 +1,4 @@
-import { type JSX, Show } from "solid-js";
+import { JSX, Show } from "solid-js";
 import { Separator } from "@/components/ui/separator";
 
 export function Header(props: {
@@ -21,13 +21,14 @@ export function Header(props: {
         </Show>
 
         <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
-          <h2 class="m-0">
-            <Show when={props.titleSelect} fallback={props.title}>
-              <span class="text-accent-600">{props.title}</span>
+          <h1 class="m-0">
+            <span class="text-accent-600">{props.title}</span>
+
+            <Show when={props.titleSelect}>
               <span class="text-muted-foreground mx-2">‣</span>
               <span class="font-normal">{props.titleSelect}</span>
             </Show>
-          </h2>
+          </h1>
 
           {/* left */}
           <Show when={props.left !== undefined}>{props.left}</Show>

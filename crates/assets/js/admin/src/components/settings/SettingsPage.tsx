@@ -580,7 +580,7 @@ export function SettingsPage() {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset class="min-w-0">
+      <SidebarInset>
         <Switch>
           <Match when={isMobile()}>
             <Body />

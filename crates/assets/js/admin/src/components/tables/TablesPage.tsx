@@ -320,33 +320,32 @@ function TableSplitView(props: {
                 <SidebarRail />
               </Sidebar>
 
-              <SidebarInset class="min-w-0">
-                <Show
-                  when={selectedTable() !== undefined}
-                  fallback={<div class="p-4">No table selected</div>}
-                >
-                  <Switch>
-                    <Match when={isMobile()}>
+              <SidebarInset>
+                <Switch>
+                  <Match when={selectedTable() !== undefined && isMobile()}>
+                    <TablePane
+                      selectedTable={selectedTable()!}
+                      schemas={props.schemas}
+                      schemaRefetch={props.schemaRefetch}
+                      postgres={isPostgres()}
+                    />
+                  </Match>
+
+                  <Match when={selectedTable() !== undefined && !isMobile()}>
+                    <div class="h-dvh overflow-y-auto">
                       <TablePane
                         selectedTable={selectedTable()!}
                         schemas={props.schemas}
                         schemaRefetch={props.schemaRefetch}
                         postgres={isPostgres()}
                       />
-                    </Match>
+                    </div>
+                  </Match>
 
-                    <Match when={!isMobile()}>
-                      <div class="h-dvh overflow-y-auto">
-                        <TablePane
-                          selectedTable={selectedTable()!}
-                          schemas={props.schemas}
-                          schemaRefetch={props.schemaRefetch}
-                          postgres={isPostgres()}
-                        />
-                      </div>
-                    </Match>
-                  </Switch>
-                </Show>
+                  <Match when={true}>
+                    <div class="p-4">No table selected</div>
+                  </Match>
+                </Switch>
               </SidebarInset>
             </SidebarProvider>
           </>

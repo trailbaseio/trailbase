@@ -148,7 +148,7 @@ const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
           ...local.style
         }}
         class={cn(
-          "group/sidebar-wrapper flex min-h-svh w-full text-sidebar-foreground has-[[data-variant=inset]]:bg-sidebar",
+          "group/sidebar-wrapper flex min-h-svh overflow-y-hidden w-full text-sidebar-foreground has-[[data-variant=inset]]:bg-sidebar",
           local.class
         )}
         {...others}

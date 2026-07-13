@@ -773,7 +773,7 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider class="min-h-0">
+    <SidebarProvider>
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -797,7 +797,7 @@ export function EditorPage() {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset class="min-h-0 min-w-0">
+      <SidebarInset>
         <Switch fallback={"Loading..."}>
           <Match when={schemaFetch.isError}>
             <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
