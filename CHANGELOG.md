@@ -1,3 +1,10 @@
+## v0.30.5
+
+- Allow configuring refresh-token TTL for anonymous auth.
+- Allow for eternal refresh-tokens by setting a negative TTL.
+- Minor: admin UI forms, improved integer fields and more explicit limits.
+- Update dependencies.
+
 ## v0.30.4
 
 - Add dark mode to auth UI.
