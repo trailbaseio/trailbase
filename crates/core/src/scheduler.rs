@@ -443,6 +443,10 @@ fn build_job(
     }
     SystemJobId::AnonymousCleaner => {
       let main_conn = connection_manager.main_entry().connection.clone();
+      let anonymous_refresh_token_ttl = config
+        .auth
+        .anonymous_refresh_token_ttl_sec
+        .map_or(DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, Duration::seconds);
 
       DefaultSystemJob {
         name: "Anonymous User Cleanup",
@@ -454,7 +458,7 @@ fn build_job(
         callback: build_callback(move || {
           let main_conn = main_conn.clone();
           return async move {
-            return cleanup_anonymous_users(&main_conn).await;
+            return cleanup_anonymous_users(&main_conn, anonymous_refresh_token_ttl).await;
           };
         }),
       }
@@ -560,6 +564,7 @@ pub fn build_job_registry_from_config(
 
 pub(crate) async fn cleanup_anonymous_users(
   user_conn: &trailbase_sqlite::Connection,
+  refresh_token_ttl: chrono::Duration,
 ) -> Result<(), trailbase_sqlite::Error> {
   const QUERY: &str = formatcp!(
     "\
@@ -575,7 +580,7 @@ pub(crate) async fn cleanup_anonymous_users(
     .execute(
       QUERY,
       named_params! {
-          ":ttl_seconds":DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL.num_seconds(),
+          ":ttl_seconds": refresh_token_ttl.num_seconds(),
       },
     )
     .await?;

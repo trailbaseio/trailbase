@@ -18,6 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  NumberField,
+  NumberFieldDecrementTrigger,
+  NumberFieldGroup,
+  NumberFieldIncrementTrigger,
+  NumberFieldInput,
+  NumberFieldLabel,
+} from "@/components/ui/number-field";
+import {
   TextField,
   TextFieldLabel,
   TextFieldInput,
@@ -265,46 +273,48 @@ type NumberFieldOptions = {
 
   info?: JSX.Element;
   placeholder?: string;
+  min?: number;
 };
 
 /// Used for proto Settings. Empty field is the same as absent.
 ///
-/// Prefer `buildOptionalIntegerFormField` and `buildOptionalFloatFormField`. We
-export function buildOptionalNumberFormField(
-  opts: NumberFieldOptions & { integer?: boolean },
-) {
+/// Prefer `buildOptionalIntegerFormField` and `buildOptionalFloatFormField`.
+/// This is currently used for smaller integers, e.g. uint32 as opposed to bigint.
+export function buildOptionalSmallIntegerFormField(opts: NumberFieldOptions) {
   return function builder(field: () => FieldApiT<number | undefined>) {
-    const isInt = opts.integer ?? false;
-
     return (
-      <TextField class="w-full">
+      <NumberField
+        class="w-full"
+        disabled={opts.disabled ?? false}
+        defaultValue={field().state.value?.toString() ?? ""}
+        onChange={(value) => {
+          field().handleChange(tryParseInt(value));
+        }}
+        step={1}
+        minValue={opts.min}
+        allowedInput={/-?\d?/}
+      >
         <div
           class={cn("grid items-center", gapStyle)}
           style={{ "grid-template-columns": "auto 1fr" }}
         >
-          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+          <NumberFieldLabel>{opts.label()}</NumberFieldLabel>
 
-          <TextFieldInput
-            disabled={opts.disabled ?? false}
-            type={isInt ? "number" : "text"}
-            step={isInt ? "1" : undefined}
-            pattern={isInt ? undefined : floatPattern}
-            value={field().state.value?.toString() ?? ""}
-            placeholder={opts.placeholder}
-            onBlur={field().handleBlur}
-            onChange={(e: Event) => {
-              const value = (e.target as HTMLInputElement).value;
-              const parsed = isInt ? tryParseInt(value) : tryParseFloat(value);
-              field().handleChange(parsed);
-            }}
-            data-testid="input"
-          />
+          <NumberFieldGroup>
+            <NumberFieldInput
+              placeholder={opts.placeholder}
+              onBlur={field().handleBlur}
+              data-testid="input"
+            />
+            <NumberFieldIncrementTrigger />
+            <NumberFieldDecrementTrigger />
+          </NumberFieldGroup>
 
           <GridFieldInfo field={field()} />
 
           <InfoColumn info={opts.info} />
         </div>
-      </TextField>
+      </NumberField>
     );
   };
 }
@@ -313,32 +323,38 @@ export function buildOptionalNumberFormField(
 export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
   return function builder(field: () => FieldApiT<bigint | undefined>) {
     return (
-      <TextField class="w-full">
+      <NumberField
+        class="w-full"
+        defaultValue={field().state.value?.toString() ?? ""}
+        disabled={opts.disabled ?? false}
+        onChange={(value: string) => {
+          field().handleChange(tryParseBigInt(value));
+        }}
+        step={1}
+        minValue={opts.min}
+        allowedInput={/-?\d?/}
+      >
         <div
           class={cn("grid items-center", gapStyle)}
           style={{ "grid-template-columns": "auto 1fr" }}
         >
-          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+          <NumberFieldLabel>{opts.label()}</NumberFieldLabel>
 
-          <TextFieldInput
-            disabled={opts.disabled ?? false}
-            type={"number"}
-            step={"1"}
-            value={field().state.value?.toString() ?? ""}
-            placeholder={opts.placeholder}
-            onBlur={field().handleBlur}
-            onChange={(e: Event) => {
-              const value = (e.target as HTMLInputElement).value;
-              field().handleChange(tryParseBigInt(value));
-            }}
-            data-testid="input"
-          />
+          <NumberFieldGroup>
+            <NumberFieldInput
+              placeholder={opts.placeholder}
+              onBlur={field().handleBlur}
+              data-testid="input"
+            />
+            <NumberFieldIncrementTrigger />
+            <NumberFieldDecrementTrigger />
+          </NumberFieldGroup>
 
           <GridFieldInfo field={field()} />
 
           <InfoColumn info={opts.info} />
         </div>
-      </TextField>
+      </NumberField>
     );
   };
 }
@@ -357,7 +373,7 @@ export function buildOptionalFloatFormField(opts: NumberFieldOptions) {
           <TextFieldInput
             disabled={opts.disabled ?? false}
             type={"text"}
-            pattern={floatPattern}
+            pattern={floatPattern.source}
             value={field().state.value?.toString() ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
@@ -566,6 +582,6 @@ export function unsetOrLargerThanZero() {
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";
-export const floatPattern = "[-+]?[0-9]*[.]?[0-9]+";
-export const intPattern = "[-+]?[0-9]+";
-export const uintPattern = "[+]?[0-9]+";
+export const floatPattern = /[+\\-]?[0-9]*[.]?[0-9]+/;
+export const intPattern = /[+\\-]?[0-9]+/;
+export const uintPattern = /[+]?[0-9]+/;

@@ -959,7 +959,7 @@ async fn test_auth_register_handle_only() {
   .await
   .unwrap();
 
-  crate::scheduler::cleanup_anonymous_users(state.user_conn())
+  crate::scheduler::cleanup_anonymous_users(state.user_conn(), DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL)
     .await
     .unwrap();
 

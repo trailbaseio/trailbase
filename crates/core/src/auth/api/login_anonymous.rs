@@ -41,12 +41,15 @@ pub async fn login_anonymous_user_handler(
   cookies: Cookies,
   either_request: Either<LoginAnonymousRequest>,
 ) -> Result<Response, AuthError> {
-  let (enabled, auth_token_ttl) = state.access_config(|c| {
+  let (enabled, auth_token_ttl, anonymous_refresh_token_ttl) = state.access_config(|c| {
     (
       c.auth.enable_anonymous_signin.unwrap_or(false),
       c.auth
         .auth_token_ttl_sec
         .map_or(DEFAULT_AUTH_TOKEN_TTL, Duration::seconds),
+      c.auth
+        .anonymous_refresh_token_ttl_sec
+        .map_or(DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, Duration::seconds),
     )
   });
 
@@ -99,7 +102,7 @@ pub async fn login_anonymous_user_handler(
           json,
           // TODO: Separate config setting for anonymous token TTLs. Folks may want this to be
           // longer than normal refresh token TTL in the absence of re-sign-in.
-          (auth_token_ttl, DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL),
+          (auth_token_ttl, anonymous_refresh_token_ttl),
         )
         .await;
       }

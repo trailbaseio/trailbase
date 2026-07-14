@@ -91,7 +91,16 @@ message AuthConfig {
   /// Time-to-live in seconds for auth tokens. [Default: 1h].
   optional int64 auth_token_ttl_sec = 1;
   /// Time-to-live in seconds for refresh tokens. [Default: 30 days]
+  ///
+  /// When set to zero tokens will instantly expire basically disabling auth
+  /// token refresh. When set to a negative value, tokens will never expire.
   optional int64 refresh_token_ttl_sec = 2;
+  /// Time-to-live in seconds for anonymous-auth refresh tokens.
+  /// [Default: 90 days]
+  ///
+  /// When set to zero tokens will instantly expire basically disabling auth
+  /// token refresh. When set to a negative value, tokens will never expire.
+  optional int64 anonymous_refresh_token_ttl_sec = 9;
 
   /// Disables password-based sign-up. Does not affect already registered users.
   optional bool disable_password_auth = 3;

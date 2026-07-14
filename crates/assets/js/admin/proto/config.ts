@@ -448,8 +448,23 @@ export interface AuthConfig {
   authTokenTtlSec?:
     | bigint
     | undefined;
-  /** / Time-to-live in seconds for refresh tokens. [Default: 30 days] */
+  /**
+   * / Time-to-live in seconds for refresh tokens. [Default: 30 days]
+   * /
+   * / When set to zero tokens will instantly expire basically disabling auth
+   * / token refresh. When set to a negative value, tokens will never expire.
+   */
   refreshTokenTtlSec?:
+    | bigint
+    | undefined;
+  /**
+   * / Time-to-live in seconds for anonymous-auth refresh tokens.
+   * / [Default: 90 days]
+   * /
+   * / When set to zero tokens will instantly expire basically disabling auth
+   * / token refresh. When set to a negative value, tokens will never expire.
+   */
+  anonymousRefreshTokenTtlSec?:
     | bigint
     | undefined;
   /** / Disables password-based sign-up. Does not affect already registered users. */
@@ -1262,6 +1277,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
       }
       writer.uint32(16).int64(message.refreshTokenTtlSec);
     }
+    if (message.anonymousRefreshTokenTtlSec !== undefined && message.anonymousRefreshTokenTtlSec !== 0n) {
+      if (BigInt.asIntN(64, message.anonymousRefreshTokenTtlSec) !== message.anonymousRefreshTokenTtlSec) {
+        throw new globalThis.Error(
+          "value provided for field message.anonymousRefreshTokenTtlSec of type int64 too large",
+        );
+      }
+      writer.uint32(72).int64(message.anonymousRefreshTokenTtlSec);
+    }
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       writer.uint32(24).bool(message.disablePasswordAuth);
     }
@@ -1325,6 +1348,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
           }
 
           message.refreshTokenTtlSec = reader.int64() as bigint;
+          continue;
+        }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.anonymousRefreshTokenTtlSec = reader.int64() as bigint;
           continue;
         }
         case 3: {
@@ -1439,6 +1470,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : isSet(object.refresh_token_ttl_sec)
         ? BigInt(object.refresh_token_ttl_sec)
         : undefined,
+      anonymousRefreshTokenTtlSec: isSet(object.anonymousRefreshTokenTtlSec)
+        ? BigInt(object.anonymousRefreshTokenTtlSec)
+        : isSet(object.anonymous_refresh_token_ttl_sec)
+        ? BigInt(object.anonymous_refresh_token_ttl_sec)
+        : undefined,
       disablePasswordAuth: isSet(object.disablePasswordAuth)
         ? globalThis.Boolean(object.disablePasswordAuth)
         : isSet(object.disable_password_auth)
@@ -1517,6 +1553,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.refreshTokenTtlSec !== undefined && message.refreshTokenTtlSec !== 0n) {
       obj.refreshTokenTtlSec = message.refreshTokenTtlSec.toString();
     }
+    if (message.anonymousRefreshTokenTtlSec !== undefined && message.anonymousRefreshTokenTtlSec !== 0n) {
+      obj.anonymousRefreshTokenTtlSec = message.anonymousRefreshTokenTtlSec.toString();
+    }
     if (message.disablePasswordAuth !== undefined && message.disablePasswordAuth !== false) {
       obj.disablePasswordAuth = message.disablePasswordAuth;
     }
@@ -1576,6 +1615,10 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.refreshTokenTtlSec = (object.refreshTokenTtlSec !== undefined && object.refreshTokenTtlSec !== null)
       ? BigInt(object.refreshTokenTtlSec)
       : 0n;
+    message.anonymousRefreshTokenTtlSec =
+      (object.anonymousRefreshTokenTtlSec !== undefined && object.anonymousRefreshTokenTtlSec !== null)
+        ? BigInt(object.anonymousRefreshTokenTtlSec)
+        : 0n;
     message.disablePasswordAuth = object.disablePasswordAuth ?? false;
     message.enableOtpSignin = object.enableOtpSignin ?? false;
     message.enableAnonymousSignin = object.enableAnonymousSignin ?? false;

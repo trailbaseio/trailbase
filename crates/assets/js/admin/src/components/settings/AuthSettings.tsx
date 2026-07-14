@@ -12,7 +12,7 @@ import {
 
 import {
   buildOptionalIntegerFormField,
-  buildOptionalNumberFormField,
+  buildOptionalSmallIntegerFormField,
   buildOptionalBoolFormField,
   buildOptionalSecretFormField,
   buildOptionalTextFormField,
@@ -460,8 +460,7 @@ function AuthSettingsForm(props: {
               </form.Field>
 
               <form.Field name="passwordMinimalLength">
-                {buildOptionalNumberFormField({
-                  integer: true,
+                {buildOptionalSmallIntegerFormField({
                   placeholder: "8",
                   label: () => (
                     <InfoTooltip label="Min Length">
@@ -550,6 +549,7 @@ function AuthSettingsForm(props: {
               <form.Field name="authTokenTtlSec">
                 {buildOptionalIntegerFormField({
                   placeholder: `${60 * 60}`,
+                  min: 0,
                   label: () => (
                     <InfoTooltip label="Auth TTL [sec]">
                       Tokens older than this TTL are considered invalid. A new
@@ -562,10 +562,36 @@ function AuthSettingsForm(props: {
               <form.Field name="refreshTokenTtlSec">
                 {buildOptionalIntegerFormField({
                   placeholder: `${30 * 24 * 60 * 60}`,
+                  min: -1,
                   label: () => (
                     <InfoTooltip label="Refresh TTL [sec]">
                       Refresh tokens older than this TTL are considered invalid.
                       A refresh token can be renewed by users logging in again.
+                      <br />
+                      <br />
+                      When set to zero tokens will instantly expire basically
+                      disabling auth token refresh. When set to a negative
+                      value, tokens will never expire.
+                    </InfoTooltip>
+                  ),
+                })}
+              </form.Field>
+
+              <form.Field name="anonymousRefreshTokenTtlSec">
+                {buildOptionalIntegerFormField({
+                  placeholder: `${90 * 24 * 60 * 60}`,
+                  min: -1,
+                  label: () => (
+                    <InfoTooltip label="Anonymous Refresh TTL [sec]">
+                      Just like "Refresh TTL" above but for anonymous sign-in.
+                      An expired refresh token, renders the corresponding
+                      anonymous users inert and will consequently be cleaned up.
+                      Expired anonymous user cannot be revived.
+                      <br />
+                      <br />
+                      When set to zero tokens will instantly expire basically
+                      disabling auth token refresh. When set to a negative
+                      value, tokens will never expire.
                     </InfoTooltip>
                   ),
                 })}

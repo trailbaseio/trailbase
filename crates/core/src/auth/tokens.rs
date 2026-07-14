@@ -1,3 +1,5 @@
+use std::{i64, ops::Neg};
+
 use axum::{
   extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
   http::{header, request::Parts},
@@ -177,26 +179,23 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
-  let claims = AuthTokenClaims::new(db_user, auth_token_ttl);
-
   // Unlike JWT auth tokens, refresh tokens are opaque.
   let refresh_token = random_alphanumeric(REFRESH_TOKEN_LENGTH);
+  let expires = if refresh_token_ttl.num_seconds() >= 0 {
+    (chrono::Utc::now() + *refresh_token_ttl).timestamp()
+  } else {
+    i64::MAX
+  };
+
   const QUERY: &str =
     formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token, expires) VALUES ($1, $2, $3)");
 
   session_conn
-    .execute(
-      QUERY,
-      params!(
-        db_user.id,
-        refresh_token.clone(),
-        (chrono::Utc::now() + *refresh_token_ttl).timestamp(),
-      ),
-    )
+    .execute(QUERY, params!(db_user.id, refresh_token.clone(), expires))
     .await?;
 
   return Ok(FreshTokens {
-    auth_token_claims: claims,
+    auth_token_claims: AuthTokenClaims::new(db_user, auth_token_ttl),
     refresh_token,
   });
 }
@@ -207,6 +206,8 @@ pub(crate) async fn reauth_with_refresh_token(
 ) -> Result<(AuthTokenClaims, chrono::Duration), AuthError> {
   let (auth_token_ttl, _refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
 
+  // QUESTION: Should we push expiry on refresh? At this point refresh token TTL would only start
+  // ticking with last login. This may be especially useful for anonymous auth.
   const SESSION_QUERY: &str = formatcp!(
     "\
       SELECT user \
