@@ -274,6 +274,7 @@ type NumberFieldOptions = {
   info?: JSX.Element;
   placeholder?: string;
   min?: number;
+  max?: number;
 };
 
 /// Used for proto Settings. Empty field is the same as absent.
@@ -292,6 +293,7 @@ export function buildOptionalSmallIntegerFormField(opts: NumberFieldOptions) {
         }}
         step={1}
         minValue={opts.min}
+        maxValue={opts.max}
         allowedInput={/-?\d?/}
       >
         <div
@@ -332,6 +334,7 @@ export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
         }}
         step={1}
         minValue={opts.min}
+        maxValue={opts.max}
         allowedInput={/-?\d?/}
       >
         <div
@@ -582,6 +585,6 @@ export function unsetOrLargerThanZero() {
 }
 
 export const gapStyle = "gap-x-2 gap-y-1";
-export const floatPattern = /[+\\-]?[0-9]*[.]?[0-9]+/;
-export const intPattern = /[+\\-]?[0-9]+/;
-export const uintPattern = /[+]?[0-9]+/;
+export const floatPattern = /^[+\\-]?[0-9]*[.]?[0-9]+$/;
+export const intPattern = /^[+\\-]?[0-9]+$/;
+export const uintPattern = /^[+]?[0-9]+$/;

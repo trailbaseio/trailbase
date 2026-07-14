@@ -3,6 +3,7 @@ import { urlSafeBase64Encode } from "trailbase";
 
 import { parseFilter } from "@/lib/list";
 import { urlSafeBase64EncodeStream } from "@/lib/base64";
+import { intPattern, uintPattern, floatPattern } from "@/components/FormFields";
 
 describe("filterParser", () => {
   test("basic", ({ expect }) => {
@@ -80,5 +81,32 @@ describe("base64 stream", () => {
     expect(await urlSafeBase64EncodeStream(stream)).toEqual(
       urlSafeBase64Encode(input),
     );
+  });
+});
+
+describe("regexPatters", () => {
+  test("int", ({ expect }) => {
+    expect(intPattern.exec("0")?.[0]).toEqual("0");
+    expect(intPattern.exec("123456789")?.[0]).toEqual("123456789");
+    expect(intPattern.exec("1.1")).toBeNull();
+    expect(intPattern.exec("+1")?.[0]).toEqual("+1");
+    expect(intPattern.exec("-1")?.[0]).toEqual("-1");
+  });
+
+  test("uint", ({ expect }) => {
+    expect(uintPattern.exec("0")?.[0]).toEqual("0");
+    expect(uintPattern.exec("123456789")?.[0]).toEqual("123456789");
+    expect(uintPattern.exec("1.1")).toBeNull();
+    expect(uintPattern.exec("+1")?.[0]).toEqual("+1");
+    expect(uintPattern.exec("-1")).toBeNull();
+  });
+
+  test("float", ({ expect }) => {
+    expect(floatPattern.exec("0")?.[0]).toEqual("0");
+    expect(floatPattern.exec("123456789")?.[0]).toEqual("123456789");
+    expect(floatPattern.exec("1.1")?.[0]).toEqual("1.1");
+    expect(floatPattern.exec("+1.1")?.[0]).toEqual("+1.1");
+    expect(floatPattern.exec("+1")?.[0]).toEqual("+1");
+    expect(floatPattern.exec("-1")?.[0]).toEqual("-1");
   });
 });

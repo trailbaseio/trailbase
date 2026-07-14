@@ -203,6 +203,8 @@ export function EmailSettings(props: {
               <form.Field name="smtpPort" validators={unsetOrLargerThanZero()}>
                 {buildOptionalSmallIntegerFormField({
                   label: textLabel("Port"),
+                  min: 1,
+                  max: 65535,
                 })}
               </form.Field>
 

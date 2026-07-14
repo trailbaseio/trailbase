@@ -329,8 +329,6 @@ function buildSqlIntegerFormField(opts: SqlFormFieldOptions) {
         <FormRow field={field}>
           <TextFieldLabel>{opts.label}</TextFieldLabel>
 
-          {/* pattern={"[-+]?[0-9]+"} */}
-
           <TextFieldInput
             disabled={disabled()}
             type={"number"}

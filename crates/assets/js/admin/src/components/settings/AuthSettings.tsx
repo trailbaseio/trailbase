@@ -462,6 +462,8 @@ function AuthSettingsForm(props: {
               <form.Field name="passwordMinimalLength">
                 {buildOptionalSmallIntegerFormField({
                   placeholder: "8",
+                  min: 6,
+                  max: 256,
                   label: () => (
                     <InfoTooltip label="Min Length">
                       Minimal length for new passwords. Does not affect existing
