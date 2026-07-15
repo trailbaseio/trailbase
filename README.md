@@ -177,6 +177,15 @@ pnpm install
 cargo build --bin trail
 ```
 
+On Debian/Ubuntu-style systems without sudo access to install build packages,
+this fork can populate the repo-local `.dev-tools/` cache used by
+`.cargo/config.toml`:
+
+```sh
+scripts/bootstrap-local-dev-tools.sh
+cargo check --workspace --all-targets
+```
+
 Alternatively, if you want to build a Docker image or don't want to deal with
 build dependencies, you can simply run:
 
