@@ -99,6 +99,10 @@ This example uses the published Docker Hub image. Pin `0.2` for reproducible
 deployments or use `latest` when you intentionally want the current release:
 `frostbite4456/trailbase-mcp:0.2`.
 
+The quick-start credential path is TrailBase login email/password. The MCP
+sidecar logs in at startup, keeps returned auth/refresh/CSRF tokens in memory,
+and refreshes auth when needed.
+
 ```yaml
 services:
   trail:
@@ -120,10 +124,8 @@ services:
     restart: unless-stopped
     environment:
       TRAILBASE_URL: "http://trail:4000"
-      TRAILBASE_AUTH_TOKEN: "${TRAILBASE_AUTH_TOKEN:-}"
-      TRAILBASE_REFRESH_TOKEN: "${TRAILBASE_REFRESH_TOKEN:-}"
-      TRAILBASE_LOGIN_EMAIL: "${TRAILBASE_LOGIN_EMAIL:-}"
-      TRAILBASE_LOGIN_PASSWORD: "${TRAILBASE_LOGIN_PASSWORD:-}"
+      TRAILBASE_LOGIN_EMAIL: "${TRAILBASE_LOGIN_EMAIL:-admin@localhost}"
+      TRAILBASE_LOGIN_PASSWORD: "${TRAILBASE_LOGIN_PASSWORD}"
       TRAILBASE_MCP_ENABLE_WRITES: "false"
       MCP_TRANSPORT: "http"
       MCP_HOST: "0.0.0.0"
@@ -140,32 +142,51 @@ sudo chown -R 1000:1000 /opt/trailbase/traildepot
 If you see TrailBase permission errors, verify the UID used by your TrailBase
 image or temporarily relax permissions to confirm the mount is the issue.
 
-In Portainer, the smoothest setup is to set `TRAILBASE_LOGIN_EMAIL` and
-`TRAILBASE_LOGIN_PASSWORD`. The sidecar logs in through TrailBase's
-`/api/auth/v1/login` endpoint, stores the returned auth/refresh/CSRF tokens only
-in memory, and refreshes auth when needed.
+In Portainer, set these stack environment variables:
 
-If you prefer to paste tokens instead, set `TRAILBASE_AUTH_TOKEN`. The value can
-be either the raw JWT or the full `Bearer ...` output; the sidecar strips the
-`Bearer ` prefix automatically. Optionally set `TRAILBASE_REFRESH_TOKEN` too.
-When present, the sidecar refreshes an expired or near-expired auth token through
-TrailBase's `/api/auth/v1/refresh` endpoint.
+```env
+TRAILBASE_LOGIN_EMAIL=admin@localhost
+TRAILBASE_LOGIN_PASSWORD=your-admin-password
+```
 
-If you prefer not to store the token in the stack environment, use the optional
-mounted token-file approach:
+This is usually smoother than copying bearer tokens between the TrailBase UI,
+Bruno, and Portainer. The sidecar logs in through TrailBase's
+`/api/auth/v1/login` endpoint and does not write the returned tokens to disk.
+
+### Alternative: auth token and refresh token
+
+If you prefer to paste tokens instead of storing a login password, replace the
+login variables in the `mcp` service with:
+
+```yaml
+    environment:
+      TRAILBASE_URL: "http://trail:4000"
+      TRAILBASE_AUTH_TOKEN: "${TRAILBASE_AUTH_TOKEN}"
+      TRAILBASE_REFRESH_TOKEN: "${TRAILBASE_REFRESH_TOKEN:-}"
+      TRAILBASE_MCP_ENABLE_WRITES: "false"
+      MCP_TRANSPORT: "http"
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+```
+
+Set `TRAILBASE_AUTH_TOKEN` to either the raw JWT or the full `Bearer ...`
+output; the sidecar strips the `Bearer ` prefix automatically. Optionally set
+`TRAILBASE_REFRESH_TOKEN` too. When present, the sidecar refreshes an expired or
+near-expired auth token through TrailBase's `/api/auth/v1/refresh` endpoint.
+
+### Alternative: mounted credential files
+
+If you prefer not to store credentials directly in the stack environment, use
+mounted files. For login/password mode, mount only the password:
 
 ```yaml
   mcp:
     image: frostbite4456/trailbase-mcp:0.2
     volumes:
-      - /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro
-      - /opt/trailbase/secrets/trailbase-refresh-token:/run/secrets/trailbase_refresh_token:ro
       - /opt/trailbase/secrets/trailbase-login-password:/run/secrets/trailbase_login_password:ro
     environment:
       TRAILBASE_URL: "http://trail:4000"
       TRAILBASE_LOGIN_EMAIL: "admin@localhost"
-      TRAILBASE_AUTH_TOKEN_FILE: "/run/secrets/trailbase_auth_token"
-      TRAILBASE_REFRESH_TOKEN_FILE: "/run/secrets/trailbase_refresh_token"
       TRAILBASE_LOGIN_PASSWORD_FILE: "/run/secrets/trailbase_login_password"
       TRAILBASE_MCP_ENABLE_WRITES: "false"
       MCP_TRANSPORT: "http"
@@ -173,21 +194,43 @@ mounted token-file approach:
       MCP_PORT: "8000"
 ```
 
-Create the token files once on the Docker host, depending on which credential
-style you use:
+Create the password file once on the Docker host:
+
+```sh
+sudo mkdir -p /opt/trailbase/secrets
+sudo sh -c 'printf "%s" "PASTE_LOGIN_PASSWORD_HERE" > /opt/trailbase/secrets/trailbase-login-password'
+sudo chmod 600 /opt/trailbase/secrets/trailbase-login-password
+```
+
+For token mode, mount token files instead:
+
+```yaml
+  mcp:
+    image: frostbite4456/trailbase-mcp:0.2
+    volumes:
+      - /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro
+      - /opt/trailbase/secrets/trailbase-refresh-token:/run/secrets/trailbase_refresh_token:ro
+    environment:
+      TRAILBASE_URL: "http://trail:4000"
+      TRAILBASE_AUTH_TOKEN_FILE: "/run/secrets/trailbase_auth_token"
+      TRAILBASE_REFRESH_TOKEN_FILE: "/run/secrets/trailbase_refresh_token"
+      TRAILBASE_MCP_ENABLE_WRITES: "false"
+      MCP_TRANSPORT: "http"
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+```
 
 ```sh
 sudo mkdir -p /opt/trailbase/secrets
 sudo sh -c 'printf "%s" "PASTE_RAW_JWT_HERE" > /opt/trailbase/secrets/trailbase-token'
 sudo sh -c 'printf "%s" "PASTE_REFRESH_TOKEN_HERE" > /opt/trailbase/secrets/trailbase-refresh-token'
-sudo sh -c 'printf "%s" "PASTE_LOGIN_PASSWORD_HERE" > /opt/trailbase/secrets/trailbase-login-password'
 sudo chmod 600 /opt/trailbase/secrets/trailbase-token
 sudo chmod 600 /opt/trailbase/secrets/trailbase-refresh-token
-sudo chmod 600 /opt/trailbase/secrets/trailbase-login-password
 ```
 
 Token files may contain either the raw token or the full `Bearer ...` output;
-the sidecar strips the `Bearer ` prefix automatically.
+the sidecar strips the `Bearer ` prefix automatically. Password files are read
+as plain text.
 
 ## Configuration
 
