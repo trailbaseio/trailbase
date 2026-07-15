@@ -34,7 +34,7 @@ docker run --rm -p 8000:8000 \
   -e MCP_TRANSPORT=http \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=8000 \
-  YOUR_DOCKERHUB_USER/trailbase-mcp:latest
+  frostbite4456/trailbase-mcp:latest
 ```
 
 The MCP endpoint is:
@@ -49,7 +49,8 @@ which is expected for MCP over HTTP.
 
 ## Portainer / Docker Compose stack
 
-Replace `YOUR_DOCKERHUB_USER/trailbase-mcp:latest` with your published image.
+This example uses the published Docker Hub image:
+`frostbite4456/trailbase-mcp:latest`.
 
 ```yaml
 services:
@@ -64,7 +65,7 @@ services:
       RUST_BACKTRACE: "1"
 
   mcp:
-    image: YOUR_DOCKERHUB_USER/trailbase-mcp:latest
+    image: frostbite4456/trailbase-mcp:latest
     depends_on:
       - trail
     ports:
