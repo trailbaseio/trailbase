@@ -62,3 +62,20 @@ TRAILBASE_AUTH_TOKEN=your-token docker compose --profile mcp up --build
 ```
 
 The MCP HTTP endpoint is exposed at `http://localhost:8000/mcp`.
+
+## Record API file and schema tools
+
+The sidecar exposes TrailBase Record API schemas and file helpers in addition
+to normal CRUD:
+
+- `get_api_json_schema(api_name, mode?, admin?)`: read a schema from
+  `/api/records/v1/<api>/schema`. `mode` may be `Insert`, `Select`, or
+  `Update`. Set `admin=true` to use the admin schema endpoint.
+- `create_record_with_file_uploads(api_name, record, files)`: create a record
+  using JSON/base64 file upload inputs. Each file needs `field` plus either
+  `content_base64` or `file_path`; optional fields are `filename`,
+  `content_type`, and `multiple`.
+- `create_record_multipart(api_name, fields, files)`: create a record as
+  `multipart/form-data` using the same file descriptors.
+- `download_file(api_name, record_id, column_name, file_name?)`: download a
+  `std.FileUpload` or `std.FileUploads` file and return `content_base64`.

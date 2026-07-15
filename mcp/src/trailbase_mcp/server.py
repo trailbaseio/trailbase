@@ -56,9 +56,17 @@ def list_tables() -> Any:
 
 
 @mcp.tool
-def get_api_json_schema(api_name: str) -> Any:
-    """Return the JSON Schema for a configured TrailBase record API."""
-    return _client().api_json_schema(api_name)
+def get_api_json_schema(
+    api_name: str,
+    mode: str | None = None,
+    admin: bool = False,
+) -> Any:
+    """Return the JSON Schema for a configured TrailBase record API.
+
+    mode may be Insert, Select, or Update. By default this uses the public
+    record schema endpoint; set admin=True to use the admin schema endpoint.
+    """
+    return _client().api_json_schema(api_name, mode, admin)
 
 
 @mcp.tool
@@ -107,6 +115,36 @@ def create_record(api_name: str, record: dict[str, Any] | list[dict[str, Any]]) 
 
 
 @mcp.tool
+def create_record_with_file_uploads(
+    api_name: str,
+    record: dict[str, Any],
+    files: list[dict[str, Any]],
+) -> Any:
+    """Create one record with JSON/base64 TrailBase file upload inputs.
+
+    Each file requires field/field_name/name plus either content_base64/data or
+    file_path/path. Optional keys: filename, content_type, multiple.
+    """
+    _require_writes_enabled()
+    return _client().create_record_with_file_uploads(api_name, record, files)
+
+
+@mcp.tool
+def create_record_multipart(
+    api_name: str,
+    fields: dict[str, Any],
+    files: list[dict[str, Any]],
+) -> Any:
+    """Create one record as multipart/form-data with file parts.
+
+    Each file requires field/field_name/name plus either content_base64/data or
+    file_path/path. Optional keys: filename, content_type.
+    """
+    _require_writes_enabled()
+    return _client().create_record_multipart(api_name, fields, files)
+
+
+@mcp.tool
 def update_record(api_name: str, record_id: str, record: dict[str, Any]) -> Any:
     """Update one record. Requires TRAILBASE_MCP_ENABLE_WRITES=true."""
     _require_writes_enabled()
@@ -118,6 +156,21 @@ def delete_record(api_name: str, record_id: str) -> Any:
     """Delete one record. Requires TRAILBASE_MCP_ENABLE_WRITES=true."""
     _require_writes_enabled()
     return _client().delete_record(api_name, record_id)
+
+
+@mcp.tool
+def download_file(
+    api_name: str,
+    record_id: str,
+    column_name: str,
+    file_name: str | None = None,
+) -> Any:
+    """Download a TrailBase file column and return the bytes as content_base64.
+
+    For std.FileUpload columns omit file_name. For std.FileUploads columns pass
+    the metadata filename as file_name.
+    """
+    return _client().download_file(api_name, record_id, column_name, file_name)
 
 
 def main() -> None:
