@@ -38,7 +38,8 @@ download_and_extract \
 download_and_extract \
   "${DEV_TOOLS_DIR}/geos" \
   libgeos-dev \
-  libgeos-c1t64
+  libgeos-c1t64 \
+  libgeos3.12.1t64
 
 download_and_extract \
   "${DEV_TOOLS_DIR}/protobuf" \

@@ -3,7 +3,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from trailbase_mcp.client import TrailBaseClient, is_readonly_sql
+from trailbase_mcp.client import TrailBaseClient, csrf_token_from_jwt, is_readonly_sql
 
 
 def test_readonly_sql_detection() -> None:
@@ -27,6 +27,23 @@ def test_client_sends_bearer_token_and_quotes_path_segments() -> None:
     )
 
     assert client.get_record("chat messages", "id/1") == {"id": "id/1"}
+
+
+def test_client_derives_csrf_header_from_jwt() -> None:
+    token = "header.eyJjc3JmX3Rva2VuIjoiY3NyZi0xMjMifQ.signature"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["csrf-token"] == "csrf-123"
+        return httpx.Response(200, json={"ok": True})
+
+    assert csrf_token_from_jwt(token) == "csrf-123"
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        auth_token=token,
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert client.admin_info() == {"ok": True}
 
 
 def test_client_raises_with_response_body() -> None:

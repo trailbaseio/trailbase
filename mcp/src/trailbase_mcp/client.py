@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import re
+import base64
+import json
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
@@ -22,6 +24,25 @@ def env_flag(name: str, default: bool = False) -> bool:
 
 def quote_segment(value: str) -> str:
     return quote(value, safe="")
+
+
+def csrf_token_from_jwt(token: str | None) -> str | None:
+    if not token:
+        return None
+
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (ValueError, TypeError):
+        return None
+
+    csrf_token = claims.get("csrf_token")
+    return csrf_token if isinstance(csrf_token, str) and csrf_token else None
 
 
 def _strip_leading_sql_comments(statement: str) -> str:
@@ -79,6 +100,9 @@ class TrailBaseClient:
         }
         if self.auth_token:
             headers["authorization"] = f"Bearer {self.auth_token}"
+            csrf_token = os.getenv("TRAILBASE_CSRF_TOKEN") or csrf_token_from_jwt(self.auth_token)
+            if csrf_token:
+                headers["csrf-token"] = csrf_token
         return headers
 
     def request(

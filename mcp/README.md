@@ -9,7 +9,9 @@ Environment variables:
 
 - `TRAILBASE_URL`: TrailBase base URL. Defaults to `http://localhost:4000`.
 - `TRAILBASE_AUTH_TOKEN` or `TRAILBASE_TOKEN`: bearer token used for admin and
-  protected record APIs.
+  protected record APIs. Pass the raw JWT without the `Bearer ` prefix.
+- `TRAILBASE_CSRF_TOKEN`: optional explicit CSRF token. If omitted, the sidecar
+  derives it from TrailBase JWTs for admin API calls.
 - `TRAILBASE_MCP_ENABLE_WRITES`: set to `true` to enable create/update/delete
   tools and mutating SQL.
 - `MCP_TRANSPORT`: `stdio` by default; set to `http` for remote MCP.
