@@ -85,11 +85,9 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
-    volumes:
-      - /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro
     environment:
       TRAILBASE_URL: "http://trail:4000"
-      TRAILBASE_AUTH_TOKEN_FILE: "/run/secrets/trailbase_auth_token"
+      TRAILBASE_AUTH_TOKEN: "${TRAILBASE_AUTH_TOKEN}"
       TRAILBASE_MCP_ENABLE_WRITES: "false"
       MCP_TRANSPORT: "http"
       MCP_HOST: "0.0.0.0"
@@ -106,9 +104,28 @@ sudo chown -R 1000:1000 /opt/trailbase/traildepot
 If you see TrailBase permission errors, verify the UID used by your TrailBase
 image or temporarily relax permissions to confirm the mount is the issue.
 
-For Portainer, the mounted token-file approach is often easier than threading
-`TRAILBASE_AUTH_TOKEN` through the stack UI. Create the file once on the Docker
-host:
+In Portainer, set `TRAILBASE_AUTH_TOKEN` in the stack environment variables.
+The value can be either the raw JWT or the full `Bearer ...` output; the sidecar
+strips the `Bearer ` prefix automatically.
+
+If you prefer not to store the token in the stack environment, use the optional
+mounted token-file approach:
+
+```yaml
+  mcp:
+    image: frostbite4456/trailbase-mcp:latest
+    volumes:
+      - /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro
+    environment:
+      TRAILBASE_URL: "http://trail:4000"
+      TRAILBASE_AUTH_TOKEN_FILE: "/run/secrets/trailbase_auth_token"
+      TRAILBASE_MCP_ENABLE_WRITES: "false"
+      MCP_TRANSPORT: "http"
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+```
+
+Create the token file once on the Docker host:
 
 ```sh
 sudo mkdir -p /opt/trailbase/secrets
@@ -159,8 +176,9 @@ Set `TRAILBASE_AUTH_TOKEN` to only the JWT part:
 TRAILBASE_AUTH_TOKEN=eyJhbGciOi...
 ```
 
-For Docker/Portainer deployments, prefer a token file or Docker secret over
-hard-coding the token in the stack when possible.
+For Docker/Portainer deployments, `TRAILBASE_AUTH_TOKEN` is the simplest path.
+`TRAILBASE_AUTH_TOKEN_FILE` is available when you prefer a bind-mounted file or
+Docker secret.
 
 ### Token lifetime and rotation
 
