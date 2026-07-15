@@ -15,3 +15,21 @@ services:
     environment:
       RUST_BACKTRACE: "1"
     # command: "/app/trail --data-dir /app/traildepot run --address 0.0.0.0:4000"
+
+  mcp:
+    profiles:
+      - mcp
+    build:
+      context: ./mcp
+    depends_on:
+      - trail
+    ports:
+      - "${MCP_PORT:-8000}:8000"
+    restart: unless-stopped
+    environment:
+      TRAILBASE_URL: "http://trail:4000"
+      TRAILBASE_AUTH_TOKEN: "${TRAILBASE_AUTH_TOKEN:-}"
+      TRAILBASE_MCP_ENABLE_WRITES: "${TRAILBASE_MCP_ENABLE_WRITES:-false}"
+      MCP_TRANSPORT: "http"
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
