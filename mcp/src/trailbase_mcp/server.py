@@ -6,6 +6,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from .client import READONLY_HTTP_METHODS, TrailBaseClient, env_flag, is_readonly_sql
+from .endpoints import get_api_operation, list_api_operations, render_operation_path
 
 
 mcp = FastMCP("TrailBase")
@@ -109,6 +110,44 @@ def trailbase_request(
     if normalized_method not in READONLY_HTTP_METHODS:
         _require_writes_enabled()
     return _client().trailbase_request(normalized_method, path, params=params, body=body)
+
+
+@mcp.tool
+def list_trailbase_api_operations(category: str | None = None) -> Any:
+    """List TrailBase OpenAPI operations known to this MCP server.
+
+    category may be auth, oauth, or records. The response includes the
+    operation_id, HTTP method, server-relative path template, mutation gate, and
+    recommended MCP support path for each operation.
+    """
+    return {"operations": list_api_operations(category)}
+
+
+@mcp.tool
+def call_trailbase_api_operation(
+    operation_id: str,
+    path_params: dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
+    body: Any | None = None,
+) -> Any:
+    """Call a known TrailBase OpenAPI operation by operation_id.
+
+    path_params fills path templates such as {"name": "todos", "record": "id"}.
+    params are URL query parameters and body is sent as JSON. Mutating
+    operations require TRAILBASE_MCP_ENABLE_WRITES=true. Streaming SSE
+    operations are cataloged but not proxied by this request/response tool.
+    """
+    operation = get_api_operation(operation_id)
+    if operation.get("streaming"):
+        raise RuntimeError(
+            f"{operation_id} is a long-running streaming endpoint and is not "
+            "proxied by this request/response MCP tool."
+        )
+    if operation.get("requires_write_permission"):
+        _require_writes_enabled()
+
+    path = render_operation_path(operation, path_params)
+    return _client().trailbase_request(operation["method"], path, params=params, body=body)
 
 
 @mcp.tool

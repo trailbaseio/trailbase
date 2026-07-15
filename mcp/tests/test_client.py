@@ -19,8 +19,14 @@ from trailbase_mcp.client import (
     refresh_token_from_env,
     validate_relative_path,
 )
+from trailbase_mcp.endpoints import (
+    get_api_operation,
+    list_api_operations,
+    render_operation_path,
+)
+from trailbase_mcp import server as server_module
 from trailbase_mcp.proto import config_api_pb2
-from trailbase_mcp.server import trailbase_request
+from trailbase_mcp.server import call_trailbase_api_operation, trailbase_request
 
 
 def test_readonly_sql_detection() -> None:
@@ -245,6 +251,88 @@ def test_server_generic_trailbase_request_write_gate(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(RuntimeError, match="Write operations are disabled"):
         trailbase_request("POST", "/api/auth/v1/login", body={})
+
+
+def test_trailbase_api_operation_catalog_covers_openapi_pages() -> None:
+    operations = list_api_operations()
+    operation_ids = {operation["operation_id"] for operation in operations}
+
+    assert len(operations) == 36
+    assert {
+        "auth_code_to_token_handler",
+        "login_handler",
+        "refresh_handler",
+        "callback_from_external_auth_provider",
+        "add_subscription_sse_handler",
+        "create_record_handler",
+        "json_schema_handler",
+        "update_record_handler",
+    }.issubset(operation_ids)
+
+    assert get_api_operation("list_records_handler") == {
+        "operation_id": "list_records_handler",
+        "category": "records",
+        "method": "GET",
+        "path": "/api/records/v1/{name}",
+        "summary": "List records matching filters.",
+        "mcp_support": "list_records or call_trailbase_api_operation",
+        "requires_write_permission": False,
+    }
+
+    assert [operation["category"] for operation in list_api_operations("oauth")] == [
+        "oauth",
+        "oauth",
+        "oauth",
+    ]
+
+
+def test_render_operation_path_quotes_parameters() -> None:
+    operation = get_api_operation("read_record_handler")
+    assert (
+        render_operation_path(operation, {"name": "chat messages", "record": "id/1"})
+        == "/api/records/v1/chat%20messages/id%2F1"
+    )
+
+    with pytest.raises(ValueError, match="Missing path parameter"):
+        render_operation_path(operation, {"name": "widgets"})
+
+
+def test_call_trailbase_api_operation(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = None
+
+    class FakeClient:
+        def trailbase_request(self, method, path, *, params=None, body=None):
+            nonlocal seen
+            seen = (method, path, params, body)
+            return {"ok": True}
+
+    monkeypatch.delenv("TRAILBASE_MCP_ENABLE_WRITES", raising=False)
+    monkeypatch.setattr(server_module, "_client", lambda: FakeClient())
+
+    assert call_trailbase_api_operation(
+        "read_record_handler",
+        path_params={"name": "widgets", "record": "1"},
+        params={"expand": "author"},
+    ) == {"ok": True}
+    assert seen == (
+        "GET",
+        "/api/records/v1/widgets/1",
+        {"expand": "author"},
+        None,
+    )
+
+    with pytest.raises(RuntimeError, match="Write operations are disabled"):
+        call_trailbase_api_operation(
+            "create_record_handler",
+            path_params={"name": "widgets"},
+            body={"name": "Ada"},
+        )
+
+    with pytest.raises(RuntimeError, match="long-running streaming endpoint"):
+        call_trailbase_api_operation(
+            "add_subscription_sse_handler",
+            path_params={"name": "widgets", "record": "1"},
+        )
 
 
 def test_client_derives_csrf_header_from_jwt() -> None:

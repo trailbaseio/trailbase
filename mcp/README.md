@@ -371,6 +371,14 @@ to normal CRUD:
   TrailBase HTTP endpoint. Use this for auth endpoints, custom WASM APIs, and
   OpenAPI endpoints not covered by specialized MCP tools. Non-readonly methods
   require `TRAILBASE_MCP_ENABLE_WRITES=true`.
+- `list_trailbase_api_operations(category?)`: list the TrailBase OpenAPI
+  operations known to MCP. `category` may be `auth`, `oauth`, or `records`.
+  Each entry includes `operation_id`, method, path template, mutation gate, and
+  the recommended MCP support path.
+- `call_trailbase_api_operation(operation_id, path_params?, params?, body?)`:
+  call a known TrailBase OpenAPI operation by `operation_id`. `path_params`
+  fills placeholders such as `{"name": "todos", "record": "id"}`. Mutating
+  operations require `TRAILBASE_MCP_ENABLE_WRITES=true`.
 - `list_records(api_name, query?)`: forwards `query` as Record API URL query
   parameters. For example:
   `{"geojson": "geometry", "limit": 1024, "skip_cursor": "true"}` maps to
@@ -399,6 +407,8 @@ Current tools:
 - `list_tables`
 - `execute_sql`
 - `trailbase_request`
+- `list_trailbase_api_operations`
+- `call_trailbase_api_operation`
 - `list_records`
 - `get_record`
 - `create_record`
@@ -453,5 +463,15 @@ instead of reimplementing TrailBase behavior. Current coverage:
 - Record APIs: CRUD, list filters/sort/pagination/cursor/geojson query params,
   schema, JSON/base64 file upload, multipart upload, and file download are
   supported.
-- Auth: use `trailbase_request` for auth endpoints; the sidecar itself should
-  be configured with an admin token for admin/config operations.
+- OpenAPI operation pages: `list_trailbase_api_operations` exposes the auth,
+  OAuth, and Record API operations documented under TrailBase's OpenAPI pages.
+  Use `call_trailbase_api_operation` when you want to call by operation id
+  instead of manually composing a URL.
+- Auth: use MCP-side login/refresh configuration for the sidecar's own
+  credentials. Use `call_trailbase_api_operation` or `trailbase_request` for
+  TrailBase user auth flows such as registration, password reset, email
+  verification, MFA/TOTP, logout, OAuth provider listing/login/callback, and
+  avatar endpoints.
+- Realtime subscriptions: the TrailBase SSE subscription endpoint is listed in
+  the operation catalog, but this MCP sidecar does not proxy long-running
+  streams through a request/response tool.
