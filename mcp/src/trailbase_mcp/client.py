@@ -5,6 +5,7 @@ import re
 import base64
 import binascii
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -39,10 +40,22 @@ def normalize_auth_token(token: str | None) -> str | None:
     return token
 
 
-def read_secret_file(path: str | None) -> str | None:
+def read_text_file(path: str | None) -> str | None:
     if not path:
         return None
-    return normalize_auth_token(Path(path).read_text())
+    value = Path(path).read_text().strip()
+    return value or None
+
+
+def read_secret_file(path: str | None) -> str | None:
+    return normalize_auth_token(read_text_file(path))
+
+
+def env_or_file(value_name: str, file_name: str) -> str | None:
+    value = os.getenv(value_name)
+    if value is not None and value.strip():
+        return value.strip()
+    return read_text_file(os.getenv(file_name))
 
 
 def auth_token_from_env() -> str | None:
@@ -51,6 +64,26 @@ def auth_token_from_env() -> str | None:
     ) or read_secret_file(
         os.getenv("TRAILBASE_AUTH_TOKEN_FILE")
         or os.getenv("TRAILBASE_TOKEN_FILE")
+    )
+
+
+def refresh_token_from_env() -> str | None:
+    return normalize_auth_token(os.getenv("TRAILBASE_REFRESH_TOKEN")) or read_secret_file(
+        os.getenv("TRAILBASE_REFRESH_TOKEN_FILE")
+    )
+
+
+def login_email_from_env() -> str | None:
+    return (
+        env_or_file("TRAILBASE_LOGIN_EMAIL", "TRAILBASE_LOGIN_EMAIL_FILE")
+        or env_or_file("TRAILBASE_ADMIN_EMAIL", "TRAILBASE_ADMIN_EMAIL_FILE")
+    )
+
+
+def login_password_from_env() -> str | None:
+    return (
+        env_or_file("TRAILBASE_LOGIN_PASSWORD", "TRAILBASE_LOGIN_PASSWORD_FILE")
+        or env_or_file("TRAILBASE_ADMIN_PASSWORD", "TRAILBASE_ADMIN_PASSWORD_FILE")
     )
 
 
@@ -132,6 +165,25 @@ def csrf_token_from_jwt(token: str | None) -> str | None:
     return csrf_token if isinstance(csrf_token, str) and csrf_token else None
 
 
+def jwt_expires_within(token: str | None, seconds: int) -> bool:
+    if not token:
+        return True
+
+    parts = token.split(".")
+    if len(parts) != 3:
+        return False
+
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+    try:
+        claims = json.loads(base64.urlsafe_b64decode(payload))
+    except (ValueError, TypeError):
+        return False
+
+    exp = claims.get("exp")
+    return isinstance(exp, (int, float)) and exp <= time.time() + seconds
+
+
 def _strip_leading_sql_comments(statement: str) -> str:
     sql = statement.strip()
     while True:
@@ -169,6 +221,10 @@ def is_readonly_sql(query: str) -> bool:
 class TrailBaseClient:
     base_url: str
     auth_token: str | None = None
+    refresh_token: str | None = None
+    csrf_token: str | None = None
+    login_email: str | None = None
+    login_password: str | None = None
     timeout: float = 30.0
     transport: httpx.BaseTransport | None = None
 
@@ -177,17 +233,95 @@ class TrailBaseClient:
         return cls(
             base_url=os.getenv("TRAILBASE_URL", "http://localhost:4000"),
             auth_token=auth_token_from_env(),
+            refresh_token=refresh_token_from_env(),
+            login_email=login_email_from_env(),
+            login_password=login_password_from_env(),
             timeout=float(os.getenv("TRAILBASE_MCP_TIMEOUT", "30")),
         )
 
+    def login(self) -> bool:
+        if not self.login_email or not self.login_password:
+            return False
+
+        base_url = self.base_url.rstrip("/")
+        with httpx.Client(
+            base_url=base_url,
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
+            timeout=self.timeout,
+            transport=self.transport,
+        ) as client:
+            response = client.post(
+                "/api/auth/v1/login",
+                json={
+                    "email": self.login_email,
+                    "password": self.login_password,
+                    "response_type": "token",
+                },
+            )
+
+        if response.is_error:
+            return False
+
+        body = response.json()
+        auth_token = normalize_auth_token(body.get("auth_token"))
+        if not auth_token:
+            return False
+
+        self.auth_token = auth_token
+        self.refresh_token = normalize_auth_token(body.get("refresh_token")) or self.refresh_token
+        self.csrf_token = body.get("csrf_token")
+        return True
+
+    def refresh_auth_token(self) -> bool:
+        if not self.refresh_token:
+            return False
+
+        base_url = self.base_url.rstrip("/")
+        with httpx.Client(
+            base_url=base_url,
+            headers={
+                "accept": "application/json",
+                "content-type": "application/json",
+            },
+            timeout=self.timeout,
+            transport=self.transport,
+        ) as client:
+            response = client.post(
+                "/api/auth/v1/refresh",
+                json={"refresh_token": self.refresh_token},
+            )
+
+        if response.is_error:
+            return False
+
+        body = response.json()
+        auth_token = normalize_auth_token(body.get("auth_token"))
+        if not auth_token:
+            return False
+
+        self.auth_token = auth_token
+        self.csrf_token = body.get("csrf_token")
+        return True
+
     def _headers(self) -> dict[str, str]:
+        if jwt_expires_within(self.auth_token, 60):
+            if not self.refresh_token or not self.refresh_auth_token():
+                self.login()
+
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
         }
         if self.auth_token:
             headers["authorization"] = f"Bearer {self.auth_token}"
-            csrf_token = os.getenv("TRAILBASE_CSRF_TOKEN") or csrf_token_from_jwt(self.auth_token)
+            csrf_token = (
+                os.getenv("TRAILBASE_CSRF_TOKEN")
+                or self.csrf_token
+                or csrf_token_from_jwt(self.auth_token)
+            )
             if csrf_token:
                 headers["csrf-token"] = csrf_token
         return headers

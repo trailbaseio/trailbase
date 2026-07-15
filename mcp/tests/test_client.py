@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import httpx
 import pytest
+import base64
+import json
+import time
 
 from trailbase_mcp.client import (
     TrailBaseClient,
@@ -9,7 +12,11 @@ from trailbase_mcp.client import (
     csrf_token_from_jwt,
     file_upload_input,
     is_readonly_sql,
+    jwt_expires_within,
+    login_email_from_env,
+    login_password_from_env,
     normalize_auth_token,
+    refresh_token_from_env,
     validate_relative_path,
 )
 from trailbase_mcp.proto import config_api_pb2
@@ -42,6 +49,126 @@ def test_auth_token_env_normalization_and_file(
 
     monkeypatch.setenv("TRAILBASE_AUTH_TOKEN", "Bearer env-token")
     assert auth_token_from_env() == "env-token"
+
+
+def test_refresh_token_env_file_and_expiration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    refresh_file = tmp_path / "trailbase-refresh-token"
+    refresh_file.write_text("refresh-from-file\n")
+
+    monkeypatch.delenv("TRAILBASE_REFRESH_TOKEN", raising=False)
+    monkeypatch.setenv("TRAILBASE_REFRESH_TOKEN_FILE", str(refresh_file))
+    assert refresh_token_from_env() == "refresh-from-file"
+
+    monkeypatch.setenv("TRAILBASE_REFRESH_TOKEN", "Bearer refresh-from-env")
+    assert refresh_token_from_env() == "refresh-from-env"
+
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"exp": int(time.time()) - 1}).encode()
+    ).decode().rstrip("=")
+    assert jwt_expires_within(f"header.{payload}.signature", 60)
+
+
+def test_login_credentials_env_file(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    email_file = tmp_path / "trailbase-email"
+    password_file = tmp_path / "trailbase-password"
+    email_file.write_text("admin@localhost\n")
+    password_file.write_text("secret\n")
+
+    monkeypatch.delenv("TRAILBASE_LOGIN_EMAIL", raising=False)
+    monkeypatch.delenv("TRAILBASE_LOGIN_PASSWORD", raising=False)
+    monkeypatch.setenv("TRAILBASE_LOGIN_EMAIL_FILE", str(email_file))
+    monkeypatch.setenv("TRAILBASE_LOGIN_PASSWORD_FILE", str(password_file))
+    assert login_email_from_env() == "admin@localhost"
+    assert login_password_from_env() == "secret"
+
+    monkeypatch.setenv("TRAILBASE_ADMIN_EMAIL", "admin-alias@localhost")
+    monkeypatch.setenv("TRAILBASE_ADMIN_PASSWORD", "admin-secret")
+    assert login_email_from_env() == "admin@localhost"
+    assert login_password_from_env() == "secret"
+
+    monkeypatch.setenv("TRAILBASE_LOGIN_EMAIL", "login@localhost")
+    monkeypatch.setenv("TRAILBASE_LOGIN_PASSWORD", "login-secret")
+    assert login_email_from_env() == "login@localhost"
+    assert login_password_from_env() == "login-secret"
+
+
+def test_client_logs_in_when_auth_token_is_missing() -> None:
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        if request.url.path == "/api/auth/v1/login":
+            assert json.loads(request.read()) == {
+                "email": "admin@localhost",
+                "password": "secret",
+                "response_type": "token",
+            }
+            return httpx.Response(
+                200,
+                json={
+                    "auth_token": "fresh-token",
+                    "refresh_token": "refresh-token",
+                    "csrf_token": "fresh-csrf",
+                },
+            )
+
+        assert request.url.path == "/api/_admin/info"
+        assert request.headers["authorization"] == "Bearer fresh-token"
+        assert request.headers["csrf-token"] == "fresh-csrf"
+        return httpx.Response(200, json={"ok": True})
+
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        login_email="admin@localhost",
+        login_password="secret",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert client.admin_info() == {"ok": True}
+    assert client.refresh_token == "refresh-token"
+    assert seen == [
+        ("POST", "/api/auth/v1/login"),
+        ("GET", "/api/_admin/info"),
+    ]
+
+
+def test_client_refreshes_expired_auth_token_before_request() -> None:
+    expired_payload = base64.urlsafe_b64encode(
+        json.dumps({"exp": int(time.time()) - 1}).encode()
+    ).decode().rstrip("=")
+    expired_token = f"header.{expired_payload}.signature"
+
+    seen: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.url.path))
+        if request.url.path == "/api/auth/v1/refresh":
+            assert request.read() == b'{"refresh_token":"refresh-token"}'
+            return httpx.Response(
+                200,
+                json={"auth_token": "fresh-token", "csrf_token": "fresh-csrf"},
+            )
+
+        assert request.url.path == "/api/_admin/info"
+        assert request.headers["authorization"] == "Bearer fresh-token"
+        assert request.headers["csrf-token"] == "fresh-csrf"
+        return httpx.Response(200, json={"ok": True})
+
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        auth_token=expired_token,
+        refresh_token="refresh-token",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert client.admin_info() == {"ok": True}
+    assert seen == [
+        ("POST", "/api/auth/v1/refresh"),
+        ("GET", "/api/_admin/info"),
+    ]
 
 
 def test_client_sends_bearer_token_and_quotes_path_segments() -> None:
