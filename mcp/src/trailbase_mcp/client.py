@@ -28,6 +28,32 @@ def env_flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in TRUE_VALUES
 
 
+def normalize_auth_token(token: str | None) -> str | None:
+    if token is None:
+        return None
+    token = token.strip()
+    if not token:
+        return None
+    if token.lower().startswith("bearer "):
+        return token[7:].strip() or None
+    return token
+
+
+def read_secret_file(path: str | None) -> str | None:
+    if not path:
+        return None
+    return normalize_auth_token(Path(path).read_text())
+
+
+def auth_token_from_env() -> str | None:
+    return normalize_auth_token(
+        os.getenv("TRAILBASE_AUTH_TOKEN") or os.getenv("TRAILBASE_TOKEN")
+    ) or read_secret_file(
+        os.getenv("TRAILBASE_AUTH_TOKEN_FILE")
+        or os.getenv("TRAILBASE_TOKEN_FILE")
+    )
+
+
 def quote_segment(value: str) -> str:
     return quote(value, safe="")
 
@@ -150,7 +176,7 @@ class TrailBaseClient:
     def from_env(cls) -> "TrailBaseClient":
         return cls(
             base_url=os.getenv("TRAILBASE_URL", "http://localhost:4000"),
-            auth_token=os.getenv("TRAILBASE_AUTH_TOKEN") or os.getenv("TRAILBASE_TOKEN"),
+            auth_token=auth_token_from_env(),
             timeout=float(os.getenv("TRAILBASE_MCP_TIMEOUT", "30")),
         )
 

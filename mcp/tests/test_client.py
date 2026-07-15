@@ -5,9 +5,11 @@ import pytest
 
 from trailbase_mcp.client import (
     TrailBaseClient,
+    auth_token_from_env,
     csrf_token_from_jwt,
     file_upload_input,
     is_readonly_sql,
+    normalize_auth_token,
     validate_relative_path,
 )
 from trailbase_mcp.proto import config_api_pb2
@@ -20,6 +22,26 @@ def test_readonly_sql_detection() -> None:
     assert is_readonly_sql("/* comment */ pragma table_info(users)")
     assert not is_readonly_sql("insert into users values (1)")
     assert not is_readonly_sql("select 1; delete from users")
+
+
+def test_auth_token_env_normalization_and_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    token_file = tmp_path / "trailbase-token"
+    token_file.write_text("Bearer file-token\n")
+
+    assert normalize_auth_token("Bearer env-token") == "env-token"
+    assert normalize_auth_token(" raw-token ") == "raw-token"
+    assert normalize_auth_token("") is None
+
+    monkeypatch.delenv("TRAILBASE_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("TRAILBASE_TOKEN", raising=False)
+    monkeypatch.setenv("TRAILBASE_AUTH_TOKEN_FILE", str(token_file))
+    assert auth_token_from_env() == "file-token"
+
+    monkeypatch.setenv("TRAILBASE_AUTH_TOKEN", "Bearer env-token")
+    assert auth_token_from_env() == "env-token"
 
 
 def test_client_sends_bearer_token_and_quotes_path_segments() -> None:

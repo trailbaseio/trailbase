@@ -37,6 +37,20 @@ docker run --rm -p 8000:8000 \
   frostbite4456/trailbase-mcp:latest
 ```
 
+Or provide the token via a mounted file:
+
+```sh
+docker run --rm -p 8000:8000 \
+  -v /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro \
+  -e TRAILBASE_URL=http://host.docker.internal:4000 \
+  -e TRAILBASE_AUTH_TOKEN_FILE=/run/secrets/trailbase_auth_token \
+  -e TRAILBASE_MCP_ENABLE_WRITES=false \
+  -e MCP_TRANSPORT=http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8000 \
+  frostbite4456/trailbase-mcp:latest
+```
+
 The MCP endpoint is:
 
 ```text
@@ -71,9 +85,11 @@ services:
     ports:
       - "8000:8000"
     restart: unless-stopped
+    volumes:
+      - /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro
     environment:
       TRAILBASE_URL: "http://trail:4000"
-      TRAILBASE_AUTH_TOKEN: "${TRAILBASE_AUTH_TOKEN}"
+      TRAILBASE_AUTH_TOKEN_FILE: "/run/secrets/trailbase_auth_token"
       TRAILBASE_MCP_ENABLE_WRITES: "false"
       MCP_TRANSPORT: "http"
       MCP_HOST: "0.0.0.0"
@@ -90,6 +106,19 @@ sudo chown -R 1000:1000 /opt/trailbase/traildepot
 If you see TrailBase permission errors, verify the UID used by your TrailBase
 image or temporarily relax permissions to confirm the mount is the issue.
 
+For Portainer, the mounted token-file approach is often easier than threading
+`TRAILBASE_AUTH_TOKEN` through the stack UI. Create the file once on the Docker
+host:
+
+```sh
+sudo mkdir -p /opt/trailbase/secrets
+sudo sh -c 'printf "%s" "PASTE_RAW_JWT_HERE" > /opt/trailbase/secrets/trailbase-token'
+sudo chmod 600 /opt/trailbase/secrets/trailbase-token
+```
+
+The file may contain either the raw JWT or the full `Bearer ...` output; the
+sidecar strips the `Bearer ` prefix automatically.
+
 ## Configuration
 
 Environment variables:
@@ -97,7 +126,8 @@ Environment variables:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TRAILBASE_URL` | `http://localhost:4000` | TrailBase base URL. In Compose, use the TrailBase service name, e.g. `http://trail:4000`. |
-| `TRAILBASE_AUTH_TOKEN` / `TRAILBASE_TOKEN` | unset | Admin or user JWT used for TrailBase API calls. Pass the raw JWT without the `Bearer ` prefix. |
+| `TRAILBASE_AUTH_TOKEN` / `TRAILBASE_TOKEN` | unset | Admin or user JWT used for TrailBase API calls. Raw JWT is preferred; a leading `Bearer ` prefix is also accepted. |
+| `TRAILBASE_AUTH_TOKEN_FILE` / `TRAILBASE_TOKEN_FILE` | unset | Path to a file containing the JWT. Useful for Portainer, Docker secrets, and bind-mounted secret files. |
 | `TRAILBASE_CSRF_TOKEN` | derived from JWT | Optional explicit CSRF token. Normally not needed for TrailBase-minted JWTs. |
 | `TRAILBASE_MCP_ENABLE_WRITES` | `false` | Set to `true` to enable create/update/delete tools, mutating SQL, config updates, and mutating generic HTTP calls. |
 | `TRAILBASE_MCP_TIMEOUT` | `30` | HTTP timeout in seconds. |
@@ -128,6 +158,30 @@ Set `TRAILBASE_AUTH_TOKEN` to only the JWT part:
 ```text
 TRAILBASE_AUTH_TOKEN=eyJhbGciOi...
 ```
+
+For Docker/Portainer deployments, prefer a token file or Docker secret over
+hard-coding the token in the stack when possible.
+
+## Credential model
+
+Most Dockerized MCP servers use one of these patterns:
+
+- local/desktop MCP clients pass credentials as environment variables in the
+  MCP client config;
+- remote/container MCP servers receive credentials from Docker/Portainer
+  environment variables or secrets;
+- OAuth-enabled remote MCP servers perform a separate MCP auth flow.
+
+This sidecar currently uses the second pattern. The MCP client, IntelliJ, or
+other frontend connects to the MCP endpoint; the sidecar uses its configured
+TrailBase token when it calls TrailBase. That keeps TrailBase credentials out
+of individual MCP prompts and avoids requiring every MCP client to understand
+TrailBase auth.
+
+Auto-minting a token from inside the MCP container is possible, but it requires
+mounting the TrailBase data directory and shipping the `trail` binary in the
+MCP image. That gives the MCP container admin-level depot access. A token file
+or Docker secret is usually simpler to operate and easier to reason about.
 
 ## Run with stdio
 
