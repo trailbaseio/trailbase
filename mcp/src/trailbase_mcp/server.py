@@ -51,6 +51,32 @@ def list_record_apis() -> Any:
 
 
 @mcp.tool
+def remove_record_api(
+    api_name: str | None = None,
+    table_name: str | None = None,
+) -> Any:
+    """Remove Record API config entries by API name or backing table name.
+
+    Requires TRAILBASE_MCP_ENABLE_WRITES=true. Use this before dropping a table
+    that is exposed as a Record API.
+    """
+    _require_writes_enabled()
+    return _client().remove_record_api(api_name=api_name, table_name=table_name)
+
+
+@mcp.tool
+def drop_table(table_name: str, remove_record_apis: bool = True) -> Any:
+    """Drop a table, optionally removing Record APIs that reference it first.
+
+    Requires TRAILBASE_MCP_ENABLE_WRITES=true. The table name must be a simple
+    SQL identifier. This helper removes API config before DROP TABLE by default
+    to avoid stale Record API references.
+    """
+    _require_writes_enabled()
+    return _client().drop_table(table_name, remove_record_apis)
+
+
+@mcp.tool
 def list_tables() -> Any:
     """List TrailBase tables, views, indexes, and triggers."""
     return _client().list_tables()

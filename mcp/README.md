@@ -12,6 +12,8 @@ store TrailBase data; it forwards MCP tool calls to a running TrailBase server.
 - Admin config read/update, including Record API configuration.
 - SQL execution with a default read-only guard.
 - Table, view, index, and trigger introspection.
+- Safe table teardown helper that removes Record API config before dropping a
+  table.
 - Record API CRUD.
 - Record API list query passthrough, including filters, sorting, pagination,
   cursors, `geojson`, `limit`, and `skip_cursor`.
@@ -426,6 +428,59 @@ to normal CRUD:
   `multipart/form-data` using the same file descriptors.
 - `download_file(api_name, record_id, column_name, file_name?)`: download a
   `std.FileUpload` or `std.FileUploads` file and return `content_base64`.
+- `remove_record_api(api_name?, table_name?)`: remove Record API config entries
+  by API name or backing table name. Use this before manually dropping a table.
+- `drop_table(table_name, remove_record_apis?)`: drop a table. By default this
+  removes any Record API entries whose `table_name` matches before running
+  `DROP TABLE IF EXISTS`.
+
+### Record API primary keys
+
+TrailBase Record APIs require a compatible primary key. If MCP creates a table
+and then exposes it as a Record API, use either:
+
+```sql
+id INTEGER PRIMARY KEY
+```
+
+or a TrailBase-compatible UUID primary key. Do not use `TEXT PRIMARY KEY` for a
+table that should become a Record API.
+
+If the primary key is not compatible, TrailBase rejects the config update with
+an error like:
+
+```text
+Does not have a suitable PRIMARY KEY column. At this point TrailBase requires
+PRIMARY KEYS to be of type INTEGER or UUID.
+```
+
+Recommended simple table shape:
+
+```sql
+CREATE TABLE candyland (
+  id INTEGER PRIMARY KEY,
+  name TEXT NOT NULL
+) STRICT;
+```
+
+### Deleting tables that have Record APIs
+
+Remove Record API config before dropping the backing table. Otherwise TrailBase
+can retain a config entry that references a missing table.
+
+Preferred MCP path:
+
+```text
+drop_table(table_name="candyland")
+```
+
+That removes Record APIs whose `table_name` is `candyland` first, then drops the
+table. If you want to do it manually:
+
+```text
+remove_record_api(table_name="candyland")
+execute_sql(query="DROP TABLE IF EXISTS candyland", allow_mutation=true)
+```
 
 ## MCP tools
 
@@ -435,6 +490,8 @@ Current tools:
 - `trailbase_config`
 - `update_config`
 - `list_record_apis`
+- `remove_record_api`
+- `drop_table`
 - `list_tables`
 - `execute_sql`
 - `trailbase_request`
@@ -480,7 +537,8 @@ instead of reimplementing TrailBase behavior. Current coverage:
 - Models & Relations: use `execute_sql` for STRICT tables, constraints,
   indexes, triggers, views, generated columns, geometry columns, and relations;
   use `update_config` to expose tables/views as Record APIs and configure
-  `expand`.
+  `expand`. For tables intended for Record API access, use an `INTEGER PRIMARY
+  KEY` or TrailBase-compatible UUID primary key.
 - Migrations: TrailBase migrations are filesystem/CLI driven
   (`traildepot/migrations`, `trail migration`, restart/SIGHUP). MCP can apply
   SQL through `execute_sql`, but it is not a migration runner and should not

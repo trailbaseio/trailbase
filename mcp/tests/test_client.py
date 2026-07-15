@@ -16,6 +16,7 @@ from trailbase_mcp.client import (
     login_email_from_env,
     login_password_from_env,
     normalize_auth_token,
+    quote_sql_identifier,
     refresh_token_from_env,
     validate_relative_path,
 )
@@ -244,6 +245,14 @@ def test_generic_trailbase_request_rejects_absolute_urls() -> None:
         validate_relative_path("api/auth/v1/status")
     with pytest.raises(ValueError, match="absolute URL"):
         validate_relative_path("https://example.com/api")
+
+
+def test_quote_sql_identifier_rejects_unsafe_names() -> None:
+    assert quote_sql_identifier("candyland_2") == '"candyland_2"'
+    with pytest.raises(ValueError, match="SQL identifier"):
+        quote_sql_identifier("candyland; drop table users")
+    with pytest.raises(ValueError, match="SQL identifier"):
+        quote_sql_identifier("candy-land")
 
 
 def test_server_generic_trailbase_request_write_gate(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -481,3 +490,61 @@ def test_client_decodes_and_updates_protobuf_config() -> None:
     assert seen_update is not None
     assert seen_update.hash == "hash-1"
     assert seen_update.config.record_apis[0].name == "widgets"
+
+
+def test_client_removes_record_api_before_drop_table() -> None:
+    config_response = config_api_pb2.GetConfigResponse()
+    config_response.hash = "hash-1"
+    config_response.config.email.smtp_host = "localhost"
+    config_response.config.server.application_name = "TrailBase"
+    config_response.config.auth.password_minimal_length = 8
+    config_response.config.jobs.SetInParent()
+    config_response.config.record_apis.add(
+        name="widgets",
+        table_name="widgets",
+        acl_world=[1, 2],
+    )
+    config_response.config.record_apis.add(
+        name="other_widgets",
+        table_name="widgets",
+        acl_world=[1],
+    )
+    config_response.config.record_apis.add(
+        name="profiles",
+        table_name="profiles",
+        acl_world=[1],
+    )
+
+    updates: list[config_api_pb2.UpdateConfigRequest] = []
+    queries: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/_admin/config" and request.method == "GET":
+            return httpx.Response(200, content=config_response.SerializeToString())
+
+        if request.url.path == "/api/_admin/config" and request.method == "POST":
+            update = config_api_pb2.UpdateConfigRequest()
+            update.ParseFromString(request.content)
+            updates.append(update)
+            return httpx.Response(200, content=b"")
+
+        if request.url.path == "/api/_admin/query":
+            queries.append(json.loads(request.read())["query"])
+            return httpx.Response(200, json={"columns": None, "rows": []})
+
+        raise AssertionError(request.url)
+
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    result = client.drop_table("widgets")
+    assert result["ok"]
+    assert [api["name"] for api in result["removed_record_apis"]] == [
+        "widgets",
+        "other_widgets",
+    ]
+    assert queries == ['DROP TABLE IF EXISTS "widgets"']
+    assert len(updates) == 1
+    assert [api.name for api in updates[0].config.record_apis] == ["profiles"]

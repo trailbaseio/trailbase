@@ -20,6 +20,7 @@ from .proto import config_api_pb2
 TRUE_VALUES = {"1", "true", "yes", "on"}
 READONLY_SQL_STARTERS = {"select", "with", "pragma", "explain"}
 READONLY_HTTP_METHODS = {"GET", "HEAD", "OPTIONS"}
+SQL_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -89,6 +90,15 @@ def login_password_from_env() -> str | None:
 
 def quote_segment(value: str) -> str:
     return quote(value, safe="")
+
+
+def quote_sql_identifier(value: str) -> str:
+    if not isinstance(value, str) or not SQL_IDENTIFIER_RE.fullmatch(value):
+        raise ValueError(
+            "SQL identifier must start with a letter or underscore and contain "
+            "only letters, digits, and underscores"
+        )
+    return f'"{value}"'
 
 
 def validate_relative_path(path: str) -> str:
@@ -492,6 +502,53 @@ class TrailBaseClient:
             body=request.SerializeToString(),
         )
         return {"ok": True}
+
+    def remove_record_api(
+        self,
+        api_name: str | None = None,
+        table_name: str | None = None,
+    ) -> Any:
+        if not api_name and not table_name:
+            raise ValueError("Provide api_name or table_name")
+
+        response = self.admin_config()
+        config = response["config"]
+        record_apis = config.setdefault("record_apis", [])
+        kept = []
+        removed = []
+
+        for api in record_apis:
+            name_matches = api_name is not None and api.get("name") == api_name
+            table_matches = table_name is not None and api.get("table_name") == table_name
+            if name_matches or table_matches:
+                removed.append(api)
+            else:
+                kept.append(api)
+
+        if not removed:
+            return {"ok": True, "removed": [], "updated": False}
+
+        config["record_apis"] = kept
+        self.update_config(config, response["hash"])
+        return {"ok": True, "removed": removed, "updated": True}
+
+    def drop_table(
+        self,
+        table_name: str,
+        remove_record_apis: bool = True,
+    ) -> Any:
+        removed_apis = {"ok": True, "removed": [], "updated": False}
+        if remove_record_apis:
+            removed_apis = self.remove_record_api(table_name=table_name)
+
+        sql = f"DROP TABLE IF EXISTS {quote_sql_identifier(table_name)}"
+        dropped = self.execute_sql(sql)
+        return {
+            "ok": True,
+            "table_name": table_name,
+            "removed_record_apis": removed_apis.get("removed", []),
+            "drop_result": dropped,
+        }
 
     def list_tables(self) -> Any:
         return self.request("GET", "/api/_admin/tables")
