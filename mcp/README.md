@@ -63,6 +63,16 @@ TRAILBASE_AUTH_TOKEN=your-token docker compose --profile mcp up --build
 
 The MCP HTTP endpoint is exposed at `http://localhost:8000/mcp`.
 
+## Browser and endpoint notes
+
+- TrailBase's root path (`/`) may return `404`. Use the admin UI path:
+  `http://localhost:4000/_/admin/`.
+- The MCP HTTP endpoint is not a browser UI. Opening `/mcp` directly in a
+  browser or plain `curl` request can return:
+  `Not Acceptable: Client must accept text/event-stream`. Use an MCP client,
+  such as FastMCP's `Client("http://localhost:8000/mcp")`, which sends the
+  required streaming headers.
+
 ## Record API file and schema tools
 
 The sidecar exposes TrailBase Record API schemas and file helpers in addition
