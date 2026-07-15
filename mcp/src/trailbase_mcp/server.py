@@ -5,7 +5,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from .client import TrailBaseClient, env_flag, is_readonly_sql
+from .client import READONLY_HTTP_METHODS, TrailBaseClient, env_flag, is_readonly_sql
 
 
 mcp = FastMCP("TrailBase")
@@ -89,6 +89,26 @@ def execute_sql(
         _require_writes_enabled()
 
     return _client().execute_sql(query, attached_databases)
+
+
+@mcp.tool
+def trailbase_request(
+    method: str,
+    path: str,
+    params: dict[str, Any] | None = None,
+    body: Any | None = None,
+) -> Any:
+    """Call an arbitrary TrailBase HTTP endpoint on the configured server.
+
+    Use this for custom WASM APIs, auth endpoints, OpenAPI endpoints, and other
+    TrailBase routes not covered by a specialized MCP tool. The path must be
+    server-relative, e.g. /api/auth/v1/status. Non-readonly methods require
+    TRAILBASE_MCP_ENABLE_WRITES=true.
+    """
+    normalized_method = method.upper()
+    if normalized_method not in READONLY_HTTP_METHODS:
+        _require_writes_enabled()
+    return _client().trailbase_request(normalized_method, path, params=params, body=body)
 
 
 @mcp.tool

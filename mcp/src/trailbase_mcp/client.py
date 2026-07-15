@@ -18,6 +18,7 @@ from .proto import config_api_pb2
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
 READONLY_SQL_STARTERS = {"select", "with", "pragma", "explain"}
+READONLY_HTTP_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 def env_flag(name: str, default: bool = False) -> bool:
@@ -29,6 +30,16 @@ def env_flag(name: str, default: bool = False) -> bool:
 
 def quote_segment(value: str) -> str:
     return quote(value, safe="")
+
+
+def validate_relative_path(path: str) -> str:
+    if not isinstance(path, str):
+        raise ValueError("path must be server-relative and start with '/'")
+    if path.startswith("//") or "://" in path:
+        raise ValueError("path must not be an absolute URL")
+    if not path.startswith("/"):
+        raise ValueError("path must be server-relative and start with '/'")
+    return path
 
 
 def base64_file_contents(file: dict[str, Any]) -> str:
@@ -330,6 +341,21 @@ class TrailBaseClient:
         if attached_databases:
             payload["attached_databases"] = attached_databases
         return self.request("POST", "/api/_admin/query", json=payload)
+
+    def trailbase_request(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        body: Any | None = None,
+    ) -> Any:
+        return self.request(
+            method.upper(),
+            validate_relative_path(path),
+            params=params,
+            json=body,
+        )
 
     def api_json_schema(
         self,

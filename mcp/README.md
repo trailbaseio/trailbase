@@ -78,6 +78,10 @@ The MCP HTTP endpoint is exposed at `http://localhost:8000/mcp`.
 The sidecar exposes TrailBase Record API schemas and file helpers in addition
 to normal CRUD:
 
+- `trailbase_request(method, path, params?, body?)`: call any server-relative
+  TrailBase HTTP endpoint. Use this for auth endpoints, custom WASM APIs, and
+  OpenAPI endpoints not covered by specialized MCP tools. Non-readonly methods
+  require `TRAILBASE_MCP_ENABLE_WRITES=true`.
 - `list_records(api_name, query?)`: forwards `query` as Record API URL query
   parameters. For example:
   `{"geojson": "geometry", "limit": 1024, "skip_cursor": "true"}` maps to
@@ -94,3 +98,28 @@ to normal CRUD:
   `multipart/form-data` using the same file descriptors.
 - `download_file(api_name, record_id, column_name, file_name?)`: download a
   `std.FileUpload` or `std.FileUploads` file and return `content_base64`.
+
+## TrailBase documentation compatibility
+
+The MCP sidecar intentionally delegates to TrailBase's public/admin HTTP APIs
+instead of reimplementing TrailBase behavior. Current coverage:
+
+- Models & Relations: use `execute_sql` for STRICT tables, constraints,
+  indexes, triggers, views, generated columns, geometry columns, and relations;
+  use `update_config` to expose tables/views as Record APIs and configure
+  `expand`.
+- Migrations: TrailBase migrations are filesystem/CLI driven
+  (`traildepot/migrations`, `trail migration`, restart/SIGHUP). MCP can apply
+  SQL through `execute_sql`, but it is not a migration runner and should not
+  replace append-only production migrations.
+- Type-Safety: use `get_api_json_schema` with `mode` `Insert`, `Select`, or
+  `Update`; feed those schemas into external generators such as quicktype.
+- Production: run MCP as a sidecar container and do not expose it publicly
+  unless it is protected like an admin surface. The `/mcp` endpoint requires an
+  MCP client that accepts `text/event-stream`.
+- Custom APIs: use `trailbase_request` for TrailBase WASM/custom routes.
+- Record APIs: CRUD, list filters/sort/pagination/cursor/geojson query params,
+  schema, JSON/base64 file upload, multipart upload, and file download are
+  supported.
+- Auth: use `trailbase_request` for auth endpoints; the sidecar itself should
+  be configured with an admin token for admin/config operations.

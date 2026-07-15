@@ -8,8 +8,10 @@ from trailbase_mcp.client import (
     csrf_token_from_jwt,
     file_upload_input,
     is_readonly_sql,
+    validate_relative_path,
 )
 from trailbase_mcp.proto import config_api_pb2
+from trailbase_mcp.server import trailbase_request
 
 
 def test_readonly_sql_detection() -> None:
@@ -58,6 +60,42 @@ def test_client_passes_record_list_query_parameters() -> None:
             "cursor": "next-page",
         },
     ) == {"type": "FeatureCollection", "features": []}
+
+
+def test_client_generic_trailbase_request() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/api/custom/search"
+        assert request.url.params["q"] == "coffee"
+        assert request.read() == b'{"limit":10}'
+        return httpx.Response(200, json={"ok": True})
+
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert client.trailbase_request(
+        "POST",
+        "/api/custom/search",
+        params={"q": "coffee"},
+        body={"limit": 10},
+    ) == {"ok": True}
+
+
+def test_generic_trailbase_request_rejects_absolute_urls() -> None:
+    assert validate_relative_path("/api/auth/v1/status") == "/api/auth/v1/status"
+    with pytest.raises(ValueError, match="server-relative"):
+        validate_relative_path("api/auth/v1/status")
+    with pytest.raises(ValueError, match="absolute URL"):
+        validate_relative_path("https://example.com/api")
+
+
+def test_server_generic_trailbase_request_write_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TRAILBASE_MCP_ENABLE_WRITES", raising=False)
+
+    with pytest.raises(RuntimeError, match="Write operations are disabled"):
+        trailbase_request("POST", "/api/auth/v1/login", body={})
 
 
 def test_client_derives_csrf_header_from_jwt() -> None:
