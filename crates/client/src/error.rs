@@ -12,6 +12,9 @@ pub enum Error {
   #[error("InvalidToken: {0}")]
   InvalidToken(jsonwebtoken::errors::Error),
 
+  #[error("InvalidRecord")]
+  InvalidRecord,
+
   #[error("InvalidUrl: {0}")]
   InvalidUrl(url::ParseError),
 

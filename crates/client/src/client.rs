@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::*;
 
 use crate::error::Error;
-use crate::record_api::RecordApi;
+use crate::record_api::{Operation, RecordApi};
 use crate::transport::{DefaultTransport, Transport, json};
 
 /// Represents the currently logged-in user.
@@ -111,7 +111,7 @@ impl ClientState {
 
   #[cfg(feature = "ws")]
   #[inline]
-  async fn upgrade_ws(
+  pub(crate) async fn upgrade_ws(
     &self,
     path: &str,
     method: Method,
@@ -212,11 +212,51 @@ impl Client {
     return None;
   }
 
-  pub fn records(&self, api_name: &str) -> RecordApi {
+  pub fn records(&self, api_name: impl std::string::ToString) -> RecordApi {
     return RecordApi {
       client: self.state.clone(),
       name: api_name.to_string(),
     };
+  }
+
+  pub async fn execute(
+    &self,
+    operations: &[Operation],
+    transaction: bool,
+  ) -> Result<Vec<String>, Error> {
+    #[derive(Serialize)]
+    struct Request<'a> {
+      operations: &'a [Operation],
+      transaction: bool,
+    }
+
+    let request = serde_json::to_vec(&Request {
+      operations,
+      transaction,
+    })
+    .map_err(Error::RecordSerialization)?;
+
+    let response = self
+      .state
+      .fetch(
+        TRANSACTION_API_BASE_PATH,
+        Method::POST,
+        Some(request),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    #[derive(Deserialize)]
+    struct Response {
+      ids: Vec<String>,
+    }
+
+    return Ok(
+      json::<Response>(error_for_status_unpack(response)?)
+        .await?
+        .ids,
+    );
   }
 
   pub async fn refresh(&self) -> Result<(), Error> {
@@ -559,6 +599,7 @@ fn error_for_status_unpack(
 }
 
 const AUTH_API: &str = "api/auth/v1";
+const TRANSACTION_API_BASE_PATH: &str = "/api/transaction/v1/execute";
 
 #[cfg(test)]
 mod tests {

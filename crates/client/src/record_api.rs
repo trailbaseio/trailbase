@@ -40,8 +40,6 @@ impl RecordId<'_> for i64 {
   }
 }
 
-type JsonObject = serde_json::value::Map<String, serde_json::Value>;
-
 #[derive(Debug, Clone, Copy, Deserialize_repr, Serialize_repr, PartialEq)]
 #[repr(i64)]
 pub enum EventErrorStatus {
@@ -54,6 +52,8 @@ pub enum EventErrorStatus {
   /// needs to be determined client-side based on event `seq` numbers.
   Loss = 2,
 }
+
+type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum EventPayload {
@@ -77,6 +77,23 @@ impl ChangeEvent {
   fn from_str(msg: &str) -> Result<ChangeEvent, serde_json::Error> {
     return serde_json::from_str::<ChangeEvent>(msg);
   }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub enum Operation {
+  Create {
+    api_name: String,
+    value: JsonObject,
+  },
+  Update {
+    api_name: String,
+    record_id: String,
+    value: JsonObject,
+  },
+  Delete {
+    api_name: String,
+    record_id: String,
+  },
 }
 
 pub trait ReadArgumentsTrait<'a> {
@@ -223,6 +240,27 @@ where
   }
 }
 
+impl Pagination {
+  pub fn new() -> Self {
+    return Self::default();
+  }
+
+  pub fn with_limit(mut self, limit: impl Into<Option<usize>>) -> Pagination {
+    self.limit = limit.into();
+    return self;
+  }
+
+  pub fn with_cursor(mut self, cursor: impl Into<Option<String>>) -> Pagination {
+    self.cursor = cursor.into();
+    return self;
+  }
+
+  pub fn with_offset(mut self, offset: impl Into<Option<usize>>) -> Pagination {
+    self.offset = offset.into();
+    return self;
+  }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ListArguments<'a> {
   pagination: Pagination,
@@ -275,27 +313,6 @@ pub struct Pagination {
   cursor: Option<String>,
   limit: Option<usize>,
   offset: Option<usize>,
-}
-
-impl Pagination {
-  pub fn new() -> Self {
-    return Self::default();
-  }
-
-  pub fn with_limit(mut self, limit: impl Into<Option<usize>>) -> Pagination {
-    self.limit = limit.into();
-    return self;
-  }
-
-  pub fn with_cursor(mut self, cursor: impl Into<Option<String>>) -> Pagination {
-    self.cursor = cursor.into();
-    return self;
-  }
-
-  pub fn with_offset(mut self, offset: impl Into<Option<usize>>) -> Pagination {
-    self.offset = offset.into();
-    return self;
-  }
 }
 
 #[derive(Clone)]
@@ -395,9 +412,9 @@ impl RecordApi {
     return json(response).await;
   }
 
-  pub async fn read<'a, T: DeserializeOwned>(
+  pub async fn read<T: DeserializeOwned>(
     &self,
-    args: impl ReadArgumentsTrait<'a>,
+    args: impl ReadArgumentsTrait<'_>,
   ) -> Result<T, Error> {
     let expand = args
       .expand()
@@ -419,6 +436,18 @@ impl RecordApi {
       .await?;
 
     return json(response).await;
+  }
+
+  pub fn create_op<T: Serialize>(&self, record: T) -> Result<Operation, Error> {
+    let value = serde_json::to_value(&record).map_err(Error::RecordSerialization)?;
+    let serde_json::Value::Object(obj) = value else {
+      return Err(Error::InvalidRecord);
+    };
+
+    return Ok(Operation::Create {
+      api_name: self.name.clone(),
+      value: obj,
+    });
   }
 
   pub async fn create<T: Serialize>(&self, record: T) -> Result<String, Error> {
@@ -449,11 +478,24 @@ impl RecordApi {
     return Ok(json::<RecordIdResponse>(response).await?.ids);
   }
 
-  pub async fn update<'a, T: Serialize>(
+  pub fn update_op<'a, T: Serialize>(
     &self,
     id: impl RecordId<'a>,
     record: T,
-  ) -> Result<(), Error> {
+  ) -> Result<Operation, Error> {
+    let value = serde_json::to_value(&record).map_err(Error::RecordSerialization)?;
+    let serde_json::Value::Object(obj) = value else {
+      return Err(Error::InvalidRecord);
+    };
+
+    return Ok(Operation::Update {
+      api_name: self.name.clone(),
+      record_id: id.serialized_id().to_string(),
+      value: obj,
+    });
+  }
+
+  pub async fn update<T: Serialize>(&self, id: impl RecordId<'_>, record: T) -> Result<(), Error> {
     self
       .client
       .fetch(
@@ -472,7 +514,14 @@ impl RecordApi {
     return Ok(());
   }
 
-  pub async fn delete<'a>(&self, id: impl RecordId<'a>) -> Result<(), Error> {
+  pub fn delete_op<'a>(&self, id: impl RecordId<'a>) -> Result<Operation, Error> {
+    return Ok(Operation::Delete {
+      api_name: self.name.clone(),
+      record_id: id.serialized_id().to_string(),
+    });
+  }
+
+  pub async fn delete(&self, id: impl RecordId<'_>) -> Result<(), Error> {
     self
       .client
       .fetch(

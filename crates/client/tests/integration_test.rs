@@ -389,6 +389,53 @@ async fn records_test() {
   }
 }
 
+async fn transaction_test() {
+  let client = connect().await;
+  let api = client.records("simple_strict_table");
+
+  let now = now();
+
+  {
+    // Test simple create transaction.
+    let msg = format!("rust transaction create test: =?&{now}");
+    let ops = [api.create_op(json!({"text_not_null": msg})).unwrap()];
+
+    let ids = client.execute(&ops, true).await.unwrap();
+    assert_eq!(1, ids.len());
+
+    let record: SimpleStrict = api.read(&ids[0]).await.unwrap();
+    assert_eq!(record.text_not_null, msg);
+  }
+
+  {
+    // Test update transaction.
+    let msg = format!("rust transaction update test original: =?&{now}");
+    let id = api.create(json!({"text_not_null": msg})).await.unwrap();
+
+    let updated_msg = format!("rust transaction update test modified: =?&{now}");
+    let ops = [api
+      .update_op(id.clone(), json!({"text_not_null": updated_msg}))
+      .unwrap()];
+    let _ids = client.execute(&ops, true).await.unwrap();
+
+    let record: SimpleStrict = api.read(&id).await.unwrap();
+    assert_eq!(record.text_not_null, updated_msg);
+  }
+
+  {
+    // Test delete transaction.
+    let msg = format!("rust transaction delete test: =?&{now}");
+    let id = api.create(json!({"text_not_null": msg})).await.unwrap();
+
+    let ops = [api.delete_op(id.clone()).unwrap()];
+    let ids = client.execute(&ops, true).await.unwrap();
+
+    assert_eq!(0, ids.len());
+
+    assert!(api.read::<SimpleStrict>(&id).await.is_err());
+  }
+}
+
 async fn expand_foreign_records_test() {
   let client = connect().await;
   let api = client.records("comment");
@@ -944,6 +991,9 @@ fn integration_test() {
 
   runtime.block_on(records_test());
   println!("Ran records tests");
+
+  runtime.block_on(transaction_test());
+  println!("Ran transaction tests");
 
   runtime.block_on(expand_foreign_records_test());
   println!("Ran expand foreign records tests");
