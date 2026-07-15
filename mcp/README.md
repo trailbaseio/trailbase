@@ -3,25 +3,129 @@
 This package exposes TrailBase through a FastMCP server. It talks to TrailBase
 over HTTP and uses the existing admin and record APIs.
 
+Use it as a sidecar container next to TrailBase. The MCP container does not
+store TrailBase data; it forwards MCP tool calls to a running TrailBase server.
+
+## Features
+
+- TrailBase admin/runtime info.
+- Admin config read/update, including Record API configuration.
+- SQL execution with a default read-only guard.
+- Table, view, index, and trigger introspection.
+- Record API CRUD.
+- Record API list query passthrough, including filters, sorting, pagination,
+  cursors, `geojson`, `limit`, and `skip_cursor`.
+- Record API JSON schemas for `Insert`, `Select`, and `Update`.
+- JSON/base64 and multipart file uploads for `std.FileUpload` and
+  `std.FileUploads`.
+- File download as base64.
+- Generic `trailbase_request` tool for custom WASM APIs, auth APIs, and other
+  TrailBase HTTP endpoints.
+
+## Quick start with Docker
+
+Run TrailBase separately, then run this MCP sidecar against it.
+
+```sh
+docker run --rm -p 8000:8000 \
+  -e TRAILBASE_URL=http://host.docker.internal:4000 \
+  -e TRAILBASE_AUTH_TOKEN=your-admin-jwt-without-bearer-prefix \
+  -e TRAILBASE_MCP_ENABLE_WRITES=false \
+  -e MCP_TRANSPORT=http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8000 \
+  YOUR_DOCKERHUB_USER/trailbase-mcp:latest
+```
+
+The MCP endpoint is:
+
+```text
+http://localhost:8000/mcp
+```
+
+Do not test `/mcp` in a browser. Use an MCP client. A browser or plain `curl`
+request can return `Not Acceptable: Client must accept text/event-stream`,
+which is expected for MCP over HTTP.
+
+## Portainer / Docker Compose stack
+
+Replace `YOUR_DOCKERHUB_USER/trailbase-mcp:latest` with your published image.
+
+```yaml
+services:
+  trail:
+    image: docker.io/trailbase/trailbase:latest
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+    volumes:
+      - /opt/trailbase/traildepot:/app/traildepot
+    environment:
+      RUST_BACKTRACE: "1"
+
+  mcp:
+    image: YOUR_DOCKERHUB_USER/trailbase-mcp:latest
+    depends_on:
+      - trail
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      TRAILBASE_URL: "http://trail:4000"
+      TRAILBASE_AUTH_TOKEN: "${TRAILBASE_AUTH_TOKEN}"
+      TRAILBASE_MCP_ENABLE_WRITES: "false"
+      MCP_TRANSPORT: "http"
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "8000"
+```
+
+Create the TrailBase data directory before deploying the stack:
+
+```sh
+sudo mkdir -p /opt/trailbase/traildepot
+sudo chown -R 1000:1000 /opt/trailbase/traildepot
+```
+
+If you see TrailBase permission errors, verify the UID used by your TrailBase
+image or temporarily relax permissions to confirm the mount is the issue.
+
 ## Configuration
 
 Environment variables:
 
-- `TRAILBASE_URL`: TrailBase base URL. Defaults to `http://localhost:4000`.
-- `TRAILBASE_AUTH_TOKEN` or `TRAILBASE_TOKEN`: bearer token used for admin and
-  protected record APIs. Pass the raw JWT without the `Bearer ` prefix.
-- `TRAILBASE_CSRF_TOKEN`: optional explicit CSRF token. If omitted, the sidecar
-  derives it from TrailBase JWTs for admin API calls.
-- `TRAILBASE_MCP_ENABLE_WRITES`: set to `true` to enable create/update/delete
-  tools and mutating SQL.
-- `MCP_TRANSPORT`: `stdio` by default; set to `http` for remote MCP.
-- `MCP_HOST`: HTTP bind host, default `127.0.0.1`.
-- `MCP_PORT`: HTTP bind port, default `8000`.
+| Variable | Default | Description |
+| --- | --- | --- |
+| `TRAILBASE_URL` | `http://localhost:4000` | TrailBase base URL. In Compose, use the TrailBase service name, e.g. `http://trail:4000`. |
+| `TRAILBASE_AUTH_TOKEN` / `TRAILBASE_TOKEN` | unset | Admin or user JWT used for TrailBase API calls. Pass the raw JWT without the `Bearer ` prefix. |
+| `TRAILBASE_CSRF_TOKEN` | derived from JWT | Optional explicit CSRF token. Normally not needed for TrailBase-minted JWTs. |
+| `TRAILBASE_MCP_ENABLE_WRITES` | `false` | Set to `true` to enable create/update/delete tools, mutating SQL, config updates, and mutating generic HTTP calls. |
+| `TRAILBASE_MCP_TIMEOUT` | `30` | HTTP timeout in seconds. |
+| `MCP_TRANSPORT` | `stdio` | Use `http` for container/remote MCP. |
+| `MCP_HOST` | `127.0.0.1` | HTTP bind host. Use `0.0.0.0` in Docker. |
+| `MCP_PORT` | `8000` | HTTP bind port. |
 
 Mint an admin bearer token with TrailBase:
 
 ```sh
 cargo run --bin trail -- --data-dir ./traildepot user mint-token admin@localhost
+```
+
+Inside the official TrailBase container this is typically:
+
+```sh
+/app/trail --data-dir /app/traildepot user mint-token admin@localhost
+```
+
+The command prints a value like:
+
+```text
+Bearer eyJhbGciOi...
+```
+
+Set `TRAILBASE_AUTH_TOKEN` to only the JWT part:
+
+```text
+TRAILBASE_AUTH_TOKEN=eyJhbGciOi...
 ```
 
 ## Run with stdio
@@ -32,7 +136,7 @@ python -m venv .venv
 . .venv/bin/activate
 pip install -e .
 TRAILBASE_URL=http://localhost:4000 \
-TRAILBASE_AUTH_TOKEN='Bearer token without the Bearer prefix' \
+TRAILBASE_AUTH_TOKEN='your-token-without-the-Bearer-prefix' \
 python -m trailbase_mcp.server
 ```
 
@@ -55,7 +159,8 @@ Example MCP client config:
 
 ## Run with Docker Compose
 
-The root `docker-compose.yml` includes an opt-in `mcp` profile:
+For local development from this repository, the root `docker-compose.yml`
+includes an opt-in `mcp` profile:
 
 ```sh
 TRAILBASE_AUTH_TOKEN=your-token docker compose --profile mcp up --build
@@ -98,6 +203,49 @@ to normal CRUD:
   `multipart/form-data` using the same file descriptors.
 - `download_file(api_name, record_id, column_name, file_name?)`: download a
   `std.FileUpload` or `std.FileUploads` file and return `content_base64`.
+
+## MCP tools
+
+Current tools:
+
+- `trailbase_info`
+- `trailbase_config`
+- `update_config`
+- `list_record_apis`
+- `list_tables`
+- `execute_sql`
+- `trailbase_request`
+- `list_records`
+- `get_record`
+- `create_record`
+- `update_record`
+- `delete_record`
+- `get_api_json_schema`
+- `create_record_with_file_uploads`
+- `create_record_multipart`
+- `download_file`
+
+## Security notes
+
+Treat this sidecar like an admin surface when configured with an admin token.
+
+- Do not expose `/mcp` directly to the public internet.
+- Prefer private Docker networks, VPN, mTLS, or an authenticated reverse proxy.
+- Keep `TRAILBASE_MCP_ENABLE_WRITES=false` unless the MCP client explicitly
+  needs mutation/config/SQL write access.
+- Use a least-privilege TrailBase token when possible. Admin tokens are required
+  for admin config and SQL tools.
+- `trailbase_request` only accepts server-relative paths and cannot proxy to
+  arbitrary external URLs.
+
+## Known limitations
+
+- Realtime subscriptions are not exposed as a long-running MCP stream in this
+  release.
+- TrailBase migrations remain filesystem/CLI driven. MCP can run SQL, but it is
+  not a production migration runner.
+- The sidecar does not generate language bindings itself; use
+  `get_api_json_schema` and an external generator such as quicktype.
 
 ## TrailBase documentation compatibility
 
