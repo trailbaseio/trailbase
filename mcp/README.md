@@ -19,8 +19,24 @@ store TrailBase data; it forwards MCP tool calls to a running TrailBase server.
 - JSON/base64 and multipart file uploads for `std.FileUpload` and
   `std.FileUploads`.
 - File download as base64.
+- MCP-side TrailBase login and refresh-token handling for container deployments.
+- TrailBase OpenAPI operation catalog with call-by-`operation_id` support for
+  auth, OAuth, and Record API operations.
 - Generic `trailbase_request` tool for custom WASM APIs, auth APIs, and other
   TrailBase HTTP endpoints.
+
+## Image tags
+
+Published image:
+
+```text
+frostbite4456/trailbase-mcp
+```
+
+Recommended tags:
+
+- `frostbite4456/trailbase-mcp:0.2` - pinned release.
+- `frostbite4456/trailbase-mcp:latest` - current release.
 
 ## Quick start with Docker
 
@@ -34,7 +50,21 @@ docker run --rm -p 8000:8000 \
   -e MCP_TRANSPORT=http \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=8000 \
-  frostbite4456/trailbase-mcp:latest
+  frostbite4456/trailbase-mcp:0.2
+```
+
+Or let the sidecar log in to TrailBase and keep returned tokens in memory:
+
+```sh
+docker run --rm -p 8000:8000 \
+  -e TRAILBASE_URL=http://host.docker.internal:4000 \
+  -e TRAILBASE_LOGIN_EMAIL=admin@localhost \
+  -e TRAILBASE_LOGIN_PASSWORD=your-admin-password \
+  -e TRAILBASE_MCP_ENABLE_WRITES=false \
+  -e MCP_TRANSPORT=http \
+  -e MCP_HOST=0.0.0.0 \
+  -e MCP_PORT=8000 \
+  frostbite4456/trailbase-mcp:0.2
 ```
 
 Or provide the token via a mounted file:
@@ -48,7 +78,7 @@ docker run --rm -p 8000:8000 \
   -e MCP_TRANSPORT=http \
   -e MCP_HOST=0.0.0.0 \
   -e MCP_PORT=8000 \
-  frostbite4456/trailbase-mcp:latest
+  frostbite4456/trailbase-mcp:0.2
 ```
 
 The MCP endpoint is:
@@ -63,8 +93,9 @@ which is expected for MCP over HTTP.
 
 ## Portainer / Docker Compose stack
 
-This example uses the published Docker Hub image:
-`frostbite4456/trailbase-mcp:latest`.
+This example uses the published Docker Hub image. Pin `0.2` for reproducible
+deployments or use `latest` when you intentionally want the current release:
+`frostbite4456/trailbase-mcp:0.2`.
 
 ```yaml
 services:
@@ -79,7 +110,7 @@ services:
       RUST_BACKTRACE: "1"
 
   mcp:
-    image: frostbite4456/trailbase-mcp:latest
+    image: frostbite4456/trailbase-mcp:0.2
     depends_on:
       - trail
     ports:
@@ -123,7 +154,7 @@ mounted token-file approach:
 
 ```yaml
   mcp:
-    image: frostbite4456/trailbase-mcp:latest
+    image: frostbite4456/trailbase-mcp:0.2
     volumes:
       - /opt/trailbase/secrets/trailbase-token:/run/secrets/trailbase_auth_token:ro
       - /opt/trailbase/secrets/trailbase-refresh-token:/run/secrets/trailbase_refresh_token:ro
