@@ -2,6 +2,7 @@
 target/
 node_modules/
 dist/
+.dev-tools/
 
 # Dart workspace artifacts
 .dart_tool

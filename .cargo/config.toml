@@ -14,3 +14,8 @@
 
 [env]
 TS_RS_EXPORT_DIR = { value = "./crates/assets/js/bindings", relative = true }
+LIBCLANG_PATH = { value = "./.dev-tools/libclang-18/usr/lib/llvm-18/lib", relative = true }
+CLANG_PATH = { value = "./.dev-tools/libclang-18/usr/bin/clang-18", relative = true }
+PKG_CONFIG_PATH = { value = "./.dev-tools/geos/usr/lib/x86_64-linux-gnu/pkgconfig", relative = true }
+PKG_CONFIG_SYSROOT_DIR = { value = "./.dev-tools/geos", relative = true }
+PROTOC = { value = "./.cargo/protoc-wrapper.sh", relative = true }
