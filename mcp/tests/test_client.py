@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from trailbase_mcp.client import TrailBaseClient, csrf_token_from_jwt, is_readonly_sql
+from trailbase_mcp.proto import config_api_pb2
 
 
 def test_readonly_sql_detection() -> None:
@@ -54,3 +55,45 @@ def test_client_raises_with_response_body() -> None:
 
     with pytest.raises(RuntimeError, match="HTTP 401: nope"):
         client.admin_info()
+
+
+def test_client_decodes_and_updates_protobuf_config() -> None:
+    config_response = config_api_pb2.GetConfigResponse()
+    config_response.hash = "hash-1"
+    config_response.config.email.smtp_host = "localhost"
+    config_response.config.server.application_name = "TrailBase"
+    config_response.config.auth.password_minimal_length = 8
+    config_response.config.jobs.SetInParent()
+
+    seen_update = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_update
+        if request.method == "GET":
+            return httpx.Response(200, content=config_response.SerializeToString())
+
+        update = config_api_pb2.UpdateConfigRequest()
+        update.ParseFromString(request.content)
+        seen_update = update
+        return httpx.Response(200, content=b"")
+
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    decoded = client.admin_config()
+    assert decoded["hash"] == "hash-1"
+    assert decoded["config"]["server"]["application_name"] == "TrailBase"
+
+    decoded["config"].setdefault("record_apis", []).append(
+        {
+            "name": "widgets",
+            "table_name": "widgets",
+            "acl_world": [1, 2, 4, 8, 16],
+        }
+    )
+    assert client.update_config(decoded["config"], decoded["hash"]) == {"ok": True}
+    assert seen_update is not None
+    assert seen_update.hash == "hash-1"
+    assert seen_update.config.record_apis[0].name == "widgets"

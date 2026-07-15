@@ -31,15 +31,22 @@ def trailbase_info() -> Any:
 
 @mcp.tool
 def trailbase_config() -> Any:
-    """Return TrailBase configuration, including configured record APIs."""
+    """Return TrailBase configuration plus the config hash required for updates."""
     return _client().admin_config()
+
+
+@mcp.tool
+def update_config(config: dict[str, Any], hash: str) -> Any:
+    """Replace TrailBase configuration. Requires TRAILBASE_MCP_ENABLE_WRITES=true."""
+    _require_writes_enabled()
+    return _client().update_config(config, hash)
 
 
 @mcp.tool
 def list_record_apis() -> Any:
     """List configured TrailBase record APIs from the server config."""
-    config = _client().admin_config()
-    return config.get("record_apis", [])
+    response = _client().admin_config()
+    return {"record_apis": response.get("config", {}).get("record_apis", [])}
 
 
 @mcp.tool

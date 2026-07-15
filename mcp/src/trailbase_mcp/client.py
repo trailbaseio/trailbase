@@ -9,6 +9,9 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
+from google.protobuf.json_format import MessageToDict, ParseDict
+
+from .proto import config_api_pb2
 
 
 TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -137,6 +140,10 @@ class TrailBaseClient:
         content_type = response.headers.get("content-type", "")
         if "application/json" in content_type:
             return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            pass
 
         return {
             "ok": True,
@@ -144,11 +151,60 @@ class TrailBaseClient:
             "body": response.text,
         }
 
+    def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        body: bytes | None = None,
+    ) -> bytes:
+        base_url = self.base_url.rstrip("/")
+        path = path if path.startswith("/") else f"/{path}"
+
+        headers = self._headers()
+        headers["content-type"] = "application/protobuf"
+        headers["accept"] = "application/protobuf"
+
+        with httpx.Client(
+            base_url=base_url,
+            headers=headers,
+            timeout=self.timeout,
+            transport=self.transport,
+        ) as client:
+            response = client.request(method, path, content=body)
+
+        if response.is_error:
+            body_text = response.text.strip()
+            raise RuntimeError(
+                f"TrailBase {method.upper()} {path} failed with "
+                f"HTTP {response.status_code}: {body_text}"
+            )
+
+        return response.content
+
     def admin_info(self) -> Any:
         return self.request("GET", "/api/_admin/info")
 
     def admin_config(self) -> Any:
-        return self.request("GET", "/api/_admin/config")
+        response = config_api_pb2.GetConfigResponse()
+        response.ParseFromString(self.request_bytes("GET", "/api/_admin/config"))
+        return MessageToDict(
+            response,
+            preserving_proto_field_name=True,
+            use_integers_for_enums=True,
+        )
+
+    def update_config(self, config: dict[str, Any], hash: str) -> Any:
+        request = ParseDict(
+            {"config": config, "hash": hash},
+            config_api_pb2.UpdateConfigRequest(),
+        )
+        self.request_bytes(
+            "POST",
+            "/api/_admin/config",
+            body=request.SerializeToString(),
+        )
+        return {"ok": True}
 
     def list_tables(self) -> Any:
         return self.request("GET", "/api/_admin/tables")
