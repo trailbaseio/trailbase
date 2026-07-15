@@ -35,6 +35,31 @@ def test_client_sends_bearer_token_and_quotes_path_segments() -> None:
     assert client.get_record("chat messages", "id/1") == {"id": "id/1"}
 
 
+def test_client_passes_record_list_query_parameters() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/records/v1/venue"
+        assert request.url.params["geojson"] == "geometry"
+        assert request.url.params["limit"] == "1024"
+        assert request.url.params["skip_cursor"] == "true"
+        assert request.url.params["cursor"] == "next-page"
+        return httpx.Response(200, json={"type": "FeatureCollection", "features": []})
+
+    client = TrailBaseClient(
+        base_url="http://trailbase.test",
+        transport=httpx.MockTransport(handler),
+    )
+
+    assert client.list_records(
+        "venue",
+        {
+            "geojson": "geometry",
+            "limit": 1024,
+            "skip_cursor": "true",
+            "cursor": "next-page",
+        },
+    ) == {"type": "FeatureCollection", "features": []}
+
+
 def test_client_derives_csrf_header_from_jwt() -> None:
     token = "header.eyJjc3JmX3Rva2VuIjoiY3NyZi0xMjMifQ.signature"
 

@@ -78,6 +78,11 @@ The MCP HTTP endpoint is exposed at `http://localhost:8000/mcp`.
 The sidecar exposes TrailBase Record API schemas and file helpers in addition
 to normal CRUD:
 
+- `list_records(api_name, query?)`: forwards `query` as Record API URL query
+  parameters. For example:
+  `{"geojson": "geometry", "limit": 1024, "skip_cursor": "true"}` maps to
+  `?geojson=geometry&limit=1024&skip_cursor=true`. Cursor pagination works the
+  same way with `{"cursor": "<cursor>"}`.
 - `get_api_json_schema(api_name, mode?, admin?)`: read a schema from
   `/api/records/v1/<api>/schema`. `mode` may be `Insert`, `Select`, or
   `Update`. Set `admin=true` to use the admin schema endpoint.
