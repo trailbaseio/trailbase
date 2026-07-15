@@ -150,7 +150,7 @@ interface DeleteOp {
 }
 
 export interface DeferredOperation<ResponseType> {
-  query(): Promise<ResponseType>;
+  query(client: Client): Promise<ResponseType>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -162,13 +162,12 @@ export class CreateOperation<
   T = Record<string, unknown>,
 > implements DeferredMutation<RecordId> {
   constructor(
-    private readonly client: Client,
     private readonly apiName: string,
     private readonly record: Partial<T>,
   ) {}
 
-  async query(): Promise<RecordId> {
-    const response = await this.client.fetch(
+  async query(client: Client): Promise<RecordId> {
+    const response = await client.fetch(
       `${recordApiBasePath}/${this.apiName}`,
       {
         method: "POST",
@@ -194,14 +193,13 @@ export class UpdateOperation<
   T = Record<string, unknown>,
 > implements DeferredMutation<void> {
   constructor(
-    private readonly client: Client,
     private readonly apiName: string,
     private readonly id: RecordId,
     private readonly record: Partial<T>,
   ) {}
 
-  async query(): Promise<void> {
-    await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
+  async query(client: Client): Promise<void> {
+    await client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
       method: "PATCH",
       body: JSON.stringify(this.record),
       headers: jsonContentTypeHeader,
@@ -221,12 +219,12 @@ export class UpdateOperation<
 
 export class DeleteOperation implements DeferredMutation<void> {
   constructor(
-    private readonly client: Client,
     private readonly apiName: string,
     private readonly id: RecordId,
   ) {}
-  async query(): Promise<void> {
-    await this.client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
+
+  async query(client: Client): Promise<void> {
+    await client.fetch(`${recordApiBasePath}/${this.apiName}/${this.id}`, {
       method: "DELETE",
     });
   }
@@ -414,11 +412,11 @@ export class RecordApiImpl<
   }
 
   public async create(record: T): Promise<RecordId> {
-    return new CreateOperation<T>(this.client, this.name, record).query();
+    return new CreateOperation<T>(this.name, record).query(this.client);
   }
 
   public createOp(record: T): CreateOperation<T> {
-    return new CreateOperation<T>(this.client, this.name, record);
+    return new CreateOperation<T>(this.name, record);
   }
   public async createBulk<T = Record<string, unknown>>(
     records: T[],
@@ -436,19 +434,19 @@ export class RecordApiImpl<
   }
 
   public async update(id: RecordId, record: Partial<T>): Promise<void> {
-    return new UpdateOperation<T>(this.client, this.name, id, record).query();
+    return new UpdateOperation<T>(this.name, id, record).query(this.client);
   }
 
   public updateOp(id: RecordId, record: Partial<T>): UpdateOperation<T> {
-    return new UpdateOperation<T>(this.client, this.name, id, record);
+    return new UpdateOperation<T>(this.name, id, record);
   }
 
   public async delete(id: RecordId): Promise<void> {
-    return new DeleteOperation(this.client, this.name, id).query();
+    return new DeleteOperation(this.name, id).query(this.client);
   }
 
   public deleteOp(id: RecordId): DeleteOperation {
-    return new DeleteOperation(this.client, this.name, id);
+    return new DeleteOperation(this.name, id);
   }
 
   public async subscribe(
