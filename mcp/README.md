@@ -162,6 +162,41 @@ TRAILBASE_AUTH_TOKEN=eyJhbGciOi...
 For Docker/Portainer deployments, prefer a token file or Docker secret over
 hard-coding the token in the stack when possible.
 
+### Token lifetime and rotation
+
+TrailBase JWTs can expire. Do not assume a token copied from an API client or
+browser login is long-lived; it may follow the dashboard's normal auth-token
+TTL.
+
+Prefer a CLI-minted token for the MCP sidecar:
+
+```sh
+/app/trail --data-dir /app/traildepot user mint-token admin@localhost
+```
+
+Then check its `exp` claim before deploying it:
+
+```sh
+TOKEN='paste-jwt-or-bearer-output-here' python3 - <<'PY'
+import base64, json, os, time
+
+token = os.environ["TOKEN"].strip()
+if token.lower().startswith("bearer "):
+    token = token[7:].strip()
+
+payload = token.split(".")[1]
+payload += "=" * (-len(payload) % 4)
+claims = json.loads(base64.urlsafe_b64decode(payload))
+print(json.dumps(claims, indent=2, sort_keys=True))
+if "exp" in claims:
+    print("expires_in_seconds:", claims["exp"] - int(time.time()))
+PY
+```
+
+If the token expires, mint a new token, update the token file or Portainer
+environment variable, and restart/redeploy the MCP container. The sidecar reads
+the token at startup.
+
 ## Credential model
 
 Most Dockerized MCP servers use one of these patterns:
