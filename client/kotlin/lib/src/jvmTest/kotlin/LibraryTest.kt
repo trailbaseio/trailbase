@@ -364,23 +364,26 @@ class ClientTest {
 
     // Test simple create.
     val msg0 = "kotlin transaction create test: =?&${now}"
-    val ids0 = client.execute(listOf(api.createOp(SimpleStrictInsert(msg0))), true)
-    assertEquals(1, ids0.count())
+    val results0= client.execute(listOf(api.createOp(SimpleStrictInsert(msg0))), true)
+    assertEquals(1, results0.count())
 
-    val record0: SimpleStrict = api.read(ids0[0])
+    val record0: SimpleStrict = api.read((results0[0] as OperationResult.Id).id)
     assertEquals(msg0, record0.text_not_null)
 
     // Test update transaction.
     val msg1 = "kotlin transaction update test original: =?&${now}"
     val id1 = api.create(SimpleStrictInsert(msg1))
     val updatedMsg1 = "kotlin transaction update test original: =?&${now}"
-    client.execute(listOf(api.updateOp(id1, SimpleStrictInsert(updatedMsg1))), true)
+    val results1 = client.execute(listOf(api.updateOp(id1, SimpleStrictInsert(updatedMsg1))), true)
+    assertEquals(1, results1.count())
 
     val record1: SimpleStrict = api.read(id1)
     assertEquals(updatedMsg1, record1.text_not_null)
 
     // Test delete transaction.
-    client.execute(listOf(api.deleteOp(id1)), true)
+    val results2 =  client.execute(listOf(api.deleteOp(id1)), true)
+    assertEquals(1, results2.count())
+
     assertThrows<HttpException>({ api.read<SimpleStrict>(id1) })
   }
 

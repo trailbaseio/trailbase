@@ -136,6 +136,27 @@ sealed class Operation {
   }
 }
 
+@Serializable
+sealed class OperationResult {
+  public class Id(val id: RecordId) : OperationResult()
+  public class Error(val message: String) : OperationResult()
+
+  companion object {
+    fun fromJson(obj: JsonObject): OperationResult {
+      val error = obj.get("Error")
+      if (error != null) {
+        return OperationResult.Error(error.jsonPrimitive.content)
+      }
+      val id = obj.get("Id")
+      if (id != null) {
+        return OperationResult.Id(RecordId.parse(id.jsonPrimitive.content))
+      }
+
+      throw Exception("Invalid OperationResult")
+    }
+  }
+}
+
 class TokenState(val state: Pair<Tokens, JwtTokenClaims>?, val headers: Map<String, List<String>>) {
   companion object {
     fun build(tokens: Tokens?): TokenState {
@@ -508,7 +529,7 @@ class Client(
     return RecordApi(name, this)
   }
 
-  suspend fun execute(ops: List<Operation>, transaction: Boolean = true): List<RecordId> {
+  suspend fun execute(ops: List<Operation>, transaction: Boolean = true): List<OperationResult> {
     @Serializable data class Request(val operations: List<JsonObject>, val transaction: Boolean)
 
     val response =
@@ -519,8 +540,10 @@ class Client(
                     throwOnError = true
             )
 
-    val ids: ResponseRecordIds = response.body()
-    return ids.ids.map { RecordId.parse(it) }
+   @Serializable data class Response(val results: List<JsonObject>)
+
+    val r : Response = response.body()
+    return r.results.map { OperationResult.fromJson(it) }
   }
 
   suspend fun login(emailOrUsername: String, password: String): MultiFactorAuthToken? {
