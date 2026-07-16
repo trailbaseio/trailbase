@@ -35,27 +35,12 @@ abstract class Transport {
 class DefaultTransport implements Transport {
   final http.Client _http;
   final Uri _baseUrl;
-  final Map<String, String>? _baseHeaders;
 
   DefaultTransport({
     required Uri url,
-    Map<String, String>? headers,
     http.Client? client,
   })  : _http = client ?? http.Client(),
-        _baseUrl = url,
-        _baseHeaders = headers;
-
-  Map<String, String>? mergeHeaders(Map<String, String>? headers) {
-    if (headers != null) {
-      return _baseHeaders != null
-          ? {
-              ...headers,
-              ..._baseHeaders,
-            }
-          : headers;
-    }
-    return _baseHeaders;
-  }
+        _baseUrl = url;
 
   @override
   Future<http.Response> fetch(
@@ -67,13 +52,10 @@ class DefaultTransport implements Transport {
   }) async {
     final uri = _baseUrl.replace(path: path, queryParameters: queryParams);
     return switch (method) {
-      Method.get => await _http.get(uri, headers: mergeHeaders(headers)),
-      Method.post =>
-        await _http.post(uri, headers: mergeHeaders(headers), body: body),
-      Method.patch =>
-        await _http.patch(uri, headers: mergeHeaders(headers), body: body),
-      Method.delete =>
-        await _http.delete(uri, headers: mergeHeaders(headers), body: body),
+      Method.get => await _http.get(uri, headers: headers),
+      Method.post => await _http.post(uri, headers: headers, body: body),
+      Method.patch => await _http.patch(uri, headers: headers, body: body),
+      Method.delete => await _http.delete(uri, headers: headers, body: body),
     };
   }
 
@@ -83,9 +65,8 @@ class DefaultTransport implements Transport {
     Map<String, String>? headers,
   }) async {
     final request = http.Request('GET', uri);
-    final mergedHeaders = mergeHeaders(headers);
-    if (mergedHeaders != null) {
-      request.headers.addAll(mergedHeaders);
+    if (headers != null) {
+      request.headers.addAll(headers);
     }
     return await _http.send(request);
   }

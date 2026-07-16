@@ -48,13 +48,9 @@ class Client {
         Client(site, transport: transport, onAuthChange: onAuthChange);
 
     // Initial check if tokens are valid and potentially refresh auth token.
-    // Do not use _updateToken to not call [onAuthChange] on intial tokens.
+    // Do not use _updateToken to not call [onAuthChange] on initial tokens.
     client._tokenState = TokenState.build(tokens);
     await client.refreshAuthToken();
-    // final uri = client.site().replace(path: '${_authApi}/status');
-    // final statusResponse =
-    //     await client._http.get(uri, headers: _buildHeaders(tokens));
-    // client._updateTokens(Tokens.fromJson(jsonDecode(statusResponse.body)));
 
     return client;
   }
@@ -199,7 +195,11 @@ class Client {
   Future<void> refreshAuthToken() async {
     final refreshToken = _tokenState.shouldRefresh();
     if (refreshToken != null) {
-      _tokenState = await _refreshTokensImpl(_transport, refreshToken);
+      _tokenState = await _refreshTokensImpl(
+        _transport,
+        _tokenState.headers,
+        refreshToken,
+      );
     }
   }
 
@@ -212,7 +212,11 @@ class Client {
   }) async {
     final refreshToken = _tokenState.shouldRefresh();
     if (refreshToken != null) {
-      _tokenState = await _refreshTokensImpl(_transport, refreshToken);
+      _tokenState = await _refreshTokensImpl(
+        _transport,
+        _tokenState.headers,
+        refreshToken,
+      );
     }
 
     final response = await _transport.fetch(
@@ -265,8 +269,11 @@ Future<Stream<Event>> implSubscribeSse({
 
   final refreshToken = client._tokenState.shouldRefresh();
   if (refreshToken != null) {
-    client._tokenState =
-        await _refreshTokensImpl(client._transport, refreshToken);
+    client._tokenState = await _refreshTokensImpl(
+      client._transport,
+      client._tokenState.headers,
+      refreshToken,
+    );
   }
 
   final uri = client._baseUrl.replace(
@@ -283,11 +290,13 @@ Future<Stream<Event>> implSubscribeSse({
 
 Future<TokenState> _refreshTokensImpl(
   Transport transport,
+  Map<String, String> headers,
   String refreshToken,
 ) async {
   // NOTE: We cannot use `Client.fetch`, which may refresh tokens to prevent a loop.
   final response = await transport.fetch('${_authApi}/refresh',
       method: Method.post,
+      headers: headers,
       body: jsonEncode({
         'refresh_token': refreshToken,
       }));
