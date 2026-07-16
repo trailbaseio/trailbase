@@ -2,413 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:meta/meta.dart';
-import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
 
+import './record_api.dart';
 import './sse.dart';
+import './token_state.dart';
+import './tokens.dart';
 import './transport.dart';
-
-class User {
-  final String id;
-  final String? email;
-  final String? username;
-
-  const User({
-    required this.id,
-    required this.email,
-    required this.username,
-  });
-
-  @override
-  String toString() => 'User(id=${id}, email=${email}, username=${username})';
-
-  @override
-  bool operator ==(Object other) {
-    return other is User &&
-        id == other.id &&
-        email == other.email &&
-        username == other.username;
-  }
-
-  @override
-  int get hashCode => Object.hash(id, email, username);
-}
-
-/// Auth tokens: auth JWT, refresh & CSRF.
-class Tokens {
-  final String auth;
-  final String? refresh;
-  final String? csrf;
-
-  const Tokens(this.auth, this.refresh, this.csrf);
-
-  Tokens.fromJson(Map<String, dynamic> json)
-      : auth = json['auth_token'],
-        refresh = json['refresh_token'],
-        csrf = json['csrf_token'];
-
-  @override
-  bool operator ==(Object other) {
-    return other is Tokens &&
-        auth == other.auth &&
-        refresh == other.refresh &&
-        csrf == other.csrf;
-  }
-
-  @override
-  int get hashCode => Object.hash(auth, refresh, csrf);
-
-  @override
-  String toString() => 'Tokens(${auth}, ${refresh}, ${csrf})';
-}
-
-class MultiFactorAuthToken {
-  final String token;
-
-  const MultiFactorAuthToken(this.token);
-
-  MultiFactorAuthToken.fromJson(Map<String, dynamic> json)
-      : token = json['mfa_token'];
-
-  @override
-  bool operator ==(Object other) {
-    return other is MultiFactorAuthToken && token == other.token;
-  }
-
-  @override
-  int get hashCode => Object.hash(token, null);
-
-  @override
-  String toString() => 'MultiFactorAuthToken(${token})';
-}
-
-class Pagination {
-  final String? cursor;
-  final int? limit;
-  final int? offset;
-
-  const Pagination({
-    this.cursor,
-    this.limit,
-    this.offset,
-  });
-}
-
-class ListResponse {
-  final String? cursor;
-  final List<Map<String, dynamic>> records;
-  final int? totalCount;
-
-  const ListResponse({
-    this.cursor,
-    required this.records,
-    this.totalCount,
-  });
-
-  ListResponse.fromJson(Map<String, dynamic> json)
-      : cursor = json['cursor'],
-        records = (json['records'] as List).cast<Map<String, dynamic>>(),
-        totalCount = json['total_count'];
-}
-
-abstract class RecordId {
-  @override
-  String toString();
-
-  factory RecordId.integer(int id) => _IntegerRecordId(id);
-  factory RecordId.uuid(String id) => _UuidRecordId(id);
-}
-
-class _ResponseRecordIds {
-  final List<String> _ids;
-
-  const _ResponseRecordIds(this._ids);
-
-  _ResponseRecordIds.fromJson(Map<String, dynamic> json)
-      : _ids = (json['ids'] as List).cast<String>();
-
-  List<RecordId> toRecordIds() {
-    return _ids.map(toRecordId).toList();
-  }
-
-  static RecordId toRecordId(String id) {
-    final intId = int.tryParse(id);
-    if (intId != null) {
-      return _IntegerRecordId(intId);
-    }
-    return _UuidRecordId(id);
-  }
-
-  @override
-  String toString() => _ids.toString();
-}
-
-class _IntegerRecordId implements RecordId {
-  final int id;
-
-  const _IntegerRecordId(this.id);
-
-  @override
-  String toString() => id.toString();
-
-  @override
-  bool operator ==(Object other) {
-    if (other is _IntegerRecordId) return id == other.id;
-    if (other is int) return id == other;
-    return false;
-  }
-
-  @override
-  int get hashCode => id.hashCode;
-}
-
-extension RecordIdExtInt on int {
-  RecordId id() => _IntegerRecordId(this);
-}
-
-class _UuidRecordId implements RecordId {
-  final String id;
-
-  const _UuidRecordId(this.id);
-
-  @override
-  String toString() => id;
-
-  @override
-  bool operator ==(Object other) {
-    if (other is _UuidRecordId) return id == other.id;
-    if (other is String) return id == other;
-    return false;
-  }
-
-  @override
-  int get hashCode => id.hashCode;
-}
-
-extension RecordIdExtString on String {
-  RecordId id() => _UuidRecordId(this);
-}
-
-enum CompareOp {
-  equal,
-  notEqual,
-  lessThan,
-  lessThanEqual,
-  greaterThan,
-  greaterThanEqual,
-  like,
-  regexp,
-  stWithin,
-  stIntersects,
-  stContains,
-  isNull,
-  isNotNull,
-}
-
-String _opToString(CompareOp op) {
-  return switch (op) {
-    CompareOp.equal => '\$eq',
-    CompareOp.notEqual => '\$ne',
-    CompareOp.lessThan => '\$lt',
-    CompareOp.lessThanEqual => '\$lte',
-    CompareOp.greaterThan => '\$gt',
-    CompareOp.greaterThanEqual => '\$gte',
-    CompareOp.like => '\$like',
-    CompareOp.regexp => '\$re',
-    CompareOp.stWithin => '@within',
-    CompareOp.stIntersects => '@intersects',
-    CompareOp.stContains => '@contains',
-    CompareOp.isNull => '\$is',
-    CompareOp.isNotNull => '\$is',
-  };
-}
-
-sealed class FilterBase {
-  const FilterBase();
-}
-
-class Filter extends FilterBase {
-  final String column;
-  final CompareOp? op;
-  final String value;
-
-  const Filter({
-    required this.column,
-    required this.value,
-    this.op,
-  });
-
-  /// Filter rows where `column` IS NULL.
-  ///
-  /// Wire format: `filter[<column>][$is]=NULL`.
-  const Filter.isNull({required String column})
-      : this(column: column, value: 'NULL', op: CompareOp.isNull);
-
-  /// Filter rows where `column` IS NOT NULL.
-  ///
-  /// Wire format: `filter[<column>][$is]=!NULL`.
-  const Filter.isNotNull({required String column})
-      : this(column: column, value: '!NULL', op: CompareOp.isNotNull);
-}
-
-class And extends FilterBase {
-  final List<FilterBase> filters;
-
-  const And(this.filters);
-}
-
-class Or extends FilterBase {
-  final List<FilterBase> filters;
-
-  const Or(this.filters);
-}
-
-class RecordApi {
-  final String _name;
-  final Client _client;
-
-  const RecordApi(this._client, this._name);
-
-  Future<ListResponse> list({
-    Pagination? pagination,
-    List<String>? order,
-    List<FilterBase>? filters,
-    bool? count,
-    List<String>? expand,
-  }) async {
-    final params = <String, String>{};
-    if (pagination != null) {
-      final cursor = pagination.cursor;
-      if (cursor != null) params['cursor'] = cursor;
-
-      final limit = pagination.limit;
-      if (limit != null) params['limit'] = limit.toString();
-
-      final offset = pagination.offset;
-      if (offset != null) params['offset'] = offset.toString();
-    }
-
-    if (order != null) params['order'] = order.join(',');
-    if (count ?? false) params['count'] = 'true';
-    if (expand != null) params['expand'] = expand.join(',');
-
-    for (final filter in filters ?? []) {
-      addFiltersToParams(params, 'filter', filter);
-    }
-
-    final response = await _client.fetch(
-      '${_recordApi}/${_name}',
-      queryParams: params,
-    );
-
-    return ListResponse.fromJson(jsonDecode(response.body));
-  }
-
-  Future<Map<String, dynamic>> read(RecordId id, {List<String>? expand}) async {
-    final response = await switch (expand) {
-      null => _client.fetch('${_recordApi}/${_name}/${id}'),
-      _ => _client.fetch('${_recordApi}/${_name}/${id}', queryParams: {
-          'expand': expand.join(','),
-        })
-    };
-    return jsonDecode(response.body);
-  }
-
-  Future<RecordId> create(Map<String, dynamic> record) async {
-    final response = await _client.fetch(
-      '${_recordApi}/${_name}',
-      method: Method.post,
-      body: jsonEncode(record),
-    );
-
-    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
-    assert(responseIds._ids.length == 1);
-    return responseIds.toRecordIds()[0];
-  }
-
-  Future<List<RecordId>> createBulk(List<Map<String, dynamic>> records) async {
-    final response = await _client.fetch(
-      '${_recordApi}/${_name}',
-      method: Method.post,
-      body: jsonEncode(records),
-    );
-
-    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
-    return responseIds.toRecordIds();
-  }
-
-  Future<void> update(
-    RecordId id,
-    Map<String, dynamic> record,
-  ) async {
-    await _client.fetch(
-      '${_recordApi}/${_name}/${id}',
-      method: Method.patch,
-      body: jsonEncode(record),
-    );
-  }
-
-  Future<void> delete(RecordId id) async {
-    await _client.fetch(
-      '${_recordApi}/${_name}/${id}',
-      method: Method.delete,
-    );
-  }
-
-  Future<Stream<Event>> subscribe(RecordId id) async {
-    return await _subscribeImpl(id: id.toString());
-  }
-
-  Future<Stream<Event>> subscribeAll({
-    List<FilterBase>? filters,
-  }) async {
-    return await _subscribeImpl(id: '*', filters: filters);
-  }
-
-  Future<Stream<Event>> _subscribeImpl({
-    required String id,
-    List<FilterBase>? filters,
-  }) async {
-    final params = <String, String>{};
-    for (final filter in filters ?? []) {
-      addFiltersToParams(params, 'filter', filter);
-    }
-
-    final refreshToken = _client._tokenState._shouldRefresh();
-    if (refreshToken != null) {
-      _client._tokenState =
-          await _refreshTokensImpl(_client._transport, refreshToken);
-    }
-
-    final uri = _client._baseUrl.replace(
-        path: '${_recordApi}/${_name}/subscribe/${id}',
-        queryParameters: params);
-
-    return await connectSse(
-      _client._transport,
-      uri,
-      headers: _client._tokenState.headers,
-      cache: _client.cache.cast<String, Future<StreamController<Event>>>(),
-    );
-  }
-
-  Uri imageUri(RecordId id, String column, {String? filename}) {
-    if (filename != null) {
-      return _client.site().replace(
-          path: '${_recordApi}/${_name}/${id}/files/${column}/${filename}');
-    }
-    return _client
-        .site()
-        .replace(path: '${_recordApi}/${_name}/${id}/file/${column}');
-  }
-}
+import './user.dart';
 
 class Client {
   final Uri _baseUrl;
   final Transport _transport;
 
-  _TokenState _tokenState;
+  TokenState _tokenState;
   final void Function(Client, Tokens?)? _authChange;
 
   @visibleForTesting
@@ -421,7 +29,7 @@ class Client {
     void Function(Client, Tokens?)? onAuthChange,
   })  : _baseUrl = Uri.parse(site),
         _transport = transport ?? DefaultTransport(url: Uri.parse(site)),
-        _tokenState = _TokenState.build(tokens),
+        _tokenState = TokenState.build(tokens),
         _authChange = onAuthChange;
 
   Client(
@@ -441,7 +49,7 @@ class Client {
 
     // Initial check if tokens are valid and potentially refresh auth token.
     // Do not use _updateToken to not call [onAuthChange] on intial tokens.
-    client._tokenState = _TokenState.build(tokens);
+    client._tokenState = TokenState.build(tokens);
     await client.refreshAuthToken();
     // final uri = client.site().replace(path: '${_authApi}/status');
     // final statusResponse =
@@ -589,7 +197,7 @@ class Client {
   }
 
   Future<void> refreshAuthToken() async {
-    final refreshToken = _tokenState._shouldRefresh();
+    final refreshToken = _tokenState.shouldRefresh();
     if (refreshToken != null) {
       _tokenState = await _refreshTokensImpl(_transport, refreshToken);
     }
@@ -602,7 +210,7 @@ class Client {
     Map<String, dynamic>? queryParams,
     bool throwOnError = true,
   }) async {
-    final refreshToken = _tokenState._shouldRefresh();
+    final refreshToken = _tokenState.shouldRefresh();
     if (refreshToken != null) {
       _tokenState = await _refreshTokensImpl(_transport, refreshToken);
     }
@@ -622,13 +230,13 @@ class Client {
     return response;
   }
 
-  _TokenState _updateTokens(Tokens? tokens) {
+  TokenState _updateTokens(Tokens? tokens) {
     final oldTokens = _tokenState.state?.$1;
     if (oldTokens == tokens) {
       return _tokenState;
     }
 
-    final state = _tokenState = _TokenState.build(tokens);
+    final state = _tokenState = TokenState.build(tokens);
 
     _authChange?.call(this, tokens);
 
@@ -644,7 +252,36 @@ class Client {
   }
 }
 
-Future<_TokenState> _refreshTokensImpl(
+Future<Stream<Event>> implSubscribeSse({
+  required Client client,
+  required String apiName,
+  required String id,
+  List<FilterBase>? filters,
+}) async {
+  final params = <String, String>{};
+  for (final filter in filters ?? []) {
+    addFiltersToParams(params, 'filter', filter);
+  }
+
+  final refreshToken = client._tokenState.shouldRefresh();
+  if (refreshToken != null) {
+    client._tokenState =
+        await _refreshTokensImpl(client._transport, refreshToken);
+  }
+
+  final uri = client._baseUrl.replace(
+      path: '${_recordApi}/${apiName}/subscribe/${id}',
+      queryParameters: params);
+
+  return await connectSse(
+    client._transport,
+    uri,
+    headers: client._tokenState.headers,
+    cache: client.cache.cast<String, Future<StreamController<Event>>>(),
+  );
+}
+
+Future<TokenState> _refreshTokensImpl(
   Transport transport,
   String refreshToken,
 ) async {
@@ -656,122 +293,10 @@ Future<_TokenState> _refreshTokensImpl(
       }));
 
   return switch (response.statusCode) {
-    200 => _TokenState.build(Tokens.fromJson(jsonDecode(response.body))),
+    200 => TokenState.build(Tokens.fromJson(jsonDecode(response.body))),
     // If the refresh token got rejected, there's no way to recover. Might as well log out.
-    401 => _TokenState.build(null),
+    401 => TokenState.build(null),
     _ => throw HttpException(response.statusCode, response.body),
-  };
-}
-
-Map<String, String> _buildHeaders(Tokens? tokens) {
-  final Map<String, String> base = {
-    'Content-Type': 'application/json',
-  };
-
-  if (tokens != null) {
-    base['Authorization'] = 'Bearer ${tokens.auth}';
-
-    final refresh = tokens.refresh;
-    if (refresh != null) {
-      base['Refresh-Token'] = refresh;
-    }
-
-    final csrf = tokens.csrf;
-    if (csrf != null) {
-      base['CSRF-Token'] = csrf;
-    }
-  }
-
-  return base;
-}
-
-class _JwtToken {
-  final String sub;
-  final int iat;
-  final int exp;
-  final String? email;
-  final String? username;
-  final String csrfToken;
-
-  const _JwtToken({
-    required this.sub,
-    required this.iat,
-    required this.exp,
-    required this.email,
-    required this.username,
-    required this.csrfToken,
-  });
-
-  factory _JwtToken.fromAuthToken(String token) =>
-      _JwtToken.fromJson(JwtDecoder.decode(token));
-
-  _JwtToken.fromJson(Map<String, dynamic> json)
-      : sub = json['sub'],
-        iat = json['iat'],
-        exp = json['exp'],
-        email = json['email'],
-        username = json['username'],
-        csrfToken = json['csrf_token'];
-}
-
-class _TokenState {
-  final (Tokens, _JwtToken)? state;
-  final Map<String, String> headers;
-
-  const _TokenState(this.state, this.headers);
-
-  static _TokenState build(Tokens? tokens) {
-    return _TokenState(
-      tokens != null ? (tokens, _JwtToken.fromAuthToken(tokens.auth)) : null,
-      _buildHeaders(tokens),
-    );
-  }
-
-  User? user() {
-    final jwt = state?.$2;
-    return (jwt != null)
-        ? User(id: jwt.sub, email: jwt.email, username: jwt.username)
-        : null;
-  }
-
-  /// Returns refresh token if refresh is warranted.
-  String? _shouldRefresh() {
-    final s = state;
-    if (s != null) {
-      final now = DateTime.now().millisecondsSinceEpoch / 1000;
-      if (s.$2.exp - 60 < now) {
-        return s.$1.refresh;
-      }
-    }
-    return null;
-  }
-}
-
-@visibleForTesting
-void addFiltersToParams(
-    Map<String, String> params, String path, FilterBase filter) {
-  final _ = switch (filter) {
-    Filter(column: final c, op: final op, value: final v) => () {
-        if (op != null) {
-          params['${path}[${c}][${_opToString(op)}]'] = switch (op) {
-            CompareOp.isNull => 'NULL',
-            CompareOp.isNotNull => '!NULL',
-            _ => v,
-          };
-        } else {
-          params['${path}[${c}]'] = v;
-        }
-      }(),
-    And(filters: final filters) => () {
-        filters.asMap().forEach((index, filter) {
-          addFiltersToParams(params, '${path}[\$and][${index}]', filter);
-        });
-      }(),
-    Or(filters: final filters) => () {
-        filters.asMap().forEach((index, filter) {
-          addFiltersToParams(params, '${path}[\$or][${index}]', filter);
-        });
-      }(),
   };
 }
 
