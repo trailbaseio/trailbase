@@ -192,8 +192,10 @@ class Client {
     );
   }
 
-  Future<void> refreshAuthToken() async {
-    final refreshToken = _tokenState.shouldRefresh();
+  Future<void> refreshAuthToken({bool force = false}) async {
+    final refreshToken =
+        force ? _tokenState.state?.$1.refresh : _tokenState.shouldRefresh();
+
     if (refreshToken != null) {
       _tokenState = await _refreshTokensImpl(
         _transport,
