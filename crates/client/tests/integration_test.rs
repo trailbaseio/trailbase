@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use temp_dir::TempDir;
 use trailbase_client::{
-  Client, CompareOp, EventPayload, Filter, ListArguments, ListResponse, Pagination, ReadArguments,
+  Client, CompareOp, EventPayload, Filter, ListArguments, ListResponse, OperationResult,
+  Pagination, ReadArguments,
 };
 
 struct Server {
@@ -400,10 +401,13 @@ async fn transaction_test() {
     let msg = format!("rust transaction create test: =?&{now}");
     let ops = [api.create_op(json!({"text_not_null": msg})).unwrap()];
 
-    let ids = client.execute(&ops, true).await.unwrap();
-    assert_eq!(1, ids.len());
+    let results = client.execute(&ops, true).await.unwrap();
+    assert_eq!(1, results.len());
 
-    let record: SimpleStrict = api.read(&ids[0]).await.unwrap();
+    let OperationResult::Id(ref id) = results[0] else {
+      panic!("expected success, got: {results:?}")
+    };
+    let record: SimpleStrict = api.read(id).await.unwrap();
     assert_eq!(record.text_not_null, msg);
   }
 
@@ -416,7 +420,13 @@ async fn transaction_test() {
     let ops = [api
       .update_op(id.clone(), json!({"text_not_null": updated_msg}))
       .unwrap()];
-    let _ids = client.execute(&ops, true).await.unwrap();
+    let results = client.execute(&ops, true).await.unwrap();
+    assert_eq!(1, results.len());
+
+    let OperationResult::Id(ref rid) = results[0] else {
+      panic!("expected success, got: {results:?}")
+    };
+    assert_eq!(id, *rid);
 
     let record: SimpleStrict = api.read(&id).await.unwrap();
     assert_eq!(record.text_not_null, updated_msg);
@@ -428,9 +438,13 @@ async fn transaction_test() {
     let id = api.create(json!({"text_not_null": msg})).await.unwrap();
 
     let ops = [api.delete_op(id.clone()).unwrap()];
-    let ids = client.execute(&ops, true).await.unwrap();
+    let results = client.execute(&ops, true).await.unwrap();
+    assert_eq!(1, results.len());
 
-    assert_eq!(0, ids.len());
+    let OperationResult::Id(ref rid) = results[0] else {
+      panic!("expected success, got: {results:?}")
+    };
+    assert_eq!(id, *rid);
 
     assert!(api.read::<SimpleStrict>(&id).await.is_err());
   }

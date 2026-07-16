@@ -96,6 +96,12 @@ pub enum Operation {
   },
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub enum OperationResult {
+  Id(String),
+  Error(String),
+}
+
 pub trait ReadArgumentsTrait<'a> {
   fn serialized_id(self) -> Cow<'a, str>;
   fn expand(&self) -> Option<&Vec<&'a str>>;

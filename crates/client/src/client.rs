@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tracing::*;
 
 use crate::error::Error;
-use crate::record_api::{Operation, RecordApi};
+use crate::record_api::{Operation, OperationResult, RecordApi};
 use crate::transport::{DefaultTransport, Transport, json};
 
 /// Represents the currently logged-in user.
@@ -223,7 +223,7 @@ impl Client {
     &self,
     operations: &[Operation],
     transaction: bool,
-  ) -> Result<Vec<String>, Error> {
+  ) -> Result<Vec<OperationResult>, Error> {
     #[derive(Serialize)]
     struct Request<'a> {
       operations: &'a [Operation],
@@ -249,13 +249,13 @@ impl Client {
 
     #[derive(Deserialize)]
     struct Response {
-      ids: Vec<String>,
+      results: Vec<OperationResult>,
     }
 
     return Ok(
       json::<Response>(error_for_status_unpack(response)?)
         .await?
-        .ids,
+        .results,
     );
   }
 
