@@ -16,6 +16,7 @@ use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub enum Operation {
   Create {
     api_name: String,
@@ -33,7 +34,6 @@ pub enum Operation {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
-#[ts(export)]
 pub struct TransactionRequest {
   operations: Vec<Operation>,
   transaction: Option<bool>,

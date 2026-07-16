@@ -32,6 +32,7 @@ import type { RefreshRequest } from "@bindings/RefreshRequest";
 import type { RefreshResponse } from "@bindings/RefreshResponse";
 import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
 import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
+import type { TransactionResponse } from "@bindings/TransactionResponse";
 
 export type User = {
   id: string;
@@ -131,11 +132,11 @@ export type FetchOptions = RequestInit & {
 export class FetchError implements Error {
   public readonly status: number;
   public readonly url: string | URL | undefined;
-  public readonly message: string;
+  public readonly msg: string;
   public readonly name: string = "FetchError";
 
   constructor(status: number, msg: string, url?: string | URL) {
-    this.message = msg;
+    this.msg = `${msg}`;
     this.status = status;
     this.url = url;
   }
@@ -152,6 +153,10 @@ export class FetchError implements Error {
     return new FetchError(response.status, msg, url);
   }
 
+  public get message(): string {
+    return this.toString();
+  }
+
   public isClient(): boolean {
     return this.status >= 400 && this.status < 500;
   }
@@ -161,7 +166,7 @@ export class FetchError implements Error {
   }
 
   public toString(): string {
-    return `FetchError(${[this.status, this.message, this.url].filter((e) => e !== undefined).join(", ")})`;
+    return `FetchError(${[this.status, this.msg, this.url].filter((e) => e !== undefined).join(", ")})`;
   }
 }
 
@@ -229,8 +234,13 @@ export interface Client {
   execute(
     operations: (CreateOperation | UpdateOperation | DeleteOperation)[],
     transaction?: boolean,
-  ): Promise<RecordId[]>;
+  ): Promise<OperationResult[]>;
 }
+
+export type OperationResult = {
+  id?: RecordId;
+  error?: string;
+};
 
 /// Client for interacting with TrailBase auth and record APIs.
 class ClientImpl implements Client {
@@ -292,13 +302,20 @@ class ClientImpl implements Client {
   async execute(
     operations: (CreateOperation | UpdateOperation | DeleteOperation)[],
     transaction: boolean = true,
-  ): Promise<RecordId[]> {
+  ): Promise<OperationResult[]> {
     const response = await this.fetch(transactionApiBasePath, {
       method: "POST",
       body: JSON.stringify({ operations, transaction }),
     });
 
-    return parseJSON(await response.text()).ids;
+    const result: TransactionResponse = parseJSON(await response.text());
+
+    return result.results.map((r) => {
+      if ("Error" in r) {
+        return { error: r.Error };
+      }
+      return { id: r.Id };
+    });
   }
 
   public avatarUrl(userId?: string): string | undefined {
@@ -327,7 +344,7 @@ class ClientImpl implements Client {
       );
     } catch (err) {
       if (err instanceof FetchError && err.status === 403) {
-        const mfaTokenResponse = JSON.parse(err.message) as MfaTokenResponse;
+        const mfaTokenResponse = JSON.parse(err.msg) as MfaTokenResponse;
         return {
           token: mfaTokenResponse.mfa_token,
         };

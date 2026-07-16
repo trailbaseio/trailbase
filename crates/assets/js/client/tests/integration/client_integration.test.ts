@@ -438,7 +438,7 @@ test("Record Transactions", async () => {
     expect(ids).toHaveLength(1);
 
     // Verify record was created
-    const createdRecord = await api.read(ids[0]);
+    const createdRecord = await api.read(ids[0].id!);
     expect(createdRecord.text_not_null).toBe(record.text_not_null);
   }
 

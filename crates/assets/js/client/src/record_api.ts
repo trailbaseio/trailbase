@@ -5,6 +5,8 @@ import { isDev, jsonContentTypeHeader } from "./constants";
 import { parseJSON } from "./json";
 import { Client } from "./client";
 
+import type { JsonValue } from "@bindings/serde_json/JsonValue";
+import type { Operation } from "@bindings/Operation";
 import type { WsProtocol } from "@bindings/WsProtocol";
 
 export interface FileUpload {
@@ -126,29 +128,6 @@ export type ChangeEvent =
 // `Event` type (KeyboardEvent, MouseEvent, ...).
 export type Event = ChangeEvent;
 
-// TODO: Use `ts-rs` generated types.
-interface CreateOp {
-  Create: {
-    api_name: string;
-    value: Record<string, unknown>;
-  };
-}
-
-interface UpdateOp {
-  Update: {
-    api_name: string;
-    record_id: RecordId;
-    value: Record<string, unknown>;
-  };
-}
-
-interface DeleteOp {
-  Delete: {
-    api_name: string;
-    record_id: RecordId;
-  };
-}
-
 export interface DeferredOperation<ResponseType> {
   query(client: Client): Promise<ResponseType>;
 }
@@ -179,11 +158,11 @@ export class CreateOperation<
     return parseJSON(await response.text()).ids[0];
   }
 
-  protected toJSON(): CreateOp {
+  protected toJSON(): Operation {
     return {
       Create: {
         api_name: this.apiName,
-        value: this.record,
+        value: this.record as JsonValue,
       },
     };
   }
@@ -206,12 +185,12 @@ export class UpdateOperation<
     });
   }
 
-  protected toJSON(): UpdateOp {
+  protected toJSON(): Operation {
     return {
       Update: {
         api_name: this.apiName,
-        record_id: this.id,
-        value: this.record,
+        record_id: this.id.toString(),
+        value: this.record as JsonValue,
       },
     };
   }
@@ -229,11 +208,11 @@ export class DeleteOperation implements DeferredMutation<void> {
     });
   }
 
-  protected toJSON(): DeleteOp {
+  protected toJSON(): Operation {
     return {
       Delete: {
         api_name: this.apiName,
-        record_id: this.id,
+        record_id: this.id.toString(),
       },
     };
   }
