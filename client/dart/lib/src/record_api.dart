@@ -150,7 +150,7 @@ class RecordApi {
       body: jsonEncode(record),
     );
 
-    final responseIds = ResponseRecordIds.fromJson(jsonDecode(response.body));
+    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
     assert(responseIds._ids.length == 1);
     return responseIds.toRecordIds()[0];
   }
@@ -162,7 +162,7 @@ class RecordApi {
       body: jsonEncode(records),
     );
 
-    final responseIds = ResponseRecordIds.fromJson(jsonDecode(response.body));
+    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
     return responseIds.toRecordIds();
   }
 
@@ -259,12 +259,12 @@ void addFiltersToParams(
   };
 }
 
-class ResponseRecordIds {
+class _ResponseRecordIds {
   final List<String> _ids;
 
-  const ResponseRecordIds(this._ids);
+  const _ResponseRecordIds(this._ids);
 
-  ResponseRecordIds.fromJson(Map<String, dynamic> json)
+  _ResponseRecordIds.fromJson(Map<String, dynamic> json)
       : _ids = (json['ids'] as List).cast<String>();
 
   List<RecordId> toRecordIds() {

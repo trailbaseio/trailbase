@@ -5,7 +5,6 @@ import 'package:meta/meta.dart';
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
 import 'package:trailbase/src/operations.dart';
-import 'package:trailbase/src/record_id.dart';
 
 import './record_api.dart';
 import './sse.dart';
@@ -69,7 +68,7 @@ class Client {
   /// Accessor for Record APIs with given [name].
   RecordApi records(String name) => RecordApi(this, name);
 
-  Future<List<RecordId>> execute(
+  Future<List<OperationResult>> execute(
     List<Operation> ops, {
     bool? transaction = true,
   }) async {
@@ -82,7 +81,7 @@ class Client {
       }),
     );
 
-    return ResponseRecordIds.fromJson(jsonDecode(response.body)).toRecordIds();
+    return _TransactionResponse.fromJson(jsonDecode(response.body))._results;
   }
 
   Future<MultiFactorAuthToken?> login(
@@ -329,7 +328,21 @@ Future<TokenState> _refreshTokensImpl(
   };
 }
 
+class _TransactionResponse {
+  final List<OperationResult> _results;
+
+  const _TransactionResponse(this._results);
+
+  _TransactionResponse.fromJson(Map<String, dynamic> json)
+      : _results = (json['results'] as List)
+            .map((r) => OperationResult.fromJson(r))
+            .toList();
+
+  @override
+  String toString() => _results.toString();
+}
+
 final _logger = Logger('trailbase');
 const String _authApi = 'api/auth/v1';
 const String _recordApi = 'api/records/v1';
-const String _transactionBasePath = "api/transaction/v1/execute";
+const String _transactionBasePath = 'api/transaction/v1/execute';

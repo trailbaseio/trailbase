@@ -66,3 +66,25 @@ class DeleteOperation implements Operation {
     };
   }
 }
+
+sealed class OperationResult {
+  static OperationResult fromJson(Map<String, dynamic> json) {
+    final err = json['Error'];
+    if (err != null) {
+      return OperationErrorResult(err);
+    }
+    return OperationIdResult(RecordId.parse(json['Id']!));
+  }
+}
+
+class OperationIdResult implements OperationResult {
+  final RecordId id;
+
+  const OperationIdResult(this.id);
+}
+
+class OperationErrorResult implements OperationResult {
+  final String error;
+
+  const OperationErrorResult(this.error);
+}

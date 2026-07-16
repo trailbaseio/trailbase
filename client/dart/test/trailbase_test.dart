@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:trailbase/src/operations.dart';
 import 'package:trailbase/trailbase.dart';
 import 'package:test/test.dart';
 import 'package:http/http.dart' as http;
@@ -446,10 +447,11 @@ Future<void> main() async {
           })
         ];
 
-        final ids = await client.execute(ops, transaction: true);
-        expect(ids.length, equals(1));
+        final results = await client.execute(ops, transaction: true);
+        expect(results.length, equals(1));
 
-        final record = SimpleStrict.fromJson(await api.read(ids[0]));
+        final record = SimpleStrict.fromJson(
+            await api.read((results[0] as OperationIdResult).id));
         expect(record.textNotNull, equals(msg));
       }
 
@@ -465,7 +467,8 @@ Future<void> main() async {
           })
         ];
 
-        await client.execute(ops, transaction: true);
+        final results = await client.execute(ops, transaction: true);
+        expect(results.length, equals(1));
 
         final record = SimpleStrict.fromJson(await api.read(id));
         expect(record.textNotNull, equals(updatedMsg));
@@ -476,9 +479,10 @@ Future<void> main() async {
         final msg = 'dart transaction update test original: =?&${now}';
         final id = await api.create({'text_not_null': msg});
 
-        final ids = await client.execute([api.deleteOp(id)], transaction: true);
+        final results =
+            await client.execute([api.deleteOp(id)], transaction: true);
 
-        expect(ids.length, equals(0));
+        expect(results.length, equals(1));
 
         expect(() async => await api.read(id), throwsException);
       }
