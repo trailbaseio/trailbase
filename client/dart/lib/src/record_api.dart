@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import './client.dart';
+import './operations.dart';
 import './record_id.dart';
 import './sse.dart';
 import './transport.dart';
@@ -149,7 +150,7 @@ class RecordApi {
       body: jsonEncode(record),
     );
 
-    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
+    final responseIds = ResponseRecordIds.fromJson(jsonDecode(response.body));
     assert(responseIds._ids.length == 1);
     return responseIds.toRecordIds()[0];
   }
@@ -161,8 +162,12 @@ class RecordApi {
       body: jsonEncode(records),
     );
 
-    final responseIds = _ResponseRecordIds.fromJson(jsonDecode(response.body));
+    final responseIds = ResponseRecordIds.fromJson(jsonDecode(response.body));
     return responseIds.toRecordIds();
+  }
+
+  CreateOperation createOp(Map<String, dynamic> record) {
+    return CreateOperation(apiName: _name, value: record);
   }
 
   Future<void> update(
@@ -176,11 +181,22 @@ class RecordApi {
     );
   }
 
+  UpdateOperation updateOp(
+    RecordId id,
+    Map<String, dynamic> record,
+  ) {
+    return UpdateOperation(apiName: _name, id: id, value: record);
+  }
+
   Future<void> delete(RecordId id) async {
     await _client.fetch(
       '${_recordApi}/${_name}/${id}',
       method: Method.delete,
     );
+  }
+
+  DeleteOperation deleteOp(RecordId id) {
+    return DeleteOperation(apiName: _name, id: id);
   }
 
   Future<Stream<Event>> subscribe(RecordId id) async {
@@ -243,24 +259,16 @@ void addFiltersToParams(
   };
 }
 
-class _ResponseRecordIds {
+class ResponseRecordIds {
   final List<String> _ids;
 
-  const _ResponseRecordIds(this._ids);
+  const ResponseRecordIds(this._ids);
 
-  _ResponseRecordIds.fromJson(Map<String, dynamic> json)
+  ResponseRecordIds.fromJson(Map<String, dynamic> json)
       : _ids = (json['ids'] as List).cast<String>();
 
   List<RecordId> toRecordIds() {
-    return _ids.map(toRecordId).toList();
-  }
-
-  static RecordId toRecordId(String id) {
-    final intId = int.tryParse(id);
-    if (intId != null) {
-      return RecordId.integer(intId);
-    }
-    return RecordId.uuid(id);
+    return _ids.map(RecordId.parse).toList();
   }
 
   @override

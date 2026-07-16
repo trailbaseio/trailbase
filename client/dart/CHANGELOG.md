@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.0
+
+- Add support for batch operations and transactions.
+- Fix token refresh.
+
 ## 0.11.0
 
 - Add support for sign-in as an anonymous user + promotion.

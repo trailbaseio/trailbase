@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:meta/meta.dart';
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
+import 'package:trailbase/src/operations.dart';
+import 'package:trailbase/src/record_id.dart';
 
 import './record_api.dart';
 import './sse.dart';
@@ -66,6 +68,22 @@ class Client {
 
   /// Accessor for Record APIs with given [name].
   RecordApi records(String name) => RecordApi(this, name);
+
+  Future<List<RecordId>> execute(
+    List<Operation> ops, {
+    bool? transaction = true,
+  }) async {
+    final response = await fetch(
+      _transactionBasePath,
+      method: Method.post,
+      body: jsonEncode({
+        'operations': ops.map((o) => o.toJson()).toList(),
+        'transaction': transaction,
+      }),
+    );
+
+    return ResponseRecordIds.fromJson(jsonDecode(response.body)).toRecordIds();
+  }
 
   Future<MultiFactorAuthToken?> login(
     String emailOrUsername,
@@ -314,3 +332,4 @@ Future<TokenState> _refreshTokensImpl(
 final _logger = Logger('trailbase');
 const String _authApi = 'api/auth/v1';
 const String _recordApi = 'api/records/v1';
+const String _transactionBasePath = "/api/transaction/v1/execute";

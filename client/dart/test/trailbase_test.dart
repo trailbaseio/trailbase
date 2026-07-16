@@ -431,6 +431,59 @@ Future<void> main() async {
       expect(() async => await api.read(ids[0]), throwsException);
     });
 
+    test('transactions', () async {
+      final client = await connect();
+      final api = client.records('simple_strict_table');
+
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      {
+        // Test simple create.
+        final msg = 'dart transaction create test: =?&${now}';
+        final ops = [
+          api.createOp({
+            'text_not_null': msg,
+          })
+        ];
+
+        final ids = await client.execute(ops, transaction: true);
+        expect(ids.length, equals(1));
+
+        final record = SimpleStrict.fromJson(await api.read(ids[0]));
+        expect(record.textNotNull, equals(msg));
+      }
+
+      {
+        // Test update transaction.
+        final msg = 'dart transaction update test original: =?&${now}';
+        final id = await api.create({'text_not_null': msg});
+
+        final updatedMsg = 'dart transaction update test modified: =?&${now}';
+        final ops = [
+          api.updateOp(id, {
+            'text_not_null': updatedMsg,
+          })
+        ];
+
+        await client.execute(ops, transaction: true);
+
+        final record = SimpleStrict.fromJson(await api.read(id));
+        expect(record.textNotNull, equals(updatedMsg));
+      }
+
+      {
+        // Test delete transaction.
+        final msg = 'dart transaction update test original: =?&${now}';
+        final id = await api.create({'text_not_null': msg});
+
+        final ids = await client.execute([api.deleteOp(id)], transaction: true);
+
+        expect(ids.length, equals(0));
+
+        expect(() async => await api.read(id), throwsException);
+      }
+    });
+
     test('expand foreign records', () async {
       final client = await connect();
       final api = client.records('comment');

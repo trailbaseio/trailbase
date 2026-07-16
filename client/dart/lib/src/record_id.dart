@@ -4,6 +4,14 @@ abstract class RecordId {
 
   factory RecordId.integer(int id) => _IntegerRecordId(id);
   factory RecordId.uuid(String id) => _UuidRecordId(id);
+
+  static RecordId parse(String id) {
+    final intId = int.tryParse(id);
+    if (intId != null) {
+      return RecordId.integer(intId);
+    }
+    return RecordId.uuid(id);
+  }
 }
 
 class _IntegerRecordId implements RecordId {
