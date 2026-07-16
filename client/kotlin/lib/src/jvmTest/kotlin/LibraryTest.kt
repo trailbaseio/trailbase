@@ -198,7 +198,7 @@ class ClientTest {
     assertEquals("admin@localhost", client.user()?.email)
     assertEquals("admin", client.user()?.username)
 
-    client.refreshAuthToken()
+    client.refreshAuthToken(true)
     assertNotNull(client.tokens())
 
     client.logout()
@@ -278,7 +278,7 @@ class ClientTest {
     }
 
     val record0: SimpleStrict = api.read(ids[0])
-    assertEquals(RecordId.string(record0.id), ids[0])
+    assertEquals(RecordId.parse(record0.id), ids[0])
 
     if (true) {
       val response: ListResponse<SimpleStrict> =
@@ -351,6 +351,37 @@ class ClientTest {
 
     api.delete(ids[0])
     assertThrows<HttpException>({ api.read<SimpleStrict>(ids[0]) })
+  }
+
+  @OptIn(kotlin.time.ExperimentalTime::class)
+  @Order(2)
+  @Test
+  fun `client transactions`() = runTest {
+    val client = connect()
+    val api = client.records("simple_strict_table")
+
+    val now = Clock.System.now().toEpochMilliseconds() / 1000
+
+    // Test simple create.
+    val msg0 = "kotlin transaction create test: =?&${now}"
+    val ids0 = client.execute(listOf(api.createOp(SimpleStrictInsert(msg0))), true)
+    assertEquals(1, ids0.count())
+
+    val record0: SimpleStrict = api.read(ids0[0])
+    assertEquals(msg0, record0.text_not_null)
+
+    // Test update transaction.
+    val msg1 = "kotlin transaction update test original: =?&${now}"
+    val id1 = api.create(SimpleStrictInsert(msg1))
+    val updatedMsg1 = "kotlin transaction update test original: =?&${now}"
+    client.execute(listOf(api.updateOp(id1, SimpleStrictInsert(updatedMsg1))), true)
+
+    val record1: SimpleStrict = api.read(id1)
+    assertEquals(updatedMsg1, record1.text_not_null)
+
+    // Test delete transaction.
+    client.execute(listOf(api.deleteOp(id1)), true)
+    assertThrows<HttpException>({ api.read<SimpleStrict>(id1) })
   }
 
   @OptIn(kotlin.time.ExperimentalTime::class)

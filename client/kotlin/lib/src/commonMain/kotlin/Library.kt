@@ -19,7 +19,11 @@ import kotlinx.serialization.json.*
 @Serializable data class User(val id: String, val email: String?, val username: String?)
 
 @Serializable
-data class Tokens(val auth_token: String, val refresh_token: String?, val csrf_token: String?)
+data class Tokens(
+        val auth_token: String,
+        val refresh_token: String? = null,
+        val csrf_token: String? = null
+)
 
 @Serializable data class MultiFactorAuthToken(val mfa_token: String)
 
@@ -84,6 +88,54 @@ sealed class ChangeEvent {
   }
 }
 
+@Serializable
+sealed class Operation {
+  public class Create(val apiName: String, val value: JsonObject) : Operation()
+  public class Update(val apiName: String, val id: RecordId, val value: JsonObject) : Operation()
+  public class Delete(val apiName: String, val id: RecordId) : Operation()
+
+  companion object {
+    fun toJson(op: Operation): JsonObject {
+      return when (op) {
+        is Create -> {
+          buildJsonObject {
+            put(
+                    "Create",
+                    buildJsonObject {
+                      put("api_name", op.apiName)
+                      put("value", op.value)
+                    }
+            )
+          }
+        }
+        is Update -> {
+          buildJsonObject {
+            put(
+                    "Update",
+                    buildJsonObject {
+                      put("api_name", op.apiName)
+                      put("record_id", op.id.id())
+                      put("value", op.value)
+                    }
+            )
+          }
+        }
+        is Delete -> {
+          buildJsonObject {
+            put(
+                    "Delete",
+                    buildJsonObject {
+                      put("api_name", op.apiName)
+                      put("record_id", op.id.id())
+                    }
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
 class TokenState(val state: Pair<Tokens, JwtTokenClaims>?, val headers: Map<String, List<String>>) {
   companion object {
     fun build(tokens: Tokens?): TokenState {
@@ -125,6 +177,11 @@ sealed class RecordId {
 
     fun int(id: Int): RecordId {
       return IntegerRecordId(id)
+    }
+
+    fun parse(id: String): RecordId {
+      val i = id.toIntOrNull()
+      return if (i != null) IntegerRecordId(i) else StringRecordId(id)
     }
   }
 
@@ -200,11 +257,11 @@ class Filter(val column: String, val value: String, val op: CompareOp? = null) :
   companion object {
     ///  Filter rows where [column] IS NULL. Wire: `filter[<column>][$is]=NULL`.
     fun isNull(column: String): Filter =
-        Filter(column = column, value = "NULL", op = CompareOp.isNull)
+            Filter(column = column, value = "NULL", op = CompareOp.isNull)
 
     /// Filter rows where [column] IS NOT NULL. Wire: `filter[<column>][$is]=!NULL`.
     fun isNotNull(column: String): Filter =
-        Filter(column = column, value = "!NULL", op = CompareOp.isNotNull)
+            Filter(column = column, value = "!NULL", op = CompareOp.isNotNull)
   }
 }
 
@@ -259,15 +316,27 @@ class RecordApi(val name: String, val client: Client) {
   suspend fun <T> create(record: T): RecordId {
     val response = client.fetch("${RECORD_API}/${name}", Method.post, record)
     val ids: ResponseRecordIds = response.body()
-    return StringRecordId(ids.ids[0])
+    return RecordId.parse(ids.ids[0])
+  }
+
+  inline fun <reified T> createOp(record: T): Operation {
+    return Operation.Create(name, jsonSerializer.encodeToJsonElement(record).jsonObject)
   }
 
   suspend fun <T> update(id: RecordId, record: T) {
     client.fetch("${RECORD_API}/${name}/${id.id()}", Method.patch, record)
   }
 
+  inline fun <reified T> updateOp(id: RecordId, record: T): Operation {
+    return Operation.Update(name, id, jsonSerializer.encodeToJsonElement(record).jsonObject)
+  }
+
   suspend fun delete(id: RecordId) {
     client.fetch("${RECORD_API}/${name}/${id.id()}", Method.delete)
+  }
+
+  fun deleteOp(id: RecordId): Operation {
+    return Operation.Delete(name, id)
   }
 
   suspend inline fun <reified T> subscribe(id: RecordId): Flow<ChangeEvent> {
@@ -439,6 +508,21 @@ class Client(
     return RecordApi(name, this)
   }
 
+  suspend fun execute(ops: List<Operation>, transaction: Boolean = true): List<RecordId> {
+    @Serializable data class Request(val operations: List<JsonObject>, val transaction: Boolean)
+
+    val response =
+            fetch(
+                    TRANSACTION_BASE_PATH,
+                    Method.post,
+                    Request(ops.map { Operation.toJson(it) }, transaction),
+                    throwOnError = true
+            )
+
+    val ids: ResponseRecordIds = response.body()
+    return ids.ids.map { RecordId.parse(it) }
+  }
+
   suspend fun login(emailOrUsername: String, password: String): MultiFactorAuthToken? {
     @Serializable data class Credentials(val email_or_username: String, val password: String)
 
@@ -512,8 +596,8 @@ class Client(
                     "{}",
             )
 
-     val tokens: Tokens = response.body()
-     tokenState = TokenState.build(tokens)
+    val tokens: Tokens = response.body()
+    tokenState = TokenState.build(tokens)
   }
 
   suspend fun logout() {
@@ -536,17 +620,22 @@ class Client(
           email: String? = null,
           username: String? = null,
   ) {
-    @Serializable data class Request(val new_password: String, val new_email: String?, val new_username: String?)
+    @Serializable
+    data class Request(val new_password: String, val new_email: String?, val new_username: String?)
 
-            fetch(
-                    "${AUTH_API}/promote_anonymous",
-                    Method.post,
-                    Request(password, email, username),
-            )
+    fetch(
+            "${AUTH_API}/promote_anonymous",
+            Method.post,
+            Request(password, email, username),
+    )
   }
 
-  suspend fun refreshAuthToken() {
-    val refreshToken = tokenState.shouldRefresh()
+  suspend fun refreshAuthToken(force: Boolean = false) {
+    val refreshToken: String? =
+            when (force) {
+              true -> tokenState.state?.first?.refresh_token
+              false -> tokenState.shouldRefresh()
+            }
     if (refreshToken != null) {
       tokenState = refreshTokensImpl(transport, refreshToken)
     }
@@ -659,11 +748,11 @@ fun addFiltersToParams(params: MutableMap<String, String>, path: String, filter:
     is Filter -> {
       if (filter.op != null) {
         val value =
-            when (filter.op) {
-              CompareOp.isNull -> "NULL"
-              CompareOp.isNotNull -> "!NULL"
-              else -> filter.value
-            }
+                when (filter.op) {
+                  CompareOp.isNull -> "NULL"
+                  CompareOp.isNotNull -> "!NULL"
+                  else -> filter.value
+                }
         params["${path}[${filter.column}][${opToString(filter.op)}]"] = value
       } else {
         params["${path}[${filter.column}]"] = filter.value
@@ -684,3 +773,4 @@ fun addFiltersToParams(params: MutableMap<String, String>, path: String, filter:
 
 private const val AUTH_API: String = "api/auth/v1"
 const val RECORD_API: String = "api/records/v1"
+const val TRANSACTION_BASE_PATH: String = "api/transaction/v1/execute"

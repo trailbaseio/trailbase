@@ -332,4 +332,4 @@ Future<TokenState> _refreshTokensImpl(
 final _logger = Logger('trailbase');
 const String _authApi = 'api/auth/v1';
 const String _recordApi = 'api/records/v1';
-const String _transactionBasePath = "/api/transaction/v1/execute";
+const String _transactionBasePath = "api/transaction/v1/execute";
