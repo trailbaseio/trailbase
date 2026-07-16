@@ -457,7 +457,7 @@ impl RecordApi {
   }
 
   pub fn primary_key_to_value(&self, pk: String) -> Result<Value, RecordError> {
-    // NOTE: loosly parse - will convert STRING to INT/REAL.
+    // NOTE: loosely parse - will convert STRING to INT/REAL.
     return trailbase_schema::json::parse_string_to_sqlite_value(
       self.state.schema.record_pk_column.column.data_type,
       pk,

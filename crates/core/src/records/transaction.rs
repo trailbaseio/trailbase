@@ -3,6 +3,7 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
+use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
@@ -14,7 +15,7 @@ use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
 
-#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 pub enum Operation {
   Create {
     api_name: String,
@@ -31,16 +32,24 @@ pub enum Operation {
   },
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct TransactionRequest {
   operations: Vec<Operation>,
   transaction: Option<bool>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
+pub enum TransactionResult {
+  Id(String),
+  Error(String),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
+#[ts(export)]
 pub struct TransactionResponse {
-  /// Url-Safe base64 encoded ids of the newly created record.
-  pub ids: Vec<String>,
+  /// A 1:1 mapping of opreations to results.
+  pub results: Vec<TransactionResult>,
 }
 
 /// Execute a batch of transactions.
@@ -63,7 +72,7 @@ pub async fn record_transactions_handler(
   // `request.transaction == true`.
   match request.operations.len() {
     0 => {
-      return Ok(Json(TransactionResponse { ids: vec![] }));
+      return Ok(Json(TransactionResponse { results: vec![] }));
     }
     n if n > 128 => {
       return Err(RecordError::BadRequest("Batch size exceeds limit: 128"));
@@ -84,11 +93,11 @@ pub async fn record_transactions_handler(
   };
 
   let conn = first_api.conn().clone();
-  let ids = if request.transaction.unwrap_or(false) {
+  let results = if request.transaction.unwrap_or(false) {
     conn
       .transaction({
-        move |mut tx| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let ids: Vec<String> = apply_ops(
+        move |mut tx| -> Result<_, trailbase_sqlite::Error> {
+          let results = apply_ops(
             &state,
             &mut tx,
             user.as_ref(),
@@ -99,30 +108,28 @@ pub async fn record_transactions_handler(
 
           tx.commit()?;
 
-          return Ok(ids);
+          return Ok(results);
         }
       })
       .await?
   } else {
     conn
-      .call_writer(
-        move |mut conn| -> Result<Vec<String>, trailbase_sqlite::Error> {
-          let ids: Vec<String> = apply_ops(
-            &state,
-            &mut conn,
-            user.as_ref(),
-            &first_api,
-            request.operations,
-          )
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+      .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
+        let results = apply_ops(
+          &state,
+          &mut conn,
+          user.as_ref(),
+          &first_api,
+          request.operations,
+        )
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-          return Ok(ids);
-        },
-      )
+        return Ok(results);
+      })
       .await?
   };
 
-  return Ok(Json(TransactionResponse { ids }));
+  return Ok(Json(TransactionResponse { results }));
 }
 
 #[inline]
@@ -164,18 +171,19 @@ fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
   return Ok(api);
 }
 
+/// Applies operations and returns a list of ids.
 fn apply_ops<T: SyncConnection>(
   state: &AppState,
   conn: &mut T,
   user: Option<&User>,
   api: &RecordApi,
   ops: Vec<Operation>,
-) -> Result<Vec<String>, RecordError> {
+) -> Result<Vec<TransactionResult>, RecordError> {
   let expected_db_name = get_db_name(api.qualified_name());
 
-  let ids: Vec<String> = ops
+  let results: Vec<TransactionResult> = ops
     .into_iter()
-    .map(|op| -> Result<Option<String>, RecordError> {
+    .map(|op| -> Result<TransactionResult, RecordError> {
       return match op {
         Operation::Create { api_name, value } => {
           let api = get_api(state, &api_name)?;
@@ -226,23 +234,24 @@ fn apply_ops<T: SyncConnection>(
           .map_err(|err| RecordError::Internal(err.into()))?;
 
           match query.apply_sync(conn) {
-            Ok(result) => Ok(Some(
-              extract_record_id(result.pk_value.expect("insert"))
-                .map_err(|err| RecordError::Internal(err.into()))?,
-            )),
+            Ok(result) => Ok(TransactionResult::Id(extract_record_id(
+              result
+                .pk_value
+                .ok_or_else(|| RecordError::Internal("insert missing id".into()))?,
+            )?)),
             // Skip over errors for `Ignore` conflict strategy.
             Err(err)
               if conflict_resolution_strategy == ConflictResolutionStrategy::Ignore
                 && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
             {
-              Ok(None)
+              Ok(TransactionResult::Error(err.to_string()))
             }
             Err(err) => Err(RecordError::Internal(err.into())),
           }
         }
         Operation::Update {
           api_name,
-          record_id,
+          record_id: record_id_str,
           value,
         } => {
           let api = get_api(state, &api_name)?;
@@ -251,7 +260,7 @@ fn apply_ops<T: SyncConnection>(
           }
 
           let record = extract_record(value)?;
-          let record_id = api.primary_key_to_value(record_id)?;
+          let record_id = api.primary_key_to_value(record_id_str.clone())?;
           let pk_meta = api.record_pk_column();
 
           let mut lazy_params = LazyParams::for_update(
@@ -284,18 +293,18 @@ fn apply_ops<T: SyncConnection>(
             .apply_sync(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(None)
+          Ok(TransactionResult::Id(record_id_str))
         }
         Operation::Delete {
           api_name,
-          record_id,
+          record_id: record_id_str,
         } => {
           let api = get_api(state, &api_name)?;
           if get_db_name(api.qualified_name()) != expected_db_name {
             return Err(RecordError::BadRequest("DB mismatch"));
           }
 
-          let record_id = api.primary_key_to_value(record_id)?;
+          let record_id = api.primary_key_to_value(record_id_str.clone())?;
 
           api.record_level_access_check(conn, Permission::Delete, Some(&record_id), None, user)?;
 
@@ -303,7 +312,7 @@ fn apply_ops<T: SyncConnection>(
             conn.connection_type(),
             api.table_name(),
             &api.record_pk_column().column.name,
-            record_id,
+            record_id.clone(),
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
@@ -311,16 +320,13 @@ fn apply_ops<T: SyncConnection>(
             .apply_sync(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(None)
+          Ok(TransactionResult::Id(record_id_str))
         }
       };
     })
-    .collect::<Result<Vec<_>, _>>()?
-    .into_iter()
-    .flatten()
-    .collect();
+    .collect::<Result<Vec<_>, _>>()?;
 
-  return Ok(ids);
+  return Ok(results);
 }
 
 #[cfg(test)]
@@ -400,10 +406,17 @@ mod tests {
     .await
     .unwrap();
 
-    assert_eq!(2, response.ids.len());
-    let first_id = response.ids[0].clone();
-    let second_id = response.ids[1].parse::<i64>().unwrap();
-    assert_eq!(5, second_id, "{:?}", response.ids);
+    assert_eq!(2, response.results.len());
+    let TransactionResult::Id(first_id) = response.results[0].clone() else {
+      panic!("Not an id: {response:?}");
+    };
+    let second_id = {
+      let TransactionResult::Id(id) = response.results[1].clone() else {
+        panic!("Not an id: {response:?}");
+      };
+      id.parse::<i64>().unwrap()
+    };
+    assert_eq!(5, second_id, "{:?}", response.results);
     assert_eq!(-1, get_value(second_id).await,);
 
     // Make sure replace works.
@@ -421,9 +434,14 @@ mod tests {
     .await
     .unwrap();
 
-    assert_eq!(1, response.ids.len());
-    let id = response.ids[0].parse::<i64>().unwrap();
-    assert_eq!(5, id, "{:?}", response.ids);
+    assert_eq!(1, response.results.len());
+    let id = {
+      let TransactionResult::Id(id) = response.results[0].clone() else {
+        panic!("Not an id: {response:?}");
+      };
+      id.parse::<i64>().unwrap()
+    };
+    assert_eq!(5, id, "{:?}", response.results);
     assert_eq!(2, get_value(id).await);
 
     let response = record_transactions_handler(
@@ -446,7 +464,7 @@ mod tests {
     .await
     .unwrap();
 
-    assert_eq!(1, response.ids.len());
+    assert_eq!(2, response.results.len());
 
     assert_eq!(
       2,
@@ -492,6 +510,6 @@ mod tests {
     .await
     .unwrap();
 
-    assert_eq!(0, response.ids.len());
+    assert_eq!(1, response.results.len());
   }
 }
