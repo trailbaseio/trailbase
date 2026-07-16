@@ -1,3 +1,10 @@
+## v0.30.6
+
+- Add transaction/batch support to Rust, Dart and Kotlin clients.
+- Fix token refresh in Dart client.
+- Fix styling regression in admin table explorer.
+- Update dependencies.
+
 ## v0.30.5
 
 - Allow configuring refresh-token TTL for anonymous auth.
