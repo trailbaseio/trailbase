@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.1
+
+- Add header overrides back to DefaultTransport.
+
 ## 0.12.0
 
 - Add support for batch operations and transactions.

@@ -36,11 +36,30 @@ class DefaultTransport implements Transport {
   final http.Client _http;
   final Uri _baseUrl;
 
+  /// The extra headers provide the means for users to override or inject their
+  /// own additional headers (the default doesn't use them). This may for
+  /// example be used to control the behavior of a reverse proxy.
+  final Map<String, String>? _extraHeaders;
+
   DefaultTransport({
     required Uri url,
+    Map<String, String>? headers,
     http.Client? client,
   })  : _http = client ?? http.Client(),
-        _baseUrl = url;
+        _baseUrl = url,
+        _extraHeaders = headers;
+
+  Map<String, String>? mergeHeaders(Map<String, String>? headers) {
+    if (headers != null) {
+      return _extraHeaders != null
+          ? {
+              ...headers,
+              ..._extraHeaders,
+            }
+          : headers;
+    }
+    return _extraHeaders;
+  }
 
   @override
   Future<http.Response> fetch(
@@ -52,10 +71,13 @@ class DefaultTransport implements Transport {
   }) async {
     final uri = _baseUrl.replace(path: path, queryParameters: queryParams);
     return switch (method) {
-      Method.get => await _http.get(uri, headers: headers),
-      Method.post => await _http.post(uri, headers: headers, body: body),
-      Method.patch => await _http.patch(uri, headers: headers, body: body),
-      Method.delete => await _http.delete(uri, headers: headers, body: body),
+      Method.get => await _http.get(uri, headers: mergeHeaders(headers)),
+      Method.post =>
+        await _http.post(uri, headers: mergeHeaders(headers), body: body),
+      Method.patch =>
+        await _http.patch(uri, headers: mergeHeaders(headers), body: body),
+      Method.delete =>
+        await _http.delete(uri, headers: mergeHeaders(headers), body: body),
     };
   }
 
@@ -65,8 +87,9 @@ class DefaultTransport implements Transport {
     Map<String, String>? headers,
   }) async {
     final request = http.Request('GET', uri);
-    if (headers != null) {
-      request.headers.addAll(headers);
+    final mergedHeaders = mergeHeaders(headers);
+    if (mergedHeaders != null) {
+      request.headers.addAll(mergedHeaders);
     }
     return await _http.send(request);
   }
