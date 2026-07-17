@@ -27,7 +27,6 @@ class SimpleStrict {
   }
 }
 
-
 [JsonSourceGenerationOptions(WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(SimpleStrict))]
 [JsonSerializable(typeof(ListResponse<SimpleStrict>))]
@@ -157,6 +156,10 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     var mfaToken = await client.Login("admin@localhost", "secret");
     Assert.Null(mfaToken);
+
+    await client.RefreshAuthToken();
+    await client.RefreshAuthToken(force: true);
+
     var firstTokens = client.Tokens();
     Assert.NotNull(firstTokens);
     var user = client.User();
@@ -396,6 +399,56 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       )!;
 
       Assert.Single(response.records);
+    }
+  }
+
+  [Fact]
+  [RequiresDynamicCode("Testing dynamic code")]
+  [RequiresUnreferencedCode("testing dynamic code")]
+  public async Task TransactionTest() {
+    var client = await ClientTest.Connect();
+    var api = client.Records("simple_strict_table");
+
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+
+    {
+      // Test simple create.
+      var msg = $"C# transaction create test:  =?&{now}";
+      List<Operation> ops = [
+        api.CreateOp(new SimpleStrict(null, null, null, msg)),
+      ];
+
+      var results = await client.Execute(ops, transaction: true);
+      Assert.Single(results);
+
+      var record = await api.Read<SimpleStrict>((results[0] as OperationIdResult)!.id);
+      Assert.Equal(msg, record!.text_not_null);
+    }
+
+    {
+      // Test update transaction.
+      var msg = $"C# transaction update test original: =?&{now}";
+      RecordId id = await api.Create(new SimpleStrict(null, null, null, msg));
+
+      var updatedMsg = $"C# transaction update test modified: =?&{now}";
+      List<Operation> ops = [
+        api.UpdateOp(id, new SimpleStrict(null, null, null, updatedMsg)),
+      ];
+
+      var results = await client.Execute(ops, transaction: true);
+      Assert.Single(results);
+
+      var record = await api.Read<SimpleStrict>(id);
+      Assert.Equal(updatedMsg, record!.text_not_null);
+
+      // Test delete transaction.
+      List<Operation> deleteOps = [
+        api.DeleteOp(id),
+      ];
+      var deleteResults = await client.Execute(deleteOps, transaction: true);
+      Assert.Single(deleteResults);
+
+      await Assert.ThrowsAsync<FetchException>(() => api.Read<SimpleStrict>(id));
     }
   }
 

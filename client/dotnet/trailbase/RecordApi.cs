@@ -16,14 +16,6 @@ internal class CreateRecordResponse {
   public CreateRecordResponse(List<string> ids) {
     this.ids = ids;
   }
-
-  static public RecordId Parse(string id) {
-    long value = 0;
-    if (long.TryParse(id, out value)) {
-      return new IntegerRecordId(value);
-    }
-    return new UuidRecordId(id);
-  }
 }
 
 /// <summary>Pagination state representation.</summary>
@@ -66,12 +58,6 @@ public class ListResponse<T> {
     this.total_count = total_count;
     this.records = records ?? [];
   }
-}
-
-[JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(CreateRecordResponse))]
-[JsonSerializable(typeof(ListResponse<JsonObject>))]
-internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
 }
 
 /// <summary>Comparison operation for column filters, e.g. col != 'val'.</summary>
@@ -279,6 +265,21 @@ public class RecordApi {
     return (await CreateImpl(recordJson))[0];
   }
 
+  /// <summary>Creates new record create operation.</summary>
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+  public Operation CreateOp<T>(T record) {
+    var options = new JsonSerializerOptions {
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    return new CreateOperation(name, value: JsonSerializer.SerializeToNode(record, options)!);
+  }
+
+  /// <summary>Creates new record create operation.</summary>
+  public Operation CreateOp<T>(T record, JsonTypeInfo<T> jsonTypeInfo) {
+    return new CreateOperation(name, value: JsonSerializer.SerializeToNode(record, jsonTypeInfo)!);
+  }
+
   /// <summary>Create new records in bulk with the given values.</summary>
   [RequiresDynamicCode(DynamicCodeMessage)]
   [RequiresUnreferencedCode(UnreferencedCodeMessage)]
@@ -310,7 +311,7 @@ public class RecordApi {
         SerializeResponseRecordIdContext.Default.CreateRecordResponse
     )!;
 
-    return createResponse.ids.ConvertAll(id => CreateRecordResponse.Parse(id));
+    return createResponse.ids.ConvertAll(id => RecordId.Parse(id));
   }
 
   /// <summary>
@@ -450,6 +451,21 @@ public class RecordApi {
     await UpdateImpl(id, recordJson);
   }
 
+  /// <summary>Creates new record update operation.</summary>
+  [RequiresDynamicCode(DynamicCodeMessage)]
+  [RequiresUnreferencedCode(UnreferencedCodeMessage)]
+  public Operation UpdateOp<T>(RecordId id, T record) {
+    var options = new JsonSerializerOptions {
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+    return new UpdateOperation(name, id.ToString(), value: JsonSerializer.SerializeToNode(record, options)!);
+  }
+
+  /// <summary>Creates new record update operation.</summary>
+  public Operation UpdateOp<T>(RecordId id, T record, JsonTypeInfo<T> jsonTypeInfo) {
+    return new UpdateOperation(name, id.ToString(), value: JsonSerializer.SerializeToNode(record, jsonTypeInfo)!);
+  }
+
   private async Task UpdateImpl(
     RecordId id,
     HttpContent recordJson
@@ -470,6 +486,11 @@ public class RecordApi {
       null,
       null
     );
+  }
+
+  /// <summary>Creates new record delete operation.</summary>
+  public Operation DeleteOp(RecordId id) {
+    return new DeleteOperation(name, id.ToString());
   }
 
   /// <summary>Listen for changes to record with given id.</summary>
@@ -517,4 +538,10 @@ public class RecordApi {
       }
     }
   }
+}
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(CreateRecordResponse))]
+[JsonSerializable(typeof(ListResponse<JsonObject>))]
+internal partial class SerializeResponseRecordIdContext : JsonSerializerContext {
 }

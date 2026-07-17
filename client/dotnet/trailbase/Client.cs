@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json;
+using System.Diagnostics.CodeAnalysis;
 
 namespace TrailBase;
 
@@ -99,11 +100,11 @@ public class RefreshTokenResponse {
   /// <summary>
   /// RefreshTokenResponse constructor.
   /// </summary>
-  /// <param name="authToken">User authentication token.</param>
-  /// <param name="csrfToken">User Cross-site request forgery token.</param>
-  public RefreshTokenResponse(string authToken, string? csrfToken) {
-    auth_token = authToken;
-    csrf_token = csrfToken;
+  /// <param name="auth_token">User authentication token.</param>
+  /// <param name="csrf_token">User Cross-site request forgery token.</param>
+  public RefreshTokenResponse(string auth_token, string? csrf_token) {
+    this.auth_token = auth_token;
+    this.csrf_token = csrf_token;
   }
 }
 
@@ -187,19 +188,6 @@ public class MultiFactorAuthToken {
   public override string ToString() {
     return $"MFAToken({mfa_token})";
   }
-}
-
-[JsonSourceGenerationOptions(WriteIndented = true)]
-[JsonSerializable(typeof(Credentials))]
-[JsonSerializable(typeof(MultiFactorAuthCredentials))]
-[JsonSerializable(typeof(JwtToken))]
-[JsonSerializable(typeof(Tokens))]
-[JsonSerializable(typeof(MultiFactorAuthToken))]
-[JsonSerializable(typeof(RefreshTokenResponse))]
-[JsonSerializable(typeof(RefreshTokenRequest))]
-[JsonSerializable(typeof(User))]
-[JsonSerializable(typeof(Dictionary<string, string>))]
-internal partial class SourceGenerationContext : JsonSerializerContext {
 }
 
 /// <summary>
@@ -333,6 +321,7 @@ internal class DefaultTransport : Transport {
 /// </summary>
 public class Client {
   static readonly string _authApi = "api/auth/v1";
+  static readonly string _transactionsBasePath = "api/transaction/v1/execute";
   static readonly ILogger logger = LoggerFactory.Create(
       builder => builder.AddConsole()).CreateLogger("TrailBase.Client");
 
@@ -372,6 +361,22 @@ public class Client {
   /// <summary>Construct a record API object for the API with the given name.</summary>
   public RecordApi Records(string name) {
     return new RecordApi(this, name);
+  }
+
+  /// <summary>Executes the given operations as either a batch or transaction.</summary>
+  public async Task<List<OperationResult>> Execute(List<Operation> ops, bool transaction = true) {
+    var request = new OperationsRequest(ops, transaction);
+    var content = request.ToJson().ToJsonString();
+
+    var response = await Fetch(
+      _transactionsBasePath,
+      HttpMethod.Post,
+      new StringContent(content, System.Text.Encoding.UTF8, "application/json"),
+      null,
+      throwOnError: true
+    );
+
+    return OperationsResponse.Parse(await response.Content.ReadAsStringAsync()).results;
   }
 
   /// <summary>Log in with the given credentials.</summary>
@@ -532,8 +537,9 @@ public class Client {
   }
 
   /// <summary>Refresh the current auth token.</summary>
-  public async Task RefreshAuthToken() {
-    var refreshToken = shouldRefresh(tokenState);
+  public async Task RefreshAuthToken(bool force = false) {
+    var state = tokenState.state;
+    string? refreshToken = force ? (state != null ? state.Value.Item1.refresh_token : null) : shouldRefresh(tokenState);
     if (refreshToken != null) {
       tokenState = await refreshTokensImpl(refreshToken);
     }
@@ -594,4 +600,17 @@ public class Client {
 
     return response;
   }
+}
+
+[JsonSourceGenerationOptions(WriteIndented = true)]
+[JsonSerializable(typeof(Credentials))]
+[JsonSerializable(typeof(MultiFactorAuthCredentials))]
+[JsonSerializable(typeof(JwtToken))]
+[JsonSerializable(typeof(Tokens))]
+[JsonSerializable(typeof(MultiFactorAuthToken))]
+[JsonSerializable(typeof(RefreshTokenResponse))]
+[JsonSerializable(typeof(RefreshTokenRequest))]
+[JsonSerializable(typeof(User))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
+internal partial class SourceGenerationContext : JsonSerializerContext {
 }

@@ -4,6 +4,15 @@ namespace TrailBase;
 public abstract class RecordId {
   /// <summary>Serialize RecordId.</summary>
   public abstract override string ToString();
+
+  /// <summary>Parses RecordIds.</summary>
+  static public RecordId Parse(string id) {
+    long value = 0;
+    if (long.TryParse(id, out value)) {
+      return new IntegerRecordId(value);
+    }
+    return new UuidRecordId(id);
+  }
 }
 
 /// <summary>Integer record id.</summary>
