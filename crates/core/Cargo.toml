@@ -62,7 +62,7 @@ hyper-util = "0.1.7"
 indexmap = "2.11.4"
 init-tracing-opentelemetry = { version = "0.38.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = "0.15.0"
-jsonschema = { version = "0.47.0", default-features = false }
+jsonschema = { version = "0.48.0", default-features = false }
 jsonwebtoken = { version = "^10.2.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 lazy_static = "1.4.0"
 lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }

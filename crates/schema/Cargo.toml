@@ -16,7 +16,7 @@ base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
 fallible-iterator = "0.3.0"
 infer = "0.22.0"
 itertools = "0.15.0"
-jsonschema = { version = "0.47.0", default-features = false }
+jsonschema = { version = "0.48.0", default-features = false }
 lazy_static = "1.5.0"
 log = { version = "^0.4.21", default-features = false }
 parking_lot = { workspace = true }
