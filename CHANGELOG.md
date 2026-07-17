@@ -1,3 +1,12 @@
+## v0.31.0
+
+- Change batch/transaction `RecordApi`s to return a result for each operation effectively establishing a 1:1 mapping.
+  - This is a breaking change if you're using the batch/transactions API. In which case, you'll have to update your clients to parse the updated format.
+  - Previously it wasn't possible to reliably establish a mapping especially since insert failures could be ignored.
+- Add batch/transaction support to C#/Dotnet client.
+  - Now 5 of 8 clients (JS/TS, Dart, Kotlin, Rust, Dotnet) support batch/transactions.
+- Update dependencies.
+
 ## v0.30.6
 
 - Add transaction/batch support to Rust, Dart and Kotlin clients.
