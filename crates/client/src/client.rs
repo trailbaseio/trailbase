@@ -259,16 +259,16 @@ impl Client {
     );
   }
 
-  pub async fn refresh(&self) -> Result<(), Error> {
+  pub async fn refresh(&self) -> Result<bool, Error> {
     let Some((headers, refresh_token)) = self.state.extract_headers_refresh_token() else {
       // Not logged in - nothing to do.
-      return Ok(());
+      return Ok(false);
     };
 
     let new_tokens = refresh_tokens_impl(&*self.state.transport, headers, refresh_token).await?;
 
     *self.state.tokens.write() = new_tokens;
-    return Ok(());
+    return Ok(true);
   }
 
   pub async fn login(

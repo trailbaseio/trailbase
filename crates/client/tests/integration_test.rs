@@ -200,7 +200,8 @@ async fn login_test() {
   assert_eq!(Some("admin@localhost"), user.email.as_deref());
   assert_eq!(Some("admin"), user.username.as_deref());
 
-  client.refresh().await.unwrap();
+  assert!(client.refresh().await.unwrap());
+  assert!(client.refresh().await.unwrap());
 
   client.logout().await.unwrap();
   assert!(client.tokens().is_none());

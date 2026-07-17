@@ -126,6 +126,7 @@ extension Trait where Self == SetupTrailBaseTrait {
     #expect(client.user!.username == "admin")
 
     try await client.refresh()
+    try await client.refresh()
 
     try await client.logout()
     #expect(client.tokens == nil)

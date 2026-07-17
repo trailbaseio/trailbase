@@ -653,15 +653,19 @@ class Client(
     )
   }
 
-  suspend fun refreshAuthToken(force: Boolean = false) {
+  suspend fun refreshAuthToken(force: Boolean = false): Boolean {
     val refreshToken: String? =
             when (force) {
               true -> tokenState.state?.first?.refresh_token
               false -> tokenState.shouldRefresh()
             }
+
     if (refreshToken != null) {
       tokenState = refreshTokensImpl(transport, refreshToken)
+      return true
     }
+
+    return false
   }
 
   suspend fun fetch(
@@ -703,7 +707,8 @@ private suspend fun refreshTokensImpl(transport: Transport, refreshToken: String
       TokenState.build(null)
     }
     HttpStatusCode.OK -> {
-      TokenState.build(response.body())
+      val tokens: Tokens = response.body()
+      TokenState.build(Tokens(tokens.auth_token, refreshToken, tokens.csrf_token))
     }
     else -> {
       throw HttpException(response.status.value, response.body())

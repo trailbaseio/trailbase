@@ -222,7 +222,7 @@ export interface Client {
   /// cookies to tokens.
   checkCookies(): Promise<Tokens | undefined>;
   /// Update auth token using longer-lived refresh tokens.
-  refreshAuthToken(opts?: { force?: boolean }): Promise<void>;
+  refreshAuthToken(opts?: { force?: boolean }): Promise<boolean>;
 
   /// Fetches data from TrailBase endpoints, e.g.:
   ///    const response = await client.fetch("/api/auth/v1/status");
@@ -538,17 +538,21 @@ class ClientImpl implements Client {
     }
   }
 
-  public async refreshAuthToken(opts?: { force?: boolean }): Promise<void> {
+  public async refreshAuthToken(opts?: { force?: boolean }): Promise<boolean> {
     const force = opts?.force ?? false;
     const refreshToken = force
       ? this._tokenState.state?.tokens.refresh_token
       : shouldRefresh(this._tokenState);
+
     if (refreshToken) {
       // Note: refreshTokenImpl will auto-logout on 401.
       this.setTokenState(
         await refreshTokensImpl(this._transport, refreshToken),
       );
+      return true;
     }
+
+    return false;
   }
 
   private setTokenState(
@@ -658,6 +662,7 @@ async function refreshTokensImpl(
       case 200:
         return buildTokenState({
           ...((await response.json()) as RefreshResponse),
+          // Merge refresh token not provided by refresh endpoint.
           refresh_token: refreshToken,
         });
       default:
