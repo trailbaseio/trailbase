@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.0
+
+- Update transaction/batch parsing to match TrailBase server v0.31+.
+
 ## 0.12.1
 
 - Add header overrides back to DefaultTransport.
