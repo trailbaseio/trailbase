@@ -244,6 +244,55 @@ extension Trait where Self == SetupTrailBaseTrait {
     }
   }
 
+  @Test func transactionTest() async throws {
+    let client = try await connect()
+    let api = client.records("simple_strict_table")
+
+    let now = NSDate().timeIntervalSince1970
+
+    let message = "swift transaction create test: =?&\(now)"
+    let results = try await client.execute(ops: [
+      api.createOp(record: SimpleStrict(text_not_null: message))
+    ])
+
+    #expect(results.count == 1)
+    guard case .Id(let id) = results[0] else {
+      throw ClientError.invalidEvent
+    }
+
+    let record: SimpleStrict = try await api.read(recordId: id)
+    #expect(record.text_not_null == message)
+
+    // Transaction update
+    let modifiedMessage = "swift transaction create test modified: =?&\(now)"
+    let results1 = try await client.execute(ops: [
+      api.updateOp(recordId: id, record: SimpleStrict(text_not_null: modifiedMessage))
+    ])
+
+    #expect(results1.count == 1)
+    guard case .Id(let id1) = results1[0] else {
+      throw ClientError.invalidEvent
+    }
+
+    let record1: SimpleStrict = try await api.read(recordId: id1)
+    #expect(record1.text_not_null == modifiedMessage)
+
+    let results2 = try await client.execute(ops: [
+      api.deleteOp(recordId: id)
+    ])
+
+    #expect(results2.count == 1)
+    guard case .Id(let id2) = results2[0] else {
+      throw ClientError.invalidEvent
+    }
+
+    do {
+      let _: SimpleStrict = try await api.read(recordId: id2)
+      assert(false)
+    } catch {
+    }
+  }
+
   // WARN: EventSource doesn't seem to receive SSE events - at least on linux
   // - we may want to debug this on a Mac before moving forward.
   //
@@ -282,6 +331,23 @@ func testIsNullFactory() {
   #expect(column == "col0")
   #expect(op == .IsNull)
   #expect(value == "NULL")
+}
+
+@Test()
+func testOperationEncoding() throws {
+  let create = Operation.Create(
+    api_name: "test",
+    value: [
+      "key": JSON.string("value")
+    ])
+
+  let encoder = JSONEncoder()
+  encoder.outputFormatting = .sortedKeys
+  let data = try encoder.encode(create)
+
+  #expect(
+    String(data: data, encoding: .utf8)
+      == #"{"Create":{"api_name":"test","value":{"key":"value"}}}"#)
 }
 
 @Test()

@@ -65,6 +65,12 @@ extension [String: JSON] {
   }
 }
 
+func encodeValue<T: Encodable>(obj: T) throws -> [String: JSON] {
+  // Not very efficient. Would love some best practices.
+  let encoded = try JSONEncoder().encode(obj)
+  return try JSONDecoder().decode([String: JSON].self, from: encoded)
+}
+
 private struct EventRepr {
   let type: String
   let seq: UInt32?
