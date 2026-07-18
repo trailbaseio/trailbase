@@ -1,4 +1,4 @@
-import { createMemo, For, Show } from "solid-js";
+import { createMemo, For, Match, Show, Switch } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { A } from "@solidjs/router";
 import {
@@ -15,27 +15,21 @@ import { fetchWasmModules } from "@/lib/api/wasm-modules";
 import type { WasmModuleEntry } from "@bindings/WasmModuleEntry";
 
 function ModuleIcon(props: { icon?: string }) {
-  const src = (): string | undefined => {
-    const icon = props.icon;
-    if (icon === undefined) {
-      return undefined;
-    }
-    if (icon.trimStart().startsWith("<svg")) {
-      return `data:image/svg+xml;utf8,${encodeURIComponent(icon)}`;
-    }
-    if (icon.startsWith("data:")) {
-      return icon;
-    }
-    return undefined;
-  };
-
+  // Inline SVGs are injected via innerHTML so `currentColor` inherits from
+  // the parent; loading through <img> isolates the SVG and breaks theming.
   return (
-    <Show
-      when={src() !== undefined}
-      fallback={<TbOutlinePuzzle size={24} />}
-    >
-      <img src={src()!} alt="" class="size-6" />
-    </Show>
+    <Switch fallback={<TbOutlinePuzzle size={24} />}>
+      <Match
+        when={
+          props.icon?.trimStart().startsWith("<svg") ? props.icon : undefined
+        }
+      >
+        {(icon) => <div innerHTML={icon()} class="[&>svg]:size-6" />}
+      </Match>
+      <Match when={props.icon?.startsWith("data:") ? props.icon : undefined}>
+        {(icon) => <img src={icon()} alt="" class="size-6" />}
+      </Match>
+    </Switch>
   );
 }
 
