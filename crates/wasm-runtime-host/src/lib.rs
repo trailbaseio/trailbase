@@ -161,9 +161,7 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
     return &self.state.component_path;
   }
 
-async fn new_bindings(
-    &self,
-  ) -> Result<(Store<State>, crate::host::Interfaces), Error> {
+  async fn new_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
     let mut store = self.state.store_builder.new_store(&self.state.engine)?;
 
     let instance_pre = self
