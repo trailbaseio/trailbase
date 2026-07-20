@@ -21,6 +21,8 @@ pub enum Subsystem {
   Http,
   Jobs,
   SqliteFunctions,
+  #[serde(other)]
+  Unknown,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
