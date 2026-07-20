@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
+use trailbase_wasm_common::manifest::InitManifest;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Result, Store};
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
@@ -23,9 +24,7 @@ use wasmtime_wasi_http::p2::WasiHttpView;
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
 
 use crate::host::TransactionImpl;
-use crate::host::exports::trailbase::component::init_endpoint::Arguments;
 
-pub use crate::host::exports::trailbase::component::init_endpoint::HttpMethodType;
 pub use crate::host::{SharedState, State};
 pub use trailbase_wasi_keyvalue::Store as KvStore;
 
@@ -41,6 +40,8 @@ pub enum Error {
   HttpErrorCode(ErrorCode),
   #[error("Encoding")]
   Encoding,
+  #[error("Json")]
+  Json(#[from] serde_json::Error),
   #[error("Other: {0}")]
   Other(String),
 }
@@ -160,18 +161,37 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
     return &self.state.component_path;
   }
 
-  async fn new_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
+async fn new_bindings(
+    &self,
+  ) -> Result<(Store<State>, crate::host::Interfaces), Error> {
     let mut store = self.state.store_builder.new_store(&self.state.engine)?;
 
-    let bindings = crate::host::Interfaces::instantiate_async(
-      &mut store,
-      &self.state.component,
-      &self.state.linker,
-    )
-    .await
-    .map_err(|err| {
+    let instance_pre = self
+      .state
+      .linker
+      .instantiate_pre(&self.state.component)
+      .map_err(|err| {
+        log::error!(
+          "Failed to pre-instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.state.component_path
+        );
+        return err;
+      })?;
+
+    let instance = instance_pre
+      .instantiate_async(&mut store)
+      .await
+      .map_err(|err| {
+        log::error!(
+          "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+          path = self.state.component_path
+        );
+        return err;
+      })?;
+
+    let bindings = crate::host::Interfaces::new(&mut store, &instance).map_err(|err| {
       log::error!(
-        "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
+        "Failed to load WIT bindings for {path:?}: '{err}'.",
         path = self.state.component_path
       );
       return err;
@@ -183,14 +203,6 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
 
 pub struct InitArgs {
   pub version: Option<String>,
-}
-
-pub struct InitResult {
-  /// Registered http handlers (method, path)[].
-  pub http_handlers: Vec<(HttpMethodType, String)>,
-
-  /// Registered jobs (name, spec)[].
-  pub job_handlers: Vec<(String, String)>,
 }
 
 impl StoreBuilder<State> for Arc<SharedState> {
@@ -265,28 +277,34 @@ impl HttpStore {
     });
   }
 
-  pub async fn initialize(&self, args: InitArgs) -> Result<InitResult, Error> {
+  pub async fn initialize(&self, args: InitArgs) -> Result<InitManifest, Error> {
     let state = self.state.clone();
 
     return Self::call(&self.state.runtime_state, async move {
       let (mut store, bindings) = state.rt.new_bindings().await?;
       let api = bindings.trailbase_component_init_endpoint();
 
-      let args = Arguments {
-        version: args.version,
-      };
+      let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
+        version: args.version.clone(),
+        subsystems: Some(vec![
+          trailbase_wasm_common::manifest::Subsystem::Http,
+          trailbase_wasm_common::manifest::Subsystem::Jobs,
+          trailbase_wasm_common::manifest::Subsystem::AdminModule,
+        ]),
+      })?;
 
       // let mut store = state.store.lock().await;
       store
-        .run_concurrent(async |accessor| -> Result<InitResult, Error> {
-          let http = api.call_init_http_handlers(accessor, args.clone()).await?;
+        .run_concurrent(async |accessor| -> Result<InitManifest, Error> {
+          let manifest_json = api
+            .call_get_manifest(accessor, args)
+            .await?
+            .map_err(Error::Other)?;
 
-          let job = api.call_init_job_handlers(accessor, args).await?;
+          let manifest: trailbase_wasm_common::manifest::InitManifest =
+            serde_json::from_str(&manifest_json)?;
 
-          return Ok(InitResult {
-            http_handlers: http.handlers,
-            job_handlers: job.handlers,
-          });
+          return Ok(manifest);
         })
         .await?
     })
@@ -629,7 +647,10 @@ mod tests {
       .await
       .unwrap();
 
-      assert_eq!(i, response_to_i64(resp).await);
+      // NOTE: The offset depends on what got initialized, e.g. http handlers, job handlers
+      // or just sqlite functions.
+      let offset = 0;
+      assert_eq!(offset + i, response_to_i64(resp).await);
     }
   }
 

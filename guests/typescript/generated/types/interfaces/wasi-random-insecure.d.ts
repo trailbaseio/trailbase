@@ -1,4 +1,4 @@
-declare module "wasi:random/insecure@0.2.3" {
+declare module "wasi:random/insecure@0.2.12" {
   /**
    * Return `len` insecure pseudo-random bytes.
    *

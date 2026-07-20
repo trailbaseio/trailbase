@@ -1,5 +1,5 @@
 /// <reference path="./wasi-http-types.d.ts" />
-declare module "wasi:http/outgoing-handler@0.2.3" {
+declare module "wasi:http/outgoing-handler@0.2.12" {
   /**
    * This function is invoked with an outgoing HTTP Request, and it returns
    * a resource `future-incoming-response` which represents an HTTP Response
@@ -16,9 +16,10 @@ declare module "wasi:http/outgoing-handler@0.2.3" {
     request: OutgoingRequest,
     options: RequestOptions | undefined,
   ): FutureIncomingResponse;
-  export type OutgoingRequest = import("wasi:http/types@0.2.3").OutgoingRequest;
-  export type RequestOptions = import("wasi:http/types@0.2.3").RequestOptions;
+  export type OutgoingRequest =
+    import("wasi:http/types@0.2.12").OutgoingRequest;
+  export type RequestOptions = import("wasi:http/types@0.2.12").RequestOptions;
   export type FutureIncomingResponse =
-    import("wasi:http/types@0.2.3").FutureIncomingResponse;
-  export type ErrorCode = import("wasi:http/types@0.2.3").ErrorCode;
+    import("wasi:http/types@0.2.12").FutureIncomingResponse;
+  export type ErrorCode = import("wasi:http/types@0.2.12").ErrorCode;
 }

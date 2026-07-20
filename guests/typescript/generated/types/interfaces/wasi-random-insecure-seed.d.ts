@@ -1,4 +1,4 @@
-declare module "wasi:random/insecure-seed@0.2.3" {
+declare module "wasi:random/insecure-seed@0.2.12" {
   /**
    * Return a 128-bit value that may contain a pseudo-random value.
    *

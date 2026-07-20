@@ -1,4 +1,4 @@
-import { OutgoingResponse } from "wasi:http/types@0.2.3";
+import { OutgoingResponse } from "wasi:http/types@0.2.12";
 import { HttpRequest } from "./request";
 import type { Method } from "./request";
 import { HttpResponse } from "./response";
@@ -7,7 +7,7 @@ import { HttpResponse } from "./response";
 import "../timer";
 
 // Exports:
-export { OutgoingResponse } from "wasi:http/types@0.2.3";
+export { OutgoingResponse } from "wasi:http/types@0.2.12";
 export { StatusCode } from "./status";
 export type { Method, HttpRequest, Scheme, User } from "./request";
 export { HttpResponse, HttpError } from "./response";
