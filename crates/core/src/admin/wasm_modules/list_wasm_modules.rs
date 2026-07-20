@@ -6,7 +6,6 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
 #[derive(Debug, Deserialize, Serialize, TS)]
-#[ts(export)]
 pub struct WasmModuleEntry {
   pub name: String,
   pub display_name: String,
@@ -21,10 +20,7 @@ pub struct ListWasmModulesResponse {
   pub modules: Vec<WasmModuleEntry>,
 }
 
-fn build_entry(
-  name: String,
-  manifest: Option<&crate::app_state::WasmManifest>,
-) -> WasmModuleEntry {
+fn build_entry(name: String, manifest: Option<&crate::app_state::WasmManifest>) -> WasmModuleEntry {
   return WasmModuleEntry {
     display_name: manifest
       .map(|m| m.display_name.clone())
@@ -93,19 +89,15 @@ mod tests {
   async fn list_wasm_modules_handler_returns_empty_when_no_runtimes() {
     let state = test_state(None).await.unwrap();
 
-    state
-      .wasm_manifests()
-      .write()
-      .await
-      .insert(
-        "phantom".to_string(),
-        WasmManifest {
-          display_name: "Phantom".to_string(),
-          icon: Some("<svg/>".to_string()),
-          config_path: Some("/_/admin/phantom".to_string()),
-          description: None,
-        },
-      );
+    state.wasm_manifests().write().await.insert(
+      "phantom".to_string(),
+      WasmManifest {
+        display_name: "Phantom".to_string(),
+        icon: Some("<svg/>".to_string()),
+        config_path: Some("/_/admin/phantom".to_string()),
+        description: None,
+      },
+    );
 
     let response = list_wasm_modules_handler(State(state)).await.unwrap();
     assert!(response.modules.is_empty());

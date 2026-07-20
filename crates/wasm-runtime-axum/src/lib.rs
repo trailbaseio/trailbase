@@ -14,8 +14,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::manifest::{
-  AdminModule, HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest,
-  Job as JobManifest,
+  AdminModule, HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest,
 };
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::{
