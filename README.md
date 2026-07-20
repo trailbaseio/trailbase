@@ -141,6 +141,21 @@ trail components add trailbase/auth_ui
 endpoints, e.g.
 [http://localhost:4000/\_/auth/login](http://localhost:4000/_/auth/login).
 
+## MCP sidecar
+
+This fork includes a FastMCP sidecar in [`mcp/`](mcp/) that exposes TrailBase's
+admin and record APIs as MCP tools. It can run over stdio for local MCP clients
+or as an HTTP sidecar in Docker Compose.
+
+```sh
+# Start TrailBase plus the MCP sidecar at http://localhost:8000/mcp.
+TRAILBASE_AUTH_TOKEN=your-admin-token docker compose --profile mcp up --build
+```
+
+Write-capable tools are disabled by default. Set
+`TRAILBASE_MCP_ENABLE_WRITES=true` for the MCP process to allow create, update,
+delete, or mutating SQL tools.
+
 ## Building
 
 If you have all the necessary build dependencies (Rust, node.js, geos,
@@ -160,6 +175,15 @@ pnpm install
 # Build the executable. Adding `--release` will yield a more optimized binary
 # but slow builds significantly.
 cargo build --bin trail
+```
+
+On Debian/Ubuntu-style systems without sudo access to install build packages,
+this fork can populate the repo-local `.dev-tools/` cache used by
+`.cargo/config.toml`:
+
+```sh
+scripts/bootstrap-local-dev-tools.sh
+cargo check --workspace --all-targets
 ```
 
 Alternatively, if you want to build a Docker image or don't want to deal with

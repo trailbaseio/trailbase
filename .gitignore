@@ -2,6 +2,11 @@
 target/
 node_modules/
 dist/
+.dev-tools/
+.venv*/
+.python-*/
+__pycache__/
+.pytest_cache/
 
 # Dart workspace artifacts
 .dart_tool
