@@ -54,7 +54,8 @@ test("Auth integration tests", async () => {
   expect(headers0["Content-Type"]).toBeUndefined();
   expect(headers0["Authorization"].startsWith("Bearer ")).toBe(true);
 
-  await client.refreshAuthToken({ force: true });
+  expect(await client.refreshAuthToken({ force: true })).toBe(true);
+  expect(await client.refreshAuthToken({ force: true })).toBe(true);
 
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);

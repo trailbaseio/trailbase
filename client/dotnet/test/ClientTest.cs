@@ -157,8 +157,9 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     var mfaToken = await client.Login("admin@localhost", "secret");
     Assert.Null(mfaToken);
 
-    await client.RefreshAuthToken();
-    await client.RefreshAuthToken(force: true);
+    Assert.True(await client.RefreshAuthToken(force: true));
+    Assert.True(await client.RefreshAuthToken(force: true));
+    Assert.False(await client.RefreshAuthToken());
 
     var firstTokens = client.Tokens();
     Assert.NotNull(firstTokens);

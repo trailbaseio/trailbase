@@ -108,10 +108,10 @@ class Tokens:
     def from_json(json: JSON_OBJECT) -> "Tokens":
         auth = json["auth_token"]
         assert isinstance(auth, str)
-        refresh = json["refresh_token"]
-        assert isinstance(refresh, str)
-        csrf = json["csrf_token"]
-        assert isinstance(csrf, str)
+        refresh = json.get("refresh_token")
+        assert isinstance(refresh, str | None)
+        csrf = json.get("csrf_token")
+        assert isinstance(csrf, str | None)
 
         return Tokens(auth, refresh, csrf)
 
@@ -291,7 +291,7 @@ class Transport(ABC):
         path: str,
         method: str | None = "GET",
         headers: dict[str, str] | None = None,
-        queryParams: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
         body: JSON | None = None,
     ) -> httpx.Response:
         pass
@@ -302,7 +302,7 @@ class Transport(ABC):
         path: str,
         method: str | None = "GET",
         headers: dict[str, str] | None = None,
-        queryParams: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ) -> ContextManager[httpx.Response]:
         pass
@@ -321,7 +321,7 @@ class DefaultTransport(Transport):
         path: str,
         method: str | None = "GET",
         headers: dict[str, str] | None = None,
-        queryParams: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
         body: JSON | None = None,
     ) -> httpx.Response:
         assert not path.startswith("/")
@@ -330,7 +330,7 @@ class DefaultTransport(Transport):
             url=f"{self.site}/{path}",
             json=body,
             headers=headers,
-            params=queryParams,
+            params=query_params,
         )
 
     def stream(
@@ -338,7 +338,7 @@ class DefaultTransport(Transport):
         path: str,
         method: str | None = "GET",
         headers: dict[str, str] | None = None,
-        queryParams: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ) -> ContextManager[httpx.Response]:
         assert not path.startswith("/")
@@ -350,7 +350,7 @@ class DefaultTransport(Transport):
             method=method or "GET",
             url=f"{self.site}/{path}",
             headers=headers,
-            params=queryParams,
+            params=query_params,
             timeout=timeout,
         )
 
@@ -372,7 +372,7 @@ class DefaultTransport(Transport):
 class Client:
     _transport: Transport
     _site: str
-    _tokenState: TokenState
+    _token_state: TokenState
 
     def __init__(
         self,
@@ -382,10 +382,10 @@ class Client:
     ) -> None:
         self._transport = transport or DefaultTransport(site)
         self._site = site
-        self._tokenState = TokenState.build(tokens)
+        self._token_state = TokenState.build(tokens)
 
     def tokens(self) -> Tokens | None:
-        state = self._tokenState.state
+        state = self._token_state.state
         return state[0] if state else None
 
     def user(self) -> User | None:
@@ -466,16 +466,16 @@ class Client:
         self._set_token_state(TokenState.build(Tokens.from_json(response.json())))
 
     def logout(self) -> None:
-        state = self._tokenState.state
-        refreshToken = state[0].refresh if state else None
+        state = self._token_state.state
+        refresh_token = state[0].refresh if state else None
 
         try:
-            if refreshToken is not None:
+            if refresh_token is not None:
                 self.fetch(
                     f"{_AUTH_API}/logout",
                     method="POST",
                     data={
-                        "refresh_token": refreshToken,
+                        "refresh_token": refresh_token,
                     },
                 )
             else:
@@ -499,26 +499,33 @@ class Client:
     def records(self, name: str) -> "RecordApi":
         return RecordApi(name, self)
 
-    def refresh_auth_tokens(self):
-        refreshToken = Client._shouldRefresh(self._tokenState)
-        if refreshToken is not None:
-            self._set_token_state(_refresh_tokens_impl(self._transport, refreshToken))
+    def refresh_auth_tokens(self, force: bool = False) -> bool:
+        state = self._token_state.state
+        refresh_token = (
+            state[0].refresh if force and state is not None else Client._should_refresh(self._token_state)
+        )
 
-    def _set_token_state(self, tokenState: TokenState) -> TokenState:
-        self._tokenState = tokenState
+        if refresh_token is not None:
+            self._set_token_state(_refresh_tokens_impl(self._transport, refresh_token))
+            return True
 
-        state = tokenState.state
+        return False
+
+    def _set_token_state(self, token_state: TokenState) -> TokenState:
+        self._token_state = token_state
+
+        state = token_state.state
         if state is not None:
             claims = state[1]
             now = int(time())
             if claims.exp < now:
                 _logger.warning("Token expired")
 
-        return tokenState
+        return token_state
 
     @staticmethod
-    def _shouldRefresh(tokenState: TokenState) -> str | None:
-        state = tokenState.state
+    def _should_refresh(token_state: TokenState) -> str | None:
+        state = token_state.state
         now = int(time())
         if state is not None and state[1].exp - 60 < now:
             return state[0].refresh
@@ -529,16 +536,16 @@ class Client:
         path: str,
         method: str | None = "GET",
         data: JSON | None = None,
-        queryParams: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
         throwOnError: bool = True,
     ) -> httpx.Response:
-        tokenState = self._tokenState
-        refreshToken = Client._shouldRefresh(tokenState)
-        if refreshToken is not None:
-            tokenState = self._set_token_state(_refresh_tokens_impl(self._transport, refreshToken))
+        token_state = self._token_state
+        refresh_token = Client._should_refresh(token_state)
+        if refresh_token is not None:
+            token_state = self._set_token_state(_refresh_tokens_impl(self._transport, refresh_token))
 
         response = self._transport.fetch(
-            path, method=method, headers=tokenState.headers, queryParams=queryParams, body=data
+            path, method=method, headers=token_state.headers, query_params=query_params, body=data
         )
 
         if response.status_code > 200 and throwOnError:
@@ -550,19 +557,19 @@ class Client:
         self,
         path: str,
         method: str | None = "GET",
-        queryParams: dict[str, str] | None = None,
+        query_params: dict[str, str] | None = None,
         timeout: httpx.Timeout | None = None,
     ):
-        tokenState = self._tokenState
-        refreshToken = Client._shouldRefresh(tokenState)
-        if refreshToken is not None:
-            tokenState = self._set_token_state(_refresh_tokens_impl(self._transport, refreshToken))
+        token_state = self._token_state
+        refresh_token = Client._should_refresh(token_state)
+        if refresh_token is not None:
+            token_state = self._set_token_state(_refresh_tokens_impl(self._transport, refresh_token))
 
         return self._transport.stream(
             path,
             method=method,
-            headers=tokenState.headers,
-            queryParams=queryParams,
+            headers=token_state.headers,
+            query_params=query_params,
             timeout=timeout,
         )
 
@@ -699,7 +706,7 @@ class RecordApi:
         if count:
             params["count"] = "true"
 
-        def traverseFilters(path: str, filter: FilterOrComposite):
+        def traverse_filters(path: str, filter: FilterOrComposite):
             match filter:
                 case Filter() as f:
                     if f.op is not None:
@@ -708,29 +715,29 @@ class RecordApi:
                         params[f"{path}[{f.column}]"] = f.value
                 case And() as f:
                     for i, filter in enumerate(f.filters):
-                        traverseFilters(f"{path}[$and][{i}", filter)
+                        traverse_filters(f"{path}[$and][{i}", filter)
                 case Or() as f:
                     for i, filter in enumerate(f.filters):
-                        traverseFilters(f"{path}[$or][{i}", filter)
+                        traverse_filters(f"{path}[$or][{i}", filter)
 
         if filters is not None:
             for filter in filters:
-                traverseFilters("filter", filter)
+                traverse_filters("filter", filter)
 
-        response = self._client.fetch(f"{self._recordApi}/{self._name}", queryParams=params)
+        response = self._client.fetch(f"{self._recordApi}/{self._name}", query_params=params)
         return ListResponse.from_json(response.json())
 
     def read(
         self,
-        recordId: RecordId | str | int,
+        record_id: RecordId | str | int,
         expand: "list[str] | None" = None,
     ) -> JSON_OBJECT:
-        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
+        id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         params = {"expand": ",".join(expand)} if expand is not None else None
 
         return self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",
-            queryParams=params,
+            query_params=params,
         ).json()
 
     def create(self, record: JSON_OBJECT) -> RecordId:
@@ -749,23 +756,23 @@ class RecordApi:
         )
         return record_ids_from_json(response.json())
 
-    def update(self, recordId: RecordId | str | int, record: JSON_OBJECT) -> None:
-        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
+    def update(self, record_id: RecordId | str | int, record: JSON_OBJECT) -> None:
+        id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",
             method="PATCH",
             data=record,
         )
 
-    def delete(self, recordId: RecordId | str | int) -> None:
-        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
+    def delete(self, record_id: RecordId | str | int) -> None:
+        id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         self._client.fetch(
             f"{self._recordApi}/{self._name}/{id}",
             method="DELETE",
         )
 
-    def subscribe(self, recordId: RecordId | str | int) -> typing.Generator[EVENT]:
-        id = repr(recordId) if isinstance(recordId, RecordId) else f"{recordId}"
+    def subscribe(self, record_id: RecordId | str | int) -> typing.Generator[EVENT]:
+        id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         context = self._client.stream(
             f"{self._recordApi}/{self._name}/subscribe/{id}", timeout=httpx.Timeout(None)
         )
@@ -787,7 +794,7 @@ class RecordApi:
         return self.subscribe("*")
 
 
-def _refresh_tokens_impl(transport: Transport, refreshToken: str) -> TokenState:
+def _refresh_tokens_impl(transport: Transport, refresh_token: str) -> TokenState:
     response = transport.fetch(
         f"{_AUTH_API}/refresh",
         method="POST",
@@ -795,13 +802,14 @@ def _refresh_tokens_impl(transport: Transport, refreshToken: str) -> TokenState:
             "Content-Type": "application/json",
         },
         body={
-            "refresh_token": refreshToken,
+            "refresh_token": refresh_token,
         },
     )
 
     match response.status_code:
         case 200:
-            return TokenState.build(Tokens.from_json(response.json()))
+            from_json = Tokens.from_json(response.json())
+            return TokenState.build(Tokens(from_json.auth, refresh_token, from_json.csrf))
         case 401:
             # Refresh token was rejected w/o means to recover. May as well log out.
             return TokenState.build(None)

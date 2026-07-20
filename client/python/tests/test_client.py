@@ -108,6 +108,8 @@ def test_authentication(trailbase: TrailBaseFixture):
     assert tokens is not None and tokens.valid()
 
     client.refresh_auth_tokens()
+    assert client.refresh_auth_tokens(force=True)
+    assert client.refresh_auth_tokens(force=True)
 
     user = client.user()
     assert user is not None and user.id != ""

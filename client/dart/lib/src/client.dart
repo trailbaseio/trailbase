@@ -209,7 +209,7 @@ class Client {
     );
   }
 
-  Future<void> refreshAuthToken({bool force = false}) async {
+  Future<bool> refreshAuthToken({bool force = false}) async {
     final refreshToken =
         force ? _tokenState.state?.$1.refresh : _tokenState.shouldRefresh();
 
@@ -219,7 +219,10 @@ class Client {
         _tokenState.headers,
         refreshToken,
       );
+      return true;
     }
+
+    return false;
   }
 
   Future<http.Response> fetch(
@@ -321,7 +324,10 @@ Future<TokenState> _refreshTokensImpl(
       }));
 
   return switch (response.statusCode) {
-    200 => TokenState.build(Tokens.fromJson(jsonDecode(response.body))),
+    200 => TokenState.build(() {
+        final fromJson = Tokens.fromJson(jsonDecode(response.body));
+        return Tokens(fromJson.auth, refreshToken, fromJson.csrf);
+      }()),
     // If the refresh token got rejected, there's no way to recover. Might as well log out.
     401 => TokenState.build(null),
     _ => throw HttpException(response.statusCode, response.body),

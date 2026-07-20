@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.1
+
+- Fix merging of `refresh_token`.
+
 ## 0.13.0
 
 - Update transaction/batch parsing to match TrailBase server v0.31+.

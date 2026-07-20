@@ -198,7 +198,9 @@ class ClientTest {
     assertEquals("admin@localhost", client.user()?.email)
     assertEquals("admin", client.user()?.username)
 
-    client.refreshAuthToken(true)
+    assert(client.refreshAuthToken(true))
+    assert(client.refreshAuthToken(true))
+    assert(!client.refreshAuthToken(false))
     assertNotNull(client.tokens())
 
     client.logout()

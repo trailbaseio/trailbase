@@ -537,12 +537,16 @@ public class Client {
   }
 
   /// <summary>Refresh the current auth token.</summary>
-  public async Task RefreshAuthToken(bool force = false) {
+  public async Task<bool> RefreshAuthToken(bool force = false) {
     var state = tokenState.state;
     string? refreshToken = force ? (state != null ? state.Value.Item1.refresh_token : null) : shouldRefresh(tokenState);
+
     if (refreshToken != null) {
       tokenState = await refreshTokensImpl(refreshToken);
+      return true;
     }
+
+    return false;
   }
 
   async Task<TokenState> refreshTokensImpl(string refreshToken) {
