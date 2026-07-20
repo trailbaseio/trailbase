@@ -26,12 +26,19 @@ pub async fn require_admin(req: &Request) -> Result<(), HttpError> {
 }
 
 pub async fn is_admin(user_id: &str) -> Result<bool, HttpError> {
-  let id_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
-    .decode(user_id.as_bytes())
-    .map_err(|err| {
-      log::warn!("require_admin: invalid user id encoding: {err}");
-      HttpError::status(StatusCode::INTERNAL_SERVER_ERROR)
-    })?;
+  use base64::engine::DecodePaddingMode;
+  use base64::engine::general_purpose::GeneralPurpose;
+  use base64::{Engine, alphabet, engine::general_purpose::GeneralPurposeConfig};
+
+  let engine = GeneralPurpose::new(
+    &alphabet::STANDARD,
+    GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent),
+  );
+
+  let id_bytes = engine.decode(user_id.as_bytes()).map_err(|err| {
+    log::warn!("require_admin: invalid user id encoding: {err}");
+    HttpError::status(StatusCode::INTERNAL_SERVER_ERROR)
+  })?;
 
   let rows = db::query(
     r#"SELECT admin FROM "_user" WHERE id = ?"#,

@@ -11,7 +11,7 @@ use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::sqlite::SqliteFunctionFlag;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
-use trailbase_wasm::{Guest, SqliteFunction, export};
+use trailbase_wasm::{AdminModule, Guest, SqliteFunction, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -226,6 +226,15 @@ impl Guest for Endpoints {
         &[],
       ),
     ];
+  }
+
+  fn admin_module() -> Option<AdminModule> {
+    return Some(AdminModule {
+      display_name: "testfixture_rust".to_string(),
+      icon: None,
+      config_path: None,
+      description: None,
+    });
   }
 }
 
