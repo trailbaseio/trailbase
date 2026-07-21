@@ -14,6 +14,7 @@ export class TbHtmlFragment extends HTMLElement {
       Array.from(old.attributes).forEach((attr) => {
         next.setAttribute(attr.name, attr.value);
       });
+
       next.textContent = old.textContent;
       old.parentNode?.replaceChild(next, old);
     });

@@ -106,7 +106,10 @@ const App: Component = () => {
           <Route path="/table/:table?" component={TablePage} />
           <Route path="/auth" component={AccountsPage} />
           <Route path="/wasm-modules" component={WasmModulesPage} />
-          <Route path="/wasm-modules/:name" component={WasmModuleSettingsPage} />
+          <Route
+            path="/wasm-modules/:name"
+            component={WasmModuleSettingsPage}
+          />
           <Route path="/editor" component={LazyEditorPage} />
           <Route path="/erd" component={LazyErdPage} />
           <Route path="/logs" component={LazyLogsPage} />
