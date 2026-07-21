@@ -4,6 +4,7 @@
 
 use base64::prelude::*;
 use std::sync::atomic::{AtomicI64, Ordering};
+use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::db::{Transaction, Value, execute, query};
 use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
@@ -192,8 +193,11 @@ impl Guest for Endpoints {
         };
         return Ok(BASE64_STANDARD.encode(vec));
       }),
-      routing::get("/dash", async |_req| {
-        return Ok(r#"
+      routing::get("/dash", async |req| {
+        require_admin(&req).await?;
+
+        return Ok(
+          r#"
             <html>
             <body>
                 Hello World
@@ -208,7 +212,8 @@ impl Guest for Endpoints {
                 }
             </script>
             </html>
-        "#);
+          "#,
+        );
       }),
     ];
   }
