@@ -15,18 +15,17 @@ import { fetchWasmModules } from "@/lib/api/wasm-modules";
 import type { WasmModuleEntry } from "@bindings/WasmModuleEntry";
 
 function ModuleIcon(props: { icon?: string }) {
+  const icon = () => props.icon?.trim();
+
   // Inline SVGs are injected via innerHTML so `currentColor` inherits from
   // the parent; loading through <img> isolates the SVG and breaks theming.
   return (
     <Switch fallback={<TbOutlinePuzzle size={24} />}>
-      <Match
-        when={
-          props.icon?.trimStart().startsWith("<svg") ? props.icon : undefined
-        }
-      >
+      <Match when={icon()?.startsWith("<svg") ? props.icon : undefined}>
         {(icon) => <div innerHTML={icon()} class="[&>svg]:size-6" />}
       </Match>
-      <Match when={props.icon?.startsWith("data:") ? props.icon : undefined}>
+
+      <Match when={icon()?.startsWith("data:") ? props.icon : undefined}>
         {(icon) => <img src={icon()} alt="" class="size-6" />}
       </Match>
     </Switch>
@@ -40,9 +39,10 @@ function ModuleCard(props: { module: WasmModuleEntry }) {
       props.module.icon !== null,
   );
 
+  // FIXME: should use Card component.
   return (
-    <div class="flex items-center gap-3 rounded-lg border border-border p-4">
-      <div class="flex size-10 shrink-0 items-center justify-center text-muted-foreground">
+    <div class="border-border flex items-center gap-3 rounded-lg border p-4">
+      <div class="text-muted-foreground flex size-10 shrink-0 items-center justify-center">
         <ModuleIcon icon={props.module.icon ?? undefined} />
       </div>
 
@@ -50,13 +50,13 @@ function ModuleCard(props: { module: WasmModuleEntry }) {
         <div class="flex items-baseline gap-2">
           <h3 class="truncate font-medium">{props.module.display_name}</h3>
           <Show when={hasManifest()}>
-            <span class="shrink-0 text-xs text-muted-foreground">
+            <span class="text-muted-foreground shrink-0 text-xs">
               {props.module.name}
             </span>
           </Show>
         </div>
         <Show when={props.module.description}>
-          <p class="mt-0.5 line-clamp-2 text-sm text-muted-foreground">
+          <p class="text-muted-foreground mt-0.5 line-clamp-2 text-sm">
             {props.module.description}
           </p>
         </Show>
@@ -65,7 +65,7 @@ function ModuleCard(props: { module: WasmModuleEntry }) {
       <Show when={props.module.config_path !== null}>
         <A
           href={`/wasm-modules/${props.module.name}`}
-          class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          class="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex size-8 shrink-0 items-center justify-center rounded-md transition-colors"
         >
           <TbOutlineSettings size={18} />
         </A>
@@ -98,7 +98,7 @@ export function WasmModulesPage() {
           <Show
             when={modules().length > 0}
             fallback={
-              <div class="flex h-64 flex-col items-center justify-center gap-2 text-muted-foreground">
+              <div class="text-muted-foreground flex h-64 flex-col items-center justify-center gap-2">
                 <TbOutlinePackage size={48} />
               </div>
             }
