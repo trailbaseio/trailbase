@@ -17,7 +17,7 @@ argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "p
 base64 = { workspace = true }
 bcrypt = "0.19.0"
 jsonschema = { version = "0.48.0", default-features = false }
-maxminddb = "0.29.0"
+maxminddb = "0.30.0"
 parking_lot = { workspace = true }
 quick_cache = { version = "0.7.0", default-features = false }
 regex = "1.11.0"

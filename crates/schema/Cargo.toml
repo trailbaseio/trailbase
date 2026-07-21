@@ -12,7 +12,7 @@ readme = "../../README.md"
 default = []
 
 [dependencies]
-base64 = { version = "0.22.1", default-features = false, features = ["alloc"] }
+base64 = { version = "0.23.0", default-features = false, features = ["alloc"] }
 fallible-iterator = "0.3.0"
 infer = "0.22.0"
 itertools = "0.15.0"

@@ -45,6 +45,7 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
     let command_cwd = cwd.parent().unwrap().parent().unwrap();
     let depot_path = "client/testfixture";
 
+    log::info!("Building dev server... (cold builds may take a while)");
     let _output = std::process::Command::new("cargo")
       .args(&[
         "build",
@@ -56,6 +57,7 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
       .current_dir(&command_cwd)
       .output()?;
 
+    log::info!("Starting the dev server...");
     let args = [
       "run".to_string(),
       #[cfg(feature = "ws")]
@@ -984,7 +986,13 @@ async fn file_upload_multipart_form_test() {
 }
 
 #[test]
-fn integration_test() {
+fn client_integration_test() {
+  env_logger::Builder::from_env(
+    env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,tracing::span=warn"),
+  )
+  .format_timestamp_micros()
+  .init();
+
   let _server = start_server().unwrap();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
