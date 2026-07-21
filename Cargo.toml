@@ -104,10 +104,10 @@ trailbase-wasm-runtime-axum= { path = "crates/wasm-runtime-axum", version = "0.1
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
-wasmtime = { version = "46.0.0", features = ["winch"] }
-wasmtime-wasi = { version = "46.0.0", default-features = false, features = [] }
-wasmtime-wasi-http = { version = "46.0.0", features = [] }
-wasmtime-wasi-io = { version = "46.0.0", features = [] }
+wasmtime = { version = "47.0.1", features = ["winch"] }
+wasmtime-wasi = { version = "47.0.1", default-features = false, features = [] }
+wasmtime-wasi-http = { version = "47.0.1", features = [] }
+wasmtime-wasi-io = { version = "47.0.1", features = [] }
 
 # When building TrailBase as a standalone workspace, use local submodule paths.
 # These [patch] sections are ignored when TrailBase is consumed as a dependency
