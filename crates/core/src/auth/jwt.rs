@@ -50,6 +50,10 @@ pub struct AuthTokenClaims {
   pub r#type: u8,
 
   /// Is admin user.
+  ///
+  /// WARN: This can be useful, e.g. on clients to dis/enable UI elements but this should not be
+  /// used for access-protection since it may be stale, e.g. admin privileges may have been
+  /// removed in the last few minutes.
   #[serde(default)]
   #[serde(skip_serializing_if = "std::ops::Not::not")]
   pub admin: bool,
