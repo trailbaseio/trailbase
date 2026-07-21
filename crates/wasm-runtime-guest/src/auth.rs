@@ -1,4 +1,3 @@
-use base64::Engine;
 use http::StatusCode;
 
 use crate::db::{self, Value};
