@@ -14,16 +14,44 @@ import { fetchWasmModules } from "@/lib/api/wasm-modules";
 import "./TbHtmlFragment";
 import type { TbHtmlFragment } from "./TbHtmlFragment";
 
+// export function WasmModuleSettingsIFramePage() {
+//   const params = useParams<{ name: string }>();
+//
+//   const wasmModules = useQuery(() => ({
+//     queryKey: ["wasm-modules"],
+//     queryFn: fetchWasmModules,
+//   }));
+//
+//
+//   const module = () =>
+//     wasmModules.data?.modules.find((m) => m.name === params.name);
+//
+//   const mod = module();
+//   if (!mod) return;
+//   const configPath = mod.config_path;
+//
+//   return (
+//     <Switch>
+//       <Match when={configPath}>
+//         {(cp) => (
+//           <iframe src={cp()} />
+//         )}
+//       </Match>
+//
+//       <Match when={true}>
+//         Fallback
+//       </Match>
+//     </Switch>
+//   );
+// }
+
 export function WasmModuleSettingsPage() {
   const params = useParams<{ name: string }>();
 
   const wasmModules = useQuery(() => ({
     queryKey: ["wasm-modules"],
     queryFn: fetchWasmModules,
-    // The module list doesn't change on its own during an admin session;
-    // refetching on window focus would re-inject the settings fragment and
-    // reset any unsaved state the user may have entered.
-    refetchOnWindowFocus: false,
+    // refetchOnWindowFocus: false,
   }));
 
   const module = () =>
@@ -75,12 +103,17 @@ export function WasmModuleSettingsPage() {
   const backLink = () => (
     <A
       href="/wasm-modules"
-      class="flex items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+      class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
       title="Back to WASM Modules"
     >
       <TbOutlineArrowLeft size={20} />
     </A>
   );
+
+  const path = () =>
+    import.meta.env.DEV
+      ? `http://${window.location.hostname}:4000${module()?.config_path}`
+      : module()?.config_path;
 
   return (
     <div>
@@ -95,7 +128,7 @@ export function WasmModuleSettingsPage() {
         <Switch>
           <Match when={module() === undefined}>
             <Header title="Module not found" leading={backLink()} />
-            <div class="p-4 text-muted-foreground">
+            <div class="text-muted-foreground p-4">
               No module named "{params.name}" is installed.
             </div>
           </Match>
@@ -105,7 +138,7 @@ export function WasmModuleSettingsPage() {
               title={module()?.display_name ?? params.name}
               leading={backLink()}
             />
-            <div class="p-4 text-muted-foreground">
+            <div class="text-muted-foreground p-4">
               This module has no settings page.
             </div>
           </Match>
@@ -113,6 +146,9 @@ export function WasmModuleSettingsPage() {
           <Match when={module()?.config_path}>
             <Header title={module()!.display_name} leading={backLink()} />
 
+            <iframe class="h-full w-full" src={path() ?? ""} />
+
+            {/*
             <div class="p-4">
               <Show when={fragmentState().status === "loading"}>
                 <div class="flex h-64 items-center justify-center">
@@ -129,6 +165,7 @@ export function WasmModuleSettingsPage() {
 
               <tb-html-fragment ref={(el) => (fragmentRef = el)} />
             </div>
+            */}
           </Match>
         </Switch>
       </Show>
