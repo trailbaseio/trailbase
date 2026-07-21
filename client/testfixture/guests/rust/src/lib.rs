@@ -192,6 +192,24 @@ impl Guest for Endpoints {
         };
         return Ok(BASE64_STANDARD.encode(vec));
       }),
+      routing::get("/dash", async |_req| {
+        return Ok(r#"
+            <html>
+            <body>
+                Hello World
+
+                <button type="button" onclick="test();">
+                    alert
+                </button>
+            </body>
+            <script>
+                function test() {
+                    alert("test");
+                }
+            </script>
+            </html>
+        "#);
+      }),
     ];
   }
 
@@ -232,8 +250,8 @@ impl Guest for Endpoints {
     return Some(AdminModule {
       display_name: "testfixture_rust".to_string(),
       icon: None,
-      config_path: None,
-      description: None,
+      config_path: Some("/dash".to_string()),
+      description: Some("my description".to_string()),
     });
   }
 }
