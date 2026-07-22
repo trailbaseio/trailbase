@@ -19,7 +19,7 @@ use crate::constants::{
 use crate::rand::random_alphanumeric;
 use crate::util::get_header;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Tokens {
   pub auth_token_claims: AuthTokenClaims,
   pub refresh_token: Option<String>,

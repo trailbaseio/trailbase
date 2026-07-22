@@ -199,7 +199,7 @@ impl Guest for Endpoints {
         return Ok(
           r#"
             <html>
-            <body>
+            <body style="background-color:#92a8d1;">
                 Hello World
 
                 <button type="button" onclick="test();">
