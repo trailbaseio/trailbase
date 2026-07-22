@@ -1,4 +1,11 @@
-import { createEffect, createSignal, Match, Show, Switch } from "solid-js";
+import {
+  createEffect,
+  createResource,
+  createSignal,
+  Match,
+  Show,
+  Switch,
+} from "solid-js";
 import { A, useParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import { TbOutlineArrowLeft } from "solid-icons/tb";
@@ -70,34 +77,65 @@ export function WasmModuleSettingsPage() {
   // produces a new object reference) don't wipe and re-inject the fragment.
   let loadedConfigPath: string | undefined;
 
-  createEffect(() => {
+  const configPath = () => {
     const mod = module();
     if (!mod) return;
-    const configPath = mod.config_path;
-    if (!configPath) return;
-    if (configPath === loadedConfigPath) return;
+    return mod.config_path;
+  };
 
-    setFragmentState({ status: "loading" });
+  // createEffect(() => {
+  //   const mod = module();
+  //   if (!mod) return;
+  //   const configPath = mod.config_path;
+  //   if (!configPath) return;
+  //   if (configPath === loadedConfigPath) return;
+  //
+  //   setFragmentState({ status: "loading" });
+  //
+  //   fetch(configPath, { credentials: "include" })
+  //     .then((res) => {
+  //       if (!res.ok) {
+  //         throw new Error(`HTTP ${res.status}`);
+  //       }
+  //       return res.text();
+  //     })
+  //     .then((html) => {
+  //       if (fragmentRef) {
+  //         fragmentRef.html = html;
+  //         loadedConfigPath = configPath;
+  //         setFragmentState({ status: "ready" });
+  //       }
+  //     })
+  //     .catch((err: unknown) => {
+  //       const message =
+  //         err instanceof Error ? err.message : "Failed to load settings";
+  //       setFragmentState({ status: "error", message });
+  //     });
+  // });
 
-    fetch(configPath, { credentials: "include" })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}`);
-        }
-        return res.text();
-      })
-      .then((html) => {
-        if (fragmentRef) {
-          fragmentRef.html = html;
-          loadedConfigPath = configPath;
-          setFragmentState({ status: "ready" });
-        }
-      })
-      .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : "Failed to load settings";
-        setFragmentState({ status: "error", message });
-      });
+  const dashboardPage = useQuery(() => ({
+    queryKey: ["wasm-dash", configPath()],
+    queryFn: async ({ queryKey: _ }) => {
+      const path = configPath();
+
+      if (!path) {
+        return;
+      }
+
+      const p = import.meta.env.DEV
+        ? `http://${window.location.hostname}:4000${path}`
+        : path;
+      const response = await fetch(p, { credentials: "include" });
+      return await response.text();
+    },
+  }));
+
+  createEffect(() => {
+    const body = dashboardPage.data;
+    if (body !== undefined) {
+      const iframe = document.getElementById("foobar")! as HTMLIFrameElement;
+      iframe.srcdoc = body;
+    }
   });
 
   const backLink = () => (
@@ -146,7 +184,10 @@ export function WasmModuleSettingsPage() {
           <Match when={module()?.config_path}>
             <Header title={module()!.display_name} leading={backLink()} />
 
-            <iframe class="h-full w-full" src={path() ?? ""} />
+            {/*
+            <iframe id="foobar" class="h-full w-full" src={path() ?? ""} />
+            */}
+            <iframe id="foobar" class="h-full w-full" />
 
             {/*
             <div class="p-4">
