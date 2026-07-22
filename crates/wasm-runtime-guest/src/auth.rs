@@ -30,7 +30,7 @@ pub async fn is_admin(user_id: &str) -> Result<bool, HttpError> {
   use base64::{Engine, alphabet, engine::general_purpose::GeneralPurposeConfig};
 
   let engine = GeneralPurpose::new(
-    &alphabet::STANDARD,
+    &alphabet::URL_SAFE,
     GeneralPurposeConfig::new().with_decode_padding_mode(DecodePaddingMode::Indifferent),
   );
 
