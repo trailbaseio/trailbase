@@ -6,10 +6,20 @@ import { TbOutlineArrowLeft } from "solid-icons/tb";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
 import { client } from "@/lib/client";
+import { createIsMobile } from "@/lib/signals";
 
 import { fetchWasmModules } from "@/lib/api/wasm-modules";
 
 export function WasmComponentDetails(props: { name: string }) {
+  const isMobile = createIsMobile();
+  const style = () => {
+    if (isMobile()) {
+      // Header (65px) + Navbar (48px) = 113px
+      return "h-[calc(100dvh-113px)] w-[calc(100dvw)]";
+    }
+    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)]";
+  };
+
   const wasmModules = useQuery(() => ({
     queryKey: ["wasm-components"],
     queryFn: fetchWasmModules,
@@ -46,7 +56,9 @@ export function WasmComponentDetails(props: { name: string }) {
   createEffect(() => {
     const body = dashboardPage.data;
     if (body !== undefined) {
-      const iframe = document.getElementById("foobar")! as HTMLIFrameElement;
+      const iframe = document.getElementById(
+        "wasm-iframe",
+      )! as HTMLIFrameElement;
       iframe.srcdoc = body;
     }
   });
@@ -92,7 +104,7 @@ export function WasmComponentDetails(props: { name: string }) {
           <Match when={module()?.config_path}>
             <Header title={module()!.display_name} leading={backLink()} />
 
-            <iframe id="foobar" class="h-full w-full" />
+            <iframe id="wasm-iframe" class={style()} />
           </Match>
         </Switch>
       </Show>
