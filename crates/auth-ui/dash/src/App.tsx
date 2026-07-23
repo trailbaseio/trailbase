@@ -1,37 +1,44 @@
-// import { createSignal } from "solid-js";
 import { initClientFromCookies, Client, initClient } from "trailbase";
 import type { Tokens } from "trailbase";
 
 function App() {
   return (
-    <div class="h-full w-full bg-red-200">
-      <section id="center">
-        <h1>Auth UI</h1>
-
+    <div class="flex h-full w-full flex-col gap-2 bg-red-200 p-4">
+      <div class="rounded bg-white p-2">
         <p>
-          {window.innerWidth}x{window.innerHeight} (WxH)
+          update or reinstall with{" "}
+          <span class="font-mono">
+            {" trail components add trailbase/auth_ui "}
+          </span>
         </p>
-      </section>
+      </div>
+
+      <p>
+        {window.innerWidth}x{window.innerHeight} (WxH)
+      </p>
     </div>
   );
 }
 
 async function test() {
-  console.debug(import.meta.env.DEV, document.cookie, localStorage);
+  const base = document.head.baseURI;
+  console.debug(import.meta.env.DEV, base, document.cookie, localStorage);
   const authTokens: string | null = localStorage.getItem("auth_tokens");
 
   let client: Client | UnderlyingDefaultSource;
   if (authTokens !== null) {
     const tokens: Tokens = JSON.parse(authTokens);
 
-    client = initClient(document.head.baseURI, {
-      tokens,
-    });
+    client = initClient(base, { tokens });
   } else {
     client = await initClientFromCookies();
   }
 
   console.log("TOKENS: ", client.tokens());
+
+  const response = await client.fetch("_/auth/admin/settings/");
+  const settings = await response.json();
+  console.log("SETTINGS:", settings);
 }
 
 test();

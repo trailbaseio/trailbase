@@ -76,6 +76,9 @@ export function WasmComponentDetails(props: { name: string }) {
         body = body.replace(`<base href="" />`, x);
       }
 
+      iframe.onload = (_ev) => {
+        console.log("loaded", iframe.contentDocument);
+      }
       iframe.srcdoc = body;
     }
   });

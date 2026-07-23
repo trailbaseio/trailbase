@@ -3,10 +3,11 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use askama::Template;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use trailbase_auth_config::AuthConfig;
 use trailbase_wasm::auth::require_admin;
+use trailbase_wasm::db::{Value, execute, query};
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -110,16 +111,8 @@ impl Guest for Endpoints {
       // NOTE: {*wildcard} is not optional, we thus require double registration.
       routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
       routing::get("/_/auth/admin/ui/{*wildcard}", admin_dashboard_handler),
-      routing::post(
-        "/_/auth/admin/settings/{*wildcard}",
-        async |req: Request| {
-          eprintln!("/_/auth/admin/settings: {req:?}");
-
-          require_admin(&req).await?;
-
-          return Ok("".to_string());
-        },
-      ),
+      routing::get("/_/auth/admin/settings/", get_settings_handler),
+      routing::post("/_/auth/admin/settings/", set_settings_handler),
     ];
   }
 
@@ -485,6 +478,65 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
 
   return response_builder
     .body(file.data.into_body())
+    .map_err(internal);
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct Settings {}
+
+async fn read_settings() -> Result<Settings, HttpError> {
+  // QUESTION: Should it be the components responsibility. Eventually with a strict capabilities
+  // system it probably should not.
+  let Ok(cells) = query(
+    "SELECT value FROM _settings WHERE component = \"auth-ui\"",
+    vec![],
+  )
+  .await
+  else {
+    eprintln!("fallback settings");
+    return Ok(Settings {});
+  };
+
+  let Value::Text(ref text) = cells[0][0] else {
+    return Err(internal("failed"));
+  };
+
+  return serde_json::from_str(text).map_err(internal);
+}
+
+async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
+  require_admin(&req).await?;
+
+  let settings = read_settings().await?;
+
+  return Response::builder()
+    .header(header::CONTENT_TYPE, "application/json")
+    .body(
+      serde_json::to_string(&settings)
+        .map_err(internal)?
+        .into_body(),
+    )
+    .map_err(internal);
+}
+
+async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
+  require_admin(&req).await?;
+
+  let body = req.body().bytes().await.map_err(internal)?;
+  let settings: Settings = serde_json::from_slice(&body).map_err(internal)?;
+  let str = serde_json::to_string(&settings).map_err(internal)?;
+
+  // FIXME: Doesn't work with Postgres.
+  execute(
+    "INSERT OR REPLACE _settings (component, values) VALUES (\"auth-ui\", ?1)",
+    vec![Value::Text(str)],
+  )
+  .await
+  .map_err(internal)?;
+
+  return Response::builder()
+    .header(header::CONTENT_TYPE, "application/json")
+    .body("Ok".into_body())
     .map_err(internal);
 }
 
