@@ -6,12 +6,13 @@ use askama::Template;
 use serde::Deserialize;
 use std::sync::LazyLock;
 use trailbase_auth_config::AuthConfig;
+use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
 };
 use trailbase_wasm::kv::Store;
-use trailbase_wasm::{Guest, export};
+use trailbase_wasm::{AdminModule, Guest, export};
 
 mod auth;
 
@@ -106,7 +107,26 @@ impl Guest for Endpoints {
         )
         .await;
       }),
+      routing::get("/_/auth/admin/ui", async |req: Request| {
+        require_admin(&req).await?;
+
+        return Ok("".to_string());
+      }),
+      routing::post("/_/auth/admin/settings", async |req: Request| {
+        require_admin(&req).await?;
+
+        return Ok("".to_string());
+      }),
     ];
+  }
+
+  fn admin_module() -> Option<AdminModule> {
+    return Some(AdminModule {
+      display_name: "Auth UI".to_string(),
+      icon: Some(AUTH_ICON.to_string()),
+      config_path: Some("/_/auth/admin/ui".to_string()),
+      description: Some("1st party authentication UI.".to_string()),
+    });
   }
 }
 
@@ -473,3 +493,12 @@ const REGISTER_USER_UI: &str = "/_/auth/register";
 const CHANGE_PASSWORD_UI: &str = "/_/auth/change_password";
 const CHANGE_EMAIL_UI: &str = "/_/auth/change_email";
 const CHANGE_USERNAME_UI: &str = "/_/auth/change_username";
+
+const AUTH_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-user-key">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+  <path d="M6 21v-2a4 4 0 0 1 4 -4h5" />
+  <path d="M18.5 18.5l-3.5 3.5l-1.5 -1.5" />
+  <path d="M18.554 18.414a2 2 0 1 1 2.828 -2.828a2 2 0 0 1 -2.828 2.828" />
+  <path d="M16 19l1 1" />
+</svg>"##;
