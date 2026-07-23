@@ -77,7 +77,8 @@ export function WasmComponentDetails(props: { name: string }) {
       }
 
       iframe.onload = (_ev) => {
-        console.log("loaded", iframe.contentDocument);
+        // Will be called after `srcdoc` was parsed and built.
+        console.debug("loaded", iframe.contentDocument);
       }
       iframe.srcdoc = body;
     }
