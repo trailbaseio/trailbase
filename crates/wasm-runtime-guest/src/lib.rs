@@ -33,6 +33,7 @@ pub mod fs;
 pub mod http;
 pub mod job;
 pub mod kv;
+pub mod prefs;
 pub mod time;
 
 use std::sync::OnceLock;
@@ -347,5 +348,28 @@ fn to_method_type(m: Method) -> trailbase_wasm_common::manifest::HttpMethodType 
     Method::TRACE => HttpMethodType::Trace,
     Method::CONNECT => HttpMethodType::Connect,
     _ => panic!("unknown http method type: {m}"),
+  };
+}
+
+pub struct Name {
+  name: &'static str,
+}
+
+impl Name {
+  pub fn __init(name: &'static str) -> Self {
+    return Name { name };
+  }
+}
+
+impl From<Name> for &'static str {
+  fn from(n: Name) -> &'static str {
+    return n.name;
+  }
+}
+
+#[macro_export]
+macro_rules! crate_name {
+  () => {
+    trailbase_wasm::Name::__init(::core::env!("CARGO_PKG_NAME"))
   };
 }

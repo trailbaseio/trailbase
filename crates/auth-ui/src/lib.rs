@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use trailbase_auth_config::AuthConfig;
 use trailbase_wasm::auth::require_admin;
-use trailbase_wasm::db::{Value, execute, query};
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -482,26 +481,19 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
-pub struct Settings {}
+pub struct AuthState {}
 
-async fn read_settings() -> Result<Settings, HttpError> {
-  // QUESTION: Should it be the components responsibility. Eventually with a strict capabilities
-  // system it probably should not.
-  let Ok(cells) = query(
-    "SELECT value FROM _settings WHERE component = \"auth-ui\"",
-    vec![],
-  )
-  .await
-  else {
-    eprintln!("fallback settings");
-    return Ok(Settings {});
+async fn read_settings() -> Result<AuthState, HttpError> {
+  return match trailbase_wasm::prefs::get_prefs(&trailbase_wasm::crate_name!())
+    .await
+    .map_err(internal)?
+  {
+    Some(value) => serde_json::from_str(&value).map_err(internal),
+    None => {
+      eprintln!("fallback settings");
+      Ok(AuthState {})
+    }
   };
-
-  let Value::Text(ref text) = cells[0][0] else {
-    return Err(internal("failed"));
-  };
-
-  return serde_json::from_str(text).map_err(internal);
 }
 
 async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
@@ -523,16 +515,12 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
   require_admin(&req).await?;
 
   let body = req.body().bytes().await.map_err(internal)?;
-  let settings: Settings = serde_json::from_slice(&body).map_err(internal)?;
+  let settings: AuthState = serde_json::from_slice(&body).map_err(internal)?;
   let str = serde_json::to_string(&settings).map_err(internal)?;
 
-  // FIXME: Doesn't work with Postgres.
-  execute(
-    "INSERT OR REPLACE _settings (component, values) VALUES (\"auth-ui\", ?1)",
-    vec![Value::Text(str)],
-  )
-  .await
-  .map_err(internal)?;
+  trailbase_wasm::prefs::set_prefs(&trailbase_wasm::crate_name!(), str)
+    .await
+    .map_err(internal)?;
 
   return Response::builder()
     .header(header::CONTENT_TYPE, "application/json")
@@ -581,3 +569,13 @@ const AUTH_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" h
   <path d="M18.554 18.414a2 2 0 1 1 2.828 -2.828a2 2 0 0 1 -2.828 2.828" />
   <path d="M16 19l1 1" />
 </svg>"##;
+
+#[cfg(test)]
+mod tests {
+  #[test]
+  fn test_name() {
+    let name = trailbase_wasm::crate_name!();
+    let name_str: &'static str = name.into();
+    assert_eq!("trailbase-auth-ui-component", name_str);
+  }
+}
