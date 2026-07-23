@@ -2,6 +2,7 @@ packages:
   - 'client/testfixture/guests/typescript'
   - 'crates/assets/js/admin'
   - 'crates/assets/js/client'
+  - 'crates/auth-ui/dash'
   - 'crates/auth-ui/ui'
   - 'docs'
   - 'docs/examples/record_api_ts'
