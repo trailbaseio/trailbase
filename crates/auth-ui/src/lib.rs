@@ -107,16 +107,19 @@ impl Guest for Endpoints {
         )
         .await;
       }),
-      routing::get("/_/auth/admin/ui", async |req: Request| {
-        require_admin(&req).await?;
+      // NOTE: {*wildcard} is not optional, we thus require double registration.
+      routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
+      routing::get("/_/auth/admin/ui/{*wildcard}", admin_dashboard_handler),
+      routing::post(
+        "/_/auth/admin/settings/{*wildcard}",
+        async |req: Request| {
+          eprintln!("/_/auth/admin/settings: {req:?}");
 
-        return Ok("".to_string());
-      }),
-      routing::post("/_/auth/admin/settings", async |req: Request| {
-        require_admin(&req).await?;
+          require_admin(&req).await?;
 
-        return Ok("".to_string());
-      }),
+          return Ok("".to_string());
+        },
+      ),
     ];
   }
 
@@ -124,7 +127,7 @@ impl Guest for Endpoints {
     return Some(AdminModule {
       display_name: "Auth UI".to_string(),
       icon: Some(AUTH_ICON.to_string()),
-      config_path: Some("/_/auth/admin/ui".to_string()),
+      config_path: Some("/_/auth/admin/ui/".to_string()),
       description: Some("1st party authentication UI.".to_string()),
     });
   }
@@ -449,6 +452,30 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
     p => auth::AuthAssets::get(p),
   }
   .ok_or_else(|| HttpError::message(StatusCode::NOT_FOUND, "Not found"))?;
+
+  let response_builder = Response::builder()
+    .header(header::CACHE_CONTROL, "public")
+    .header(header::CACHE_CONTROL, "max-age=604800")
+    .header(header::CACHE_CONTROL, "immutable")
+    .header(header::CONTENT_TYPE, file.metadata.mimetype());
+
+  return response_builder
+    .body(file.data.into_body())
+    .map_err(internal);
+}
+
+async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
+  let p = req.path_param("wildcard");
+  let file = auth::DashboardAssets::get(p.unwrap_or("index.html"));
+
+  eprintln!("/_/auth/admin/ui: {req:?}, {p:?}, {}", file.is_some());
+
+  // TODO: Move this back up.
+  require_admin(&req).await?;
+
+  let Some(file) = file else {
+    return Err(HttpError::message(StatusCode::NOT_FOUND, "Not found"));
+  };
 
   let response_builder = Response::builder()
     .header(header::CACHE_CONTROL, "public")
