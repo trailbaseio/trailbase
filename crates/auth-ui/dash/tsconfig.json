@@ -10,7 +10,8 @@
     "jsxImportSource": "solid-js",
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@bindings/*": ["../../assets/js/bindings/*"]
     }
   },
   "exclude": ["dist/", "node_modules/", "public/"]
