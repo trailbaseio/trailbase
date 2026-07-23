@@ -11,6 +11,8 @@ import { createIsMobile } from "@/lib/signals";
 import { fetchWasmModules } from "@/lib/api/wasm-modules";
 
 export function WasmComponentDetails(props: { name: string }) {
+  let iframe: HTMLIFrameElement | undefined;
+
   const isMobile = createIsMobile();
   const style = () => {
     if (isMobile()) {
@@ -35,30 +37,45 @@ export function WasmComponentDetails(props: { name: string }) {
     return mod.config_path;
   };
 
+  const source = () => {
+    const path = configPath();
+
+    if (!path) {
+      return;
+    }
+    return import.meta.env.DEV
+      ? `http://${window.location.hostname}:4000${path}`
+      : path;
+  };
+
   const dashboardPage = useQuery(() => ({
     queryKey: ["wasm-dash", configPath()],
     queryFn: async ({ queryKey: _ }) => {
-      const path = configPath();
-
-      if (!path) {
+      const src = source();
+      if (!src) {
         return;
       }
 
-      const p = import.meta.env.DEV
-        ? `http://${window.location.hostname}:4000${path}`
-        : path;
-
-      const response = await fetch(p, { headers: client.headers() });
+      const response = await fetch(src, { headers: client.headers() });
       return await response.text();
     },
   }));
 
   createEffect(() => {
-    const body = dashboardPage.data;
+    let body = dashboardPage.data;
     if (body !== undefined) {
-      const iframe = document.getElementById(
-        "wasm-iframe",
-      )! as HTMLIFrameElement;
+      if (iframe === undefined) {
+        console.error("iframe not bound");
+        return;
+      }
+
+      // FIXME: Ultra hacky, requires the guest app to be set-up appropriately.
+      // That said, should only be required in DEV mode :/
+      if (import.meta.env.DEV) {
+        const x = `<base href="http://${window.location.hostname}:4000/">`;
+        body = body.replace(`<base href="">`, x);
+      }
+
       iframe.srcdoc = body;
     }
   });
@@ -104,7 +121,16 @@ export function WasmComponentDetails(props: { name: string }) {
           <Match when={module()?.config_path}>
             <Header title={module()!.display_name} leading={backLink()} />
 
-            <iframe id="wasm-iframe" class={style()} />
+            <div class={style()}>
+              <iframe
+                ref={iframe}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "block",
+                }}
+              />
+            </div>
           </Match>
         </Switch>
       </Show>

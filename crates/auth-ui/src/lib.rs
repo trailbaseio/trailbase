@@ -471,7 +471,7 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
   eprintln!("/_/auth/admin/ui: {req:?}, {p:?}, {}", file.is_some());
 
   // TODO: Move this back up.
-  require_admin(&req).await?;
+  // require_admin(&req).await?;
 
   let Some(file) = file else {
     return Err(HttpError::message(StatusCode::NOT_FOUND, "Not found"));

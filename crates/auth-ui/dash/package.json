@@ -10,7 +10,8 @@
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "dependencies": {
-    "solid-js": "^1.9.13"
+    "solid-js": "^1.9.13",
+    "trailbase": "file:../../assets/js/client"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
