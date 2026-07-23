@@ -15,5 +15,12 @@ fn main() -> std::io::Result<()> {
     trailbase_build::build_js(path)?;
   }
 
+  {
+    let path = base.join("dash");
+    trailbase_build::rerun_if_changed(path.join("src"));
+
+    trailbase_build::build_js(path)?;
+  }
+
   return Ok(());
 }

@@ -3,15 +3,17 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use askama::Template;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::LazyLock;
 use trailbase_auth_config::AuthConfig;
+use trailbase_wasm::auth::require_admin;
+use trailbase_wasm::db::{Value, execute, query};
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
 };
 use trailbase_wasm::kv::Store;
-use trailbase_wasm::{Guest, export};
+use trailbase_wasm::{AdminModule, Guest, export};
 
 mod auth;
 
@@ -106,7 +108,21 @@ impl Guest for Endpoints {
         )
         .await;
       }),
+      // NOTE: {*wildcard} is not optional, we thus require double registration.
+      routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
+      routing::get("/_/auth/admin/ui/{*wildcard}", admin_dashboard_handler),
+      routing::get("/_/auth/admin/settings/", get_settings_handler),
+      routing::post("/_/auth/admin/settings/", set_settings_handler),
     ];
+  }
+
+  fn admin_module() -> Option<AdminModule> {
+    return Some(AdminModule {
+      display_name: "Auth UI".to_string(),
+      icon: Some(AUTH_ICON.to_string()),
+      config_path: Some("/_/auth/admin/ui/".to_string()),
+      description: Some("1st party authentication UI.".to_string()),
+    });
   }
 }
 
@@ -441,6 +457,89 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
+async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
+  let p = req.path_param("wildcard");
+  let file = auth::DashboardAssets::get(p.unwrap_or("index.html"));
+
+  eprintln!("/_/auth/admin/ui: {req:?}, {p:?}, {}", file.is_some());
+
+  // TODO: Move this back up.
+  // require_admin(&req).await?;
+
+  let Some(file) = file else {
+    return Err(HttpError::message(StatusCode::NOT_FOUND, "Not found"));
+  };
+
+  let response_builder = Response::builder()
+    .header(header::CACHE_CONTROL, "public")
+    .header(header::CACHE_CONTROL, "max-age=604800")
+    .header(header::CACHE_CONTROL, "immutable")
+    .header(header::CONTENT_TYPE, file.metadata.mimetype());
+
+  return response_builder
+    .body(file.data.into_body())
+    .map_err(internal);
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct Settings {}
+
+async fn read_settings() -> Result<Settings, HttpError> {
+  // QUESTION: Should it be the components responsibility. Eventually with a strict capabilities
+  // system it probably should not.
+  let Ok(cells) = query(
+    "SELECT value FROM _settings WHERE component = \"auth-ui\"",
+    vec![],
+  )
+  .await
+  else {
+    eprintln!("fallback settings");
+    return Ok(Settings {});
+  };
+
+  let Value::Text(ref text) = cells[0][0] else {
+    return Err(internal("failed"));
+  };
+
+  return serde_json::from_str(text).map_err(internal);
+}
+
+async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
+  require_admin(&req).await?;
+
+  let settings = read_settings().await?;
+
+  return Response::builder()
+    .header(header::CONTENT_TYPE, "application/json")
+    .body(
+      serde_json::to_string(&settings)
+        .map_err(internal)?
+        .into_body(),
+    )
+    .map_err(internal);
+}
+
+async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
+  require_admin(&req).await?;
+
+  let body = req.body().bytes().await.map_err(internal)?;
+  let settings: Settings = serde_json::from_slice(&body).map_err(internal)?;
+  let str = serde_json::to_string(&settings).map_err(internal)?;
+
+  // FIXME: Doesn't work with Postgres.
+  execute(
+    "INSERT OR REPLACE _settings (component, values) VALUES (\"auth-ui\", ?1)",
+    vec![Value::Text(str)],
+  )
+  .await
+  .map_err(internal)?;
+
+  return Response::builder()
+    .header(header::CONTENT_TYPE, "application/json")
+    .body("Ok".into_body())
+    .map_err(internal);
+}
+
 #[allow(unused)]
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
@@ -473,3 +572,12 @@ const REGISTER_USER_UI: &str = "/_/auth/register";
 const CHANGE_PASSWORD_UI: &str = "/_/auth/change_password";
 const CHANGE_EMAIL_UI: &str = "/_/auth/change_email";
 const CHANGE_USERNAME_UI: &str = "/_/auth/change_username";
+
+const AUTH_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-user-key">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+  <path d="M6 21v-2a4 4 0 0 1 4 -4h5" />
+  <path d="M18.5 18.5l-3.5 3.5l-1.5 -1.5" />
+  <path d="M18.554 18.414a2 2 0 1 1 2.828 -2.828a2 2 0 0 1 -2.828 2.828" />
+  <path d="M16 19l1 1" />
+</svg>"##;
