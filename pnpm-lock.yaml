@@ -302,6 +302,9 @@ importers:
       solid-js:
         specifier: ^1.9.13
         version: 1.9.14
+      trailbase:
+        specifier: file:../../assets/js/client
+        version: link:../../assets/js/client
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
