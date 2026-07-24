@@ -480,7 +480,7 @@ async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
 pub struct AuthState {}
 
 async fn read_settings() -> Result<AuthState, HttpError> {
-  return match trailbase_wasm::prefs::get_prefs(&trailbase_wasm::crate_name!(), SETTINGS_KEY)
+  return match trailbase_wasm::prefs::get_prefs(SETTINGS_KEY)
     .await
     .map_err(internal)?
   {
@@ -514,7 +514,7 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
   let settings: AuthState = serde_json::from_slice(&body).map_err(internal)?;
   let value = serde_json::to_string(&settings).map_err(internal)?;
 
-  trailbase_wasm::prefs::set_prefs(&trailbase_wasm::crate_name!(), SETTINGS_KEY, value)
+  trailbase_wasm::prefs::set_prefs(SETTINGS_KEY, Some(value))
     .await
     .map_err(internal)?;
 
@@ -567,13 +567,3 @@ const AUTH_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" h
 </svg>"##;
 
 const SETTINGS_KEY: &str = "settings";
-
-#[cfg(test)]
-mod tests {
-  #[test]
-  fn test_name() {
-    let name = trailbase_wasm::crate_name!();
-    let name_str: &'static str = name.into();
-    assert_eq!("trailbase-auth-ui-component", name_str);
-  }
-}
