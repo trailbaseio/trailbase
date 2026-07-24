@@ -285,9 +285,9 @@ impl HttpStore {
       let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
         version: args.version.clone(),
         subsystems: Some(vec![
+          trailbase_wasm_common::manifest::Subsystem::Metadata,
           trailbase_wasm_common::manifest::Subsystem::Http,
           trailbase_wasm_common::manifest::Subsystem::Jobs,
-          trailbase_wasm_common::manifest::Subsystem::AdminModule,
         ]),
       })?;
 

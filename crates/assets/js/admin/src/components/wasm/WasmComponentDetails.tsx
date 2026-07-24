@@ -8,9 +8,9 @@ import { Spinner } from "@/components/Spinner";
 import { client } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 
-import { fetchWasmModules } from "@/lib/api/wasm-modules";
+import type { WasmComponent } from "@bindings/WasmComponent";
 
-export function WasmComponentDetails(props: { name: string }) {
+export function WasmComponentDetails(props: { component: WasmComponent }) {
   let iframe: HTMLIFrameElement | undefined;
 
   const isMobile = createIsMobile();
@@ -22,34 +22,20 @@ export function WasmComponentDetails(props: { name: string }) {
     return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)]";
   };
 
-  const wasmModules = useQuery(() => ({
-    queryKey: ["wasm-components"],
-    queryFn: fetchWasmModules,
-    // refetchOnWindowFocus: false,
-  }));
-
-  const module = () =>
-    wasmModules.data?.modules.find((m) => m.name === props.name);
-
-  const configPath = () => {
-    const mod = module();
-    if (!mod) return;
-    return mod.config_path;
-  };
-
   const source = () => {
-    const path = configPath();
-
+    const path = props.component.admin_ui_path;
     if (!path) {
       return;
     }
+
+    // Fix up for separate dev server.
     return import.meta.env.DEV
       ? `http://${window.location.hostname}:4000${path}`
       : path;
   };
 
   const dashboardPage = useQuery(() => ({
-    queryKey: ["wasm-dash", configPath()],
+    queryKey: ["wasm-dash", props.component.admin_ui_path],
     queryFn: async ({ queryKey: _ }) => {
       const src = source();
       if (!src) {
@@ -69,17 +55,20 @@ export function WasmComponentDetails(props: { name: string }) {
         return;
       }
 
-      // FIXME: Ultra hacky, requires the guest app to be set-up appropriately.
-      // That said, should only be required in DEV mode :/
+      // NOTE: Ultra hacky, this requires the guest UI to be set-up appropriately,
+      // however this is only relevant for components that should work in a
+      // separate dev server for the admin UI.
       if (import.meta.env.DEV) {
-        const x = `base href="http://${window.location.hostname}:4000/"`;
-        body = body.replace(`base href=""`, x);
+        body = body.replace(
+          `base href=""`,
+          `base href="http://${window.location.hostname}:4000/"`,
+        );
       }
 
       iframe.onload = (_ev) => {
         // Will be called after `srcdoc` was parsed and built.
         console.debug("loaded", iframe.contentDocument);
-      }
+      };
       iframe.srcdoc = body;
     }
   });
@@ -95,49 +84,34 @@ export function WasmComponentDetails(props: { name: string }) {
   );
 
   return (
-    <div>
-      <Show
-        when={!wasmModules.isLoading}
-        fallback={
-          <div class="flex h-64 items-center justify-center">
-            <Spinner size={32} class="text-muted-foreground" />
-          </div>
-        }
-      >
-        <Switch>
-          <Match when={module() === undefined}>
-            <Header title="Module not found" leading={backLink()} />
-            <div class="text-muted-foreground p-4">
-              No module named "{props.name}" is installed.
-            </div>
-          </Match>
+    <Switch>
+      <Match when={props.component.admin_ui_path === undefined}>
+        <Header
+          title={props.component.display_name ?? props.component.name}
+          leading={backLink()}
+        />
+        <div class="text-muted-foreground p-4">
+          This module has no settings page.
+        </div>
+      </Match>
 
-          <Match when={!module()?.config_path}>
-            <Header
-              title={module()?.display_name ?? props.name}
-              leading={backLink()}
-            />
-            <div class="text-muted-foreground p-4">
-              This module has no settings page.
-            </div>
-          </Match>
+      <Match when={true}>
+        <Header
+          title={props.component.display_name ?? props.component.name}
+          leading={backLink()}
+        />
 
-          <Match when={module()?.config_path}>
-            <Header title={module()!.display_name} leading={backLink()} />
-
-            <div class={style()}>
-              <iframe
-                ref={iframe}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  display: "block",
-                }}
-              />
-            </div>
-          </Match>
-        </Switch>
-      </Show>
-    </div>
+        <div class={style()}>
+          <iframe
+            ref={iframe}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+            }}
+          />
+        </div>
+      </Match>
+    </Switch>
   );
 }

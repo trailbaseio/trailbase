@@ -12,7 +12,7 @@ use trailbase_wasm::http::{
   User, header, routing,
 };
 use trailbase_wasm::kv::Store;
-use trailbase_wasm::{AdminModule, Guest, export};
+use trailbase_wasm::{Guest, Metadata, export};
 
 mod auth;
 
@@ -116,12 +116,13 @@ impl Guest for Endpoints {
     ];
   }
 
-  fn admin_module() -> Option<AdminModule> {
-    return Some(AdminModule {
-      display_name: "Auth UI".to_string(),
+  fn metadata() -> Option<Metadata> {
+    return Some(Metadata {
+      display_name: Some("Auth UI".to_string()),
       icon: Some(AUTH_ICON.to_string()),
-      config_path: Some("/_/auth/admin/ui/".to_string()),
       description: Some("1st party authentication UI.".to_string()),
+      admin_ui_path: Some("/_/auth/admin/ui/".to_string()),
+      ..Default::default()
     });
   }
 }
