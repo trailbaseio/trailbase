@@ -99,6 +99,7 @@ impl WasiView for State {
 
 pub(crate) struct Hooks {
   pub shared: Arc<SharedState>,
+  pub wasm_source_file: PathBuf,
 }
 
 impl WasiHttpHooks for Hooks {
@@ -120,14 +121,43 @@ impl WasiHttpHooks for Hooks {
       Some("__sqlite") => {
         let conn = self.shared.conn.clone().ok_or_else(|| {
           debug_assert!(false, "missing SQLite connection");
+
           wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
             "missing SQLite connection".to_string(),
           ))
         })?;
+
         Ok(
           wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
             wasmtime_wasi::runtime::spawn(async move {
               Ok(crate::sqlite::handle_sqlite_request(conn, request).await)
+            }),
+          ),
+        )
+      }
+      Some("__prefs") => {
+        let component_name = match crate::component_path_to_name(&self.wasm_source_file) {
+          Ok(name) => name,
+          Err(err) => {
+            return Err(
+              wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(err))
+                .into(),
+            );
+          }
+        };
+
+        let conn = self.shared.conn.clone().ok_or_else(|| {
+          debug_assert!(false, "missing SQLite connection");
+
+          wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
+            "missing SQLite connection".to_string(),
+          ))
+        })?;
+
+        Ok(
+          wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
+            wasmtime_wasi::runtime::spawn(async move {
+              Ok(crate::prefs::handle_prefs_request(conn, component_name, request).await)
             }),
           ),
         )

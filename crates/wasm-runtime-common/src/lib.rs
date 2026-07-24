@@ -26,6 +26,19 @@ pub enum SqliteResponse {
   TxRollback,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum PrefsRequest {
+  Get { key: String },
+  Set { key: String, value: Option<String> },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+pub enum PrefsResponse {
+  Ok,
+  Value(Option<String>),
+  Error(String),
+}
+
 /// Used to pass extra information from host to guest via an HTTP request header "__context".
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 #[ts(export)]

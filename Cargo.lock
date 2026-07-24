@@ -8526,6 +8526,7 @@ name = "trailbase-wasm-runtime-host"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "const_format",
  "futures-util",
  "http",
  "http-body-util",

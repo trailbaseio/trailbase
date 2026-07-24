@@ -4,6 +4,7 @@
 
 pub mod functions;
 mod host;
+mod prefs;
 mod sqlite;
 
 use bytes::Bytes;
@@ -57,7 +58,7 @@ pub struct RuntimeOptions {
 }
 
 pub trait StoreBuilder<S> {
-  fn new_store(&self, engine: &Engine) -> Result<Store<S>, Error>;
+  fn new_store(&self, engine: &Engine, wasm_source_file: PathBuf) -> Result<Store<S>, Error>;
 }
 
 // NOTE: A better name may be Component.
@@ -65,9 +66,9 @@ struct RuntimeInternal<T: StoreBuilder<State>> {
   engine: Engine,
   linker: Linker<State>,
 
-  component: Component,
   /// Path to original .wasm component file.
   component_path: PathBuf,
+  component: Component,
 
   store_builder: T,
 
@@ -145,8 +146,8 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
     let state = Arc::new(RuntimeInternal {
       engine,
       linker,
-      component,
       component_path: wasm_source_file,
+      component,
       store_builder,
       rt_handle,
       local_in_flight: AtomicUsize::new(0),
@@ -160,7 +161,10 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
   }
 
   async fn new_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
-    let mut store = self.state.store_builder.new_store(&self.state.engine)?;
+    let mut store = self
+      .state
+      .store_builder
+      .new_store(&self.state.engine, self.component_path().clone())?;
 
     let instance_pre = self
       .state
@@ -202,7 +206,7 @@ pub struct InitArgs {
 }
 
 impl StoreBuilder<State> for Arc<SharedState> {
-  fn new_store(&self, engine: &Engine) -> Result<Store<State>, Error> {
+  fn new_store(&self, engine: &Engine, wasm_source_file: PathBuf) -> Result<Store<State>, Error> {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
     wasi_ctx.stdin(wasmtime_wasi::p2::pipe::ClosedInputStream);
@@ -228,6 +232,7 @@ impl StoreBuilder<State> for Arc<SharedState> {
         http_ctx: WasiHttpCtx::new(),
         hooks: host::Hooks {
           shared: self.clone(),
+          wasm_source_file,
         },
         kv: WasiKeyValueCtx::new(self.kv_store.clone()),
         #[allow(deprecated)]
@@ -338,7 +343,7 @@ impl HttpStore {
           .rt
           .state
           .store_builder
-          .new_store(&state.rt.state.engine)?;
+          .new_store(&state.rt.state.engine, state.rt.component_path().clone())?;
         // let (mut lock, _bindings) = state.rt.new_bindings().await?;
 
         let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
@@ -498,6 +503,17 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   return config;
 }
 
+#[inline]
+pub fn component_path_to_name(path: &PathBuf) -> Result<String, String> {
+  return Ok(
+    path
+      .file_stem()
+      .and_then(|s| s.to_str())
+      .ok_or_else(|| "unknown".to_string())?
+      .to_string(),
+  );
+}
+
 // fn bytes_to_response(
 //   bytes: Vec<u8>,
 // ) -> Result<wasmtime_wasi_http::types::HostFutureIncomingResponse, ErrorCode> {
@@ -524,7 +540,7 @@ const ABI_MISMATCH_WARNING: &str = "\
     to run more up-to-date components.\n\
     First-party components can be updated easily by running `$ trail components update` or downloaded from: \
     https://github.com/trailbaseio/trailbase/releases.";
-//
+
 #[cfg(test)]
 mod tests {
   use super::*;
