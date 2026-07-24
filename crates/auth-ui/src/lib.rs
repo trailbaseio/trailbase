@@ -480,7 +480,7 @@ async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
 pub struct AuthState {}
 
 async fn read_settings() -> Result<AuthState, HttpError> {
-  return match trailbase_wasm::prefs::get_prefs(&trailbase_wasm::crate_name!())
+  return match trailbase_wasm::prefs::get_prefs(&trailbase_wasm::crate_name!(), SETTINGS_KEY)
     .await
     .map_err(internal)?
   {
@@ -512,9 +512,9 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
 
   let body = req.body().bytes().await.map_err(internal)?;
   let settings: AuthState = serde_json::from_slice(&body).map_err(internal)?;
-  let str = serde_json::to_string(&settings).map_err(internal)?;
+  let value = serde_json::to_string(&settings).map_err(internal)?;
 
-  trailbase_wasm::prefs::set_prefs(&trailbase_wasm::crate_name!(), str)
+  trailbase_wasm::prefs::set_prefs(&trailbase_wasm::crate_name!(), SETTINGS_KEY, value)
     .await
     .map_err(internal)?;
 
@@ -565,6 +565,8 @@ const AUTH_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" h
   <path d="M18.554 18.414a2 2 0 1 1 2.828 -2.828a2 2 0 0 1 -2.828 2.828" />
   <path d="M16 19l1 1" />
 </svg>"##;
+
+const SETTINGS_KEY: &str = "settings";
 
 #[cfg(test)]
 mod tests {

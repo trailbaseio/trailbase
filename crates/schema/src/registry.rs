@@ -1,10 +1,13 @@
-use schemars::schema_for;
+use schemars::{JsonSchema, schema_for};
 use std::sync::Arc;
 
 pub use trailbase_extension::jsonschema::{JsonSchemaRegistry, Schema};
 
 use crate::error::Error;
 use crate::file::{FileUpload, FileUploads};
+
+#[derive(Debug, Default, Clone, PartialEq, JsonSchema)]
+struct KeyValue(std::collections::BTreeMap<String, String>);
 
 pub fn build_json_schema_registry(
   schemas: Vec<(String, serde_json::Value)>,
@@ -53,6 +56,10 @@ fn builtin_schemas() -> Vec<(String, Schema)> {
     (
       "std.FileUploads".to_string(),
       Schema::from(schema_for!(FileUploads).to_value(), None, true).expect("infallible"),
+    ),
+    (
+      "std.KeyValue".to_string(),
+      Schema::from(schema_for!(KeyValue).to_value(), None, true).expect("infallible"),
     ),
   ];
 }

@@ -38,6 +38,7 @@ mod wasm {
   use std::path::PathBuf;
   use std::sync::Arc;
   use tokio::sync::RwLock;
+  use trailbase_wasm_common::manifest::Metadata;
 
   use crate::AppState;
 
@@ -98,7 +99,7 @@ mod wasm {
   #[cfg(not(feature = "wasm"))]
   pub(crate) async fn install_routes_and_jobs(
     _state: &AppState,
-    _runtime: Arc<RwLock<Runtime>>,
+    _runtime: Arc<RwLock<(Option<Metadata>, Runtime)>>,
   ) -> Result<Option<Router<AppState>>, AnyError> {
     return Ok(None);
   }
