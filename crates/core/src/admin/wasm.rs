@@ -52,13 +52,9 @@ pub async fn list_wasm_components_handler(
   let mut components: Vec<WasmComponent> = vec![];
   for rt in state.wasm_runtimes() {
     let metadata_and_rt = rt.read().await;
-    let name = metadata_and_rt
-      .1
-      .component_path()
-      .file_stem()
-      .and_then(|s| s.to_str())
-      .unwrap_or("unknown")
-      .to_string();
+    let name =
+      trailbase_wasm_runtime_host::component_path_to_name(metadata_and_rt.1.component_path())
+        .map_err(|err| Error::Internal(err.into()))?;
 
     components.push(build_entry(name, metadata_and_rt.0.as_ref()));
   }
