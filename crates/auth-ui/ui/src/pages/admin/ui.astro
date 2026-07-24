@@ -1,0 +1,52 @@
+---
+import BaseLayout from "@/layouts/BaseLayout.astro";
+---
+
+<BaseLayout noCsp={true}>
+  <div class="flex h-full w-full flex-col gap-2 bg-red-200 p-4">
+    <div class="rounded bg-white p-2">
+      <p>
+        update or reinstall with{" "}
+        <span class="font-mono">
+          {" trail components add trailbase/auth_ui "}
+        </span>
+      </p>
+    </div>
+
+    {
+      /*
+    <p>
+      {window.innerWidth}x{window.innerHeight} (WxH)
+    </p>
+    */
+    }
+  </div>
+</BaseLayout>
+
+<script>
+  import { initClientFromCookies, initClient } from "trailbase";
+  import type { Client, Tokens } from "trailbase";
+
+  async function test() {
+    const base = document.head.baseURI;
+    console.debug(import.meta.env.DEV, base, document.cookie, localStorage);
+    const authTokens: string | null = localStorage.getItem("auth_tokens");
+
+    let client: Client | UnderlyingDefaultSource;
+    if (authTokens !== null) {
+      const tokens: Tokens = JSON.parse(authTokens);
+
+      client = initClient(base, { tokens });
+    } else {
+      client = await initClientFromCookies();
+    }
+
+    console.log("TOKENS: ", client.tokens());
+
+    const response = await client.fetch("_/auth/admin/settings/");
+    const settings = await response.json();
+    console.log("SETTINGS:", settings);
+  }
+
+  test();
+</script>

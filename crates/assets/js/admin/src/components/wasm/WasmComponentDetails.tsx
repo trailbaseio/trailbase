@@ -72,8 +72,8 @@ export function WasmComponentDetails(props: { name: string }) {
       // FIXME: Ultra hacky, requires the guest app to be set-up appropriately.
       // That said, should only be required in DEV mode :/
       if (import.meta.env.DEV) {
-        const x = `<base href="http://${window.location.hostname}:4000/" />`;
-        body = body.replace(`<base href="" />`, x);
+        const x = `base href="http://${window.location.hostname}:4000/"`;
+        body = body.replace(`base href=""`, x);
       }
 
       iframe.onload = (_ev) => {
