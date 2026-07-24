@@ -504,12 +504,12 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
 }
 
 #[inline]
-pub fn component_path_to_name(path: &PathBuf) -> Result<String, String> {
+pub fn component_path_to_name(path: &std::path::Path) -> Result<String, String> {
   return Ok(
     path
       .file_stem()
       .and_then(|s| s.to_str())
-      .ok_or_else(|| "unknown".to_string())?
+      .ok_or_else(|| format!("failed to get component name from '{path:?}'"))?
       .to_string(),
   );
 }

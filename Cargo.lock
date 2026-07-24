@@ -8549,7 +8549,6 @@ version = "0.5.1"
 dependencies = [
  "base64 0.23.0",
  "bytes",
- "const_format",
  "futures-util",
  "http",
  "log",
