@@ -5,9 +5,10 @@ import favicon from "@/assets/favicon.svg";
 
 interface Props {
   title?: string;
+  noCsp?: boolean;
 }
 
-const { title } = Astro.props;
+const { title, noCsp } = Astro.props;
 
 const DEV = import.meta.env.DEV;
 const CspFragments = new Map<string, string>([
@@ -41,10 +42,17 @@ const CSP: string = Array.from(CspFragments)
 <!doctype html>
 <html lang="en" class="hide-scrollbars">
   <head>
+    {/* Needed for admin dash along admin UI dev server */}
+    <base href="" />
+
     <meta charset="UTF-8" />
     <meta name="description" content="Astro description" />
     <meta name="viewport" content="width=device-width" />
-    <meta http-equiv="Content-Security-Policy" content={CSP} />
+    {
+      (noCsp ?? false) ? null : (
+        <meta http-equiv="Content-Security-Policy" content={CSP} />
+      )
+    }
 
     <link rel="icon" type="image/svg+xml" href={favicon.src} />
 
