@@ -11,7 +11,7 @@ use core::future::Future;
 use http_body_util::combinators::UnsyncBoxBody;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::SystemTime;
 use tokio::task::JoinError;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
@@ -27,8 +27,6 @@ use crate::host::TransactionImpl;
 
 pub use crate::host::{SharedState, State};
 pub use trailbase_wasi_keyvalue::Store as KvStore;
-
-static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -310,6 +308,7 @@ impl HttpStore {
     .map_err(|join_err| Error::Other(join_err.to_string()))?;
   }
 
+  /// Main entry-point for incoming HTTP requests. Typically called by an Axum handler.
   pub async fn call_incoming_http_handler(
     &self,
     request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
@@ -333,7 +332,7 @@ impl HttpStore {
       // In the current setup, if the listening side hangs-up the they call may not be aborted.
       // Depends on what the implementation does when the streaming body's receiving end gets
       // out of scope.
-      let handle = tokio::spawn(async move {
+      let handle = tokio::spawn(REQUEST_ID.scope(REQUEST_ID.with(|id| *id), async move {
         // Instantiate a store per request, see FIXME below.
         let mut lock = state
           .rt
@@ -362,11 +361,19 @@ impl HttpStore {
         // incorrect termination?
         // state
         //   .proxy_bindings
-        proxy_bindings
+        let res = proxy_bindings
           .wasi_http_incoming_handler()
           .call_handle(lock.as_context_mut(), req, out)
-          .await
-      });
+          .await;
+
+        #[cfg(debug_assertions)]
+        log::debug!(
+          "wasi_http_incoming_handler() completed call({id})",
+          id = REQUEST_ID.with(|id| *id),
+        );
+
+        res
+      }));
 
       match receiver.await {
         Ok(Ok(resp)) => {
@@ -393,6 +400,7 @@ impl HttpStore {
     .map_err(|join_err| Error::Other(join_err.to_string()))?;
   }
 
+  /// Wraps future to execute on the associated Tokio runtime and do some accounting/logging.
   fn call<F>(
     rt: &Arc<RuntimeInternal<Arc<SharedState>>>,
     f: F,
@@ -403,26 +411,40 @@ impl HttpStore {
   {
     let state = rt.clone();
 
+    let local_in_flight = state.local_in_flight.fetch_add(1, Ordering::Relaxed);
+    let in_flight = IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
+    let id = REQUEST_ID_CNT.fetch_add(1, Ordering::Relaxed);
+
     #[cfg(debug_assertions)]
     log::debug!(
-      "WASM runtime ({path:?}) waiting for new messages. In flight: {}, {}",
-      state.local_in_flight.load(Ordering::Relaxed),
-      IN_FLIGHT.load(Ordering::Relaxed),
+      "WASM runtime ({path:?}) `call({id})`. In flight (local={local_in_flight}, global={in_flight})",
       path = state.component_path,
     );
 
-    state.local_in_flight.fetch_add(1, Ordering::Relaxed);
-    IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
-
-    return rt.rt_handle.spawn(async move {
+    // This is where we spawn a new task on the associated tokio runtime.
+    return rt.rt_handle.spawn(REQUEST_ID.scope(id, async move {
       let r = f.await;
 
       IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
       state.local_in_flight.fetch_sub(1, Ordering::Relaxed);
 
+      #[cfg(debug_assertions)]
+      log::debug!(
+        "WASM runtime ({path:?}) completed call({id})",
+        path = state.component_path,
+        id = REQUEST_ID.with(|id| *id),
+      );
+
       r
-    });
+    }));
   }
+}
+
+static IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+static REQUEST_ID_CNT: AtomicU64 = AtomicU64::new(0);
+
+tokio::task_local! {
+    pub(crate) static REQUEST_ID: u64;
 }
 
 pub fn find_wasm_components(components_path: impl AsRef<std::path::Path>) -> Vec<PathBuf> {

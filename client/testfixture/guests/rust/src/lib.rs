@@ -78,7 +78,12 @@ impl Guest for Endpoints {
         .await
         .map_err(internal)?[0][0];
 
-        eprintln!("[print from WASM guest] user id: {user_id:?}");
+        let user_id_str = match user_id {
+          Value::Blob(b) => BASE64_STANDARD.encode(b),
+          x => format!("{x:?}"),
+        };
+
+        eprintln!("[print from WASM guest] user id: {user_id_str}");
 
         let mut bytes: [u8; 32] = [0; 32];
         trailbase_wasm::rand::get_random_bytes(&mut bytes);
