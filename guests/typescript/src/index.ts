@@ -66,6 +66,7 @@ export function defineConfig(opts: {
           : null;
 
         const manifest: InitManifest = {
+          metadata: null,
           http_handlers,
           job_handlers,
           sqlite_functions: null,
