@@ -19,13 +19,14 @@ pub enum PrefsError {
 type KeyValueStore = std::collections::btree_map::BTreeMap<String, String>;
 
 // TODO: When WASIp3 actually works ,we should probably have dedicated [set|get]_prefs endpoints
-// and push the component name mapping responsibility into the host.
+// and push the component name mapping responsibility into the host. Would also allow for cross
+// request caching and invalidation.
 pub async fn get_prefs(component_name: &Name, key: &str) -> Result<Option<String>, PrefsError> {
   let cells = query(QUERY, vec![Value::Text(component_name.name.to_string())]).await?;
 
-  if let Some(Value::Text(json)) = cells.get(0).and_then(|r| r.get(0)) {
+  if let Some(Value::Text(json)) = cells.first().and_then(|r| r.first()) {
     let mut store: KeyValueStore =
-      serde_json::from_str(&json).map_err(|_err| PrefsError::Serialization)?;
+      serde_json::from_str(json).map_err(|_err| PrefsError::Serialization)?;
 
     return Ok(store.remove(key));
   }
@@ -33,7 +34,8 @@ pub async fn get_prefs(component_name: &Name, key: &str) -> Result<Option<String
 }
 
 // TODO: When WASIp3 actually works ,we should probably have dedicated [set|get]_prefs endpoints
-// and push the component name mapping responsibility into the host.
+// and push the component name mapping responsibility into the host. Would also allow for cross
+// request caching and invalidation.
 pub async fn set_prefs(
   name: &Name,
   key: &str,
@@ -45,7 +47,7 @@ pub async fn set_prefs(
   let cells = tx.query(QUERY, &params)?;
 
   let mut map: std::collections::BTreeMap<String, String> =
-    if let Some(Value::Text(json)) = cells.get(0).and_then(|r| r.get(0)) {
+    if let Some(Value::Text(json)) = cells.first().and_then(|r| r.first()) {
       serde_json::from_str(json).map_err(|_err| PrefsError::Serialization)?
     } else {
       Default::default()

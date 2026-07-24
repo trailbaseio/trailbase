@@ -108,11 +108,13 @@ impl WasiHttpHooks for Hooks {
     config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
   ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
   {
-    // log::debug!(
-    //   "send_request {:?} {}: {request:?}",
-    //   request.uri().host(),
-    //   request.uri().path()
-    // );
+    #[cfg(debug_assertions)]
+    log::debug!(
+      "WASI outgoing http send_request {host:?} {path} ({id:?})",
+      host = request.uri().host(),
+      path = request.uri().path(),
+      id = crate::REQUEST_ID.try_with(|id| *id),
+    );
 
     return match request.uri().host() {
       Some("__sqlite") => {
