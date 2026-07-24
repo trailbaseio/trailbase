@@ -355,25 +355,25 @@ fn to_method_type(m: Method) -> trailbase_wasm_common::manifest::HttpMethodType 
   };
 }
 
-pub struct Name {
-  name: &'static str,
-}
-
-impl Name {
-  pub fn __init(name: &'static str) -> Self {
-    return Name { name };
-  }
-}
-
-impl From<Name> for &'static str {
-  fn from(n: Name) -> &'static str {
-    return n.name;
-  }
-}
-
-#[macro_export]
-macro_rules! crate_name {
-  () => {
-    trailbase_wasm::Name::__init(::core::env!("CARGO_PKG_NAME"))
-  };
-}
+// pub struct Name {
+//   name: &'static str,
+// }
+//
+// impl Name {
+//   pub fn __init(name: &'static str) -> Self {
+//     return Name { name };
+//   }
+// }
+//
+// impl From<Name> for &'static str {
+//   fn from(n: Name) -> &'static str {
+//     return n.name;
+//   }
+// }
+//
+// #[macro_export]
+// macro_rules! crate_name {
+//   () => {
+//     trailbase_wasm::Name::__init(::core::env!("CARGO_PKG_NAME"))
+//   };
+// }
