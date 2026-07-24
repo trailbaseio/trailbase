@@ -5,13 +5,14 @@ import favicon from "@/assets/favicon.svg";
 
 interface Props {
   title?: string;
-  noCsp?: boolean;
+  description?: string;
+  csp?: Map<string, string>;
 }
 
-const { title, noCsp } = Astro.props;
+const { title, description, csp } = Astro.props;
 
 const DEV = import.meta.env.DEV;
-const CspFragments = new Map<string, string>([
+const defaultCspFragments = new Map<string, string>([
   // default-src is fallback for all other policies that are not explicitly defined below.
   ["default-src", "'none'"],
   ["object-src", ["'self'", ...(DEV ? ["localhost:*"] : [])].join(" ")],
@@ -34,9 +35,11 @@ const CspFragments = new Map<string, string>([
   ["connect-src", ["'self'", ...(DEV ? ["localhost:*"] : [])].join(" ")],
 ]);
 
-const CSP: string = Array.from(CspFragments)
+const CSP: string = Array.from(csp ?? defaultCspFragments)
   .map(([v, k]) => `${v} ${k}`)
   .join("; ");
+
+const backgroundColor = import.meta.env.DEV ? "#13151a" : null;
 ---
 
 <!doctype html>
@@ -46,13 +49,9 @@ const CSP: string = Array.from(CspFragments)
     <base href="" />
 
     <meta charset="UTF-8" />
-    <meta name="description" content="Astro description" />
+    <meta name="description" content={description ?? "Admin UI"} />
     <meta name="viewport" content="width=device-width" />
-    {
-      (noCsp ?? false) ? null : (
-        <meta http-equiv="Content-Security-Policy" content={CSP} />
-      )
-    }
+    <meta http-equiv="Content-Security-Policy" content={CSP} />
 
     <link rel="icon" type="image/svg+xml" href={favicon.src} />
 
@@ -64,7 +63,7 @@ const CSP: string = Array.from(CspFragments)
   <body>
     <slot />
 
-    <style is:global>
+    <style is:global define:vars={{ backgroundColor }}>
       :root {
         --accent: 136, 58, 234;
         --accent-light: 224, 204, 250;
@@ -78,8 +77,8 @@ const CSP: string = Array.from(CspFragments)
       }
       html {
         font-family: system-ui, sans-serif;
-        background: #13151a;
-        background-size: 224px;
+        background: var(--backgroundColor);
+        /* background-size: 224px; */
       }
       code {
         font-family:
