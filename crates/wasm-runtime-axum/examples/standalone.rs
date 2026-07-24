@@ -46,13 +46,18 @@ async fn main() {
 
   let runtimes_builder =
     wasm_runtime_builder(args.path, shared_state, None, None, /* dev= */ false);
-  let runtime = Arc::new(tokio::sync::RwLock::new(runtimes_builder().unwrap()));
+  let runtime = runtimes_builder().unwrap();
 
   let mut router = Router::new();
-  let InstallResult { router: r, jobs }: InstallResult<State> =
-    install_routes_and_jobs::<State>(runtime, extract_user, None)
-      .await
-      .unwrap();
+  let InstallResult {
+    router: r,
+    jobs,
+    metadata,
+  }: InstallResult<State> = install_routes_and_jobs::<State>(&runtime, extract_user, None)
+    .await
+    .unwrap();
+
+  log::info!("{metadata:?}");
 
   if let Some(routes) = r {
     router = router.merge(routes);

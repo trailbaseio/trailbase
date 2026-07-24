@@ -18,10 +18,19 @@ pub enum HttpMethodType {
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum Subsystem {
+  Metadata,
   Http,
   Jobs,
   SqliteFunctions,
-  AdminModule,
+  #[serde(other)]
+  Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum GuestRuntime {
+  Rust,
+  EcmaScript,
   #[serde(other)]
   Unknown,
 }
@@ -81,12 +90,19 @@ pub enum SqliteFunction {
 }
 
 /// Metadata a component can self-report for display in the admin WASM modules page.
-#[derive(Clone, Debug, Deserialize, Serialize, TS)]
-pub struct AdminModule {
-  pub display_name: String,
-  pub icon: Option<String>,
-  pub config_path: Option<String>,
+#[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
+pub struct Metadata {
+  /// Name to show in the admin UI component browser.
+  pub display_name: Option<String>,
+  /// Optional description to show in the admin UI.
   pub description: Option<String>,
+  /// Icon to show in the admin UI component browser, e.g. "<svg ..." or
+  /// "data:<mime-type>;base64,<base64-encoded-data>".
+  pub icon: Option<String>,
+  /// Which guest runtime is used by the component.
+  pub guest_runtime: Option<GuestRuntime>,
+  /// An HTTP endpoint for an admin UI to present in the admin dashboard's, e.g.: "/comp0/admin".
+  pub admin_ui_path: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
@@ -102,6 +118,9 @@ pub struct InitArguments {
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct InitManifest {
+  /// Metadata for the WASM component, useful e.g. for the admin page.
+  pub metadata: Option<Metadata>,
+
   /// Registered HTTP handlers tuple of Method + Path. May contain wild cards.
   pub http_handlers: Option<Vec<HttpRoute>>,
 
@@ -110,7 +129,4 @@ pub struct InitManifest {
 
   /// Registered Sqlite functions.
   pub sqlite_functions: Option<Vec<SqliteFunction>>,
-
-  /// Metadata for the admin WASM modules page.
-  pub admin_module: Option<AdminModule>,
 }

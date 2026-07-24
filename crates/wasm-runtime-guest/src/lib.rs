@@ -37,6 +37,7 @@ pub mod prefs;
 pub mod time;
 
 use std::sync::OnceLock;
+use trailbase_wasm_common::manifest::GuestRuntime;
 use trailbase_wasm_common::{HttpContext, HttpContextKind};
 use wstd::http::Request;
 use wstd::http::body::IncomingBody;
@@ -58,9 +59,7 @@ pub mod rand {
   pub use wstd::rand::{get_insecure_random_bytes, get_random_bytes};
 }
 
-// Re-export AdminModule so guest crates can use it without depending on
-// trailbase-wasm-common directly.
-pub use trailbase_wasm_common::manifest::AdminModule;
+pub use trailbase_wasm_common::manifest::Metadata;
 
 #[macro_export]
 macro_rules! export {
@@ -111,6 +110,10 @@ impl SqliteFunction {
 pub trait Guest {
   fn init(_: Args) {}
 
+  fn metadata() -> Option<Metadata> {
+    return None;
+  }
+
   fn http_handlers() -> Vec<HttpRoute> {
     return vec![];
   }
@@ -121,10 +124,6 @@ pub trait Guest {
 
   fn sqlite_scalar_functions() -> Vec<SqliteFunction> {
     return vec![];
-  }
-
-  fn admin_module() -> Option<AdminModule> {
-    return None;
   }
 }
 
@@ -150,8 +149,7 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
 {
   fn get_manifest(args: String) -> Result<String, String> {
     use trailbase_wasm_common::manifest::{
-      AdminModule, HttpRoute, InitArguments, InitManifest, Job, SqliteFunction,
-      SqliteScalarFunction,
+      HttpRoute, InitArguments, InitManifest, Job, Metadata, SqliteFunction, SqliteScalarFunction,
     };
 
     let args: InitArguments = serde_json::from_str(&args).map_err(|err| err.to_string())?;
@@ -232,21 +230,26 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
       None
     };
 
-    let admin_module: Option<AdminModule> = if args
+    let metadata: Metadata = if args
       .subsystems
       .as_ref()
-      .is_none_or(|c| c.contains(&trailbase_wasm_common::manifest::Subsystem::AdminModule))
+      .is_none_or(|c| c.contains(&trailbase_wasm_common::manifest::Subsystem::Metadata))
+      && let Some(mut metadata) = T::metadata()
     {
-      T::admin_module()
+      metadata.guest_runtime = Some(GuestRuntime::Rust);
+      metadata
     } else {
-      None
+      Metadata {
+        guest_runtime: Some(GuestRuntime::Rust),
+        ..Default::default()
+      }
     };
 
     let manifest = InitManifest {
       http_handlers,
       job_handlers,
       sqlite_functions,
-      admin_module,
+      metadata: Some(metadata),
     };
 
     return serde_json::to_string(&manifest).map_err(|err| err.to_string());
@@ -312,6 +315,7 @@ impl<T: Guest> HttpIncomingHandler<T> {
           return handler(responder).await;
         }
       }
+      HttpContextKind::Unknown => {}
     }
 
     return responder

@@ -17,9 +17,8 @@ import {
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
 
-// TODO: Rename to components.
-import { fetchWasmModules } from "@/lib/api/wasm-modules";
-import type { WasmModuleEntry } from "@bindings/WasmModuleEntry";
+import { listWasmComponents } from "@/lib/api/wasm-components";
+import type { WasmComponent } from "@bindings/WasmComponent";
 
 function ComponentIcon(props: { icon?: string }) {
   const icon = createMemo(() => props.icon?.trim());
@@ -46,38 +45,39 @@ function ComponentIcon(props: { icon?: string }) {
   );
 }
 
-function ComponentCard(props: { module: WasmModuleEntry }) {
-  const hasManifest = () =>
-    props.module.display_name !== props.module.name ||
-    props.module.icon !== null;
+function ComponentCard(props: { component: WasmComponent }) {
+  const displayName = () =>
+    props.component.display_name ?? props.component.name;
 
   return (
     <Card>
       <CardContent class="flex p-4">
         <div class="text-muted-foreground flex size-10 shrink-0 items-center justify-center">
-          <ComponentIcon icon={props.module.icon ?? undefined} />
+          <ComponentIcon icon={props.component.icon ?? undefined} />
         </div>
 
         <div class="flex w-full gap-2">
           <div class="flex grow flex-col justify-start">
             <div class="flex h-full items-center gap-2">
-              <CardTitle>{props.module.display_name}</CardTitle>
+              <CardTitle>{displayName()}</CardTitle>
 
-              <Show when={hasManifest()}>
+              <Show
+                when={props.component.display_name !== props.component.name}
+              >
                 <span class="text-muted-foreground shrink-0 text-xs">
-                  {props.module.name}
+                  {props.component.name}
                 </span>
               </Show>
             </div>
 
-            <Show when={props.module.description}>
-              <CardDescription>{props.module.description}</CardDescription>
+            <Show when={props.component.description}>
+              <CardDescription>{props.component.description}</CardDescription>
             </Show>
           </div>
 
-          <Show when={props.module.config_path !== null}>
+          <Show when={props.component.admin_ui_path !== null}>
             <A
-              href={`/wasm/${props.module.name}`}
+              href={`/wasm/${props.component.name}`}
               class="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex size-8 shrink-0 items-center justify-center rounded-md transition-colors"
             >
               <TbOutlineSettings size={18} />
@@ -90,12 +90,12 @@ function ComponentCard(props: { module: WasmModuleEntry }) {
 }
 
 export function WasmComponentsList() {
-  const wasmModules = useQuery(() => ({
+  const wasmComponents = useQuery(() => ({
     queryKey: ["wasm-components"],
-    queryFn: fetchWasmModules,
+    queryFn: listWasmComponents,
   }));
 
-  const modules = () => wasmModules.data?.modules ?? [];
+  const components = () => wasmComponents.data?.components ?? [];
 
   return (
     <div>
@@ -103,7 +103,7 @@ export function WasmComponentsList() {
 
       <div class="flex flex-col gap-3 p-4">
         <Show
-          when={!wasmModules.isLoading}
+          when={!wasmComponents.isLoading}
           fallback={
             <div class="flex h-64 items-center justify-center">
               <Spinner size={32} class="text-muted-foreground" />
@@ -111,15 +111,15 @@ export function WasmComponentsList() {
           }
         >
           <Show
-            when={modules().length > 0}
+            when={components().length > 0}
             fallback={
               <div class="text-muted-foreground flex h-64 flex-col items-center justify-center gap-2">
                 <TbOutlinePackage size={48} />
               </div>
             }
           >
-            <For each={modules()}>
-              {(module) => <ComponentCard module={module} />}
+            <For each={components()}>
+              {(c) => <ComponentCard component={c} />}
             </For>
           </Show>
         </Show>

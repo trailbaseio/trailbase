@@ -14,7 +14,7 @@ pub(crate) mod rows;
 mod table;
 pub(crate) mod user;
 mod util;
-mod wasm_modules;
+mod wasm;
 
 pub use error::AdminError;
 
@@ -75,10 +75,7 @@ pub fn router() -> Router<AppState> {
     )
     .route("/public_key", get(jwt::get_public_key))
     .route("/info", get(info::info_handler))
-    .route(
-      "/wasm-modules",
-      get(wasm_modules::list_wasm_modules_handler),
-    )
+    .route("/wasm", get(wasm::list_wasm_components_handler))
     .route("/jobs", get(jobs::list_jobs_handler))
     .route("/job/run", post(jobs::run_job_handler))
     .route("/backups", get(backup::list_backups_handler))
