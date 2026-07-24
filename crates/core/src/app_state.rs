@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, RegistrationIdentifier};
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
+use trailbase_wasm_common::manifest::Metadata;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
@@ -43,14 +44,6 @@ pub struct InitArgs {
   pub pg_uri: Option<String>,
 }
 
-#[derive(Clone, Debug, serde::Deserialize)]
-pub struct WasmManifest {
-  pub display_name: String,
-  pub icon: Option<String>,
-  pub config_path: Option<String>,
-  pub description: Option<String>,
-}
-
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
@@ -83,10 +76,9 @@ struct InternalState {
   object_store: Arc<dyn ObjectStore>,
 
   /// Actual WASM runtimes.
-  wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
+  wasm_runtimes: Vec<Arc<RwLock<(Option<Metadata>, Runtime)>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   wasm_runtime_builders: Vec<Box<crate::wasm::WasmRuntimeBuilder>>,
-  wasm_manifests: Arc<RwLock<HashMap<String, WasmManifest>>>,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -232,10 +224,9 @@ impl AppState {
         object_store,
         wasm_runtimes: wasm_runtime_builders
           .iter()
-          .map(|builder| Arc::new(RwLock::new(builder().expect("startup"))))
+          .map(|builder| Arc::new(RwLock::new((None, builder().expect("startup")))))
           .collect(),
         wasm_runtime_builders,
-        wasm_manifests: Arc::new(RwLock::new(HashMap::new())),
         #[cfg(test)]
         pg_uri: None,
         #[cfg(test)]
@@ -430,12 +421,8 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<(Option<Metadata>, Runtime)>>] {
     return &self.state.wasm_runtimes;
-  }
-
-  pub(crate) fn wasm_manifests(&self) -> &Arc<RwLock<HashMap<String, WasmManifest>>> {
-    return &self.state.wasm_manifests;
   }
 
   pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
@@ -454,7 +441,10 @@ impl AppState {
     info!("Reloading WASM components. New HTTP routes and Jobs require a server restart.");
 
     for old_rt in &self.state.wasm_runtimes {
-      let component_path = old_rt.read().await.component_path().clone();
+      let (metadata, component_path) = {
+        let old_rt = old_rt.read().await;
+        (old_rt.0.clone(), old_rt.1.component_path().clone())
+      };
 
       let Some(index) = new_runtimes
         .iter()
@@ -465,7 +455,8 @@ impl AppState {
       };
 
       // Swap out old with new WASM runtime for the given component.
-      *old_rt.write().await = new_runtimes.remove(index);
+      // TODO: We should probably also update Metadata.
+      *old_rt.write().await = (metadata, new_runtimes.remove(index));
     }
 
     for new_rt in new_runtimes {
@@ -909,7 +900,6 @@ mod test_utils {
         object_store,
         wasm_runtimes: vec![],
         wasm_runtime_builders: vec![],
-        wasm_manifests: Arc::new(RwLock::new(HashMap::new())),
         pg_uri,
         // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
         // write new artifacts to the already deleted dir.

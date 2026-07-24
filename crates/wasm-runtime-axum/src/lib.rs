@@ -12,9 +12,8 @@ use log::*;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use trailbase_wasm_common::manifest::{
-  AdminModule, HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest,
+  HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest, Metadata,
 };
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::{
@@ -140,11 +139,11 @@ pub struct Job {
 pub struct InstallResult<S: Clone + Send + Sync> {
   pub router: Option<Router<S>>,
   pub jobs: Vec<Job>,
-  pub admin_module: Option<AdminModule>,
+  pub metadata: Option<Metadata>,
 }
 
 pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
-  runtime: Arc<RwLock<Runtime>>,
+  runtime: &Runtime,
   user_fn: for<'a> fn(&'a mut Parts, &'a S) -> BoxFuture<'a, Option<HttpContextUser>>,
   version: Option<String>,
 ) -> Result<InstallResult<S>, AnyError> {
@@ -152,9 +151,9 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
     http_handlers,
     job_handlers,
     sqlite_functions: _,
-    admin_module,
+    metadata,
   } = {
-    let store = HttpStore::new(&*runtime.read().await).await?;
+    let store = HttpStore::new(runtime).await?;
     store.initialize(InitArgs { version }).await?
   };
 
@@ -170,7 +169,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   let mut jobs: Vec<Job> = vec![];
   for JobManifest { name, spec } in job_handlers {
     let schedule = cron::Schedule::from_str(&spec)?;
-    let store = HttpStore::new(&*runtime.read().await).await?;
+    let store = HttpStore::new(runtime).await?;
 
     jobs.push(Job {
       name: name.clone(),
@@ -211,8 +210,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   for HttpRouteManifest { method, path } in http_handlers {
     debug!("Installing WASM route: {method:?}: {path}");
 
-    // let runtime = runtime.clone();
-    let store = HttpStore::new(&*runtime.read().await).await?;
+    let store = HttpStore::new(runtime).await?;
     let registered_path = path.clone();
 
     use axum::response::Response;
@@ -285,7 +283,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   return Ok(InstallResult {
     router,
     jobs,
-    admin_module,
+    metadata,
   });
 }
 

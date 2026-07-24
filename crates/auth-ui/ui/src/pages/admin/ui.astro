@@ -2,7 +2,10 @@
 import BaseLayout from "@/layouts/BaseLayout.astro";
 ---
 
-<BaseLayout noCsp={true}>
+{
+  /* FIXME: Disable CSP for now, since the default is currently to strict to run in an admin UI iframe. */
+}
+<BaseLayout csp={new Map<string, string>()}>
   <div class="flex h-full w-full flex-col gap-2 bg-red-200 p-4">
     <div class="rounded bg-white p-2">
       <p>
