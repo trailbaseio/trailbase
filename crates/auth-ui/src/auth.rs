@@ -10,10 +10,6 @@ pub use trailbase_auth_config::{LoginIdentifier, RegistrationIdentifier};
 #[folder = "ui/dist/"]
 pub struct AuthAssets;
 
-#[derive(RustEmbed, Clone)]
-#[folder = "dash/dist/"]
-pub struct DashboardAssets;
-
 /// Render a slice of tuples into an unescpaed query string.
 ///
 /// Careful, this should only be used on safe, static inputs only. We want HTML

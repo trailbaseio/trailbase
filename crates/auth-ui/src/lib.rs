@@ -99,6 +99,12 @@ impl Guest for Endpoints {
           return ui_change_username_handler(req.query_parse()?, user).await;
         },
       ),
+      // Admin UI routes.
+      routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
+      routing::get("/_/auth/admin/settings/", get_settings_handler),
+      routing::post("/_/auth/admin/settings/", set_settings_handler),
+      // Wildcard match for static assets. Note `{*wildcard}` is not optional, i.e. this route
+      // does not match `/_/auth/`.
       routing::get("/_/auth/{*wildcard}", async |req: Request| {
         return static_assets_handler(
           req
@@ -107,11 +113,6 @@ impl Guest for Endpoints {
         )
         .await;
       }),
-      // NOTE: {*wildcard} is not optional, we thus require double registration.
-      routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
-      routing::get("/_/auth/admin/ui/{*wildcard}", admin_dashboard_handler),
-      routing::get("/_/auth/admin/settings/", get_settings_handler),
-      routing::post("/_/auth/admin/settings/", set_settings_handler),
     ];
   }
 
@@ -456,18 +457,12 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
-  let p = req.path_param("wildcard");
-  let file = auth::DashboardAssets::get(p.unwrap_or("index.html"));
-
-  eprintln!("/_/auth/admin/ui: {req:?}, {p:?}, {}", file.is_some());
-
-  // TODO: Move this back up.
+async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
+  // TODO: Re-enable
   // require_admin(&req).await?;
 
-  let Some(file) = file else {
-    return Err(HttpError::message(StatusCode::NOT_FOUND, "Not found"));
-  };
+  let file =
+    auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;
 
   let response_builder = Response::builder()
     .header(header::CACHE_CONTROL, "public")
