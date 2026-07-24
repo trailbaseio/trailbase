@@ -8549,7 +8549,6 @@ version = "0.5.1"
 dependencies = [
  "base64 0.23.0",
  "bytes",
- "const_format",
  "futures-util",
  "http",
  "log",
@@ -8602,6 +8601,7 @@ name = "trailbase-wasm-runtime-host"
 version = "0.1.0"
 dependencies = [
  "bytes",
+ "const_format",
  "futures-util",
  "http",
  "http-body-util",
