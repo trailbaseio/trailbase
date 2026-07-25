@@ -102,6 +102,10 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         />
 
         <div class={style()}>
+          {/*
+             NOTE: The `csp` attribute is not yet supported by all relevant modern browsers:
+               https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
+          */}
           <iframe
             ref={iframe}
             style={{
@@ -109,6 +113,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
               height: "100%",
               display: "block",
             }}
+            csp=""
           />
         </div>
       </Match>

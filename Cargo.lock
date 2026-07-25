@@ -8290,6 +8290,7 @@ dependencies = [
  "trailbase-auth-config",
  "trailbase-build",
  "trailbase-wasm",
+ "ts-rs",
 ]
 
 [[package]]

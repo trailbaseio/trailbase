@@ -6,50 +6,20 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
   /* FIXME: Disable CSP for now, since the default is currently to strict to run in an admin UI iframe. */
 }
 <BaseLayout csp={new Map<string, string>()}>
-  <div class="flex size-full gap-2 bg-red-200 p-4">
-    <div class="rounded-sm bg-white p-2">
-      <p>
-        update or reinstall with{" "}
-        <span class="font-mono">
-          {" trail components add trailbase/auth_ui "}
-        </span>
-      </p>
-    </div>
-
-    {
-      /*
-    <p>
-      {window.innerWidth}x{window.innerHeight} (WxH)
-    </p>
-    */
-    }
-  </div>
+  {/* See below */}
+  <div id="solid-root"></div>
 </BaseLayout>
 
 <script>
-  import { initClientFromCookies, initClient } from "trailbase";
-  import type { Client, Tokens } from "trailbase";
+  import { renderAdminUI } from "@/components/admin/SettingsPage";
 
-  async function test() {
-    const base = document.head.baseURI;
-    console.debug(import.meta.env.DEV, base, document.cookie, localStorage);
-    const authTokens: string | null = localStorage.getItem("auth_tokens");
+  // Astro inlines the JS from client:only components into the html. W/o a safety
+  // hash or nonce, this would be in vialoation of admin UI's root CSP. We thus
+  // have this render indirection via the <script> tag, which Astro pulls out
+  // of the template into a separete JS file.
+  renderAdminUI("solid-root");
 
-    let client: Client | UnderlyingDefaultSource;
-    if (authTokens !== null) {
-      const tokens: Tokens = JSON.parse(authTokens);
-
-      client = initClient(base, { tokens });
-    } else {
-      client = await initClientFromCookies();
-    }
-
-    console.log("TOKENS: ", client.tokens());
-
-    const response = await client.fetch("_/auth/admin/settings/");
-    const settings = await response.json();
-    console.log("SETTINGS:", settings);
-  }
-
-  test();
+  console.debug("LOCATION:", window.location, "doc.baseURI:");
+  console.debug("DOC BASE:", document.head.baseURI);
+  console.debug("COOKIES & STORAGE:", document.cookie, localStorage);
 </script>
