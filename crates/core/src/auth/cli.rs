@@ -3,6 +3,7 @@ use const_format::formatcp;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use trailbase_sqlite::{Connection, params};
 use uuid::Uuid;
+use validator::ValidateEmail;
 
 use crate::DataDir;
 use crate::auth::AuthError;
@@ -10,31 +11,42 @@ use crate::auth::password::hash_password;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  get_user_by_email, get_user_by_id, validate_and_normalize_email_address,
+  get_user_by_email, get_user_by_id, get_user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username,
 };
 use crate::constants::USER_TABLE;
 
 pub enum UserReference {
   Email(String),
-  Id(String),
+  Username(String),
+  Id(uuid::Uuid),
 }
 
 impl UserReference {
+  pub fn parse(user: impl AsRef<str>) -> Result<Self, String> {
+    let user = user.as_ref().trim().to_string();
+    if user.contains("@") {
+      if !user.validate_email() {
+        return Err(format!("invalid email address: {user}"));
+      }
+      return Ok(Self::Email(user));
+    }
+
+    // TODO: We could do more validation, e.g. username characters, UUID version, etc.
+    return match user.len() {
+      36 if let Ok(uuid) = Uuid::parse_str(&user) => Ok(Self::Id(uuid)),
+      24 if let Ok(base64) = BASE64_URL_SAFE.decode(&user) => Ok(Self::Id(
+        Uuid::from_slice(&base64).map_err(|err| err.to_string())?,
+      )),
+      _ => Ok(Self::Username(user)),
+    };
+  }
+
   async fn lookup_user(&self, user_conn: &Connection) -> Result<DbUser, AuthError> {
     return match self {
       Self::Email(email) => get_user_by_email(user_conn, email).await,
-      Self::Id(id) => {
-        let decoded_id = Uuid::parse_str(id).or_else(|_| {
-          let bytes = BASE64_URL_SAFE.decode(id).map_err(|err| {
-            AuthError::FailedDependency(format!("Failed to parse Base64: {err}").into())
-          })?;
-          return Uuid::from_slice(&bytes).map_err(|err| {
-            AuthError::FailedDependency(format!("Failed to parse UUID from slice: {err}").into())
-          });
-        })?;
-        get_user_by_id(user_conn, &decoded_id).await
-      }
+      Self::Username(username) => get_user_by_username(user_conn, username).await,
+      Self::Id(uuid) => get_user_by_id(user_conn, uuid).await,
     };
   }
 }
@@ -264,4 +276,33 @@ pub async fn import_users(
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
   return Ok(());
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_parse_user_reference() {
+    let UserReference::Email(email) = UserReference::parse("  user@test.org ").unwrap() else {
+      panic!("expected email");
+    };
+    assert_eq!(email, "user@test.org");
+
+    let UserReference::Username(username) = UserReference::parse("  foo ").unwrap() else {
+      panic!("expected username");
+    };
+    assert_eq!(username, "foo");
+
+    let uuid = uuid::Uuid::new_v4();
+    let UserReference::Id(_) = UserReference::parse(uuid.to_string()).unwrap() else {
+      panic!("expected uuid");
+    };
+
+    let UserReference::Id(_) =
+      UserReference::parse(BASE64_URL_SAFE.encode(uuid.into_bytes())).unwrap()
+    else {
+      panic!("expected uuid");
+    };
+  }
 }

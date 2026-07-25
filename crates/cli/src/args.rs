@@ -186,12 +186,12 @@ pub enum AdminSubCommands {
   List,
   /// Demotes admin user to normal user.
   Demote {
-    /// Admin in question, either email or UUID.
+    /// Admin in question, either email, username or UUID.
     user: String,
   },
   /// Promotes user to admin.
   Promote {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
 }
@@ -201,21 +201,21 @@ pub enum AdminSubCommands {
 pub enum UserSubCommands {
   /// Change a user's password.
   ChangePassword {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// New password to set for user.
     password: String,
   },
   /// Change a user's email.
   ChangeEmail {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// New email address to set for user.
     new_email: String,
   },
   /// Change Username.
   ChangeUsername {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// New username .
     new_username: String,
@@ -229,12 +229,12 @@ pub enum UserSubCommands {
   },
   /// Delete a user.
   Delete {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
   /// Change a user's verification state.
   Verify {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// User's verification state to set.
     #[arg(default_value = "true")]
@@ -242,12 +242,12 @@ pub enum UserSubCommands {
   },
   /// Invalidate user session, thus requiring them to re-auth when their auth token expires.
   InvalidateSession {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
   /// Mint auth token for the given user.
   MintToken {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
   // Import users from a file.

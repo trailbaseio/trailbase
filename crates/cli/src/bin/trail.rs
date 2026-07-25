@@ -8,6 +8,7 @@ use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use serde::Deserialize;
 use std::io::Write;
+use trailbase::api::cli::UserReference;
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::constants::USER_TABLE;
 use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
@@ -179,13 +180,13 @@ async fn async_main(
         }
         Some(AdminSubCommands::Demote { user }) => {
           let id =
-            api::cli::demote_admin_to_user(state.user_conn(), to_user_reference(user)).await?;
+            api::cli::demote_admin_to_user(state.user_conn(), UserReference::parse(user)?).await?;
 
           println!("Demoted admin to user for '{id}'");
         }
         Some(AdminSubCommands::Promote { user }) => {
           let id =
-            api::cli::promote_user_to_admin(state.user_conn(), to_user_reference(user)).await?;
+            api::cli::promote_user_to_admin(state.user_conn(), UserReference::parse(user)?).await?;
 
           println!("Promoted user to admin for '{id}'");
         }
@@ -206,20 +207,26 @@ async fn async_main(
 
       match cmd {
         Some(UserSubCommands::ChangePassword { user, password }) => {
-          let id = api::cli::change_password(state.user_conn(), to_user_reference(user), &password)
-            .await?;
+          let id =
+            api::cli::change_password(state.user_conn(), UserReference::parse(user)?, &password)
+              .await?;
 
           println!("Updated password for '{id}'");
         }
         Some(UserSubCommands::ChangeEmail { user, new_email }) => {
           let id =
-            api::cli::change_email(state.user_conn(), to_user_reference(user), &new_email).await?;
+            api::cli::change_email(state.user_conn(), UserReference::parse(user)?, &new_email)
+              .await?;
 
           println!("Updated email for '{id}'");
         }
         Some(UserSubCommands::ChangeUsername { user, new_username }) => {
-          api::cli::change_username(state.user_conn(), to_user_reference(user), &new_username)
-            .await?;
+          api::cli::change_username(
+            state.user_conn(),
+            UserReference::parse(user)?,
+            &new_username,
+          )
+          .await?;
         }
         Some(UserSubCommands::Add { email, password }) => {
           api::cli::add_user(state.user_conn(), &email, &password).await?;
@@ -227,13 +234,13 @@ async fn async_main(
           println!("Added user '{email}'");
         }
         Some(UserSubCommands::Delete { user }) => {
-          api::cli::delete_user(state.user_conn(), to_user_reference(user.clone())).await?;
+          api::cli::delete_user(state.user_conn(), UserReference::parse(&user)?).await?;
 
           println!("Deleted user '{user}'");
         }
         Some(UserSubCommands::Verify { user, verified }) => {
-          let id =
-            api::cli::set_verified(state.user_conn(), to_user_reference(user), verified).await?;
+          let id = api::cli::set_verified(state.user_conn(), UserReference::parse(user)?, verified)
+            .await?;
 
           println!("Set verified={verified} for '{id}'");
         }
@@ -241,7 +248,7 @@ async fn async_main(
           api::cli::invalidate_sessions(
             state.user_conn(),
             state.session_conn(),
-            to_user_reference(user.clone()),
+            UserReference::parse(&user)?,
           )
           .await?;
 
@@ -252,7 +259,7 @@ async fn async_main(
             state.data_dir(),
             state.user_conn(),
             state.session_conn(),
-            to_user_reference(user.clone()),
+            UserReference::parse(&user)?,
           )
           .await?;
           println!("Bearer {auth_token}");
@@ -464,13 +471,6 @@ async fn async_main(
   }
 
   return Ok(());
-}
-
-fn to_user_reference(user: String) -> api::cli::UserReference {
-  if user.contains("@") {
-    return api::cli::UserReference::Email(user);
-  }
-  return api::cli::UserReference::Id(user);
 }
 
 fn main() -> Result<(), BoxError> {
