@@ -1,6 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use trailbase::DataDir;
 use trailbase::api::JsonSchemaMode;
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -30,10 +29,14 @@ impl From<JsonSchemaModeArg> for JsonSchemaMode {
 #[derive(Parser, Debug, Clone, Default)]
 #[command(version, about, long_about = None, disable_version_flag = true)]
 pub struct CommandLineArgs {
-  /// Directory for runtime files including the database. Will be created by TrailBase if dir
+  /// Directory for runtime files including the databases. Will be created by TrailBase if dir
   /// doesn't exist.
-  #[arg(long, env, default_value = DataDir::DEFAULT)]
-  pub data_dir: std::path::PathBuf,
+  #[arg(long, env)]
+  pub depot: Option<std::path::PathBuf>,
+
+  /// DEPRECATED: Use --depot instead
+  #[arg(long, env, hide = true)]
+  pub data_dir: Option<std::path::PathBuf>,
 
   /// Public url used to access TrailBase. This is necessary for sending valid auth emails and
   /// OAuth2 redirects, i.e. after users authenticating externally.

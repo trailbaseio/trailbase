@@ -481,15 +481,41 @@ fn main() -> Result<(), BoxError> {
     .install_default()
     .expect("Failed to install rustls crypto");
 
-  let args = CommandLineArgs::parse();
+  let CommandLineArgs {
+    data_dir,
+    depot,
+    public_url,
+    version,
+    cmd,
+  } = CommandLineArgs::parse();
 
-  init_logger(if let Some(SubCommands::Run(ref cmd)) = args.cmd {
+  let mut warn_data_dir = false;
+  let data_dir = if let Some(data_dir) = data_dir {
+    assert!(
+      depot.is_none(),
+      "Cannot specify both: --data-dir and --depot."
+    );
+
+    warn_data_dir = true;
+    data_dir
+  } else if let Some(depot) = depot {
+    depot
+  } else {
+    std::path::PathBuf::from(DataDir::DEFAULT)
+  };
+
+  init_logger(if let Some(SubCommands::Run(ref cmd)) = cmd {
     cmd.dev
   } else {
     false
   });
 
-  if args.version {
+  // Need to delay warning until after logger was initialized.
+  if warn_data_dir {
+    log::warn!("--data_dir and $DATA_DIR are deprecated, use --depot and $DEPOT instead.");
+  }
+
+  if version {
     let version = trailbase_build::get_version_info!();
     let tag = version.git_version_tag.as_deref().unwrap_or("?");
     let date = version
@@ -504,7 +530,7 @@ fn main() -> Result<(), BoxError> {
     return Ok(());
   }
 
-  let Some(cmd) = args.cmd else {
+  let Some(cmd) = cmd else {
     let _ = CommandLineArgs::command().print_help();
     return Ok(());
   };
@@ -536,8 +562,8 @@ fn main() -> Result<(), BoxError> {
 
   main_runtime.block_on(async_main(
     cmd,
-    DataDir(args.data_dir.clone()),
-    args.public_url,
+    DataDir(data_dir),
+    public_url,
     wasm_tokio_runtime.as_ref().map(|rt| rt.handle().clone()),
   ))?;
 
