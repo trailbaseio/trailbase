@@ -51,7 +51,11 @@ const backgroundColor = import.meta.env.DEV ? "#13151a" : null;
     <meta charset="UTF-8" />
     <meta name="description" content={description ?? "Admin UI"} />
     <meta name="viewport" content="width=device-width" />
-    <meta http-equiv="Content-Security-Policy" content={CSP} />
+    {
+      CSP !== "" ? (
+        <meta http-equiv="Content-Security-Policy" content={CSP} />
+      ) : null
+    }
 
     <link rel="icon" type="image/svg+xml" href={favicon.src} />
 
