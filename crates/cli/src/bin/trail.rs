@@ -25,13 +25,16 @@ use trailbase_cli::{
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-fn init_logger(dev: bool) {
-  const DEFAULT: &str = "info,trailbase_refinery=warn,tracing::span=warn";
+fn init_logger(dev: bool, base_level: Option<&str>) {
+  let default = format!(
+    "{},trailbase_refinery=warn,tracing::span=warn",
+    base_level.unwrap_or("info")
+  );
 
   env_logger::Builder::from_env(if dev {
-    env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase=debug"))
+    env_logger::Env::new().default_filter_or(format!("{default},trailbase=debug"))
   } else {
-    env_logger::Env::new().default_filter_or(DEFAULT)
+    env_logger::Env::new().default_filter_or(default)
   })
   .format_timestamp_micros()
   .init();
@@ -504,11 +507,12 @@ fn main() -> Result<(), BoxError> {
     std::path::PathBuf::from(DataDir::DEFAULT)
   };
 
-  init_logger(if let Some(SubCommands::Run(ref cmd)) = cmd {
-    cmd.dev
+  if let Some(SubCommands::Run(ref cmd)) = cmd {
+    init_logger(cmd.dev, Some("info"));
   } else {
-    false
-  });
+    // For none-run-server commands, lower the log level to keep the spam at bay, e.g. SMTP fallback.
+    init_logger(false, Some("warn"));
+  }
 
   // Need to delay warning until after logger was initialized.
   if warn_data_dir {
