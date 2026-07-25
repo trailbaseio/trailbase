@@ -1,3 +1,12 @@
+## v0.31.1
+
+- Add username parsing to CLI, i.e. users can now be specified by either email, username or id (both UUID or url-safe base64).
+- Mark `--data-dir`/`$DATA_DIR` as deprecated in favor of `--depot`/`$DEPOT`.
+- Add transaction/batch support to Swift client.
+- Minor: fix theme switchers button style on first load. Thanks @zyrakq.
+- Minor: reduce log level for CLI when not running the server.
+- Update dependencies.
+
 ## v0.31.0
 
 - Change batch/transaction `RecordApi`s to return a result for each operation effectively establishing a 1:1 mapping.
