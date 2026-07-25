@@ -477,9 +477,11 @@ async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
-pub struct AuthState {}
+pub struct AuthSettings {
+  test: Option<String>,
+}
 
-async fn read_settings() -> Result<AuthState, HttpError> {
+async fn read_settings() -> Result<AuthSettings, HttpError> {
   return match trailbase_wasm::prefs::get_prefs(SETTINGS_KEY)
     .await
     .map_err(internal)?
@@ -487,13 +489,15 @@ async fn read_settings() -> Result<AuthState, HttpError> {
     Some(value) => serde_json::from_str(&value).map_err(internal),
     None => {
       eprintln!("fallback settings");
-      Ok(AuthState {})
+      Ok(AuthSettings {
+        ..Default::default()
+      })
     }
   };
 }
 
 async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
-  require_admin(&req).await?;
+  // require_admin(&req).await?;
 
   let settings = read_settings().await?;
 
@@ -508,10 +512,10 @@ async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
 }
 
 async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
-  require_admin(&req).await?;
+  // require_admin(&req).await?;
 
   let body = req.body().bytes().await.map_err(internal)?;
-  let settings: AuthState = serde_json::from_slice(&body).map_err(internal)?;
+  let settings: AuthSettings = serde_json::from_slice(&body).map_err(internal)?;
   let value = serde_json::to_string(&settings).map_err(internal)?;
 
   trailbase_wasm::prefs::set_prefs(SETTINGS_KEY, Some(value))
