@@ -102,6 +102,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         />
 
         <div class={style()}>
+          {/* NOTE: The `csp` attribute is ignored by most modern browsers. */}
           <iframe
             ref={iframe}
             style={{
@@ -109,6 +110,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
               height: "100%",
               display: "block",
             }}
+            csp=""
           />
         </div>
       </Match>

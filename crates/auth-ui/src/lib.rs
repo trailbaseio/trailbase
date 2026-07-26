@@ -458,9 +458,13 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
-  // TODO: Re-enable
-  // require_admin(&req).await?;
+async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
+  // TODO: Since we're serving an SPA we technically would NOT need to access protect the
+  // static asset, however this would be different with SSR. As a best practice, we should
+  // probably return an error here as the stricter, safer default
+  if require_admin(&req).await.is_err() {
+    eprintln!("admin_dashboard_handler: Not an admin");
+  }
 
   let file =
     auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;
@@ -497,7 +501,7 @@ async fn read_settings() -> Result<AuthSettings, HttpError> {
 }
 
 async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
-  // require_admin(&req).await?;
+  require_admin(&req).await?;
 
   let settings = read_settings().await?;
 
@@ -512,7 +516,7 @@ async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
 }
 
 async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
-  // require_admin(&req).await?;
+  require_admin(&req).await?;
 
   let body = req.body().bytes().await.map_err(internal)?;
   let settings: AuthSettings = serde_json::from_slice(&body).map_err(internal)?;

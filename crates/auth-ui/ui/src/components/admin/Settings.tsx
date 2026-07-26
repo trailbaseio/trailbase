@@ -47,7 +47,7 @@ export function Settings() {
             }
 
             (async () => {
-              const _response = await client.fetch("_/auth/admin/settings/", {
+              await client.fetch("_/auth/admin/settings/", {
                 method: "POST",
                 body: JSON.stringify({
                   test: "value",

@@ -16,33 +16,21 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
       </p>
     </div>
 
-    {
-      /* We can't have Astro inline JS w/o validating admin UI's CSP, thus this indirection */
-    }
+    {/* See below */}
     <div id="solid-root"></div>
   </div>
 </BaseLayout>
 
 <script>
-  import { adminClient } from "@/lib/admin-client";
-  import { buildPage } from "@/components/admin/Page";
+  import { renderAdminUI } from "@/components/admin/Page";
 
-  async function test() {
-    console.debug(document.head.baseURI, document.cookie, localStorage);
-    const client = adminClient();
-    if (!client) {
-      console.error("no client");
-      return;
-    }
+  // Astro inlines the JS from client:only components into the html. W/o a safety
+  // hash or nonce, this would be in vialoation of admin UI's root CSP. We thus
+  // have this render indirection via the <script> tag, which Astro pulls out
+  // of the template into a separete JS file.
+  renderAdminUI("solid-root");
 
-    console.log("TOKENS: ", client.tokens());
-
-    const response = await client.fetch("_/auth/admin/settings/");
-    const settings = await response.json();
-    console.log("SETTINGS:", settings);
-  }
-
-  test();
-
-  buildPage("solid-root");
+  console.debug("LOCATION:", window.location, "doc.baseURI:");
+  console.debug("DOC BASE:", document.head.baseURI);
+  console.debug("COOKIES & STORAGE:", document.cookie, localStorage);
 </script>

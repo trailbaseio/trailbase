@@ -510,7 +510,8 @@ fn main() -> Result<(), BoxError> {
   if let Some(SubCommands::Run(ref cmd)) = cmd {
     init_logger(cmd.dev, Some("info"));
   } else {
-    // For none-run-server commands, lower the log level to keep the spam at bay, e.g. SMTP fallback.
+    // For none-run-server commands, lower the log level to keep the spam at bay, e.g. SMTP
+    // fallback.
     init_logger(false, Some("warn"));
   }
 

@@ -1,11 +1,12 @@
 import { isServer } from "solid-js/web";
+import { Show } from "solid-js";
 
 export function ScreenDimensions() {
-  if (isServer) return null;
-
   return (
-    <p>
-      {window.innerWidth}x{window.innerHeight} (WxH)
-    </p>
+    <Show when={!isServer}>
+      <span>
+        {window.innerWidth}x{window.innerHeight} (WxH)
+      </span>
+    </Show>
   );
 }
