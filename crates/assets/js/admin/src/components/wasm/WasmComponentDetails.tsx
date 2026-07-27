@@ -102,7 +102,10 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         />
 
         <div class={style()}>
-          {/* NOTE: The `csp` attribute is ignored by most modern browsers. */}
+          {/*
+             NOTE: The `csp` attribute is not yet supported by all relevant modern browsers:
+               https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
+          */}
           <iframe
             ref={iframe}
             style={{

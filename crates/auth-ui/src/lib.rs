@@ -13,6 +13,7 @@ use trailbase_wasm::http::{
 };
 use trailbase_wasm::kv::Store;
 use trailbase_wasm::{Guest, Metadata, export};
+use ts_rs::TS;
 
 mod auth;
 
@@ -480,12 +481,30 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-#[derive(Debug, Default, Deserialize, Serialize)]
-pub struct AuthSettings {
-  test: Option<String>,
+#[derive(Debug, Default, Deserialize, Serialize, TS)]
+#[ts(export)]
+pub struct AuthUiSettings {
+  #[ts(optional)]
+  title: Option<String>,
+
+  #[ts(optional)]
+  icon_url: Option<String>,
+
+  /// E.g. mailto://test@trailbase.io.
+  #[ts(optional)]
+  contact_url: Option<String>,
+  /// Typically a page detailing the terms.
+  #[ts(optional)]
+  terms_url: Option<String>,
+  /// Typically a page detailing PII usage.
+  #[ts(optional)]
+  privacy_url: Option<String>,
+  /// Typically a page declaring a legal entity for ownership and/or authorship.
+  #[ts(optional)]
+  impressum_url: Option<String>,
 }
 
-async fn read_settings() -> Result<AuthSettings, HttpError> {
+async fn read_settings() -> Result<AuthUiSettings, HttpError> {
   return match trailbase_wasm::prefs::get_prefs(SETTINGS_KEY)
     .await
     .map_err(internal)?
@@ -493,7 +512,7 @@ async fn read_settings() -> Result<AuthSettings, HttpError> {
     Some(value) => serde_json::from_str(&value).map_err(internal),
     None => {
       eprintln!("fallback settings");
-      Ok(AuthSettings {
+      Ok(AuthUiSettings {
         ..Default::default()
       })
     }
@@ -519,7 +538,7 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
   require_admin(&req).await?;
 
   let body = req.body().bytes().await.map_err(internal)?;
-  let settings: AuthSettings = serde_json::from_slice(&body).map_err(internal)?;
+  let settings: AuthUiSettings = serde_json::from_slice(&body).map_err(internal)?;
   let value = serde_json::to_string(&settings).map_err(internal)?;
 
   trailbase_wasm::prefs::set_prefs(SETTINGS_KEY, Some(value))
