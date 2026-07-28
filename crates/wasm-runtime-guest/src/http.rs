@@ -97,6 +97,10 @@ impl HttpRoute {
     };
   }
 
+  /// Wrap route to be rejected for all non-admin users.
+  ///
+  /// NOTE: We're using a builder pattern on an HttpRoute instead of an HttpRouteBuilder, this may
+  /// be surprising.
   pub fn require_admin(self) -> HttpRoute {
     let Self {
       method,
@@ -104,51 +108,29 @@ impl HttpRoute {
       handler: original,
     } = self;
 
-    let wrapped: HttpHandler = Box::new(
-      move |context: HttpContext,
-            req: http::Request<wstd::http::body::IncomingBody>,
-            responder: Responder| {
-        Box::pin(async move {
-          let Some(user) = context.user.as_ref() else {
-            return responder
-              .respond(empty_error_response(StatusCode::UNAUTHORIZED))
-              .await;
-          };
-
-          if req.method() != Method::GET {
-            let received = req
-              .headers()
-              .get("CSRF-Token")
-              .and_then(|v| v.to_str().ok());
-            if received != Some(user.csrf_token.as_str()) {
-              return responder
-                .respond(empty_error_response(StatusCode::FORBIDDEN))
-                .await;
-            }
-          }
-
-          let user_id = user.id.clone();
-          match crate::auth::is_admin(&user_id).await {
-            Ok(true) => original(context, req, responder).await,
-            Ok(false) => {
-              responder
-                .respond(empty_error_response(StatusCode::FORBIDDEN))
-                .await
-            }
-            Err(_err) => {
-              responder
-                .respond(empty_error_response(StatusCode::INTERNAL_SERVER_ERROR))
-                .await
-            }
-          }
-        })
-      },
-    );
-
     return HttpRoute {
       method,
       path,
-      handler: wrapped,
+      // Wraps the handler in an access check to build a new route.
+      handler: Box::new(
+        move |context: HttpContext,
+              req: http::Request<wstd::http::body::IncomingBody>,
+              responder: Responder| {
+          Box::pin(async move {
+            if let Err(err) = crate::auth::require_admin_impl(
+              context.user.as_ref(),
+              req.method(),
+              req.headers().get(crate::auth::CSRF_HEADER),
+            )
+            .await
+            {
+              return responder.respond(err.into()).await;
+            }
+
+            return original(context, req, responder).await;
+          })
+        },
+      ),
     };
   }
 }
