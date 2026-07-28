@@ -34,6 +34,8 @@ pub struct LoginTemplate<'a> {
   pub login_identifier: LoginIdentifier,
   pub oauth_providers: &'a [OAuthProvider],
   pub oauth_query_params: &'a [(&'a str, &'a str)],
+  pub title: Option<&'a str>,
+  pub icon_url: Option<&'a str>,
 }
 
 #[derive(Template)]
@@ -139,6 +141,8 @@ mod tests {
       login_identifier: LoginIdentifier::EmailOrUsername,
       oauth_providers: &[],
       oauth_query_params: &[("redirect_uri", redirect_uri)],
+      title: Some("test"),
+      icon_url: Some("https://picsum.photos/300/200"),
     }
     .render()
     .unwrap();
@@ -161,6 +165,8 @@ mod tests {
         img_name: "oidc".to_string(),
       }],
       oauth_query_params: &[("redirect_uri", redirect_uri), ("foo", "bar")],
+      title: None,
+      icon_url: None,
     }
     .render()
     .unwrap();

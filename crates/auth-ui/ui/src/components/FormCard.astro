@@ -1,0 +1,15 @@
+---
+import Card from "@/components/Card.astro";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<Card title={title}>
+  <slot name="header" slot="header" />
+
+  <slot />
+</Card>
