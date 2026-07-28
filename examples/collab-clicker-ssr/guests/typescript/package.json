@@ -10,6 +10,7 @@
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/component.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && eslint",
+    "check:format": "prettier -c src",
     "format": "prettier -w src"
   },
   "dependencies": {

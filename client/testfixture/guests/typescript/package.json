@@ -9,6 +9,7 @@
     "build": "npm run build:tsc && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && eslint",
     "deploy": "npm run build && cp dist/wasm_ts_guest_testfixture.wasm ../../wasm/",
+    "check:format": "prettier -c src",
     "format": "prettier -w src"
   },
   "dependencies": {

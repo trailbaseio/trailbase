@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "check:format": "prettier -c src",
     "format": "prettier -w src",
     "read": "node --loader ts-node/esm src/index.js",
     "fill": "node --loader ts-node/esm src/fill.js",
