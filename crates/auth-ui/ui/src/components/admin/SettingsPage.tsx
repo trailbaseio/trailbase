@@ -1,6 +1,7 @@
 import { createResource, Show } from "solid-js";
 import { render } from "solid-js/web";
 import { TbOutlineRefresh } from "solid-icons/tb";
+import { useStore } from "@nanostores/solid";
 import type { Client } from "trailbase";
 
 import { ScreenDimensions } from "@/components/admin/ScreenDimensions";
@@ -19,10 +20,13 @@ import {
 } from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-import { adminClient } from "@/lib/admin-client";
+import { $client, installPostMessageHandler } from "@/lib/admin-client";
 import type { AuthUiSettings } from "@auth-ui/AuthUiSettings";
 
 export function renderAdminUI(id: string) {
+  // Install handler to receive tokens from shell via postMessage.
+  installPostMessageHandler();
+
   render(
     () => (
       <ErrorBoundary>
@@ -34,10 +38,16 @@ export function renderAdminUI(id: string) {
 }
 
 function SettingsPage() {
+  const client = useStore($client);
   const [settings, { mutate: setSettings, refetch }] = createResource(
-    async () => {
-      const client = buildClient();
-      return await fetchAuthUiSettings(client);
+    client,
+    async (c) => {
+      if (!c) {
+        console.debug("undefined client");
+        return {} as AuthUiSettings;
+      }
+      // const client = buildClient();
+      return await fetchAuthUiSettings(c);
     },
   );
 
@@ -99,10 +109,13 @@ function SettingsPage() {
 
           <Button
             onClick={() => {
-              const client = buildClient();
+              const c = client();
+              if (!c) {
+                return;
+              }
 
               (async () => {
-                const updatedSettings = await updateAuthUiSettings(client, {
+                const updatedSettings = await updateAuthUiSettings(c, {
                   title: getOptionalValue(titleRef),
                   icon_url: getOptionalValue(iconRef),
                 });
@@ -142,17 +155,17 @@ function getOptionalValue(
   return undefined;
 }
 
-function buildClient(): Client {
-  const client = adminClient();
-  if (!client) {
-    throw new Error("Tokens not found. Not logged in?");
-  }
-  if (client.tokens() === undefined) {
-    throw new Error("Invalid tokens. Not logged in.");
-  }
-
-  return client;
-}
+// function buildClient(): Client {
+//   const client = adminClient();
+//   if (!client) {
+//     throw new Error("Tokens not found. Not logged in?");
+//   }
+//   if (client.tokens() === undefined) {
+//     throw new Error("Invalid tokens. Not logged in.");
+//   }
+//
+//   return client;
+// }
 
 async function fetchAuthUiSettings(client: Client) {
   const response = await client.fetch("_/auth/admin/settings/", {

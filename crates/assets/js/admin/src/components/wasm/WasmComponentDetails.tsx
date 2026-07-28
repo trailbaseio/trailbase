@@ -1,17 +1,17 @@
-import { createEffect, Match, Switch } from "solid-js";
+import { createEffect, onCleanup, Match, Switch } from "solid-js";
 import { A } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import { TbOutlineArrowLeft } from "solid-icons/tb";
 
 import { Header } from "@/components/Header";
-import { client } from "@/lib/client";
+import { client, hostAddress } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
+import { $tokens } from "@/lib/client";
 
 import type { WasmComponent } from "@bindings/WasmComponent";
+import { Tokens } from "trailbase";
 
 export function WasmComponentDetails(props: { component: WasmComponent }) {
-  let iframe: HTMLIFrameElement | undefined;
-
   const isMobile = createIsMobile();
   const style = () => {
     if (isMobile()) {
@@ -46,6 +46,8 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
     },
   }));
 
+  let iframe: HTMLIFrameElement | undefined;
+
   createEffect(() => {
     let body = dashboardPage.data;
     if (body !== undefined) {
@@ -54,9 +56,13 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         return;
       }
 
-      // NOTE: Ultra hacky, this requires the guest UI to be set-up appropriately,
-      // however this is only relevant for components that should work in a
-      // separate dev server for the admin UI.
+      // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
+      // the admin UI runs in a separate dev-server. W/o guest dashboards
+      // would try to fetch their assets from the dev-server rather than TB.
+      // This requires guests to be appropriately set up, however isn't generally
+      // necessary unless you're also developing on the admin UI itself.
+      // NOTE: We cannot just pass the base URI via `postMessage`, since static
+      // assets referenced by the root document could not be fetched.
       if (import.meta.env.DEV) {
         body = body.replace(
           `base href=""`,
@@ -64,10 +70,34 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         );
       }
 
-      iframe.onload = (_ev) => {
-        // Will be called after `srcdoc` was parsed and built.
-        console.debug("loaded", iframe.contentDocument);
+      let cleanup: (() => void) | undefined;
+      const onLoad = (_ev: HTMLElementEventMap["load"]) => {
+        // Will be called after `srcdoc` was set (below), then parsed and built.
+        console.debug("iframe loaded");
+
+        // NOTE: with the iframe sandbox, we cannot access `iframe.contentDocument`
+        // directly to interact with globals in the child. It would be rejected as
+        // a cross-origin request. We thus need postMessage.
+        // NOTE: the `*` target is critical for sandboxed (different-origin)
+        // iframes to avoid messages being rejected.
+        cleanup = $tokens.subscribe((tokens) => {
+          iframe.contentWindow?.postMessage(
+            {
+              type: "setup",
+              value: {
+                tokens: tokens !== null ? { ...tokens } : undefined,
+                url: hostAddress(),
+              },
+            } satisfies Message,
+            "*",
+          );
+        });
       };
+
+      iframe.addEventListener("load", onLoad);
+      onCleanup(() => cleanup?.());
+
+      // Set the actual body.
       iframe.srcdoc = body;
     }
   });
@@ -76,7 +106,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
     <A
       href="/wasm"
       class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
-      title="Back to WASM Modules"
+      title="Back to the list of WASM components"
     >
       <TbOutlineArrowLeft size={20} />
     </A>
@@ -90,7 +120,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
           leading={backLink()}
         />
         <div class="text-muted-foreground p-4">
-          This module has no settings page.
+          This WASM component did not register a dashboard.
         </div>
       </Match>
 
@@ -102,8 +132,10 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
 
         <div class={style()}>
           {/*
-             NOTE: The `csp` attribute is not yet supported by all relevant modern browsers:
+             NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
                https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
+            TODO: Can we use something stricter like:
+              csp="default-src 'none'; script-src 'unsafe-inline'"
           */}
           <iframe
             ref={iframe}
@@ -112,10 +144,29 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
               height: "100%",
               display: "block",
             }}
-            csp=""
+            sandbox="allow-scripts"
+            csp={iframeCsp}
           />
         </div>
       </Match>
     </Switch>
   );
 }
+
+type SetupMessage = {
+  type: "setup";
+  value: {
+    tokens?: Tokens;
+    url?: string;
+  };
+};
+
+type Message = SetupMessage;
+
+const iframeCsp = import.meta.env.DEV
+  ? ""
+  : [
+      "default-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "connect-src * 'self' 'unsafe-inline'",
+    ].join("; ");
