@@ -9,8 +9,8 @@
     "build": "vite build && npm run build:wasm",
     "check": "eslint",
     "dev": "node --experimental-strip-types hot-reload.ts",
-    "check:format": "prettier -c src",
-    "format": "prettier -w src"
+    "check:format": "prettier -c .",
+    "format": "prettier -w ."
   },
   "dependencies": {
     "trailbase-wasm": "workspace:*"

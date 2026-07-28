@@ -3,12 +3,12 @@ import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
 
 const entryPoints = {
-  "index": resolve(__dirname, 'src/index.ts'),
-  "db": resolve(__dirname, 'src/db/index.ts'),
-  "fs": resolve(__dirname, 'src/fs/index.ts'),
-  "http": resolve(__dirname, 'src/http/index.ts'),
-  "job": resolve(__dirname, 'src/job/index.ts'),
-  "kv": resolve(__dirname, 'src/kv/index.ts'),
+  index: resolve(__dirname, "src/index.ts"),
+  db: resolve(__dirname, "src/db/index.ts"),
+  fs: resolve(__dirname, "src/fs/index.ts"),
+  http: resolve(__dirname, "src/http/index.ts"),
+  job: resolve(__dirname, "src/job/index.ts"),
+  kv: resolve(__dirname, "src/kv/index.ts"),
 };
 
 export default defineConfig({
@@ -39,10 +39,7 @@ export default defineConfig({
       output: {
         entryFileNames: "[name].js",
       },
-      external: [
-        /^wasi:.*/,
-        /^trailbase:.*/,
-      ],
+      external: [/^wasi:.*/, /^trailbase:.*/],
     },
   },
 });
