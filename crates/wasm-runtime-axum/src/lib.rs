@@ -148,10 +148,10 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   version: Option<String>,
 ) -> Result<InstallResult<S>, AnyError> {
   let InitManifest {
+    metadata,
     http_handlers,
     job_handlers,
     sqlite_functions: _,
-    metadata,
   } = {
     let store = HttpStore::new(runtime).await?;
     store.initialize(InitArgs { version }).await?
@@ -161,9 +161,13 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   let job_handlers = job_handlers.unwrap_or_default();
 
   debug!(
-    "Got {m} jobs and {n} http routes",
+    "Component {path}: got {m} jobs and {n} http routes ({meta})",
+    path = runtime.component_path().to_string_lossy(),
     m = job_handlers.len(),
-    n = http_handlers.len()
+    n = http_handlers.len(),
+    meta = metadata
+      .as_ref()
+      .map_or_else(|| "".to_string(), |m| format!("{m}")),
   );
 
   let mut jobs: Vec<Job> = vec![];

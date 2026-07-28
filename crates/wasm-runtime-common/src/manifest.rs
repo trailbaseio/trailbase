@@ -105,6 +105,17 @@ pub struct Metadata {
   pub admin_ui_path: Option<String>,
 }
 
+impl std::fmt::Display for Metadata {
+  fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    return write!(
+      fmt,
+      "Metadata(display_name={}, rt={:?})",
+      self.display_name.as_deref().unwrap_or("??"),
+      self.guest_runtime.unwrap_or(GuestRuntime::Unknown),
+    );
+  }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct InitArguments {
