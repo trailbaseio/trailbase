@@ -54,7 +54,7 @@ repos:
     ### JS/TypeScript: Cient, Admin UI, Auth UI, Docs, examples ... ###
     - id: prettier
       name: Prettier
-      entry: pnpm -r format --check
+      entry: pnpm -r check:format
       language: system
       types_or: [javascript, jsx, ts, tsx, astro, markdown, mdx]
       # NOTE: We're relying on pnpm workspaces instead.

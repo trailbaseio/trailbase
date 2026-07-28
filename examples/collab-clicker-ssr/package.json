@@ -8,6 +8,7 @@
     "build": "pnpm run build:client && pnpm run build:server",
     "build:client": "vite build --outDir dist/client",
     "build:server": "vite build --ssr src/entry-server.tsx --outDir dist/server",
+    "check:format": "prettier -c *.{ts,js,tsx,jsx}",
     "format": "prettier -w *.{ts,js,tsx,jsx}",
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },

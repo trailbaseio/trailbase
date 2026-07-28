@@ -44,6 +44,8 @@ pub struct InitArgs {
   pub pg_uri: Option<String>,
 }
 
+type WasmMetadataAndRuntime = (Option<Metadata>, Runtime);
+
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
@@ -76,7 +78,7 @@ struct InternalState {
   object_store: Arc<dyn ObjectStore>,
 
   /// Actual WASM runtimes.
-  wasm_runtimes: Vec<Arc<RwLock<(Option<Metadata>, Runtime)>>>,
+  wasm_runtimes: Vec<Arc<RwLock<WasmMetadataAndRuntime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   wasm_runtime_builders: Vec<Box<crate::wasm::WasmRuntimeBuilder>>,
 
@@ -421,7 +423,7 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<(Option<Metadata>, Runtime)>>] {
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<WasmMetadataAndRuntime>>] {
     return &self.state.wasm_runtimes;
   }
 
