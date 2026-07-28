@@ -1,5 +1,6 @@
-import { createSignal } from "solid-js";
+import { createResource, Show } from "solid-js";
 import { render } from "solid-js/web";
+import { TbOutlineRefresh } from "solid-icons/tb";
 import type { Client } from "trailbase";
 
 import { ScreenDimensions } from "@/components/admin/ScreenDimensions";
@@ -10,7 +11,12 @@ import {
   TextFieldInput,
 } from "@/components/ui/text-field";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 import { adminClient } from "@/lib/admin-client";
@@ -28,7 +34,12 @@ export function renderAdminUI(id: string) {
 }
 
 function SettingsPage() {
-  const [settings, setSettings] = createSignal<AuthUiSettings | undefined>();
+  const [settings, { mutate: setSettings, refetch }] = createResource(
+    async () => {
+      const client = buildClient();
+      return await fetchAuthUiSettings(client);
+    },
+  );
 
   let titleRef: HTMLInputElement | undefined;
   let iconRef: HTMLInputElement | undefined;
@@ -41,12 +52,14 @@ function SettingsPage() {
         </CardHeader>
 
         <CardContent>
-          <p>
-            update or reinstall with{" "}
-            <span class="font-mono">
-              {" trail components add trailbase/auth_ui "}
-            </span>
+          <p class="text-sm">
+            To update or re-install the first-party auth-ui component, simply
+            run the following:
           </p>
+
+          <pre class="mx-4 my-2 whitespace-pre-wrap">
+            trail components add trailbase/auth_ui
+          </pre>
         </CardContent>
       </Card>
 
@@ -59,62 +72,62 @@ function SettingsPage() {
           <TextField>
             <div class="flex items-center gap-2">
               <TextFieldLabel>Title</TextFieldLabel>
-              <TextFieldInput ref={titleRef} type="text" />
+              <TextFieldInput
+                ref={titleRef}
+                type="text"
+                value={settings()?.title}
+              />
             </div>
           </TextField>
 
           <TextField>
             <div class="flex items-center gap-2">
               <TextFieldLabel>Icon</TextFieldLabel>
-              <TextFieldInput ref={iconRef} type="text" />
+              <TextFieldInput
+                ref={iconRef}
+                type="text"
+                value={settings()?.icon_url}
+              />
             </div>
           </TextField>
         </CardContent>
+
+        <CardFooter class="flex justify-end gap-2">
+          <Button size="icon" variant="outline" onClick={() => refetch()}>
+            <TbOutlineRefresh />
+          </Button>
+
+          <Button
+            onClick={() => {
+              const client = buildClient();
+
+              (async () => {
+                const updatedSettings = await updateAuthUiSettings(client, {
+                  title: getOptionalValue(titleRef),
+                  icon_url: getOptionalValue(iconRef),
+                });
+                setSettings(updatedSettings);
+              })();
+            }}
+          >
+            Submit
+          </Button>
+        </CardFooter>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <h2>Debug</h2>
-        </CardHeader>
+      <Show when={import.meta.env.DEV}>
+        <Card>
+          <CardHeader>
+            <h2>Debug</h2>
+          </CardHeader>
 
-        <CardContent class="flex flex-col gap-2">
-          <ScreenDimensions />
+          <CardContent class="flex flex-col gap-2">
+            <ScreenDimensions />
 
-          <span>Current Settings: {JSON.stringify(settings())}</span>
-
-          <div class="flex gap-2">
-            <Button
-              onClick={() => {
-                const client = buildClient();
-
-                (async () => {
-                  const settings = await fetchAuthUiSettings(client);
-                  console.debug("Got", settings);
-                  setSettings(settings);
-                })();
-              }}
-            >
-              Load Settings
-            </Button>
-
-            <Button
-              onClick={() => {
-                const client = buildClient();
-
-                (async () => {
-                  const updatedSettings = await updateAuthUiSettings(client, {
-                    title: getOptionalValue(titleRef),
-                    icon_url: getOptionalValue(iconRef),
-                  });
-                  setSettings(updatedSettings);
-                })();
-              }}
-            >
-              Save Settings
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <span>Current Settings: {JSON.stringify(settings())}</span>
+          </CardContent>
+        </Card>
+      </Show>
     </div>
   );
 }

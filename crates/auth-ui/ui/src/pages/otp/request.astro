@@ -1,5 +1,5 @@
 ---
-import Form from "@/components/Form.astro";
+import FormLayout from "@/layouts/FormLayout.astro";
 import Button from "@/components/Button.astro";
 import TextFieldInput from "@/components/TextFieldInput.astro";
 import TextFieldLabel from "@/components/TextFieldLabel.astro";
@@ -10,7 +10,7 @@ const formBaseAction = `${AUTH_API}/otp/request`;
 const BASE_URL = import.meta.env.BASE_URL;
 ---
 
-<Form title="OTP">
+<FormLayout title="OTP">
   <div>
     <form
       id="login-form"
@@ -43,4 +43,4 @@ const BASE_URL = import.meta.env.BASE_URL;
       </div>
     </form>
   </div>
-</Form>
+</FormLayout>
