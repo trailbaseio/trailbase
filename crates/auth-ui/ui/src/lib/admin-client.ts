@@ -1,30 +1,54 @@
-import { isServer } from "solid-js/web";
 import { initClient } from "trailbase";
 import type { Client, Tokens } from "trailbase";
+import { atom } from "nanostores";
 
-export function adminClient(base?: string): Client | undefined {
-  if (isServer) {
-    return;
-  }
+export const $client = atom<Client | undefined>();
 
-  const authTokens: string | null = localStorage.getItem("auth_tokens");
-  if (authTokens === null) {
-    console.debug("adminClient tokens missing");
-    return;
-  }
+type UnknownMessage = {
+  type: string;
+  value?: unknown;
+};
 
-  const tokens: Tokens = JSON.parse(authTokens);
-  const uri = base ?? defaultBaseUri();
-  console.debug(`adminClient(base = ${uri})`);
-  return initClient(uri, { tokens });
+type SetupMessage = {
+  type: "setup";
+  value: {
+    tokens: Tokens | null;
+    url?: string;
+  };
+};
+
+type Message = SetupMessage | UnknownMessage;
+
+export function installPostMessageHandler() {
+  window.addEventListener("message", (event) => {
+    const msg = event.data as Message;
+
+    switch (msg.type) {
+      case "setup":
+        const value = msg.value as SetupMessage["value"];
+        const tokens = value.tokens;
+        if (!tokens) {
+          console.debug("Received null tokens:", msg);
+          break;
+        }
+
+        $client.set(initClient(defaultBaseUri(), { tokens }));
+
+        break;
+
+      default:
+        console.warn("Expected setup message, got:", msg);
+        break;
+    }
+  });
 }
 
 function defaultBaseUri() {
-  console.debug(
-    "adminClient location:",
-    window.location,
-    document.head.baseURI,
-  );
+  // console.debug(
+  //   "adminClient location:",
+  //   window.location,
+  //   document.head.baseURI,
+  // );
 
   const href = window.location.href;
   const origin = window.location.origin;

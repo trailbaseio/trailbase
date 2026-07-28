@@ -4,7 +4,7 @@ import type { Client, Tokens, User } from "trailbase";
 import { FetchError, initClient } from "trailbase";
 import { showToast } from "@/components/ui/toast";
 
-const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
+export const $tokens = persistentAtom<Tokens | null>("auth_tokens", null, {
   encode: JSON.stringify,
   decode: JSON.parse,
 });

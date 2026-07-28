@@ -127,8 +127,8 @@ pub fn build_js(path: impl AsRef<Path>) -> Result<()> {
   let _ = build_result?;
 
   // Enable source maps for debug builds:
-  // let build_output = pnpm_run(&["--dir", &path, "build", "--sourcemap", "inline"]);
-  let build_output = pnpm_run(&["--dir", &path, "build"]);
+  let build_output = pnpm_run(&["--dir", &path, "build", "--sourcemap", "inline"]);
+  // let build_output = pnpm_run(&["--dir", &path, "build"]);
   if build_output.is_err() && cfg!(windows) {
     error!(
       "pnpm build failed on Windows. Make sure to enable symlinks: `git config core.symlinks true && git reset --hard`."
