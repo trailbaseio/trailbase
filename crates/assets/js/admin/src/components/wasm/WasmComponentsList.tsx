@@ -44,11 +44,12 @@ function ComponentIcon(props: { icon?: string }) {
 function ComponentCard(props: { component: WasmComponent }) {
   const component = () => props.component;
   const displayName = () => component().display_name ?? component().name;
+  const hasDetails = () => !!component().admin_ui_path;
 
   const WrapHyperlink = (props: { children: JSXElement }) => {
     return (
       <Switch>
-        <Match when={component().admin_ui_path}>
+        <Match when={hasDetails()}>
           <A href={`/wasm/${component().name}`}>{props.children}</A>
         </Match>
 
@@ -68,7 +69,9 @@ function ComponentCard(props: { component: WasmComponent }) {
           <div class="flex w-full gap-2">
             <div class="flex grow flex-col justify-start">
               <div class="flex h-full items-center gap-2">
-                <CardTitle>{displayName()}</CardTitle>
+                <CardTitle class={hasDetails() ? "" : "text-muted-foreground"}>
+                  {displayName()}
+                </CardTitle>
 
                 <Show when={displayName() !== props.component.name}>
                   <span class="text-muted-foreground text-xs">
