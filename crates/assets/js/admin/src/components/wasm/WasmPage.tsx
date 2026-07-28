@@ -7,7 +7,6 @@ import { listWasmComponents } from "@/lib/api/wasm-components";
 import { Spinner } from "@/components/Spinner";
 import { WasmComponentDetails } from "@/components/wasm/WasmComponentDetails";
 import { WasmComponentsList } from "@/components/wasm/WasmComponentsList";
-import { find } from "@antv/x6/lib/common/dom/elem";
 
 export function WasmPage() {
   const params = useParams<{ name?: string }>();

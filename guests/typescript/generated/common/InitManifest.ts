@@ -4,19 +4,19 @@ import type { Job } from "./Job";
 import type { Metadata } from "./Metadata";
 import type { SqliteFunction } from "./SqliteFunction";
 
-export type InitManifest = {
+export type InitManifest = { 
 /**
  * Metadata for the WASM component, useful e.g. for the admin page.
  */
-metadata: Metadata | null,
+metadata: Metadata | null, 
 /**
  * Registered HTTP handlers tuple of Method + Path. May contain wild cards.
  */
-http_handlers: Array<HttpRoute> | null,
+http_handlers: Array<HttpRoute> | null, 
 /**
  * Registered JobHandlers.
  */
-job_handlers: Array<Job> | null,
+job_handlers: Array<Job> | null, 
 /**
  * Registered Sqlite functions.
  */

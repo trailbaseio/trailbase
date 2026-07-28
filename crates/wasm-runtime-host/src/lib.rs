@@ -10,7 +10,7 @@ mod sqlite;
 use bytes::Bytes;
 use core::future::Future;
 use http_body_util::combinators::UnsyncBoxBody;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::SystemTime;
@@ -28,6 +28,7 @@ use crate::host::TransactionImpl;
 
 pub use crate::host::{SharedState, State};
 pub use trailbase_wasi_keyvalue::Store as KvStore;
+pub use trailbase_wasm_common::component_path_to_name;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -156,7 +157,7 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
     return Ok(Self { state });
   }
 
-  pub fn component_path(&self) -> &PathBuf {
+  pub fn component_path(&self) -> &Path {
     return &self.state.component_path;
   }
 
@@ -164,7 +165,7 @@ impl<T: StoreBuilder<State>> RuntimeT<T> {
     let mut store = self
       .state
       .store_builder
-      .new_store(&self.state.engine, self.component_path().clone())?;
+      .new_store(&self.state.engine, self.component_path().to_path_buf())?;
 
     let instance_pre = self
       .state
@@ -339,11 +340,10 @@ impl HttpStore {
       // out of scope.
       let handle = tokio::spawn(REQUEST_ID.scope(REQUEST_ID.with(|id| *id), async move {
         // Instantiate a store per request, see FIXME below.
-        let mut lock = state
-          .rt
-          .state
-          .store_builder
-          .new_store(&state.rt.state.engine, state.rt.component_path().clone())?;
+        let mut lock = state.rt.state.store_builder.new_store(
+          &state.rt.state.engine,
+          state.rt.component_path().to_path_buf(),
+        )?;
         // let (mut lock, _bindings) = state.rt.new_bindings().await?;
 
         let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
@@ -501,17 +501,6 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   }
 
   return config;
-}
-
-#[inline]
-pub fn component_path_to_name(path: &std::path::Path) -> Result<String, String> {
-  return Ok(
-    path
-      .file_stem()
-      .and_then(|s| s.to_str())
-      .ok_or_else(|| format!("failed to get component name from '{path:?}'"))?
-      .to_string(),
-  );
 }
 
 // fn bytes_to_response(

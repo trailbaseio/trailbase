@@ -72,3 +72,14 @@ pub struct HttpContextUser {
   /// The "expected" CSRF token as included in the auth token claims [User] was constructed from.
   pub csrf_token: String,
 }
+
+#[inline]
+pub fn component_path_to_name(path: &std::path::Path) -> Result<String, String> {
+  return Ok(
+    path
+      .file_stem()
+      .and_then(|s| s.to_str())
+      .ok_or_else(|| format!("failed to get component name from '{path:?}'"))?
+      .to_string(),
+  );
+}
