@@ -63,7 +63,7 @@ async function startTrailBaseAndHotRestart(opts: {
       signal: signal,
       env: {
         RUST_BACKTRACE: "1",
-      }
+      },
     },
   );
 

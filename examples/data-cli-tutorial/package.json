@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "check:format": "prettier -c src",
-    "format": "prettier -w src",
+    "check:format": "prettier -c .",
+    "format": "prettier -w .",
     "read": "node --loader ts-node/esm src/index.js",
     "fill": "node --loader ts-node/esm src/fill.js",
     "check": "tsc --noEmit --skipLibCheck && eslint"

@@ -9,8 +9,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check && eslint",
-    "check:format": "prettier -c src *.mjs",
-    "format": "prettier -w src *.mjs",
+    "check:format": "prettier -c .",
+    "format": "prettier -w .",
     "types": "make --always-make types"
   },
   "dependencies": {

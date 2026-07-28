@@ -12,10 +12,5 @@
       "@schema/*": ["./types/*"]
     }
   },
-  "exclude": [
-    "dist",
-    "node_modules",
-    "types",
-    "public"
-  ]
+  "exclude": ["dist", "node_modules", "types", "public"]
 }
