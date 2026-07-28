@@ -102,8 +102,8 @@ impl Guest for Endpoints {
       ),
       // Admin UI routes.
       routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
-      routing::get("/_/auth/admin/settings/", get_settings_handler),
-      routing::post("/_/auth/admin/settings/", set_settings_handler),
+      routing::get("/_/auth/admin/settings/", get_settings_handler).require_admin(),
+      routing::post("/_/auth/admin/settings/", set_settings_handler).require_admin(),
       // Wildcard match for static assets. Note `{*wildcard}` is not optional, i.e. this route
       // does not match `/_/auth/`.
       routing::get("/_/auth/{*wildcard}", async |req: Request| {
@@ -519,9 +519,7 @@ async fn read_settings() -> Result<AuthUiSettings, HttpError> {
   };
 }
 
-async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
-  require_admin(&req).await?;
-
+async fn get_settings_handler(_req: Request) -> Result<Response, HttpError> {
   let settings = read_settings().await?;
 
   return Response::builder()
@@ -535,8 +533,6 @@ async fn get_settings_handler(req: Request) -> Result<Response, HttpError> {
 }
 
 async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
-  require_admin(&req).await?;
-
   let body = req.body().bytes().await.map_err(internal)?;
   let settings: AuthUiSettings = serde_json::from_slice(&body).map_err(internal)?;
   let value = serde_json::to_string(&settings).map_err(internal)?;
