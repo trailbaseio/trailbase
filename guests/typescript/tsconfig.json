@@ -25,7 +25,7 @@
         "./generated/types/interfaces/wasi-filesystem-types.d.ts"
       ],
       "wasi:keyvalue/store@0.2.0-draft": [
-        "./generated/types/interfaces/wasi-keyvalue-store.d.ts",
+        "./generated/types/interfaces/wasi-keyvalue-store.d.ts"
       ],
       "trailbase:database/sqlite@0.1.0": [
         "./generated/types/interfaces/trailbase-database-sqlite.d.ts"
