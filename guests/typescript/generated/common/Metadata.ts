@@ -4,24 +4,24 @@ import type { GuestRuntime } from "./GuestRuntime";
 /**
  * Metadata a component can self-report for display in the admin WASM modules page.
  */
-export type Metadata = {
+export type Metadata = { 
 /**
  * Name to show in the admin UI component browser.
  */
-display_name: string | null,
+display_name: string | null, 
 /**
  * Optional description to show in the admin UI.
  */
-description: string | null,
+description: string | null, 
 /**
  * Icon to show in the admin UI component browser, e.g. "<svg ..." or
  * "data:<mime-type>;base64,<base64-encoded-data>".
  */
-icon: string | null,
+icon: string | null, 
 /**
  * Which guest runtime is used by the component.
  */
-guest_runtime: GuestRuntime | null,
+guest_runtime: GuestRuntime | null, 
 /**
  * An HTTP endpoint for an admin UI to present in the admin dashboard's, e.g.: "/comp0/admin".
  */

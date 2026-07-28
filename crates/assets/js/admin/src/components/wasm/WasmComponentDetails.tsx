@@ -1,10 +1,9 @@
-import { createEffect, Match, Show, Switch } from "solid-js";
+import { createEffect, Match, Switch } from "solid-js";
 import { A } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import { TbOutlineArrowLeft } from "solid-icons/tb";
 
 import { Header } from "@/components/Header";
-import { Spinner } from "@/components/Spinner";
 import { client } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 

@@ -9,10 +9,15 @@ use crate::app_state::AppState;
 #[derive(Debug, Default, Deserialize, Serialize, TS)]
 pub struct WasmComponent {
   pub name: String,
+  #[ts(optional)]
   pub display_name: Option<String>,
+  #[ts(optional)]
   pub description: Option<String>,
+  #[ts(optional)]
   pub icon: Option<String>,
+  #[ts(optional)]
   pub admin_ui_path: Option<String>,
+  #[ts(optional)]
   pub guest_runtime: Option<String>,
 }
 
@@ -52,9 +57,8 @@ pub async fn list_wasm_components_handler(
   let mut components: Vec<WasmComponent> = vec![];
   for rt in state.wasm_runtimes() {
     let metadata_and_rt = rt.read().await;
-    let name =
-      trailbase_wasm_runtime_host::component_path_to_name(metadata_and_rt.1.component_path())
-        .map_err(|err| Error::Internal(err.into()))?;
+    let name = trailbase_wasm_common::component_path_to_name(metadata_and_rt.1.component_path())
+      .map_err(|err| Error::Internal(err.into()))?;
 
     components.push(build_entry(name, metadata_and_rt.0.as_ref()));
   }
