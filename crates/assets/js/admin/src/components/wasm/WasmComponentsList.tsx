@@ -1,12 +1,8 @@
-import { createMemo, For, Match, Show, Switch } from "solid-js";
+import { createMemo, For, JSXElement, Match, Show, Switch } from "solid-js";
 import { template } from "solid-js/web";
 import { useQuery } from "@tanstack/solid-query";
 import { A } from "@solidjs/router";
-import {
-  TbOutlinePackage,
-  TbOutlinePuzzle,
-  TbOutlineSettings,
-} from "solid-icons/tb";
+import { TbOutlinePuzzle, TbOutlineSettings } from "solid-icons/tb";
 
 import {
   Card,
@@ -46,45 +42,54 @@ function ComponentIcon(props: { icon?: string }) {
 }
 
 function ComponentCard(props: { component: WasmComponent }) {
-  const displayName = () =>
-    props.component.display_name ?? props.component.name;
+  const component = () => props.component;
+  const displayName = () => component().display_name ?? component().name;
+
+  const WrapHyperlink = (props: { children: JSXElement }) => {
+    return (
+      <Switch>
+        <Match when={component().admin_ui_path}>
+          <A href={`/wasm/${component().name}`}>{props.children}</A>
+        </Match>
+
+        <Match when={true}>{props.children}</Match>
+      </Switch>
+    );
+  };
 
   return (
     <Card>
-      <CardContent class="flex p-4">
-        <div class="text-muted-foreground flex size-10 shrink-0 items-center justify-center">
-          <ComponentIcon icon={props.component.icon ?? undefined} />
-        </div>
+      <WrapHyperlink>
+        <CardContent class="flex bg-transparent p-4">
+          <div class="text-muted-foreground size-10 shrink-0 content-center">
+            <ComponentIcon icon={props.component.icon ?? undefined} />
+          </div>
 
-        <div class="flex w-full gap-2">
-          <div class="flex grow flex-col justify-start">
-            <div class="flex h-full items-center gap-2">
-              <CardTitle>{displayName()}</CardTitle>
+          <div class="flex w-full gap-2">
+            <div class="flex grow flex-col justify-start">
+              <div class="flex h-full items-center gap-2">
+                <CardTitle>{displayName()}</CardTitle>
 
-              <Show
-                when={props.component.display_name !== props.component.name}
-              >
-                <span class="text-muted-foreground shrink-0 text-xs">
-                  {props.component.name}
-                </span>
+                <Show when={displayName() !== props.component.name}>
+                  <span class="text-muted-foreground text-xs">
+                    {props.component.name}
+                  </span>
+                </Show>
+              </div>
+
+              <Show when={props.component.description}>
+                <CardDescription>{props.component.description}</CardDescription>
               </Show>
             </div>
 
-            <Show when={props.component.description}>
-              <CardDescription>{props.component.description}</CardDescription>
+            <Show when={props.component.admin_ui_path}>
+              <div class="text-muted-foreground hover:bg-accent hover:text-accent-foreground content-center rounded-sm p-2">
+                <TbOutlineSettings size={18} />
+              </div>
             </Show>
           </div>
-
-          <Show when={props.component.admin_ui_path !== null}>
-            <A
-              href={`/wasm/${props.component.name}`}
-              class="text-muted-foreground hover:bg-accent hover:text-accent-foreground flex size-8 shrink-0 items-center justify-center rounded-md transition-colors"
-            >
-              <TbOutlineSettings size={18} />
-            </A>
-          </Show>
-        </div>
-      </CardContent>
+        </CardContent>
+      </WrapHyperlink>
     </Card>
   );
 }
@@ -95,34 +100,38 @@ export function WasmComponentsList() {
     queryFn: listWasmComponents,
   }));
 
-  const components = () => wasmComponents.data?.components ?? [];
+  const components = (): WasmComponent[] => {
+    const components = [...(wasmComponents.data?.components ?? [])];
+    if (import.meta.env.DEV) {
+      components.push({
+        name: "[DEV]injected_debug_default",
+      });
+    }
+    return components;
+  };
 
   return (
     <div>
       <Header title="WASM Components" />
 
       <div class="flex flex-col gap-3 p-4">
-        <Show
-          when={!wasmComponents.isLoading}
-          fallback={
+        <Switch>
+          <Match when={wasmComponents.isLoading}>
             <div class="flex h-64 items-center justify-center">
               <Spinner size={32} class="text-muted-foreground" />
             </div>
-          }
-        >
-          <Show
-            when={components().length > 0}
-            fallback={
-              <div class="text-muted-foreground flex h-64 flex-col items-center justify-center gap-2">
-                <TbOutlinePackage size={48} />
-              </div>
-            }
-          >
+          </Match>
+
+          <Match when={wasmComponents.isError}>
+            {`${wasmComponents.error}`}
+          </Match>
+
+          <Match when={wasmComponents.isSuccess}>
             <For each={components()}>
               {(c) => <ComponentCard component={c} />}
             </For>
-          </Show>
-        </Show>
+          </Match>
+        </Switch>
       </div>
     </div>
   );

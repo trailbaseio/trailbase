@@ -443,12 +443,12 @@ impl AppState {
     for old_rt in &self.state.wasm_runtimes {
       let (metadata, component_path) = {
         let old_rt = old_rt.read().await;
-        (old_rt.0.clone(), old_rt.1.component_path().clone())
+        (old_rt.0.clone(), old_rt.1.component_path().to_path_buf())
       };
 
       let Some(index) = new_runtimes
         .iter()
-        .position(|rt| *rt.component_path() == component_path)
+        .position(|rt| *rt.component_path() == *component_path)
       else {
         warn!("WASM component: {component_path:?} was removed. Required server restart");
         continue;
