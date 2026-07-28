@@ -29,6 +29,7 @@
   "scripts": {
     "build": "vite build",
     "check": "tsc --noEmit --skipLibCheck && eslint",
+    "check:format": "prettier -c src tests",
     "format": "prettier -w src tests",
     "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/index.js",
     "test": "vitest run && vite-node tests/integration_test_runner.ts"
