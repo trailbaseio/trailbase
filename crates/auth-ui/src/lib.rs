@@ -154,6 +154,12 @@ async fn ui_login_handler(
     return Ok(Redirect::to(PROFILE_UI).into_response());
   }
 
+  let settings: AuthUiSettings = trailbase_wasm::prefs::get_prefs(SETTINGS_KEY)
+    .await
+    .map_err(internal)?
+    .and_then(|s| serde_json::from_str(&s).ok())
+    .unwrap_or_default();
+
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let oauth_query_params: Vec<(&str, &str)> = [
     Some(("redirect_uri", redirect_uri)),
@@ -187,6 +193,8 @@ async fn ui_login_handler(
     login_identifier: config.login_identifier,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
+    title: settings.title.as_deref(),
+    icon_url: settings.icon_url.as_deref(),
   }
   .render();
 
@@ -470,11 +478,7 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
   let file =
     auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;
 
-  let response_builder = Response::builder()
-    .header(header::CACHE_CONTROL, "public")
-    .header(header::CACHE_CONTROL, "max-age=604800")
-    .header(header::CACHE_CONTROL, "immutable")
-    .header(header::CONTENT_TYPE, file.metadata.mimetype());
+  let response_builder = Response::builder().header(header::CONTENT_TYPE, file.metadata.mimetype());
 
   return response_builder
     .body(file.data.into_body())
@@ -489,19 +493,22 @@ pub struct AuthUiSettings {
 
   #[ts(optional)]
   icon_url: Option<String>,
+  /*
+    TODO: Ideas for further customization.
 
-  /// E.g. mailto://test@trailbase.io.
-  #[ts(optional)]
-  contact_url: Option<String>,
-  /// Typically a page detailing the terms.
-  #[ts(optional)]
-  terms_url: Option<String>,
-  /// Typically a page detailing PII usage.
-  #[ts(optional)]
-  privacy_url: Option<String>,
-  /// Typically a page declaring a legal entity for ownership and/or authorship.
-  #[ts(optional)]
-  impressum_url: Option<String>,
+    /// Typically a page or mailto://test@trailbase.io.
+    #[ts(optional)]
+    contact_url: Option<String>,
+    /// Typically a page detailing the terms.
+    #[ts(optional)]
+    terms_url: Option<String>,
+    /// Typically a page detailing PII usage.
+    #[ts(optional)]
+    privacy_url: Option<String>,
+    /// Typically a page declaring a legal entity for ownership and/or authorship.
+    #[ts(optional)]
+    impressum_url: Option<String>,
+  */
 }
 
 async fn read_settings() -> Result<AuthUiSettings, HttpError> {

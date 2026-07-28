@@ -13,13 +13,9 @@ import BaseLayout from "@/layouts/BaseLayout.astro";
 <script>
   import { renderAdminUI } from "@/components/admin/SettingsPage";
 
-  // Astro inlines the JS from client:only components into the html. W/o a safety
-  // hash or nonce, this would be in vialoation of admin UI's root CSP. We thus
+  // Astro in-lines the JS from client:only components into the html. W/o a safety
+  // hash or nonce, this would be in violation of admin UI's root CSP. We thus
   // have this render indirection via the <script> tag, which Astro pulls out
-  // of the template into a separete JS file.
+  // of the template into a separate JS file.
   renderAdminUI("solid-root");
-
-  console.debug("LOCATION:", window.location, "doc.baseURI:");
-  console.debug("DOC BASE:", document.head.baseURI);
-  console.debug("COOKIES & STORAGE:", document.cookie, localStorage);
 </script>

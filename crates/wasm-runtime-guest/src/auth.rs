@@ -19,7 +19,7 @@ pub async fn require_admin_impl(
     return Err(HttpError::status(StatusCode::UNAUTHORIZED));
   };
 
-  if !is_admin(&user).await? {
+  if !is_admin(user).await? {
     return Err(HttpError::status(StatusCode::FORBIDDEN));
   }
 
