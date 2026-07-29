@@ -9,13 +9,14 @@ mod sqlite;
 
 use bytes::Bytes;
 use core::future::Future;
+use http::Uri;
 use http_body_util::combinators::UnsyncBoxBody;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::SystemTime;
-use tokio::sync::Mutex;
 use tokio::task::JoinError;
+use tokio::time::Duration;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use trailbase_wasm_common::manifest::InitManifest;
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -43,6 +44,8 @@ pub enum Error {
   Encoding,
   #[error("Json")]
   Json(#[from] serde_json::Error),
+  #[error("Timeout: {0:?}")]
+  Timeout(Option<Uri>),
   #[error("Other: {0}")]
   Other(String),
 }
@@ -252,11 +255,11 @@ struct StoreAndBindings {
   proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
 }
 
-struct Manager {
+struct StoreManager {
   rt: Runtime,
 }
 
-impl deadpool::managed::Manager for Manager {
+impl deadpool::managed::Manager for StoreManager {
   type Type = StoreAndBindings;
   type Error = Error;
 
@@ -277,8 +280,16 @@ impl deadpool::managed::Manager for Manager {
   async fn recycle(
     &self,
     _: &mut StoreAndBindings,
-    _: &deadpool::managed::Metrics,
-  ) -> deadpool::managed::RecycleResult<Error> {
+    metrics: &deadpool::managed::Metrics,
+  ) -> Result<(), deadpool::managed::RecycleError<Error>> {
+    // Limit how often a store gets recycled to avoid persistent ballooning if guests have memory leaks.
+    if metrics.recycle_count > 2048 {
+      return Err(deadpool::managed::RecycleError::message("count limit"));
+    }
+    if metrics.age().as_secs() > 3600 {
+      return Err(deadpool::managed::RecycleError::message("age limit"));
+    }
+
     return Ok(());
   }
 }
@@ -288,10 +299,11 @@ enum HttpStoreInternal {
   Unique {
     rt: Runtime,
   },
-  // A state store that is shared across incoming requests.
+  // A state store that is shared across incoming requests. We need a pool to:
+  //  * Recursive self-requests don't deadlock on store acquisition.
+  //  * Ensure devs cannot reliably rely on state sharing across requests.
   Shared {
-    rt: Runtime,
-    pool: deadpool::managed::Pool<Manager>,
+    pool: deadpool::managed::Pool<StoreManager>,
   },
 }
 
@@ -305,7 +317,7 @@ pub struct HttpStore {
 
 impl HttpStore {
   pub async fn initialize(rt: &Runtime, args: InitArgs) -> Result<(Self, InitManifest), Error> {
-    let (mut store, _bindings, manifest) = Self::call(rt, {
+    let manifest = Self::call(rt, {
       let rt = rt.clone();
       async move {
         let (mut store, bindings) = rt.new_bindings().await?;
@@ -320,8 +332,7 @@ impl HttpStore {
           ]),
         })?;
 
-        // let mut store = state.store.lock().await;
-        let manifest = store
+        store
           .run_concurrent(async |accessor| -> Result<InitManifest, Error> {
             let manifest_json = api
               .call_get_manifest(accessor, args)
@@ -333,9 +344,7 @@ impl HttpStore {
 
             return Ok(manifest);
           })
-          .await??;
-
-        Ok::<_, Error>((store, bindings, manifest))
+          .await?
       }
     })
     .await
@@ -346,22 +355,37 @@ impl HttpStore {
     // We thus enable state sharing only for Rust guests :/.
     return match manifest.metadata.as_ref().and_then(|m| m.guest_runtime) {
       Some(trailbase_wasm_common::manifest::GuestRuntime::Rust) => {
-        // let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
-        //   &mut store,
-        //   &rt.state.component,
-        //   &rt.state.linker,
-        // )
-        // .await?;
+        // We use a generous hard limit and then periodically prune the pool to a
+        // smaller number of stand-by stores.
+        let pool = deadpool::managed::Pool::builder(StoreManager { rt: rt.clone() })
+          .max_size(POOL_HARD_LIMIT)
+          .build()
+          .expect("deadpool construction");
+
+        let weak = pool.weak();
+        tokio::spawn(async move {
+          const PERIOD: Duration = Duration::from_secs(60);
+          loop {
+            tokio::time::sleep(PERIOD).await;
+            let Some(pool) = weak.upgrade() else {
+              return;
+            };
+
+            log::debug!("WASM store pool: {:?}", pool.status());
+
+            // Keep all recently used stores but at least 16.
+            const MAX_AGE: std::time::Duration = std::time::Duration::from_mins(2);
+            let mut cnt = 0;
+            pool.retain(|_, metrics| {
+              cnt += 1;
+              return cnt <= 16 || metrics.last_used() < MAX_AGE;
+            });
+          }
+        });
 
         Ok((
           Self {
-            state: Arc::new(HttpStoreInternal::Shared {
-              rt: rt.clone(),
-              pool: deadpool::managed::Pool::builder(Manager { rt: rt.clone() })
-                .max_size(16)
-                .build()
-                .unwrap(),
-            }),
+            state: Arc::new(HttpStoreInternal::Shared { pool }),
           },
           manifest,
         ))
@@ -382,12 +406,13 @@ impl HttpStore {
   ) -> Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, Error> {
     let rt = match &*self.state {
       HttpStoreInternal::Unique { rt } => rt,
-      HttpStoreInternal::Shared { rt, .. } => rt,
+      HttpStoreInternal::Shared { pool } => &pool.manager().rt,
     };
 
     return Self::call(rt, {
       let state = self.state.clone();
       async move {
+        let uri = request.uri().clone();
         let (sender, receiver) = tokio::sync::oneshot::channel::<
           Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, ErrorCode>,
         >();
@@ -405,6 +430,7 @@ impl HttpStore {
         // Depends on what the implementation does when the streaming body's receiving end gets
         // out of scope.
         let handle = tokio::spawn(REQUEST_ID.scope(REQUEST_ID.with(|id| *id), async move {
+          let uri = request.uri().clone();
           let res = match &*state {
             HttpStoreInternal::Unique { rt } => {
               // Instantiate a store per request.
@@ -421,24 +447,8 @@ impl HttpStore {
                 request,
               )?;
               let out = store.data_mut().http().new_response_outparam(sender)?;
-              proxy_bindings
-                .wasi_http_incoming_handler()
-                .call_handle(store.as_context_mut(), req, out)
-                .await
-            }
-            HttpStoreInternal::Shared { pool, .. } => {
-              let StoreAndBindings {
-                ref mut store,
-                ref proxy_bindings,
-              } = *pool.get().await?;
-
-              let req = store.data_mut().http().new_incoming_request(
-                wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
-                request,
-              )?;
-              let out = store.data_mut().http().new_response_outparam(sender)?;
-              let res = tokio::time::timeout(
-                tokio::time::Duration::from_secs(1),
+              tokio::time::timeout(
+                WASM_CALL_TIMEOUT,
                 proxy_bindings.wasi_http_incoming_handler().call_handle(
                   store.as_context_mut(),
                   req,
@@ -446,12 +456,35 @@ impl HttpStore {
                 ),
               )
               .await
-              .map_err(|err| {
-                log::error!("call TIMEOUT");
-                return Error::Other(err.to_string());
-              })?;
+              .map_err(|_err| Error::Timeout(Some(uri)))?
+            }
+            HttpStoreInternal::Shared { pool, .. } => {
+              // Acquire shared store from pool.
+              let StoreAndBindings {
+                ref mut store,
+                ref proxy_bindings,
+              } = *tokio::time::timeout(WASM_WAIT_TIMEOUT, pool.get())
+                .await
+                .map_err(|_err| Error::Timeout(None))??;
 
-              res
+              let req = store.data_mut().http().new_incoming_request(
+                wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
+                request,
+              )?;
+              let out = store.data_mut().http().new_response_outparam(sender)?;
+              tokio::time::timeout(
+                WASM_CALL_TIMEOUT,
+                proxy_bindings.wasi_http_incoming_handler().call_handle(
+                  store.as_context_mut(),
+                  req,
+                  out,
+                ),
+              )
+              .await
+              .map_err(|_err| {
+                log::warn!("HTTP call to WASM timed out: {uri} ({WASM_CALL_TIMEOUT:?})");
+                return Error::Timeout(Some(uri));
+              })?
             }
           };
 
@@ -464,9 +497,12 @@ impl HttpStore {
           res
         }));
 
-        match tokio::time::timeout(tokio::time::Duration::from_secs(4), receiver)
+        // NOTE: We have a separate timeout here (besides the call timeout above), since
+        // cancelling the call won't drop the sender to close the receiver (the sender is
+        // leaked via the store). Thus we have to separa timeout the receiving end.
+        return match tokio::time::timeout(WASM_WAIT_TIMEOUT, receiver)
           .await
-          .expect("receiver TIMEOUT")
+          .map_err(|_err| Error::Timeout(Some(uri)))?
         {
           Ok(Ok(resp)) => {
             // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
@@ -486,7 +522,7 @@ impl HttpStore {
               .map_err(|err| Error::Other(err.to_string()))??;
             Err(Error::ChannelClosed)
           }
-        }
+        };
       }
     })
     .await
@@ -504,12 +540,12 @@ impl HttpStore {
   {
     let id = REQUEST_ID_CNT.fetch_add(1, Ordering::Relaxed);
 
-    let local_in_flight = rt.state.local_in_flight.fetch_add(1, Ordering::Relaxed);
-    let in_flight = IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
+    let _local_in_flight = rt.state.local_in_flight.fetch_add(1, Ordering::Relaxed);
+    let _in_flight = IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
     #[cfg(debug_assertions)]
     log::debug!(
-      "WASM runtime ({path:?}) `call({id})`. In flight (local={local_in_flight}, global={in_flight})",
+      "WASM runtime ({path:?}) `call({id})`. In flight (local={_local_in_flight}, global={_in_flight})",
       path = rt.component_path(),
     );
 
@@ -812,3 +848,7 @@ mod tests {
     return String::from_utf8_lossy(&body).trim().parse().unwrap();
   }
 }
+
+const WASM_CALL_TIMEOUT: Duration = Duration::from_secs(20);
+const WASM_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
+const POOL_HARD_LIMIT: usize = 65536;
