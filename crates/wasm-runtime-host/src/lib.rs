@@ -356,6 +356,8 @@ impl HttpStore {
           Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, ErrorCode>,
         >();
 
+        let uri = request.uri().clone();
+
         // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been
         // streamed, `call_handle` will complete. This is also when the streaming response
         // body completes.
@@ -384,7 +386,6 @@ impl HttpStore {
                 wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
                 request,
               )?;
-
               let out = store.data_mut().http().new_response_outparam(sender)?;
               proxy_bindings
                 .wasi_http_incoming_handler()
@@ -396,18 +397,45 @@ impl HttpStore {
               proxy_bindings,
               ..
             } => {
-              let mut lock = store.lock().await;
+              let uri = request.uri().clone();
+
+              println!("Acquire: {uri}");
+              let mut lock =
+                tokio::time::timeout(tokio::time::Duration::from_secs(1), store.lock())
+                  .await
+                  .map_err(|err| {
+                    log::error!("Acquisition TIMEOUT: {uri}");
+                    return Error::Other(err.to_string());
+                  })?;
+              println!("Acquired: {uri}");
 
               let req = lock.data_mut().http().new_incoming_request(
                 wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
                 request,
               )?;
 
+              // FIXME: The issue is here: when the call gets stuck, the sender is
+              // never freed and thus the receiver never completes or closes :/.
               let out = lock.data_mut().http().new_response_outparam(sender)?;
-              proxy_bindings
-                .wasi_http_incoming_handler()
-                .call_handle(lock.as_context_mut(), req, out)
-                .await
+              let x = wasmtime::component::Resource::<_>::new_borrow(out.rep());
+
+              let res = tokio::time::timeout(
+                tokio::time::Duration::from_secs(1),
+                proxy_bindings.wasi_http_incoming_handler().call_handle(
+                  lock.as_context_mut(),
+                  req,
+                  x,
+                ),
+              )
+              .await
+              .map_err(|err| {
+                lock.data_mut().resource_table.delete(out).unwrap();
+                log::error!("call TIMEOUT: {uri}");
+                return Error::Other(err.to_string());
+              })?;
+
+              println!("returned: {uri}");
+              res
             }
           };
 
@@ -420,19 +448,26 @@ impl HttpStore {
           res
         }));
 
-        match receiver.await {
+        match tokio::time::timeout(tokio::time::Duration::from_secs(4), receiver)
+          .await
+          .expect("receiver TIMEOUT")
+        {
           Ok(Ok(resp)) => {
+            println!("WOOOO {uri}");
             // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
             // we're not consuming the response body, see above.
             Ok(resp)
           }
           Ok(Err(err)) => {
+            println!("HERE0 {uri}");
             handle
               .await
               .map_err(|err| Error::Other(err.to_string()))??;
+            println!("HERE2");
             Err(Error::HttpErrorCode(err))
           }
           Err(_) => {
+            println!("HERE4 {uri}");
             log::debug!("channel closed");
             handle
               .await
