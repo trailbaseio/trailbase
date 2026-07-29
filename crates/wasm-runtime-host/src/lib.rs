@@ -63,7 +63,8 @@ pub trait StoreBuilder<S> {
   fn new_store(&self, engine: &Engine, wasm_source_file: PathBuf) -> Result<Store<S>, Error>;
 }
 
-// NOTE: A better name may be Component.
+// NOTE: Tentatively generic to maybe split state between HttpStore and SqliteStore in the future
+// :shrug:.
 struct RuntimeInternal<T: StoreBuilder<State>> {
   engine: Engine,
   linker: Linker<State>,
@@ -78,17 +79,17 @@ struct RuntimeInternal<T: StoreBuilder<State>> {
   local_in_flight: AtomicUsize,
 }
 
+/// Holds everything one needs to instantiate state for a component and run it, e.g. wasmtime
+/// engine, linker, compiled component, state/store builder, etc.
 #[derive(Clone)]
-pub struct RuntimeT<T: StoreBuilder<State>> {
-  state: Arc<RuntimeInternal<T>>,
+pub struct Runtime {
+  state: Arc<RuntimeInternal<Arc<SharedState>>>,
 }
 
-pub type Runtime = RuntimeT<Arc<SharedState>>;
-
-impl<T: StoreBuilder<State>> RuntimeT<T> {
+impl Runtime {
   pub fn init(
     wasm_source_file: PathBuf,
-    store_builder: T,
+    store_builder: Arc<SharedState>,
     opts: RuntimeOptions,
   ) -> Result<Self, Error> {
     let engine = {
@@ -245,75 +246,97 @@ impl StoreBuilder<State> for Arc<SharedState> {
   }
 }
 
-struct HttpStoreInternal {
-  store: Mutex<Store<State>>,
-  bindings: crate::host::Interfaces,
-  proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
-  runtime_state: Arc<RuntimeInternal<Arc<SharedState>>>,
-  // rt: Runtime,
+enum HttpStoreInternal {
+  // A state store is initialized per incoming request.
+  Unique {
+    rt: Runtime,
+  },
+  // A state store that is shared across incoming requests.
+  Shared {
+    rt: Runtime,
+    store: Mutex<Store<State>>,
+    // bindings: crate::host::Interfaces,
+    proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
+  },
 }
 
+/// Main abstraction to send incoming HTTP requests into a guest "isolate" (provided runtime +
+/// state). Due to the lack of proper async WASIp3 support, this is also used for Jobs etc.
+/// Sync  There's also a separate sync SqliteStore "isolate".
 #[derive(Clone)]
 pub struct HttpStore {
   state: Arc<HttpStoreInternal>,
 }
 
 impl HttpStore {
-  pub async fn new(rt: &Runtime) -> Result<Self, Error> {
-    let (mut store, bindings) = rt.new_bindings().await?;
+  pub async fn initialize(rt: &Runtime, args: InitArgs) -> Result<(Self, InitManifest), Error> {
+    let (mut store, _bindings, manifest) = Self::call(rt, {
+      let rt = rt.clone();
+      async move {
+        let (mut store, bindings) = rt.new_bindings().await?;
+        let api = bindings.trailbase_component_init_endpoint();
 
-    let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
-      &mut store,
-      &rt.state.component,
-      &rt.state.linker,
-    )
-    .await?;
+        let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
+          version: args.version.clone(),
+          subsystems: Some(vec![
+            trailbase_wasm_common::manifest::Subsystem::Metadata,
+            trailbase_wasm_common::manifest::Subsystem::Http,
+            trailbase_wasm_common::manifest::Subsystem::Jobs,
+          ]),
+        })?;
 
-    return Ok(Self {
-      state: Arc::new(HttpStoreInternal {
-        store: Mutex::new(store),
-        bindings,
-        proxy_bindings,
-        runtime_state: rt.state.clone(),
-        // rt: rt.clone(),
-      }),
-    });
-  }
+        // let mut store = state.store.lock().await;
+        let manifest = store
+          .run_concurrent(async |accessor| -> Result<InitManifest, Error> {
+            let manifest_json = api
+              .call_get_manifest(accessor, args)
+              .await?
+              .map_err(Error::Other)?;
 
-  pub async fn initialize(&self, args: InitArgs) -> Result<InitManifest, Error> {
-    let state = self.state.clone();
+            let manifest: trailbase_wasm_common::manifest::InitManifest =
+              serde_json::from_str(&manifest_json)?;
 
-    return Self::call(&self.state.runtime_state, async move {
-      let api = state.bindings.trailbase_component_init_endpoint();
-      // let (mut store, bindings) = state.rt.new_bindings().await?;
-      // let api = bindings.trailbase_component_init_endpoint();
+            return Ok(manifest);
+          })
+          .await??;
 
-      let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
-        version: args.version.clone(),
-        subsystems: Some(vec![
-          trailbase_wasm_common::manifest::Subsystem::Metadata,
-          trailbase_wasm_common::manifest::Subsystem::Http,
-          trailbase_wasm_common::manifest::Subsystem::Jobs,
-        ]),
-      })?;
-
-      let mut store = state.store.lock().await;
-      store
-        .run_concurrent(async |accessor| -> Result<InitManifest, Error> {
-          let manifest_json = api
-            .call_get_manifest(accessor, args)
-            .await?
-            .map_err(Error::Other)?;
-
-          let manifest: trailbase_wasm_common::manifest::InitManifest =
-            serde_json::from_str(&manifest_json)?;
-
-          return Ok(manifest);
-        })
-        .await?
+        Ok::<_, Error>((store, bindings, manifest))
+      }
     })
     .await
-    .map_err(|join_err| Error::Other(join_err.to_string()))?;
+    .map_err(|join_err| Error::Other(join_err.to_string()))??;
+
+    // NOTE: Sharing state between requests is more efficient at the cost of worse isolation.
+    // However, most guest runtimes don't even support it :(. Especially jco does not.
+    // We thus enable state sharing only for Rust guests :/.
+    return match manifest.metadata.as_ref().and_then(|m| m.guest_runtime) {
+      Some(trailbase_wasm_common::manifest::GuestRuntime::Rust) => {
+        let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+          &mut store,
+          &rt.state.component,
+          &rt.state.linker,
+        )
+        .await?;
+
+        Ok((
+          Self {
+            state: Arc::new(HttpStoreInternal::Shared {
+              rt: rt.clone(),
+              store: Mutex::new(store),
+              // bindings,
+              proxy_bindings,
+            }),
+          },
+          manifest,
+        ))
+      }
+      _ => Ok((
+        Self {
+          state: Arc::new(HttpStoreInternal::Unique { rt: rt.clone() }),
+        },
+        manifest,
+      )),
+    };
   }
 
   /// Main entry-point for incoming HTTP requests. Typically called by an Axum handler.
@@ -321,86 +344,101 @@ impl HttpStore {
     &self,
     request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
   ) -> Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, Error> {
-    let state = self.state.clone();
+    let rt = match &*self.state {
+      HttpStoreInternal::Unique { rt } => rt,
+      HttpStoreInternal::Shared { rt, .. } => rt,
+    };
 
-    return Self::call(&self.state.runtime_state, async move {
-      let (sender, receiver) = tokio::sync::oneshot::channel::<
-        Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, ErrorCode>,
-      >();
+    return Self::call(rt, {
+      let state = self.state.clone();
+      async move {
+        let (sender, receiver) = tokio::sync::oneshot::channel::<
+          Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, ErrorCode>,
+        >();
 
-      // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been
-      // streamed, `call_handle` will complete. This is also when the streaming response
-      // body completes.
-      //
-      // We cannot use `wasmtime_wasi::runtime::spawn` here, which aborts the call when the handle
-      // gets dropped, since we're not awaiting the response stream here. We'd either have to
-      // consume the entire response here, keep the handle alive or as we currently do use a
-      // non-aborting spawn.
-      //
-      // In the current setup, if the listening side hangs-up the they call may not be aborted.
-      // Depends on what the implementation does when the streaming body's receiving end gets
-      // out of scope.
-      let handle = tokio::spawn(REQUEST_ID.scope(REQUEST_ID.with(|id| *id), async move {
-        // Instantiate a store per request, see FIXME below.
-        // let mut lock = state.rt.state.store_builder.new_store(
-        //   &state.rt.state.engine,
-        //   state.rt.component_path().to_path_buf(),
-        // )?;
-        // let (mut lock, _bindings) = state.rt.new_bindings().await?;
+        // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been
+        // streamed, `call_handle` will complete. This is also when the streaming response
+        // body completes.
+        //
+        // We cannot use `wasmtime_wasi::runtime::spawn` here, which aborts the call when the handle
+        // gets dropped, since we're not awaiting the response stream here. We'd either have to
+        // consume the entire response here, keep the handle alive or as we currently do use a
+        // non-aborting spawn.
+        //
+        // In the current setup, if the listening side hangs-up the they call may not be aborted.
+        // Depends on what the implementation does when the streaming body's receiving end gets
+        // out of scope.
+        let handle = tokio::spawn(REQUEST_ID.scope(REQUEST_ID.with(|id| *id), async move {
+          let res = match &*state {
+            HttpStoreInternal::Unique { rt } => {
+              // Instantiate a store per request.
+              let (mut store, _bindings) = rt.new_bindings().await?;
+              let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+                &mut store,
+                &rt.state.component,
+                &rt.state.linker,
+              )
+              .await?;
 
-        // let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
-        //   &mut lock,
-        //   &state.rt.state.component,
-        //   &state.rt.state.linker,
-        // )
-        // .await?;
-        let mut lock = state.store.lock().await;
+              let req = store.data_mut().http().new_incoming_request(
+                wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
+                request,
+              )?;
 
-        let req = lock.data_mut().http().new_incoming_request(
-          wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
-          request,
-        )?;
+              let out = store.data_mut().http().new_response_outparam(sender)?;
+              proxy_bindings
+                .wasi_http_incoming_handler()
+                .call_handle(store.as_context_mut(), req, out)
+                .await
+            }
+            HttpStoreInternal::Shared {
+              store,
+              proxy_bindings,
+              ..
+            } => {
+              let mut lock = store.lock().await;
 
-        let out = lock.data_mut().http().new_response_outparam(sender)?;
+              let req = lock.data_mut().http().new_incoming_request(
+                wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
+                request,
+              )?;
 
-        // FIXME: Using the shared store, this may not trigger the execution of JS guests.
-        // Rust guests don't have the same issue. Yet unclear what exactly is happening. Some
-        // incorrect termination?
-        // state
-        //   .proxy_bindings
-        let res = state
-          .proxy_bindings
-          .wasi_http_incoming_handler()
-          .call_handle(lock.as_context_mut(), req, out)
-          .await;
+              let out = lock.data_mut().http().new_response_outparam(sender)?;
+              proxy_bindings
+                .wasi_http_incoming_handler()
+                .call_handle(lock.as_context_mut(), req, out)
+                .await
+            }
+          };
 
-        #[cfg(debug_assertions)]
-        log::debug!(
-          "wasi_http_incoming_handler() completed call({id})",
-          id = REQUEST_ID.with(|id| *id),
-        );
+          #[cfg(debug_assertions)]
+          log::debug!(
+            "wasi_http_incoming_handler() completed call({id})",
+            id = REQUEST_ID.with(|id| *id),
+          );
 
-        res
-      }));
+          res
+        }));
 
-      match receiver.await {
-        Ok(Ok(resp)) => {
-          // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
-          // we're not consuming the response body, see above.
-          Ok(resp)
-        }
-        Ok(Err(err)) => {
-          handle
-            .await
-            .map_err(|err| Error::Other(err.to_string()))??;
-          Err(Error::HttpErrorCode(err))
-        }
-        Err(_) => {
-          log::debug!("channel closed");
-          handle
-            .await
-            .map_err(|err| Error::Other(err.to_string()))??;
-          Err(Error::ChannelClosed)
+        match receiver.await {
+          Ok(Ok(resp)) => {
+            // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
+            // we're not consuming the response body, see above.
+            Ok(resp)
+          }
+          Ok(Err(err)) => {
+            handle
+              .await
+              .map_err(|err| Error::Other(err.to_string()))??;
+            Err(Error::HttpErrorCode(err))
+          }
+          Err(_) => {
+            log::debug!("channel closed");
+            handle
+              .await
+              .map_err(|err| Error::Other(err.to_string()))??;
+            Err(Error::ChannelClosed)
+          }
         }
       }
     })
@@ -409,41 +447,43 @@ impl HttpStore {
   }
 
   /// Wraps future to execute on the associated Tokio runtime and do some accounting/logging.
-  fn call<F>(
-    rt: &Arc<RuntimeInternal<Arc<SharedState>>>,
+  fn call<'a, F>(
+    rt: &'a Runtime,
     f: F,
-  ) -> impl Future<Output = Result<F::Output, JoinError>>
+  ) -> impl Future<Output = Result<F::Output, JoinError>> + use<'a, F>
   where
     F: Future + Send + 'static,
-    F::Output: Send + 'static,
+    F::Output: Send,
   {
-    let state = rt.clone();
-
-    let local_in_flight = state.local_in_flight.fetch_add(1, Ordering::Relaxed);
-    let in_flight = IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
     let id = REQUEST_ID_CNT.fetch_add(1, Ordering::Relaxed);
+
+    let local_in_flight = rt.state.local_in_flight.fetch_add(1, Ordering::Relaxed);
+    let in_flight = IN_FLIGHT.fetch_add(1, Ordering::Relaxed);
 
     #[cfg(debug_assertions)]
     log::debug!(
       "WASM runtime ({path:?}) `call({id})`. In flight (local={local_in_flight}, global={in_flight})",
-      path = state.component_path,
+      path = rt.component_path(),
     );
 
     // This is where we spawn a new task on the associated tokio runtime.
-    return rt.rt_handle.spawn(REQUEST_ID.scope(id, async move {
-      let r = f.await;
+    return rt.state.rt_handle.spawn(REQUEST_ID.scope(id, {
+      let rt_state = rt.state.clone();
+      async move {
+        let r = f.await;
 
-      IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
-      state.local_in_flight.fetch_sub(1, Ordering::Relaxed);
+        IN_FLIGHT.fetch_sub(1, Ordering::Relaxed);
+        rt_state.local_in_flight.fetch_sub(1, Ordering::Relaxed);
 
-      #[cfg(debug_assertions)]
-      log::debug!(
-        "WASM runtime ({path:?}) completed call({id})",
-        path = state.component_path,
-        id = REQUEST_ID.with(|id| *id),
-      );
+        #[cfg(debug_assertions)]
+        log::debug!(
+          "WASM runtime ({path:?}) completed call({id})",
+          path = rt_state.component_path,
+          id = REQUEST_ID.with(|id| *id),
+        );
 
-      r
+        return r;
+      }
     }));
   }
 }
@@ -582,16 +622,12 @@ mod tests {
     let conn = trailbase_sqlite::Connection::open_in_memory().unwrap();
     let runtime = init_runtime(Some(conn.clone()));
 
-    let store = HttpStore::new(&runtime).await.unwrap();
-    store.initialize(InitArgs { version: None }).await.unwrap();
+    let (store, _manifest) = HttpStore::initialize(&runtime, InitArgs { version: None })
+      .await
+      .unwrap();
 
-    let response = send_http_request(
-      &runtime,
-      "http://localhost:4000/transaction",
-      "/transaction",
-    )
-    .await
-    .unwrap();
+    let request = build_http_request("http://localhost:4000/transaction", "/transaction");
+    let response = store.call_incoming_http_handler(request).await.unwrap();
 
     assert_eq!(response.status(), StatusCode::OK, "{response:?}");
 
@@ -682,11 +718,10 @@ mod tests {
     }
   }
 
-  async fn send_http_request(
-    runtime: &Runtime,
+  fn build_http_request(
     uri: &str,
     registered_path: &str,
-  ) -> Result<Response<UnsyncBoxBody<Bytes, ErrorCode>>, Error> {
+  ) -> hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>> {
     fn to_header_value(context: &HttpContext) -> hyper::http::HeaderValue {
       return hyper::http::HeaderValue::from_bytes(
         &serde_json::to_vec(&context).unwrap_or_default(),
@@ -703,13 +738,23 @@ mod tests {
       user: None,
     };
 
-    let request = hyper::Request::builder()
+    return hyper::Request::builder()
       .uri(uri)
       .header("__context", to_header_value(&context))
       .body(sqlite::bytes_to_body(Bytes::from_static(b"")))
       .unwrap();
+  }
 
-    let store = HttpStore::new(&runtime).await.unwrap();
+  async fn send_http_request(
+    runtime: &Runtime,
+    uri: &str,
+    registered_path: &str,
+  ) -> Result<Response<UnsyncBoxBody<Bytes, ErrorCode>>, Error> {
+    let (store, _manifest) = HttpStore::initialize(&runtime, InitArgs { version: None })
+      .await
+      .unwrap();
+
+    let request = build_http_request(uri, registered_path);
     return store.call_incoming_http_handler(request).await;
   }
 
