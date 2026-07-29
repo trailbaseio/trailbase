@@ -246,6 +246,43 @@ impl StoreBuilder<State> for Arc<SharedState> {
   }
 }
 
+struct StoreAndBindings {
+  store: Store<State>,
+  // bindings: crate::host::Interfaces,
+  proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
+}
+
+struct Manager {
+  rt: Runtime,
+}
+
+impl deadpool::managed::Manager for Manager {
+  type Type = StoreAndBindings;
+  type Error = Error;
+
+  async fn create(&self) -> Result<StoreAndBindings, Error> {
+    let (mut store, _bindings) = self.rt.new_bindings().await?;
+    let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+      &mut store,
+      &self.rt.state.component,
+      &self.rt.state.linker,
+    )
+    .await?;
+    return Ok(StoreAndBindings {
+      store,
+      proxy_bindings,
+    });
+  }
+
+  async fn recycle(
+    &self,
+    _: &mut StoreAndBindings,
+    _: &deadpool::managed::Metrics,
+  ) -> deadpool::managed::RecycleResult<Error> {
+    return Ok(());
+  }
+}
+
 enum HttpStoreInternal {
   // A state store is initialized per incoming request.
   Unique {
@@ -254,9 +291,7 @@ enum HttpStoreInternal {
   // A state store that is shared across incoming requests.
   Shared {
     rt: Runtime,
-    store: Mutex<Store<State>>,
-    // bindings: crate::host::Interfaces,
-    proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
+    pool: deadpool::managed::Pool<Manager>,
   },
 }
 
@@ -311,20 +346,21 @@ impl HttpStore {
     // We thus enable state sharing only for Rust guests :/.
     return match manifest.metadata.as_ref().and_then(|m| m.guest_runtime) {
       Some(trailbase_wasm_common::manifest::GuestRuntime::Rust) => {
-        let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
-          &mut store,
-          &rt.state.component,
-          &rt.state.linker,
-        )
-        .await?;
+        // let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+        //   &mut store,
+        //   &rt.state.component,
+        //   &rt.state.linker,
+        // )
+        // .await?;
 
         Ok((
           Self {
             state: Arc::new(HttpStoreInternal::Shared {
               rt: rt.clone(),
-              store: Mutex::new(store),
-              // bindings,
-              proxy_bindings,
+              pool: deadpool::managed::Pool::builder(Manager { rt: rt.clone() })
+                .max_size(16)
+                .build()
+                .unwrap(),
             }),
           },
           manifest,
@@ -355,8 +391,6 @@ impl HttpStore {
         let (sender, receiver) = tokio::sync::oneshot::channel::<
           Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, ErrorCode>,
         >();
-
-        let uri = request.uri().clone();
 
         // NOTE: wstd streams out responses in chunks of 2kB. Only once everything has been
         // streamed, `call_handle` will complete. This is also when the streaming response
@@ -392,49 +426,31 @@ impl HttpStore {
                 .call_handle(store.as_context_mut(), req, out)
                 .await
             }
-            HttpStoreInternal::Shared {
-              store,
-              proxy_bindings,
-              ..
-            } => {
-              let uri = request.uri().clone();
+            HttpStoreInternal::Shared { pool, .. } => {
+              let StoreAndBindings {
+                ref mut store,
+                ref proxy_bindings,
+              } = *pool.get().await?;
 
-              println!("Acquire: {uri}");
-              let mut lock =
-                tokio::time::timeout(tokio::time::Duration::from_secs(1), store.lock())
-                  .await
-                  .map_err(|err| {
-                    log::error!("Acquisition TIMEOUT: {uri}");
-                    return Error::Other(err.to_string());
-                  })?;
-              println!("Acquired: {uri}");
-
-              let req = lock.data_mut().http().new_incoming_request(
+              let req = store.data_mut().http().new_incoming_request(
                 wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
                 request,
               )?;
-
-              // FIXME: The issue is here: when the call gets stuck, the sender is
-              // never freed and thus the receiver never completes or closes :/.
-              let out = lock.data_mut().http().new_response_outparam(sender)?;
-              let x = wasmtime::component::Resource::<_>::new_borrow(out.rep());
-
+              let out = store.data_mut().http().new_response_outparam(sender)?;
               let res = tokio::time::timeout(
                 tokio::time::Duration::from_secs(1),
                 proxy_bindings.wasi_http_incoming_handler().call_handle(
-                  lock.as_context_mut(),
+                  store.as_context_mut(),
                   req,
-                  x,
+                  out,
                 ),
               )
               .await
               .map_err(|err| {
-                lock.data_mut().resource_table.delete(out).unwrap();
-                log::error!("call TIMEOUT: {uri}");
+                log::error!("call TIMEOUT");
                 return Error::Other(err.to_string());
               })?;
 
-              println!("returned: {uri}");
               res
             }
           };
@@ -453,21 +469,17 @@ impl HttpStore {
           .expect("receiver TIMEOUT")
         {
           Ok(Ok(resp)) => {
-            println!("WOOOO {uri}");
             // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
             // we're not consuming the response body, see above.
             Ok(resp)
           }
           Ok(Err(err)) => {
-            println!("HERE0 {uri}");
             handle
               .await
               .map_err(|err| Error::Other(err.to_string()))??;
-            println!("HERE2");
             Err(Error::HttpErrorCode(err))
           }
           Err(_) => {
-            println!("HERE4 {uri}");
             log::debug!("channel closed");
             handle
               .await
