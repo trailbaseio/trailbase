@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { client, hostAddress } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
+import { type ResolvedTheme, currentTheme } from "@/lib/theme";
 
 import type { WasmComponent } from "@bindings/WasmComponent";
 import { Tokens } from "trailbase";
@@ -75,14 +76,14 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         iframe.sandbox = "";
       }
 
-      // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
-      // the admin UI runs in a separate dev-server. W/o guest dashboards
-      // would try to fetch their assets from the dev-server rather than TB.
-      // This requires guests to be appropriately set up, however isn't generally
-      // necessary unless you're also developing on the admin UI itself.
-      // NOTE: We cannot just pass the base URI via `postMessage`, since static
-      // assets referenced by the root document could not be fetched.
       if (import.meta.env.DEV) {
+        // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
+        // the admin UI runs in a separate dev-server. W/o guest dashboards
+        // would try to fetch their assets from the dev-server rather than TB.
+        // This requires guests to be appropriately set up, however isn't generally
+        // necessary unless you're also developing on the admin UI itself.
+        // NOTE: We cannot just pass the base URI via `postMessage`, since static
+        // assets referenced by the root document could not be fetched.
         body = body.replace(
           `base href=""`,
           `base href="http://${window.location.hostname}:4000/"`,
@@ -106,11 +107,14 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
               value: {
                 tokens: tokens !== null ? { ...tokens } : undefined,
                 url: hostAddress(),
+                theme: currentTheme(),
               },
             } satisfies Message,
             "*",
           );
         });
+
+        // TODO: Subscribe to theme changes and send a dedicated "theme" message.
       };
 
       iframe.addEventListener("load", onLoad);
@@ -197,6 +201,7 @@ type SetupMessage = {
   value: {
     tokens?: Tokens;
     url?: string;
+    theme?: ResolvedTheme;
   };
 };
 
