@@ -1,9 +1,18 @@
-import { createEffect, onCleanup, Match, Switch } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  onCleanup,
+  Match,
+  Switch,
+  Show,
+} from "solid-js";
 import { A } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
-import { TbOutlineArrowLeft } from "solid-icons/tb";
+import { TbOutlineArrowLeft, TbOutlineSandbox } from "solid-icons/tb";
 
 import { Header } from "@/components/Header";
+import { Button } from "@/components/ui/button";
+
 import { client, hostAddress } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
@@ -13,6 +22,8 @@ import { Tokens } from "trailbase";
 
 export function WasmComponentDetails(props: { component: WasmComponent }) {
   const isMobile = createIsMobile();
+  const [enableSandbox, setEnableSandbox] = createSignal<boolean>(true);
+
   const style = () => {
     if (isMobile()) {
       // Header (65px) + Navbar (48px) = 113px
@@ -54,6 +65,14 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       if (iframe === undefined) {
         console.error("iframe not bound");
         return;
+      }
+
+      // QUESTION: Should we browser fingerprint and use a different sandbox or
+      // simply offer a button to toggle sandbox?
+      if (enableSandbox()) {
+        iframe.sandbox = defaultSandbox;
+      } else {
+        iframe.sandbox = "";
       }
 
       // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
@@ -102,7 +121,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
     }
   });
 
-  const backLink = () => (
+  const BackButton = () => (
     <A
       href="/wasm"
       class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
@@ -117,7 +136,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       <Match when={props.component.admin_ui_path === undefined}>
         <Header
           title={props.component.display_name ?? props.component.name}
-          leading={backLink()}
+          leading={BackButton()}
         />
         <div class="text-muted-foreground p-4">
           This WASM component did not register a dashboard.
@@ -127,14 +146,34 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       <Match when={true}>
         <Header
           title={props.component.display_name ?? props.component.name}
-          leading={backLink()}
+          leading={BackButton()}
+          right={
+            <Show when={import.meta.env.DEV}>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={() => {
+                  setEnableSandbox((old) => {
+                    const toggled = !old;
+                    console.debug("sandbox enabled:", toggled);
+                    return toggled;
+                  });
+                }}
+              >
+                <TbOutlineSandbox />
+              </Button>
+            </Show>
+          }
         />
 
         <div class={style()}>
           {/*
+            Sandbox options:
+              https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
+
              NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
                https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
-            TODO: Can we use something stricter like:
+             TODO: Can we use something stricter like:
               csp="default-src 'none'; script-src 'unsafe-inline'"
           */}
           <iframe
@@ -144,7 +183,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
               height: "100%",
               display: "block",
             }}
-            sandbox="allow-scripts"
+            sandbox={defaultSandbox}
             csp={iframeCsp}
           />
         </div>
@@ -168,5 +207,13 @@ const iframeCsp = import.meta.env.DEV
   : [
       "default-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
+      // NOTE: the "*" is critical here because the sandboxed srcdoc iframe's
+      // origin is "null", i.e. 'self' is null and we need to allow fetches from
+      // the server. We also had '*' to the admin UI's CSP because Firefox/Safari
+      // ignore this property.
       "connect-src * 'self' 'unsafe-inline'",
     ].join("; ");
+
+// NOTE: An iframe which has both allow-scripts and allow-same-origin for its
+// sandbox attribute can remove its sandboxing.
+const defaultSandbox = "allow-scripts";
