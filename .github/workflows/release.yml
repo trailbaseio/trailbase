@@ -274,8 +274,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUST_TARGET: wasm32-wasip2
-      BINARY_PATH: target/$RUST_TARGET/release/trailbase_auth_ui_component.wasm
-      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
+
     steps:
       - uses: actions/checkout@v6
         with:
@@ -284,32 +283,57 @@ jobs:
           fetch-depth: 0
       - name: Inspect Checkout
         run: git describe --tags
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update && \
-            sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - name: PNPM install
-        run: pnpm install
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.TOOLCHAIN_VERSION }}
-          target: ${{ env.RUST_TARGET }}
-          default: true
-      - name: Rust Build
-        run: |
-          env && cargo build -p trailbase-auth-ui-component --target ${{ env.RUST_TARGET }} --release
 
-      - name: Package Artifacts
-        run: |
-          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
+      - id: release_component
+        uses: ./.github/actions/release_component
         with:
-          fail_on_unmatched_files: true
-          files: ${{ env.ARCHIVE_NAME }}
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
+          rust-target: ${{ env.RUST_TARGET }}
+          binary-path: target/${{ env.RUST_TARGET }}/release/trailbase_auth_ui_component.wasm
+          package-name: trailbase-auth-ui-component
+          archive-name: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
+
+  # release-wasm-auth-ui:
+  #   needs: changelog
+  #   runs-on: ubuntu-latest
+  #   env:
+  #     RUST_TARGET: wasm32-wasip2
+  #     BINARY_PATH: target/$RUST_TARGET/release/trailbase_auth_ui_component.wasm
+  #     ARCHIVE_NAME: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #       with:
+  #         submodules: 'recursive'
+  #         # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+  #         fetch-depth: 0
+  #     - name: Inspect Checkout
+  #       run: git describe --tags
+  #     - name: Install Dependencies
+  #       run: |
+  #         sudo apt-get update && \
+  #           sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
+  #     - uses: actions/setup-node@v6
+  #       with:
+  #         node-version: 22
+  #     - uses: pnpm/action-setup@v4
+  #       with:
+  #         version: 10
+  #     - name: PNPM install
+  #       run: pnpm install
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         toolchain: ${{ env.TOOLCHAIN_VERSION }}
+  #         target: ${{ env.RUST_TARGET }}
+  #         default: true
+  #     - name: Rust Build
+  #       run: |
+  #         env && cargo build -p trailbase-auth-ui-component --target ${{ env.RUST_TARGET }} --release
+  #
+  #     - name: Package Artifacts
+  #       run: |
+  #         zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
+  #     - name: Release binaries
+  #       uses: softprops/action-gh-release@v2
+  #       with:
+  #         fail_on_unmatched_files: true
+  #         files: ${{ env.ARCHIVE_NAME }}
