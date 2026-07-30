@@ -95,6 +95,9 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
         // Will be called after `srcdoc` was set (below), then parsed and built.
         console.debug("iframe loaded");
 
+        // Focus the iframe so it can receive keyboard events.
+        iframe.focus();
+
         // NOTE: with the iframe sandbox, we cannot access `iframe.contentDocument`
         // directly to interact with globals in the child. It would be rejected as
         // a cross-origin request. We thus need postMessage.
@@ -172,13 +175,8 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
 
         <div class={style()}>
           {/*
-            Sandbox options:
-              https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
-
              NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
                https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
-             TODO: Can we use something stricter like:
-              csp="default-src 'none'; script-src 'unsafe-inline'"
           */}
           <iframe
             ref={iframe}
@@ -217,8 +215,14 @@ const iframeCsp = import.meta.env.DEV
       // the server. We also had '*' to the admin UI's CSP because Firefox/Safari
       // ignore this property.
       "connect-src * 'self' 'unsafe-inline'",
+      // NOTE: For some reason `script-src` and `script-src-elem` seem to be ignored
+      // even by Chrome and instead the parent CSP is maintained.
+      // "script-src 'self' 'unsafe-inline'",
     ].join("; ");
 
 // NOTE: An iframe which has both allow-scripts and allow-same-origin for its
 // sandbox attribute can remove its sandboxing.
+//
+// Sandbox options:
+//   https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
 const defaultSandbox = "allow-scripts";

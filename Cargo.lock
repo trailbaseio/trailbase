@@ -8551,6 +8551,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "trailbase-tetris-component"
+version = "0.0.0"
+dependencies = [
+ "rust-embed",
+ "trailbase-wasm",
+]
+
+[[package]]
 name = "trailbase-wasi-keyvalue"
 version = "0.1.0"
 dependencies = [
