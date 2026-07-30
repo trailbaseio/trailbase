@@ -1,5 +1,6 @@
 name: 'Free Disk'
 description: 'Frees up space on GitHub runners'
+
 runs:
   using: "composite"
   steps:
