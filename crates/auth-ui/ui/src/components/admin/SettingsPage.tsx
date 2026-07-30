@@ -85,7 +85,8 @@ function SettingsPage() {
               <TextFieldInput
                 ref={titleRef}
                 type="text"
-                value={settings()?.title}
+                value={settings()?.title ?? ""}
+                placeholder="title"
               />
             </div>
           </TextField>
@@ -96,7 +97,8 @@ function SettingsPage() {
               <TextFieldInput
                 ref={iconRef}
                 type="text"
-                value={settings()?.icon_url}
+                value={settings()?.icon_url ?? ""}
+                placeholder="url, e.g. https://logo.org/logo.png"
               />
             </div>
           </TextField>
@@ -115,10 +117,11 @@ function SettingsPage() {
               }
 
               (async () => {
-                const updatedSettings = await updateAuthUiSettings(c, {
+                const settings: AuthUiSettings = {
                   title: getOptionalValue(titleRef),
                   icon_url: getOptionalValue(iconRef),
-                });
+                };
+                const updatedSettings = await updateAuthUiSettings(c, settings);
                 setSettings(updatedSettings);
               })();
             }}
@@ -148,8 +151,8 @@ function SettingsPage() {
 function getOptionalValue(
   ref: HTMLInputElement | undefined,
 ): string | undefined {
-  const value = ref?.value;
-  if (value !== undefined || value !== "") {
+  const value = ref?.value?.trim();
+  if (value) {
     return value;
   }
   return undefined;
