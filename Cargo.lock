@@ -8346,6 +8346,7 @@ dependencies = [
  "trailbase-build",
  "trailbase-extension",
  "trailbase-sqlite",
+ "trailbase-wasm-component-repo",
  "trailbase-wasm-runtime-host",
  "url",
  "utoipa",
@@ -8598,6 +8599,22 @@ dependencies = [
  "serde",
  "trailbase-sqlvalue",
  "ts-rs",
+]
+
+[[package]]
+name = "trailbase-wasm-component-repo"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "log",
+ "minijinja",
+ "reqwest 0.13.4",
+ "serde",
+ "trailbase-build",
+ "trailbase-wasm-runtime-host",
+ "url",
+ "wit-component",
+ "zip 8.6.0",
 ]
 
 [[package]]
