@@ -282,7 +282,8 @@ impl deadpool::managed::Manager for StoreManager {
     _: &mut StoreAndBindings,
     metrics: &deadpool::managed::Metrics,
   ) -> Result<(), deadpool::managed::RecycleError<Error>> {
-    // Limit how often a store gets recycled to avoid persistent ballooning if guests have memory leaks.
+    // Limit how often a store gets recycled to avoid persistent ballooning if guests have memory
+    // leaks.
     if metrics.recycle_count > 2048 {
       return Err(deadpool::managed::RecycleError::message("count limit"));
     }
