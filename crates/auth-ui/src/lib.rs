@@ -1,10 +1,12 @@
 #![forbid(unsafe_code, clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+mod auth;
 
 use askama::Template;
 use serde::{Deserialize, Serialize};
-use std::sync::LazyLock;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use trailbase_auth_config::AuthConfig;
 use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::http::{
@@ -15,8 +17,6 @@ use trailbase_wasm::kv::Store;
 use trailbase_wasm::{Guest, Metadata, export};
 use ts_rs::TS;
 
-mod auth;
-
 // Implement the function exported in this world (see above).
 struct Endpoints;
 
@@ -26,8 +26,8 @@ impl Guest for Endpoints {
       routing::get(
         LOGIN_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          let config: &AuthConfig = AUTH_CONFIG.as_ref().map_err(|err| err.clone())?;
-          return ui_login_handler(config, req.user(), req.query_parse()?).await;
+          let config = read_cached_config()?;
+          return ui_login_handler(&config, req.user(), req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -57,8 +57,8 @@ impl Guest for Endpoints {
       routing::get(
         REGISTER_USER_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          let config: &AuthConfig = AUTH_CONFIG.as_ref().map_err(|err| err.clone())?;
-          return ui_register_handler(config, req.query_parse()?).await;
+          let config = read_cached_config()?;
+          return ui_register_handler(&config, req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -154,11 +154,7 @@ async fn ui_login_handler(
     return Ok(Redirect::to(PROFILE_UI).into_response());
   }
 
-  let settings: AuthUiSettings = trailbase_wasm::prefs::get_prefs(SETTINGS_KEY)
-    .await
-    .map_err(internal)?
-    .and_then(|s| serde_json::from_str(&s).ok())
-    .unwrap_or_default();
+  let settings = read_cached_settings().await?;
 
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let oauth_query_params: Vec<(&str, &str)> = [
@@ -495,7 +491,7 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, TS)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct AuthUiSettings {
   #[ts(optional)]
@@ -533,6 +529,20 @@ async fn read_settings() -> Result<AuthUiSettings, HttpError> {
   };
 }
 
+async fn read_cached_settings() -> Result<Arc<AuthUiSettings>, HttpError> {
+  let mut guard = SETTINGS_CACHE.lock().map_err(internal)?;
+  if let Some((instant, settings)) = &*guard
+    && instant.elapsed() < CACHE_TTL
+  {
+    return Ok(settings.clone());
+  }
+
+  // Update cache
+  let settings = Arc::new(read_settings().await?);
+  *guard = Some((Instant::now(), settings.clone()));
+  return Ok(settings);
+}
+
 async fn get_settings_handler(_req: Request) -> Result<Response, HttpError> {
   let settings = read_settings().await?;
 
@@ -548,6 +558,8 @@ async fn get_settings_handler(_req: Request) -> Result<Response, HttpError> {
 
 async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
   let body = req.body().bytes().await.map_err(internal)?;
+
+  let _ = SETTINGS_CACHE.lock().map(|mut guard| *guard = None);
 
   trailbase_wasm::prefs::set_prefs(
     SETTINGS_KEY,
@@ -566,19 +578,18 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-#[inline]
-fn internal(err: impl std::string::ToString) -> HttpError {
-  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
-}
+fn read_cached_config() -> Result<Arc<AuthConfig>, HttpError> {
+  let mut guard = CONFIG_CACHE.lock().map_err(internal)?;
+  if let Some((instant, config)) = &*guard
+    && instant.elapsed() < CACHE_TTL
+  {
+    return Ok(config.clone());
+  }
 
-#[inline]
-fn bad_request() -> HttpError {
-  return HttpError::status(StatusCode::BAD_REQUEST);
-}
-
-// Read auth config. It may be a bit hacky to use KVStore :shrug:. Should we add a TTL
-// here to allow more flexible config updates?
-static AUTH_CONFIG: LazyLock<Result<AuthConfig, HttpError>> = LazyLock::new(|| {
+  // Update cache
+  //
+  // Read auth config. It may be a bit hacky to use KVStore :shrug:. Should we add a TTL
+  // here to allow more flexible config updates?
   let store = Store::open().map_err(internal)?;
   let value = store
     .get("config:auth")
@@ -589,8 +600,24 @@ static AUTH_CONFIG: LazyLock<Result<AuthConfig, HttpError>> = LazyLock::new(|| {
     return Err(internal("empty config"));
   }
 
-  return serde_json::from_slice(&value).map_err(internal);
-});
+  let config = Arc::new(serde_json::from_slice::<AuthConfig>(&value).map_err(internal)?);
+  *guard = Some((Instant::now(), config.clone()));
+  return Ok(config);
+}
+
+#[inline]
+fn internal(err: impl std::string::ToString) -> HttpError {
+  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
+}
+
+#[inline]
+fn bad_request() -> HttpError {
+  return HttpError::status(StatusCode::BAD_REQUEST);
+}
+
+const CACHE_TTL: Duration = Duration::from_secs(120);
+static SETTINGS_CACHE: Mutex<Option<(Instant, Arc<AuthUiSettings>)>> = Mutex::new(None);
+static CONFIG_CACHE: Mutex<Option<(Instant, Arc<AuthConfig>)>> = Mutex::new(None);
 
 const AUTH_API: &str = "/api/auth/v1";
 

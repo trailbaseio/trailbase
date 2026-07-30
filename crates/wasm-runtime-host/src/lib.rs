@@ -371,6 +371,7 @@ impl HttpStore {
               return;
             };
 
+            #[cfg(debug_assertions)]
             log::debug!("WASM store pool: {:?}", pool.status());
 
             // Keep all recently used stores but at least 16.
