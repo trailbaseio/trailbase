@@ -14,6 +14,7 @@ type SetupMessage = {
   value: {
     tokens: Tokens | null;
     url?: string;
+    theme?: string;
   };
 };
 
@@ -24,8 +25,12 @@ export function installPostMessageHandler() {
     const msg = event.data as Message;
 
     switch (msg.type) {
-      case "setup":
+      case "setup": {
         const value = msg.value as SetupMessage["value"];
+        if (value.theme === "dark") {
+          applyTheme(value.theme === "dark" ? "dark" : "light");
+        }
+
         const tokens = value.tokens;
         if (!tokens) {
           console.debug("Received null tokens:", msg);
@@ -35,12 +40,19 @@ export function installPostMessageHandler() {
         $client.set(initClient(defaultBaseUri(), { tokens }));
 
         break;
-
-      default:
+      }
+      default: {
         console.warn("Expected setup message, got:", msg);
         break;
+      }
     }
   });
+}
+
+export function applyTheme(theme: "light" | "dark") {
+  const root = document.documentElement;
+  root.classList.toggle("dark", theme === "dark");
+  root.setAttribute("data-kb-theme", theme);
 }
 
 function defaultBaseUri() {
