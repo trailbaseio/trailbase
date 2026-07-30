@@ -276,6 +276,14 @@ jobs:
       RUST_TARGET: wasm32-wasip2
 
     steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+
       - id: release_component
         uses: ./.github/actions/release_component
         with:
