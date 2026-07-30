@@ -83,7 +83,7 @@ Future<Stream<Event>> connectSse(
     }
 
     late final StreamController<Event> ctrl;
-    StreamSubscription<List<int>>? subscription;
+    StreamSubscription<String>? subscription;
 
     ctrl = StreamController<Event>.broadcast(
       onCancel: () {
@@ -94,21 +94,28 @@ Future<Stream<Event>> connectSse(
         // NOTE: Unlike the default StreamController, the broadcast one doesn't
         // buffer. Hence we have to delay listening until somebody starts
         // listening.
-        final buffer = BytesBuilder();
-        subscription = response.stream.listen(
-          (List<int> data) {
-            if (_endsWithNewlineNewline(data)) {
-              if (buffer.isNotEmpty) {
-                buffer.add(data);
-
-                final event = decodeEvent(buffer.takeBytes());
-                if (event != null) ctrl.add(event);
-              } else {
-                final event = decodeEvent(data);
-                if (event != null) ctrl.add(event);
+        String buffer = '';
+        subscription = response.stream.transform(utf8.decoder).listen(
+          (String data) {
+            buffer += data;
+            int index;
+            while ((index = buffer.indexOf('\n\n')) != -1) {
+              final eventStr = buffer.substring(0, index);
+              buffer = buffer.substring(index + 2);
+              
+              if (eventStr.trim().isEmpty) continue;
+              
+              for (final line in eventStr.split('\n')) {
+                if (line.startsWith('data: ')) {
+                  try {
+                    final event = _eventfromJson(jsonDecode(line.substring(6)));
+                    ctrl.add(event);
+                  } catch (e, st) {
+                    ctrl.addError(e, st);
+                  }
+                  break;
+                }
               }
-            } else {
-              buffer.add(data);
             }
           },
           onDone: () => ctrl.close(),
