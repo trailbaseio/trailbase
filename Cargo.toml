@@ -100,6 +100,7 @@ trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }
 trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.5.1" }
 trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.2.0" }
+trailbase-wasm-component-repo = { path = "crates/wasm-component-repo", version = "0.1.0" }
 trailbase-wasm-runtime-axum= { path = "crates/wasm-runtime-axum", version = "0.1.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }

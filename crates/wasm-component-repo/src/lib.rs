@@ -1,7 +1,11 @@
+#![forbid(unsafe_code, clippy::unwrap_used)]
+#![allow(clippy::needless_return)]
+#![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek};
-use trailbase::DataDir;
+use std::path::Path;
 use trailbase_wasm_runtime_host::find_wasm_components;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -71,15 +75,13 @@ pub async fn download_component(
 }
 
 pub async fn install_wasm_component(
-  data_dir: &DataDir,
+  components_dir: &Path,
   path: impl AsRef<std::path::Path>,
   mut reader: impl Read + Seek,
 ) -> Result<Vec<std::path::PathBuf>, BoxError> {
   let path = path.as_ref();
-  let wasm_dir = data_dir.root().join("wasm");
-
-  if !fs::exists(&wasm_dir)? {
-    fs::create_dir_all(&wasm_dir)?;
+  if !fs::exists(components_dir)? {
+    fs::create_dir_all(components_dir)?;
   }
 
   return match path
@@ -101,7 +103,7 @@ pub async fn install_wasm_component(
           let Some(filename) = path.file_name().and_then(|e| e.to_str()) else {
             return Err(format!("Invalid filename: {:?}", file.name()).into());
           };
-          let component_file_path = wasm_dir.join(filename);
+          let component_file_path = components_dir.join(filename);
           let mut component_file = std::fs::File::create(&component_file_path)?;
           std::io::copy(&mut file, &mut component_file)?;
 
@@ -116,7 +118,7 @@ pub async fn install_wasm_component(
         return Err(format!("Invalid filename: {path:?}").into());
       };
 
-      let component_file_path = wasm_dir.join(filename);
+      let component_file_path = components_dir.join(filename);
       let mut component_file = std::fs::File::create(&component_file_path)?;
       std::io::copy(&mut reader, &mut component_file)?;
 
@@ -141,10 +143,8 @@ pub struct Component {
   pub packages: Vec<Package>,
 }
 
-pub fn list_installed_wasm_components(data_dir: &DataDir) -> Result<Vec<Component>, BoxError> {
-  let components_path = data_dir.root().join("wasm");
-
-  let components: Vec<(Vec<u8>, std::path::PathBuf)> = find_wasm_components(components_path)
+pub fn list_installed_wasm_components(components_dir: &Path) -> Result<Vec<Component>, BoxError> {
+  let components: Vec<(Vec<u8>, std::path::PathBuf)> = find_wasm_components(components_dir)
     .into_iter()
     .map(|path| -> std::io::Result<(Vec<u8>, std::path::PathBuf)> {
       return Ok((std::fs::read(&path)?, path));
@@ -190,4 +190,44 @@ pub fn list_installed_wasm_components(data_dir: &DataDir) -> Result<Vec<Componen
       return Ok(Component { path, packages });
     })
     .collect();
+}
+
+#[derive(Clone, Debug)]
+pub enum ComponentReference {
+  Path(std::path::PathBuf),
+  Url(url::Url),
+  Name(String),
+}
+
+impl TryFrom<&str> for ComponentReference {
+  type Error = String;
+
+  fn try_from(reference: &str) -> Result<Self, Self::Error> {
+    if let Ok(url) = url::Url::parse(reference) {
+      if url.scheme() != "https" {
+        return Err("Only HTTPS supported".into());
+      }
+
+      return Ok(ComponentReference::Url(url));
+    }
+
+    let path = std::path::PathBuf::from(reference);
+    if let Some(ext) = path.extension() {
+      match &*ext.to_string_lossy() {
+        "wasm" | "zip" => {
+          return Ok(ComponentReference::Path(path));
+        }
+        _ => {}
+      }
+    }
+
+    if reference
+      .chars()
+      .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '/')
+    {
+      return Ok(ComponentReference::Name(reference.into()));
+    }
+
+    return Err("Failed to parse component reference".into());
+  }
 }
