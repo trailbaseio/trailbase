@@ -1,0 +1,15 @@
+[package]
+name = "trailbase-tetris-component"
+version = "0.0.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "TrailBase Tetris Component"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+rust-embed = { workspace = true }
+trailbase-wasm = { workspace = true }

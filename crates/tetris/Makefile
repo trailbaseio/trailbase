@@ -1,6 +1,6 @@
 TRAILBIN ?= RUST_BACKTRACE=1 cargo run -p trailbase-cli --
 TRAILDEPOT := traildepot
-NAME := trailbase_auth_ui_component
+NAME := trailbase_tetris_component
 
 APPDIR := .
 DISTDIR := ${APPDIR}/dist

@@ -303,8 +303,7 @@ jobs:
           default: true
       - name: Rust Build
         run: |
-          env && cd crates/auth-ui && \
-            cargo build --target ${{ env.RUST_TARGET }} --release
+          env && cargo build -p trailbase-auth-ui-component --target ${{ env.RUST_TARGET }} --release
 
       - name: Package Artifacts
         run: |
