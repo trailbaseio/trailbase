@@ -16,6 +16,7 @@ reqwest = { workspace = true }
 serde = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
+trailbase-wasm-common = { workspace = true }
 url = "2.5.4"
 wit-component = "0.254.0"
 zip = { version = "8.1.0", default-features = false, features = ["deflate"] }

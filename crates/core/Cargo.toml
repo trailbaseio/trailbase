@@ -115,6 +115,7 @@ trailbase-refinery = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true, default-features = false }
 trailbase-sqlvalue = { workspace = true, features = ["rusqlite"] }
+trailbase-wasm-component-repo = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasm-runtime-axum = { workspace = true, optional = true }
 trailbase-wasm-runtime-host = { workspace = true, optional = true }

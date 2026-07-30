@@ -2,50 +2,80 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek};
 use std::path::Path;
+use std::sync::{Arc, LazyLock};
 use trailbase_wasm_runtime_host::find_wasm_components;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct ComponentDefinition {
+  pub id: String,
   pub url_template: String,
-  pub wasm_filenames: Vec<String>,
+  pub files: Vec<String>,
 }
 
-pub fn repo() -> HashMap<String, ComponentDefinition> {
-  return HashMap::from([
-        ("trailbase/auth_ui".to_string(), ComponentDefinition {
-            url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_auth_ui.zip".to_string(),
-            wasm_filenames: vec![
-                "trailbase_auth_ui_component.wasm".to_string(),
-                // Old filename.
-                "auth_ui_component.wasm".to_string(),
-            ],
-        }),
-        ("trailbase/tetris".to_string(), ComponentDefinition {
-            url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_tetris.zip".to_string(),
-            wasm_filenames: vec![
-                "trailbase_tetris_component.wasm".to_string(),
-            ],
-        }),
-    ]);
+#[derive(Clone, Debug)]
+pub struct ComponentRepository {
+  repo: Arc<Vec<ComponentDefinition>>,
+}
+
+impl ComponentRepository {
+  pub fn get(&self, id: &str) -> Option<&ComponentDefinition> {
+    return self.repo.iter().find(|c| c.id == id);
+  }
+
+  pub fn iter(&self) -> std::slice::Iter<'_, ComponentDefinition> {
+    return self.repo.iter();
+  }
+}
+
+pub fn repo() -> ComponentRepository {
+  // TODO: Eventually we may want to read the repo from somwhere.
+  static REPO: LazyLock<ComponentRepository> = LazyLock::new(|| {
+    return ComponentRepository {
+      repo: Arc::new(vec![
+          ComponentDefinition {
+              id: "trailbase/auth_ui".to_string(),
+
+              url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_auth_ui.zip".to_string(),
+              files: vec![
+                  "trailbase_auth_ui_component.wasm".to_string(),
+                  // Old filename. We keep this here to be able to identify legacy installations
+                  // for folks who haven't updated the component lately.
+                  "auth_ui_component.wasm".to_string(),
+              ],
+          },
+          ComponentDefinition {
+              id: "trailbase/tetris".to_string(),
+              url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_tetris.zip".to_string(),
+              files: vec![
+                  "trailbase_tetris_component.wasm".to_string(),
+              ],
+          },
+       ]),
+    };
+  });
+
+  return REPO.clone();
 }
 
 pub fn find_component(name: &str) -> Option<ComponentDefinition> {
   return repo().get(name).cloned();
 }
 
-pub fn find_component_by_filename(filename: &str) -> Option<ComponentDefinition> {
-  return repo().into_values().find(|component_def| {
-    return component_def
-      .wasm_filenames
-      .iter()
-      .any(|f| f.as_str() == filename);
-  });
+pub fn find_component_by_filename(
+  repo: &ComponentRepository,
+  filename: &str,
+) -> Option<ComponentDefinition> {
+  return repo
+    .iter()
+    .find(|component_def| {
+      return component_def.files.iter().any(|f| f.as_str() == filename);
+    })
+    .cloned();
 }
 
 pub async fn download_component(
@@ -78,6 +108,11 @@ pub async fn download_component(
     })?;
 
   return Ok((url, bytes));
+}
+
+pub async fn remove_wasm_component(component_path: &Path) -> Result<(), BoxError> {
+  fs::remove_file(component_path)?;
+  return Ok(());
 }
 
 pub async fn install_wasm_component(
@@ -205,10 +240,8 @@ pub enum ComponentReference {
   Name(String),
 }
 
-impl TryFrom<&str> for ComponentReference {
-  type Error = String;
-
-  fn try_from(reference: &str) -> Result<Self, Self::Error> {
+impl ComponentReference {
+  pub fn parse(reference: &str) -> Result<Self, String> {
     if let Ok(url) = url::Url::parse(reference) {
       if url.scheme() != "https" {
         return Err("Only HTTPS supported".into());
@@ -235,5 +268,13 @@ impl TryFrom<&str> for ComponentReference {
     }
 
     return Err("Failed to parse component reference".into());
+  }
+}
+
+impl TryFrom<&str> for ComponentReference {
+  type Error = String;
+
+  fn try_from(reference: &str) -> Result<Self, Self::Error> {
+    return ComponentReference::parse(reference);
   }
 }

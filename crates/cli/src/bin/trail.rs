@@ -353,7 +353,7 @@ async fn async_main(
               let wasm_dir = data_dir.wasm_path();
 
               let filenames: Vec<_> = component_def
-                .wasm_filenames
+                .files
                 .into_iter()
                 .map(|f| wasm_dir.join(f))
                 .collect();
@@ -371,7 +371,7 @@ async fn async_main(
           }
         }
         Some(ComponentSubCommands::List) => {
-          println!("Components:\n\n{}", repo().keys().join("\n"));
+          println!("Components:\n\n{}", repo().iter().map(|c| &c.id).join("\n"));
         }
         Some(ComponentSubCommands::Installed) => {
           let components = list_installed_wasm_components(&data_dir.wasm_path())?;
@@ -401,7 +401,9 @@ async fn async_main(
               continue;
             };
 
-            let Some(component_def) = find_component_by_filename(&filename.to_string_lossy())
+            let components_repo = repo();
+            let Some(component_def) =
+              find_component_by_filename(&components_repo, &filename.to_string_lossy())
             else {
               log::warn!(
                 "Skipping {:?}, not a first-party component",

@@ -109,6 +109,8 @@ export function WasmComponentsList() {
     if (import.meta.env.DEV) {
       components.push({
         name: "[DEV]injected_debug_default",
+        path: "wasm/fake_component.wasm",
+        installed: false,
       });
     }
     return components;
@@ -125,14 +127,13 @@ export function WasmComponentsList() {
           </CardHeader>
 
           <CardContent>
-            To update or re-install the first-party components, simply run the following:
-
+            To update or re-install the first-party components, simply run the
+            following:
             <pre class="my-2 ml-4 whitespace-pre-wrap">
               trail components add trailbase/auth_ui
             </pre>
           </CardContent>
         </Card>
-
 
         <Switch>
           <Match when={wasmComponents.isLoading}>

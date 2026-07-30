@@ -76,6 +76,11 @@ pub fn router() -> Router<AppState> {
     .route("/public_key", get(jwt::get_public_key))
     .route("/info", get(info::info_handler))
     .route("/wasm", get(wasm::list_wasm_components_handler))
+    .route("/wasm/install", post(wasm::install_wasm_component_handler))
+    .route(
+      "/wasm/uninstall",
+      post(wasm::uninstall_wasm_component_handler),
+    )
     .route("/jobs", get(jobs::list_jobs_handler))
     .route("/job/run", post(jobs::run_job_handler))
     .route("/backups", get(backup::list_backups_handler))
