@@ -202,9 +202,7 @@ async fn ui_login_handler(
 }
 
 fn get_optional_non_empty(v: &Option<String>) -> Option<&str> {
-  return v
-    .as_deref()
-    .and_then(|v| if v.is_empty() { None } else { Some(v) });
+  return v.as_deref().filter(|v| !v.is_empty());
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -482,13 +480,10 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
 }
 
 async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
-  // TODO: Since we're serving an SPA we technically would NOT need to access protect the
-  // static asset, however this would be different with SSR. As a best practice, we should
-  // probably return an error here as the stricter, safer default
-  if require_admin(&req).await.is_err() {
-    // TODO: remove print.
-    eprintln!("admin_dashboard_handler: Not an admin");
-  }
+  // Since we're serving an SPA, i.e. static assets, we do NOT strictly need access protection as
+  // long as all the REST endpoints are protected. This could be different for SSR which may expose
+  // server internals. Therefore and as a generally good practice, we check access here.
+  require_admin(&req).await?;
 
   let file =
     auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;
