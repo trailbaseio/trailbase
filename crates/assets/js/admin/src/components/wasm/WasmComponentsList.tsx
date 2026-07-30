@@ -9,6 +9,7 @@ import {
   CardContent,
   CardTitle,
   CardDescription,
+  CardHeader,
 } from "@/components/ui/card";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
@@ -61,7 +62,7 @@ function ComponentCard(props: { component: WasmComponent }) {
   return (
     <Card>
       <WrapHyperlink>
-        <CardContent class="flex bg-transparent p-4">
+        <CardContent class="flex p-4">
           <div class="text-muted-foreground size-10 shrink-0 content-center">
             <ComponentIcon icon={props.component.icon ?? undefined} />
           </div>
@@ -118,6 +119,21 @@ export function WasmComponentsList() {
       <Header title="WASM Components" />
 
       <div class="flex flex-col gap-3 p-4">
+        <Card class="text-sm">
+          <CardHeader>
+            <h2>Install, Remove {"&"} Update</h2>
+          </CardHeader>
+
+          <CardContent>
+            To update or re-install the first-party components, simply run the following:
+
+            <pre class="my-2 ml-4 whitespace-pre-wrap">
+              trail components add trailbase/auth_ui
+            </pre>
+          </CardContent>
+        </Card>
+
+
         <Switch>
           <Match when={wasmComponents.isLoading}>
             <div class="flex h-64 items-center justify-center">
