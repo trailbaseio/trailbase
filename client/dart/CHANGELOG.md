@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.13.2
+
+- Fix change `Event` decoding when the server concatenates multiple events.
+
 ## 0.13.1
 
 - Fix merging of `refresh_token`.
