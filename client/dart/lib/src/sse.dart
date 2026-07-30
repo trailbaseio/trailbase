@@ -83,7 +83,7 @@ Future<Stream<Event>> connectSse(
     }
 
     late final StreamController<Event> ctrl;
-    StreamSubscription<String>? subscription;
+    StreamSubscription<List<int>>? subscription;
 
     ctrl = StreamController<Event>.broadcast(
       onCancel: () {
@@ -94,27 +94,30 @@ Future<Stream<Event>> connectSse(
         // NOTE: Unlike the default StreamController, the broadcast one doesn't
         // buffer. Hence we have to delay listening until somebody starts
         // listening.
-        String buffer = '';
-        subscription = response.stream.transform(utf8.decoder).listen(
-          (String data) {
-            buffer += data;
-            int index;
-            while ((index = buffer.indexOf('\n\n')) != -1) {
-              final eventStr = buffer.substring(0, index);
-              buffer = buffer.substring(index + 2);
-              
-              if (eventStr.trim().isEmpty) continue;
-              
-              for (final line in eventStr.split('\n')) {
-                if (line.startsWith('data: ')) {
-                  try {
-                    final event = _eventfromJson(jsonDecode(line.substring(6)));
-                    ctrl.add(event);
-                  } catch (e, st) {
-                    ctrl.addError(e, st);
-                  }
-                  break;
-                }
+        final buffer = BytesBuilder();
+        subscription = response.stream.listen(
+          (List<int> data) {
+            // `data` may contain multiple concatenated events, we thus have to scan for `\n\n` delimiter.
+            for (final chunk in splitByNewlineNewline(data)) {
+              if (!_endsWithNewlineNewline(chunk)) {
+                buffer.add(chunk);
+                continue;
+              }
+
+              // We have a terminated chunk => build and issue change `Event`.
+              final merged = switch (buffer.isEmpty) {
+                true => chunk,
+                false => () {
+                    buffer.add(chunk);
+                    return buffer.takeBytes();
+                  }(),
+              };
+
+              try {
+                final event = decodeEvent(merged);
+                if (event != null) ctrl.add(event);
+              } catch (err, st) {
+                ctrl.addError(err, st);
               }
             }
           },
@@ -141,6 +144,20 @@ bool _endsWithNewlineNewline(List<int> bytes) {
     return bytes[bytes.length - 1] == 10 && bytes[bytes.length - 2] == 10;
   }
   return false;
+}
+
+@visibleForTesting
+Iterable<List<int>> splitByNewlineNewline(List<int> list) sync* {
+  int start = 0;
+  for (int i = 0; i <= list.length - 2; i++) {
+    if (list[i] == 10 && list[i + 1] == 10) {
+      yield list.sublist(start, i + 2);
+      start = i + 2;
+      i += 1;
+    }
+  }
+
+  if (start < list.length) yield list.sublist(start);
 }
 
 Event _eventfromJson(Map<String, dynamic> json) {
