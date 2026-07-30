@@ -193,12 +193,18 @@ async fn ui_login_handler(
     login_identifier: config.login_identifier,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
-    title: settings.title.as_deref(),
-    icon_url: settings.icon_url.as_deref(),
+    title: get_optional_non_empty(&settings.title),
+    icon_url: get_optional_non_empty(&settings.icon_url),
   }
   .render();
 
   return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+fn get_optional_non_empty(v: &Option<String>) -> Option<&str> {
+  return v
+    .as_deref()
+    .and_then(|v| if v.is_empty() { None } else { Some(v) });
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -457,10 +463,18 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
   .ok_or_else(|| HttpError::message(StatusCode::NOT_FOUND, "Not found"))?;
 
   let response_builder = Response::builder()
+    .header(
+      header::CONTENT_TYPE,
+      match path {
+        p if p.ends_with(".js") => "text/javascript",
+        p if p.ends_with(".css") => "text/css",
+        p if p.ends_with(".html") => "text/html",
+        _ => file.metadata.mimetype(),
+      },
+    )
     .header(header::CACHE_CONTROL, "public")
     .header(header::CACHE_CONTROL, "max-age=604800")
-    .header(header::CACHE_CONTROL, "immutable")
-    .header(header::CONTENT_TYPE, file.metadata.mimetype());
+    .header(header::CACHE_CONTROL, "immutable");
 
   return response_builder
     .body(file.data.into_body())
@@ -472,13 +486,14 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
   // static asset, however this would be different with SSR. As a best practice, we should
   // probably return an error here as the stricter, safer default
   if require_admin(&req).await.is_err() {
+    // TODO: remove print.
     eprintln!("admin_dashboard_handler: Not an admin");
   }
 
   let file =
     auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;
 
-  let response_builder = Response::builder().header(header::CONTENT_TYPE, file.metadata.mimetype());
+  let response_builder = Response::builder().header(header::CONTENT_TYPE, "text/html");
 
   return response_builder
     .body(file.data.into_body())
@@ -494,7 +509,7 @@ pub struct AuthUiSettings {
   #[ts(optional)]
   icon_url: Option<String>,
   /*
-    TODO: Ideas for further customization.
+    NOTE: Ideas for further customization.
 
     /// Typically a page or mailto://test@trailbase.io.
     #[ts(optional)]
@@ -517,12 +532,9 @@ async fn read_settings() -> Result<AuthUiSettings, HttpError> {
     .map_err(internal)?
   {
     Some(value) => serde_json::from_str(&value).map_err(internal),
-    None => {
-      eprintln!("fallback settings");
-      Ok(AuthUiSettings {
-        ..Default::default()
-      })
-    }
+    None => Ok(AuthUiSettings {
+      ..Default::default()
+    }),
   };
 }
 
@@ -541,12 +553,17 @@ async fn get_settings_handler(_req: Request) -> Result<Response, HttpError> {
 
 async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
   let body = req.body().bytes().await.map_err(internal)?;
-  let settings: AuthUiSettings = serde_json::from_slice(&body).map_err(internal)?;
-  let value = serde_json::to_string(&settings).map_err(internal)?;
 
-  trailbase_wasm::prefs::set_prefs(SETTINGS_KEY, Some(value))
-    .await
-    .map_err(internal)?;
+  trailbase_wasm::prefs::set_prefs(
+    SETTINGS_KEY,
+    Some({
+      // Input validation: make sure settings object has the right shape.
+      let settings: AuthUiSettings = serde_json::from_slice(&body).map_err(|_| bad_request())?;
+      serde_json::to_string(&settings).map_err(internal)?
+    }),
+  )
+  .await
+  .map_err(internal)?;
 
   return Response::builder()
     .header(header::CONTENT_TYPE, "application/json")
@@ -554,9 +571,14 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-#[allow(unused)]
+#[inline]
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
+}
+
+#[inline]
+fn bad_request() -> HttpError {
+  return HttpError::status(StatusCode::BAD_REQUEST);
 }
 
 // Read auth config. It may be a bit hacky to use KVStore :shrug:. Should we add a TTL
