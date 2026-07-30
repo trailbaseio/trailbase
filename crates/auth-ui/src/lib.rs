@@ -119,9 +119,9 @@ impl Guest for Endpoints {
 
   fn metadata() -> Option<Metadata> {
     return Some(Metadata {
-      display_name: Some("Auth UI".to_string()),
+      display_name: Some("AuthUi".to_string()),
       icon: Some(AUTH_ICON.to_string()),
-      description: Some("1st party authentication UI.".to_string()),
+      description: Some("TrailBase's first-party auth UI.".to_string()),
       admin_ui_path: Some("/_/auth/admin/ui/".to_string()),
       ..Default::default()
     });

@@ -25,7 +25,13 @@ pub fn repo() -> HashMap<String, ComponentDefinition> {
                 // Old filename.
                 "auth_ui_component.wasm".to_string(),
             ],
-        })
+        }),
+        ("trailbase/tetris".to_string(), ComponentDefinition {
+            url_template: "https://github.com/trailbaseio/trailbase/releases/download/{{ release }}/trailbase_{{ release }}_wasm_tetris.zip".to_string(),
+            wasm_filenames: vec![
+                "trailbase_tetris_component.wasm".to_string(),
+            ],
+        }),
     ]);
 }
 
