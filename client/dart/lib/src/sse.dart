@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:meta/meta.dart';
 
@@ -102,9 +101,9 @@ Future<Stream<Event>> connectSse(
             while ((index = buffer.indexOf('\n\n')) != -1) {
               final eventStr = buffer.substring(0, index);
               buffer = buffer.substring(index + 2);
-              
+
               if (eventStr.trim().isEmpty) continue;
-              
+
               for (final line in eventStr.split('\n')) {
                 if (line.startsWith('data: ')) {
                   try {
@@ -134,13 +133,6 @@ Future<Stream<Event>> connectSse(
   }
 
   return (await connectSseImpl()).stream;
-}
-
-bool _endsWithNewlineNewline(List<int> bytes) {
-  if (bytes.length >= 2) {
-    return bytes[bytes.length - 1] == 10 && bytes[bytes.length - 2] == 10;
-  }
-  return false;
 }
 
 Event _eventfromJson(Map<String, dynamic> json) {
