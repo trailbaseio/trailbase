@@ -21,6 +21,7 @@ tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
+url = "2.5.8"
 
 [dev-dependencies]
 clap = { workspace = true }

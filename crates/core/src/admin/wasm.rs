@@ -172,9 +172,9 @@ pub async fn install_wasm_component_handler(
     return Err(Error::Precondition("component not found".into()));
   };
 
-  let (url, bytes) = download_component(&component_def)
+  let (url, bytes) = download_component(component_def)
     .await
-    .map_err(|err| Error::Internal(err.into()))?;
+    .map_err(Error::Internal)?;
   let filename = url.path();
   let paths = install_wasm_component(
     &state.data_dir().wasm_path(),
@@ -182,7 +182,7 @@ pub async fn install_wasm_component_handler(
     std::io::Cursor::new(bytes),
   )
   .await
-  .map_err(|err| Error::Internal(err.into()))?;
+  .map_err(Error::Internal)?;
 
   log::debug!("Installed components: {paths:?}");
 

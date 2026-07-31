@@ -39,6 +39,17 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       return;
     }
 
+    // Ideally with a strict parent `connect-src` CSP we could allow URLs w/o
+    // checking the dashboard's origin. However, Firefox required us to have a
+    // loose '*' `connect-src` policy for now, forcing us to implement our own
+    // here. The risk is that an untrusted component could register a URL, sent
+    // admins off site and exfiltrate the postMessage tokens.
+    //
+    // Even with a stricter CSP, this defence in depth.
+    if (URL.parse(path)) {
+      throw Error(`only paths allowed for safety, got: ${path}`);
+    }
+
     // Fix up for separate dev server.
     return import.meta.env.DEV
       ? `http://${window.location.hostname}:4000${path}`
@@ -46,7 +57,7 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
   };
 
   const dashboardPage = useQuery(() => ({
-    queryKey: ["wasm-dash", props.component.admin_ui_path],
+    queryKey: ["wasm-dash", source()],
     queryFn: async ({ queryKey: _ }) => {
       const src = source();
       if (!src) {
@@ -140,6 +151,8 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
 
   return (
     <Switch>
+      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
+
       <Match when={props.component.admin_ui_path === undefined}>
         <Header
           title={props.component.display_name ?? props.component.name}
