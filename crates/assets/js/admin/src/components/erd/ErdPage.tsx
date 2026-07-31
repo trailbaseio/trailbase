@@ -30,6 +30,7 @@ import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import { QualifiedName } from "@bindings/QualifiedName";
+import { getSpareHeaderStyle } from "@/lib/header";
 
 function namesMatch(a: QualifiedName, b: QualifiedName): boolean {
   if (a.name === b.name) {
@@ -190,18 +191,10 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
     return { nodes, edges };
   });
 
-  const style = () => {
-    if (isMobile()) {
-      // Header (65px) + Navbar (48px) = 113px
-      return "h-[calc(100dvh-113px)] w-[calc(100dvw)]";
-    }
-    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)]";
-  };
-
   let graph: Graph | undefined;
 
   return (
-    <div class={style()}>
+    <div class={getSpareHeaderStyle(isMobile())}>
       {/* UI overlay */}
       <div class="absolute right-0 z-10">
         <div class="m-2 flex flex-col gap-2">

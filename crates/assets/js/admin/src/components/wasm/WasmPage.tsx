@@ -31,7 +31,7 @@ export function WasmPage() {
       <Match when={wasmComponents.isError}>{`${wasmComponents.error}`}</Match>
 
       <Match when={params.name !== undefined && findComponent() !== undefined}>
-        <WasmComponentDetails component={findComponent()!} />
+        <WasmComponentDetails component={findComponent()!} sandboxed={true} />
       </Match>
 
       <Match when={params.name !== undefined && findComponent() === undefined}>
