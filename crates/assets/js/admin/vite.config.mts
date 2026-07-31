@@ -40,6 +40,8 @@ export default defineConfig({
         "style-src": ["'self'", "'unsafe-inline'"],
         // 'unsafe-inline' needed for ERD renderer.
         "style-src-elem": ["'self'", "'unsafe-inline'"],
+        "frame-src": ["blob:"],
+        "child-src": ["blob:"],
       },
       build: {
         sri: true,

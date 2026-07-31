@@ -1,62 +1,28 @@
-import {
-  createEffect,
-  createSignal,
-  onCleanup,
-  Match,
-  Switch,
-  Show,
-} from "solid-js";
+import { createEffect, onCleanup, Match, Switch, Show } from "solid-js";
 import { A } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import { TbOutlineArrowLeft, TbOutlineSandbox } from "solid-icons/tb";
+import { createWritableMemo } from "@solid-primitives/memo";
+import { Tokens } from "trailbase";
+
+import type { WasmComponent } from "@bindings/WasmComponent";
 
 import { Header } from "@/components/Header";
-import { Button } from "@/components/ui/button";
+import {
+  Switch as ToggleSwitch,
+  SwitchControl,
+  SwitchThumb,
+  SwitchLabel,
+} from "@/components/ui/switch";
 
 import { client, hostAddress } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
+import { getSpareHeaderStyle } from "@/lib/header";
 
-import type { WasmComponent } from "@bindings/WasmComponent";
-import { Tokens } from "trailbase";
-
-export function WasmComponentDetails(props: { component: WasmComponent }) {
-  const isMobile = createIsMobile();
-  const [enableSandbox, setEnableSandbox] = createSignal<boolean>(true);
-
-  const style = () => {
-    if (isMobile()) {
-      // Header (65px) + Navbar (48px) = 113px
-      return "h-[calc(100dvh-113px)] w-[calc(100dvw)]";
-    }
-    return "h-[calc(100dvh-65px)] w-[calc(100dvw-58px)]";
-  };
-
-  const source = () => {
-    const path = props.component.admin_ui_path;
-    if (!path) {
-      return;
-    }
-
-    // Ideally with a strict parent `connect-src` CSP we could allow URLs w/o
-    // checking the dashboard's origin. However, Firefox required us to have a
-    // loose '*' `connect-src` policy for now, forcing us to implement our own
-    // here. The risk is that an untrusted component could register a URL, sent
-    // admins off site and exfiltrate the postMessage tokens. Arguably that's
-    // still true, i.e. a local path can forward credentials.
-    //
-    // Even with a stricter CSP, this defence in depth.
-    if (URL.parse(path)) {
-      throw Error(`only paths allowed for safety, got: ${path}`);
-    }
-
-    // Fix up for separate dev server.
-    return import.meta.env.DEV
-      ? `http://${window.location.hostname}:4000${path}`
-      : path;
-  };
-
+function SandboxedIframe(props: { component: WasmComponent }) {
+  const source = () => getAdminUiPath(props.component);
   const dashboardPage = useQuery(() => ({
     queryKey: ["wasm-dash", source()],
     queryFn: async ({ queryKey: _ }) => {
@@ -78,14 +44,6 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       if (iframe === undefined) {
         console.error("iframe not bound");
         return;
-      }
-
-      // QUESTION: Should we browser fingerprint and use a different sandbox or
-      // simply offer a button to toggle sandbox?
-      if (enableSandbox()) {
-        iframe.sandbox = defaultSandbox;
-      } else {
-        iframe.sandbox = "";
       }
 
       if (import.meta.env.DEV) {
@@ -145,7 +103,111 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
     }
   });
 
-  const BackButton = () => (
+  return (
+    <Switch>
+      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
+
+      {/*
+         Sandbox options:
+         https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
+
+         WARN: An iframe which has both allow-scripts and allow-same-origin for its
+         sandbox attribute can remove its sandboxing.
+      */}
+      <Match when={true}>
+        <iframe
+          ref={iframe}
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "block",
+          }}
+          sandbox="allow-scripts allow-modals"
+          csp={iframeCsp}
+        />
+      </Match>
+    </Switch>
+  );
+}
+
+function YoloIframe(props: { component: WasmComponent }) {
+  const source = () => getAdminUiPath(props.component);
+
+  return (
+    <iframe
+      src={source()}
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "block",
+      }}
+      sandbox={undefined}
+      csp={undefined}
+    />
+  );
+}
+
+// FIXME: This one is broken because assets cannot be loaded, since origin is `blob:...`.
+function YoloWithExtraStepsIframe(props: { component: WasmComponent }) {
+  const source = () => getAdminUiPath(props.component);
+  const dashboardPage = useQuery(() => ({
+    queryKey: ["wasm-dash", source()],
+    queryFn: async ({ queryKey: _ }) => {
+      const src = source();
+      if (!src) {
+        return;
+      }
+
+      const response = await fetch(src, { headers: client.headers() });
+      return await response.blob();
+    },
+  }));
+
+  let iframe: HTMLIFrameElement | undefined;
+
+  createEffect(() => {
+    let blob: Blob | undefined = dashboardPage.data;
+    if (blob !== undefined) {
+      if (iframe === undefined) {
+        console.error("iframe not bound");
+        return;
+      }
+
+      const html = new Blob([blob], { type: "text/html" });
+      const url = URL.createObjectURL(html);
+
+      iframe.src = url;
+      iframe.style.width = "100%";
+      iframe.style.height = "400px";
+
+      iframe.addEventListener("load", () => URL.revokeObjectURL(url));
+    }
+  });
+
+  return (
+    <Switch>
+      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
+
+      <Match when={true}>
+        <iframe
+          ref={iframe}
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "block",
+          }}
+          sandbox={
+            true ? undefined : "allow-same-origin allow-scripts allow-modals"
+          }
+          csp={undefined}
+        />
+      </Match>
+    </Switch>
+  );
+}
+
+function BackButton() {
+  return (
     <A
       href="/wasm"
       class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
@@ -154,59 +216,72 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       <TbOutlineArrowLeft size={20} />
     </A>
   );
+}
+
+function SandboxButton(props: {
+  sandboxed: boolean;
+  setSandboxed: (v: boolean) => void;
+}) {
+  return (
+    <ToggleSwitch
+      class="flex items-center space-x-2"
+      defaultChecked={props.sandboxed}
+      onChange={(v) => {
+        console.debug("sandbox enabled:", v);
+        props.setSandboxed(v);
+      }}
+    >
+      <SwitchControl>
+        <SwitchThumb />
+      </SwitchControl>
+
+      <SwitchLabel>
+        <TbOutlineSandbox />
+      </SwitchLabel>
+    </ToggleSwitch>
+  );
+}
+
+export function WasmComponentDetails(props: {
+  component: WasmComponent;
+  sandboxed: boolean;
+}) {
+  const isMobile = createIsMobile();
+  const [sandboxed, setSandboxed] = createWritableMemo<boolean>(
+    () => props.sandboxed,
+  );
 
   return (
     <Switch>
-      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
-
-      <Match when={props.component.admin_ui_path === undefined}>
-        <Header
-          title={props.component.display_name ?? props.component.name}
-          leading={BackButton()}
-        />
-        <div class="text-muted-foreground p-4">
-          This WASM component did not register a dashboard.
-        </div>
+      <Match when={!props.component.admin_ui_path}>
+        {`The '${props.component.name}' component has no dashboard.`}
       </Match>
 
       <Match when={true}>
         <Header
           title={props.component.display_name ?? props.component.name}
           leading={BackButton()}
+          left={`${sandboxed()}`}
           right={
-            <Show when={import.meta.env.DEV}>
-              <Button
-                size="icon"
-                variant="outline"
-                onClick={() => {
-                  setEnableSandbox((old) => {
-                    const toggled = !old;
-                    console.debug("sandbox enabled:", toggled);
-                    return toggled;
-                  });
-                }}
-              >
-                <TbOutlineSandbox />
-              </Button>
+            <Show when={true || import.meta.env.DEV}>
+              <SandboxButton
+                sandboxed={sandboxed()}
+                setSandboxed={setSandboxed}
+              />
             </Show>
           }
         />
 
-        <div class={style()}>
-          {/*
-             NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
-               https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
-          */}
-          <iframe
-            ref={iframe}
-            style={{
-              width: "100%",
-              height: "100%",
-              display: "block",
-            }}
-            sandbox={defaultSandbox}
-            csp={iframeCsp}
-          />
+        <div class={getSpareHeaderStyle(isMobile())}>
+          <Switch>
+            <Match when={!sandboxed()}>
+              <YoloWithExtraStepsIframe component={props.component} />
+            </Match>
+
+            <Match when={true}>
+              <SandboxedIframe component={props.component} />
+            </Match>
+          </Switch>
         </div>
       </Match>
     </Switch>
@@ -224,6 +299,32 @@ type SetupMessage = {
 
 type Message = SetupMessage;
 
+function getAdminUiPath(component: WasmComponent): string | undefined {
+  const path = component.admin_ui_path;
+  if (!path) {
+    return;
+  }
+
+  // Ideally with a strict parent `connect-src` CSP we could allow URLs w/o
+  // checking the dashboard's origin. However, Firefox required us to have a
+  // loose '*' `connect-src` policy for now, forcing us to implement our own
+  // here. The risk is that an untrusted component could register a URL, sent
+  // admins off site and exfiltrate the postMessage tokens. Arguably that's
+  // still true, i.e. a local path can forward credentials.
+  //
+  // Even with a stricter CSP, this defence in depth.
+  if (URL.parse(path)) {
+    throw Error(`only paths allowed for safety, got: ${path}`);
+  }
+
+  // Fix up for separate dev server.
+  return import.meta.env.DEV
+    ? `http://${window.location.hostname}:4000${path}`
+    : path;
+}
+
+// NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
+//   https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
 const iframeCsp = import.meta.env.DEV
   ? ""
   : [
@@ -239,10 +340,3 @@ const iframeCsp = import.meta.env.DEV
       // "script-src 'self' 'unsafe-inline'",
       // "img-src *",
     ].join("; ");
-
-// NOTE: An iframe which has both allow-scripts and allow-same-origin for its
-// sandbox attribute can remove its sandboxing.
-//
-// Sandbox options:
-//   https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
-const defaultSandbox = "allow-scripts allow-modals";

@@ -197,7 +197,7 @@ impl Guest for Endpoints {
         };
         return Ok(BASE64_STANDARD.encode(vec));
       }),
-      routing::get("/dash", async |_req| Ok(DASH)).require_admin(),
+      routing::get("/dash", async |_req| Ok(DASH)),
     ];
   }
 
