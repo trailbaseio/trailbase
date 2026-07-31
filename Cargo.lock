@@ -8634,6 +8634,7 @@ dependencies = [
  "trailbase-sqlite",
  "trailbase-wasm-common",
  "trailbase-wasm-runtime-host",
+ "url",
 ]
 
 [[package]]
