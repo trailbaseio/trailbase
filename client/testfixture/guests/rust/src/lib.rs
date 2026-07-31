@@ -4,7 +4,6 @@
 
 use base64::prelude::*;
 use std::sync::atomic::{AtomicI64, Ordering};
-use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::db::{Transaction, Value, execute, query};
 use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
@@ -198,28 +197,7 @@ impl Guest for Endpoints {
         };
         return Ok(BASE64_STANDARD.encode(vec));
       }),
-      routing::get("/dash", async |req| {
-        require_admin(&req).await?;
-
-        return Ok(
-          r#"
-            <html>
-            <body style="background-color:#92a8d1;">
-                Hello World
-
-                <button type="button" onclick="test();">
-                    alert
-                </button>
-            </body>
-            <script>
-                function test() {
-                    alert("test");
-                }
-            </script>
-            </html>
-          "#,
-        );
-      }),
+      routing::get("/dash", async |_req| Ok(DASH)).require_admin(),
     ];
   }
 
@@ -302,3 +280,36 @@ const ICON: &str = r##"<svg height="800px" width="800px" version="1.1" id="_x32_
     C419.889,229.254,419.889,239.432,413.606,245.715z"/>
 </g>
 </svg>"##;
+
+const DASH: &str = r##"
+<html>
+<body style="background-color:#92a8d1;">
+  <h1>Testfixture Dash</h1>
+
+  <div style="display: flex; flex-direction: column; gap: 8px; width: fit-content;">
+    <button type="button" onclick="test();">
+      alert
+    </button>
+
+    <button type="button" onclick="externalFetch();">
+      fetch
+    </button>
+
+    <img src="https://picsum.photos/200" alt="external img" />
+  </div>
+</body>
+
+<script>
+  function test() {
+    alert("test");
+  }
+
+  async function externalFetch() {
+    const url = "https://trailbase.io";
+    console.debug("fetching:", url);
+    const resp = await fetch(url);
+    console.debug("got:", resp.status());
+  }
+</script>
+</html>
+"##;

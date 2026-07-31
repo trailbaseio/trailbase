@@ -43,7 +43,8 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
     // checking the dashboard's origin. However, Firefox required us to have a
     // loose '*' `connect-src` policy for now, forcing us to implement our own
     // here. The risk is that an untrusted component could register a URL, sent
-    // admins off site and exfiltrate the postMessage tokens.
+    // admins off site and exfiltrate the postMessage tokens. Arguably that's
+    // still true, i.e. a local path can forward credentials.
     //
     // Even with a stricter CSP, this defence in depth.
     if (URL.parse(path)) {
@@ -135,6 +136,11 @@ export function WasmComponentDetails(props: { component: WasmComponent }) {
       onCleanup(() => cleanup?.());
 
       // Set the actual body.
+      //
+      // NOTE: `srcdoc` with string is less efficient than using a `src="blob:..."`
+      // with `createObjectURL`, however relative, path-based resources, e.g.
+      // `<img src="/foo.png" />` will work because fetches won't be relative to
+      // a `blob:` origin.
       iframe.srcdoc = body;
     }
   });
@@ -231,6 +237,7 @@ const iframeCsp = import.meta.env.DEV
       // NOTE: For some reason `script-src` and `script-src-elem` seem to be ignored
       // even by Chrome and instead the parent CSP is maintained.
       // "script-src 'self' 'unsafe-inline'",
+      // "img-src *",
     ].join("; ");
 
 // NOTE: An iframe which has both allow-scripts and allow-same-origin for its
@@ -238,4 +245,4 @@ const iframeCsp = import.meta.env.DEV
 //
 // Sandbox options:
 //   https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
-const defaultSandbox = "allow-scripts";
+const defaultSandbox = "allow-scripts allow-modals";
