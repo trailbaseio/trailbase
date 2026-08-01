@@ -20,6 +20,7 @@ import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
 import { getSpareHeaderStyle } from "@/lib/header";
+import { cn } from "@/lib/utils";
 
 function SandboxedIframe(props: { component: WasmComponent }) {
   const source = () => getAdminUiPath(props.component);
@@ -231,12 +232,14 @@ function SandboxButton(props: {
         props.setSandboxed(v);
       }}
     >
-      <SwitchControl>
+      <SwitchControl class="bg-destructive data-[checked]:bg-input">
         <SwitchThumb />
       </SwitchControl>
 
       <SwitchLabel>
-        <TbOutlineSandbox />
+        <div class={cn("flex gap-1", !props.sandboxed && "opacity-50")}>
+          Sandboxed <TbOutlineSandbox />
+        </div>
       </SwitchLabel>
     </ToggleSwitch>
   );
@@ -261,7 +264,6 @@ export function WasmComponentDetails(props: {
         <Header
           title={props.component.display_name ?? props.component.name}
           leading={BackButton()}
-          left={`${sandboxed()}`}
           right={
             <Show when={true || import.meta.env.DEV}>
               <SandboxButton
@@ -275,7 +277,7 @@ export function WasmComponentDetails(props: {
         <div class={getSpareHeaderStyle(isMobile())}>
           <Switch>
             <Match when={!sandboxed()}>
-              <YoloWithExtraStepsIframe component={props.component} />
+              <YoloIframe component={props.component} />
             </Match>
 
             <Match when={true}>

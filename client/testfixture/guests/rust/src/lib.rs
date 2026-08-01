@@ -287,6 +287,8 @@ const DASH: &str = r##"
   <h1>Testfixture Dash</h1>
 
   <div style="display: flex; flex-direction: column; gap: 8px; width: fit-content;">
+    <pre id="location"></pre>
+
     <button type="button" onclick="test();">
       alert
     </button>
@@ -310,6 +312,9 @@ const DASH: &str = r##"
     const resp = await fetch(url);
     console.debug("got:", resp.status());
   }
+
+  const el = document.getElementById("location");
+  el.textContent = JSON.stringify(window.location, null, 2);
 </script>
 </html>
 "##;
