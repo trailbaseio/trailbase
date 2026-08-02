@@ -1,10 +1,10 @@
-import { createMemo, For, Match, Show, Switch } from "solid-js";
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
 import { template } from "solid-js/web";
 import { useQuery } from "@tanstack/solid-query";
 import { A } from "@solidjs/router";
 import {
   TbOutlinePuzzle,
-  TbOutlineSettings,
+  TbOutlineArrowRight,
   TbOutlineDownload,
   TbOutlineTrash,
 } from "solid-icons/tb";
@@ -27,7 +27,11 @@ import {
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
 
-import { listWasmComponents } from "@/lib/api/wasm-components";
+import {
+  listWasmComponents,
+  installWasmComponent,
+  uninstallWasmComponent,
+} from "@/lib/api/wasm-components";
 import type { WasmComponent } from "@bindings/WasmComponent";
 
 function ComponentIcon(props: { icon?: string }) {
@@ -93,15 +97,13 @@ function ComponentCardContent(props: {
           <InstallButton component={props.component} />
         </Show>
 
-        <Show
-          when={props.component.repo_id && props.component.installed === true}
-        >
+        <Show when={props.component.installed === true}>
           <UninstallButton component={props.component} />
         </Show>
 
         <Show when={props.component.admin_ui_path}>
           <div class="text-muted-foreground hover:bg-accent hover:text-accent-foreground content-center rounded-sm p-2">
-            <TbOutlineSettings size={18} />
+            <TbOutlineArrowRight size={18} />
           </div>
         </Show>
       </div>
@@ -195,10 +197,12 @@ export function WasmComponentsList() {
 }
 
 function InstallButton(props: { component: WasmComponent }) {
+  const [open, setOpen] = createSignal(false);
+
   return (
-    <Dialog>
+    <Dialog open={open()} onOpenChange={setOpen}>
       <DialogTrigger>
-        <Button variant="outline" size="icon">
+        <Button variant="ghost" size="icon">
           <TbOutlineDownload />
         </Button>
       </DialogTrigger>
@@ -206,14 +210,35 @@ function InstallButton(props: { component: WasmComponent }) {
       <DialogContent>
         <DialogTitle>Confirmation</DialogTitle>
 
-        {
-          "For the installing of a WASM component to take effect, the server needs to be restarted."
-        }
+        <p>
+          For the installing of the WASM component to take effect, the server
+          needs to be restarted.
+        </p>
 
         <DialogFooter class="gap-2">
-          <Button variant="outline">Back</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Back
+          </Button>
 
-          <Button variant="outline">Acknowledge</Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              // Install the component.
+              const repoId = props.component.repo_id;
+              if (!repoId) {
+                throw new Error("missing repo id");
+              }
+
+              (async () => {
+                await installWasmComponent({
+                  RepoId: repoId,
+                });
+                setOpen(false);
+              })();
+            }}
+          >
+            Proceed
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -221,15 +246,17 @@ function InstallButton(props: { component: WasmComponent }) {
 }
 
 function UninstallButton(props: { component: WasmComponent }) {
+  const [open, setOpen] = createSignal(false);
+
   return (
-    <Dialog>
+    <Dialog open={open()} onOpenChange={setOpen}>
       <DialogTrigger>
         <Button
-          variant="outline"
+          variant="ghost"
           size="icon"
           onClick={(e) => {
+            // Do not follow the link to the dashboard.
             e.preventDefault();
-            console.log("uninstall");
           }}
         >
           <TbOutlineTrash />
@@ -239,14 +266,37 @@ function UninstallButton(props: { component: WasmComponent }) {
       <DialogContent>
         <DialogTitle>Confirmation</DialogTitle>
 
-        {
-          "For the removing of a WASM component to take effect, the server needs to be restarted."
-        }
+        <p>
+          For the removal of the WASM component to take effect, the server needs
+          to be restarted.
+        </p>
 
         <DialogFooter class="gap-2">
-          <Button variant="outline">Back</Button>
+          <Button variant="outline" onClick={() => setOpen(false)}>
+            Back
+          </Button>
 
-          <Button variant="outline">Acknowledge</Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              // Delete the component.
+              (async () => {
+                uninstallWasmComponent(
+                  props.component.repo_id
+                    ? {
+                        RepoId: props.component.repo_id,
+                      }
+                    : {
+                        Path: props.component.path,
+                      },
+                );
+
+                setOpen(false);
+              })();
+            }}
+          >
+            Proceed
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

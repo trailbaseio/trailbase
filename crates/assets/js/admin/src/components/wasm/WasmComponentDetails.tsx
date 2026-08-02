@@ -167,7 +167,7 @@ function YoloWithExtraStepsIframe(props: { component: WasmComponent }) {
   let iframe: HTMLIFrameElement | undefined;
 
   createEffect(() => {
-    let blob: Blob | undefined = dashboardPage.data;
+    const blob: Blob | undefined = dashboardPage.data;
     if (blob !== undefined) {
       if (iframe === undefined) {
         console.error("iframe not bound");
@@ -197,9 +197,7 @@ function YoloWithExtraStepsIframe(props: { component: WasmComponent }) {
             height: "100%",
             display: "block",
           }}
-          sandbox={
-            true ? undefined : "allow-same-origin allow-scripts allow-modals"
-          }
+          sandbox={undefined}
           csp={undefined}
         />
       </Match>
@@ -265,7 +263,7 @@ export function WasmComponentDetails(props: {
           title={props.component.display_name ?? props.component.name}
           leading={BackButton()}
           right={
-            <Show when={true || import.meta.env.DEV}>
+            <Show when={import.meta.env.DEV}>
               <SandboxButton
                 sandboxed={sandboxed()}
                 setSandboxed={setSandboxed}
