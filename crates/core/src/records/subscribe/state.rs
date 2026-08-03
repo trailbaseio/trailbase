@@ -1,6 +1,7 @@
 use async_channel::WeakReceiver;
 use futures_util::Stream;
 use log::*;
+use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use pin_project_lite::pin_project;
 use std::collections::HashMap;
@@ -10,17 +11,30 @@ use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
-use trailbase_schema::json::value_to_flat_json;
 
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
-use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
+use crate::records::subscribe::event::{EventError, EventPayload, JsonEventPayload};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
 use crate::schema_metadata::ConnectionMetadata;
+
+pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
+
+type RecordAndEvent = (Option<Arc<Record>>, Arc<EventPayload>);
+
+impl<'a> crate::records::expand::Record<'a> for &'a Record {
+  fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)> {
+    return self.get_index(index).map(|(name, v)| (name.as_str(), v));
+  }
+
+  fn len(&self) -> usize {
+    return (self as &Record).len();
+  }
+}
 
 /// Composite id uniquely identifying a subscription.
 ///
@@ -120,7 +134,8 @@ pub struct Subscription {
 // Represents a change event that needs further filtering, e.g. ACLs.
 #[derive(Debug)]
 pub struct EventCandidate {
-  pub record: Option<Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>>,
+  // Only present for Insert/Update/Delete event payloads.
+  pub record: Option<Arc<Record>>,
   pub payload: Arc<EventPayload>,
   pub seq: i64,
 }
@@ -381,11 +396,15 @@ impl Drop for PerConnectionState {
   }
 }
 
-fn broker_subscriptions(
+fn broker_subscriptions<F>(
   subs: &[Arc<Subscription>],
-  record: &Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>,
-  event: &Arc<EventPayload>,
-) -> Vec<usize> {
+  record_and_event: &Lazy<RecordAndEvent, F>,
+) -> Vec<usize>
+where
+  F: FnOnce() -> RecordAndEvent,
+{
+  let (record, event) = Lazy::force(record_and_event);
+
   return subs
     .iter()
     .enumerate()
@@ -393,7 +412,7 @@ fn broker_subscriptions(
       // Cloning the event. It's important that we use a try_send here to not block other
       // subscriptions if a subscriber is slow and their channel fills up.
       if let Err(err) = sub.sender.try_send(EventCandidate {
-        record: Some(record.clone()),
+        record: record.clone(),
         payload: event.clone(),
         seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
       }) {
@@ -448,37 +467,56 @@ fn broker(
     return;
   }
 
-  // Join values with column names. We use a map rather than a Vec<(String, Value)> for filter
-  // access.
-  let record: Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>> = Arc::new(
-    record
-      .into_iter()
-      .enumerate()
-      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
-      .collect(),
-  );
-
   // Build a JSON-encoded SQLite event (insert, update, delete).
-  let event: Arc<EventPayload> = {
-    let json_obj = record
-      .iter()
-      .filter_map(|(name, value)| {
-        return value_to_flat_json(value)
-          .ok()
-          .map(|v| (name.to_string(), v));
-      })
-      .collect();
+  let record_and_event: Lazy<RecordAndEvent, _> = Lazy::new(move || {
+    // Join values with column names. We need index access for `record_to_json_expanded` below and
+    // column-name-based access for filters, we thus use an IndexMap rather than a Vec<(String,
+    // Value)> a data type. Needs to be an Arc so it can be passed to sqlite worker across
+    // async boundary.
+    let record: Arc<Record> = Arc::new(
+      record
+        .into_iter()
+        .enumerate()
+        .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
+        .collect(),
+    );
 
-    Arc::new(EventPayload::from(&match action {
-      RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
-      RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
-      RecordAction::Update => JsonEventPayload::Update { value: json_obj },
-    }))
-  };
+    return match crate::records::expand::record_to_json_expand(
+      &table_metadata.column_metadata,
+      &*record,
+      None,
+    ) {
+      Ok(json_obj) => {
+        let payload = Arc::new(EventPayload::from(&match action {
+          RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
+          RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
+          RecordAction::Update => JsonEventPayload::Update { value: json_obj },
+        }));
+
+        (Some(record), payload)
+      }
+      Err(err) => (
+        None,
+        Arc::new(EventPayload::from(&JsonEventPayload::Error {
+          value: EventError {
+            status: super::event::EventErrorStatus::Serialization,
+            message: if cfg!(debug_assertions) {
+              Some(err.to_string())
+            } else {
+              None
+            },
+          },
+        })),
+      ),
+    };
+  });
 
   // First broker record subscriptions.
+  //
+  // NOTE: If/when latency becomes an issue we could do all the brokering (both records & tables as
+  // well as across subscriptions) in parallel.
   if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
-    let dead = broker_subscriptions(record_subscriptions, &record, &event);
+    let dead = broker_subscriptions(record_subscriptions, &record_and_event);
 
     for idx in dead.iter().rev() {
       record_subscriptions.remove(*idx);
@@ -486,7 +524,7 @@ fn broker(
   }
 
   // Then broker table subscriptions.
-  let dead = broker_subscriptions(&subscriptions.table, &record, &event);
+  let dead = broker_subscriptions(&subscriptions.table, &record_and_event);
   for idx in dead.iter().rev() {
     subscriptions.table.remove(*idx);
   }

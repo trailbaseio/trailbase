@@ -18,6 +18,8 @@ pub enum EventErrorStatus {
   /// additional losses that may happen between the TrailBase server and the client. This
   /// needs to be determined client-side based on event `seq` numbers.
   Loss = 2,
+  /// Failed ot serialize the change event to JSON.
+  Serialization = 3,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -35,27 +37,23 @@ pub enum JsonEventPayload {
   Ping,
 }
 
-#[allow(unused)]
+/// EventPayload represents a serialized JsonEventPayload.
 #[derive(Debug, Clone, Serialize)]
 pub enum EventPayload {
-  Update(Option<Box<serde_json::value::RawValue>>),
-  Insert(Option<Box<serde_json::value::RawValue>>),
-  Delete(Option<Box<serde_json::value::RawValue>>),
-  Error(Option<Box<serde_json::value::RawValue>>),
+  Update(Box<serde_json::value::RawValue>),
+  Insert(Box<serde_json::value::RawValue>),
+  Delete(Box<serde_json::value::RawValue>),
+  Error(Box<serde_json::value::RawValue>),
   Ping,
 }
 
 impl PartialEq for EventPayload {
   fn eq(&self, other: &Self) -> bool {
-    fn get(v: &Option<Box<serde_json::value::RawValue>>) -> Option<&str> {
-      return v.as_ref().map(|v| v.get());
-    }
-
     return match (self, other) {
-      (Self::Update(lhs), Self::Update(rhs)) => get(lhs) == get(rhs),
-      (Self::Insert(lhs), Self::Insert(rhs)) => get(lhs) == get(rhs),
-      (Self::Delete(lhs), Self::Delete(rhs)) => get(lhs) == get(rhs),
-      (Self::Error(lhs), Self::Error(rhs)) => get(lhs) == get(rhs),
+      (Self::Update(lhs), Self::Update(rhs)) => lhs.get() == rhs.get(),
+      (Self::Insert(lhs), Self::Insert(rhs)) => lhs.get() == rhs.get(),
+      (Self::Delete(lhs), Self::Delete(rhs)) => lhs.get() == rhs.get(),
+      (Self::Error(lhs), Self::Error(rhs)) => lhs.get() == rhs.get(),
       (Self::Ping, Self::Ping) => true,
       _ => false,
     };
@@ -64,27 +62,33 @@ impl PartialEq for EventPayload {
 
 impl EventPayload {
   pub fn from(value: &JsonEventPayload) -> Self {
+    // NOTE: to_raw_value should never fail.
+    #[inline]
+    #[cfg(not(debug_assertions))]
+    fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
+    where
+      T: ?Sized + Serialize,
+    {
+      return serde_json::value::to_raw_value(value)
+        .map(|v| v.to_owned())
+        .unwrap_or_default();
+    }
+
+    #[cfg(debug_assertions)]
+    fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
+    where
+      T: ?Sized + Serialize,
+    {
+      return serde_json::value::to_raw_value(value)
+        .map(|v| v.to_owned())
+        .expect("should never fail for well-defined serde_json::Value");
+    }
+
     return match value {
-      JsonEventPayload::Update { value } => EventPayload::Update(
-        serde_json::value::to_raw_value(&value)
-          .map(|v| v.to_owned())
-          .ok(),
-      ),
-      JsonEventPayload::Insert { value } => EventPayload::Insert(
-        serde_json::value::to_raw_value(&value)
-          .map(|v| v.to_owned())
-          .ok(),
-      ),
-      JsonEventPayload::Delete { value } => EventPayload::Delete(
-        serde_json::value::to_raw_value(&value)
-          .map(|v| v.to_owned())
-          .ok(),
-      ),
-      JsonEventPayload::Error { value } => EventPayload::Error(
-        serde_json::value::to_raw_value(&value)
-          .map(|v| v.to_owned())
-          .ok(),
-      ),
+      JsonEventPayload::Update { value } => EventPayload::Update(to_raw_value(&value)),
+      JsonEventPayload::Insert { value } => EventPayload::Insert(to_raw_value(value)),
+      JsonEventPayload::Delete { value } => EventPayload::Delete(to_raw_value(value)),
+      JsonEventPayload::Error { value } => EventPayload::Error(to_raw_value(value)),
       JsonEventPayload::Ping => EventPayload::Ping,
     };
   }

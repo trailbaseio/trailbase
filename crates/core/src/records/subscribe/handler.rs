@@ -108,29 +108,30 @@ async fn validate_event(
     return Ok(Some(EVENT_LOSS_EVENT.clone()));
   }
 
-  let Some(ref record) = ev.record else {
-    // Established events.
-    return Ok(Some(ev.payload));
+  return match ev.record {
+    // None-Insert/Update/Delete events.
+    None => Ok(Some(ev.payload)),
+    Some(ref record) => {
+      let sub: &Subscription = &args.subscription;
+      if let Filter::Record(ref filter) = sub.filter
+        && !apply_filter_recursively_to_record(filter, record)
+      {
+        return Ok(None);
+      }
+
+      // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+      // version.
+      let Some(api) = args.state.lookup_record_api(&sub.record_api_name) else {
+        return Ok(None);
+      };
+
+      api
+        .check_record_level_read_access_for_subscriptions(record, sub.user.as_ref())
+        .await?;
+
+      Ok(Some(ev.payload))
+    }
   };
-
-  let sub: &Subscription = &args.subscription;
-  if let Filter::Record(ref filter) = sub.filter
-    && !apply_filter_recursively_to_record(filter, record)
-  {
-    return Ok(None);
-  }
-
-  // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
-  // version.
-  let Some(api) = args.state.lookup_record_api(&sub.record_api_name) else {
-    return Ok(None);
-  };
-
-  api
-    .check_record_level_read_access_for_subscriptions(record, sub.user.as_ref())
-    .await?;
-
-  return Ok(Some(ev.payload));
 }
 
 pub async fn subscribe_sse(

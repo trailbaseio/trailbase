@@ -17,7 +17,9 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-use crate::records::expand::{ExpandedTable, JsonError, expand_tables, row_to_json_expand};
+use crate::records::expand::{
+  ExpandedTable, JsonError, JsonObject, expand_tables, record_to_json_expand,
+};
 use crate::records::{Permission, RecordError};
 use crate::util::row_id_column;
 
@@ -31,7 +33,7 @@ pub struct ListResponse {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub total_count: Option<usize>,
   /// Actual record data for records matching the query.
-  pub records: Vec<serde_json::Value>,
+  pub records: Vec<JsonObject>,
 }
 
 #[derive(Debug)]
@@ -329,8 +331,8 @@ pub async fn list_records_handler(
 
   let records = if expanded_tables.is_empty() {
     rows
-      .into_iter()
-      .map(|row| row_to_json_expand(api.columns(), &row, column_filter, api.expand()))
+      .iter()
+      .map(|row| record_to_json_expand(api.columns(), row, api.expand()))
       .collect::<Result<Vec<_>, JsonError>>()
       .map_err(|err| RecordError::Internal(err.into()))?
   } else {
@@ -349,13 +351,10 @@ pub async fn list_records_handler(
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
-          let foreign_value = row_to_json_expand(
-            &expanded.metadata.column_metadata,
-            &curr,
-            column_filter,
-            None,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
+          let foreign_value =
+            record_to_json_expand(&expanded.metadata.column_metadata, &curr, None)
+              .map_err(|err| RecordError::Internal(err.into()))?
+              .into();
 
           let result = expand.insert(expanded.local_column_name.clone(), foreign_value);
           assert!(result.is_some());
@@ -363,7 +362,7 @@ pub async fn list_records_handler(
           curr = next;
         }
 
-        return row_to_json_expand(api.columns(), &row, column_filter, Some(&expand))
+        return record_to_json_expand(api.columns(), &row, Some(&expand))
           .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
@@ -382,7 +381,8 @@ pub async fn list_records_handler(
       &state,
       &api,
       trailbase_schema::json_schema::JsonSchemaMode::Select,
-      record,
+      // Expensive.
+      &serde_json::Value::Object(record.clone()),
     )?;
   }
 
@@ -399,7 +399,7 @@ fn build_feature_collection(
   pk_column_name: &str,
   cursor: Option<String>,
   total_count: Option<usize>,
-  records: Vec<serde_json::Value>,
+  records: Vec<JsonObject>,
 ) -> Result<geos::geojson::FeatureCollection, RecordError> {
   type JsonMap = serde_json::Map<String, serde_json::Value>;
   let foreign_members = match (cursor, total_count) {
@@ -423,11 +423,7 @@ fn build_feature_collection(
 
   let features = records
     .into_iter()
-    .map(|record| -> Result<geos::geojson::Feature, RecordError> {
-      let serde_json::Value::Object(mut obj) = record else {
-        return Err(RecordError::Internal("Not an object".into()));
-      };
-
+    .map(|mut obj| -> Result<geos::geojson::Feature, RecordError> {
       let id = obj.get(pk_column_name).and_then(|id| match id {
         serde_json::Value::Number(n) => Some(geos::geojson::feature::Id::Number(n.clone())),
         serde_json::Value::String(s) => Some(geos::geojson::feature::Id::String(s.clone())),
@@ -465,11 +461,6 @@ fn fmt_order(col: &str, order: OrderPrecedent) -> String {
       OrderPrecedent::Ascending => "ASC",
     }
   );
-}
-
-#[inline]
-fn column_filter(col_name: &str) -> bool {
-  return !col_name.starts_with("_");
 }
 
 /// Encrypts the cookie's value with authenticated encryption providing
@@ -816,7 +807,8 @@ mod tests {
 
     assert_eq!(3, response.records.len());
 
-    let first: Entry = serde_json::from_value(response.records[0].clone()).unwrap();
+    let first: Entry =
+      serde_json::from_value(serde_json::Value::Object(response.records[0].clone())).unwrap();
 
     let ListOrGeoJSONResponse::List(response) = list_records_handler(
       State(state.clone()),
@@ -835,7 +827,7 @@ mod tests {
     assert_eq!(1, response.records.len());
     assert_eq!(
       first,
-      serde_json::from_value(response.records[0].clone()).unwrap()
+      serde_json::from_value(serde_json::Value::Object(response.records[0].clone())).unwrap()
     );
 
     let ListOrGeoJSONResponse::List(null_response) = list_records_handler(

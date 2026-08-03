@@ -636,7 +636,7 @@ mod tests {
         "fk_null": null,
       });
 
-      let Json(value) = read_record_handler(
+      let Json(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery { expand: None }),
@@ -645,8 +645,8 @@ mod tests {
       .await
       .unwrap();
 
+      let value = serde_json::Value::Object(obj);
       validator.validate(&value).expect(&format!("{value}"));
-
       assert_eq!(expected, value);
 
       let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
@@ -663,8 +663,13 @@ mod tests {
         panic!("not a list");
       };
 
-      assert_eq!(vec![expected.clone()], list_response.records);
-      validator.validate(&list_response.records[0]).unwrap();
+      let records: Vec<_> = list_response
+        .records
+        .into_iter()
+        .map(|obj| serde_json::Value::Object(obj))
+        .collect();
+      assert_eq!(vec![expected.clone()], records);
+      validator.validate(&records[0]).unwrap();
     }
 
     let expected = json!({
@@ -679,7 +684,7 @@ mod tests {
     });
 
     {
-      let Json(value) = read_record_handler(
+      let Json(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
@@ -690,8 +695,8 @@ mod tests {
       .await
       .unwrap();
 
+      let value = serde_json::Value::Object(obj);
       validator.validate(&value).expect(&format!("{value}"));
-
       assert_eq!(expected, value);
     }
 
@@ -710,8 +715,13 @@ mod tests {
         panic!("not a list");
       };
 
-      assert_eq!(vec![expected.clone()], list_response.records);
-      validator.validate(&list_response.records[0]).unwrap();
+      let records: Vec<_> = list_response
+        .records
+        .into_iter()
+        .map(|obj| serde_json::Value::Object(obj))
+        .collect();
+      assert_eq!(vec![expected.clone()], records);
+      validator.validate(&records[0]).unwrap();
     }
 
     {
@@ -730,8 +740,13 @@ mod tests {
       };
 
       assert_eq!(Some(1), list_response.total_count);
-      assert_eq!(vec![expected], list_response.records);
-      validator.validate(&list_response.records[0]).unwrap();
+      let records: Vec<_> = list_response
+        .records
+        .into_iter()
+        .map(|obj| serde_json::Value::Object(obj))
+        .collect();
+      assert_eq!(vec![expected], records);
+      validator.validate(&records[0]).unwrap();
     }
   }
 
@@ -782,7 +797,7 @@ mod tests {
 
     // Expand none
     {
-      let Json(value) = read_record_handler(
+      let Json(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery { expand: None }),
@@ -798,7 +813,7 @@ mod tests {
         "fk1": { "id": 1 },
       });
 
-      assert_eq!(expected, value);
+      assert_eq!(expected, serde_json::Value::Object(obj));
 
       let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
@@ -814,7 +829,12 @@ mod tests {
         panic!("not a list");
       };
 
-      assert_eq!(vec![expected], list_response.records);
+      let records: Vec<_> = list_response
+        .records
+        .into_iter()
+        .map(|obj| serde_json::Value::Object(obj))
+        .collect();
+      assert_eq!(vec![expected], records);
     }
 
     // Expand one
@@ -831,7 +851,7 @@ mod tests {
         },
       });
 
-      let Json(value) = read_record_handler(
+      let Json(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
@@ -842,7 +862,7 @@ mod tests {
       .await
       .unwrap();
 
-      assert_eq!(expected, value);
+      assert_eq!(expected, serde_json::Value::Object(obj));
 
       let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
@@ -858,7 +878,12 @@ mod tests {
         panic!("not a list");
       };
 
-      assert_eq!(vec![expected], list_response.records);
+      let records: Vec<_> = list_response
+        .records
+        .into_iter()
+        .map(|obj| serde_json::Value::Object(obj))
+        .collect();
+      assert_eq!(vec![expected], records);
     }
 
     // Expand all.
@@ -880,7 +905,7 @@ mod tests {
         },
       });
 
-      let Json(value) = read_record_handler(
+      let Json(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
@@ -891,7 +916,7 @@ mod tests {
       .await
       .unwrap();
 
-      assert_eq!(expected, value);
+      assert_eq!(expected, serde_json::Value::Object(obj));
 
       state
         .conn()
@@ -913,6 +938,12 @@ mod tests {
         panic!("not a list");
       };
 
+      let records: Vec<_> = list_response
+        .records
+        .into_iter()
+        .map(|obj| serde_json::Value::Object(obj))
+        .collect();
+
       assert_eq!(
         vec![
           json!({
@@ -923,7 +954,7 @@ mod tests {
           }),
           expected
         ],
-        list_response.records
+        records
       );
     }
   }
