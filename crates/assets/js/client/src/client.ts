@@ -31,6 +31,7 @@ import type { PromoteAnonymousRequest } from "@bindings/PromoteAnonymousRequest"
 import type { RefreshRequest } from "@bindings/RefreshRequest";
 import type { RefreshResponse } from "@bindings/RefreshResponse";
 import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
+import type { RegisterUserRequest } from "@bindings/RegisterUserRequest";
 import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
 import type { TransactionResponse } from "@bindings/TransactionResponse";
 
@@ -79,6 +80,28 @@ type PromotionOptions = {
   username?: string;
   email?: string;
   password: string;
+};
+
+export type SignUpOptions = {
+  email?: string;
+  username?: string;
+  password: string;
+  /// Defaults to `password`.
+  passwordRepeat?: string;
+  options?: {
+    /// Where the verification link sends the user after confirming.
+    redirectUri?: string;
+    /// Sign in right after signing up, when the account needs no verification.
+    /// Defaults to `true`.
+    autoLogin?: boolean;
+  };
+};
+
+export type SignUpResponse = {
+  /// Set only when sign-up was followed by an implicit sign-in.
+  user?: User;
+  /// The account must verify its email address before it can sign in.
+  verificationRequired: boolean;
 };
 
 function buildTokenState(tokens?: Tokens): TokenState {
@@ -192,6 +215,11 @@ export interface Client {
   records<T = Record<string, unknown>>(name: string): RecordApi<T>;
 
   avatarUrl(userId?: string): string | undefined;
+
+  /// Register a new user. Accounts with an email address have to verify it
+  /// before they can sign in, in which case no sign-in is attempted and
+  /// `verificationRequired` is set.
+  signUp(opts: SignUpOptions): Promise<SignUpResponse>;
 
   login(
     emailOrUsername: string,
@@ -324,6 +352,40 @@ class ClientImpl implements Client {
       return `${authApiBasePath}/avatar/${id}`;
     }
     return undefined;
+  }
+
+  public async signUp(opts: SignUpOptions): Promise<SignUpResponse> {
+    const { email, username, password } = opts;
+
+    await this.fetch(`${authApiBasePath}/register`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email ?? null,
+        username: username ?? null,
+        password,
+        password_repeat: opts.passwordRepeat ?? password,
+        redirect_uri: opts.options?.redirectUri ?? null,
+      } satisfies RegisterUserRequest),
+    });
+
+    // Accounts with an email address must verify it before they can sign in.
+    if (email !== undefined) {
+      return { verificationRequired: true };
+    }
+
+    if (username !== undefined && (opts.options?.autoLogin ?? true)) {
+      try {
+        await this.login(username, password);
+      } catch (err) {
+        // Registration reports success even when the account already exists, so
+        // the password may not match.
+        if (!(err instanceof FetchError && err.status === 401)) {
+          throw err;
+        }
+      }
+    }
+
+    return { user: this.user(), verificationRequired: false };
   }
 
   public async login(

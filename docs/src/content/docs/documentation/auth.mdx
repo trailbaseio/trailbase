@@ -61,7 +61,8 @@ OAuth via WebView, can be used by both web and mobile/desktop apps[^2].
 When using the built-in UIs, the general approach is to send users to
 `/_/auth/(login|logout|profile)`.
 
-When building your own UIs, login is handled by:
+When building your own UIs, [sign-up](#sign-up) is handled by
+[`/api/auth/v1/register`](/api/operations/register_user_handler/) and login by:
 
 * [`/api/auth/v1/login`](/api/operations/login_handler/) for password auth.
   It directly exchanges valid credentials for tokens.
@@ -234,6 +235,61 @@ You should avoid changing the policy post launch.
 For example, switching from `OnlyUsername` to `OnlyEmail`
 will lead to an inconsistent user DB and when using the first-party auth UI
 leave username-only users w/o the means to re-authenticate.
+
+
+## Sign-Up
+
+New accounts are created via
+[`/api/auth/v1/register`](/api/operations/register_user_handler/), which takes an
+`email` and/or a `username` alongside `password` and `password_repeat`, subject
+to the identifier policy above.
+
+Whenever an account carries an email address, TrailBase sends out a verification
+email and the account cannot sign in until that address has been confirmed.
+Username-only accounts have nothing to verify and can sign in right away.
+The TypeScript client's `signUp` reflects this: it signs the new user in
+whenever no verification is pending.
+
+export const signUpTs = `
+// With an email address a confirmation mail is sent and no tokens are issued.
+const { verificationRequired } = await client.signUp({
+  email: "alice@example.com",
+  password: "s3cr3t!",
+});
+
+// Username-only accounts have nothing to verify, so we're already signed in.
+const { user } = await client.signUp({
+  username: "alice",
+  password: "s3cr3t!",
+});
+`;
+
+export const signUpCurl = `
+curl
+  --header "Content-Type: application/json"
+  --request POST
+  --data '{ "email": "alice@example.com", "password": "s3cr3t!", "password_repeat": "s3cr3t!" }'
+  http://localhost:4000/api/auth/v1/register
+`;
+
+<Tabs>
+  <TabItem label="TypeScript">
+    <Code lang="ts" code={signUpTs} />
+  </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={signUpCurl} />
+  </TabItem>
+</Tabs>
+
+Passing `options: { redirectUri }` controls where the link in the verification
+email sends users after confirming. The target needs to be covered by the
+`redirect_uri_allowlist` configuration.
+
+Note that registration reports success even when the account already exists, so
+that the endpoint cannot be used to enumerate your users' email addresses.
+Password-based sign-up can be disabled altogether under *Settings → Auth*, in
+which case registration is rejected with `403`.
 
 
 ## Anonymous Authentication
