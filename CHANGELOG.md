@@ -1,3 +1,12 @@
+## v0.31.2
+
+- Fix token refresh for just promoted users with a yet unverified email address. Thanks @UserNobody14 🙏.
+- Move unverified email addresses into a separate column to simplify and gurantee that entries in `_user.email` are verified.
+- Disable FK constraints during SQLite migrations consistently across sync and async drivers.
+- Fix python client: promote anonymous users. Thanks @UserNobody14 🙏.
+- Fix dart client: SSE change event parsing. Thanks @devsdocs 🙏.
+- Update dependencies.
+
 ## v0.31.1
 
 - Add username parsing to CLI, i.e. users can now be specified by either email, username or id (both UUID or url-safe base64).
