@@ -60,6 +60,9 @@ fn is_foreign_key(options: &[ColumnOption]) -> bool {
 }
 
 /// Serialize SQL row to json.
+///
+/// NOTE: There's a very similar function for subscrptions in
+/// crate::records::subscribe::state::record_to_json_expand that needs to be kept in sync.
 pub(crate) fn row_to_json_expand(
   column_metadata: &[ColumnMetadata],
   row: &trailbase_sqlite::Row,
@@ -155,7 +158,7 @@ pub(crate) fn row_to_json_expand(
   ));
 }
 
-fn strip_file_metadata_id(file_metadata: &mut serde_json::Value) {
+pub(crate) fn strip_file_metadata_id(file_metadata: &mut serde_json::Value) {
   if !cfg!(test) {
     file_metadata.as_object_mut().map(|o| o.remove("id"));
   }
