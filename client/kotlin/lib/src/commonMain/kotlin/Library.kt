@@ -546,6 +546,33 @@ class Client(
     return r.results.map { OperationResult.fromJson(it) }
   }
 
+  /**
+   * Register a new user. Does not sign them in: accounts with an email address have to verify it
+   * before they can sign in.
+   */
+  suspend fun register(
+          password: String,
+          email: String? = null,
+          username: String? = null,
+          passwordRepeat: String? = null,
+          redirectUri: String? = null,
+  ) {
+    @Serializable
+    data class Request(
+            val email: String?,
+            val username: String?,
+            val password: String,
+            val password_repeat: String,
+            val redirect_uri: String?,
+    )
+
+    fetch(
+            "${AUTH_API}/register",
+            Method.post,
+            Request(email, username, password, passwordRepeat ?: password, redirectUri),
+    )
+  }
+
   suspend fun login(emailOrUsername: String, password: String): MultiFactorAuthToken? {
     @Serializable data class Credentials(val email_or_username: String, val password: String)
 

@@ -31,6 +31,7 @@ import type { PromoteAnonymousRequest } from "@bindings/PromoteAnonymousRequest"
 import type { RefreshRequest } from "@bindings/RefreshRequest";
 import type { RefreshResponse } from "@bindings/RefreshResponse";
 import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
+import type { RegisterUserRequest } from "@bindings/RegisterUserRequest";
 import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
 import type { TransactionResponse } from "@bindings/TransactionResponse";
 
@@ -79,6 +80,18 @@ type PromotionOptions = {
   username?: string;
   email?: string;
   password: string;
+};
+
+export type RegisterOptions = {
+  email?: string;
+  username?: string;
+  password: string;
+  /// Defaults to `password`.
+  passwordRepeat?: string;
+  options?: {
+    /// Where the verification link sends the user after confirming.
+    redirectUri?: string;
+  };
 };
 
 function buildTokenState(tokens?: Tokens): TokenState {
@@ -192,6 +205,10 @@ export interface Client {
   records<T = Record<string, unknown>>(name: string): RecordApi<T>;
 
   avatarUrl(userId?: string): string | undefined;
+
+  /// Register a new user. Does not sign them in: accounts with an email
+  /// address have to verify it before they can sign in.
+  register(opts: RegisterOptions): Promise<void>;
 
   login(
     emailOrUsername: string,
@@ -324,6 +341,21 @@ class ClientImpl implements Client {
       return `${authApiBasePath}/avatar/${id}`;
     }
     return undefined;
+  }
+
+  public async register(opts: RegisterOptions): Promise<void> {
+    const { email, username, password } = opts;
+
+    await this.fetch(`${authApiBasePath}/register`, {
+      method: "POST",
+      body: JSON.stringify({
+        email: email ?? null,
+        username: username ?? null,
+        password,
+        password_repeat: opts.passwordRepeat ?? password,
+        redirect_uri: opts.options?.redirectUri ?? null,
+      } satisfies RegisterUserRequest),
+    });
   }
 
   public async login(
