@@ -1422,6 +1422,95 @@ async fn test_auth_annonymous_signin() {
   .unwrap();
 }
 
+#[tokio::test]
+async fn test_auth_refresh_after_anonymous_promotion() {
+  let mailer = TestAsyncSmtpTransport::new();
+  let state = test_state(Some(TestStateOptions {
+    mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some({
+      let mut config = build_test_config_with_trivial_tokens();
+      config.auth.user_identifier = Some(UserIdentifier::RequireEmail.into());
+      config.auth.enable_anonymous_signin = Some(true);
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  let response = login_anonymous_user_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Cookies::default(),
+    Either::Json(LoginAnonymousRequest {
+      params: Default::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+  let login_response: LoginResponse = serde_json::from_slice(&body).unwrap();
+  let user = User::from_auth_token(&state, &login_response.auth_token).unwrap();
+
+  // Anonymous users are unverified but have no email, so refreshing has to keep working for them.
+  let Json(_refreshed_tokens) = refresh_handler(
+    State(state.clone()),
+    Json(RefreshRequest {
+      refresh_token: login_response.refresh_token.clone(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  promote_anonymous_user_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    user.clone(),
+    Either::Json(PromoteAnonymousRequest {
+      new_password: "secret123".to_string(),
+      new_email: Some("user@test.org".to_string()),
+      ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  // Promotion attaches a not-yet-verified email to the pre-existing session. Since tokens must
+  // never be minted for a user with an unverified email, refreshing that session has to fail
+  // rather than hand out fresh tokens.
+  assert!(matches!(
+    refresh_handler(
+      State(state.clone()),
+      Json(RefreshRequest {
+        refresh_token: login_response.refresh_token.clone(),
+      }),
+    )
+    .await,
+    Err(AuthError::Unauthorized)
+  ));
+
+  state
+    .user_conn()
+    .execute_batch(format!(
+      "UPDATE {USER_TABLE} SET verified = TRUE WHERE email = 'user@test.org';"
+    ))
+    .await
+    .unwrap();
+
+  // Verifying doesn't revoke the session, it merely paused it. Refreshing works again.
+  let Json(_refreshed_tokens) = refresh_handler(
+    State(state.clone()),
+    Json(RefreshRequest {
+      refresh_token: login_response.refresh_token,
+    }),
+  )
+  .await
+  .unwrap();
+}
+
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
   return state
     .session_conn()

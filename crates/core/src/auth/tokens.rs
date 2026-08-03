@@ -231,20 +231,24 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
-  const USER_QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
+  // NOTE: The `verified` condition mirrors `mint_new_tokens`: a user with an email must have it
+  // verified before we hand out tokens. Anonymous users are exempt, since they have no email.
+  const USER_QUERY: &str =
+    formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1 AND (email IS NULL OR verified)"#);
 
   let Some(db_user) = state
     .user_conn()
     .read_query_value::<DbUser>(USER_QUERY, params!(user_id))
     .await?
   else {
-    // Row not found case, typically expected in one of 4 cases:
+    // Row not found case, typically expected in one of 5 cases:
     //  1. Above where clause doesn't match, e.g. refresh token expired.
     //  2. Token was actively deleted and thus revoked.
     //  3. User explicitly logged out, which will delete **all** sessions for that user.
     //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
+    //  5. User's email is not verified (yet), e.g. right after promoting an anonymous user.
     #[cfg(debug_assertions)]
-    log::debug!("User not found");
+    log::debug!("User not found or unverified");
 
     return Err(AuthError::Unauthorized);
   };
