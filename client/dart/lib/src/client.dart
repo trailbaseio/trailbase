@@ -84,6 +84,28 @@ class Client {
     return _TransactionResponse.fromJson(jsonDecode(response.body))._results;
   }
 
+  /// Register a new user. Does not sign them in: accounts with an email address
+  /// have to verify it before they can sign in.
+  Future<void> signUp({
+    required String password,
+    String? email,
+    String? username,
+    String? passwordRepeat,
+    String? redirectUri,
+  }) async {
+    await fetch(
+      '${_authApi}/register',
+      method: Method.post,
+      body: jsonEncode({
+        'email': email,
+        'username': username,
+        'password': password,
+        'password_repeat': passwordRepeat ?? password,
+        'redirect_uri': redirectUri,
+      }),
+    );
+  }
+
   Future<MultiFactorAuthToken?> login(
     String emailOrUsername,
     String password,

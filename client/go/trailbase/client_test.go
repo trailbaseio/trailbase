@@ -152,6 +152,28 @@ func TestAuth(t *testing.T) {
 	assert(t, client.User() == nil, "should be nil")
 }
 
+func TestSignUp(t *testing.T) {
+	client, err := NewClient(SITE)
+	assertFine(t, err)
+
+	now := time.Now().Unix()
+	email := fmt.Sprintf("test_go_signup_%d@test.org", now)
+	password := "secret123."
+
+	// NOTE: The test fixture requires an email address, which has to be verified
+	// before the new account can sign in.
+	err = client.SignUp(SignUpOptions{
+		Password: password,
+		Email:    &email,
+	})
+	assertFine(t, err)
+	assert(t, client.User() == nil, "should not be signed in")
+
+	_, err = client.Login(email, password)
+	ferr, ok := err.(*FetchError)
+	assert(t, ok && ferr.StatusCode == 401, "expected 401 before verification")
+}
+
 func TestAnonymousAuth(t *testing.T) {
 	client, err := NewClient(SITE)
 	assertFine(t, err)

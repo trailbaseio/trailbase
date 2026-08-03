@@ -247,21 +247,54 @@ to the identifier policy above.
 Whenever an account carries an email address, TrailBase sends out a verification
 email and the account cannot sign in until that address has been confirmed.
 Username-only accounts have nothing to verify and can sign in right away.
-The TypeScript client's `signUp` reflects this: it signs the new user in
-whenever no verification is pending.
+All clients expose this as a `signUp` method, which registers the account but
+never signs it in; follow up with a login where that is applicable.
 
 export const signUpTs = `
-// With an email address a confirmation mail is sent and no tokens are issued.
-const { verificationRequired } = await client.signUp({
-  email: "alice@example.com",
-  password: "s3cr3t!",
-});
+// A confirmation mail is sent, the account cannot sign in yet.
+await client.signUp({ email: "alice@example.com", password: "s3cr3t!" });
 
-// Username-only accounts have nothing to verify, so we're already signed in.
-const { user } = await client.signUp({
-  username: "alice",
-  password: "s3cr3t!",
-});
+// Username-only accounts have nothing to verify and can sign in right away.
+await client.signUp({ username: "alice", password: "s3cr3t!" });
+await client.login("alice", "s3cr3t!");
+`;
+
+export const signUpDart = `
+await client.signUp(email: 'alice@example.com', password: 's3cr3t!');
+`;
+
+export const signUpSwift = `
+try await client.signUp(password: "s3cr3t!", email: "alice@example.com")
+`;
+
+export const signUpKotlin = `
+client.signUp(password = "s3cr3t!", email = "alice@example.com")
+`;
+
+export const signUpDotnet = `
+await client.SignUp(password: "s3cr3t!", email: "alice@example.com");
+`;
+
+export const signUpRust = `
+client
+  .sign_up(SignUpOptions {
+    password: "s3cr3t!".to_string(),
+    email: Some("alice@example.com".to_string()),
+    ..Default::default()
+  })
+  .await?;
+`;
+
+export const signUpGo = `
+email := "alice@example.com"
+err := client.SignUp(trailbase.SignUpOptions{
+	Password: "s3cr3t!",
+	Email:    &email,
+})
+`;
+
+export const signUpPy = `
+client.sign_up(password="s3cr3t!", email="alice@example.com")
 `;
 
 export const signUpCurl = `
@@ -273,8 +306,36 @@ curl
 `;
 
 <Tabs>
-  <TabItem label="TypeScript">
+  <TabItem label="JS/TS">
     <Code lang="ts" code={signUpTs} />
+  </TabItem>
+
+  <TabItem label="Dart">
+    <Code lang="dart" code={signUpDart} />
+  </TabItem>
+
+  <TabItem label="Swift">
+    <Code lang="swift" code={signUpSwift} />
+  </TabItem>
+
+  <TabItem label="Kotlin">
+    <Code lang="kotlin" code={signUpKotlin} />
+  </TabItem>
+
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={signUpDotnet} />
+  </TabItem>
+
+  <TabItem label="Rust">
+    <Code lang="rust" code={signUpRust} />
+  </TabItem>
+
+  <TabItem label="Go">
+    <Code lang="go" code={signUpGo} />
+  </TabItem>
+
+  <TabItem label="Python">
+    <Code lang="python" code={signUpPy} />
   </TabItem>
 
   <TabItem label="curl">
@@ -282,8 +343,8 @@ curl
   </TabItem>
 </Tabs>
 
-Passing `options: { redirectUri }` controls where the link in the verification
-email sends users after confirming. The target needs to be covered by the
+An optional redirect URI controls where the link in the verification email sends
+users after confirming. The target needs to be covered by the
 `redirect_uri_allowlist` configuration.
 
 Note that registration reports success even when the account already exists, so

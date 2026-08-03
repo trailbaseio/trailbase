@@ -72,57 +72,19 @@ class RecordingTransport implements Transport {
   }
 }
 
-function urlSafeBase64(value: object): string {
-  return btoa(JSON.stringify(value))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-/// Builds an unsigned, decodable JWT. `jwt-decode` does not verify signatures.
-function fakeAuthToken(email: string | null, username: string | null): string {
-  const now = Math.floor(Date.now() / 1000);
-  const claims = {
-    sub: "6a8f0e6c-1a3b-7cde-8000-000000000000",
-    iat: now,
-    exp: now + 3600,
-    email,
-    username,
-    csrf_token: "csrf",
-  };
-  return `${urlSafeBase64({ alg: "none", typ: "JWT" })}.${urlSafeBase64(claims)}.`;
-}
-
-function loginResponse(
-  email: string | null,
-  username: string | null,
-): Response {
-  return new Response(
-    JSON.stringify({
-      auth_token: fakeAuthToken(email, username),
-      refresh_token: "refresh",
-      csrf_token: "csrf",
-    }),
-    { status: 200 },
-  );
-}
-
 describe("signUp", () => {
-  it("posts the registration and requires verification for email accounts", async () => {
+  it("registers an email account without signing in", async () => {
     const transport = new RecordingTransport(
       () => new Response("registered", { status: 200 }),
     );
     const client = initClient("http://localhost", { transport });
 
-    const response = await client.signUp({
+    await client.signUp({
       email: "alice@example.org",
       password: "s3cr3t!",
     });
 
-    expect(response).toStrictEqual({ verificationRequired: true });
     expect(client.user()).toBe(undefined);
-
-    // No implicit sign-in, since the email needs to be verified first.
     expect(transport.paths).toStrictEqual(["/api/auth/v1/register"]);
     expect(transport.bodies[0]).toStrictEqual({
       email: "alice@example.org",
@@ -133,29 +95,20 @@ describe("signUp", () => {
     });
   });
 
-  it("signs in username-only accounts", async () => {
-    const transport = new RecordingTransport((path) =>
-      path.endsWith("/login")
-        ? loginResponse(null, "alice")
-        : new Response("registered", { status: 200 }),
+  it("registers a username account and forwards the redirect uri", async () => {
+    const transport = new RecordingTransport(
+      () => new Response("registered", { status: 200 }),
     );
     const client = initClient("http://localhost", { transport });
 
-    const response = await client.signUp({
+    await client.signUp({
       username: "alice",
       password: "s3cr3t!",
       passwordRepeat: "s3cr3t!",
       options: { redirectUri: "my-app://callback" },
     });
 
-    expect(response.verificationRequired).toBe(false);
-    expect(response.user?.username).toBe("alice");
-    expect(client.user()?.username).toBe("alice");
-
-    expect(transport.paths).toStrictEqual([
-      "/api/auth/v1/register",
-      "/api/auth/v1/login",
-    ]);
+    expect(transport.paths).toStrictEqual(["/api/auth/v1/register"]);
     expect(transport.bodies[0]).toStrictEqual({
       email: null,
       username: "alice",
@@ -163,50 +116,6 @@ describe("signUp", () => {
       password_repeat: "s3cr3t!",
       redirect_uri: "my-app://callback",
     });
-  });
-
-  it("skips the implicit sign-in when autoLogin is off", async () => {
-    const transport = new RecordingTransport(
-      () => new Response("registered", { status: 200 }),
-    );
-    const client = initClient("http://localhost", { transport });
-
-    const response = await client.signUp({
-      username: "alice",
-      password: "s3cr3t!",
-      options: { autoLogin: false },
-    });
-
-    expect(response).toStrictEqual({
-      user: undefined,
-      verificationRequired: false,
-    });
-    expect(transport.paths).toStrictEqual(["/api/auth/v1/register"]);
-  });
-
-  it("tolerates a rejected sign-in for an already existing account", async () => {
-    const transport = new RecordingTransport((path) =>
-      path.endsWith("/login")
-        ? new Response("unauthorized", { status: 401 })
-        : new Response("registered", { status: 200 }),
-    );
-    const client = initClient("http://localhost", { transport });
-
-    // Registration reports success even when the account already exists, so the
-    // subsequent sign-in may legitimately fail. That must not throw.
-    const response = await client.signUp({
-      username: "alice",
-      password: "wrong-password",
-    });
-
-    expect(response).toStrictEqual({
-      user: undefined,
-      verificationRequired: false,
-    });
-    expect(transport.paths).toStrictEqual([
-      "/api/auth/v1/register",
-      "/api/auth/v1/login",
-    ]);
   });
 
   it("propagates registration errors", async () => {

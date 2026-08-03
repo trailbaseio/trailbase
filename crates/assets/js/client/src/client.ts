@@ -91,17 +91,7 @@ export type SignUpOptions = {
   options?: {
     /// Where the verification link sends the user after confirming.
     redirectUri?: string;
-    /// Sign in right after signing up, when the account needs no verification.
-    /// Defaults to `true`.
-    autoLogin?: boolean;
   };
-};
-
-export type SignUpResponse = {
-  /// Set only when sign-up was followed by an implicit sign-in.
-  user?: User;
-  /// The account must verify its email address before it can sign in.
-  verificationRequired: boolean;
 };
 
 function buildTokenState(tokens?: Tokens): TokenState {
@@ -216,10 +206,9 @@ export interface Client {
 
   avatarUrl(userId?: string): string | undefined;
 
-  /// Register a new user. Accounts with an email address have to verify it
-  /// before they can sign in, in which case no sign-in is attempted and
-  /// `verificationRequired` is set.
-  signUp(opts: SignUpOptions): Promise<SignUpResponse>;
+  /// Register a new user. Does not sign them in: accounts with an email
+  /// address have to verify it before they can sign in.
+  signUp(opts: SignUpOptions): Promise<void>;
 
   login(
     emailOrUsername: string,
@@ -354,7 +343,7 @@ class ClientImpl implements Client {
     return undefined;
   }
 
-  public async signUp(opts: SignUpOptions): Promise<SignUpResponse> {
+  public async signUp(opts: SignUpOptions): Promise<void> {
     const { email, username, password } = opts;
 
     await this.fetch(`${authApiBasePath}/register`, {
@@ -367,25 +356,6 @@ class ClientImpl implements Client {
         redirect_uri: opts.options?.redirectUri ?? null,
       } satisfies RegisterUserRequest),
     });
-
-    // Accounts with an email address must verify it before they can sign in.
-    if (email !== undefined) {
-      return { verificationRequired: true };
-    }
-
-    if (username !== undefined && (opts.options?.autoLogin ?? true)) {
-      try {
-        await this.login(username, password);
-      } catch (err) {
-        // Registration reports success even when the account already exists, so
-        // the password may not match.
-        if (!(err instanceof FetchError && err.status === 401)) {
-          throw err;
-        }
-      }
-    }
-
-    return { user: this.user(), verificationRequired: false };
   }
 
   public async login(

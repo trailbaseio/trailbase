@@ -75,9 +75,7 @@ test("Sign-up integration tests", async () => {
 
   // NOTE: The test fixture requires an email address, which has to be verified
   // before the new account can sign in.
-  const response = await client.signUp({ email, password });
-  expect(response.verificationRequired).toBe(true);
-  expect(response.user).toBe(undefined);
+  await client.signUp({ email, password });
   expect(client.user()).toBe(undefined);
 
   const err = await client.login(email, password).then(

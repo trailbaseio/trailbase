@@ -73,6 +73,38 @@ public class MultiFactorAuthCredentials {
 }
 
 /// <summary>
+/// Representation of SignUpRequest JSON objects used to register new users.
+/// </summary>
+public class SignUpRequest {
+  /// <summary>The new user's email address.</summary>
+  public string? email { get; }
+  /// <summary>The new user's username.</summary>
+  public string? username { get; }
+  /// <summary>The new user's password.</summary>
+  public string password { get; }
+  /// <summary>Repetition of the new user's password.</summary>
+  public string password_repeat { get; }
+  /// <summary>Where the verification link sends the user after confirming.</summary>
+  public string? redirect_uri { get; }
+
+  /// <summary>
+  /// SignUpRequest constructor.
+  /// </summary>
+  /// <param name="password">The new user's password.</param>
+  /// <param name="email">The new user's email address.</param>
+  /// <param name="username">The new user's username.</param>
+  /// <param name="passwordRepeat">Repetition of the password. Defaults to <paramref name="password"/>.</param>
+  /// <param name="redirectUri">Where the verification link sends the user after confirming.</param>
+  public SignUpRequest(string password, string? email = null, string? username = null, string? passwordRepeat = null, string? redirectUri = null) {
+    this.password = password;
+    this.email = email;
+    this.username = username;
+    password_repeat = passwordRepeat ?? password;
+    redirect_uri = redirectUri;
+  }
+}
+
+/// <summary>
 /// Representation of RefreshTokenRequest JSON objects.
 /// </summary>
 public class RefreshTokenRequest {
@@ -379,6 +411,24 @@ public class Client {
     return OperationsResponse.Parse(await response.Content.ReadAsStringAsync()).results;
   }
 
+  /// <summary>Register a new user. Does not sign them in: accounts with an email address have to verify it before they can sign in.</summary>
+  /// <param name="password">The new user's password.</param>
+  /// <param name="email">The new user's email address.</param>
+  /// <param name="username">The new user's username.</param>
+  /// <param name="passwordRepeat">Repetition of the password. Defaults to <paramref name="password"/>.</param>
+  /// <param name="redirectUri">Where the verification link sends the user after confirming.</param>
+  public async Task SignUp(string password, string? email = null, string? username = null, string? passwordRepeat = null, string? redirectUri = null) {
+    await Fetch(
+      $"{_authApi}/register",
+      HttpMethod.Post,
+      JsonContent.Create(
+        new SignUpRequest(password, email, username, passwordRepeat, redirectUri),
+        SourceGenerationContext.Default.SignUpRequest
+      ),
+      queryParams: null
+    );
+  }
+
   /// <summary>Log in with the given credentials.</summary>
   public async Task<MultiFactorAuthToken?> Login(string emailOrUsername, string password) {
     var response = await Fetch(
@@ -614,6 +664,7 @@ public class Client {
 [JsonSerializable(typeof(MultiFactorAuthToken))]
 [JsonSerializable(typeof(RefreshTokenResponse))]
 [JsonSerializable(typeof(RefreshTokenRequest))]
+[JsonSerializable(typeof(SignUpRequest))]
 [JsonSerializable(typeof(User))]
 [JsonSerializable(typeof(Dictionary<string, string>))]
 internal partial class SourceGenerationContext : JsonSerializerContext {

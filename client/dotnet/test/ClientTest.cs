@@ -178,6 +178,23 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
+  public async Task SignUpTest() {
+    var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
+
+    var now = DateTimeOffset.Now.ToUnixTimeSeconds();
+    var email = $"test_dotnet_signup_{now}@test.org";
+    var password = "secret123.";
+
+    // NOTE: The test fixture requires an email address, which has to be verified
+    // before the new account can sign in.
+    await client.SignUp(password: password, email: email);
+    Assert.Null(client.User());
+
+    var err = await Assert.ThrowsAsync<FetchException>(async () => await client.Login(email, password));
+    Assert.Equal(System.Net.HttpStatusCode.Unauthorized, err.Status);
+  }
+
+  [Fact]
   public async Task AnonymousAuthTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
     Assert.Null(client.Tokens());

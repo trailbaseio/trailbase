@@ -153,6 +153,51 @@ func (c *Client) User() *User {
 	return nil
 }
 
+type SignUpOptions struct {
+	Password string
+	Email    *string
+	Username *string
+	// Defaults to Password.
+	PasswordRepeat *string
+	// Where the verification link sends the user after confirming.
+	RedirectUri *string
+}
+
+// SignUp registers a new user. It does not sign them in: accounts with an email
+// address have to verify it before they can sign in.
+func (c *Client) SignUp(opts SignUpOptions) error {
+	type Request struct {
+		Email          *string `json:"email"`
+		Username       *string `json:"username"`
+		Password       string  `json:"password"`
+		PasswordRepeat string  `json:"password_repeat"`
+		RedirectUri    *string `json:"redirect_uri"`
+	}
+
+	passwordRepeat := opts.Password
+	if opts.PasswordRepeat != nil {
+		passwordRepeat = *opts.PasswordRepeat
+	}
+
+	reqBody, err := json.Marshal(Request{
+		Email:          opts.Email,
+		Username:       opts.Username,
+		Password:       opts.Password,
+		PasswordRepeat: passwordRepeat,
+		RedirectUri:    opts.RedirectUri,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = c.do("POST", authApi+"/register", reqBody, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) Login(emailOrUsername string, password string) (*MultiFactorAuthToken, error) {
 	type Credentials struct {
 		Email    string `json:"email_or_username"`

@@ -412,6 +412,34 @@ public class Client {
     })
   }
 
+  /// Register a new user. Does not sign them in: accounts with an email address
+  /// have to verify it before they can sign in.
+  public func signUp(
+    password: String,
+    email: String? = nil,
+    username: String? = nil,
+    passwordRepeat: String? = nil,
+    redirectUri: String? = nil
+  ) async throws {
+    struct Request: Codable {
+      let email: String?
+      let username: String?
+      let password: String
+      let password_repeat: String
+      let redirect_uri: String?
+    }
+
+    let body = try JSONEncoder().encode(
+      Request(
+        email: email,
+        username: username,
+        password: password,
+        password_repeat: passwordRepeat ?? password,
+        redirect_uri: redirectUri))
+    let (_, _) = try await self.fetch(
+      path: "/\(AUTH_API)/register", method: "POST", body: body)
+  }
+
   public func login(emailOrUsername: String, password: String) async throws
     -> MultiFactorAuthToken?
   {
