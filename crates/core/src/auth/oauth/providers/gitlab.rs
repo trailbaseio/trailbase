@@ -2,8 +2,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Gitlab;
@@ -33,18 +32,14 @@ impl SocialSpec for Gitlab {
 
   type User = GitlabUser;
 
-  async fn map_user(_api: &UserApi<'_>, user: GitlabUser) -> Result<OAuthUser, AuthError> {
-    let verified = user.state == "active";
-    if !verified {
-      return Err(AuthError::Unauthorized);
-    }
-
-    return Ok(OAuthUser {
+  async fn map_user(_api: &UserApi<'_>, user: GitlabUser) -> Result<ExternalUser, AuthError> {
+    return Ok(ExternalUser {
       provider_user_id: user.id.to_string(),
-      provider_id: Self::ID,
       email: Some(user.email),
       username: user.username,
-      verified,
+      // GitLab has no email-confirmation flag, but blocked and deactivated accounts must not
+      // be able to log in.
+      verified: user.state == "active",
       avatar: user.avatar_url,
     });
   }

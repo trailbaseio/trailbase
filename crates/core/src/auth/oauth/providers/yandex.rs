@@ -2,8 +2,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Yandex;
@@ -35,23 +34,19 @@ impl SocialSpec for Yandex {
 
   type User = YandexUser;
 
-  async fn map_user(_api: &UserApi<'_>, user: YandexUser) -> Result<OAuthUser, AuthError> {
-    let avatar = if !user.is_avatar_empty {
-      Some(format!(
-        "https://avatars.yandex.net/get-yapic/{}/islands-200",
-        user.default_avatar_id
-      ))
-    } else {
-      None
-    };
-
-    return Ok(OAuthUser {
+  async fn map_user(_api: &UserApi<'_>, user: YandexUser) -> Result<ExternalUser, AuthError> {
+    return Ok(ExternalUser {
       provider_user_id: user.id,
-      provider_id: Self::ID,
       email: Some(user.default_email),
       username: user.login,
       verified: true,
-      avatar,
+      // NOTE: Yandex sends a placeholder id alongside the flag, so the flag decides.
+      avatar: (!user.is_avatar_empty).then(|| {
+        format!(
+          "https://avatars.yandex.net/get-yapic/{}/islands-200",
+          user.default_avatar_id
+        )
+      }),
     });
   }
 }

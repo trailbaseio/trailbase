@@ -2,8 +2,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Google;
@@ -34,18 +33,13 @@ impl SocialSpec for Google {
 
   type User = GoogleUser;
 
-  async fn map_user(_api: &UserApi<'_>, user: GoogleUser) -> Result<OAuthUser, AuthError> {
-    if !user.verified_email {
-      return Err(AuthError::Unauthorized);
-    }
-
-    return Ok(OAuthUser {
+  async fn map_user(_api: &UserApi<'_>, user: GoogleUser) -> Result<ExternalUser, AuthError> {
+    return Ok(ExternalUser {
       provider_user_id: user.id,
-      provider_id: Self::ID,
       email: Some(user.email),
-      username: None,
       verified: user.verified_email,
       avatar: user.picture,
+      ..Default::default()
     });
   }
 }

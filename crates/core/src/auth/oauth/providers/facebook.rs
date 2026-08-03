@@ -2,20 +2,14 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{DataEnvelope, ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Facebook;
 
 #[derive(Default, Deserialize, Debug)]
-struct FacebookUserPictureData {
+struct FacebookPicture {
   url: String,
-}
-
-#[derive(Default, Deserialize, Debug)]
-struct FacebookUserPicture {
-  data: FacebookUserPictureData,
 }
 
 #[derive(Default, Deserialize, Debug)]
@@ -23,7 +17,7 @@ pub(crate) struct FacebookUser {
   id: String,
   email: String,
   // name: Option<String>,
-  picture: Option<FacebookUserPicture>,
+  picture: Option<DataEnvelope<FacebookPicture>>,
 }
 
 #[async_trait]
@@ -41,14 +35,13 @@ impl SocialSpec for Facebook {
 
   type User = FacebookUser;
 
-  async fn map_user(_api: &UserApi<'_>, user: FacebookUser) -> Result<OAuthUser, AuthError> {
-    return Ok(OAuthUser {
+  async fn map_user(_api: &UserApi<'_>, user: FacebookUser) -> Result<ExternalUser, AuthError> {
+    return Ok(ExternalUser {
       provider_user_id: user.id,
-      provider_id: Self::ID,
       email: Some(user.email),
-      username: None,
       verified: true,
       avatar: user.picture.map(|p| p.data.url),
+      ..Default::default()
     });
   }
 }

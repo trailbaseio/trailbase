@@ -2,8 +2,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Github;
@@ -48,7 +47,7 @@ impl SocialSpec for Github {
     return vec![("User-Agent", "TrailBase".to_string())];
   }
 
-  async fn map_user(api: &UserApi<'_>, user: GithubUser) -> Result<OAuthUser, AuthError> {
+  async fn map_user(api: &UserApi<'_>, user: GithubUser) -> Result<ExternalUser, AuthError> {
     // Users can set the "Keep my email private" option, in which case the user api will return an
     // empty email and we'll have to call the dedicated `/emails` endpoint.
     let email = if let Some(email) = user.email
@@ -70,9 +69,8 @@ impl SocialSpec for Github {
       primary.email
     };
 
-    return Ok(OAuthUser {
+    return Ok(ExternalUser {
       provider_user_id: user.id.to_string(),
-      provider_id: Self::ID,
       email: Some(email),
       username: user.login,
       verified: true,

@@ -2,8 +2,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Discord;
@@ -34,31 +33,26 @@ impl SocialSpec for Discord {
 
   type User = DiscordUser;
 
-  async fn map_user(_api: &UserApi<'_>, user: DiscordUser) -> Result<OAuthUser, AuthError> {
-    if !user.verified {
-      return Err(AuthError::Unauthorized);
-    }
-
+  async fn map_user(_api: &UserApi<'_>, user: DiscordUser) -> Result<ExternalUser, AuthError> {
     // let username = match (user.discriminator, user.username) {
     //   (Some(discriminator), Some(username)) => Some(format!("{username}#{discriminator}")),
     //   (None, Some(username)) => Some(username.to_string()),
     //   (Some(discriminator), None) => Some(discriminator.to_string()),
     //   (None, None) => None,
     // };
-    let avatar = user.avatar.map(|avatar| {
-      format!(
-        "https://cdn.discordapp.com/avatars/{id}/{avatar}.png",
-        id = user.id
-      )
-    });
 
-    return Ok(OAuthUser {
+    return Ok(ExternalUser {
+      // Discord only hands out the avatar's hash, the CDN URL is ours to build.
+      avatar: user.avatar.map(|avatar| {
+        format!(
+          "https://cdn.discordapp.com/avatars/{id}/{avatar}.png",
+          id = user.id
+        )
+      }),
       provider_user_id: user.id,
-      provider_id: Self::ID,
       email: Some(user.email),
       username: user.username,
       verified: user.verified,
-      avatar,
     });
   }
 }

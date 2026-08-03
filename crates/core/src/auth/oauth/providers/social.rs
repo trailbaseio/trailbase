@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use oauth2::{AuthType, TokenResponse as _};
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
 use url::Url;
@@ -50,11 +51,11 @@ pub(crate) trait SocialSpec: Send + Sync + 'static {
     return None;
   }
 
-  /// Maps the provider's user onto our user model.
+  /// Maps the provider's user onto [`ExternalUser`].
   ///
   /// `api` is only needed by the few providers that have to make follow-up calls, e.g. Github's
   /// separate email endpoint.
-  async fn map_user(api: &UserApi<'_>, user: Self::User) -> Result<OAuthUser, AuthError>;
+  async fn map_user(api: &UserApi<'_>, user: Self::User) -> Result<ExternalUser, AuthError>;
 
   fn factory() -> OAuthProviderFactory
   where
@@ -62,6 +63,28 @@ pub(crate) trait SocialSpec: Send + Sync + 'static {
   {
     return SocialProvider::<Self>::factory();
   }
+}
+
+/// What a [`SocialSpec`] pulls out of its provider's user-info response.
+///
+/// Narrower than [`OAuthUser`] on purpose: [`SocialProvider`] fills in the provider id, so a spec
+/// can't accidentally claim to be a different provider, and it turns an unverified user into
+/// [`AuthError::Unauthorized`], so no spec has to remember that check. Anything a provider doesn't
+/// expose is left at its default.
+#[derive(Default, Debug)]
+pub(crate) struct ExternalUser {
+  pub provider_user_id: String,
+  pub email: Option<String>,
+  pub username: Option<String>,
+  /// Whether the provider vouches for the account, e.g. confirmed the email address.
+  pub verified: bool,
+  pub avatar: Option<String>,
+}
+
+/// Payload wrapper for the providers that nest their responses under a `data` key.
+#[derive(Debug, Deserialize)]
+pub(crate) struct DataEnvelope<T> {
+  pub data: T,
 }
 
 /// Authenticated client for a provider's user-info API.
@@ -193,9 +216,22 @@ impl<S: SocialSpec> OAuthProvider for SocialProvider<S> {
       headers: S::user_api_headers(&self.client_id),
     };
 
-    let user = api.get_json::<S::User>(api.user_api_url()).await?;
+    let user = S::map_user(&api, api.get_json::<S::User>(api.user_api_url()).await?).await?;
 
-    return S::map_user(&api, user).await;
+    // Central so that no spec can forget it: whatever signal a provider offers, `map_user` folds
+    // it into `verified` and an account the provider won't vouch for never becomes a local user.
+    if !user.verified {
+      return Err(AuthError::Unauthorized);
+    }
+
+    return Ok(OAuthUser {
+      provider_user_id: user.provider_user_id,
+      provider_id: S::ID,
+      email: user.email,
+      username: user.username,
+      verified: user.verified,
+      avatar: user.avatar,
+    });
   }
 }
 
@@ -204,6 +240,9 @@ impl<S: SocialSpec> OAuthProvider for SocialProvider<S> {
 /// This is what the indirection buys beyond deduplication: because the user-info endpoint is a
 /// field rather than a constant, a spec's request, response parsing and user mapping can be tested
 /// without reaching out to the real provider.
+#[cfg(test)]
+pub(crate) use testing::{USER_API_TEST_PATH, resolve_user, resolve_user_against};
+
 #[cfg(test)]
 mod testing {
   use axum::Json;
@@ -255,6 +294,3 @@ mod testing {
     return resolve_user_against::<S>(routes).await;
   }
 }
-
-#[cfg(test)]
-pub(crate) use testing::{USER_API_TEST_PATH, resolve_user, resolve_user_against};

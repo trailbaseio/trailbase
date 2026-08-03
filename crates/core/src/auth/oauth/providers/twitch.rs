@@ -2,27 +2,21 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
 use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::auth::oauth::providers::social::{DataEnvelope, ExternalUser, SocialSpec, UserApi};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Twitch;
 
 // Reference: https://dev.twitch.tv/docs/api/reference#get-users
 #[derive(Default, Deserialize, Debug)]
-struct TwitchUser {
+pub(crate) struct TwitchUser {
   id: String,
   // According to reference above, email is implicitly verified.
   email: String,
   login: Option<String>,
   // display_name: String,
   profile_image_url: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-pub(crate) struct TwitchUsersResponse {
-  data: Vec<TwitchUser>,
 }
 
 #[async_trait]
@@ -39,7 +33,7 @@ impl SocialSpec for Twitch {
 
   const AUTH_TYPE: oauth2::AuthType = oauth2::AuthType::RequestBody;
 
-  type User = TwitchUsersResponse;
+  type User = DataEnvelope<Vec<TwitchUser>>;
 
   fn user_api_headers(client_id: &str) -> Vec<(&'static str, String)> {
     return vec![("Client-Id", client_id.to_string())];
@@ -53,8 +47,8 @@ impl SocialSpec for Twitch {
 
   async fn map_user(
     _api: &UserApi<'_>,
-    mut response: TwitchUsersResponse,
-  ) -> Result<OAuthUser, AuthError> {
+    mut response: DataEnvelope<Vec<TwitchUser>>,
+  ) -> Result<ExternalUser, AuthError> {
     let user = match response.data.len() {
       1 => response.data.swap_remove(0),
       0 => {
@@ -69,9 +63,8 @@ impl SocialSpec for Twitch {
       }
     };
 
-    return Ok(OAuthUser {
+    return Ok(ExternalUser {
       provider_user_id: user.id,
-      provider_id: Self::ID,
       email: Some(user.email),
       username: user.login,
       verified: true,
