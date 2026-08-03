@@ -116,13 +116,11 @@ pub(crate) fn row_to_json_expand(
           {
             return match json {
               JsonColumnMetadata::SchemaName(x) if x == "std.FileUpload" => {
-                #[allow(unused_mut)]
                 let mut file_metadata: serde_json::Value = serde_json::from_str(str)?;
                 strip_file_metadata_id(&mut file_metadata);
                 Ok((column.name.clone(), file_metadata))
               }
               JsonColumnMetadata::SchemaName(x) if x == "std.FileUploads" => {
-                #[allow(unused_mut)]
                 let mut file_metadata_list: Vec<serde_json::Value> = serde_json::from_str(str)?;
                 for file_metadata in &mut file_metadata_list {
                   strip_file_metadata_id(file_metadata);

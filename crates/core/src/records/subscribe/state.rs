@@ -459,24 +459,29 @@ fn broker(
   );
 
   // Build a JSON-encoded SQLite event (insert, update, delete).
-  let event: Arc<EventPayload> = {
+  let event: Arc<EventPayload> = Arc::new({
     let json_obj = record
       .iter()
       .filter_map(|(name, value)| {
+        // FIXME: We should respect and deserialize nested JSON. ReadRecord uses
+        // row_to_json_expand with explicit column_metadata.
         return value_to_flat_json(value)
           .ok()
           .map(|v| (name.to_string(), v));
       })
       .collect();
 
-    Arc::new(EventPayload::from(&match action {
+    EventPayload::from(&match action {
       RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
       RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
       RecordAction::Update => JsonEventPayload::Update { value: json_obj },
-    }))
-  };
+    })
+  });
 
   // First broker record subscriptions.
+  //
+  // NOTE: If/when latency becomes an issue we could do all the brokering (both records & tables as
+  // well as across subscriptions) in parallel.
   if let Some(record_subscriptions) = subscriptions.record.get_mut(&row_id) {
     let dead = broker_subscriptions(record_subscriptions, &record, &event);
 
