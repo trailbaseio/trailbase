@@ -1485,12 +1485,30 @@ async fn test_auth_refresh_after_anonymous_promotion() {
     refresh_handler(
       State(state.clone()),
       Json(RefreshRequest {
-        refresh_token: login_response.refresh_token,
+        refresh_token: login_response.refresh_token.clone(),
       }),
     )
     .await,
     Err(AuthError::Unauthorized)
   ));
+
+  state
+    .user_conn()
+    .execute_batch(format!(
+      "UPDATE {USER_TABLE} SET verified = TRUE WHERE email = 'user@test.org';"
+    ))
+    .await
+    .unwrap();
+
+  // Verifying doesn't revoke the session, it merely paused it. Refreshing works again.
+  let Json(_refreshed_tokens) = refresh_handler(
+    State(state.clone()),
+    Json(RefreshRequest {
+      refresh_token: login_response.refresh_token,
+    }),
+  )
+  .await
+  .unwrap();
 }
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
