@@ -402,7 +402,7 @@ class Client:
     def site(self) -> str:
         return self._site
 
-    def sign_up(
+    def register(
         self,
         password: str,
         email: str | None = None,

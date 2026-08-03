@@ -82,7 +82,7 @@ type PromotionOptions = {
   password: string;
 };
 
-export type SignUpOptions = {
+export type RegisterOptions = {
   email?: string;
   username?: string;
   password: string;
@@ -208,7 +208,7 @@ export interface Client {
 
   /// Register a new user. Does not sign them in: accounts with an email
   /// address have to verify it before they can sign in.
-  signUp(opts: SignUpOptions): Promise<void>;
+  register(opts: RegisterOptions): Promise<void>;
 
   login(
     emailOrUsername: string,
@@ -343,7 +343,7 @@ class ClientImpl implements Client {
     return undefined;
   }
 
-  public async signUp(opts: SignUpOptions): Promise<void> {
+  public async register(opts: RegisterOptions): Promise<void> {
     const { email, username, password } = opts;
 
     await this.fetch(`${authApiBasePath}/register`, {

@@ -153,7 +153,7 @@ func (c *Client) User() *User {
 	return nil
 }
 
-type SignUpOptions struct {
+type RegisterOptions struct {
 	Password string
 	Email    *string
 	Username *string
@@ -163,9 +163,9 @@ type SignUpOptions struct {
 	RedirectUri *string
 }
 
-// SignUp registers a new user. It does not sign them in: accounts with an email
+// Register registers a new user. It does not sign them in: accounts with an email
 // address have to verify it before they can sign in.
-func (c *Client) SignUp(opts SignUpOptions) error {
+func (c *Client) Register(opts RegisterOptions) error {
 	type Request struct {
 		Email          *string `json:"email"`
 		Username       *string `json:"username"`

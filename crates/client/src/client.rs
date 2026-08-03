@@ -165,7 +165,7 @@ pub struct PromoteOptions {
 }
 
 #[derive(Default)]
-pub struct SignUpOptions {
+pub struct RegisterOptions {
   pub password: String,
   pub email: Option<String>,
   pub username: Option<String>,
@@ -284,7 +284,7 @@ impl Client {
 
   /// Register a new user. Does not sign them in: accounts with an email address
   /// have to verify it before they can sign in.
-  pub async fn sign_up(&self, opts: SignUpOptions) -> Result<(), Error> {
+  pub async fn register(&self, opts: RegisterOptions) -> Result<(), Error> {
     #[derive(Serialize)]
     struct Request<'a> {
       email: Option<&'a str>,

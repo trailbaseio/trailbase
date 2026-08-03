@@ -210,17 +210,17 @@ async fn login_test() {
   client.refresh().await.unwrap();
 }
 
-async fn sign_up_test() {
+async fn register_test() {
   let client = Client::new(&*site(), None).unwrap();
 
   let now = now();
-  let email = format!("test_rust_signup_{now}@test.org");
+  let email = format!("test_rust_register_{now}@test.org");
   let password = "Secret123.".to_string();
 
   // NOTE: The test fixture requires an email address, which has to be verified
   // before the new account can sign in.
   client
-    .sign_up(trailbase_client::SignUpOptions {
+    .register(trailbase_client::RegisterOptions {
       password: password.clone(),
       email: Some(email.clone()),
       ..Default::default()
@@ -1030,8 +1030,8 @@ fn client_integration_test() {
   runtime.block_on(login_test());
   println!("Ran login tests");
 
-  runtime.block_on(sign_up_test());
-  println!("Ran sign-up tests");
+  runtime.block_on(register_test());
+  println!("Ran register tests");
 
   runtime.block_on(login_anonymous_test());
   println!("Ran login anonymous tests");

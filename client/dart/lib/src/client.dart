@@ -86,7 +86,7 @@ class Client {
 
   /// Register a new user. Does not sign them in: accounts with an email address
   /// have to verify it before they can sign in.
-  Future<void> signUp({
+  Future<void> register({
     required String password,
     String? email,
     String? username,

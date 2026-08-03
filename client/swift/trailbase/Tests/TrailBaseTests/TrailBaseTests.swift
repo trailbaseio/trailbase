@@ -133,16 +133,16 @@ extension Trait where Self == SetupTrailBaseTrait {
     #expect(client.user == nil)
   }
 
-  @Test("Test Sign-up") func testSignUp() async throws {
+  @Test("Test Register") func testRegister() async throws {
     let client = try Client(site: URL(string: "http://127.0.0.1:\(PORT)")!, tokens: nil)
 
     let now = NSDate().timeIntervalSince1970
-    let email = "test_swift_signup_\(now)@test.org"
+    let email = "test_swift_register_\(now)@test.org"
     let password = "secret123."
 
     // NOTE: The test fixture requires an email address, which has to be verified
     // before the new account can sign in.
-    try await client.signUp(password: password, email: email)
+    try await client.register(password: password, email: email)
     #expect(client.user == nil)
 
     await #expect(throws: ClientError.self) {

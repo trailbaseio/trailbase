@@ -122,18 +122,18 @@ def test_authentication(trailbase: TrailBaseFixture):
     client.refresh_auth_tokens()
 
 
-def test_sign_up(trailbase: TrailBaseFixture):
+def test_register(trailbase: TrailBaseFixture):
     assert trailbase.isUp()
 
     client = Client(site, tokens=None)
 
     now = int(time())
-    email = f"test_py_signup_{now}@test.org"
+    email = f"test_py_register_{now}@test.org"
     password = "secret123."
 
     # Note: the test fixture requires an email address, which has to be verified
     # before the new account can sign in.
-    client.sign_up(password=password, email=email)
+    client.register(password=password, email=email)
     assert client.user() is None
 
     with pytest.raises(FetchException) as err:

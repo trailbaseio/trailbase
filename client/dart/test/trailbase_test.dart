@@ -300,16 +300,16 @@ Future<void> main() async {
       expect(newTokens, equals(client.tokens()));
     });
 
-    test('sign-up', () async {
+    test('register', () async {
       final client = Client('http://${address}');
 
       final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-      final email = 'test_dart_signup_${now}@test.org';
+      final email = 'test_dart_register_${now}@test.org';
       const password = 'secret123.';
 
       // NOTE: The test fixture requires an email address, which has to be
       // verified before the new account can sign in.
-      await client.signUp(password: password, email: email);
+      await client.register(password: password, email: email);
       expect(client.user(), isNull);
 
       expect(

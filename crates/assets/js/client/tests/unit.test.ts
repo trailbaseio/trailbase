@@ -72,14 +72,14 @@ class RecordingTransport implements Transport {
   }
 }
 
-describe("signUp", () => {
+describe("register", () => {
   it("registers an email account without signing in", async () => {
     const transport = new RecordingTransport(
       () => new Response("registered", { status: 200 }),
     );
     const client = initClient("http://localhost", { transport });
 
-    await client.signUp({
+    await client.register({
       email: "alice@example.org",
       password: "s3cr3t!",
     });
@@ -101,7 +101,7 @@ describe("signUp", () => {
     );
     const client = initClient("http://localhost", { transport });
 
-    await client.signUp({
+    await client.register({
       username: "alice",
       password: "s3cr3t!",
       passwordRepeat: "s3cr3t!",
@@ -124,7 +124,7 @@ describe("signUp", () => {
     );
     const client = initClient("http://localhost", { transport });
 
-    const err = await client.signUp({ password: "s3cr3t!" }).then(
+    const err = await client.register({ password: "s3cr3t!" }).then(
       () => undefined,
       (err: unknown) => err,
     );

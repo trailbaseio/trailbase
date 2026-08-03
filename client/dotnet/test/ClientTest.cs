@@ -178,16 +178,16 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
   }
 
   [Fact]
-  public async Task SignUpTest() {
+  public async Task RegisterTest() {
     var client = new Client($"http://127.0.0.1:{Constants.Port}", null);
 
     var now = DateTimeOffset.Now.ToUnixTimeSeconds();
-    var email = $"test_dotnet_signup_{now}@test.org";
+    var email = $"test_dotnet_register_{now}@test.org";
     var password = "secret123.";
 
     // NOTE: The test fixture requires an email address, which has to be verified
     // before the new account can sign in.
-    await client.SignUp(password: password, email: email);
+    await client.Register(password: password, email: email);
     Assert.Null(client.User());
 
     var err = await Assert.ThrowsAsync<FetchException>(async () => await client.Login(email, password));

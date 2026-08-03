@@ -247,37 +247,37 @@ to the identifier policy above.
 Whenever an account carries an email address, TrailBase sends out a verification
 email and the account cannot sign in until that address has been confirmed.
 Username-only accounts have nothing to verify and can sign in right away.
-All clients expose this as a `signUp` method, which registers the account but
+All clients expose this as a `register` method, which registers the account but
 never signs it in; follow up with a login where that is applicable.
 
-export const signUpTs = `
+export const registerTs = `
 // A confirmation mail is sent, the account cannot sign in yet.
-await client.signUp({ email: "alice@example.com", password: "s3cr3t!" });
+await client.register({ email: "alice@example.com", password: "s3cr3t!" });
 
 // Username-only accounts have nothing to verify and can sign in right away.
-await client.signUp({ username: "alice", password: "s3cr3t!" });
+await client.register({ username: "alice", password: "s3cr3t!" });
 await client.login("alice", "s3cr3t!");
 `;
 
-export const signUpDart = `
-await client.signUp(email: 'alice@example.com', password: 's3cr3t!');
+export const registerDart = `
+await client.register(email: 'alice@example.com', password: 's3cr3t!');
 `;
 
-export const signUpSwift = `
-try await client.signUp(password: "s3cr3t!", email: "alice@example.com")
+export const registerSwift = `
+try await client.register(password: "s3cr3t!", email: "alice@example.com")
 `;
 
-export const signUpKotlin = `
-client.signUp(password = "s3cr3t!", email = "alice@example.com")
+export const registerKotlin = `
+client.register(password = "s3cr3t!", email = "alice@example.com")
 `;
 
-export const signUpDotnet = `
-await client.SignUp(password: "s3cr3t!", email: "alice@example.com");
+export const registerDotnet = `
+await client.Register(password: "s3cr3t!", email: "alice@example.com");
 `;
 
-export const signUpRust = `
+export const registerRust = `
 client
-  .sign_up(SignUpOptions {
+  .register(RegisterOptions {
     password: "s3cr3t!".to_string(),
     email: Some("alice@example.com".to_string()),
     ..Default::default()
@@ -285,19 +285,19 @@ client
   .await?;
 `;
 
-export const signUpGo = `
+export const registerGo = `
 email := "alice@example.com"
-err := client.SignUp(trailbase.SignUpOptions{
+err := client.Register(trailbase.RegisterOptions{
 	Password: "s3cr3t!",
 	Email:    &email,
 })
 `;
 
-export const signUpPy = `
-client.sign_up(password="s3cr3t!", email="alice@example.com")
+export const registerPy = `
+client.register(password="s3cr3t!", email="alice@example.com")
 `;
 
-export const signUpCurl = `
+export const registerCurl = `
 curl
   --header "Content-Type: application/json"
   --request POST
@@ -307,39 +307,39 @@ curl
 
 <Tabs>
   <TabItem label="JS/TS">
-    <Code lang="ts" code={signUpTs} />
+    <Code lang="ts" code={registerTs} />
   </TabItem>
 
   <TabItem label="Dart">
-    <Code lang="dart" code={signUpDart} />
+    <Code lang="dart" code={registerDart} />
   </TabItem>
 
   <TabItem label="Swift">
-    <Code lang="swift" code={signUpSwift} />
+    <Code lang="swift" code={registerSwift} />
   </TabItem>
 
   <TabItem label="Kotlin">
-    <Code lang="kotlin" code={signUpKotlin} />
+    <Code lang="kotlin" code={registerKotlin} />
   </TabItem>
 
   <TabItem label="C#/.NET">
-    <Code lang="cs" code={signUpDotnet} />
+    <Code lang="cs" code={registerDotnet} />
   </TabItem>
 
   <TabItem label="Rust">
-    <Code lang="rust" code={signUpRust} />
+    <Code lang="rust" code={registerRust} />
   </TabItem>
 
   <TabItem label="Go">
-    <Code lang="go" code={signUpGo} />
+    <Code lang="go" code={registerGo} />
   </TabItem>
 
   <TabItem label="Python">
-    <Code lang="python" code={signUpPy} />
+    <Code lang="python" code={registerPy} />
   </TabItem>
 
   <TabItem label="curl">
-    <Code lang="sh" frame="code" code={signUpCurl} />
+    <Code lang="sh" frame="code" code={registerCurl} />
   </TabItem>
 </Tabs>
 

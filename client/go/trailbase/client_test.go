@@ -152,17 +152,17 @@ func TestAuth(t *testing.T) {
 	assert(t, client.User() == nil, "should be nil")
 }
 
-func TestSignUp(t *testing.T) {
+func TestRegister(t *testing.T) {
 	client, err := NewClient(SITE)
 	assertFine(t, err)
 
 	now := time.Now().Unix()
-	email := fmt.Sprintf("test_go_signup_%d@test.org", now)
+	email := fmt.Sprintf("test_go_register_%d@test.org", now)
 	password := "secret123."
 
 	// NOTE: The test fixture requires an email address, which has to be verified
 	// before the new account can sign in.
-	err = client.SignUp(SignUpOptions{
+	err = client.Register(RegisterOptions{
 		Password: password,
 		Email:    &email,
 	})

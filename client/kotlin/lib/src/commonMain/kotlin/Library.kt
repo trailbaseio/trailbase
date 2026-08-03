@@ -550,7 +550,7 @@ class Client(
    * Register a new user. Does not sign them in: accounts with an email address have to verify it
    * before they can sign in.
    */
-  suspend fun signUp(
+  suspend fun register(
           password: String,
           email: String? = null,
           username: String? = null,

@@ -67,7 +67,7 @@ test("Auth integration tests", async () => {
   expect(headers1["Authorization"]).toBeUndefined();
 });
 
-test("Sign-up integration tests", async () => {
+test("Register integration tests", async () => {
   const client = initClient(new URL(`http://${serverAddress()}`));
 
   const email = `test_${new Date().getTime()}@test.org`;
@@ -75,7 +75,7 @@ test("Sign-up integration tests", async () => {
 
   // NOTE: The test fixture requires an email address, which has to be verified
   // before the new account can sign in.
-  await client.signUp({ email, password });
+  await client.register({ email, password });
   expect(client.user()).toBe(undefined);
 
   const err = await client.login(email, password).then(
@@ -87,7 +87,7 @@ test("Sign-up integration tests", async () => {
 
   // A weak password is rejected outright.
   await expect(
-    async () => await client.signUp({ email: `x_${email}`, password: "x" }),
+    async () => await client.register({ email: `x_${email}`, password: "x" }),
   ).rejects.toThrowError(FetchError);
 });
 
