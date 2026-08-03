@@ -129,16 +129,38 @@ def test_anonymous_auth(trailbase: TrailBaseFixture):
     assert client.user() is None
 
     client.login_anonymously()
-    assert client.user() is not None
+    user = client.user()
+    assert user is not None
+    assert user.email is None
+    assert user.username is not None and user.username.startswith("anon")
 
     now = int(time())
     email = f"test_py_{now}@test.org"
     client.promote_anonymous(password="secret123.", email=email)
 
+    # Promotion is a one-shot operation: the user is no longer anonymous afterwards, so a second
+    # attempt has to be rejected. Anonymous sign-in, by contrast, succeeds every time, so this
+    # also pins down which endpoint we're talking to.
+    with pytest.raises(FetchException) as exec:
+        client.promote_anonymous(password="secret123.", email=email)
+
+    assert exec.value.status == 424
+
     # Note: to actually login we'd need to verify the email first.
 
     client.logout()
     assert client.user() is None
+
+
+def test_promote_anonymous_requires_authentication(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    # Promotion acts on the authenticated user, whereas anonymous sign-in is unauthenticated.
+    client = Client(site, tokens=None)
+    with pytest.raises(FetchException) as exec:
+        client.promote_anonymous(password="secret123.", email="test_py_unauthenticated@test.org")
+
+    assert exec.value.status == 401
 
 
 def test_second_factor_authentication(trailbase: TrailBaseFixture):
