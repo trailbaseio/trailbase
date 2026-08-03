@@ -1,23 +1,33 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse as _};
 use serde::{Deserialize, Serialize};
-use url::Url;
 
-use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::oauth::ReqwestClient;
+use crate::auth::oauth::OAuthUser;
 use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::config::proto::OAuthProviderId;
 
-pub(crate) struct TwitchOAuthProvider {
-  client_id: String,
-  client_secret: String,
+pub(crate) struct Twitch;
+
+// Reference: https://dev.twitch.tv/docs/api/reference#get-users
+#[derive(Default, Deserialize, Debug)]
+struct TwitchUser {
+  id: String,
+  // According to reference above, email is implicitly verified.
+  email: String,
+  login: Option<String>,
+  // display_name: String,
+  profile_image_url: Option<String>,
 }
 
-impl TwitchOAuthProvider {
+#[derive(Deserialize, Debug)]
+pub(crate) struct TwitchUsersResponse {
+  data: Vec<TwitchUser>,
+}
+
+#[async_trait]
+impl SocialSpec for Twitch {
+  const ID: OAuthProviderId = OAuthProviderId::Twitch;
   const NAME: &'static str = "twitch";
   const DISPLAY_NAME: &'static str = "Twitch";
 
@@ -25,119 +35,28 @@ impl TwitchOAuthProvider {
   const TOKEN_URL: &'static str = "https://id.twitch.tv/oauth2/token";
   const USER_API_URL: &'static str = "https://api.twitch.tv/helix/users";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Twitch client id".to_string()));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Twitch client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &["user:read:email"];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
+  const AUTH_TYPE: oauth2::AuthType = oauth2::AuthType::RequestBody;
+
+  type User = TwitchUsersResponse;
+
+  fn user_api_headers(client_id: &str) -> Vec<(&'static str, String)> {
+    return vec![("Client-Id", client_id.to_string())];
   }
 
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Twitch,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
-}
-
-#[async_trait]
-impl OAuthProvider for TwitchOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Twitch
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+  fn recover_token_response(body: &[u8]) -> Option<Result<TokenResponse, AuthError>> {
+    // Twitch returns non-RFC-6749 compliant body: scopes are an array rather than space delimited
+    // list.
+    return Some(parse_twitch_token_response(body));
   }
 
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(TwitchOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(TwitchOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn auth_type(&self) -> oauth2::AuthType {
-    return oauth2::AuthType::RequestBody;
-  }
-
-  fn oauth_scopes(&self) -> Vec<&str> {
-    return vec!["user:read:email"];
-  }
-
-  async fn get_token(
-    &self,
-    state: &AppState,
-    auth_code: String,
-    server_pkce_code_verifier: String,
-  ) -> Result<TokenResponse, AuthError> {
-    let http_client = reqwest::ClientBuilder::new()
-      // Following redirects might set us up for server-side request forgery (SSRF).
-      .redirect(reqwest::redirect::Policy::none())
-      .build()
-      .map_err(|err| AuthError::Internal(err.into()))?;
-
-    let client = self.oauth_client(state)?;
-    let token_response: TokenResponse = client
-      .exchange_code(AuthorizationCode::new(auth_code))
-      .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-      .request_async(&ReqwestClient(http_client))
-      .await
-      .or_else(|err| match err {
-        // Twitch returns non-RFC-6749 compliant body: scopes are an array rather than space
-        // delimited list.
-        oauth2::RequestTokenError::Parse(_path, resp) => parse_twitch_token_response(&resp),
-        err => Err(AuthError::FailedDependency(err.into())),
-      })?;
-
-    return Ok(token_response);
-  }
-
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(Self::USER_API_URL)
-      .header("Client-Id", &self.client_id)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let mut users = response
-      .json::<TwitchUsersResponse>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?
-      .data;
-
-    let user = match users.len() {
-      1 => users.swap_remove(0),
+  async fn map_user(
+    _api: &UserApi<'_>,
+    mut response: TwitchUsersResponse,
+  ) -> Result<OAuthUser, AuthError> {
+    let user = match response.data.len() {
+      1 => response.data.swap_remove(0),
       0 => {
         return Err(AuthError::FailedDependency(
           "Twitch user response had empty data".into(),
@@ -152,7 +71,7 @@ impl OAuthProvider for TwitchOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Twitch,
+      provider_id: Self::ID,
       email: Some(user.email),
       username: user.login,
       verified: true,
@@ -191,22 +110,6 @@ fn parse_twitch_token_response(body: &[u8]) -> Result<TokenResponse, AuthError> 
   .map_err(|_err| AuthError::Internal("Failed to deserialize".into()));
 }
 
-// Reference: https://dev.twitch.tv/docs/api/reference#get-users
-#[derive(Default, Deserialize, Debug)]
-struct TwitchUser {
-  id: String,
-  // According to reference above, email is implicitly verified.
-  email: String,
-  login: Option<String>,
-  // display_name: String,
-  profile_image_url: Option<String>,
-}
-
-#[derive(Deserialize, Debug)]
-struct TwitchUsersResponse {
-  data: Vec<TwitchUser>,
-}
-
 pub fn serialize_space_delimited_vec<T, S>(
   vec_opt: &Option<Vec<T>>,
   serializer: S,
@@ -226,6 +129,7 @@ where
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::auth::oauth::providers::social::resolve_user;
 
   #[test]
   fn parse_twitch_token_response_test() {
@@ -238,5 +142,41 @@ mod tests {
     }"#;
 
     parse_twitch_token_response(response.as_bytes()).unwrap();
+  }
+
+  /// Twitch wraps the user in a `data` array rather than returning it directly.
+  #[tokio::test]
+  async fn test_twitch_user_mapping() {
+    let user = resolve_user::<Twitch>(serde_json::json!({
+      "data": [{
+        "id": "141981764",
+        "email": "twitchdev@example.com",
+        "login": "twitchdev",
+        "profile_image_url": "https://static-cdn.jtvnw.net/avatar.png",
+      }],
+    }))
+    .await
+    .unwrap();
+
+    assert_eq!(user.provider_user_id, "141981764");
+    assert_eq!(user.email.as_deref(), Some("twitchdev@example.com"));
+    assert_eq!(user.username.as_deref(), Some("twitchdev"));
+  }
+
+  #[tokio::test]
+  async fn test_twitch_rejects_ambiguous_user_response() {
+    for data in [
+      serde_json::json!([]),
+      serde_json::json!([
+        { "id": "1", "email": "a@example.com" },
+        { "id": "2", "email": "b@example.com" },
+      ]),
+    ] {
+      let result = resolve_user::<Twitch>(serde_json::json!({ "data": data })).await;
+      assert!(
+        matches!(result, Err(AuthError::FailedDependency(_))),
+        "{result:?}"
+      );
+    }
   }
 }

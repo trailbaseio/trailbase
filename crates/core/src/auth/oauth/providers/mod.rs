@@ -6,6 +6,7 @@ mod gitlab;
 mod google;
 mod microsoft;
 mod oidc;
+mod social;
 mod twitch;
 mod yandex;
 
@@ -16,6 +17,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
+use crate::auth::oauth::providers::social::SocialSpec as _;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 #[derive(Debug, Error)]
@@ -44,15 +46,18 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
       // NOTE: In the future we might want to have more than one OIDC factory.
       oidc::OidcProvider::factory(0),
       // "Social" OAuth providers.
+      //
+      // NOTE: All but Apple, which reads its claims off a JWT rather than a user API, are
+      // declared as a `social::SocialSpec`.
       apple::AppleOAuthProvider::factory(),
-      discord::DiscordOAuthProvider::factory(),
-      gitlab::GitlabOAuthProvider::factory(),
-      github::GithubOAuthProvider::factory(),
-      google::GoogleOAuthProvider::factory(),
-      facebook::FacebookOAuthProvider::factory(),
-      microsoft::MicrosoftOAuthProvider::factory(),
-      twitch::TwitchOAuthProvider::factory(),
-      yandex::YandexOAuthProvider::factory(),
+      discord::Discord::factory(),
+      gitlab::Gitlab::factory(),
+      github::Github::factory(),
+      google::Google::factory(),
+      facebook::Facebook::factory(),
+      microsoft::Microsoft::factory(),
+      twitch::Twitch::factory(),
+      yandex::Yandex::factory(),
     ]
   });
 

@@ -1,21 +1,27 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::config::proto::OAuthProviderId;
 
-pub(crate) struct GitlabOAuthProvider {
-  client_id: String,
-  client_secret: String,
+pub(crate) struct Gitlab;
+
+// https://docs.gitlab.com/ee/api/users.html#for-user
+#[derive(Default, Deserialize, Debug)]
+pub(crate) struct GitlabUser {
+  id: i64,
+  // name: String,
+  username: Option<String>,
+  email: String,
+  avatar_url: Option<String>,
+  state: String,
 }
 
-impl GitlabOAuthProvider {
+#[async_trait]
+impl SocialSpec for Gitlab {
+  const ID: OAuthProviderId = OAuthProviderId::Gitlab;
   const NAME: &'static str = "gitlab";
   const DISPLAY_NAME: &'static str = "GitLab";
 
@@ -23,93 +29,11 @@ impl GitlabOAuthProvider {
   const TOKEN_URL: &'static str = "https://gitlab.com/oauth/token";
   const USER_API_URL: &'static str = "https://gitlab.com/api/v4/user";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("GitLab client id".to_string()));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "GitLab client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &["read_user"];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
-  }
+  type User = GitlabUser;
 
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Gitlab,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
-}
-
-#[async_trait]
-impl OAuthProvider for GitlabOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Gitlab
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
-
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GitlabOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(GitlabOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self) -> Vec<&str> {
-    return vec!["read_user"];
-  }
-
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    // https://docs.gitlab.com/ee/api/users.html#for-user
-    #[derive(Default, Deserialize, Debug)]
-    struct GitlabUser {
-      id: i64,
-      // name: String,
-      username: Option<String>,
-      email: String,
-      avatar_url: Option<String>,
-      state: String,
-    }
-
-    let user = response
-      .json::<GitlabUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
+  async fn map_user(_api: &UserApi<'_>, user: GitlabUser) -> Result<OAuthUser, AuthError> {
     let verified = user.state == "active";
     if !verified {
       return Err(AuthError::Unauthorized);
@@ -117,11 +41,47 @@ impl OAuthProvider for GitlabOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.id.to_string(),
-      provider_id: OAuthProviderId::Gitlab,
+      provider_id: Self::ID,
       email: Some(user.email),
       username: user.username,
       verified,
       avatar: user.avatar_url,
     });
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::auth::oauth::providers::social::resolve_user;
+
+  #[tokio::test]
+  async fn test_gitlab_user_mapping() {
+    let user = resolve_user::<Gitlab>(serde_json::json!({
+      "id": 42,
+      "username": "john_smith",
+      "email": "john@example.com",
+      "avatar_url": "https://gitlab.com/uploads/user/avatar/42/index.jpg",
+      "state": "active",
+    }))
+    .await
+    .unwrap();
+
+    // GitLab ids are numeric, ours are strings.
+    assert_eq!(user.provider_user_id, "42");
+    assert_eq!(user.username.as_deref(), Some("john_smith"));
+    assert!(user.verified);
+  }
+
+  #[tokio::test]
+  async fn test_gitlab_rejects_inactive_user() {
+    let result = resolve_user::<Gitlab>(serde_json::json!({
+      "id": 42,
+      "email": "john@example.com",
+      "state": "blocked",
+    }))
+    .await;
+
+    assert!(matches!(result, Err(AuthError::Unauthorized)), "{result:?}");
   }
 }

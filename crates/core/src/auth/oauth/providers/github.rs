@@ -1,21 +1,36 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::config::proto::OAuthProviderId;
 
-pub(crate) struct GithubOAuthProvider {
-  client_id: String,
-  client_secret: String,
+pub(crate) struct Github;
+
+//  Checkout available fields on: https://docs.github.com/en/rest/users/users?apiVersion=2026-03-10
+#[derive(Default, Deserialize, Debug)]
+pub(crate) struct GithubUser {
+  id: i64,
+  login: Option<String>,
+  // name: String,
+  email: Option<String>,
+  // verified: bool,
+  avatar_url: Option<String>,
 }
 
-impl GithubOAuthProvider {
+#[derive(Default, Deserialize, Debug)]
+struct GithubEmail {
+  email: String,
+  primary: bool,
+  verified: bool,
+  // NOTE: null | "private" | "public"
+  // visibility: Option<String>,
+}
+
+#[async_trait]
+impl SocialSpec for Github {
+  const ID: OAuthProviderId = OAuthProviderId::Github;
   const NAME: &'static str = "github";
   const DISPLAY_NAME: &'static str = "Github";
 
@@ -24,96 +39,16 @@ impl GithubOAuthProvider {
   // const DEVICE_AUTH_URL: &'static str = "https://github.com/login/device/code";
   const USER_API_URL: &'static str = "https://api.github.com/user";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Github client id".to_string()));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Github client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &["read:user", "user:email"];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
+  type User = GithubUser;
+
+  fn user_api_headers(_client_id: &str) -> Vec<(&'static str, String)> {
+    // Github rejects requests without a user agent.
+    return vec![("User-Agent", "TrailBase".to_string())];
   }
 
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Github,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
-}
-
-#[async_trait]
-impl OAuthProvider for GithubOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Github
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
-
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GithubOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(GithubOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self) -> Vec<&str> {
-    return vec!["read:user", "user:email"];
-  }
-
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    //  Checkout available fields on: https://docs.github.com/en/rest/users/users?apiVersion=2026-03-10
-    #[derive(Default, Deserialize, Debug)]
-    struct GithubUser {
-      id: i64,
-      login: Option<String>,
-      // name: String,
-      email: Option<String>,
-      // verified: bool,
-      avatar_url: Option<String>,
-    }
-
-    let client = reqwest::Client::new();
-    let response = client
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .header(axum::http::header::USER_AGENT, "TrailBase")
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<GithubUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
+  async fn map_user(api: &UserApi<'_>, user: GithubUser) -> Result<OAuthUser, AuthError> {
     // Users can set the "Keep my email private" option, in which case the user api will return an
     // empty email and we'll have to call the dedicated `/emails` endpoint.
     let email = if let Some(email) = user.email
@@ -121,28 +56,9 @@ impl OAuthProvider for GithubOAuthProvider {
     {
       email
     } else {
-      #[allow(non_snake_case)]
-      #[derive(Default, Deserialize, Debug)]
-      struct GithubEmail {
-        email: String,
-        primary: bool,
-        verified: bool,
-        // NOTE: null | "private" | "public"
-        // visibility: Option<String>,
-      }
-
-      let email_response = client
-        .get(format!("{}/emails", Self::USER_API_URL))
-        .bearer_auth(token_response.access_token().secret())
-        .header(axum::http::header::USER_AGENT, "TrailBase")
-        .send()
-        .await
-        .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-      let emails: Vec<GithubEmail> = email_response
-        .json()
-        .await
-        .map_err(|err| AuthError::FailedDependency(err.into()))?;
+      let emails: Vec<GithubEmail> = api
+        .get_json(&format!("{}/emails", api.user_api_url()))
+        .await?;
 
       let Some(primary) = emails
         .into_iter()
@@ -156,11 +72,86 @@ impl OAuthProvider for GithubOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.id.to_string(),
-      provider_id: OAuthProviderId::Github,
+      provider_id: Self::ID,
       email: Some(email),
       username: user.login,
       verified: true,
       avatar: user.avatar_url,
     });
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use axum::Json;
+  use axum::routing::{Router, get};
+
+  use super::*;
+  use crate::auth::oauth::providers::social::{
+    USER_API_TEST_PATH, resolve_user, resolve_user_against,
+  };
+
+  #[tokio::test]
+  async fn test_github_user_mapping() {
+    let user = resolve_user::<Github>(serde_json::json!({
+      "id": 1234,
+      "login": "octocat",
+      "email": "octocat@github.com",
+      "avatar_url": "https://github.com/images/octocat.gif",
+    }))
+    .await
+    .unwrap();
+
+    // Github ids are numeric, ours are strings.
+    assert_eq!(user.provider_user_id, "1234");
+    assert_eq!(user.email.as_deref(), Some("octocat@github.com"));
+    assert_eq!(user.username.as_deref(), Some("octocat"));
+  }
+
+  /// Users with "Keep my email private" force a second call to `/emails`, out of which only the
+  /// verified primary address may be used.
+  #[tokio::test]
+  async fn test_github_falls_back_to_email_endpoint() {
+    for private_email in [serde_json::Value::Null, "".into()] {
+      let user = resolve_user_against::<Github>(github_routes(
+        serde_json::json!({
+          "id": 1234,
+          "login": "octocat",
+          "email": private_email,
+        }),
+        serde_json::json!([
+          { "email": "unverified@github.com", "primary": true, "verified": false },
+          { "email": "secondary@github.com", "primary": false, "verified": true },
+          { "email": "primary@github.com", "primary": true, "verified": true },
+        ]),
+      ))
+      .await
+      .unwrap();
+
+      assert_eq!(user.email.as_deref(), Some("primary@github.com"));
+    }
+  }
+
+  #[tokio::test]
+  async fn test_github_without_any_usable_email() {
+    let result = resolve_user_against::<Github>(github_routes(
+      serde_json::json!({ "id": 1234, "login": "octocat" }),
+      serde_json::json!([{ "email": "a@github.com", "primary": true, "verified": false }]),
+    ))
+    .await;
+
+    assert!(
+      matches!(result, Err(AuthError::FailedDependency(_))),
+      "{result:?}"
+    );
+  }
+
+  fn github_routes(user: serde_json::Value, emails: serde_json::Value) -> Router {
+    return Router::new()
+      .route(USER_API_TEST_PATH, get(|| async move { Json(user) }))
+      .route(
+        &format!("{USER_API_TEST_PATH}/emails"),
+        get(|| async move { Json(emails) }),
+      );
   }
 }

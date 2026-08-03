@@ -1,14 +1,12 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::providers::social::{SocialSpec, UserApi};
+use crate::config::proto::OAuthProviderId;
+
+pub(crate) struct Facebook;
 
 #[derive(Default, Deserialize, Debug)]
 struct FacebookUserPictureData {
@@ -21,19 +19,16 @@ struct FacebookUserPicture {
 }
 
 #[derive(Default, Deserialize, Debug)]
-struct FacebookUser {
+pub(crate) struct FacebookUser {
   id: String,
   email: String,
   // name: Option<String>,
   picture: Option<FacebookUserPicture>,
 }
 
-pub(crate) struct FacebookOAuthProvider {
-  client_id: String,
-  client_secret: String,
-}
-
-impl FacebookOAuthProvider {
+#[async_trait]
+impl SocialSpec for Facebook {
+  const ID: OAuthProviderId = OAuthProviderId::Facebook;
   const NAME: &'static str = "facebook";
   const DISPLAY_NAME: &'static str = "Facebook";
 
@@ -42,92 +37,54 @@ impl FacebookOAuthProvider {
   const USER_API_URL: &'static str =
     "https://graph.facebook.com/me?fields=name,email,picture.type(large)";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Facebook client id".to_string(),
-      ));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Facebook client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &["email"];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
-  }
+  type User = FacebookUser;
 
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Facebook,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
-}
-
-#[async_trait]
-impl OAuthProvider for FacebookOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Facebook
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
-
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(FacebookOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(FacebookOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self) -> Vec<&str> {
-    return vec!["email"];
-  }
-
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<FacebookUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
+  async fn map_user(_api: &UserApi<'_>, user: FacebookUser) -> Result<OAuthUser, AuthError> {
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Facebook,
+      provider_id: Self::ID,
       email: Some(user.email),
       username: None,
       verified: true,
       avatar: user.picture.map(|p| p.data.url),
     });
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::auth::oauth::providers::social::resolve_user;
+
+  #[tokio::test]
+  async fn test_facebook_user_mapping() {
+    let user = resolve_user::<Facebook>(serde_json::json!({
+      "id": "1234",
+      "email": "user@example.com",
+      "picture": { "data": { "url": "https://scontent.xx.fbcdn.net/avatar" } },
+    }))
+    .await
+    .unwrap();
+
+    assert_eq!(user.email.as_deref(), Some("user@example.com"));
+    // The avatar is nested two levels deep in Facebook's response.
+    assert_eq!(
+      user.avatar.as_deref(),
+      Some("https://scontent.xx.fbcdn.net/avatar")
+    );
+  }
+
+  #[tokio::test]
+  async fn test_facebook_user_without_picture() {
+    let user = resolve_user::<Facebook>(serde_json::json!({
+      "id": "1234",
+      "email": "user@example.com",
+    }))
+    .await
+    .unwrap();
+
+    assert_eq!(user.avatar, None);
   }
 }
