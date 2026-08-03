@@ -87,7 +87,7 @@ impl OAuthProvider for MicrosoftOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["User.Read"];
   }
 
@@ -113,7 +113,7 @@ impl OAuthProvider for MicrosoftOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Microsoft,
-      email: user.mail,
+      email: Some(user.mail),
       // username: Some(user.displayName),
       username: None,
       verified: true,

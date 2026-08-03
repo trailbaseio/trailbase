@@ -19,9 +19,16 @@ pub struct OidcProvider {
   auth_url: String,
   token_url: String,
   user_api_url: String,
+  scopes: Vec<String>,
 }
 
 impl OidcProvider {
+  /// Scopes requested when the config doesn't override them.
+  ///
+  /// NOTE: `openid` is mandated by the spec, `email` and `profile` merely back the claims we map
+  /// onto our user model below. Providers that don't offer the latter need `scopes` configured.
+  const DEFAULT_SCOPES: [&'static str; 3] = ["openid", "email", "profile"];
+
   pub fn factory(index: u64) -> OAuthProviderFactory {
     let (id, factory_name, factory_display_name) = match index {
       0 => (OAuthProviderId::Oidc0, "oidc0", "OpenID Connect"),
@@ -57,6 +64,7 @@ impl OidcProvider {
           auth_url,
           token_url,
           user_api_url,
+          scopes: config.scopes.clone(),
         }))
       }),
     }
@@ -67,9 +75,11 @@ impl OidcProvider {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct OidcUser {
   pub sub: String,
-  pub email: String,
+  /// Requires the `email` scope. Absent for providers that don't offer it.
+  pub email: Option<String>,
   pub email_verified: Option<bool>,
 
+  /// Requires the `profile` scope.
   pub preferred_username: Option<String>,
   // pub name: Option<String>,
   pub picture: Option<String>,
@@ -96,8 +106,11 @@ impl OAuthProvider for OidcProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["openid", "email", "profile"];
+  fn oauth_scopes(&self) -> Vec<&str> {
+    if self.scopes.is_empty() {
+      return Self::DEFAULT_SCOPES.to_vec();
+    }
+    return self.scopes.iter().map(String::as_str).collect();
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

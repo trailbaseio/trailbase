@@ -77,7 +77,7 @@ impl OAuthProvider for DiscordOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["identify", "email"];
   }
 
@@ -132,7 +132,7 @@ impl OAuthProvider for DiscordOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Discord,
-      email: user.email,
+      email: Some(user.email),
       username: user.username,
       verified: user.verified,
       avatar,

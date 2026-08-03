@@ -83,7 +83,7 @@ impl OAuthProvider for TwitchOAuthProvider {
     return oauth2::AuthType::RequestBody;
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["user:read:email"];
   }
 
@@ -153,7 +153,7 @@ impl OAuthProvider for TwitchOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Twitch,
-      email: user.email,
+      email: Some(user.email),
       username: user.login,
       verified: true,
       avatar: user.profile_image_url,

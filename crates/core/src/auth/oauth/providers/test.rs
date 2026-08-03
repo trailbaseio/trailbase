@@ -68,7 +68,7 @@ impl OAuthProvider for TestOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["identity", "email", "preferences"];
   }
 
@@ -94,7 +94,7 @@ impl OAuthProvider for TestOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Test,
-      email: user.email,
+      email: Some(user.email),
       username: None,
       verified: user.verified,
       avatar: None,

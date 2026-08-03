@@ -77,7 +77,7 @@ impl OAuthProvider for GoogleOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec![
       "https://www.googleapis.com/auth/userinfo.profile",
       "https://www.googleapis.com/auth/userinfo.email",
@@ -118,7 +118,7 @@ impl OAuthProvider for GoogleOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Google,
-      email: user.email,
+      email: Some(user.email),
       username: None,
       verified: user.verified_email,
       avatar: user.picture,

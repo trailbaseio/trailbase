@@ -78,7 +78,7 @@ impl OAuthProvider for GithubOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["read:user", "user:email"];
   }
 
@@ -157,7 +157,7 @@ impl OAuthProvider for GithubOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id.to_string(),
       provider_id: OAuthProviderId::Github,
-      email,
+      email: Some(email),
       username: user.login,
       verified: true,
       avatar: user.avatar_url,

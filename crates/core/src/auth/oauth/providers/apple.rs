@@ -137,7 +137,7 @@ impl OAuthProvider for AppleOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["name", "email"];
   }
 
@@ -155,7 +155,7 @@ impl OAuthProvider for AppleOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: apple_id_token.sub,
       provider_id: OAuthProviderId::Apple,
-      email,
+      email: Some(email),
       username: None,
       verified: apple_id_token.email_verified.is_some_and(|v| v == "true"),
       avatar: None,

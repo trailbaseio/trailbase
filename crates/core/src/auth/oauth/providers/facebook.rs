@@ -98,7 +98,7 @@ impl OAuthProvider for FacebookOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["email"];
   }
 
@@ -124,7 +124,7 @@ impl OAuthProvider for FacebookOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Facebook,
-      email: user.email,
+      email: Some(user.email),
       username: None,
       verified: true,
       avatar: user.picture.map(|p| p.data.url),

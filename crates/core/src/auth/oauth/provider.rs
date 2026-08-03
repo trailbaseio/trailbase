@@ -46,7 +46,9 @@ pub struct OAuthUser {
   pub provider_user_id: String,
   pub provider_id: OAuthProviderId,
 
-  pub email: String,
+  /// Absent when the provider wasn't asked for, or doesn't expose, an email address. Requires a
+  /// username-based `UserIdentifier`, see `create_user_for_external_provider`.
+  pub email: Option<String>,
   pub username: Option<String>,
   pub verified: bool,
 
@@ -113,7 +115,11 @@ pub trait OAuthProvider {
     return Ok(client);
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str>;
+  /// Scopes to request from the provider.
+  ///
+  /// NOTE: Tied to `&self`'s lifetime rather than `'static`, so providers can return scopes
+  /// that were read from the config.
+  fn oauth_scopes(&self) -> Vec<&str>;
 
   async fn get_token(
     &self,

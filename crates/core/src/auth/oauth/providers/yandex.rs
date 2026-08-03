@@ -79,7 +79,7 @@ impl OAuthProvider for YandexOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["login:email", "login:avatar", "login:info"];
   }
 
@@ -127,7 +127,7 @@ impl OAuthProvider for YandexOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Yandex,
-      email: user.default_email,
+      email: Some(user.default_email),
       username: user.login,
       verified: true,
       avatar,
