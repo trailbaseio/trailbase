@@ -1,3 +1,19 @@
+//! External OAuth providers: which ones exist, and the pieces they're built from.
+//!
+//! - [`interface`]: what a provider must implement, i.e. the [`OAuthProvider`] trait.
+//! - [`client`]: how to talk to one, i.e. credentials, endpoints and the user-info request.
+//! - [`social`]: the declarative shortcut all but three providers take.
+//! - One module per provider, plus the registry at the bottom of this file.
+
+/// What a provider must implement.
+pub(crate) mod interface;
+
+/// Credentials, endpoints and the authenticated user-info request.
+pub(crate) mod client;
+
+/// Declarative provider descriptions, used by all but Apple, OIDC and the test provider.
+mod social;
+
 mod apple;
 mod discord;
 mod facebook;
@@ -6,7 +22,6 @@ mod gitlab;
 mod google;
 mod microsoft;
 mod oidc;
-mod social;
 mod twitch;
 mod yandex;
 

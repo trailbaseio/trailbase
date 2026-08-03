@@ -1,17 +1,15 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
+use crate::auth::oauth::providers::client::ProviderClient;
+use crate::auth::oauth::providers::interface::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 pub(crate) struct AppleOAuthProvider {
-  client_id: String,
-  client_secret: String,
+  client: ProviderClient,
 }
 
 #[allow(unused)]
@@ -54,18 +52,8 @@ impl AppleOAuthProvider {
   const TOKEN_URL: &str = "https://appleid.apple.com/auth/token";
 
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Apple client id".to_string()));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Apple client secret".to_string(),
-      ));
-    };
-
     return Ok(Self {
-      client_id,
-      client_secret,
+      client: ProviderClient::new(config, Self::DISPLAY_NAME, Self::AUTH_URL, Self::TOKEN_URL)?,
     });
   }
 
@@ -101,7 +89,7 @@ impl AppleOAuthProvider {
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
-    validation.set_audience(&[&self.client_id]);
+    validation.set_audience(&[self.client.client_id()]);
     validation.set_issuer(&["https://appleid.apple.com"]);
 
     let token_data = jsonwebtoken::decode::<AppleIdToken>(id_token, &decoding_key, &validation)
@@ -113,28 +101,15 @@ impl AppleOAuthProvider {
 
 #[async_trait]
 impl OAuthProvider for AppleOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
+  fn name(&self) -> &str {
+    return Self::NAME;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Apple
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+  fn display_name(&self) -> &str {
+    return Self::DISPLAY_NAME;
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(AppleOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(AppleOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
+    return Ok(self.client.settings());
   }
 
   fn oauth_scopes(&self) -> Vec<&str> {

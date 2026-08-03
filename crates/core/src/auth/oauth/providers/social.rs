@@ -1,12 +1,12 @@
 use async_trait::async_trait;
-use oauth2::{AuthType, TokenResponse as _};
+use oauth2::AuthType;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use std::marker::PhantomData;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
+use crate::auth::oauth::providers::client::{ProviderClient, UserApi};
+use crate::auth::oauth::providers::interface::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -87,47 +87,10 @@ pub(crate) struct DataEnvelope<T> {
   pub data: T,
 }
 
-/// Authenticated client for a provider's user-info API.
-pub(crate) struct UserApi<'a> {
-  client: reqwest::Client,
-  access_token: &'a str,
-  user_api_url: &'a str,
-  headers: Vec<(&'static str, String)>,
-}
-
-impl UserApi<'_> {
-  /// The provider's user-info endpoint, i.e. [`SocialSpec::USER_API_URL`] outside of tests.
-  ///
-  /// Providers making follow-up calls must derive them from this rather than the constant, so
-  /// tests can redirect them too.
-  pub(crate) fn user_api_url(&self) -> &str {
-    return self.user_api_url;
-  }
-
-  pub(crate) async fn get_json<T: DeserializeOwned>(&self, url: &str) -> Result<T, AuthError> {
-    let mut request = self.client.get(url).bearer_auth(self.access_token);
-    for (name, value) in &self.headers {
-      request = request.header(*name, value);
-    }
-
-    return request
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?
-      .json::<T>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()));
-  }
-}
-
 pub(crate) struct SocialProvider<S: SocialSpec> {
-  client_id: String,
-  client_secret: String,
+  client: ProviderClient,
 
-  // NOTE: Held rather than derived from `S` on every call, both to parse the URLs only once and so
-  // tests can point a provider at a fake server.
-  auth_url: Url,
-  token_url: Url,
+  // NOTE: A field rather than `S::USER_API_URL` so tests can point a provider at a fake server.
   user_api_url: String,
 
   spec: PhantomData<S>,
@@ -135,25 +98,8 @@ pub(crate) struct SocialProvider<S: SocialSpec> {
 
 impl<S: SocialSpec> SocialProvider<S> {
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing(format!(
-        "{} client id",
-        S::DISPLAY_NAME
-      )));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(format!(
-        "{} client secret",
-        S::DISPLAY_NAME
-      )));
-    };
-
     return Ok(Self {
-      client_id,
-      client_secret,
-      // NOTE: Infallible, the URLs are compile-time constants.
-      auth_url: Url::parse(S::AUTH_URL).expect("infallible"),
-      token_url: Url::parse(S::TOKEN_URL).expect("infallible"),
+      client: ProviderClient::new(config, S::DISPLAY_NAME, S::AUTH_URL, S::TOKEN_URL)?,
       user_api_url: S::USER_API_URL.to_string(),
       spec: PhantomData,
     });
@@ -173,13 +119,10 @@ impl<S: SocialSpec> SocialProvider<S> {
 
 #[async_trait]
 impl<S: SocialSpec> OAuthProvider for SocialProvider<S> {
-  fn name(&self) -> &'static str {
+  fn name(&self) -> &str {
     return S::NAME;
   }
-  fn provider(&self) -> OAuthProviderId {
-    return S::ID;
-  }
-  fn display_name(&self) -> &'static str {
+  fn display_name(&self) -> &str {
     return S::DISPLAY_NAME;
   }
   fn auth_type(&self) -> AuthType {
@@ -190,12 +133,7 @@ impl<S: SocialSpec> OAuthProvider for SocialProvider<S> {
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    return Ok(OAuthClientSettings {
-      auth_url: self.auth_url.clone(),
-      token_url: self.token_url.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
+    return Ok(self.client.settings());
   }
 
   fn recover_token_response(&self, body: &[u8]) -> Option<Result<TokenResponse, AuthError>> {
@@ -203,18 +141,11 @@ impl<S: SocialSpec> OAuthProvider for SocialProvider<S> {
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let api = UserApi {
-      client: reqwest::Client::new(),
-      access_token: token_response.access_token().secret(),
-      user_api_url: &self.user_api_url,
-      headers: S::user_api_headers(&self.client_id),
-    };
+    let api = UserApi::new(
+      token_response,
+      &self.user_api_url,
+      S::user_api_headers(self.client.client_id()),
+    )?;
 
     let user = S::map_user(&api, api.get_json::<S::User>(api.user_api_url()).await?).await?;
 
@@ -250,7 +181,7 @@ mod testing {
   use axum_test::{TestServer, TestServerConfig};
 
   use super::*;
-  use crate::auth::oauth::provider::ExtraTokenFields;
+  use crate::auth::oauth::providers::interface::ExtraTokenFields;
 
   /// Path the fake user-info endpoint is served under.
   pub(crate) const USER_API_TEST_PATH: &str = "/user";
@@ -267,11 +198,15 @@ mod testing {
       },
     );
 
+    let config = OAuthProviderConfig {
+      client_id: Some("client_id".to_string()),
+      client_secret: Some("client_secret".to_string()),
+      ..Default::default()
+    };
+
     let provider = SocialProvider::<S> {
-      client_id: "client_id".to_string(),
-      client_secret: "client_secret".to_string(),
-      auth_url: Url::parse(S::AUTH_URL).expect("infallible"),
-      token_url: Url::parse(S::TOKEN_URL).expect("infallible"),
+      client: ProviderClient::new(&config, S::DISPLAY_NAME, S::AUTH_URL, S::TOKEN_URL)
+        .expect("infallible"),
       user_api_url: server.server_url(USER_API_TEST_PATH).unwrap().to_string(),
       spec: PhantomData,
     };

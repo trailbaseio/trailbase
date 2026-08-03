@@ -2,8 +2,9 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::social::{DataEnvelope, ExternalUser, SocialSpec, UserApi};
+use crate::auth::oauth::providers::client::UserApi;
+use crate::auth::oauth::providers::interface::TokenResponse;
+use crate::auth::oauth::providers::social::{DataEnvelope, ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Twitch;

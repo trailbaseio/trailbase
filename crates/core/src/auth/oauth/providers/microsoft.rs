@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
+use crate::auth::oauth::providers::client::UserApi;
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Microsoft;

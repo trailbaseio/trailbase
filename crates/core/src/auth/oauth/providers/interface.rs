@@ -66,11 +66,10 @@ pub struct OAuthClientSettings {
 /// Common trait for OAuth providers like Discord, etc.
 #[async_trait]
 pub trait OAuthProvider {
-  #[allow(unused)]
-  fn provider(&self) -> OAuthProviderId;
-
+  /// Config key and URL path segment, i.e. what users authenticate against.
   fn name(&self) -> &str;
 
+  /// Human-readable name, shown in the admin UI and returned by the providers API.
   fn display_name(&self) -> &str;
 
   fn auth_type(&self) -> AuthType {

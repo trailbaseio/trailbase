@@ -1,4 +1,3 @@
-pub(crate) mod provider;
 pub(crate) mod providers;
 
 mod callback;
@@ -14,7 +13,7 @@ use axum::Router;
 use axum::routing::get;
 use utoipa::OpenApi;
 
-pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
+pub(crate) use providers::interface::{OAuthClientSettings, OAuthProvider, OAuthUser};
 pub(crate) use reqwest_client::ReqwestClient;
 
 use crate::AppState;

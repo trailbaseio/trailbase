@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec, UserApi};
+use crate::auth::oauth::providers::client::UserApi;
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
 pub(crate) struct Github;
@@ -31,7 +32,7 @@ struct GithubEmail {
 impl SocialSpec for Github {
   const ID: OAuthProviderId = OAuthProviderId::Github;
   const NAME: &'static str = "github";
-  const DISPLAY_NAME: &'static str = "Github";
+  const DISPLAY_NAME: &'static str = "GitHub";
 
   const AUTH_URL: &'static str = "https://github.com/login/oauth/authorize";
   const TOKEN_URL: &'static str = "https://github.com/login/oauth/access_token";

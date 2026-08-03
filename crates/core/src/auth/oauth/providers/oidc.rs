@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use oauth2::TokenResponse as _;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
+use crate::auth::oauth::providers::client::UserApi;
+use crate::auth::oauth::providers::interface::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -90,9 +90,6 @@ impl OAuthProvider for OidcProvider {
   fn name(&self) -> &str {
     return &self.name;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Oidc0
-  }
   fn display_name(&self) -> &str {
     return &self.display_name;
   }
@@ -114,23 +111,8 @@ impl OAuthProvider for OidcProvider {
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(&self.user_api_url)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<OidcUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    let api = UserApi::new(token_response, &self.user_api_url, vec![])?;
+    let user = api.get_json::<OidcUser>(api.user_api_url()).await?;
 
     return Ok(OAuthUser {
       provider_user_id: user.sub,
