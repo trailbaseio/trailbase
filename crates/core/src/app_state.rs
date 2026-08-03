@@ -1003,9 +1003,9 @@ async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
           format!(
             r#"
               INSERT INTO {USER_TABLE}
-                (email, username, password_hash, verified, admin)
+                (email, username, password_hash, admin)
               VALUES
-                ($1, $2, $3, TRUE, TRUE)
+                ($1, $2, $3, TRUE)
             "#
           ),
           trailbase_sqlite::params!(email.to_string(), username.to_string(), hashed_password),

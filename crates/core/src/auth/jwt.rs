@@ -76,7 +76,7 @@ pub struct AuthTokenClaims {
 
 impl AuthTokenClaims {
   pub(crate) fn new(db_user: &DbUser, auth_token_ttl: &chrono::Duration) -> Self {
-    assert!(db_user.email.is_none() || db_user.verified);
+    assert!(db_user.unverified_email.is_none());
 
     let now = chrono::Utc::now();
     return AuthTokenClaims {
@@ -374,7 +374,6 @@ mod tests {
     let db_user = DbUser {
       id: uuid::Uuid::new_v4().into_bytes(),
       email: Some("foo@bar.com".to_string()),
-      verified: true,
       admin: false,
       ..Default::default()
     };

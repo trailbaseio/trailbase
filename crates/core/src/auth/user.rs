@@ -14,9 +14,9 @@ use crate::{app_state::AppState, util::b64_to_uuid};
 pub(crate) struct DbUser {
   pub id: [u8; 16],
   pub email: Option<String>,
+  pub unverified_email: Option<String>,
   pub username: Option<String>,
   pub password_hash: Option<String>,
-  pub verified: bool,
   pub admin: bool,
 
   // TOTP secret for multi-factor.
@@ -52,9 +52,9 @@ impl DbUser {
       ))
       .into_bytes(),
       email: Some(email.to_string()),
+      unverified_email: None,
       username: None,
       password_hash: Some(crate::auth::password::hash_password(password).unwrap()),
-      verified: true,
       admin: false,
       totp_secret: None,
       created: timestamp as i64,

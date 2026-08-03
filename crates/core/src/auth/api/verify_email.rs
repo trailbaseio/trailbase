@@ -111,9 +111,10 @@ pub(crate) async fn verify_email_handler(
 
   const UPDATE_CODE_QUERY: &str = formatcp!(
     "\
-      UPDATE \"{USER_TABLE}\" \
-      SET verified = TRUE \
-      WHERE email = $1 \
+      UPDATE \"{USER_TABLE}\" SET
+        email = $1, \
+        unverified_email = NULL
+      WHERE unverified_email = $1 \
     "
   );
 

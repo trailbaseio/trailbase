@@ -50,9 +50,9 @@ pub async fn create_user_handler(
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
       INSERT INTO \"{USER_TABLE}\" \
-        (email, password_hash, verified, admin) \
+        (email, unverified_email, password_hash, admin) \
       VALUES \
-        (:email, :password_hash, :verified, :admin) \
+        (:email, :unverified_email, :password_hash, :admin) \
       RETURNING * \
     ",
   );
@@ -62,9 +62,17 @@ pub async fn create_user_handler(
     .write_query_value::<DbUser>(
       INSERT_USER_QUERY,
       named_params! {
-        ":email": normalized_email,
+        ":email": if request.verified {
+          Some(normalized_email.clone())
+          } else {
+              None
+          },
+        ":unverified_email": if request.verified {
+              None
+          } else {
+          Some(normalized_email)
+          },
         ":password_hash": hashed_password,
-        ":verified": request.verified,
         ":admin": request.admin,
       },
     )

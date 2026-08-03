@@ -273,7 +273,7 @@ async fn get_or_create_user(
     create_user_for_external_provider(state.user_conn(), user_identifier, oauth_user).await?;
 
   // This should never happen. We only ever create a new local user here for verified users above.
-  if !db_user.verified {
+  if !db_user.unverified_email.is_none() {
     return Err(AuthError::Internal(
       "OAuth users are expected to be verified".into(),
     ));
@@ -347,9 +347,9 @@ async fn create_user_for_external_provider(
   const QUERY: &str = formatcp!(
     "\
       INSERT INTO \"{USER_TABLE}\" ( \
-        provider_id, provider_user_id, verified, email, username, provider_avatar_url \
+        provider_id, provider_user_id, email, username, provider_avatar_url \
       ) VALUES ( \
-        :provider_id, :provider_user_id, :verified, :email, :username, :avatar \
+        :provider_id, :provider_user_id, :email, :username, :avatar \
       ) RETURNING * \
     "
   );
@@ -360,7 +360,6 @@ async fn create_user_for_external_provider(
       named_params! {
           ":provider_id": provider_id as i64,
           ":provider_user_id": provider_user_id,
-          ":verified": verified as i64,
           ":email": email,
           ":username": username,
           ":avatar": avatar,
