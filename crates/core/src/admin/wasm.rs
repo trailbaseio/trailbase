@@ -160,6 +160,12 @@ pub async fn install_wasm_component_handler(
   State(state): State<AppState>,
   Json(request): Json<WasmComponentRequest>,
 ) -> Result<(), Error> {
+  if state.demo_mode() {
+    return Err(Error::Precondition(
+      "Managing WASM components disallowed in demo".into(),
+    ));
+  }
+
   let id = match request {
     WasmComponentRequest::Path(_) => {
       return Err(Error::Precondition("repo id required".into()));
@@ -193,6 +199,12 @@ pub async fn uninstall_wasm_component_handler(
   State(state): State<AppState>,
   Json(request): Json<WasmComponentRequest>,
 ) -> Result<(), Error> {
+  if state.demo_mode() {
+    return Err(Error::Precondition(
+      "Managing WASM components disallowed in demo".into(),
+    ));
+  }
+
   let paths: Vec<PathBuf> = match request {
     WasmComponentRequest::Path(p) => vec![PathBuf::from(p)],
     WasmComponentRequest::RepoId(id) => {

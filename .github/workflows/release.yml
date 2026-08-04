@@ -316,4 +316,3 @@ jobs:
           binary-path: target/${{ env.RUST_TARGET }}/release/trailbase_tetris_component.wasm
           package-name: trailbase-tetris-component
           archive-name: trailbase_${{  github.ref_name }}_wasm_tetris.zip
-

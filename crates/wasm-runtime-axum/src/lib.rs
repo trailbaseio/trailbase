@@ -158,16 +158,16 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   ) = HttpStore::initialize(runtime, InitArgs { version }).await?;
 
   // Validate manifest.
-  if let Some(ref metadata) = metadata {
-    if let Some(ref admin_ui_path) = metadata.admin_ui_path {
-      url::Url::parse("https://trailbase.io")
-        .expect("static")
-        .join(admin_ui_path)
-        .map_err(|err| {
-          log::error!("expected path, got: {admin_ui_path}");
-          return err;
-        })?;
-    }
+  if let Some(ref metadata) = metadata
+    && let Some(ref admin_ui_path) = metadata.admin_ui_path
+  {
+    url::Url::parse("https://trailbase.io")
+      .expect("static")
+      .join(admin_ui_path)
+      .map_err(|err| {
+        log::error!("expected path, got: {admin_ui_path}");
+        return err;
+      })?;
   }
 
   let http_handlers = http_handlers.unwrap_or_default();
