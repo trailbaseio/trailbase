@@ -1,8 +1,6 @@
-use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::client::UserApi;
 use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
@@ -21,22 +19,11 @@ pub(crate) struct YandexUser {
   default_avatar_id: String,
 }
 
-#[async_trait]
-impl SocialSpec for Yandex {
-  const ID: OAuthProviderId = OAuthProviderId::Yandex;
-  const NAME: &'static str = "yandex";
-  const DISPLAY_NAME: &'static str = "Yandex";
+impl TryFrom<YandexUser> for ExternalUser {
+  type Error = AuthError;
 
-  const AUTH_URL: &'static str = "https://oauth.yandex.com/authorize";
-  const TOKEN_URL: &'static str = "https://oauth.yandex.com/token";
-  const USER_API_URL: &'static str = "https://login.yandex.ru/info";
-
-  const SCOPES: &'static [&'static str] = &["login:email", "login:avatar", "login:info"];
-
-  type User = YandexUser;
-
-  async fn map_user(_api: &UserApi<'_>, user: YandexUser) -> Result<ExternalUser, AuthError> {
-    return Ok(ExternalUser {
+  fn try_from(user: YandexUser) -> Result<Self, AuthError> {
+    return Ok(Self {
       provider_user_id: user.id,
       email: Some(user.default_email),
       username: user.login,
@@ -50,6 +37,20 @@ impl SocialSpec for Yandex {
       }),
     });
   }
+}
+
+impl SocialSpec for Yandex {
+  const ID: OAuthProviderId = OAuthProviderId::Yandex;
+  const NAME: &'static str = "yandex";
+  const DISPLAY_NAME: &'static str = "Yandex";
+
+  const AUTH_URL: &'static str = "https://oauth.yandex.com/authorize";
+  const TOKEN_URL: &'static str = "https://oauth.yandex.com/token";
+  const USER_API_URL: &'static str = "https://login.yandex.ru/info";
+
+  const SCOPES: &'static [&'static str] = &["login:email", "login:avatar", "login:info"];
+
+  type User = YandexUser;
 }
 
 #[cfg(test)]

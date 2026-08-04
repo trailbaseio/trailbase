@@ -38,7 +38,10 @@ pub(crate) trait SocialSpec: Send + Sync + 'static {
   const AUTH_TYPE: AuthType = AuthType::BasicAuth;
 
   /// The provider's user-info response.
-  type User: DeserializeOwned + Send;
+  ///
+  /// Its `TryFrom<Self::User> for ExternalUser` impl is where the mapping onto our user model
+  /// lives, next to the struct describing the wire format rather than out here in the metadata.
+  type User: DeserializeOwned + Send + TryInto<ExternalUser, Error = AuthError>;
 
   /// Headers the user-info request needs on top of the bearer token.
   fn user_api_headers(_client_id: &str) -> Vec<(&'static str, String)> {
@@ -51,11 +54,13 @@ pub(crate) trait SocialSpec: Send + Sync + 'static {
     return None;
   }
 
-  /// Maps the provider's user onto [`ExternalUser`].
+  /// Resolves the authenticated user.
   ///
-  /// `api` is only needed by the few providers that have to make follow-up calls, e.g. Github's
-  /// separate email endpoint.
-  async fn map_user(api: &UserApi<'_>, user: Self::User) -> Result<ExternalUser, AuthError>;
+  /// Defaults to [`Self::User`]'s own conversion. Override only when the mapping needs a further
+  /// request, as Github's does for users who keep their address private.
+  async fn map_user(_api: &UserApi<'_>, user: Self::User) -> Result<ExternalUser, AuthError> {
+    return user.try_into();
+  }
 
   fn factory() -> OAuthProviderFactory
   where
@@ -65,7 +70,10 @@ pub(crate) trait SocialSpec: Send + Sync + 'static {
   }
 }
 
-/// What a [`SocialSpec`] pulls out of its provider's user-info response.
+/// Our user model, as far as an external provider can describe it.
+///
+/// Each provider's user-info struct converts into this via `TryFrom`, which is where you'll find
+/// the per-provider mapping.
 ///
 /// Narrower than [`OAuthUser`] on purpose: [`SocialProvider`] fills in the provider id, so a spec
 /// can't accidentally claim to be a different provider, and it turns an unverified user into

@@ -1,8 +1,6 @@
-use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::client::UserApi;
 use crate::auth::oauth::providers::social::{DataEnvelope, ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
@@ -21,7 +19,20 @@ pub(crate) struct FacebookUser {
   picture: Option<DataEnvelope<FacebookPicture>>,
 }
 
-#[async_trait]
+impl TryFrom<FacebookUser> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(user: FacebookUser) -> Result<Self, AuthError> {
+    return Ok(Self {
+      provider_user_id: user.id,
+      email: Some(user.email),
+      verified: true,
+      avatar: user.picture.map(|p| p.data.url),
+      ..Default::default()
+    });
+  }
+}
+
 impl SocialSpec for Facebook {
   const ID: OAuthProviderId = OAuthProviderId::Facebook;
   const NAME: &'static str = "facebook";
@@ -35,16 +46,6 @@ impl SocialSpec for Facebook {
   const SCOPES: &'static [&'static str] = &["email"];
 
   type User = FacebookUser;
-
-  async fn map_user(_api: &UserApi<'_>, user: FacebookUser) -> Result<ExternalUser, AuthError> {
-    return Ok(ExternalUser {
-      provider_user_id: user.id,
-      email: Some(user.email),
-      verified: true,
-      avatar: user.picture.map(|p| p.data.url),
-      ..Default::default()
-    });
-  }
 }
 
 #[cfg(test)]

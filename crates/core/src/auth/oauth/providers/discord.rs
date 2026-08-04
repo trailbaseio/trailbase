@@ -1,8 +1,6 @@
-use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::client::UserApi;
 use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
@@ -20,21 +18,10 @@ pub(crate) struct DiscordUser {
   avatar: Option<String>,
 }
 
-#[async_trait]
-impl SocialSpec for Discord {
-  const ID: OAuthProviderId = OAuthProviderId::Discord;
-  const NAME: &'static str = "discord";
-  const DISPLAY_NAME: &'static str = "Discord";
+impl TryFrom<DiscordUser> for ExternalUser {
+  type Error = AuthError;
 
-  const AUTH_URL: &'static str = "https://discord.com/oauth2/authorize";
-  const TOKEN_URL: &'static str = "https://discord.com/api/oauth2/token";
-  const USER_API_URL: &'static str = "https://discord.com/api/users/@me";
-
-  const SCOPES: &'static [&'static str] = &["identify", "email"];
-
-  type User = DiscordUser;
-
-  async fn map_user(_api: &UserApi<'_>, user: DiscordUser) -> Result<ExternalUser, AuthError> {
+  fn try_from(user: DiscordUser) -> Result<Self, AuthError> {
     // let username = match (user.discriminator, user.username) {
     //   (Some(discriminator), Some(username)) => Some(format!("{username}#{discriminator}")),
     //   (None, Some(username)) => Some(username.to_string()),
@@ -42,7 +29,7 @@ impl SocialSpec for Discord {
     //   (None, None) => None,
     // };
 
-    return Ok(ExternalUser {
+    return Ok(Self {
       // Discord only hands out the avatar's hash, the CDN URL is ours to build.
       avatar: user.avatar.map(|avatar| {
         format!(
@@ -56,6 +43,20 @@ impl SocialSpec for Discord {
       verified: user.verified,
     });
   }
+}
+
+impl SocialSpec for Discord {
+  const ID: OAuthProviderId = OAuthProviderId::Discord;
+  const NAME: &'static str = "discord";
+  const DISPLAY_NAME: &'static str = "Discord";
+
+  const AUTH_URL: &'static str = "https://discord.com/oauth2/authorize";
+  const TOKEN_URL: &'static str = "https://discord.com/api/oauth2/token";
+  const USER_API_URL: &'static str = "https://discord.com/api/users/@me";
+
+  const SCOPES: &'static [&'static str] = &["identify", "email"];
+
+  type User = DiscordUser;
 }
 
 #[cfg(test)]

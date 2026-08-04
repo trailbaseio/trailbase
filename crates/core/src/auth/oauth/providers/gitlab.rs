@@ -1,8 +1,6 @@
-use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::client::UserApi;
 use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
 
@@ -19,7 +17,22 @@ pub(crate) struct GitlabUser {
   state: String,
 }
 
-#[async_trait]
+impl TryFrom<GitlabUser> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(user: GitlabUser) -> Result<Self, AuthError> {
+    return Ok(Self {
+      provider_user_id: user.id.to_string(),
+      email: Some(user.email),
+      username: user.username,
+      // GitLab has no email-confirmation flag, but blocked and deactivated accounts must not
+      // be able to log in.
+      verified: user.state == "active",
+      avatar: user.avatar_url,
+    });
+  }
+}
+
 impl SocialSpec for Gitlab {
   const ID: OAuthProviderId = OAuthProviderId::Gitlab;
   const NAME: &'static str = "gitlab";
@@ -32,18 +45,6 @@ impl SocialSpec for Gitlab {
   const SCOPES: &'static [&'static str] = &["read_user"];
 
   type User = GitlabUser;
-
-  async fn map_user(_api: &UserApi<'_>, user: GitlabUser) -> Result<ExternalUser, AuthError> {
-    return Ok(ExternalUser {
-      provider_user_id: user.id.to_string(),
-      email: Some(user.email),
-      username: user.username,
-      // GitLab has no email-confirmation flag, but blocked and deactivated accounts must not
-      // be able to log in.
-      verified: user.state == "active",
-      avatar: user.avatar_url,
-    });
-  }
 }
 
 #[cfg(test)]

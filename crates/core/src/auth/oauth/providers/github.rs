@@ -19,6 +19,26 @@ pub(crate) struct GithubUser {
   avatar_url: Option<String>,
 }
 
+impl TryFrom<GithubUser> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(user: GithubUser) -> Result<Self, AuthError> {
+    // NOTE: Github blanks the email for users who keep it private, which `Github::map_user` fills
+    // in beforehand. Reaching here without one means neither endpoint had anything usable.
+    let Some(email) = user.email.filter(|email| !email.is_empty()) else {
+      return Err(AuthError::FailedDependency("missing email".into()));
+    };
+
+    return Ok(Self {
+      provider_user_id: user.id.to_string(),
+      email: Some(email),
+      username: user.login,
+      verified: true,
+      avatar: user.avatar_url,
+    });
+  }
+}
+
 #[derive(Default, Deserialize, Debug)]
 struct GithubEmail {
   email: String,
@@ -26,6 +46,23 @@ struct GithubEmail {
   verified: bool,
   // NOTE: null | "private" | "public"
   // visibility: Option<String>,
+}
+
+/// Github's dedicated email endpoint, needed for users who opted out of exposing their address on
+/// the user endpoint.
+async fn primary_email(api: &UserApi<'_>) -> Result<String, AuthError> {
+  let emails: Vec<GithubEmail> = api
+    .get_json(&format!("{}/emails", api.user_api_url()))
+    .await?;
+
+  let Some(primary) = emails
+    .into_iter()
+    .find(|cand| cand.verified && cand.primary)
+  else {
+    return Err(AuthError::FailedDependency("missing email".into()));
+  };
+
+  return Ok(primary.email);
 }
 
 #[async_trait]
@@ -48,35 +85,14 @@ impl SocialSpec for Github {
     return vec![("User-Agent", "TrailBase".to_string())];
   }
 
-  async fn map_user(api: &UserApi<'_>, user: GithubUser) -> Result<ExternalUser, AuthError> {
-    // Users can set the "Keep my email private" option, in which case the user api will return an
-    // empty email and we'll have to call the dedicated `/emails` endpoint.
-    let email = if let Some(email) = user.email
-      && !email.is_empty()
-    {
-      email
-    } else {
-      let emails: Vec<GithubEmail> = api
-        .get_json(&format!("{}/emails", api.user_api_url()))
-        .await?;
+  /// Overridden because users can set the "Keep my email private" option, in which case the user
+  /// api returns an empty email and we have to ask the dedicated `/emails` endpoint instead.
+  async fn map_user(api: &UserApi<'_>, mut user: GithubUser) -> Result<ExternalUser, AuthError> {
+    if user.email.as_deref().unwrap_or_default().is_empty() {
+      user.email = Some(primary_email(api).await?);
+    }
 
-      let Some(primary) = emails
-        .into_iter()
-        .find(|cand| cand.verified && cand.primary)
-      else {
-        return Err(AuthError::FailedDependency("missing email".into()));
-      };
-
-      primary.email
-    };
-
-    return Ok(ExternalUser {
-      provider_user_id: user.id.to_string(),
-      email: Some(email),
-      username: user.login,
-      verified: true,
-      avatar: user.avatar_url,
-    });
+    return user.try_into();
   }
 }
 

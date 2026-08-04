@@ -1,8 +1,6 @@
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthError;
-use crate::auth::oauth::providers::client::UserApi;
 use crate::auth::oauth::providers::interface::TokenResponse;
 use crate::auth::oauth::providers::social::{DataEnvelope, ExternalUser, SocialSpec};
 use crate::config::proto::OAuthProviderId;
@@ -20,7 +18,34 @@ pub(crate) struct TwitchUser {
   profile_image_url: Option<String>,
 }
 
-#[async_trait]
+impl TryFrom<DataEnvelope<Vec<TwitchUser>>> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(mut response: DataEnvelope<Vec<TwitchUser>>) -> Result<Self, AuthError> {
+    let user = match response.data.len() {
+      1 => response.data.swap_remove(0),
+      0 => {
+        return Err(AuthError::FailedDependency(
+          "Twitch user response had empty data".into(),
+        ));
+      }
+      n => {
+        return Err(AuthError::FailedDependency(
+          format!("Twitch user response contains {n} users").into(),
+        ));
+      }
+    };
+
+    return Ok(Self {
+      provider_user_id: user.id,
+      email: Some(user.email),
+      username: user.login,
+      verified: true,
+      avatar: user.profile_image_url,
+    });
+  }
+}
+
 impl SocialSpec for Twitch {
   const ID: OAuthProviderId = OAuthProviderId::Twitch;
   const NAME: &'static str = "twitch";
@@ -44,33 +69,6 @@ impl SocialSpec for Twitch {
     // Twitch returns non-RFC-6749 compliant body: scopes are an array rather than space delimited
     // list.
     return Some(parse_twitch_token_response(body));
-  }
-
-  async fn map_user(
-    _api: &UserApi<'_>,
-    mut response: DataEnvelope<Vec<TwitchUser>>,
-  ) -> Result<ExternalUser, AuthError> {
-    let user = match response.data.len() {
-      1 => response.data.swap_remove(0),
-      0 => {
-        return Err(AuthError::FailedDependency(
-          "Twitch user response had empty data".into(),
-        ));
-      }
-      n => {
-        return Err(AuthError::FailedDependency(
-          format!("Twitch user response contains {n} users").into(),
-        ));
-      }
-    };
-
-    return Ok(ExternalUser {
-      provider_user_id: user.id,
-      email: Some(user.email),
-      username: user.login,
-      verified: true,
-      avatar: user.profile_image_url,
-    });
   }
 }
 
