@@ -16,14 +16,15 @@ use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
-use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
+use crate::records::subscribe::event::{EventError, EventPayload, JsonEventPayload};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
 use crate::schema_metadata::ConnectionMetadata;
 
 pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
-type RecordAndEvent = (Arc<Record>, Arc<EventPayload>);
+
+type RecordAndEvent = (Option<Arc<Record>>, Arc<EventPayload>);
 
 impl<'a> crate::records::expand::Record<'a> for &'a Record {
   fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)> {
@@ -411,7 +412,7 @@ where
       // Cloning the event. It's important that we use a try_send here to not block other
       // subscriptions if a subscriber is slow and their channel fills up.
       if let Err(err) = sub.sender.try_send(EventCandidate {
-        record: Some(record.clone()),
+        record: record.clone(),
         payload: event.clone(),
         seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
       }) {
@@ -480,20 +481,34 @@ fn broker(
         .collect(),
     );
 
-    // FIXME: Error handling.
-    let json_obj = crate::records::expand::record_to_json_expand(
+    return match crate::records::expand::record_to_json_expand(
       &table_metadata.column_metadata,
       &*record,
       None,
-    )
-    .unwrap();
-    let payload = Arc::new(EventPayload::from(&match action {
-      RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
-      RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
-      RecordAction::Update => JsonEventPayload::Update { value: json_obj },
-    }));
+    ) {
+      Ok(json_obj) => {
+        let payload = Arc::new(EventPayload::from(&match action {
+          RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
+          RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
+          RecordAction::Update => JsonEventPayload::Update { value: json_obj },
+        }));
 
-    return (record, payload);
+        (Some(record), payload)
+      }
+      Err(err) => (
+        None,
+        Arc::new(EventPayload::from(&JsonEventPayload::Error {
+          value: EventError {
+            status: super::event::EventErrorStatus::Serialization,
+            message: if cfg!(debug_assertions) {
+              Some(err.to_string())
+            } else {
+              None
+            },
+          },
+        })),
+      ),
+    };
   });
 
   // First broker record subscriptions.

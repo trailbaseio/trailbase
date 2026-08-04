@@ -174,7 +174,7 @@ pub(crate) fn record_to_json_expand<'a>(
     .collect::<Result<_, JsonError>>();
 }
 
-pub(crate) fn strip_file_metadata_id(file_metadata: &mut serde_json::Value) {
+fn strip_file_metadata_id(file_metadata: &mut serde_json::Value) {
   if !cfg!(test) {
     file_metadata.as_object_mut().map(|o| o.remove("id"));
   }

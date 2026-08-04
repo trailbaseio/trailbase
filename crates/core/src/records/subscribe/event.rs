@@ -18,6 +18,8 @@ pub enum EventErrorStatus {
   /// additional losses that may happen between the TrailBase server and the client. This
   /// needs to be determined client-side based on event `seq` numbers.
   Loss = 2,
+  /// Failed ot serialize the change event to JSON.
+  Serialization = 3,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
