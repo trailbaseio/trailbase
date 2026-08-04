@@ -11,22 +11,29 @@ use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
-use trailbase_schema::json::value_to_flat_json;
-use trailbase_schema::metadata::ColumnMetadata;
 
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
-use crate::records::expand::{JsonError, strip_file_metadata_id};
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
 use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
-use crate::schema_metadata::{ConnectionMetadata, JsonColumnMetadata};
+use crate::schema_metadata::ConnectionMetadata;
 
 pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
 type RecordAndEvent = (Arc<Record>, Arc<EventPayload>);
+
+impl<'a> crate::records::expand::Record<'a> for &'a Record {
+  fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)> {
+    return self.get_index(index).map(|(name, v)| (name.as_str(), v));
+  }
+
+  fn len(&self) -> usize {
+    return (self as &Record).len();
+  }
+}
 
 /// Composite id uniquely identifying a subscription.
 ///
@@ -461,8 +468,10 @@ fn broker(
 
   // Build a JSON-encoded SQLite event (insert, update, delete).
   let record_and_event: Lazy<RecordAndEvent, _> = Lazy::new(move || {
-    // Join values with column names. We use a map rather than a Vec<(String, Value)> for filter
-    // access. Needs to be an Arc so it can be passed to sqlite worker across async boundary.
+    // Join values with column names. We need index access for `record_to_json_expanded` below and
+    // column-name-based access for filters, we thus use an IndexMap rather than a Vec<(String,
+    // Value)> a data type. Needs to be an Arc so it can be passed to sqlite worker across
+    // async boundary.
     let record: Arc<Record> = Arc::new(
       record
         .into_iter()
@@ -471,7 +480,13 @@ fn broker(
         .collect(),
     );
 
-    let json_obj = record_to_json_expand(&table_metadata.column_metadata, &record).unwrap();
+    // FIXME: Error handling.
+    let json_obj = crate::records::expand::record_to_json_expand(
+      &table_metadata.column_metadata,
+      &*record,
+      None,
+    )
+    .unwrap();
     let payload = Arc::new(EventPayload::from(&match action {
       RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
       RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
@@ -502,81 +517,6 @@ fn broker(
   if subscriptions.is_empty() {
     let _ = uninstall_hook(conn);
   }
-}
-
-// Mirrors crate::records::expand::row_to_json_expand.
-pub(crate) fn record_to_json_expand(
-  column_metadata: &[ColumnMetadata],
-  record: &Record,
-) -> Result<serde_json::value::Map<String, serde_json::Value>, JsonError> {
-  // Row may contain extra columns like trailing "_rowid_" or excluded columns.
-  if column_metadata.len() > record.len() {
-    return Err(JsonError::ColumnMismatch);
-  }
-
-  return Ok(
-    column_metadata
-      .iter()
-      .enumerate()
-      .filter(|(_i, meta)| !meta.column.name.starts_with("_"))
-      .map(
-        |(i, meta)| -> Result<(String, serde_json::Value), JsonError> {
-          let column = &meta.column;
-          let Some((name, value)) = record.get_index(i) else {
-            return Err(JsonError::ValueNotFound);
-          };
-
-          if column.name.as_str() != name {
-            return Err(JsonError::ColumnMismatch);
-          }
-
-          if matches!(value, trailbase_sqlite::Value::Null) {
-            return Ok((column.name.clone(), serde_json::Value::Null));
-          }
-
-          // De-serialize JSON.
-          if let trailbase_sqlite::Value::Text(str) = value
-            && let Some(ref json) = meta.json
-          {
-            return match json {
-              JsonColumnMetadata::SchemaName(x) if x == "std.FileUpload" => {
-                let mut file_metadata: serde_json::Value = serde_json::from_str(str)?;
-                strip_file_metadata_id(&mut file_metadata);
-                Ok((column.name.clone(), file_metadata))
-              }
-              JsonColumnMetadata::SchemaName(x) if x == "std.FileUploads" => {
-                let mut file_metadata_list: Vec<serde_json::Value> = serde_json::from_str(str)?;
-                for file_metadata in &mut file_metadata_list {
-                  strip_file_metadata_id(file_metadata);
-                }
-                Ok((
-                  column.name.clone(),
-                  serde_json::Value::Array(file_metadata_list),
-                ))
-              }
-              JsonColumnMetadata::SchemaName(_) | JsonColumnMetadata::Pattern(_) => {
-                Ok((column.name.clone(), serde_json::from_str(str)?))
-              }
-            };
-          }
-
-          // De-serialize WKB Geometry.
-          #[cfg(any(feature = "geos", feature = "geos-static"))]
-          if let trailbase_sqlite::Value::Blob(wkb) = value
-            && meta.is_geometry
-          {
-            let geometry = geos::Geometry::new_from_wkb(wkb)?;
-            let json_geometry: geos::geojson::Geometry = geometry.try_into()?;
-            return Ok((column.name.clone(), serde_json::to_value(json_geometry)?));
-          }
-
-          debug_assert!(!meta.is_geometry);
-
-          return Ok((column.name.clone(), value_to_flat_json(value)?));
-        },
-      )
-      .collect::<Result<_, JsonError>>()?,
-  );
 }
 
 static SUBSCRIPTION_COUNTER: AtomicI64 = AtomicI64::new(0);
