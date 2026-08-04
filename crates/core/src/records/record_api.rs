@@ -13,6 +13,7 @@ use crate::auth::user::User;
 use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
 use crate::constants::USER_TABLE;
 use crate::records::params::{LazyParams, Params};
+use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
 
@@ -577,7 +578,7 @@ impl RecordApi {
   #[inline]
   pub(crate) async fn check_record_level_read_access_for_subscriptions(
     &self,
-    record: &Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>,
+    record: &Arc<EventPayload>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -704,7 +705,7 @@ impl RecordApi {
 }
 
 struct SubscriptionAclParams {
-  params: Arc<indexmap::IndexMap<String, trailbase_sqlite::Value>>,
+  params: Arc<EventPayload>,
   user: Option<User>,
 }
 
@@ -713,10 +714,19 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    for (name, v) in self.params.iter() {
-      if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
-        stmt.bind_parameter(idx, v.into())?;
-      };
+    match *self.params {
+      EventPayload::Insert { ref record, .. }
+      | EventPayload::Update { ref record, .. }
+      | EventPayload::Delete { ref record, .. } => {
+        for (name, v) in record.iter() {
+          if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
+            stmt.bind_parameter(idx, v.into())?;
+          };
+        }
+      }
+      _ => {
+        return Err(trailbase_sqlite::Error::Other("not a change param".into()));
+      }
     }
 
     if let Some(user) = self.user

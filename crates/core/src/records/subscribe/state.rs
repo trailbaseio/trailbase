@@ -16,15 +16,11 @@ use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
-use crate::records::subscribe::event::{EventError, EventPayload, JsonEventPayload};
+use crate::records::subscribe::event::{EventError, EventPayload, Record};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
 use crate::schema_metadata::ConnectionMetadata;
-
-pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
-
-type RecordAndEvent = (Option<Arc<Record>>, Arc<EventPayload>);
 
 impl<'a> crate::records::expand::Record<'a> for &'a Record {
   fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)> {
@@ -134,9 +130,9 @@ pub struct Subscription {
 // Represents a change event that needs further filtering, e.g. ACLs.
 #[derive(Debug)]
 pub struct EventCandidate {
-  // Only present for Insert/Update/Delete event payloads.
-  pub record: Option<Arc<Record>>,
   pub payload: Arc<EventPayload>,
+  // Sequence number is counted by the central broker thread to detect event loss due to
+  // overflowing buffers.
   pub seq: i64,
 }
 
@@ -398,12 +394,12 @@ impl Drop for PerConnectionState {
 
 fn broker_subscriptions<F>(
   subs: &[Arc<Subscription>],
-  record_and_event: &Lazy<RecordAndEvent, F>,
+  payload: &Lazy<Arc<EventPayload>, F>,
 ) -> Vec<usize>
 where
-  F: FnOnce() -> RecordAndEvent,
+  F: FnOnce() -> Arc<EventPayload>,
 {
-  let (record, event) = Lazy::force(record_and_event);
+  let payload = Lazy::force(payload);
 
   return subs
     .iter()
@@ -412,8 +408,7 @@ where
       // Cloning the event. It's important that we use a try_send here to not block other
       // subscriptions if a subscriber is slow and their channel fills up.
       if let Err(err) = sub.sender.try_send(EventCandidate {
-        record: record.clone(),
-        payload: event.clone(),
+        payload: payload.clone(),
         seq: sub.candidate_seq.fetch_add(1, Ordering::SeqCst),
       }) {
         match err {
@@ -468,46 +463,35 @@ fn broker(
   }
 
   // Build a JSON-encoded SQLite event (insert, update, delete).
-  let record_and_event: Lazy<RecordAndEvent, _> = Lazy::new(move || {
+  let record_and_event: Lazy<Arc<EventPayload>, _> = Lazy::new(move || {
     // Join values with column names. We need index access for `record_to_json_expanded` below and
     // column-name-based access for filters, we thus use an IndexMap rather than a Vec<(String,
     // Value)> a data type. Needs to be an Arc so it can be passed to sqlite worker across
     // async boundary.
-    let record: Arc<Record> = Arc::new(
-      record
-        .into_iter()
-        .enumerate()
-        .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
-        .collect(),
-    );
+    let record: Record = record
+      .into_iter()
+      .enumerate()
+      .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
+      .collect();
 
     return match crate::records::expand::record_to_json_expand(
       &table_metadata.column_metadata,
-      &*record,
+      &record,
       None,
     ) {
-      Ok(json_obj) => {
-        let payload = Arc::new(EventPayload::from(&match action {
-          RecordAction::Delete => JsonEventPayload::Delete { value: json_obj },
-          RecordAction::Insert => JsonEventPayload::Insert { value: json_obj },
-          RecordAction::Update => JsonEventPayload::Update { value: json_obj },
-        }));
-
-        (Some(record), payload)
-      }
-      Err(err) => (
-        None,
-        Arc::new(EventPayload::from(&JsonEventPayload::Error {
-          value: EventError {
-            status: super::event::EventErrorStatus::Serialization,
-            message: if cfg!(debug_assertions) {
-              Some(err.to_string())
-            } else {
-              None
-            },
-          },
-        })),
-      ),
+      Ok(json_obj) => Arc::new(match action {
+        RecordAction::Insert => EventPayload::insert(&json_obj, record),
+        RecordAction::Update => EventPayload::update(&json_obj, record),
+        RecordAction::Delete => EventPayload::delete(&json_obj, record),
+      }),
+      Err(err) => Arc::new(EventPayload::error(&EventError {
+        status: super::event::EventErrorStatus::Serialization,
+        message: if cfg!(debug_assertions) {
+          Some(err.to_string())
+        } else {
+          None
+        },
+      })),
     };
   });
 

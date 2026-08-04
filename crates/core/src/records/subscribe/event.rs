@@ -5,7 +5,8 @@ use std::sync::Arc;
 
 use crate::records::RecordError;
 
-type JsonObject = serde_json::value::Map<String, serde_json::Value>;
+pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
+pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
 
 #[derive(Debug, Clone, Copy, Deserialize_repr, Serialize_repr, PartialEq)]
 #[repr(i64)]
@@ -28,69 +29,54 @@ pub struct EventError {
   pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum JsonEventPayload {
-  Update { value: JsonObject },
-  Insert { value: JsonObject },
-  Delete { value: JsonObject },
-  Error { value: EventError },
-  Ping,
-}
-
-/// EventPayload represents a serialized JsonEventPayload.
-#[derive(Debug, Clone, Serialize)]
+/// Pre-serialized EventPayload with custom Serializer (skips records, which are for filtering
+/// only).
+#[derive(Debug, Clone)]
 pub enum EventPayload {
-  Update(Box<serde_json::value::RawValue>),
-  Insert(Box<serde_json::value::RawValue>),
-  Delete(Box<serde_json::value::RawValue>),
+  Insert {
+    json: Box<serde_json::value::RawValue>,
+    record: Record,
+  },
+  Update {
+    json: Box<serde_json::value::RawValue>,
+    record: Record,
+  },
+  Delete {
+    json: Box<serde_json::value::RawValue>,
+    record: Record,
+  },
   Error(Box<serde_json::value::RawValue>),
   Ping,
 }
 
-impl PartialEq for EventPayload {
-  fn eq(&self, other: &Self) -> bool {
-    return match (self, other) {
-      (Self::Update(lhs), Self::Update(rhs)) => lhs.get() == rhs.get(),
-      (Self::Insert(lhs), Self::Insert(rhs)) => lhs.get() == rhs.get(),
-      (Self::Delete(lhs), Self::Delete(rhs)) => lhs.get() == rhs.get(),
-      (Self::Error(lhs), Self::Error(rhs)) => lhs.get() == rhs.get(),
-      (Self::Ping, Self::Ping) => true,
-      _ => false,
+impl EventPayload {
+  pub fn insert(obj: &JsonObject, record: Record) -> Self {
+    return Self::Insert {
+      json: to_raw_value(obj),
+      record,
     };
   }
-}
 
-impl EventPayload {
-  pub fn from(value: &JsonEventPayload) -> Self {
-    // NOTE: to_raw_value should never fail.
-    #[inline]
-    #[cfg(not(debug_assertions))]
-    fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
-    where
-      T: ?Sized + Serialize,
-    {
-      return serde_json::value::to_raw_value(value)
-        .map(|v| v.to_owned())
-        .unwrap_or_default();
-    }
-
-    #[cfg(debug_assertions)]
-    fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
-    where
-      T: ?Sized + Serialize,
-    {
-      return serde_json::value::to_raw_value(value)
-        .map(|v| v.to_owned())
-        .expect("should never fail for well-defined serde_json::Value");
-    }
-
-    return match value {
-      JsonEventPayload::Update { value } => EventPayload::Update(to_raw_value(&value)),
-      JsonEventPayload::Insert { value } => EventPayload::Insert(to_raw_value(value)),
-      JsonEventPayload::Delete { value } => EventPayload::Delete(to_raw_value(value)),
-      JsonEventPayload::Error { value } => EventPayload::Error(to_raw_value(value)),
-      JsonEventPayload::Ping => EventPayload::Ping,
+  pub fn update(obj: &JsonObject, record: Record) -> Self {
+    return Self::Update {
+      json: to_raw_value(obj),
+      record,
     };
+  }
+
+  pub fn delete(obj: &JsonObject, record: Record) -> Self {
+    return Self::Delete {
+      json: to_raw_value(obj),
+      record,
+    };
+  }
+
+  pub fn error(err: &EventError) -> Self {
+    return Self::Error(to_raw_value(err));
+  }
+
+  pub fn ping() -> Self {
+    return Self::Ping;
   }
 
   #[inline]
@@ -122,11 +108,58 @@ impl EventPayload {
   }
 }
 
+impl serde::Serialize for EventPayload {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: serde::Serializer,
+  {
+    match *self {
+      EventPayload::Insert { ref json, .. } => {
+        serializer.serialize_newtype_variant("EventPayload", 0, "Insert", json)
+      }
+      EventPayload::Update { ref json, .. } => {
+        serializer.serialize_newtype_variant("EventPayload", 1, "Update", json)
+      }
+      EventPayload::Delete { ref json, .. } => {
+        serializer.serialize_newtype_variant("EventPayload", 2, "Delete", json)
+      }
+      EventPayload::Error(ref __field0) => serde::Serializer::serialize_newtype_variant(
+        serializer,
+        "EventPayload",
+        3,
+        "Error",
+        __field0,
+      ),
+      EventPayload::Ping => {
+        serde::Serializer::serialize_unit_variant(serializer, "EventPayload", 4, "Ping")
+      }
+    }
+  }
+}
+
+impl PartialEq for EventPayload {
+  fn eq(&self, other: &Self) -> bool {
+    return match (self, other) {
+      (Self::Insert { json: lhs, .. }, Self::Insert { json: rhs, .. }) => lhs.get() == rhs.get(),
+      (Self::Update { json: lhs, .. }, Self::Update { json: rhs, .. }) => lhs.get() == rhs.get(),
+      (Self::Delete { json: lhs, .. }, Self::Delete { json: rhs, .. }) => lhs.get() == rhs.get(),
+      (Self::Error(lhs), Self::Error(rhs)) => lhs.get() == rhs.get(),
+      (Self::Ping, Self::Ping) => true,
+      _ => false,
+    };
+  }
+}
+
+/// What's ultimately serialized and sent to clients. Contains a per-subscription sequence number
+/// to discover event loss.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ChangeEvent {
   #[serde(flatten)]
   event: Arc<EventPayload>,
-  // NOTE: Because unsigned isn't supported by Avro.
+  // Sequence number is counted by each subscription handler to detect event loss due to network
+  // issues.
+  //
+  // NOTE: Is signed because Avro doesn't support unsigned.
   #[serde(skip_serializing_if = "Option::is_none")]
   seq: Option<i64>,
 }
@@ -152,6 +185,28 @@ pub struct TestChangeEvent {
   pub seq: Option<i64>,
 }
 
+// NOTE: to_raw_value should never fail given the limited set of inputs.
+#[inline]
+#[cfg(not(debug_assertions))]
+fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
+where
+  T: ?Sized + Serialize,
+{
+  return serde_json::value::to_raw_value(value)
+    .map(|v| v.to_owned())
+    .unwrap_or_default();
+}
+
+#[cfg(debug_assertions)]
+fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
+where
+  T: ?Sized + Serialize,
+{
+  return serde_json::value::to_raw_value(value)
+    .map(|v| v.to_owned())
+    .expect("should never fail for well-defined serde_json::Value");
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -161,9 +216,10 @@ mod tests {
   fn serialization_sse_event_test() {
     {
       let event = ChangeEvent {
-        event: Arc::new(EventPayload::from(&JsonEventPayload::Delete {
-          value: JsonObject::from_iter([("foo".to_string(), json!(4))]),
-        })),
+        event: Arc::new(EventPayload::delete(
+          &JsonObject::from_iter([("foo".to_string(), json!(4))]),
+          Default::default(),
+        )),
         seq: Some(4),
       };
 
@@ -181,11 +237,9 @@ mod tests {
 
     {
       let event = ChangeEvent {
-        event: Arc::new(EventPayload::from(&JsonEventPayload::Error {
-          value: EventError {
-            status: EventErrorStatus::Loss,
-            message: Some("test".to_string()),
-          },
+        event: Arc::new(EventPayload::error(&EventError {
+          status: EventErrorStatus::Loss,
+          message: Some("test".to_string()),
         })),
         seq: Some(4),
       };

@@ -13,9 +13,7 @@ use crate::app_state::AppState;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
-use crate::records::subscribe::event::{
-  EventError, EventErrorStatus, EventPayload, JsonEventPayload,
-};
+use crate::records::subscribe::event::{EventError, EventErrorStatus, EventPayload};
 use crate::records::subscribe::state::{EventCandidate, Subscription};
 use crate::records::{Permission, RecordError};
 
@@ -108,10 +106,11 @@ async fn validate_event(
     return Ok(Some(EVENT_LOSS_EVENT.clone()));
   }
 
-  return match ev.record {
+  return match *ev.payload {
     // None-Insert/Update/Delete events.
-    None => Ok(Some(ev.payload)),
-    Some(ref record) => {
+    EventPayload::Insert { ref record, .. }
+    | EventPayload::Update { ref record, .. }
+    | EventPayload::Delete { ref record, .. } => {
       let sub: &Subscription = &args.subscription;
       if let Filter::Record(ref filter) = sub.filter
         && !apply_filter_recursively_to_record(filter, record)
@@ -126,11 +125,12 @@ async fn validate_event(
       };
 
       api
-        .check_record_level_read_access_for_subscriptions(record, sub.user.as_ref())
+        .check_record_level_read_access_for_subscriptions(&ev.payload, sub.user.as_ref())
         .await?;
 
       Ok(Some(ev.payload))
     }
+    _ => Ok(Some(ev.payload)),
   };
 }
 
@@ -473,19 +473,15 @@ pub async fn subscribe_ws(
 }
 
 static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
-  Arc::new(EventPayload::from(&JsonEventPayload::Error {
-    value: EventError {
-      status: EventErrorStatus::Forbidden,
-      message: Some("Access denied".into()),
-    },
+  Arc::new(EventPayload::error(&EventError {
+    status: EventErrorStatus::Forbidden,
+    message: Some("Access denied".into()),
   }))
 });
 static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
-  Arc::new(EventPayload::from(&JsonEventPayload::Error {
-    value: EventError {
-      status: EventErrorStatus::Loss,
-      message: None,
-    },
+  Arc::new(EventPayload::error(&EventError {
+    status: EventErrorStatus::Loss,
+    message: None,
   }))
 });
 
