@@ -10,6 +10,7 @@ import {
 } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import {
   Card,
   CardContent,
@@ -33,6 +34,7 @@ import {
   uninstallWasmComponent,
 } from "@/lib/api/wasm-components";
 import type { WasmComponent } from "@bindings/WasmComponent";
+import { cn } from "@/lib/utils";
 
 function ComponentIcon(props: { icon?: string }) {
   const icon = createMemo(() => props.icon?.trim());
@@ -61,13 +63,16 @@ function ComponentIcon(props: { icon?: string }) {
 
 function ComponentCardContent(props: {
   component: WasmComponent;
+  refetch: () => void;
   hasDetails: boolean;
 }) {
   const displayName = () =>
     props.component.display_name ?? props.component.name;
 
+  const skew = () => props.component.loaded != props.component.installed;
+
   return (
-    <CardContent class="flex p-4">
+    <CardContent class={cn("flex p-4", skew() && "bg-red-200")}>
       <div class="text-muted-foreground size-10 shrink-0 content-center">
         <ComponentIcon icon={props.component.icon ?? undefined} />
       </div>
@@ -94,11 +99,11 @@ function ComponentCardContent(props: {
         <Show
           when={props.component.repo_id && props.component.installed === false}
         >
-          <InstallButton component={props.component} />
+          <InstallButton {...props} />
         </Show>
 
         <Show when={props.component.installed === true}>
-          <UninstallButton component={props.component} />
+          <UninstallButton {...props} />
         </Show>
 
         <Show when={props.component.admin_ui_path}>
@@ -111,7 +116,10 @@ function ComponentCardContent(props: {
   );
 }
 
-function ComponentCard(props: { component: WasmComponent }) {
+function ComponentCard(props: {
+  component: WasmComponent;
+  refetch: () => void;
+}) {
   const hasDetails = () => !!props.component.admin_ui_path;
 
   return (
@@ -119,18 +127,12 @@ function ComponentCard(props: { component: WasmComponent }) {
       <Switch>
         <Match when={hasDetails()}>
           <A href={`/wasm/${props.component.name}`}>
-            <ComponentCardContent
-              component={props.component}
-              hasDetails={true}
-            />
+            <ComponentCardContent {...props} hasDetails={true} />
           </A>
         </Match>
 
         <Match when={true}>
-          <ComponentCardContent
-            component={props.component}
-            hasDetails={false}
-          />
+          <ComponentCardContent {...props} hasDetails={false} />
         </Match>
       </Switch>
     </Card>
@@ -149,6 +151,7 @@ export function WasmComponentsList() {
       components.push({
         name: "[DEV]injected_debug_default",
         path: "wasm/fake_component.wasm",
+        loaded: false,
         installed: false,
       });
     }
@@ -160,19 +163,15 @@ export function WasmComponentsList() {
       <Header title="WASM Components" />
 
       <div class="flex flex-col gap-3 p-4">
-        <Card class="text-sm">
-          <CardHeader>
-            <h2>Install, Remove {"&"} Update</h2>
-          </CardHeader>
-
-          <CardContent>
-            To update or re-install the first-party components, simply run the
-            following:
-            <pre class="my-2 ml-4 whitespace-pre-wrap">
-              trail components add trailbase/auth_ui
-            </pre>
-          </CardContent>
-        </Card>
+        <Callout class="text-sm">
+          Installing or removing a WASM component currently requires the server
+          to be restarted in order to take effect. Alternatively, to avoid skew
+          between a component being installed on the file system and loaded for
+          use, you can run the CLI while the server is off, e.g.:
+          <pre class="my-2 ml-4 whitespace-pre-wrap">
+            trail [--depot=..] components add trailbase/auth_ui
+          </pre>
+        </Callout>
 
         <Switch>
           <Match when={wasmComponents.isLoading}>
@@ -187,7 +186,9 @@ export function WasmComponentsList() {
 
           <Match when={wasmComponents.isSuccess}>
             <For each={components()}>
-              {(c) => <ComponentCard component={c} />}
+              {(c) => (
+                <ComponentCard component={c} refetch={wasmComponents.refetch} />
+              )}
             </For>
           </Match>
         </Switch>
@@ -196,7 +197,10 @@ export function WasmComponentsList() {
   );
 }
 
-function InstallButton(props: { component: WasmComponent }) {
+function InstallButton(props: {
+  component: WasmComponent;
+  refetch: () => void;
+}) {
   const [open, setOpen] = createSignal(false);
 
   return (
@@ -233,6 +237,8 @@ function InstallButton(props: { component: WasmComponent }) {
                 await installWasmComponent({
                   RepoId: repoId,
                 });
+
+                props.refetch();
                 setOpen(false);
               })();
             }}
@@ -245,7 +251,10 @@ function InstallButton(props: { component: WasmComponent }) {
   );
 }
 
-function UninstallButton(props: { component: WasmComponent }) {
+function UninstallButton(props: {
+  component: WasmComponent;
+  refetch: () => void;
+}) {
   const [open, setOpen] = createSignal(false);
 
   return (
@@ -291,6 +300,7 @@ function UninstallButton(props: { component: WasmComponent }) {
                       },
                 );
 
+                props.refetch();
                 setOpen(false);
               })();
             }}
