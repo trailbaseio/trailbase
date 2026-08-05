@@ -23,6 +23,10 @@ icon?: string,
  */
 guest_runtime?: GuestRuntime, 
 /**
+ * The component's version.
+ */
+version?: string, 
+/**
  * An HTTP endpoint for an admin UI to present in the admin dashboard's, e.g.: "/comp0/admin".
  */
 admin_ui_path?: string, };

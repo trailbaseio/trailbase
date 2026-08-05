@@ -16,7 +16,6 @@ import {
   CardContent,
   CardTitle,
   CardDescription,
-  CardHeader,
 } from "@/components/ui/card";
 import {
   Dialog,
@@ -79,7 +78,7 @@ function ComponentCardContent(props: {
 
       <div class="flex w-full gap-2">
         <div class="flex grow flex-col justify-start">
-          <div class="flex h-full items-center gap-2">
+          <div class="flex h-full flex-wrap items-center gap-2">
             <CardTitle class={props.hasDetails ? "" : "text-muted-foreground"}>
               {displayName()}
             </CardTitle>
@@ -87,6 +86,12 @@ function ComponentCardContent(props: {
             <Show when={displayName() !== props.component.name}>
               <span class="text-muted-foreground text-xs">
                 {props.component.name}
+              </span>
+            </Show>
+
+            <Show when={props.component.version}>
+              <span class="text-muted-foreground text-xs">
+                {`@${props.component.version}`}
               </span>
             </Show>
           </div>

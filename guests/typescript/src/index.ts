@@ -45,7 +45,7 @@ export function defineConfig(opts: {
       handle: buildIncomingHttpHandler(opts),
     },
     initEndpoint: {
-      getManifest: function(jsonArgs: string): string {
+      getManifest: function (jsonArgs: string): string {
         const args: InitArguments = JSON.parse(jsonArgs);
 
         opts.init?.({
@@ -56,9 +56,9 @@ export function defineConfig(opts: {
 
         const http_handlers = subsystems?.find((v) => v === "http")
           ? (opts.httpHandlers?.map((h) => ({
-            method: h.method,
-            path: h.path,
-          })) ?? null)
+              method: h.method,
+              path: h.path,
+            })) ?? null)
           : null;
 
         const job_handlers = subsystems?.find((v) => v === "jobs")
@@ -80,7 +80,7 @@ export function defineConfig(opts: {
       },
     },
     sqliteFunctionEndpoint: {
-      dispatchScalarFunction: function(
+      dispatchScalarFunction: function (
         _args: sqliteFunctionEndpoint.Arguments,
       ) {
         throw {

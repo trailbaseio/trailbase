@@ -262,6 +262,7 @@ export function WasmComponentDetails(props: {
         <Header
           title={props.component.display_name ?? props.component.name}
           leading={BackButton()}
+          left={props.component.version && `@${props.component.version}`}
           right={
             <Show when={import.meta.env.DEV}>
               <SandboxButton

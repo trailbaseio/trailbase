@@ -29,8 +29,9 @@ pub struct WasmComponent {
   pub display_name: Option<String>,
   pub description: Option<String>,
   pub icon: Option<String>,
-  pub admin_ui_path: Option<String>,
   pub guest_runtime: Option<String>,
+  pub version: Option<String>,
+  pub admin_ui_path: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, TS)]
@@ -56,8 +57,9 @@ fn build_entry(
     display_name,
     description,
     icon,
-    admin_ui_path,
     guest_runtime,
+    version,
+    admin_ui_path,
   } = metadata.cloned().unwrap_or_default();
 
   return Ok(WasmComponent {
@@ -68,8 +70,9 @@ fn build_entry(
     display_name,
     description,
     icon,
-    admin_ui_path,
     guest_runtime: guest_runtime.map(|r| format!("{r:?}")),
+    version,
+    admin_ui_path,
     repo_id,
   });
 }
