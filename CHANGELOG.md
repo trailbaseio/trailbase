@@ -1,3 +1,21 @@
+## v0.32.0
+
+- New admin WASM component browser **and** experimental support for component-provided custom dashes 🎉.
+  - Beware, if you're using WASM components, this is a **breaking** change. In order to support capabilities the component interface needed to be extended to provide additional metadata: name, version, dashboard url, ... . Ideally, we could have handled this in a backwards compatible way, however WIT does not yet support adding optional methods to an existing interface. Consequently, we changed type-erased the existing interface to be able to handle versioning internally, hopefully reducing the frequency of future breaking changes at least until WIT catches up.
+  - Consequently, custom components will need to be re-build against the latest version of the guest runtime. This should be straight forward, since existing user facing APIs did not change. For the first-party AuthUi component, you'll simply need to install the latest version.
+  - The dashboard work was kicked off by @zyrakq - thanks 🙏.
+- WASM component browser allows inspecting, installing and removing components.
+  - Live reload of components is not yet supported, thus whenever changing the set of installed components, a server restart is required.
+- A new shared-preferences component interface helps to store per-component-scoped settings in the database.
+  - Accessing the DB has long been possible for components, however longer-term we may want to switch to a more sandboxed app-like model. For example, any component can store its settings (which may also be wiped by the platform) but raw access to the DB, may require explicit permissions. In a similar vein, we may also want to reconsider packaging to allow for bundled assets and declerative manifests.
+- Update the AuthUi component to provide an admin dash allowing for some initial customization of the login screen, i.e. add a title and/or logo.
+  - This uses both the experimental dashboard support and the shared preferences.
+- A lower overhead, guest-dependent execution model for Rust WASM components.
+  - Specifically, JS/TS components will continue to initialize their state anew for each HTTP request, whereas the state of Rust components is recycled across HTTP requests.
+  - Fun fact: this is similar to how TrailBase's started out managing component state, however it turns out that JS components built with Wasmtime's `jco`, can only support one request before they become defunct. This made us switch to the slower but consistent pristine-state-model - sadly at a non-trivial performance regression for Rust components.
+  - Measurements show that for cheap requests, Rust component throughput increased by 4+x and inversely latency reduced by 4+x (with the standard deviation being 32% narrower).
+- Update dependencies.
+
 ## v0.31.3
 
 - Properly expand nested JSON in change events to match JSON schemas and to match the behavior for record list and read.
