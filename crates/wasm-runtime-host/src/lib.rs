@@ -381,15 +381,18 @@ impl HttpStore {
               return;
             };
 
-            let size_before = pool.status().size;
-
             // Keep all recently used stores but at least 16.
+            const MIN_SIZE: usize = 16;
             const MAX_AGE: std::time::Duration = std::time::Duration::from_mins(2);
-            let mut cnt = 0;
-            pool.retain(|_, metrics| {
-              cnt += 1;
-              return cnt <= 16 || metrics.last_used() < MAX_AGE;
-            });
+
+            let size_before = pool.status().size;
+            if size_before > MIN_SIZE {
+              let mut cnt = 0;
+              pool.retain(|_, metrics| {
+                cnt += 1;
+                return cnt <= MIN_SIZE || metrics.last_used() < MAX_AGE;
+              });
+            }
 
             log::debug!(
               "periodic store-pool shrink '{name}': {size_before} => {size_after}",
