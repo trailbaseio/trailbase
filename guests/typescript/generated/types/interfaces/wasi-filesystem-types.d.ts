@@ -199,9 +199,7 @@ declare module "wasi:filesystem/types@0.2.12" {
    * When setting a timestamp, this gives the value to set it to.
    */
   export type NewTimestamp =
-    | NewTimestampNoChange
-    | NewTimestampNow
-    | NewTimestampTimestamp;
+    NewTimestampNoChange | NewTimestampNow | NewTimestampTimestamp;
   /**
    * Leave the timestamp set to its previous value.
    */
@@ -422,12 +420,7 @@ declare module "wasi:filesystem/types@0.2.12" {
    * not reuse it thereafter.
    */
   export type Advice =
-    | "normal"
-    | "sequential"
-    | "random"
-    | "will-need"
-    | "dont-need"
-    | "no-reuse";
+    "normal" | "sequential" | "random" | "will-need" | "dont-need" | "no-reuse";
   /**
    * A 128-bit hash value, split into parts because wasm doesn't have a
    * 128-bit integer type.
