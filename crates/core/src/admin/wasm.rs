@@ -11,12 +11,12 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
 #[derive(Debug, Default, Deserialize, Serialize, TS)]
+#[ts(optional_fields)]
 pub struct WasmComponent {
   // QUESTION: Should we remove name in favor of "path". The name is a simple derivative and we
   // can also chop on the client.
   pub name: String,
   pub path: String,
-  #[ts(optional)]
   pub repo_id: Option<String>,
 
   /// Whether the component is loaded by the server. This is different from `installed`.
@@ -26,15 +26,10 @@ pub struct WasmComponent {
   pub installed: bool,
 
   // Below properties are manifest provided.
-  #[ts(optional)]
   pub display_name: Option<String>,
-  #[ts(optional)]
   pub description: Option<String>,
-  #[ts(optional)]
   pub icon: Option<String>,
-  #[ts(optional)]
   pub admin_ui_path: Option<String>,
-  #[ts(optional)]
   pub guest_runtime: Option<String>,
 }
 
