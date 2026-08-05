@@ -13,6 +13,11 @@ const PREFIX = "/js";
 
 export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
   defineConfig({
+    metadata: {
+      display_name: "TestFixture TypeScript",
+      description: "A component used within Trailbase's tests.",
+      admin_ui_path: `${PREFIX}/dash`,
+    },
     httpHandlers: [
       HttpHandler.get(`${PREFIX}/method`, (_: HttpRequest): string => "get"),
       HttpHandler.post(`${PREFIX}/method`, (_: HttpRequest): string => "post"),
@@ -108,6 +113,7 @@ export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
       HttpHandler.get(`${PREFIX}/random`, async (): Promise<string> => {
         return `${Math.random().toString()}\n`;
       }),
+      HttpHandler.get(`${PREFIX}/dash`, (_: HttpRequest): string => dash),
     ],
   });
 
@@ -139,3 +145,15 @@ function fibonacci(num: number): number {
       return fibonacci(num - 1) + fibonacci(num - 2);
   }
 }
+
+const dash = `
+<html>
+<body style="background-color:#92a8d1;" >
+  <h1>Testfixture Dash</h1>
+
+  <p>
+    Greetings from TypeScript.
+  </p>
+</body>
+</html>
+`;

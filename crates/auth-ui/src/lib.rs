@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use trailbase_auth_config::AuthConfig;
-// use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -475,7 +474,7 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
+async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
   // Since we're serving an SPA, i.e. static assets, we do NOT strictly need access protection as
   // long as all the REST endpoints are protected. This could be different for SSR which may expose
   // server internals. Therefore and as a generally good practice, we check access here.
@@ -492,27 +491,20 @@ async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
-#[ts(export)]
+#[ts(export, optional_fields)]
 pub struct AuthUiSettings {
-  #[ts(optional)]
   title: Option<String>,
-
-  #[ts(optional)]
   icon_url: Option<String>,
   /*
     NOTE: Ideas for further customization.
 
     /// Typically a page or mailto://test@trailbase.io.
-    #[ts(optional)]
     contact_url: Option<String>,
     /// Typically a page detailing the terms.
-    #[ts(optional)]
     terms_url: Option<String>,
     /// Typically a page detailing PII usage.
-    #[ts(optional)]
     privacy_url: Option<String>,
     /// Typically a page declaring a legal entity for ownership and/or authorship.
-    #[ts(optional)]
     impressum_url: Option<String>,
   */
 }

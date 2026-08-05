@@ -8,21 +8,21 @@ export type Metadata = {
 /**
  * Name to show in the admin UI component browser.
  */
-display_name: string | null, 
+display_name?: string, 
 /**
  * Optional description to show in the admin UI.
  */
-description: string | null, 
+description?: string, 
 /**
  * Icon to show in the admin UI component browser, e.g. "<svg ..." or
  * "data:<mime-type>;base64,<base64-encoded-data>".
  */
-icon: string | null, 
+icon?: string, 
 /**
  * Which guest runtime is used by the component.
  */
-guest_runtime: GuestRuntime | null, 
+guest_runtime?: GuestRuntime, 
 /**
  * An HTTP endpoint for an admin UI to present in the admin dashboard's, e.g.: "/comp0/admin".
  */
-admin_ui_path: string | null, };
+admin_ui_path?: string, };

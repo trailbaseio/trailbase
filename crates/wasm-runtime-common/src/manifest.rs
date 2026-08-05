@@ -91,6 +91,7 @@ pub enum SqliteFunction {
 
 /// Metadata a component can self-report for display in the admin WASM modules page.
 #[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
+#[ts(optional_fields)]
 pub struct Metadata {
   /// Name to show in the admin UI component browser.
   pub display_name: Option<String>,

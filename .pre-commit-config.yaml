@@ -13,6 +13,9 @@ repos:
     -   id: end-of-file-fixer
     -   id: mixed-line-ending
     -   id: trailing-whitespace
+        # `cargo test` below regenerates the bindings and ts-rs may add
+        # trailing whitespaces on optional fields with comments :shrug:.
+        exclude: ^guests/typescript/generated/common/
 
 # Self-validation for pre-commit manifest.
 -   repo: https://github.com/pre-commit/pre-commit

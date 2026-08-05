@@ -10,6 +10,8 @@ export { addPeriodicCallback } from "./timer";
 
 import type { InitArguments } from "@common/InitArguments";
 import type { InitManifest } from "@common/InitManifest";
+import type { Metadata } from "@common/Metadata";
+export type { Metadata } from "@common/Metadata";
 
 export * from "./util";
 
@@ -36,6 +38,7 @@ export function defineConfig(opts: {
   init?: (args: InitArgs) => void;
   httpHandlers?: HttpHandlerInterface[];
   jobHandlers?: JobHandlerInterface[];
+  metadata?: Metadata;
 }): Config {
   return {
     incomingHandler: {
@@ -64,7 +67,7 @@ export function defineConfig(opts: {
           : null;
 
         const manifest: InitManifest = {
-          metadata: null,
+          metadata: opts.metadata ?? null,
           http_handlers,
           job_handlers,
           sqlite_functions: null,
