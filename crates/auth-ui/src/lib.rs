@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use trailbase_auth_config::AuthConfig;
+use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
@@ -484,11 +485,12 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
     .map_err(internal);
 }
 
-async fn admin_dashboard_handler(_req: Request) -> Result<Response, HttpError> {
+async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
   // Since we're serving an SPA, i.e. static assets, we do NOT strictly need access protection as
-  // long as all the REST endpoints are protected. This could be different for SSR which may expose
-  // server internals. Therefore and as a generally good practice, we check access here.
-  // require_admin(&req).await?;
+  // long as all the REST endpoints are protected. This may be different for dashboards using
+  // SSR, which may expose internal data. Ultimately, we have the check here to establish a safe
+  // default.
+  require_admin(&req).await?;
 
   let file =
     auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;

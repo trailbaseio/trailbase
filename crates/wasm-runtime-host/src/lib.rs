@@ -162,6 +162,7 @@ impl Runtime {
     return Ok(Self { state });
   }
 
+  #[allow(unused)]
   pub fn component_path(&self) -> &Path {
     return &self.state.component_path;
   }
