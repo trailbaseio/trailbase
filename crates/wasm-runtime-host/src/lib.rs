@@ -308,6 +308,15 @@ enum HttpStoreInternal {
   },
 }
 
+impl HttpStoreInternal {
+  fn component_path(&self) -> &Path {
+    return match self {
+      HttpStoreInternal::Unique { rt } => rt.component_path(),
+      HttpStoreInternal::Shared { pool } => pool.manager().rt.component_path(),
+    };
+  }
+}
+
 /// Main abstraction to send incoming HTTP requests into a guest "isolate" (provided runtime +
 /// state). Due to the lack of proper async WASIp3 support, this is also used for Jobs etc.
 /// Sync  There's also a separate sync SqliteStore "isolate".
@@ -372,8 +381,7 @@ impl HttpStore {
               return;
             };
 
-            #[cfg(debug_assertions)]
-            log::debug!("WASM store pool: {:?}", pool.status());
+            let size_before = pool.status().size;
 
             // Keep all recently used stores but at least 16.
             const MAX_AGE: std::time::Duration = std::time::Duration::from_mins(2);
@@ -382,6 +390,12 @@ impl HttpStore {
               cnt += 1;
               return cnt <= 16 || metrics.last_used() < MAX_AGE;
             });
+
+            log::debug!(
+              "periodic store-pool shrink '{name}': {size_before} => {size_after}",
+              name = component_path_to_name(pool.manager().rt.component_path()).unwrap_or_default(),
+              size_after = pool.status().size,
+            );
           }
         });
 
@@ -492,7 +506,8 @@ impl HttpStore {
 
           #[cfg(debug_assertions)]
           log::debug!(
-            "wasi_http_incoming_handler() completed call({id})",
+            "HttpStore::wasi_http_incoming_handler() completed ({name}, id={id})",
+            name = component_path_to_name(state.component_path()).unwrap_or_default(),
             id = REQUEST_ID.with(|id| *id),
           );
 
@@ -547,8 +562,8 @@ impl HttpStore {
 
     #[cfg(debug_assertions)]
     log::debug!(
-      "WASM runtime ({path:?}) `call({id})`. In flight (local={_local_in_flight}, global={_in_flight})",
-      path = rt.component_path(),
+      "HttpStore::call() started: in flight (local={_local_in_flight}, global={_in_flight}) ({name}, id={id})",
+      name = component_path_to_name(rt.component_path()).unwrap_or_default(),
     );
 
     // This is where we spawn a new task on the associated tokio runtime.
@@ -562,8 +577,8 @@ impl HttpStore {
 
         #[cfg(debug_assertions)]
         log::debug!(
-          "WASM runtime ({path:?}) completed call({id})",
-          path = rt_state.component_path,
+          "HttpStore::call() completed: in flight (local={_local_in_flight}, global={_in_flight}) ({name}, id={id})",
+          name = component_path_to_name(&rt_state.component_path).unwrap_or_default(),
           id = REQUEST_ID.with(|id| *id),
         );
 

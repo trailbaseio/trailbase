@@ -47,14 +47,15 @@ export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
         return "A".repeat(5000);
       }),
       HttpHandler.get(`${PREFIX}/addDeletePost`, async () => {
+        const user = "admin@localhost";
         const userId = (
-          await query(
-            "SELECT id FROM _user WHERE email = 'admin@localhost'",
-            [],
-          )
+          await query("SELECT id FROM _user WHERE email = ?1", [user])
         )[0][0];
 
-        console.info("[print from WASM JS guest] user id:", userId);
+        console.info(
+          `[print from WASM JS guest] user id of '${user}':`,
+          btoa(String.fromCharCode(...(userId as Uint8Array))),
+        );
 
         const body = `${Date.now()} - ${Math.random()}`;
         const numInsertions = await execute(

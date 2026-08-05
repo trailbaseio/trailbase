@@ -126,7 +126,7 @@ pub async fn list_wasm_components_handler(
         path,
         Some(metadata),
         None,
-        /*installed=*/ true,
+        /* installed= */ true,
       )?);
     }
   }
@@ -142,7 +142,7 @@ pub async fn list_wasm_components_handler(
       &base_path.join(filename),
       None,
       Some(not_installed.id.clone()),
-      /*installed=*/ false,
+      /* installed= */ false,
     )?);
   }
 
