@@ -10,11 +10,7 @@ declare module "trailbase:component/sqlite-function-endpoint@0.2.0" {
     val: string;
   }
   export type Value =
-    | ValueNull
-    | ValueText
-    | ValueBlob
-    | ValueInteger
-    | ValueReal;
+    ValueNull | ValueText | ValueBlob | ValueInteger | ValueReal;
   export interface ValueNull {
     tag: "null";
   }

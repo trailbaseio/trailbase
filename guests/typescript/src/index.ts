@@ -1,9 +1,7 @@
-import { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.12";
 import type {
-  Arguments as SqliteArguments,
-  Error as SqliteError,
-  dispatchScalarFunction,
-} from "trailbase:component/sqlite-function-endpoint@0.2.0";
+  sqliteFunctionEndpoint,
+  WasiHttpTypes0212,
+} from "trailbase:component/interfaces@0.2.0";
 import type { HttpHandlerInterface } from "./http";
 import type { JobHandlerInterface } from "./job";
 import { buildIncomingHttpHandler } from "./http/incoming";
@@ -18,15 +16,15 @@ export * from "./util";
 export interface Config {
   incomingHandler: {
     handle: (
-      req: IncomingRequest,
-      respOutparam: ResponseOutparam,
+      req: WasiHttpTypes0212.IncomingRequest,
+      respOutparam: WasiHttpTypes0212.ResponseOutparam,
     ) => Promise<void>;
   };
   initEndpoint: {
     getManifest: (args: string) => string;
   };
   sqliteFunctionEndpoint: {
-    dispatchScalarFunction: typeof dispatchScalarFunction;
+    dispatchScalarFunction: typeof sqliteFunctionEndpoint.dispatchScalarFunction;
   };
 }
 
@@ -76,11 +74,13 @@ export function defineConfig(opts: {
       },
     },
     sqliteFunctionEndpoint: {
-      dispatchScalarFunction: function (_args: SqliteArguments) {
+      dispatchScalarFunction: function (
+        _args: sqliteFunctionEndpoint.Arguments,
+      ) {
         throw {
           tag: "other",
           val: "missing sqlite function",
-        } as SqliteError;
+        } as sqliteFunctionEndpoint.Error;
       },
     },
   };

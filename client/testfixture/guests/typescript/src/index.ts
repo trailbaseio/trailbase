@@ -8,8 +8,8 @@ import {
 } from "trailbase-wasm/http";
 import { execute, query, Transaction } from "trailbase-wasm/db";
 
-const PREFIX = "";
-// const PREFIX = "/js";
+//const PREFIX = "";
+const PREFIX = "/js";
 
 export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
   defineConfig({

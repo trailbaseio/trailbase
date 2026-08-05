@@ -290,9 +290,7 @@ declare module "wasi:http/types@0.2.12" {
    * setting or appending to a `fields` resource.
    */
   export type HeaderError =
-    | HeaderErrorInvalidSyntax
-    | HeaderErrorForbidden
-    | HeaderErrorImmutable;
+    HeaderErrorInvalidSyntax | HeaderErrorForbidden | HeaderErrorImmutable;
   /**
    * This error indicates that a `field-name` or `field-value` was
    * syntactically invalid when used with an operation that sets headers in a

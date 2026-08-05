@@ -1,4 +1,4 @@
-import type { Value as WitValue } from "trailbase:database/sqlite@0.1.1";
+import type { TrailbaseDatabaseSqlite011 } from "trailbase:component/interfaces@0.2.0";
 import { SqlValue } from "@common/SqlValue";
 import { Blob } from "@common/Blob";
 
@@ -57,7 +57,7 @@ export function fromJsonSqlValue(value: SqlValue): Value {
   throw new Error(`Invalid value: ${value}`);
 }
 
-export function toWitValue(val: Value): WitValue {
+export function toWitValue(val: Value): TrailbaseDatabaseSqlite011.Value {
   if (val === null) {
     return { tag: "null" };
   } else if (typeof val === "boolean") {
@@ -75,7 +75,7 @@ export function toWitValue(val: Value): WitValue {
   throw new Error(`Invalid value: ${val}`);
 }
 
-export function fromWitValue(val: WitValue): Value {
+export function fromWitValue(val: TrailbaseDatabaseSqlite011.Value): Value {
   switch (val.tag) {
     case "null":
       return null;
