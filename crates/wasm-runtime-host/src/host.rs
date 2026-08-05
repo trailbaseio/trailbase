@@ -5,7 +5,6 @@ use tokio::time::Duration;
 use trailbase_sqlite::SyncConnectionTrait;
 use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_wasi_keyvalue::WasiKeyValueCtx;
-use trailbase_wasm_common::component_path_to_name;
 use wasmtime::Result;
 use wasmtime::component::{HasData, Resource, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
@@ -115,7 +114,7 @@ impl WasiHttpHooks for Hooks {
       "WasiHttpHooks::send_request() {host}{path} ({name}, id={id:?})",
       host = request.uri().host().unwrap_or_default(),
       path = request.uri().path(),
-      name = component_path_to_name(&self.wasm_source_file).unwrap_or_default(),
+      name = crate::component_path_to_name(&self.wasm_source_file).unwrap_or_default(),
       id = crate::REQUEST_ID.try_with(|id| *id).unwrap_or_default(),
     );
 
