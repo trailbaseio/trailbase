@@ -9,4 +9,4 @@ loaded: boolean,
  * Whether the component is present ("installed") in the file-system. There may be skew with
  * loaded, if the component was newly added/removed and a reload hasn't happened yet.
  */
-installed: boolean, display_name?: string, description?: string, icon?: string, admin_ui_path?: string, guest_runtime?: string, };
+installed: boolean, display_name?: string, description?: string, icon?: string, guest_runtime?: string, version?: string, admin_ui_path?: string, };

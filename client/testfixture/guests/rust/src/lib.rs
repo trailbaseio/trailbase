@@ -235,10 +235,20 @@ impl Guest for Endpoints {
   }
 
   fn metadata() -> Option<Metadata> {
+    let version_info = trailbase_build::get_version_info!();
+
     return Some(Metadata {
       display_name: Some("TestFixture Rust".to_string()),
       icon: Some(ICON.to_string()),
       description: Some("A component used within Trailbase's tests.".to_string()),
+      version: version_info.git_version().map(|v| {
+        let git_tag = v.tag();
+        let extra_commits = v.commits_since.unwrap_or(0);
+        if extra_commits > 0 {
+          return format!("{git_tag} ({extra_commits})");
+        }
+        return git_tag;
+      }),
       admin_ui_path: Some("/dash".to_string()),
       ..Default::default()
     });

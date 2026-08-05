@@ -102,6 +102,8 @@ pub struct Metadata {
   pub icon: Option<String>,
   /// Which guest runtime is used by the component.
   pub guest_runtime: Option<GuestRuntime>,
+  /// The component's version.
+  pub version: Option<String>,
   /// An HTTP endpoint for an admin UI to present in the admin dashboard's, e.g.: "/comp0/admin".
   pub admin_ui_path: Option<String>,
 }
