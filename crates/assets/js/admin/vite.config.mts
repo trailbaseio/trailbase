@@ -34,14 +34,14 @@ export default defineConfig({
         // "connect-src": ["'self'", "https://tiles.openfreemap.org"],
         "img-src": [...DEFAULT_CSP, "data:"],
         "object-src": DEFAULT_CSP,
-        "script-src": ["'self'", "blob:"],
+        "script-src": [...DEFAULT_CSP, "blob:"],
         // WARN: We should definitely disallow eval() to avoid any potential
         // injections from DB contents via the admin table browser/explorer.
-        "style-src": ["'self'", "'unsafe-inline'"],
+        "style-src": [...DEFAULT_CSP, "'unsafe-inline'"],
         // 'unsafe-inline' needed for ERD renderer.
-        "style-src-elem": ["'self'", "'unsafe-inline'"],
-        "frame-src": ["blob:"],
-        "child-src": ["blob:"],
+        "style-src-elem": [...DEFAULT_CSP, "'unsafe-inline'"],
+        "frame-src": ["'self'", "blob:"],
+        "child-src": ["'self'", "blob:"],
       },
       build: {
         sri: true,
