@@ -35,7 +35,7 @@ wasm = ["dep:trailbase-wasm-runtime-axum", "dep:trailbase-wasm-runtime-host"]
 ws = ["axum/ws"]
 
 [dependencies]
-aes-gcm-siv = "0.11.1"
+aes-gcm-siv = "0.12.0"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 askama = { workspace = true }
 async-channel = "2.3.1"
