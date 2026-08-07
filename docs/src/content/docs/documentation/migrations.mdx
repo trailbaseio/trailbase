@@ -81,12 +81,12 @@ For example, dropping a table is a destructive operation that results in all of
 the table's records being deleted.
 Reverting the schema will bring back an empty table only.
 
-TrailBase does **not** provide a builtin revert. Schema migrations are append
+TrailBase does **not** provide a built-in revert. Schema migrations are append
 only and move strictly forward in time.
 They should always be conducted with great care.
-If a destructive operations has been rolled out all the way to prod, the data
+If a destructive operation has been rolled out all the way to prod, the data
 is gone. You can still undo the schema change by manually applying an inverse
-forward migration, i.e. addin a column or table back, but properly undoing the
+forward migration, i.e. adding a column or table back, but properly undoing the
 database state will require a restore from backups.
 
 <Aside type="note" title="Backups">

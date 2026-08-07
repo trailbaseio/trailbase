@@ -9,7 +9,7 @@ import { githubCodeReference } from '@/lib/github';
 import { apiPath, recordApiNamePlaceholder, recordApiIdPlaceholder } from "./_record_apis.ts";
 
 TrailBase's _Record APIs_ allow you to easily configure endpoints exposing your
-`TABLE`s and `VIEW`s though **type-safe** restful
+`TABLE`s and `VIEW`s through **type-safe** RESTful
 **C**reate**R**ead**U**pdate**D**elete operations, composite list queries and
 even realtime change subscriptions.
 
@@ -667,7 +667,7 @@ addition to your toolbox.
 [^2]:
     Views are more tricky to type strictly being the result of an arbitrary
     `SELECT` statement. For columns that are mapped 1:1 from a `STRICT`ly typed
-    `TABLE` the type can be infered. For everything else you can use
+    `TABLE` the type can be inferred. For everything else you can use
     `CAST(col AS <TYPE>)` expressions to assert the types of computed columns.
 
 [^3]:
