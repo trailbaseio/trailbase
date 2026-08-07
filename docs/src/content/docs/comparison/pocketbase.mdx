@@ -12,28 +12,29 @@ Firstly, PocketBase is amazing! It paved the way for single-executable
 application bases, is incredibly easy-to-use, and a polished
 experience. Gani, the person behind it, is a mad scientist 🙏.
 
-From a distance PocketBase and TrailBase are both single-executables providing
-almost identical feature sets: REST APIs, realtime updates, authentication, file
-storage, a runtime for custom endpoints, admin dashboard..., all on top of SQLite.
+From a distance, PocketBase and TrailBase are both single-executables providing
+similar feature sets: REST APIs, realtime updates, authentication, file
+storage, a runtime for custom endpoints, admin dashboard..., all on top of SQLite[^7].
 
-For the sake of this comparison, we'll dive a little deeper to have a closer
-look at their differences both technically and philosophically.
+To see the differences both on a technical and philosophical level, we'll have
+to dive a little deeper...
 
 ## Goals
 
 TrailBase was born out of admiration for PocketBase trying to move the needle
 in a few areas:
 
+- Be even lighter and faster. SQLite is astonishingly fast, to the point where
+  even small overheads matter. PocketBase is written in Go, which in itself is
+  a fast language, however [FFI overhead matters](/reference/benchmarks/).
+  This is where a language like Rust with native C ABI support can help.
 - Less abstraction and embracing standards (SQL[^1], a full ES6 runtime through WASM,
-  JWT, UUID) to not get in your way, avoid lock-in and making it easier to
-  adopt TrailBase either fully or as piece-meal as well as getting rid of it if
-  necessary.
+  JWT, UUID) to avoid lock-in as much as possible, thus simplifying adoption
+  either fully or as piece-meal as well as as moving on if necessary.
 - Untethered access to SQLite[^2] including features such as recursive CTEs,
   virtual tables and extensions, e.g., providing vector search and geoip out of
   the box[^3], unlocking more use-cases and standard solutions to well-known
   problems.
-- Be lightweight and fast to rival in-process SQLite performance at least for
-  higher-level languages.
 - Be just as easy to self-host with aspirations to be even easier to manage a
   fleet of deployments across integration tests, development, and production.
   We'd also like to eventually tackle replication.
@@ -59,11 +60,13 @@ Measuring we found that TrailBase's APIs are roughly [10x faster](/reference/ben
 This may sound like a lot but is the result of SQLite itself being extremely
 fast meaning that even small overheads weigh heavily.
 
-Independently, TrailBase offers a WebAssembly runtime over PocketBase's
-JavaScript interpreter.
-This allows for strict state isolation between requests and supports a
-wide-range of guest languages - currently JS/TS and Rust with more to come.
-A custom Rust endpoint can be up to 140x faster than a PocketBase JS one.
+Independently, TrailBase offers a WebAssembly runtime in contrast to
+PocketBase's ~~gotcha~~ [`goja`](https://github.com/dop251/goja) JavaScript interpreter 🙃.
+The former can support a wide-range of guest languages - currently JS/TS and
+Rust with more to come - and can allow for a wider range of
+isolation/performance trade-offs.
+In practice, a custom Rust WASM endpoint can be up to 140x faster than a
+PocketBase JS one.
 
 ### Framework Use
 
@@ -87,20 +90,20 @@ emerge.
 In lieu of trying to enumerating all of these constantly evolving differences,
 let's look a some of the nifty tricks that TrailBase has up its sleeve:
 
-- Support for multiple independent SQLite DBs [^6].
+- Support for multiple independent SQLite DBs[^6].
 - Language independent bindings via JSON-schema with strict type-safety
   enforced all the way from the client to the database[^4].
-- A WASM runtime, supporting multiple guest languages for custom endpoints and
-  up to 140x speed-up[^5].
-- Untethered access to SQLite with all its features and capabilities.
-- First-party client libraries beyond JS/TS and Dart for
-  C#, Kotlin, Swift, Go, Python and Rust.
-- Ships with a simple pre-built auth UI to get you started. You can always
-  graduate to your own. In fact, the first-party one is just a WASM component
-  waiting to be forked.
+- A WASM runtime for custom endpoints in multiple languages and speed-ups of up
+  to 140x[^5].
+- Untethered access to SQLite with all its features and capabilities[^1].
+- First-party client libraries beyond JS/TS and Dart for C#, Kotlin, Swift, Go,
+  Python and Rust.
+- Has a ready, public auth UI (login, profile, ...) to get you started. You can fork,
+  modify or roll your own since it's just a WASM component.
 - Support for geospatial data and `GeoJSON` APIs.
 - Support for stable more and more efficient cursor-based pagination in addition to `OFFSET`.
-- An admin UI that "works" on small mobile screens 😅.
+- Component-provided admin UI extension dashboards.
+- Arguably a less polished admin UI but it works on small mobile screens 😅.
 
 ### Contributing & Licensing
 
@@ -137,6 +140,9 @@ flexibility and performance matter.
     ORMs, on the other hand, often look great in examples but many fall apart
     for more complex tasks. They're certainly bespoke, non-transferable
     knowledge, and lead to vendor lock-in.
+    UPDATE: PocketBase in v0.39 gained an SQL console but special care is
+    needed especially for schema manipulations, since PB manges its own
+    metadata besides the primary schema, which will get out-of-sync.
 
 [^2]:
     Maybe more in line with SupaBase's philosophy. We suspect that PocketBase
@@ -158,3 +164,8 @@ flexibility and performance matter.
 
 [^6]:
     This can aid with physical separation and offer a path to overcoming potential locking bottlenecks.
+
+[^7]:
+    TrailBase recently gained support for Postgres. It's still early
+    days and change subscriptions are not supported but it offers a path for
+    folks who feel that they may need finer-grained locking in the future.
