@@ -8252,6 +8252,7 @@ dependencies = [
  "ts-rs",
  "url",
  "utoipa",
+ "utoipa-axum",
  "uuid",
  "validator",
  "walkdir",
@@ -8480,6 +8481,7 @@ dependencies = [
  "trailbase-extension",
  "trailbase-sqlite",
  "ts-rs",
+ "utoipa",
  "uuid",
 ]
 
@@ -8525,6 +8527,7 @@ dependencies = [
  "thiserror 2.0.19",
  "trailbase-sqlite",
  "ts-rs",
+ "utoipa",
 ]
 
 [[package]]
@@ -8907,6 +8910,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "utoipa-axum"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c25bae5bccc842449ec0c5ddc5cbb6a3a1eaeac4503895dc105a1138f8234a0"
+dependencies = [
+ "axum",
+ "paste",
+ "tower-layer",
+ "tower-service",
+ "utoipa",
+]
+
+[[package]]
 name = "utoipa-gen"
 version = "5.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8916,6 +8932,7 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.119",
+ "uuid",
 ]
 
 [[package]]
@@ -8933,8 +8950,15 @@ dependencies = [
  "serde_json",
  "url",
  "utoipa",
+ "utoipa-swagger-ui-vendored",
  "zip 3.0.0",
 ]
+
+[[package]]
+name = "utoipa-swagger-ui-vendored"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2eebbbfe4093922c2b6734d7c679ebfebd704a0d7e56dfcb0d05818ce28977d"
 
 [[package]]
 name = "uuid"

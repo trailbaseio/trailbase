@@ -10,7 +10,7 @@ use crate::admin::AdminError as Error;
 use crate::admin::util::{rows_to_columns, rows_to_sql_value_rows};
 use crate::connection::{BuildOptions, ConnectionEntry};
 
-#[derive(Debug, Default, Serialize, TS)]
+#[derive(Debug, Default, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct QueryResponse {
   columns: Option<Vec<Column>>,
@@ -18,13 +18,22 @@ pub struct QueryResponse {
   rows: Vec<Vec<SqlValue>>,
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct QueryRequest {
   query: String,
   attached_databases: Option<Vec<String>>,
 }
 
+#[utoipa::path(
+  post,
+  path = "/query",
+  tag = "admin",
+  request_body = QueryRequest,
+  responses(
+    (status = 200, description = "Success", body = QueryResponse),
+  )
+)]
 pub async fn query_handler(
   State(state): State<AppState>,
   Json(request): Json<QueryRequest>,

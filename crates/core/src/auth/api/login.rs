@@ -11,10 +11,10 @@ use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
+use crate::auth::api::totp::new_totp;
 use crate::auth::jwt::PendingAuthTokenClaims;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::password::check_user_password;
-use crate::auth::totp::new_totp;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,

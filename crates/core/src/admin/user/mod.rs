@@ -1,15 +1,7 @@
-mod create_user;
-mod delete_user;
-mod list_users;
-mod update_user;
-
-pub use create_user::{CreateUserRequest, create_user_handler};
-pub(super) use delete_user::delete_user_handler;
-pub(super) use list_users::list_users_handler;
-pub(super) use update_user::update_user_handler;
-
-#[cfg(test)]
-pub(crate) use create_user::create_user_for_test;
+pub mod create_user;
+pub mod delete_user;
+pub mod list_users;
+pub mod update_user;
 
 #[cfg(test)]
 mod tests {

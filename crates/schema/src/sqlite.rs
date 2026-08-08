@@ -32,7 +32,7 @@ pub enum SchemaError {
   Precondition(Box<dyn std::error::Error + Send + Sync>),
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub struct ForeignKey {
   pub name: Option<String>,
   pub columns: Vec<String>,
@@ -74,7 +74,7 @@ impl ForeignKey {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub struct Check {
   pub name: Option<String>,
   pub expr: String,
@@ -91,7 +91,7 @@ impl Check {
 }
 
 // https://www.sqlite.org/syntax/table-constraint.html.
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub struct UniqueConstraint {
   pub name: Option<String>,
 
@@ -122,7 +122,7 @@ impl UniqueConstraint {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub struct ColumnOrder {
   pub column_name: String,
   pub ascending: Option<bool>,
@@ -130,7 +130,7 @@ pub struct ColumnOrder {
 }
 
 /// Conflict resolution types
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub enum ConflictResolution {
   /// `ROLLBACK`
   Rollback,
@@ -170,7 +170,7 @@ impl ConflictResolution {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub enum ReferentialAction {
   Restrict,
   Cascade,
@@ -205,13 +205,13 @@ impl ReferentialAction {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub enum GeneratedExpressionMode {
   Virtual,
   Stored,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub enum ColumnOption {
   Null,
   NotNull,
@@ -354,7 +354,7 @@ impl<'b> From<&'b sqlite3_parser::ast::ColumnConstraint<'b>> for ColumnOption {
   }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub enum ColumnDataType {
   // Per cell storage type.
   Any,
@@ -395,7 +395,7 @@ impl ColumnDataType {
 /// Different affinity types in SQLite will lead to different preferences in interpreting input
 /// literals. For example, a column with REAL preference, will store any input but try to convert
 /// strings into REAL when possible.
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub enum ColumnAffinityType {
   Text,
   Integer,
@@ -449,7 +449,7 @@ impl ColumnAffinityType {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, TS, utoipa::ToSchema)]
 pub struct Column {
   pub name: String,
   pub type_name: String,
@@ -499,7 +499,7 @@ impl Column {
   }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, TS)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 pub struct QualifiedName {
   pub name: String,
   pub database_schema: Option<String>,
@@ -616,7 +616,7 @@ impl<'b> From<AstQualifiedName<'b>> for QualifiedName {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 #[ts(export)]
 pub struct Table {
   pub name: QualifiedName,
@@ -805,7 +805,7 @@ impl<'b> TryFrom<&'b sqlite3_parser::ast::Stmt<'b>> for Table {
   }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, TS, PartialEq, utoipa::ToSchema)]
 pub struct TableIndex {
   pub name: QualifiedName,
 
@@ -902,7 +902,7 @@ impl<'b> std::fmt::Display for SelectFormatter<'b> {
   }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 pub struct View {
   pub name: QualifiedName,
 
@@ -974,7 +974,7 @@ impl View {
   }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS, utoipa::ToSchema)]
 pub struct ViewColumn {
   // e.g. "foo" for CREATE VIEW v AS SELECT foo.bar AS baz FROM ...
   // #[allow(unused)]
@@ -996,7 +996,7 @@ pub struct ViewColumn {
   pub aggregation: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 pub struct ColumnMapping {
   pub columns: Vec<ViewColumn>,
 

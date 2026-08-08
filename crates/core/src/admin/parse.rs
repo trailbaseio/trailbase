@@ -7,13 +7,13 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
-#[derive(Debug, Deserialize, PartialEq, Serialize, TS)]
+#[derive(Debug, Deserialize, PartialEq, Serialize, TS, utoipa::ToSchema)]
 pub enum Mode {
   Expression,
   Statement,
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ParseRequest {
   query: String,
@@ -26,13 +26,22 @@ pub struct ParseRequest {
   // delete_access: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ParseResponse {
   ok: bool,
   message: Option<String>,
 }
 
+#[utoipa::path(
+  post,
+  path = "/parse",
+  tag = "admin",
+  request_body = ParseRequest,
+  responses(
+    (status = 200, description = "Success", body = ParseResponse),
+  )
+)]
 pub async fn parse_handler(
   State(_state): State<AppState>,
   Json(request): Json<ParseRequest>,

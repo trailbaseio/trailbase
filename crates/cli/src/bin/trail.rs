@@ -16,7 +16,6 @@ use trailbase_wasm_component_repo::{
   ComponentReference, download_component, find_component, find_component_by_filename,
   install_wasm_component, list_installed_wasm_components, repo,
 };
-use utoipa::OpenApi;
 
 use trailbase_cli::{
   AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, OpenApiSubCommands,
@@ -101,15 +100,21 @@ async fn async_main(
     }
     SubCommands::OpenApi { cmd } => match cmd {
       Some(OpenApiSubCommands::Print) | None => {
-        let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
+        // QUESTION: Should we eventually require initialization and instead use
+        // `build_api_definitions_from_state`? This may allow us to include routes form WASM
+        // components.
+        // TODO: Wire up config.
+        let json =
+          trailbase::openapi::build_api_definitions(/* config= */ None).to_pretty_json()?;
         println!("{json}");
       }
       #[cfg(feature = "swagger")]
       Some(OpenApiSubCommands::Run { address }) => {
-        let router = axum::Router::new().merge(
-          utoipa_swagger_ui::SwaggerUi::new("/docs")
-            .url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
-        );
+        // TODO: Wire up config.
+        let router = axum::Router::new().merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url(
+          "/api/openapi.json",
+          trailbase::openapi::build_api_definitions(/* config= */ None),
+        ));
 
         let listener = tokio::net::TcpListener::bind(address.clone())
           .await

@@ -19,7 +19,7 @@ use crate::util::uuid_to_b64;
 
 #[utoipa::path(
   get,
-  path = "/avatar/:b64_user_id",
+  path = "/avatar/{b64_user_id}",
   tag = "auth",
   responses((status = 200, description = "Optional Avatar file"))
 )]
@@ -52,7 +52,7 @@ pub async fn get_avatar_handler(
 
 #[utoipa::path(
   post,
-  path = "/avatar/",
+  path = "/avatar",
   tag = "auth",
   responses((status = 200, description = "Deletion success"))
 )]
@@ -117,7 +117,7 @@ pub async fn create_avatar_handler(
 
 #[utoipa::path(
   delete,
-  path = "/avatar/",
+  path = "/avatar",
   tag = "auth",
   responses((status = 200, description = "Deletion success"))
 )]
@@ -222,7 +222,7 @@ mod tests {
   use axum_test::multipart::{MultipartForm, Part};
 
   use super::*;
-  use crate::admin::user::create_user_for_test;
+  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::{DbUser, User};
   use crate::auth::util::login_with_password;

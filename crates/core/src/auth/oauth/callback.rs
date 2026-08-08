@@ -35,7 +35,7 @@ pub struct AuthQuery {
 /// user's information, creates a new local user if needed, and finally mints our own tokens.
 #[utoipa::path(
   get,
-  path = "/{provider}/callback",
+  path = "/oauth/{provider}/callback",
   tag = "oauth",
   params(AuthQuery),
   responses(

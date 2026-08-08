@@ -16,7 +16,7 @@ use crate::constants::USER_TABLE_FQ;
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::util::row_id_column;
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, utoipa::ToSchema)]
 pub struct UserJson {
   pub id: String,
   pub email: Option<String>,
@@ -48,7 +48,7 @@ impl From<DbUser> for UserJson {
   }
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListUsersResponse {
   total_row_count: i64,
@@ -56,6 +56,14 @@ pub struct ListUsersResponse {
   users: Vec<UserJson>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/user",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn list_users_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,

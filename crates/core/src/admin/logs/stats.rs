@@ -17,7 +17,7 @@ use crate::constants::{LOGS_RETENTION_DEFAULT, LOGS_TABLE};
 use crate::listing::{WhereClause, build_filter_where_clause};
 use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct StatsResponse {
   // List of (timestamp, number of queries).
@@ -26,6 +26,14 @@ pub struct StatsResponse {
   country_codes: Option<HashMap<String, usize>>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/logs/stats",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = StatsResponse),
+  )
+)]
 pub async fn fetch_stats_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,

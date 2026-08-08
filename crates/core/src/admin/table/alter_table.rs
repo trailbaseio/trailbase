@@ -10,7 +10,7 @@ use crate::app_state::AppState;
 use crate::config::proto::hash_config;
 use crate::transaction_recorder::{TransactionLog, TransactionRecorder};
 
-#[derive(Clone, Debug, Deserialize, TS)]
+#[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
 pub enum AlterTableOperation {
   RenameTableTo { name: String },
   AddColumn { column: Column },
@@ -20,7 +20,7 @@ pub enum AlterTableOperation {
 }
 
 /// Request for altering `TABLE` schema.
-#[derive(Clone, Debug, Deserialize, TS)]
+#[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct AlterTableRequest {
   pub source_schema: Table,
@@ -29,7 +29,7 @@ pub struct AlterTableRequest {
   pub dry_run: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct AlterTableResponse {
   pub sql: String,
@@ -39,6 +39,15 @@ pub struct AlterTableResponse {
 ///
 /// NOTE: SQLite has very limited alter table support. Thus, we always recreate the table and move
 /// the data over, see https://sqlite.org/lang_altertable.html.
+#[utoipa::path(
+  patch,
+  path = "/table",
+  tag = "admin",
+  request_body = AlterTableRequest,
+  responses(
+    (status = 200, description = "Success", body = AlterTableResponse),
+  )
+)]
 pub async fn alter_table_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterTableRequest>,
@@ -410,7 +419,7 @@ mod tests {
   use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
 
   use super::*;
-  use crate::admin::table::{CreateTableRequest, create_table_handler};
+  use crate::admin::table::create_table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::connection::ConnectionEntry;

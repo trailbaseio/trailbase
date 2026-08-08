@@ -8,7 +8,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::transaction_recorder::TransactionRecorder;
 
-#[derive(Clone, Debug, Deserialize, TS)]
+#[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct AlterIndexRequest {
   pub source_schema: TableIndex,
@@ -16,12 +16,21 @@ pub struct AlterIndexRequest {
   pub dry_run: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct AlterIndexResponse {
   pub sql: String,
 }
 
+#[utoipa::path(
+  patch,
+  path = "/index",
+  tag= "admin",
+  request_body = AlterIndexRequest,
+  responses(
+    (status = 200, description = "Success", body = AlterIndexResponse),
+  )
+)]
 pub async fn alter_index_handler(
   State(state): State<AppState>,
   Json(request): Json<AlterIndexRequest>,

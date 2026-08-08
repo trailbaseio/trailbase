@@ -18,3 +18,4 @@ serde = { workspace = true }
 thiserror = "2.0.12"
 ts-rs = { workspace = true }
 trailbase-sqlite = { workspace = true, optional = true }
+utoipa = { workspace = true }

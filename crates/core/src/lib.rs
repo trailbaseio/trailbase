@@ -123,25 +123,94 @@ static DESCRIPTOR_POOL: LazyLock<DescriptorPool> = LazyLock::new(|| {
 });
 
 pub mod openapi {
-  use utoipa::OpenApi;
+  use utoipa::openapi::{InfoBuilder, LicenseBuilder, OpenApiBuilder};
+  use utoipa_axum::router::OpenApiRouter;
 
-  #[derive(OpenApi)]
-  #[openapi(
-        info(
-            title = "TrailBase",
-            description = "TrailBase APIs",
-        ),
-        nest(
-            (path = "/api/auth/v1", api = crate::auth::AuthApi),
-            (path = "/api/records/v1", api = crate::records::RecordOpenApi),
-        ),
-        tags(),
-    )]
-  pub struct Doc;
+  use crate::AppState;
+  use crate::config::proto::Config;
+  use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH};
+
+  fn version() -> String {
+    let version_info = trailbase_build::get_version_info!();
+    return version_info
+      .git_version()
+      .map(|v| {
+        let tag = v.tag();
+        if let Some(commits_since) = v.commits_since {
+          return format!("{tag} ({commits_since})");
+        }
+        return tag;
+      })
+      .unwrap_or_default();
+  }
+
+  fn from_router<S: Send + Sync + Clone + 'static>(
+    router: OpenApiRouter<S>,
+  ) -> utoipa::openapi::OpenApi {
+    const LICENSE: &str = "OSL-3.0";
+    return OpenApiBuilder::new()
+      .info(
+        InfoBuilder::new()
+          .title("TrailBase")
+          .description(Some("OpenApi definitions of TrailBase's APIs"))
+          .license(Some(
+            LicenseBuilder::new()
+              .name(LICENSE)
+              .identifier(Some(LICENSE))
+              .build(),
+          ))
+          .version(version())
+          .build(),
+      )
+      .build()
+      .merge_from(router.into_openapi());
+  }
+
+  // Initializes routes from fully initialized TrailBase. This would allow to even pick up routes
+  // from registered WASM components.
+  pub fn build_api_definitions_from_state(state: &AppState) -> utoipa::openapi::OpenApi {
+    type Installer = fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>;
+
+    return from_router(
+      crate::server::Server::build_main_router(state, None, false, &[], None::<&Installer>, vec![])
+        .unwrap_or_else(|err| {
+          log::error!("failed to build main_router: {err}");
+
+          return OpenApiRouter::new();
+        }),
+    );
+  }
+
+  pub fn build_api_definitions(config: Option<Config>) -> utoipa::openapi::OpenApi {
+    let config = config.unwrap_or_else(|| {
+      let mut config = Config::new_with_custom_defaults();
+      config.auth.enable_anonymous_signin = Some(true);
+      config.auth.enable_otp_signin = Some(true);
+      return config;
+    });
+
+    let public_router = || {
+      return OpenApiRouter::new()
+        .nest(&format!("/{AUTH_API_PATH}/"), crate::auth::router(&config))
+        .merge(crate::records::router(
+          trailbase_sqlite::ConnectionType::Sqlite,
+          true,
+        ));
+    };
+
+    // Currently we only include the admin APIs in dev builds.
+    if cfg!(debug_assertions) {
+      return from_router(
+        public_router().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router()),
+      );
+    }
+
+    return from_router(public_router());
+  }
 }
 
 pub mod api {
-  pub use crate::admin::user::{CreateUserRequest, create_user_handler};
+  pub use crate::admin::user::create_user::{CreateUserRequest, create_user_handler};
   pub use crate::app_state::InitArgs;
   pub use crate::auth::{AuthTokenClaims, JwtHelper, cli};
   pub use crate::backup::{Backup, backup_all, delete_backups, find_backups, restore_all};

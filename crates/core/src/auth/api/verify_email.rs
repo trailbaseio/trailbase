@@ -90,7 +90,7 @@ pub(crate) struct VerifyEmailParams {
 /// Request a new email to verify email address.
 #[utoipa::path(
   get,
-  path = "/verify_email/confirm/:email_verification_code",
+  path = "/verify_email/confirm/{email_verification_token}",
   tag = "auth",
   responses(
     (status = 200, description = "Email verified, when redirect_uri not present"),

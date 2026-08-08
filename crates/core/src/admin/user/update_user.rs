@@ -22,7 +22,7 @@ use crate::constants::USER_TABLE;
 /// NOTE: We don't allow admin promotions and especially demotions, since they could easily be
 /// abused. Instead we relegate such critical actions to the CLI, which limits them to sys
 /// admins over mere TrailBase admins.
-#[derive(Debug, Serialize, Deserialize, Default, TS)]
+#[derive(Debug, Serialize, Deserialize, Default, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct UpdateUserRequest {
   id: uuid::Uuid,
@@ -34,6 +34,15 @@ pub struct UpdateUserRequest {
   password: Option<String>,
 }
 
+#[utoipa::path(
+  patch,
+  path = "/user",
+  tag = "admin",
+  request_body = UpdateUserRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn update_user_handler(
   State(state): State<AppState>,
   Json(request): Json<UpdateUserRequest>,

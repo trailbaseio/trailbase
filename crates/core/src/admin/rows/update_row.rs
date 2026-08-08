@@ -11,7 +11,7 @@ use crate::connection::ConnectionEntry;
 use crate::records::params::Params;
 use crate::records::write_queries::run_update_query;
 
-#[derive(Debug, Serialize, Deserialize, TS)]
+#[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct UpdateRowRequest {
   pub primary_key_column: String,
@@ -24,6 +24,15 @@ pub struct UpdateRowRequest {
   pub row: indexmap::IndexMap<String, SqlValue>,
 }
 
+#[utoipa::path(
+  patch,
+  path = "/table/{table_name}",
+  tag = "admin",
+  request_body = UpdateRowRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn update_row_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,

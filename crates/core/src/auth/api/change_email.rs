@@ -200,7 +200,7 @@ pub(crate) struct ChangeEmailConfigParams {
 /// Confirm a change of email address.
 #[utoipa::path(
   get,
-  path = "/change_email/confirm/:email_verification_code",
+  path = "/change_email/confirm/{email_verification_code}",
   tag = "auth",
   responses(
     (status = 200, description = "Success, when redirect_uri is not present."),
