@@ -3,16 +3,18 @@ use axum::{
   http::StatusCode,
   response::{IntoResponse, Response},
 };
+use const_format::formatcp;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::constants::RECORD_API_PATH;
 use crate::records::write_queries::run_delete_query;
 use crate::records::{Permission, RecordError};
 
 /// Delete record.
 #[utoipa::path(
   delete,
-  path = "/{name}/{record}",
+  path = formatcp!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
   tag = "records",
   responses(
     (status = 200, description = "Successful deletion.")

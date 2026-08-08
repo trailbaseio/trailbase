@@ -1,6 +1,7 @@
 use axum::extract::{Path, RawQuery, Request, State};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
+use const_format::formatcp;
 use futures_util::StreamExt;
 use futures_util::stream;
 use serde::Deserialize;
@@ -11,6 +12,7 @@ use ts_rs::TS;
 
 use crate::app_state::AppState;
 use crate::auth::User;
+use crate::constants::RECORD_API_PATH;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
 use crate::records::subscribe::event::{EventError, EventErrorStatus, EventPayload};
@@ -41,7 +43,7 @@ impl SubscriptionQuery {
 /// Read record.
 #[utoipa::path(
   get,
-  path = "/{name}/subscribe/{record}",
+  path = formatcp!("/{RECORD_API_PATH}/{{name}}/subscribe/{{record}}"),
   tag = "records",
   // TODO: Document the params. Requires utoipa support in trailbase_qs or external impl.
   // params(SubscriptionParams),

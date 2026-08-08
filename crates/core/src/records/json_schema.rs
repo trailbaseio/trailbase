@@ -1,4 +1,5 @@
 use axum::extract::{Json, Path, Query, State};
+use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_schema::json_schema::{
   Expand, JsonSchemaMode, build_json_schema, build_json_schema_expanded,
@@ -6,6 +7,7 @@ use trailbase_schema::json_schema::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::constants::RECORD_API_PATH;
 use crate::records::{Permission, RecordApi, RecordError};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -16,7 +18,7 @@ pub struct JsonSchemaQuery {
 /// Retrieve json schema associated with given record api.
 #[utoipa::path(
   get,
-  path = "/{name}/schema",
+  path = formatcp!("/{RECORD_API_PATH}/{{name}}/schema"),
   tag = "records",
   responses(
     (status = 200, description = "JSON schema.")

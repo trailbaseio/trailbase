@@ -1,7 +1,9 @@
 use axum::extract::{Path, State};
+use const_format::formatcp;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::constants::RECORD_API_PATH;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams};
 use crate::records::write_queries::run_update_query;
@@ -10,7 +12,7 @@ use crate::records::{Permission, RecordError};
 /// Update existing record.
 #[utoipa::path(
   patch,
-  path = "/{name}/{record}",
+  path = formatcp!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
   tag = "records",
   request_body = serde_json::Value,
   responses(

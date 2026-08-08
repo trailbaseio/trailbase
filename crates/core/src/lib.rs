@@ -158,20 +158,6 @@ pub mod openapi {
       .paths(api.paths)
       .build();
   }
-
-  #[derive(OpenApi)]
-  #[openapi(
-        info(
-            title = "TrailBase",
-            description = "TrailBase APIs",
-        ),
-        nest(
-            (path = "/api/auth/v1", api = crate::auth::AuthApi),
-            (path = "/api/records/v1", api = crate::records::RecordOpenApi),
-        ),
-        tags(),
-    )]
-  pub struct Doc;
 }
 
 pub mod api {

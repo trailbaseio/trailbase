@@ -1,31 +1,20 @@
-pub(crate) mod provider;
-pub(crate) mod providers;
-
 mod callback;
 mod list_providers;
 mod login;
+pub(crate) mod provider;
+pub(crate) mod providers;
 mod reqwest_client;
 mod state;
 
 #[cfg(test)]
 mod oauth_test;
 
-use axum::routing::get;
-use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
-
-pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
-pub(crate) use reqwest_client::ReqwestClient;
 
 use crate::AppState;
 
-#[derive(OpenApi)]
-#[openapi(paths(
-  list_providers::list_configured_providers_handler,
-  login::login_with_external_auth_provider,
-  callback::callback_from_external_auth_provider,
-))]
-pub(super) struct OAuthApi;
+pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
+pub(crate) use reqwest_client::ReqwestClient;
 
 pub fn oauth_router() -> OpenApiRouter<AppState> {
   // Using the utoipa integration, we can use the on-handler metadata as the
@@ -35,13 +24,6 @@ pub fn oauth_router() -> OpenApiRouter<AppState> {
 
   return OpenApiRouter::new()
     .routes(routes!(list_providers::list_configured_providers_handler))
-    // TODO: convert to utoipa
-    .route(
-      "/{provider}/login",
-      get(login::login_with_external_auth_provider),
-    )
-    .route(
-      "/{provider}/callback",
-      get(callback::callback_from_external_auth_provider),
-    );
+    .routes(routes!(login::login_with_external_auth_provider))
+    .routes(routes!(callback::callback_from_external_auth_provider));
 }

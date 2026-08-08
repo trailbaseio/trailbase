@@ -1,4 +1,3 @@
-use axum::routing::{delete, get, patch, post};
 use trailbase_sqlite::ConnectionType;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
@@ -32,72 +31,34 @@ pub(crate) use validate::validate_record_api_config;
 
 use crate::AppState;
 use crate::config::proto::PermissionFlag;
-use crate::constants::{RECORD_API_PATH, TRANSACTION_API_PATH};
-
-#[derive(OpenApi)]
-#[openapi(paths(
-  read_record::read_record_handler,
-  read_record::get_uploaded_file_from_record_handler,
-  read_record::get_uploaded_files_from_record_handler,
-  list_records::list_records_handler,
-  create_record::create_record_handler,
-  update_record::update_record_handler,
-  delete_record::delete_record_handler,
-  json_schema::json_schema_handler,
-  subscribe::handler::add_subscription_sse_and_ws_handler,
-))]
-pub(super) struct RecordOpenApi;
 
 pub(crate) fn router(
   connection_type: ConnectionType,
   enable_transactions: bool,
 ) -> OpenApiRouter<AppState> {
+  // Using the utoipa integration, we can use the on-handler metadata as the
+  // source of truth for registering the routes avoiding skew.
+  // Inversely, using this macro ensures that the handlers do have metadata.
+  use utoipa_axum::routes;
+
   let mut router = OpenApiRouter::new()
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
-      get(read_record::read_record_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}"),
-      post(create_record::create_record_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
-      patch(update_record::update_record_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
-      delete(delete_record::delete_record_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}"),
-      get(list_records::list_records_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}/file/{{column_name}}"),
-      get(read_record::get_uploaded_file_from_record_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/{{record}}/files/{{column_name}}/{{file_name}}"),
-      get(read_record::get_uploaded_files_from_record_handler),
-    )
-    .route(
-      &format!("/{RECORD_API_PATH}/{{name}}/schema"),
-      get(json_schema::json_schema_handler),
-    );
+    .routes(routes!(create_record::create_record_handler))
+    .routes(routes!(read_record::read_record_handler))
+    .routes(routes!(update_record::update_record_handler))
+    .routes(routes!(delete_record::delete_record_handler))
+    .routes(routes!(list_records::list_records_handler))
+    .routes(routes!(read_record::get_uploaded_file_from_record_handler))
+    .routes(routes!(read_record::get_uploaded_files_from_record_handler))
+    .routes(routes!(json_schema::json_schema_handler));
 
   if matches!(connection_type, ConnectionType::Sqlite) {
-    router = router.route(
-      &format!("/{RECORD_API_PATH}/{{name}}/subscribe/{{record}}"),
-      get(subscribe::handler::add_subscription_sse_and_ws_handler),
-    );
+    router = router.routes(routes!(
+      subscribe::handler::add_subscription_sse_and_ws_handler
+    ));
   }
 
   if enable_transactions {
-    router = router.route(
-      &format!("/{TRANSACTION_API_PATH}/execute"),
-      post(transaction::record_transactions_handler),
-    );
+    router = router.routes(routes!(transaction::record_transactions_handler));
   }
 
   return router;

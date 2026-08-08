@@ -1,5 +1,3 @@
-use axum::routing::{delete, get, post};
-use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 
 pub mod cli;
@@ -27,45 +25,6 @@ use crate::constants::AUTH_API_PATH;
 
 // NOTE: This import is needed to not mangle names in OpenAPI export.
 use api::*;
-
-// FIXME: Remove with use of openapi-axum
-#[derive(OpenApi)]
-#[openapi(
-  tags(
-      (name = "auth", description = "Auth-related APIs"),
-  ),
-  paths(
-    register::register_user_handler,
-    verify_email::request_email_verification_handler,
-    verify_email::verify_email_handler,
-    change_email::change_email_request_handler,
-    change_email::change_email_confirm_handler,
-    change_username::change_username_handler,
-    reset_password::reset_password_request_handler,
-    reset_password::reset_password_update_handler,
-    change_password::change_password_handler,
-    refresh::refresh_handler,
-    login::login_handler,
-    login::login_mfa_handler,
-    otp::request_otp_handler,
-    otp::login_otp_handler,
-    totp::register_totp_request_handler,
-    totp::register_totp_confirm_handler,
-    totp::unregister_totp_handler,
-    token::auth_code_to_token_handler,
-    status::login_status_handler,
-    logout::logout_handler,
-    logout::post_logout_handler,
-    avatar::get_avatar_handler,
-    avatar::create_avatar_handler,
-    avatar::delete_avatar_handler,
-    delete::delete_handler,
-  ),
-  nest(
-     (path = "/oauth", api = oauth::OAuthApi),
-  ),
-)]
-pub(super) struct AuthApi;
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
 pub(super) fn router(config: &Config) -> OpenApiRouter<AppState> {
@@ -120,10 +79,12 @@ pub(super) fn router(config: &Config) -> OpenApiRouter<AppState> {
     .routes(routes!(api::token::auth_code_to_token_handler))
     // Login status (also let's one lift tokens from cookies).
     .routes(routes!(api::status::login_status_handler))
-    // Logout [get]: deletes all sessions for the current user.
-    .routes(routes!(api::logout::logout_handler))
-    // Logout [post]: deletes given session
-    .routes(routes!(api::logout::post_logout_handler))
+    .routes(routes!(
+      // Logout [get]: deletes all sessions for the current user.
+      api::logout::logout_handler,
+      // Logout [post]: deletes given session
+      api::logout::post_logout_handler,
+    ))
     // Get a user's avatar.
     .routes(routes!(api::avatar::get_avatar_handler))
     .routes(routes!(api::avatar::create_avatar_handler))

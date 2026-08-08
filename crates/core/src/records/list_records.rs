@@ -4,6 +4,7 @@ use axum::{
   extract::{Path, Query, RawQuery, State},
 };
 use base64::prelude::*;
+use const_format::formatcp;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -15,6 +16,7 @@ use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::constants::RECORD_API_PATH;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{
@@ -76,7 +78,7 @@ pub struct ListRecordsQuery {
 /// Lists records matching the given filters
 #[utoipa::path(
   get,
-  path = "/{name}",
+  path = formatcp!("/{RECORD_API_PATH}/{{name}}"),
   tag = "records",
   responses(
     (status = 200, description = "Matching records.")

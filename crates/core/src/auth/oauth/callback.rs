@@ -20,8 +20,8 @@ use crate::auth::util::{
 };
 use crate::config::proto::{OAuthProviderId, UserIdentifier};
 use crate::constants::{
-  AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
-  DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
+  AUTH_API_PATH, AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE,
+  COOKIE_REFRESH_TOKEN, DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };
 use crate::rand::random_alphanumeric;
 
@@ -35,7 +35,7 @@ pub struct AuthQuery {
 /// user's information, creates a new local user if needed, and finally mints our own tokens.
 #[utoipa::path(
   get,
-  path = "/{provider}/callback",
+  path = formatcp!("/{AUTH_API_PATH}/oauth/{{provider}}/callback"),
   tag = "oauth",
   params(AuthQuery),
   responses(
