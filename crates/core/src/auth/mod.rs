@@ -21,10 +21,6 @@ pub use user::User;
 
 use crate::AppState;
 use crate::config::proto::Config;
-use crate::constants::AUTH_API_PATH;
-
-// NOTE: This import is needed to not mangle names in OpenAPI export.
-use api::*;
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
 pub(super) fn router(config: &Config) -> OpenApiRouter<AppState> {
@@ -92,7 +88,7 @@ pub(super) fn router(config: &Config) -> OpenApiRouter<AppState> {
     // User delete.
     .routes(routes!(api::delete::delete_handler))
     // OAuth flows: list providers, login+callback
-    .nest(&format!("/{AUTH_API_PATH}/oauth"), oauth::oauth_router());
+    .merge(oauth::oauth_router());
 
   if config.auth.enable_anonymous_signin() {
     router = router

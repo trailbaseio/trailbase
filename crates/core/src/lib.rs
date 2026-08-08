@@ -123,14 +123,15 @@ static DESCRIPTOR_POOL: LazyLock<DescriptorPool> = LazyLock::new(|| {
 });
 
 pub mod openapi {
-  use crate::AppState;
-  use utoipa::OpenApi;
-  use utoipa::openapi::{InfoBuilder, OpenApiBuilder};
+  use utoipa::openapi::{InfoBuilder, LicenseBuilder, OpenApiBuilder};
   use utoipa_axum::router::OpenApiRouter;
 
-  pub fn build_api_definitions(state: &AppState) -> utoipa::openapi::OpenApi {
+  use crate::AppState;
+  use crate::constants::ADMIN_API_PATH;
+
+  fn version() -> String {
     let version_info = trailbase_build::get_version_info!();
-    let git_version = version_info
+    return version_info
       .git_version()
       .map(|v| {
         let tag = v.tag();
@@ -140,23 +141,63 @@ pub mod openapi {
         return tag;
       })
       .unwrap_or_default();
+  }
 
-    type Installer = fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>;
-    let (_router, api) =
-      crate::server::Server::build_main_router(state, None, false, &[], None::<&Installer>, vec![])
-        .unwrap()
-        .split_for_parts();
-
+  fn from_paths(paths: utoipa::openapi::Paths) -> utoipa::openapi::OpenApi {
+    const LICENSE: &str = "OSL-3.0";
     return OpenApiBuilder::new()
       .info(
         InfoBuilder::new()
           .title("TrailBase")
           .description(Some("OpenApi definitions of TrailBase's APIs"))
-          .version(git_version)
+          .license(Some(
+            LicenseBuilder::new()
+              .name(LICENSE)
+              .identifier(Some(LICENSE))
+              .build(),
+          ))
+          .version(version())
           .build(),
       )
-      .paths(api.paths)
+      .paths(paths)
       .build();
+  }
+
+  // Initializes routes from fully initialized TrailBase. This would allow to even pick up routes
+  // from registered WASM components.
+  pub fn build_api_definitions_from_state(state: &AppState) -> utoipa::openapi::OpenApi {
+    type Installer = fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>;
+    let (_router, api) =
+      crate::server::Server::build_main_router(state, None, false, &[], None::<&Installer>, vec![])
+        .unwrap_or_else(|err| {
+          log::error!("failed to build main_router: {err}");
+
+          return OpenApiRouter::new();
+        })
+        .split_for_parts();
+
+    return from_paths(api.paths);
+  }
+
+  pub fn build_api_definitions() -> utoipa::openapi::OpenApi {
+    let mut config = crate::config::proto::Config::new_with_custom_defaults();
+    config.auth.enable_anonymous_signin = Some(true);
+    config.auth.enable_otp_signin = Some(true);
+
+    return from_paths(
+      OpenApiRouter::new()
+        .merge(crate::auth::router(&config))
+        .merge(crate::records::router(
+          trailbase_sqlite::ConnectionType::Sqlite,
+          true,
+        ))
+        .nest(
+          &format!("/{ADMIN_API_PATH}/"),
+          crate::admin::router().into(),
+        )
+        .into_openapi()
+        .paths,
+    );
   }
 }
 

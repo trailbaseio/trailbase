@@ -1,5 +1,4 @@
 use trailbase_sqlite::ConnectionType;
-use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 
 pub(crate) mod create_record;
