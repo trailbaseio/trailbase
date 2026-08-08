@@ -1,9 +1,7 @@
-use axum::{
-  Router,
-  routing::{delete, get, patch, post},
-};
+use axum::routing::{delete, get, patch, post};
 use trailbase_sqlite::ConnectionType;
 use utoipa::OpenApi;
+use utoipa_axum::router::OpenApiRouter;
 
 pub(crate) mod create_record;
 pub(crate) mod delete_record;
@@ -53,8 +51,8 @@ pub(super) struct RecordOpenApi;
 pub(crate) fn router(
   connection_type: ConnectionType,
   enable_transactions: bool,
-) -> Router<AppState> {
-  let mut router = Router::new()
+) -> OpenApiRouter<AppState> {
+  let mut router = OpenApiRouter::new()
     .route(
       &format!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
       get(read_record::read_record_handler),

@@ -123,7 +123,41 @@ static DESCRIPTOR_POOL: LazyLock<DescriptorPool> = LazyLock::new(|| {
 });
 
 pub mod openapi {
+  use crate::AppState;
   use utoipa::OpenApi;
+  use utoipa::openapi::{InfoBuilder, OpenApiBuilder};
+  use utoipa_axum::router::OpenApiRouter;
+
+  pub fn build_api_definitions(state: &AppState) -> utoipa::openapi::OpenApi {
+    let version_info = trailbase_build::get_version_info!();
+    let git_version = version_info
+      .git_version()
+      .map(|v| {
+        let tag = v.tag();
+        if let Some(commits_since) = v.commits_since {
+          return format!("{tag} ({commits_since})");
+        }
+        return tag;
+      })
+      .unwrap_or_default();
+
+    type Installer = fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>;
+    let (_router, api) =
+      crate::server::Server::build_main_router(state, None, false, &[], None::<&Installer>, vec![])
+        .unwrap()
+        .split_for_parts();
+
+    return OpenApiBuilder::new()
+      .info(
+        InfoBuilder::new()
+          .title("TrailBase")
+          .description(Some("OpenApi definitions of TrailBase's APIs"))
+          .version(git_version)
+          .build(),
+      )
+      .paths(api.paths)
+      .build();
+  }
 
   #[derive(OpenApi)]
   #[openapi(

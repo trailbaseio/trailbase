@@ -104,6 +104,9 @@ trailbase-wasm-component-repo = { path = "crates/wasm-component-repo", version =
 trailbase-wasm-runtime-axum= { path = "crates/wasm-runtime-axum", version = "0.1.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
+utoipa = { version = "5.5.0", features = ["axum_extras", "debug"] }
+utoipa-axum = { version = "0.2.0" }
+utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
 wasmtime = { version = "47.0.1", features = ["winch"] }
 wasmtime-wasi = { version = "47.0.1", default-features = false, features = [] }

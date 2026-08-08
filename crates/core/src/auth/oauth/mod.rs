@@ -10,9 +10,9 @@ mod state;
 #[cfg(test)]
 mod oauth_test;
 
-use axum::Router;
 use axum::routing::get;
 use utoipa::OpenApi;
+use utoipa_axum::router::OpenApiRouter;
 
 pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
 pub(crate) use reqwest_client::ReqwestClient;
@@ -27,12 +27,15 @@ use crate::AppState;
 ))]
 pub(super) struct OAuthApi;
 
-pub fn oauth_router() -> Router<AppState> {
-  Router::new()
-    .route(
-      "/providers",
-      get(list_providers::list_configured_providers_handler),
-    )
+pub fn oauth_router() -> OpenApiRouter<AppState> {
+  // Using the utoipa integration, we can use the on-handler metadata as the
+  // source of truth for registering the routes avoiding skew.
+  // Inversely, using this macro ensures that the handlers do have metadata.
+  use utoipa_axum::routes;
+
+  return OpenApiRouter::new()
+    .routes(routes!(list_providers::list_configured_providers_handler))
+    // TODO: convert to utoipa
     .route(
       "/{provider}/login",
       get(login::login_with_external_auth_provider),
@@ -40,5 +43,5 @@ pub fn oauth_router() -> Router<AppState> {
     .route(
       "/{provider}/callback",
       get(callback::callback_from_external_auth_provider),
-    )
+    );
 }

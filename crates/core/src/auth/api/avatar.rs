@@ -9,7 +9,7 @@ use trailbase_schema::{FileUploadInput, QualifiedName};
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
 use crate::config::proto::ConflictResolutionStrategy;
-use crate::constants::AVATAR_TABLE;
+use crate::constants::{AUTH_API_PATH, AVATAR_TABLE};
 use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::params::{JsonRow, LazyParams};
@@ -19,7 +19,7 @@ use crate::util::uuid_to_b64;
 
 #[utoipa::path(
   get,
-  path = "/avatar/:b64_user_id",
+  path = formatcp!("/{AUTH_API_PATH}/avatar/{{b64_user_id}}"),
   tag = "auth",
   responses((status = 200, description = "Optional Avatar file"))
 )]
@@ -52,7 +52,7 @@ pub async fn get_avatar_handler(
 
 #[utoipa::path(
   post,
-  path = "/avatar/",
+  path = formatcp!("/{AUTH_API_PATH}/avatar/"),
   tag = "auth",
   responses((status = 200, description = "Deletion success"))
 )]
@@ -117,7 +117,7 @@ pub async fn create_avatar_handler(
 
 #[utoipa::path(
   delete,
-  path = "/avatar/",
+  path = formatcp!("/{AUTH_API_PATH}/avatar/"),
   tag = "auth",
   responses((status = 200, description = "Deletion success"))
 )]

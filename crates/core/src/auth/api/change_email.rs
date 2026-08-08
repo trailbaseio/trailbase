@@ -14,7 +14,7 @@ use crate::auth::jwt::EmailChangeTokenClaims;
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
 use crate::config::proto::UserIdentifier;
-use crate::constants::USER_TABLE;
+use crate::constants::{AUTH_API_PATH, USER_TABLE};
 use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
@@ -42,7 +42,7 @@ pub struct ChangeEmailRequest {
 /// Request an email change.
 #[utoipa::path(
   post,
-  path = "/change_email/request",
+  path = formatcp!("/{AUTH_API_PATH}/change_email/request"),
   tag = "auth",
   params(ChangeEmailParams),
   request_body = ChangeEmailRequest,
@@ -200,7 +200,7 @@ pub(crate) struct ChangeEmailConfigParams {
 /// Confirm a change of email address.
 #[utoipa::path(
   get,
-  path = "/change_email/confirm/:email_verification_code",
+  path = formatcp!("/{AUTH_API_PATH}/change_email/confirm/{{email_verification_code}}"),
   tag = "auth",
   responses(
     (status = 200, description = "Success, when redirect_uri is not present."),

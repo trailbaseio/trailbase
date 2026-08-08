@@ -14,7 +14,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::util::{user_by_email, user_by_username};
 use crate::auth::{AuthError, User};
-use crate::constants::USER_TABLE;
+use crate::constants::{AUTH_API_PATH, USER_TABLE};
 use crate::extract::Either;
 
 #[derive(Debug, Default, Deserialize, Serialize, IntoParams)]
@@ -33,7 +33,7 @@ pub struct RegisterTotpResponse {
 /// Sign-up user for TOTP second factor.
 #[utoipa::path(
   get,
-  path = "/totp/register",
+  path = formatcp!("/{AUTH_API_PATH}/totp/register"),
   tag = "auth",
   params(RegisterTotpParams),
   responses(
@@ -89,7 +89,7 @@ pub struct ConfirmRegisterTotpRequest {
 /// Verify the current user's TOTP
 #[utoipa::path(
   post,
-  path = "/totp/confirm",
+  path = formatcp!("/{AUTH_API_PATH}/totp/confirm"),
   tag = "auth",
   request_body = ConfirmRegisterTotpRequest,
   responses(
@@ -135,7 +135,7 @@ pub struct DisableTotpRequest {
 
 #[utoipa::path(
   post,
-  path = "/totp/unregister",
+  path = formatcp!("/{AUTH_API_PATH}/totp/unregister"),
   tag = "auth",
   request_body = DisableTotpRequest,
   responses(

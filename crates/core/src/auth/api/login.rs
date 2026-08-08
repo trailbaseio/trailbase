@@ -21,7 +21,7 @@ use crate::auth::util::{
   validate_and_normalize_email_address, validate_and_normalize_username,
 };
 use crate::constants::{
-  AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
+  AUTH_API_PATH, AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::extract::Either;
@@ -78,7 +78,7 @@ pub struct MfaTokenResponse {
 /// Log in users by email and password.
 #[utoipa::path(
   post,
-  path = "/login",
+  path = formatcp!("/{AUTH_API_PATH}/login"),
   tag= "auth",
   params(LoginInputParams),
   request_body = LoginRequest,
@@ -409,7 +409,7 @@ pub struct LoginMfaRequest {
 /// Log in users by email and password.
 #[utoipa::path(
   post,
-  path = "/login_mfa",
+  path = formatcp!("/{AUTH_API_PATH}/login_mfa"),
   tag= "auth",
   params(LoginInputParams),
   request_body = LoginMfaRequest,

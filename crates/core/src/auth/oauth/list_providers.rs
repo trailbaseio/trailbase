@@ -1,11 +1,13 @@
 use axum::Json;
 use axum::extract::State;
+use const_format::formatcp;
 use serde::Serialize;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::constants::AUTH_API_PATH;
 
 #[derive(Debug, Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -17,7 +19,7 @@ pub struct ConfiguredOAuthProvidersResponse {
 /// List configured OAuth providers.
 #[utoipa::path(
   get,
-  path = "/providers",
+  path = formatcp!("/{AUTH_API_PATH}/oauth/providers"),
   tag = "oauth",
   responses(
     (status = 200, description = "List of OAuth providers.", body = ConfiguredOAuthProvidersResponse)

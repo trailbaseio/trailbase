@@ -121,7 +121,8 @@ trailbase-wasm-runtime-axum = { workspace = true, optional = true }
 trailbase-wasm-runtime-host = { workspace = true, optional = true }
 ts-rs = { workspace = true }
 url = { version = "^2.4.1", default-features = false }
-utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
+utoipa = { workspace = true }
+utoipa-axum = { workspace = true }
 uuid = { workspace = true }
 validator = { version = "0.21.0", default-features = false }
 walkdir = "2.5.0"
