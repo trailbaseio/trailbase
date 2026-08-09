@@ -41,7 +41,19 @@ pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;
 
 // Public APIs
 pub const RECORD_API_PATH: &str = "api/records/v1";
-pub const TRANSACTION_API_PATH: &str = "api/transaction/v1";
-pub const QUERY_API_PATH: &str = "api/query/v1";
 pub const AUTH_API_PATH: &str = "api/auth/v1";
 pub const ADMIN_API_PATH: &str = "api/_admin";
+
+macro_rules! with_auth_prefix {
+  ($s:expr) => {
+    formatcp!("/{}{}", crate::constants::AUTH_API_PATH, $s)
+  };
+}
+
+macro_rules! with_record_prefix {
+  ($s:expr) => {
+    formatcp!("/{}{}", crate::constants::AUTH_API_PATH, $s)
+  };
+}
+
+pub(crate) use {with_auth_prefix, with_record_prefix};
