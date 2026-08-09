@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Request, State};
-use axum::http::{Method, header};
+use axum::extract::{Form, Json as AxumJson, Path, Query, Request, State};
+use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
-use axum::response::Response;
+use axum::response::{IntoResponse, Redirect, Response};
+use axum::routing::{get, post};
 use axum::{RequestExt, Router};
 use http_body_util::BodyExt;
 use rmcp::handler::server::{router::tool::ToolRouter, wrapper::Parameters};
@@ -14,7 +15,7 @@ use rmcp::transport::{
   streamable_http_server::{session::local::LocalSessionManager, tower::StreamableHttpService},
 };
 use rmcp::{Json, ServerHandler, schemars, tool, tool_handler, tool_router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
@@ -22,6 +23,9 @@ use crate::admin;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{AuthError, User};
+
+const MCP_SCOPE: &str = "mcp";
+const MCP_PATH: &str = "/mcp";
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct AdminRequest {
@@ -132,25 +136,464 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
         .disable_allowed_hosts(),
     );
 
+  let protected_mcp =
+    Router::new()
+      .nest_service("/mcp", service)
+      .layer(middleware::from_fn_with_state(
+        state.clone(),
+        assert_mcp_access,
+      ));
+
   Router::new()
-    .nest_service("/mcp", service)
-    .layer(middleware::from_fn_with_state(
-      state.clone(),
-      assert_mcp_access,
-    ))
+    .merge(protected_mcp)
+    .route(
+      "/.well-known/oauth-protected-resource",
+      get(protected_resource_metadata),
+    )
+    .route(
+      "/.well-known/oauth-protected-resource/mcp",
+      get(protected_resource_metadata),
+    )
+    .route(
+      "/.well-known/oauth-authorization-server",
+      get(authorization_server_metadata),
+    )
+    .route("/_/mcp/authorize", get(authorize))
+    .route("/_/mcp/callback/{flow}", get(authorization_callback))
+    .route("/_/mcp/register", post(register_client))
+    .route("/_/mcp/token", post(oauth_token))
 }
 
 async fn assert_mcp_access(
   State(state): State<AppState>,
   mut request: Request,
   next: Next,
-) -> Result<Response, AuthError> {
-  let user = request.extract_parts_with_state::<User, _>(&state).await?;
-  if !is_admin(&state, &user.uuid).await {
-    return Err(AuthError::Forbidden);
+) -> Response {
+  let authorized = match request.extract_parts_with_state::<User, _>(&state).await {
+    Ok(user) => is_admin(&state, &user.uuid).await,
+    Err(_) => false,
+  };
+  if authorized {
+    return next.run(request).await;
   }
 
-  Ok(next.run(request).await)
+  let metadata_url = external_url(&state, "/.well-known/oauth-protected-resource");
+  let mut response = AuthError::Unauthorized.into_response();
+  if let Ok(value) = HeaderValue::from_str(&format!(
+    "Bearer resource_metadata=\"{metadata_url}\", scope=\"{MCP_SCOPE}\""
+  )) {
+    response
+      .headers_mut()
+      .insert(header::WWW_AUTHENTICATE, value);
+  }
+  response
+}
+
+#[derive(Serialize)]
+struct ProtectedResourceMetadata {
+  resource: String,
+  authorization_servers: Vec<String>,
+  scopes_supported: Vec<&'static str>,
+  bearer_methods_supported: Vec<&'static str>,
+}
+
+async fn protected_resource_metadata(
+  State(state): State<AppState>,
+) -> AxumJson<ProtectedResourceMetadata> {
+  let issuer = external_url(&state, "");
+  AxumJson(ProtectedResourceMetadata {
+    resource: external_url(&state, MCP_PATH),
+    authorization_servers: vec![issuer],
+    scopes_supported: vec![MCP_SCOPE],
+    bearer_methods_supported: vec!["header"],
+  })
+}
+
+#[derive(Serialize)]
+struct AuthorizationServerMetadata {
+  issuer: String,
+  authorization_endpoint: String,
+  token_endpoint: String,
+  registration_endpoint: String,
+  response_types_supported: Vec<&'static str>,
+  grant_types_supported: Vec<&'static str>,
+  code_challenge_methods_supported: Vec<&'static str>,
+  token_endpoint_auth_methods_supported: Vec<&'static str>,
+  scopes_supported: Vec<&'static str>,
+}
+
+async fn authorization_server_metadata(
+  State(state): State<AppState>,
+) -> AxumJson<AuthorizationServerMetadata> {
+  AxumJson(AuthorizationServerMetadata {
+    issuer: external_url(&state, ""),
+    authorization_endpoint: external_url(&state, "/_/mcp/authorize"),
+    token_endpoint: external_url(&state, "/_/mcp/token"),
+    registration_endpoint: external_url(&state, "/_/mcp/register"),
+    response_types_supported: vec!["code"],
+    grant_types_supported: vec!["authorization_code", "refresh_token"],
+    code_challenge_methods_supported: vec!["S256"],
+    token_endpoint_auth_methods_supported: vec!["none"],
+    scopes_supported: vec![MCP_SCOPE],
+  })
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ClientRegistration {
+  #[serde(default)]
+  redirect_uris: Vec<String>,
+  #[serde(default)]
+  client_name: Option<String>,
+  #[serde(default)]
+  scope: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ClientClaims {
+  exp: i64,
+  iat: i64,
+  redirect_uris: Vec<String>,
+  client_name: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ClientRegistrationResponse {
+  client_id: String,
+  client_id_issued_at: i64,
+  redirect_uris: Vec<String>,
+  client_name: Option<String>,
+  token_endpoint_auth_method: &'static str,
+  grant_types: Vec<&'static str>,
+  response_types: Vec<&'static str>,
+  scope: &'static str,
+}
+
+async fn register_client(
+  State(state): State<AppState>,
+  AxumJson(request): AxumJson<ClientRegistration>,
+) -> Result<AxumJson<ClientRegistrationResponse>, OAuthError> {
+  if request.redirect_uris.is_empty()
+    || request
+      .redirect_uris
+      .iter()
+      .any(|uri| !valid_client_redirect(uri))
+    || request
+      .scope
+      .as_deref()
+      .is_some_and(|scope| !scope.split(' ').any(|value| value == MCP_SCOPE))
+  {
+    return Err(OAuthError::invalid_client_metadata("invalid redirect_uris"));
+  }
+
+  let now = chrono::Utc::now().timestamp();
+  let claims = ClientClaims {
+    iat: now,
+    exp: now + chrono::Duration::days(30).num_seconds(),
+    redirect_uris: request.redirect_uris.clone(),
+    client_name: request.client_name.clone(),
+  };
+  let client_id = state
+    .jwt()
+    .encode(&claims)
+    .map_err(|err| OAuthError::server(err.to_string()))?;
+
+  Ok(AxumJson(ClientRegistrationResponse {
+    client_id,
+    client_id_issued_at: now,
+    redirect_uris: request.redirect_uris,
+    client_name: request.client_name,
+    token_endpoint_auth_method: "none",
+    grant_types: vec!["authorization_code", "refresh_token"],
+    response_types: vec!["code"],
+    scope: MCP_SCOPE,
+  }))
+}
+
+#[derive(Deserialize)]
+struct AuthorizeQuery {
+  client_id: String,
+  redirect_uri: String,
+  response_type: String,
+  code_challenge: String,
+  code_challenge_method: String,
+  state: Option<String>,
+  scope: Option<String>,
+  resource: Option<String>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct FlowClaims {
+  exp: i64,
+  redirect_uri: String,
+  client_id: String,
+  state: Option<String>,
+}
+
+async fn authorize(
+  State(state): State<AppState>,
+  user: Option<User>,
+  Query(query): Query<AuthorizeQuery>,
+) -> Result<Response, OAuthError> {
+  let client: ClientClaims = state
+    .jwt()
+    .decode(&query.client_id)
+    .map_err(|_| OAuthError::invalid_request("unknown or expired client_id"))?;
+  if query.response_type != "code"
+    || query.code_challenge_method != "S256"
+    || !client.redirect_uris.contains(&query.redirect_uri)
+    || query
+      .scope
+      .as_deref()
+      .is_some_and(|scope| !scope.split(' ').any(|s| s == MCP_SCOPE))
+    || query
+      .resource
+      .as_deref()
+      .is_some_and(|resource| resource != external_url(&state, MCP_PATH))
+  {
+    return Err(OAuthError::invalid_request("invalid authorization request"));
+  }
+
+  let flow = state
+    .jwt()
+    .encode(&FlowClaims {
+      exp: chrono::Utc::now().timestamp() + chrono::Duration::minutes(10).num_seconds(),
+      redirect_uri: query.redirect_uri,
+      client_id: query.client_id,
+      state: query.state,
+    })
+    .map_err(|err| OAuthError::server(err.to_string()))?;
+  let callback = format!("/_/mcp/callback/{flow}");
+  let login_query = url::form_urlencoded::Serializer::new(String::new())
+    .append_pair("redirect_uri", &callback)
+    .append_pair("response_type", "code")
+    .append_pair("pkce_code_challenge", &query.code_challenge)
+    .finish();
+
+  if let Some(user) = user {
+    if !is_admin(&state, &user.uuid).await {
+      return Err(OAuthError::access_denied(
+        "MCP access requires an administrator",
+      ));
+    }
+    let db_user = crate::auth::util::user_by_id(&state, &user.uuid)
+      .await
+      .map_err(OAuthError::from_auth)?;
+    return crate::auth::api::login::build_authorization_code_flow_and_pkce_response(
+      &state,
+      &db_user,
+      callback,
+      query.code_challenge,
+    )
+    .await
+    .map_err(OAuthError::from_auth);
+  }
+
+  Ok(Redirect::to(&format!("/_/auth/login?{login_query}")).into_response())
+}
+
+#[derive(Deserialize)]
+struct CallbackQuery {
+  code: String,
+}
+
+async fn authorization_callback(
+  State(state): State<AppState>,
+  Path(flow): Path<String>,
+  Query(query): Query<CallbackQuery>,
+) -> Result<Redirect, OAuthError> {
+  let flow: FlowClaims = state
+    .jwt()
+    .decode(&flow)
+    .map_err(|_| OAuthError::invalid_request("unknown or expired authorization flow"))?;
+  let mut redirect = url::Url::parse(&flow.redirect_uri)
+    .map_err(|_| OAuthError::invalid_request("invalid redirect_uri"))?;
+  redirect.query_pairs_mut().append_pair("code", &query.code);
+  if let Some(state) = flow.state {
+    redirect.query_pairs_mut().append_pair("state", &state);
+  }
+  Ok(Redirect::to(redirect.as_str()))
+}
+
+#[derive(Deserialize)]
+struct TokenRequest {
+  grant_type: String,
+  code: Option<String>,
+  code_verifier: Option<String>,
+  refresh_token: Option<String>,
+  client_id: Option<String>,
+  redirect_uri: Option<String>,
+  resource: Option<String>,
+}
+
+#[derive(Serialize)]
+struct TokenResponse {
+  access_token: String,
+  token_type: &'static str,
+  expires_in: i64,
+  refresh_token: Option<String>,
+  scope: &'static str,
+}
+
+async fn oauth_token(
+  State(state): State<AppState>,
+  Form(request): Form<TokenRequest>,
+) -> Result<AxumJson<TokenResponse>, OAuthError> {
+  if request
+    .resource
+    .as_deref()
+    .is_some_and(|resource| resource != external_url(&state, MCP_PATH))
+  {
+    return Err(OAuthError::invalid_grant("invalid resource"));
+  }
+
+  let client_id = request
+    .client_id
+    .as_deref()
+    .ok_or_else(|| OAuthError::invalid_grant("missing client_id"))?;
+  let client: ClientClaims = state
+    .jwt()
+    .decode(client_id)
+    .map_err(|_| OAuthError::invalid_grant("unknown or expired client_id"))?;
+
+  let (access_token, refresh_token) = match request.grant_type.as_str() {
+    "authorization_code" => {
+      let redirect_uri = request
+        .redirect_uri
+        .as_deref()
+        .ok_or_else(|| OAuthError::invalid_grant("missing redirect_uri"))?;
+      if !client.redirect_uris.iter().any(|uri| uri == redirect_uri) {
+        return Err(OAuthError::invalid_grant(
+          "redirect_uri does not match client",
+        ));
+      }
+      let code = request
+        .code
+        .ok_or_else(|| OAuthError::invalid_grant("missing code"))?;
+      let verifier = request
+        .code_verifier
+        .ok_or_else(|| OAuthError::invalid_grant("missing code_verifier"))?;
+      let AxumJson(tokens) = crate::auth::api::token::auth_code_to_token_handler(
+        State(state.clone()),
+        AxumJson(crate::auth::api::token::AuthCodeToTokenRequest {
+          authorization_code: Some(code),
+          pkce_code_verifier: Some(verifier),
+        }),
+      )
+      .await
+      .map_err(OAuthError::from_auth)?;
+      (tokens.auth_token, Some(tokens.refresh_token))
+    }
+    "refresh_token" => {
+      let refresh_token = request
+        .refresh_token
+        .ok_or_else(|| OAuthError::invalid_grant("missing refresh_token"))?;
+      let AxumJson(tokens) = crate::auth::api::refresh::refresh_handler(
+        State(state.clone()),
+        AxumJson(crate::auth::api::refresh::RefreshRequest { refresh_token }),
+      )
+      .await
+      .map_err(OAuthError::from_auth)?;
+      (tokens.auth_token, None)
+    }
+    _ => return Err(OAuthError::invalid_grant("unsupported grant_type")),
+  };
+  let claims = crate::auth::AuthTokenClaims::from_auth_token(state.jwt(), &access_token)
+    .map_err(|_| OAuthError::server("failed to decode issued access token"))?;
+
+  Ok(AxumJson(TokenResponse {
+    access_token,
+    token_type: "Bearer",
+    expires_in: (claims.exp - chrono::Utc::now().timestamp()).max(0),
+    refresh_token,
+    scope: MCP_SCOPE,
+  }))
+}
+
+#[derive(Debug)]
+struct OAuthError {
+  status: StatusCode,
+  code: &'static str,
+  description: String,
+}
+
+impl OAuthError {
+  fn invalid_request(description: impl Into<String>) -> Self {
+    Self {
+      status: StatusCode::BAD_REQUEST,
+      code: "invalid_request",
+      description: description.into(),
+    }
+  }
+
+  fn invalid_client_metadata(description: impl Into<String>) -> Self {
+    Self {
+      status: StatusCode::BAD_REQUEST,
+      code: "invalid_client_metadata",
+      description: description.into(),
+    }
+  }
+
+  fn invalid_grant(description: impl Into<String>) -> Self {
+    Self {
+      status: StatusCode::BAD_REQUEST,
+      code: "invalid_grant",
+      description: description.into(),
+    }
+  }
+
+  fn access_denied(description: impl Into<String>) -> Self {
+    Self {
+      status: StatusCode::FORBIDDEN,
+      code: "access_denied",
+      description: description.into(),
+    }
+  }
+
+  fn server(description: impl Into<String>) -> Self {
+    Self {
+      status: StatusCode::INTERNAL_SERVER_ERROR,
+      code: "server_error",
+      description: description.into(),
+    }
+  }
+
+  fn from_auth(error: AuthError) -> Self {
+    Self {
+      status: StatusCode::BAD_REQUEST,
+      code: "invalid_grant",
+      description: error.to_string(),
+    }
+  }
+}
+
+impl IntoResponse for OAuthError {
+  fn into_response(self) -> Response {
+    (
+      self.status,
+      AxumJson(json!({ "error": self.code, "error_description": self.description })),
+    )
+      .into_response()
+  }
+}
+
+fn valid_client_redirect(uri: &str) -> bool {
+  let Ok(uri) = url::Url::parse(uri) else {
+    return false;
+  };
+  uri.scheme() == "https"
+    || (uri.scheme() == "http" && matches!(uri.host_str(), Some("localhost" | "127.0.0.1" | "::1")))
+}
+
+fn external_url(state: &AppState, path: &str) -> String {
+  let mut base = state
+    .site_url()
+    .as_ref()
+    .clone()
+    .unwrap_or_else(|| url::Url::parse("http://localhost:4000").expect("constant URL"));
+  base.set_path(path);
+  base.set_query(None);
+  base.set_fragment(None);
+  base.to_string().trim_end_matches('/').to_string()
 }
 
 fn normalize_admin_path(path: &str) -> Result<String, McpError> {
@@ -169,6 +612,7 @@ fn normalize_admin_path(path: &str) -> Result<String, McpError> {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::app_state::test_state;
 
   #[test]
   fn normalizes_admin_paths() {
@@ -178,5 +622,49 @@ mod tests {
       "/logs/list?limit=5"
     );
     assert!(normalize_admin_path("https://example.com").is_err());
+  }
+
+  #[tokio::test]
+  async fn registers_client_and_builds_pkce_login_redirect() {
+    let state = test_state(None).await.unwrap();
+    let callback = "http://127.0.0.1:3334/oauth/callback".to_string();
+    let AxumJson(registration) = register_client(
+      State(state.clone()),
+      AxumJson(ClientRegistration {
+        redirect_uris: vec![callback.clone()],
+        client_name: Some("test client".to_string()),
+        scope: Some(MCP_SCOPE.to_string()),
+      }),
+    )
+    .await
+    .unwrap();
+
+    let redirect = authorize(
+      State(state),
+      None,
+      Query(AuthorizeQuery {
+        client_id: registration.client_id,
+        redirect_uri: callback,
+        response_type: "code".to_string(),
+        code_challenge: "ZmFrZS1jaGFsbGVuZ2U".to_string(),
+        code_challenge_method: "S256".to_string(),
+        state: Some("client-state".to_string()),
+        scope: Some(MCP_SCOPE.to_string()),
+        resource: None,
+      }),
+    )
+    .await
+    .unwrap()
+    .into_response();
+
+    let location = redirect
+      .headers()
+      .get(header::LOCATION)
+      .unwrap()
+      .to_str()
+      .unwrap();
+    assert!(location.starts_with("/_/auth/login?"));
+    assert!(location.contains("response_type=code"));
+    assert!(location.contains("pkce_code_challenge="));
   }
 }
