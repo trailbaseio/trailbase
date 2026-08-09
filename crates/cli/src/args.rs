@@ -1,6 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
-use trailbase::DataDir;
 use trailbase::api::JsonSchemaMode;
 
 #[derive(ValueEnum, Clone, Copy, Debug)]
@@ -30,10 +29,14 @@ impl From<JsonSchemaModeArg> for JsonSchemaMode {
 #[derive(Parser, Debug, Clone, Default)]
 #[command(version, about, long_about = None, disable_version_flag = true)]
 pub struct CommandLineArgs {
-  /// Directory for runtime files including the database. Will be created by TrailBase if dir
+  /// Directory for runtime files including the databases. Will be created by TrailBase if dir
   /// doesn't exist.
-  #[arg(long, env, default_value = DataDir::DEFAULT)]
-  pub data_dir: std::path::PathBuf,
+  #[arg(long, env)]
+  pub depot: Option<std::path::PathBuf>,
+
+  /// DEPRECATED: Use --depot instead
+  #[arg(long, env, hide = true)]
+  pub data_dir: Option<std::path::PathBuf>,
 
   /// Public url used to access TrailBase. This is necessary for sending valid auth emails and
   /// OAuth2 redirects, i.e. after users authenticating externally.
@@ -186,12 +189,12 @@ pub enum AdminSubCommands {
   List,
   /// Demotes admin user to normal user.
   Demote {
-    /// Admin in question, either email or UUID.
+    /// Admin in question, either email, username or UUID.
     user: String,
   },
   /// Promotes user to admin.
   Promote {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
 }
@@ -201,21 +204,21 @@ pub enum AdminSubCommands {
 pub enum UserSubCommands {
   /// Change a user's password.
   ChangePassword {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// New password to set for user.
     password: String,
   },
   /// Change a user's email.
   ChangeEmail {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// New email address to set for user.
     new_email: String,
   },
   /// Change Username.
   ChangeUsername {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// New username .
     new_username: String,
@@ -229,12 +232,12 @@ pub enum UserSubCommands {
   },
   /// Delete a user.
   Delete {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
   /// Change a user's verification state.
   Verify {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
     /// User's verification state to set.
     #[arg(default_value = "true")]
@@ -242,12 +245,12 @@ pub enum UserSubCommands {
   },
   /// Invalidate user session, thus requiring them to re-auth when their auth token expires.
   InvalidateSession {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
   /// Mint auth token for the given user.
   MintToken {
-    /// User in question, either email or UUID.
+    /// User in question, either email, username or UUID.
     user: String,
   },
   // Import users from a file.
@@ -259,46 +262,6 @@ pub enum UserSubCommands {
     #[arg(long)]
     auth0_json: Option<String>,
   },
-}
-
-#[derive(Clone, Debug)]
-pub enum ComponentReference {
-  Path(std::path::PathBuf),
-  Url(url::Url),
-  Name(String),
-}
-
-impl TryFrom<&str> for ComponentReference {
-  type Error = String;
-
-  fn try_from(reference: &str) -> Result<Self, Self::Error> {
-    if let Ok(url) = url::Url::parse(reference) {
-      if url.scheme() != "https" {
-        return Err("Only HTTPS supported".into());
-      }
-
-      return Ok(ComponentReference::Url(url));
-    }
-
-    let path = std::path::PathBuf::from(reference);
-    if let Some(ext) = path.extension() {
-      match &*ext.to_string_lossy() {
-        "wasm" | "zip" => {
-          return Ok(ComponentReference::Path(path));
-        }
-        _ => {}
-      }
-    }
-
-    if reference
-      .chars()
-      .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '/')
-    {
-      return Ok(ComponentReference::Name(reference.into()));
-    }
-
-    return Err("Failed to parse component reference".into());
-  }
 }
 
 #[derive(Subcommand, Debug, Clone)]

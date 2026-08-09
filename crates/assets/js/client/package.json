@@ -2,7 +2,7 @@
   "name": "trailbase",
   "description": "Official TrailBase Client",
   "homepage": "https://trailbase.io",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "license": "Apache-2.0 OR OSL-3.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -29,8 +29,10 @@
   "scripts": {
     "build": "vite build",
     "check": "tsc --noEmit --skipLibCheck && eslint",
-    "format": "prettier -w src tests",
+    "check:format": "prettier -c .",
+    "format": "prettier -w .",
     "prepack": "rm -rf ./dist && pnpm build && test -e ./dist/index.js",
+    "test:integration": "vite-node tests/integration_test_runner.ts",
     "test": "vitest run && vite-node tests/integration_test_runner.ts"
   },
   "dependencies": {

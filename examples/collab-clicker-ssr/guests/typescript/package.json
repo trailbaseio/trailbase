@@ -10,7 +10,8 @@
     "build:wasm:aot": "jco componentize  dist/index.mjs -w ../../../../guests/typescript/wit --aot -o dist/component.wasm",
     "build": "npm run build:tsc && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && eslint",
-    "format": "prettier -w src"
+    "check:format": "prettier -c .",
+    "format": "prettier -w ."
   },
   "dependencies": {
     "trailbase-wasm": "workspace:*"

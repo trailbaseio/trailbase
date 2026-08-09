@@ -9,7 +9,7 @@ use trailbase_schema::FileUploads;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::expand::expand_tables;
-use crate::records::expand::row_to_json_expand;
+use crate::records::expand::record_to_json_expand;
 use crate::records::files::read_file_into_response;
 use crate::records::read_queries::{
   ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
@@ -39,7 +39,7 @@ pub async fn read_record_handler(
   Path((api_name, record)): Path<(String, String)>,
   Query(query): Query<ReadRecordQuery>,
   user: Option<User>,
-) -> Result<Json<serde_json::Value>, RecordError> {
+) -> Result<Json<crate::records::expand::JsonObject>, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -95,15 +95,15 @@ pub async fn read_record_handler(
     let mut expand = expand.clone();
 
     for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-      let foreign_value = row_to_json_expand(&metadata.column_metadata, &row, prefix_filter, None)
+      let foreign_value = record_to_json_expand(&metadata.column_metadata, &row, None)
         .map_err(|err| RecordError::Internal(err.into()))?;
 
-      let result = expand.insert(col_name.to_string(), foreign_value);
+      let result = expand.insert(col_name.to_string(), foreign_value.into());
       debug_assert!(result.is_some(), "{col_name} duplicate");
     }
 
     return Ok(Json(
-      row_to_json_expand(api.columns(), &root, prefix_filter, Some(&expand))
+      record_to_json_expand(api.columns(), &root, Some(&expand))
         .map_err(|err| RecordError::Internal(err.into()))?,
     ));
   }
@@ -120,7 +120,7 @@ pub async fn read_record_handler(
     return Err(RecordError::RecordNotFound);
   };
 
-  let json_response = row_to_json_expand(api.columns(), &row, prefix_filter, api.expand())
+  let json_response = record_to_json_expand(api.columns(), &row, api.expand())
     .map_err(|err| RecordError::Internal(err.into()))?;
 
   #[cfg(debug_assertions)]
@@ -128,7 +128,8 @@ pub async fn read_record_handler(
     &state,
     &api,
     trailbase_schema::json_schema::JsonSchemaMode::Select,
-    &json_response,
+    // Expensive.
+    &serde_json::Value::Object(json_response.clone()),
   )?;
 
   return Ok(Json(json_response));
@@ -242,11 +243,6 @@ pub async fn get_uploaded_files_from_record_handler(
   return read_file_into_response(&state, file_upload)
     .await
     .map_err(|err| RecordError::Internal(err.into()));
-}
-
-#[inline]
-fn prefix_filter(col_name: &str) -> bool {
-  return !col_name.starts_with("_");
 }
 
 #[cfg(test)]
@@ -530,7 +526,7 @@ mod test {
 
     let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let Json(value) = read_record_handler(
+    let Json(map) = read_record_handler(
       State(state),
       Path(record_path),
       Query(ReadRecordQuery::default()),
@@ -538,10 +534,6 @@ mod test {
     )
     .await
     .unwrap();
-
-    let serde_json::Value::Object(map) = value else {
-      panic!("Not a map");
-    };
 
     assert_eq!(
       *map.get("index").unwrap(),
@@ -589,7 +581,7 @@ mod test {
 
     let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let Json(value) = read_record_handler(
+    let Json(map) = read_record_handler(
       State(state.clone()),
       Path(record_path.clone()),
       Query(ReadRecordQuery::default()),
@@ -597,10 +589,6 @@ mod test {
     )
     .await
     .unwrap();
-
-    let serde_json::Value::Object(map) = value else {
-      panic!("Not a map");
-    };
 
     let file_upload: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
     assert_eq!(
@@ -742,7 +730,7 @@ mod test {
         return file_path;
       }
 
-      let Json(value) = read_record_handler(
+      let Json(map) = read_record_handler(
         State(state.clone()),
         Path((API_NAME.to_string(), record_id.clone())),
         Query(ReadRecordQuery::default()),
@@ -750,10 +738,6 @@ mod test {
       )
       .await
       .unwrap();
-
-      let serde_json::Value::Object(map) = value else {
-        panic!("Not a map");
-      };
 
       let file: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
       let files: Vec<FileUpload> =
@@ -1000,7 +984,7 @@ mod test {
     .await
     .unwrap();
 
-    assert_eq!(json, value);
+    assert_eq!(serde_json::Value::Object(json), value);
 
     // Providing a value for the hidden column should be ignored
     create_record_handler(
@@ -1170,7 +1154,7 @@ mod test {
       },
     });
 
-    let Json(value) = read_record_handler(
+    let Json(obj) = read_record_handler(
       State(state.clone()),
       Path(("child_api".to_string(), "1".to_string())),
       Query(ReadRecordQuery {
@@ -1181,7 +1165,7 @@ mod test {
     .await
     .unwrap();
 
-    assert_eq!(value, expected);
+    assert_eq!(serde_json::Value::Object(obj), expected);
 
     // Test views.
     add_record_api_config(
@@ -1197,7 +1181,7 @@ mod test {
     .await
     .unwrap();
 
-    let Json(value) = read_record_handler(
+    let Json(obj) = read_record_handler(
       State(state.clone()),
       Path(("child_view_api".to_string(), "1".to_string())),
       Query(ReadRecordQuery {
@@ -1208,7 +1192,7 @@ mod test {
     .await
     .unwrap();
 
-    assert_eq!(value, expected);
+    assert_eq!(serde_json::Value::Object(obj), expected);
   }
 
   // NOTE: Fails config validation for a PG connection ("custom schemas not (yet) supported...").
@@ -1301,7 +1285,7 @@ mod test {
           .await
           .unwrap();
 
-        let Json(read_response) = read_record_handler(
+        let Json(obj) = read_record_handler(
           State(state),
           Path((name.clone(), create_response.ids[0].clone())),
           Query(ReadRecordQuery::default()),
@@ -1310,7 +1294,7 @@ mod test {
         .await
         .unwrap();
 
-        assert_eq!(read_response, record);
+        assert_eq!(serde_json::Value::Object(obj), record);
       }
     }
   }
@@ -1402,7 +1386,7 @@ mod test {
     .await
     .unwrap();
 
-    let Json(read_response) = read_record_handler(
+    let Json(obj) = read_record_handler(
       State(state),
       Path((name.clone(), create_response.ids[0].clone())),
       Query(ReadRecordQuery::default()),
@@ -1411,6 +1395,6 @@ mod test {
     .await
     .unwrap();
 
-    assert_eq!(read_response, record);
+    assert_eq!(serde_json::Value::Object(obj), record);
   }
 }

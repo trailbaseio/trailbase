@@ -35,7 +35,11 @@ abstract class Transport {
 class DefaultTransport implements Transport {
   final http.Client _http;
   final Uri _baseUrl;
-  final Map<String, String>? _baseHeaders;
+
+  /// The extra headers provide the means for users to override or inject their
+  /// own additional headers (the default doesn't use them). This may for
+  /// example be used to control the behavior of a reverse proxy.
+  final Map<String, String>? _extraHeaders;
 
   DefaultTransport({
     required Uri url,
@@ -43,18 +47,18 @@ class DefaultTransport implements Transport {
     http.Client? client,
   })  : _http = client ?? http.Client(),
         _baseUrl = url,
-        _baseHeaders = headers;
+        _extraHeaders = headers;
 
   Map<String, String>? mergeHeaders(Map<String, String>? headers) {
     if (headers != null) {
-      return _baseHeaders != null
+      return _extraHeaders != null
           ? {
               ...headers,
-              ..._baseHeaders,
+              ..._extraHeaders,
             }
           : headers;
     }
-    return _baseHeaders;
+    return _extraHeaders;
   }
 
   @override

@@ -57,7 +57,7 @@ opt-level = 1
 [workspace.dependencies]
 askama = { version = "0.16.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.1", features = ["multipart"] }
-base64 = { version = "0.22.1", default-features = false, features = ["alloc", "std"] }
+base64 = { version = "0.23.0", default-features = false, features = ["alloc", "std"] }
 clap = { version = "^4.4.11", features=["derive", "env"] }
 cron = "0.17.0"
 crossfire = { version = "3.1.16", default-features = false, features = ["tokio"] }
@@ -87,7 +87,7 @@ trailbase-assets = { path = "crates/assets", version = "0.2.0" }
 trailbase-auth-config = { path = "crates/auth-config", version = "0.0.0" }
 trailbase-auth-ui-component = { path = "crates/auth-ui", version = "0.0.0" }
 trailbase-build = { path = "crates/build", version = "0.1.1" }
-trailbase-client = { path = "crates/client", version = "0.9.0" }
+trailbase-client = { path = "crates/client", version = "0.10.0" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
 trailbase-pg-schema = { path = "crates/pg-schema", version = "0.0.1" }
 trailbase-pgrow2serde = { git = "https://github.com/ignatz/pgrow2serde", branch = "main" }
@@ -100,14 +100,15 @@ trailbase-sqlvalue = { path = "crates/sqlvalue", version = "0.1.0" }
 trailbase-wasi-keyvalue = { path = "crates/wasi-keyvalue", version = "0.1.0" }
 trailbase-wasm = { path = "crates/wasm-runtime-guest", version = "0.5.1" }
 trailbase-wasm-common = { path = "crates/wasm-runtime-common", version = "0.2.0" }
+trailbase-wasm-component-repo = { path = "crates/wasm-component-repo", version = "0.1.0" }
 trailbase-wasm-runtime-axum= { path = "crates/wasm-runtime-axum", version = "0.1.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
-wasmtime = { version = "46.0.0", features = ["winch"] }
-wasmtime-wasi = { version = "46.0.0", default-features = false, features = [] }
-wasmtime-wasi-http = { version = "46.0.0", features = [] }
-wasmtime-wasi-io = { version = "46.0.0", features = [] }
+wasmtime = { version = "47.0.1", features = ["winch"] }
+wasmtime-wasi = { version = "47.0.1", default-features = false, features = [] }
+wasmtime-wasi-http = { version = "47.0.1", features = [] }
+wasmtime-wasi-io = { version = "47.0.1", features = [] }
 
 # When building TrailBase as a standalone workspace, use local submodule paths.
 # These [patch] sections are ignored when TrailBase is consumed as a dependency

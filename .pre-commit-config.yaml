@@ -13,6 +13,9 @@ repos:
     -   id: end-of-file-fixer
     -   id: mixed-line-ending
     -   id: trailing-whitespace
+        # `cargo test` below regenerates the bindings and ts-rs may add
+        # trailing whitespaces on optional fields with comments :shrug:.
+        exclude: ^guests/typescript/generated/common/
 
 # Self-validation for pre-commit manifest.
 -   repo: https://github.com/pre-commit/pre-commit
@@ -54,7 +57,7 @@ repos:
     ### JS/TypeScript: Cient, Admin UI, Auth UI, Docs, examples ... ###
     - id: prettier
       name: Prettier
-      entry: pnpm -r format --check
+      entry: pnpm -r check:format
       language: system
       types_or: [javascript, jsx, ts, tsx, astro, markdown, mdx]
       # NOTE: We're relying on pnpm workspaces instead.
@@ -120,14 +123,14 @@ repos:
       name: Dotnet format
       entry: sh -c 'dotnet format client/dotnet/trailbase --verify-no-changes && dotnet format client/dotnet/test --verify-no-changes'
       language: system
-      types: [c#, csproj]
+      types: [c#]
       pass_filenames: false
 
     - id: dotnet_test
       name: Dotnet test
       entry: dotnet test client/dotnet/test
       language: system
-      types: [c#, csproj]
+      types: [c#]
       pass_filenames: false
 
     ### Python client

@@ -38,9 +38,14 @@ export function createTheme(): Accessor<ResolvedTheme> {
     });
   });
 
-  onMount(() =>
-    attrObserver.observe(document.documentElement, { attributes: true }),
-  );
+  onMount(() => {
+    // `initializeTheme()` (called from a parent's onMount) may already have
+    // applied the resolved theme by the time we get here, i.e. before the
+    // observer below starts watching, so the initial signal snapshot above
+    // can be stale. Re-sync once on mount to close that race.
+    setTheme(currentTheme());
+    attrObserver.observe(document.documentElement, { attributes: true });
+  });
   onCleanup(() => attrObserver.disconnect());
 
   return theme;

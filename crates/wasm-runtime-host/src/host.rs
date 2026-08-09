@@ -17,13 +17,13 @@ wasmtime::component::bindgen!({
     world: "trailbase:component/interfaces",
     path: [
         // Order-sensitive: will import *.wit from the folder.
-        "wit/deps-0.2.6/random",
-        "wit/deps-0.2.6/io",
-        "wit/deps-0.2.6/clocks",
-        "wit/deps-0.2.6/filesystem",
-        "wit/deps-0.2.6/sockets",
-        "wit/deps-0.2.6/cli",
-        "wit/deps-0.2.6/http",
+        "wit/wasi-0.2.12/random",
+        "wit/wasi-0.2.12/io",
+        "wit/wasi-0.2.12/clocks",
+        "wit/wasi-0.2.12/filesystem",
+        "wit/wasi-0.2.12/sockets",
+        "wit/wasi-0.2.12/cli",
+        "wit/wasi-0.2.12/http",
         "wit/keyvalue-0.2.0-draft",
         // Ours:
         "wit/trailbase/database",
@@ -99,6 +99,7 @@ impl WasiView for State {
 
 pub(crate) struct Hooks {
   pub shared: Arc<SharedState>,
+  pub wasm_source_file: PathBuf,
 }
 
 impl WasiHttpHooks for Hooks {
@@ -108,24 +109,56 @@ impl WasiHttpHooks for Hooks {
     config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
   ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
   {
-    // log::debug!(
-    //   "send_request {:?} {}: {request:?}",
-    //   request.uri().host(),
-    //   request.uri().path()
-    // );
+    #[cfg(debug_assertions)]
+    log::debug!(
+      "WasiHttpHooks::send_request() {host}{path} ({name}, id={id:?})",
+      host = request.uri().host().unwrap_or_default(),
+      path = request.uri().path(),
+      name = crate::component_path_to_name(&self.wasm_source_file).unwrap_or_default(),
+      id = crate::REQUEST_ID.try_with(|id| *id).unwrap_or_default(),
+    );
 
     return match request.uri().host() {
       Some("__sqlite") => {
         let conn = self.shared.conn.clone().ok_or_else(|| {
           debug_assert!(false, "missing SQLite connection");
+
           wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
             "missing SQLite connection".to_string(),
           ))
         })?;
+
         Ok(
           wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
             wasmtime_wasi::runtime::spawn(async move {
               Ok(crate::sqlite::handle_sqlite_request(conn, request).await)
+            }),
+          ),
+        )
+      }
+      Some("__prefs") => {
+        let component_name = match crate::component_path_to_name(&self.wasm_source_file) {
+          Ok(name) => name,
+          Err(err) => {
+            return Err(
+              wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(err))
+                .into(),
+            );
+          }
+        };
+
+        let conn = self.shared.conn.clone().ok_or_else(|| {
+          debug_assert!(false, "missing SQLite connection");
+
+          wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
+            "missing SQLite connection".to_string(),
+          ))
+        })?;
+
+        Ok(
+          wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
+            wasmtime_wasi::runtime::spawn(async move {
+              Ok(crate::prefs::handle_prefs_request(conn, component_name, request).await)
             }),
           ),
         )

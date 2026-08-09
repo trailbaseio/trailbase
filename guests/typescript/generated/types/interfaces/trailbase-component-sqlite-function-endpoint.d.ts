@@ -1,4 +1,4 @@
-declare module "trailbase:component/sqlite-function-endpoint@0.1.1" {
+declare module "trailbase:component/sqlite-function-endpoint@0.2.0" {
   export function dispatchScalarFunction(args: Arguments): Value;
   /**
    * WARNING: Evolving a variant currently breaks the ABI:
@@ -10,11 +10,7 @@ declare module "trailbase:component/sqlite-function-endpoint@0.1.1" {
     val: string;
   }
   export type Value =
-    | ValueNull
-    | ValueText
-    | ValueBlob
-    | ValueInteger
-    | ValueReal;
+    ValueNull | ValueText | ValueBlob | ValueInteger | ValueReal;
   export interface ValueNull {
     tag: "null";
   }

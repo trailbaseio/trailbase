@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.13.2
+
+- Fix change `Event` decoding when the server concatenates multiple events.
+
+## 0.13.1
+
+- Fix merging of `refresh_token`.
+
+## 0.13.0
+
+- Update transaction/batch parsing to match TrailBase server v0.31+.
+
+## 0.12.1
+
+- Add header overrides back to DefaultTransport.
+
+## 0.12.0
+
+- Add support for batch operations and transactions.
+- Fix token refresh.
+
 ## 0.11.0
 
 - Add support for sign-in as an anonymous user + promotion.

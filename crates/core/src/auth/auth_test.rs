@@ -153,20 +153,8 @@ async fn register_test_user(
     assert_eq!(mailer.get_logs().len(), 1);
 
     // Then steal the verification code from the DB and verify.
-    let verification_email_body: String = String::from_utf8_lossy(&quoted_printable::decode(
-      mailer.get_logs()[0].1.as_bytes(),
-      quoted_printable::ParseMode::Robust,
-    )?)
-    .to_string();
-
-    let verification_email_re = Regex::new(r"\n(ey.*)$").unwrap();
-    let verification_email_token: String = verification_email_re
-      .captures(&verification_email_body)
-      .unwrap()
-      .get(1)
-      .unwrap()
-      .as_str()
-      .to_string();
+    let verification_email_token: String =
+      extract_email_verification_token(&mailer.get_logs()[0].1);
 
     // Check that login before email verification fails.
     assert!(matches!(
@@ -196,6 +184,35 @@ async fn register_test_user(
       Err(AuthError::Unauthorized),
     ));
 
+    match identifier {
+      Identifier::Email(ref email) | Identifier::EmailAndUsername(ref email, _) => {
+        assert!(
+          state
+            .user_conn()
+            .read_query_value::<DbUser>(
+              format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+              params!(email.clone()),
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
+
+        assert!(
+          state
+            .user_conn()
+            .read_query_value::<DbUser>(
+              format!(r#"SELECT * FROM "{USER_TABLE}" WHERE unverified_email = $1"#),
+              params!(email.clone()),
+            )
+            .await
+            .unwrap()
+            .is_some()
+        );
+      }
+      _ => {}
+    }
+
     let _ = verify_email_handler(
       State(state.clone()),
       Path(verification_email_token.clone()),
@@ -216,7 +233,7 @@ async fn register_test_user(
         .unwrap();
 
       // User should now be verified.
-      assert!(db_user.verified);
+      assert!(db_user.unverified_email.is_none());
 
       db_user
     }
@@ -235,6 +252,24 @@ async fn register_test_user(
     db_user.email.as_deref(),
     db_user.username.as_deref(),
   ));
+}
+
+fn extract_email_verification_token(body: &str) -> String {
+  let verification_email_body: String = String::from_utf8_lossy(
+    &quoted_printable::decode(body.as_bytes(), quoted_printable::ParseMode::Robust).unwrap(),
+  )
+  .to_string();
+
+  let verification_email_re = Regex::new(r"\n(ey.*)$").unwrap();
+  let verification_email_token: String = verification_email_re
+    .captures(&verification_email_body)
+    .unwrap()
+    .get(1)
+    .unwrap()
+    .as_str()
+    .to_string();
+
+  return verification_email_token;
 }
 
 #[tokio::test]
@@ -1398,13 +1433,16 @@ async fn test_auth_annonymous_signin() {
     .is_err()
   );
 
-  state
-    .user_conn()
-    .execute_batch(format!(
-      "UPDATE {USER_TABLE} SET verified = TRUE WHERE username = 'user';"
-    ))
-    .await
-    .unwrap();
+  // Steal the verification code from the DB and verify.
+  let verification_email_token: String = extract_email_verification_token(&mailer.get_logs()[0].1);
+
+  verify_email_handler(
+    State(state.clone()),
+    Path(verification_email_token.clone()),
+    Query(VerifyEmailParams::default()),
+  )
+  .await
+  .unwrap();
 
   login_handler(
     State(state.clone()),
@@ -1416,6 +1454,98 @@ async fn test_auth_annonymous_signin() {
       params: LoginInputParams {
         ..Default::default()
       },
+    }),
+  )
+  .await
+  .unwrap();
+}
+
+#[tokio::test]
+async fn test_auth_refresh_after_anonymous_promotion() {
+  let mailer = TestAsyncSmtpTransport::new();
+  let state = test_state(Some(TestStateOptions {
+    mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
+    config: Some({
+      let mut config = build_test_config_with_trivial_tokens();
+      config.auth.user_identifier = Some(UserIdentifier::RequireEmail.into());
+      config.auth.enable_anonymous_signin = Some(true);
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  let response = login_anonymous_user_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    Cookies::default(),
+    Either::Json(LoginAnonymousRequest {
+      params: Default::default(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+    .await
+    .unwrap();
+  let login_response: LoginResponse = serde_json::from_slice(&body).unwrap();
+  let user = User::from_auth_token(&state, &login_response.auth_token).unwrap();
+
+  // Anonymous users are unverified but have no email, so refreshing has to keep working for them.
+  let Json(_refreshed_tokens) = refresh_handler(
+    State(state.clone()),
+    Json(RefreshRequest {
+      refresh_token: login_response.refresh_token.clone(),
+    }),
+  )
+  .await
+  .unwrap();
+
+  promote_anonymous_user_handler(
+    State(state.clone()),
+    Query(Default::default()),
+    user.clone(),
+    Either::Json(PromoteAnonymousRequest {
+      new_password: "secret123".to_string(),
+      new_email: Some("user@test.org".to_string()),
+      ..Default::default()
+    }),
+  )
+  .await
+  .unwrap();
+
+  // Promotion attaches a not-yet-verified email to the pre-existing user. Since tokens must
+  // never be minted for a user with an unverified email, refreshing that session has to fail
+  // rather than hand out fresh tokens.
+  assert!(matches!(
+    refresh_handler(
+      State(state.clone()),
+      Json(RefreshRequest {
+        refresh_token: login_response.refresh_token.clone(),
+      }),
+    )
+    .await,
+    Err(AuthError::Unauthorized)
+  ));
+
+  // Steal the verification code from the DB and verify.
+  let verification_email_token: String = extract_email_verification_token(&mailer.get_logs()[0].1);
+
+  verify_email_handler(
+    State(state.clone()),
+    Path(verification_email_token.clone()),
+    Query(VerifyEmailParams::default()),
+  )
+  .await
+  .unwrap();
+
+  // Verifying doesn't revoke the session, it merely paused it. Refreshing works again.
+  let Json(_refreshed_tokens) = refresh_handler(
+    State(state.clone()),
+    Json(RefreshRequest {
+      refresh_token: login_response.refresh_token,
     }),
   )
   .await

@@ -61,7 +61,7 @@ private struct TokenState {
   }
 }
 
-public enum RecordId: CustomStringConvertible {
+public enum RecordId: CustomStringConvertible, Sendable {
   case string(String)
   case int(Int64)
 
@@ -71,6 +71,14 @@ public enum RecordId: CustomStringConvertible {
     case .int(let id): id.description
     }
   }
+
+  // public static func parse(id: String) -> Self {
+  //     let value = Int64("123")
+  //     if value != nil {
+  //         return Self.int(value!)
+  //     }
+  //     return Self.string(id)
+  // }
 }
 
 private struct RecordIdResponse: Codable {
@@ -256,15 +264,31 @@ public class RecordApi {
     return RecordId.string(response.ids[0])
   }
 
+  public func createOp<T: Encodable>(record: T) throws -> Operation {
+    return Operation.Create(
+      api_name: name, value: try encodeValue(obj: record))
+  }
+
   public func update<T: Encodable>(recordId: RecordId, record: T) async throws {
     let body = try JSONEncoder().encode(record)
     let _ = try await self.client.fetch(
       path: "/\(RECORD_API)/\(name)/\(recordId)", method: "PATCH", body: body)
   }
 
+  public func updateOp<T: Encodable>(recordId: RecordId, record: T) throws -> Operation {
+    return Operation.Update(
+      api_name: name, record_id: recordId.description,
+      value: try encodeValue(obj: record)
+    )
+  }
+
   public func delete(recordId: RecordId) async throws {
     let _ = try await self.client.fetch(
       path: "/\(RECORD_API)/\(name)/\(recordId)", method: "DELETE")
+  }
+
+  public func deleteOp(recordId: RecordId) throws -> Operation {
+    return Operation.Delete(api_name: name, record_id: recordId.description)
   }
 
   // public func subscribe(recordId: RecordId) async throws -> AsyncStream<Event> {
@@ -338,6 +362,41 @@ public class Client {
 
   public func records(_ name: String) -> RecordApi {
     return RecordApi(client: self, name: name)
+  }
+
+  public func execute(ops: [Operation], transaction: Bool = true) async throws
+    -> [OperationResult]
+  {
+    struct OperationsRequest: Encodable, Sendable {
+      let operations: [Operation]
+      let transaction: Bool
+    }
+
+    let body = try JSONEncoder().encode(
+      OperationsRequest(operations: ops, transaction: transaction))
+
+    let (_, data) = try await self.fetch(
+      path: "/\(TRANSACTION_BASE_PATH)", method: "POST", body: body, throwOnError: true)
+
+    struct OperationResult0: Decodable, Sendable {
+      let Id: String?
+      let Error: String?
+    }
+    struct OperationsResponse: Decodable, Sendable {
+      let results: [OperationResult0]
+    }
+
+    let response = try JSONDecoder().decode(OperationsResponse.self, from: data)
+    return try response.results.map({
+      if $0.Error != nil {
+        return OperationResult.Error($0.Error!)
+      }
+      if $0.Id != nil {
+        return OperationResult.Id(RecordId.string($0.Id!))
+      }
+
+      throw ClientError.invalidResponse(nil)
+    })
   }
 
   public func refresh() async throws {
@@ -666,3 +725,4 @@ private func refreshTokens(
 
 private let AUTH_API = "api/auth/v1"
 private let RECORD_API = "api/records/v1"
+private let TRANSACTION_BASE_PATH = "api/transaction/v1/execute"

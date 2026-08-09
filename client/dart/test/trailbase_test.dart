@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:trailbase/src/operations.dart';
 import 'package:trailbase/trailbase.dart';
 import 'package:test/test.dart';
 import 'package:http/http.dart' as http;
@@ -277,10 +278,13 @@ Future<void> main() async {
       expect(user.email, equals('admin@localhost'));
       expect(user.username, equals('admin'));
 
+      expect(await client.refreshAuthToken(force: true), isTrue);
+      expect(await client.refreshAuthToken(force: true), isTrue);
+
       await client.logout();
       expect(client.tokens(), isNull);
 
-      await client.refreshAuthToken();
+      expect(await client.refreshAuthToken(force: true), isFalse);
 
       // We need to wait a little to push the expiry time in seconds to avoid just getting the same token minted again.
       await Future.delayed(Duration(milliseconds: 1500));
@@ -429,6 +433,62 @@ Future<void> main() async {
 
       await api.delete(ids[0]);
       expect(() async => await api.read(ids[0]), throwsException);
+    });
+
+    test('transactions', () async {
+      final client = await connect();
+      final api = client.records('simple_strict_table');
+
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+      {
+        // Test simple create.
+        final msg = 'dart transaction create test: =?&${now}';
+        final ops = [
+          api.createOp({
+            'text_not_null': msg,
+          })
+        ];
+
+        final results = await client.execute(ops, transaction: true);
+        expect(results.length, equals(1));
+
+        final record = SimpleStrict.fromJson(
+            await api.read((results[0] as OperationIdResult).id));
+        expect(record.textNotNull, equals(msg));
+      }
+
+      {
+        // Test update transaction.
+        final msg = 'dart transaction update test original: =?&${now}';
+        final id = await api.create({'text_not_null': msg});
+
+        final updatedMsg = 'dart transaction update test modified: =?&${now}';
+        final ops = [
+          api.updateOp(id, {
+            'text_not_null': updatedMsg,
+          })
+        ];
+
+        final results = await client.execute(ops, transaction: true);
+        expect(results.length, equals(1));
+
+        final record = SimpleStrict.fromJson(await api.read(id));
+        expect(record.textNotNull, equals(updatedMsg));
+      }
+
+      {
+        // Test delete transaction.
+        final msg = 'dart transaction update test original: =?&${now}';
+        final id = await api.create({'text_not_null': msg});
+
+        final results =
+            await client.execute([api.deleteOp(id)], transaction: true);
+
+        expect(results.length, equals(1));
+
+        expect(() async => await api.read(id), throwsException);
+      }
     });
 
     test('expand foreign records', () async {

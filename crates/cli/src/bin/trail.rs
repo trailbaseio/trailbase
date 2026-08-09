@@ -8,29 +8,33 @@ use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use serde::Deserialize;
 use std::io::Write;
+use trailbase::api::cli::UserReference;
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::constants::USER_TABLE;
 use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
-use trailbase_cli::wasm::{
-  download_component, find_component, find_component_by_filename, install_wasm_component,
-  list_installed_wasm_components, repo,
+use trailbase_wasm_component_repo::{
+  ComponentReference, download_component, find_component, find_component_by_filename,
+  install_wasm_component, list_installed_wasm_components, repo,
 };
 use utoipa::OpenApi;
 
 use trailbase_cli::{
-  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentReference, ComponentSubCommands,
-  OpenApiSubCommands, SubCommands, UserSubCommands,
+  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, OpenApiSubCommands,
+  SubCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-fn init_logger(dev: bool) {
-  const DEFAULT: &str = "info,trailbase_refinery=warn,tracing::span=warn";
+fn init_logger(dev: bool, base_level: Option<&str>) {
+  let default = format!(
+    "{},trailbase_refinery=warn,tracing::span=warn",
+    base_level.unwrap_or("info")
+  );
 
   env_logger::Builder::from_env(if dev {
-    env_logger::Env::new().default_filter_or(format!("{DEFAULT},trailbase=debug"))
+    env_logger::Env::new().default_filter_or(format!("{default},trailbase=debug"))
   } else {
-    env_logger::Env::new().default_filter_or(DEFAULT)
+    env_logger::Env::new().default_filter_or(default)
   })
   .format_timestamp_micros()
   .init();
@@ -179,13 +183,13 @@ async fn async_main(
         }
         Some(AdminSubCommands::Demote { user }) => {
           let id =
-            api::cli::demote_admin_to_user(state.user_conn(), to_user_reference(user)).await?;
+            api::cli::demote_admin_to_user(state.user_conn(), UserReference::parse(user)?).await?;
 
           println!("Demoted admin to user for '{id}'");
         }
         Some(AdminSubCommands::Promote { user }) => {
           let id =
-            api::cli::promote_user_to_admin(state.user_conn(), to_user_reference(user)).await?;
+            api::cli::promote_user_to_admin(state.user_conn(), UserReference::parse(user)?).await?;
 
           println!("Promoted user to admin for '{id}'");
         }
@@ -206,20 +210,26 @@ async fn async_main(
 
       match cmd {
         Some(UserSubCommands::ChangePassword { user, password }) => {
-          let id = api::cli::change_password(state.user_conn(), to_user_reference(user), &password)
-            .await?;
+          let id =
+            api::cli::change_password(state.user_conn(), UserReference::parse(user)?, &password)
+              .await?;
 
           println!("Updated password for '{id}'");
         }
         Some(UserSubCommands::ChangeEmail { user, new_email }) => {
           let id =
-            api::cli::change_email(state.user_conn(), to_user_reference(user), &new_email).await?;
+            api::cli::change_email(state.user_conn(), UserReference::parse(user)?, &new_email)
+              .await?;
 
           println!("Updated email for '{id}'");
         }
         Some(UserSubCommands::ChangeUsername { user, new_username }) => {
-          api::cli::change_username(state.user_conn(), to_user_reference(user), &new_username)
-            .await?;
+          api::cli::change_username(
+            state.user_conn(),
+            UserReference::parse(user)?,
+            &new_username,
+          )
+          .await?;
         }
         Some(UserSubCommands::Add { email, password }) => {
           api::cli::add_user(state.user_conn(), &email, &password).await?;
@@ -227,13 +237,13 @@ async fn async_main(
           println!("Added user '{email}'");
         }
         Some(UserSubCommands::Delete { user }) => {
-          api::cli::delete_user(state.user_conn(), to_user_reference(user.clone())).await?;
+          api::cli::delete_user(state.user_conn(), UserReference::parse(&user)?).await?;
 
           println!("Deleted user '{user}'");
         }
         Some(UserSubCommands::Verify { user, verified }) => {
-          let id =
-            api::cli::set_verified(state.user_conn(), to_user_reference(user), verified).await?;
+          let id = api::cli::set_verified(state.user_conn(), UserReference::parse(user)?, verified)
+            .await?;
 
           println!("Set verified={verified} for '{id}'");
         }
@@ -241,7 +251,7 @@ async fn async_main(
           api::cli::invalidate_sessions(
             state.user_conn(),
             state.session_conn(),
-            to_user_reference(user.clone()),
+            UserReference::parse(&user)?,
           )
           .await?;
 
@@ -252,7 +262,7 @@ async fn async_main(
             state.data_dir(),
             state.user_conn(),
             state.session_conn(),
-            to_user_reference(user.clone()),
+            UserReference::parse(&user)?,
           )
           .await?;
           println!("Bearer {auth_token}");
@@ -311,16 +321,23 @@ async fn async_main(
               let (url, bytes) = download_component(&component_def).await?;
 
               let filename = url.path();
-              install_wasm_component(&data_dir, filename, std::io::Cursor::new(bytes)).await?
+              install_wasm_component(&data_dir.wasm_path(), filename, std::io::Cursor::new(bytes))
+                .await?
             }
             ComponentReference::Url(url) => {
               log::info!("Downloading {url}");
               let bytes = reqwest::get(url.clone()).await?.bytes().await?;
-              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?
+              install_wasm_component(
+                &data_dir.wasm_path(),
+                url.path(),
+                std::io::Cursor::new(bytes),
+              )
+              .await?
             }
             ComponentReference::Path(path) => {
               let bytes = std::fs::read(&path)?;
-              install_wasm_component(&data_dir, &path, std::io::Cursor::new(bytes)).await?
+              install_wasm_component(&data_dir.wasm_path(), &path, std::io::Cursor::new(bytes))
+                .await?
             }
           };
 
@@ -333,10 +350,10 @@ async fn async_main(
             }
             ComponentReference::Name(name) => {
               let component_def = find_component(&name).ok_or("component not found")?;
-              let wasm_dir = data_dir.root().join("wasm");
+              let wasm_dir = data_dir.wasm_path();
 
               let filenames: Vec<_> = component_def
-                .wasm_filenames
+                .files
                 .into_iter()
                 .map(|f| wasm_dir.join(f))
                 .collect();
@@ -354,10 +371,10 @@ async fn async_main(
           }
         }
         Some(ComponentSubCommands::List) => {
-          println!("Components:\n\n{}", repo().keys().join("\n"));
+          println!("Components:\n\n{}", repo().iter().map(|c| &c.id).join("\n"));
         }
         Some(ComponentSubCommands::Installed) => {
-          let components = list_installed_wasm_components(&data_dir)?;
+          let components = list_installed_wasm_components(&data_dir.wasm_path())?;
 
           for component in components {
             let output = serde_json::to_string_pretty(
@@ -377,14 +394,16 @@ async fn async_main(
           }
         }
         Some(ComponentSubCommands::Update) => {
-          let installed_components = list_installed_wasm_components(&data_dir)?;
+          let installed_components = list_installed_wasm_components(&data_dir.wasm_path())?;
 
           for installed_component in installed_components {
             let Some(filename) = installed_component.path.file_name() else {
               continue;
             };
 
-            let Some(component_def) = find_component_by_filename(&filename.to_string_lossy())
+            let components_repo = repo();
+            let Some(component_def) =
+              find_component_by_filename(&components_repo, &filename.to_string_lossy())
             else {
               log::warn!(
                 "Skipping {:?}, not a first-party component",
@@ -396,7 +415,8 @@ async fn async_main(
             let (url, bytes) = download_component(&component_def).await?;
             let filename = url.path();
             let paths =
-              install_wasm_component(&data_dir, filename, std::io::Cursor::new(bytes)).await?;
+              install_wasm_component(&data_dir.wasm_path(), filename, std::io::Cursor::new(bytes))
+                .await?;
 
             println!("Updated : {paths:?}");
           }
@@ -466,13 +486,6 @@ async fn async_main(
   return Ok(());
 }
 
-fn to_user_reference(user: String) -> api::cli::UserReference {
-  if user.contains("@") {
-    return api::cli::UserReference::Email(user);
-  }
-  return api::cli::UserReference::Id(user);
-}
-
 fn main() -> Result<(), BoxError> {
   // Install the process-wide rustls crypto provider. Since rustls 0.23.39 there is no more
   // implicit default. W/o this any TLS traffic incoming and outgoing (e.g. via WASM components)
@@ -481,15 +494,43 @@ fn main() -> Result<(), BoxError> {
     .install_default()
     .expect("Failed to install rustls crypto");
 
-  let args = CommandLineArgs::parse();
+  let CommandLineArgs {
+    data_dir,
+    depot,
+    public_url,
+    version,
+    cmd,
+  } = CommandLineArgs::parse();
 
-  init_logger(if let Some(SubCommands::Run(ref cmd)) = args.cmd {
-    cmd.dev
+  let mut warn_data_dir = false;
+  let data_dir = if let Some(data_dir) = data_dir {
+    assert!(
+      depot.is_none(),
+      "Cannot specify both: --data-dir and --depot."
+    );
+
+    warn_data_dir = true;
+    data_dir
+  } else if let Some(depot) = depot {
+    depot
   } else {
-    false
-  });
+    std::path::PathBuf::from(DataDir::DEFAULT)
+  };
 
-  if args.version {
+  if let Some(SubCommands::Run(ref cmd)) = cmd {
+    init_logger(cmd.dev, Some("info"));
+  } else {
+    // For none-run-server commands, lower the log level to keep the spam at bay, e.g. SMTP
+    // fallback.
+    init_logger(false, Some("warn"));
+  }
+
+  // Need to delay warning until after logger was initialized.
+  if warn_data_dir {
+    log::warn!("--data_dir and $DATA_DIR are deprecated, use --depot and $DEPOT instead.");
+  }
+
+  if version {
     let version = trailbase_build::get_version_info!();
     let tag = version.git_version_tag.as_deref().unwrap_or("?");
     let date = version
@@ -504,7 +545,7 @@ fn main() -> Result<(), BoxError> {
     return Ok(());
   }
 
-  let Some(cmd) = args.cmd else {
+  let Some(cmd) = cmd else {
     let _ = CommandLineArgs::command().print_help();
     return Ok(());
   };
@@ -536,8 +577,8 @@ fn main() -> Result<(), BoxError> {
 
   main_runtime.block_on(async_main(
     cmd,
-    DataDir(args.data_dir.clone()),
-    args.public_url,
+    DataDir(data_dir),
+    public_url,
     wasm_tokio_runtime.as_ref().map(|rt| rt.handle().clone()),
   ))?;
 

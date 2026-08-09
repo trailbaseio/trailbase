@@ -144,6 +144,7 @@ func TestAuth(t *testing.T) {
 	assertEqual(t, *newClient.User().Email, "admin@localhost")
 
 	client.Refresh()
+	client.Refresh()
 
 	err = client.Logout()
 	assertFine(t, err)

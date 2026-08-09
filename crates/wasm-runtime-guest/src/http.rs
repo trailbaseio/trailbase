@@ -96,6 +96,43 @@ impl HttpRoute {
       ),
     };
   }
+
+  /// Wrap route to be rejected for all non-admin users.
+  ///
+  /// NOTE: We're using a builder pattern on an HttpRoute instead of an HttpRouteBuilder, this may
+  /// be surprising.
+  pub fn require_admin(self) -> HttpRoute {
+    let Self {
+      method,
+      path,
+      handler: original,
+    } = self;
+
+    return HttpRoute {
+      method,
+      path,
+      // Wraps the handler in an access check to build a new route.
+      handler: Box::new(
+        move |context: HttpContext,
+              req: http::Request<wstd::http::body::IncomingBody>,
+              responder: Responder| {
+          Box::pin(async move {
+            if let Err(err) = crate::auth::require_admin_impl(
+              context.user.as_ref(),
+              req.method(),
+              req.headers().get(crate::auth::CSRF_HEADER),
+            )
+            .await
+            {
+              return responder.respond(err.into()).await;
+            }
+
+            return original(context, req, responder).await;
+          })
+        },
+      ),
+    };
+  }
 }
 
 pub mod routing {

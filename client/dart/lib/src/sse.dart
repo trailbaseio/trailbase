@@ -97,18 +97,28 @@ Future<Stream<Event>> connectSse(
         final buffer = BytesBuilder();
         subscription = response.stream.listen(
           (List<int> data) {
-            if (_endsWithNewlineNewline(data)) {
-              if (buffer.isNotEmpty) {
-                buffer.add(data);
-
-                final event = decodeEvent(buffer.takeBytes());
-                if (event != null) ctrl.add(event);
-              } else {
-                final event = decodeEvent(data);
-                if (event != null) ctrl.add(event);
+            // `data` may contain multiple concatenated events, we thus have to scan for `\n\n` delimiter.
+            for (final chunk in splitByNewlineNewline(data)) {
+              if (!_endsWithNewlineNewline(chunk)) {
+                buffer.add(chunk);
+                continue;
               }
-            } else {
-              buffer.add(data);
+
+              // We have a terminated chunk => build and issue change `Event`.
+              final merged = switch (buffer.isEmpty) {
+                true => chunk,
+                false => () {
+                    buffer.add(chunk);
+                    return buffer.takeBytes();
+                  }(),
+              };
+
+              try {
+                final event = decodeEvent(merged);
+                if (event != null) ctrl.add(event);
+              } catch (err, st) {
+                ctrl.addError(err, st);
+              }
             }
           },
           onDone: () => ctrl.close(),
@@ -134,6 +144,20 @@ bool _endsWithNewlineNewline(List<int> bytes) {
     return bytes[bytes.length - 1] == 10 && bytes[bytes.length - 2] == 10;
   }
   return false;
+}
+
+@visibleForTesting
+Iterable<List<int>> splitByNewlineNewline(List<int> list) sync* {
+  int start = 0;
+  for (int i = 0; i <= list.length - 2; i++) {
+    if (list[i] == 10 && list[i + 1] == 10) {
+      yield list.sublist(start, i + 2);
+      start = i + 2;
+      i += 1;
+    }
+  }
+
+  if (start < list.length) yield list.sublist(start);
 }
 
 Event _eventfromJson(Map<String, dynamic> json) {

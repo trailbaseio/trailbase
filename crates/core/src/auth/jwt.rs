@@ -50,6 +50,10 @@ pub struct AuthTokenClaims {
   pub r#type: u8,
 
   /// Is admin user.
+  ///
+  /// WARN: This can be useful, e.g. on clients to dis/enable UI elements but this should not be
+  /// used for access-protection since it may be stale, e.g. admin privileges may have been
+  /// removed in the last few minutes.
   #[serde(default)]
   #[serde(skip_serializing_if = "std::ops::Not::not")]
   pub admin: bool,
@@ -76,7 +80,7 @@ pub struct AuthTokenClaims {
 
 impl AuthTokenClaims {
   pub(crate) fn new(db_user: &DbUser, auth_token_ttl: &chrono::Duration) -> Self {
-    assert!(db_user.email.is_none() || db_user.verified);
+    assert!(db_user.unverified_email.is_none());
 
     let now = chrono::Utc::now();
     return AuthTokenClaims {
@@ -374,7 +378,6 @@ mod tests {
     let db_user = DbUser {
       id: uuid::Uuid::new_v4().into_bytes(),
       email: Some("foo@bar.com".to_string()),
-      verified: true,
       admin: false,
       ..Default::default()
     };

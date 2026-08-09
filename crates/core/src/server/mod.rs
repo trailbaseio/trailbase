@@ -522,6 +522,8 @@ async fn assert_admin_api_access(
 ) -> Result<Response, AuthError> {
   let user = req.extract_parts_with_state::<User, _>(&state).await?;
 
+  // IMPORTANT: We cannot trust the admin bit in the auth-token, since it may be stale. We need to
+  // query the DB.
   if !is_admin(&state, &user.uuid).await {
     return Err(AuthError::Forbidden);
   }
@@ -567,6 +569,9 @@ fn build_cors(cors_allowed_origins: &[String], dev: bool) -> cors::CorsLayer {
   };
 
   // Cannot combine `Access-Control-Allow-Credentials: true` with `Access-Control-Allow-Methods: *`
+  //
+  // We cannot further limit the set of allowed methods or headers with routes potentially being
+  // provided by WASM components.
   return cors::CorsLayer::new()
     .allow_methods(cors::Any)
     .allow_headers(cors::Any)

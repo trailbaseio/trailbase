@@ -35,9 +35,10 @@ mod wasm;
 #[cfg(not(feature = "wasm"))]
 mod wasm {
   use axum::Router;
-  use std::path::PathBuf;
-  use std::sync::Arc;
+  use std::path::{Path, PathBuf};
+  use std::sync::{Arc, LazyLock};
   use tokio::sync::RwLock;
+  use trailbase_wasm_common::manifest::Metadata;
 
   use crate::AppState;
 
@@ -60,14 +61,12 @@ mod wasm {
   pub(crate) struct Runtime;
 
   impl Runtime {
-    pub fn component_path(&self) -> PathBuf {
-      return std::path::PathBuf::default();
+    pub fn component_path(&self) -> &Path {
+      static DEFAULT: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::default());
+      return &DEFAULT;
     }
   }
 
-  // pub(crate) type WasmRuntimeBuilder =
-  //   Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
-  //
   pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, AnyError> + Send + Sync;
 
   pub(crate) fn wasm_runtime_builders(
@@ -98,7 +97,7 @@ mod wasm {
   #[cfg(not(feature = "wasm"))]
   pub(crate) async fn install_routes_and_jobs(
     _state: &AppState,
-    _runtime: Arc<RwLock<Runtime>>,
+    _runtime: Arc<RwLock<(Option<Metadata>, Runtime)>>,
   ) -> Result<Option<Router<AppState>>, AnyError> {
     return Ok(None);
   }

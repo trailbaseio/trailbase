@@ -11,8 +11,8 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      preserveEntrySignatures: 'strict',
+      preserveEntrySignatures: "strict",
       external: /(wasi|trailbase):.*/,
     },
   },
-})
+});

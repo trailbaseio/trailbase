@@ -20,8 +20,8 @@ use crate::util::row_id_column;
 pub struct UserJson {
   pub id: String,
   pub email: Option<String>,
+  pub unverified_email: Option<String>,
   pub username: Option<String>,
-  pub verified: bool,
   pub admin: bool,
 
   // For external oauth providers.
@@ -37,8 +37,8 @@ impl From<DbUser> for UserJson {
     UserJson {
       id: Uuid::from_bytes(value.id).to_string(),
       email: value.email,
+      unverified_email: value.unverified_email,
       username: value.username,
-      verified: value.verified,
       admin: value.admin,
       provider_id: value.provider_id,
       provider_user_id: value.provider_user_id,

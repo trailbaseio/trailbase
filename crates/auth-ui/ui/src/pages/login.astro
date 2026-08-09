@@ -1,5 +1,5 @@
 ---
-import Form from "@/components/Form.astro";
+import FormLayout from "@/layouts/FormLayout.astro";
 import Button from "@/components/Button.astro";
 import TextFieldInput from "@/components/TextFieldInput.astro";
 import TextFieldLabel from "@/components/TextFieldLabel.astro";
@@ -13,7 +13,7 @@ const BASE_URL = import.meta.env.BASE_URL;
 const formBaseAction = `${AUTH_API}/login`;
 ---
 
-<Form title="Login">
+<FormLayout title="Login" hasTitle={true}>
   <SwitchThemeButton slot="header" client:only="solid-js" />
 
   <div>
@@ -120,4 +120,4 @@ const formBaseAction = `${AUTH_API}/login`;
     </div>
     {"{% endif %}"}
   </div>
-</Form>
+</FormLayout>

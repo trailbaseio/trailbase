@@ -54,7 +54,8 @@ test("Auth integration tests", async () => {
   expect(headers0["Content-Type"]).toBeUndefined();
   expect(headers0["Authorization"].startsWith("Bearer ")).toBe(true);
 
-  await client.refreshAuthToken({ force: true });
+  expect(await client.refreshAuthToken({ force: true })).toBe(true);
+  expect(await client.refreshAuthToken({ force: true })).toBe(true);
 
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
@@ -438,7 +439,7 @@ test("Record Transactions", async () => {
     expect(ids).toHaveLength(1);
 
     // Verify record was created
-    const createdRecord = await api.read(ids[0]);
+    const createdRecord = await api.read(ids[0].id!);
     expect(createdRecord.text_not_null).toBe(record.text_not_null);
   }
 

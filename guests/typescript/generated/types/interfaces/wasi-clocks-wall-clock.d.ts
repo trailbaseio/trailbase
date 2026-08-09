@@ -1,4 +1,4 @@
-declare module "wasi:clocks/wall-clock@0.2.3" {
+declare module "wasi:clocks/wall-clock@0.2.12" {
   /**
    * Read the current value of the clock.
    *

@@ -32,10 +32,11 @@ and an integer (or UUIDv7) primary key column.
 
 The main benefit of relying on TrailBase to apply the above schema as migrations
 over manually applying the schema yourself, is to:
- * document your database's schema alongside your code and
- * even more importantly, letting TrailBase bootstrap from scratch and
-   sync-up databases across your dev setup, your colleague's, every time
-   integration tests run, QA stages, and in production.
+
+- document your database's schema alongside your code and
+- even more importantly, letting TrailBase bootstrap from scratch and
+  sync-up databases across your dev setup, your colleague's, every time
+  integration tests run, QA stages, and in production.
 
 That said, TrailBase will happily work on existing datasets, in which
 case it is your responsibility to provide a SQLite database file that
@@ -139,7 +140,7 @@ $ trail schema movies --mode insert
 
 This will output a standard JSON schema type definition file. There's quite a few
 code-generators you can use to generate bindings for your favorite language.
-For this example we'll use *quicktype* to generate *TypeScript* definitions,
+For this example we'll use _quicktype_ to generate _TypeScript_ definitions,
 which also happens to support some other ~25 languages. You can install it, but
 for the tutorial we'll stick with the [browser](https://app.quicktype.io/)
 version and copy&paste the JSON schema from above.
