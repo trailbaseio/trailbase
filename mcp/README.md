@@ -38,19 +38,22 @@ The official Docker image already contains the auth UI component.
 
 ## IDE configuration
 
-Clients with native remote-MCP and OAuth support can connect directly to:
+Clients with native remote-MCP and OAuth support can connect directly to either
+the local or public MCP URL. For IDEs that accept only local command-based MCP
+servers, use the matching `mcp-remote` configuration below.
+
+### Localhost
+
+Use this while TrailBase is running on the same machine as the IDE:
 
 ```text
 http://localhost:4000/mcp
 ```
 
-For IDEs that accept only local command-based MCP servers, this localhost
-configuration is a quick way to get started:
-
 ```json
 {
   "mcpServers": {
-    "trailbase": {
+    "trailbase-local": {
       "command": "npx",
       "args": [
         "-y",
@@ -65,21 +68,46 @@ configuration is a quick way to get started:
 }
 ```
 
-This configuration assumes Node.js 20.18.1 or newer, as required by the HTTP
-client currently used by `mcp-remote`. It does not require `NODE_OPTIONS`, a
+`localhost` can use any port on which TrailBase is exposed, for example
+`http://localhost:4100/mcp`. `--allow-http` is required for a plain HTTP URL and
+is intended only for local development.
+
+### Public HTTPS URL
+
+Use this for Cloudflare Tunnel, a reverse proxy, or another deployed TrailBase
+instance:
+
+```text
+https://trailbase.example.com/mcp
+```
+
+```json
+{
+  "mcpServers": {
+    "trailbase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://trailbase.example.com/mcp",
+        "--static-oauth-client-metadata",
+        "{\"scope\":\"mcp\"}"
+      ]
+    }
+  }
+}
+```
+
+Replace `trailbase.example.com` with the deployment's public hostname. Do not
+add `--allow-http` for HTTPS. Configure TrailBase's `--public-url` as
+`https://trailbase.example.com` without the `/mcp` suffix so OAuth discovery,
+redirects, and token audience validation agree.
+
+These command-based configurations assume Node.js 20.18.1 or newer, as required
+by the HTTP client currently used by `mcp-remote`. They do not require `NODE_OPTIONS`, a
 polyfill, a TrailBase bearer token, or any machine-specific paths. Upgrade the
 Node.js runtime selected by the IDE if an older runtime reports that `File` is
 not defined.
-
-`localhost` can use any port on which TrailBase is listening, for example
-`http://localhost:4100/mcp`. `--allow-http` is intended only for local
-development.
-
-For Cloudflare Tunnel, a reverse proxy, or another deployed instance, replace
-the localhost URL with the public HTTPS URL, such as
-`https://trailbase.example.com/mcp`, and remove `"--allow-http"`. Configure
-TrailBase's `--public-url` with the same public HTTPS origin so OAuth discovery,
-redirects, and token audience validation agree.
 
 On the first connection, the client opens a browser at TrailBase's login page.
 Sign in with a TrailBase administrator account. Credentials are submitted only
