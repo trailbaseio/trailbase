@@ -16,4 +16,4 @@ services:
       RUST_BACKTRACE: "1"
     # Add --mcp to expose the authenticated native MCP endpoint at /mcp.
     # Also set --public-url to the external HTTPS origin used by MCP clients.
-    # command: "/app/trail --data-dir /app/traildepot --public-url https://trailbase.example.com run --address 0.0.0.0:4000 --mcp"
+    # command: "/app/trail --depot /app/traildepot --public-url https://trailbase.example.com run --address 0.0.0.0:4000 --mcp"

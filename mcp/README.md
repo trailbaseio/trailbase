@@ -108,7 +108,7 @@ services:
       RUST_BACKTRACE: "1"
     command:
       - /app/trail
-      - --data-dir
+      - --depot
       - /app/traildepot
       - --public-url
       - https://trailbase.example.com
