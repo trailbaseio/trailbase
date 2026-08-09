@@ -24,6 +24,7 @@ mod encryption;
 mod extract;
 mod init_error;
 mod listing;
+mod mcp;
 mod migrations;
 mod scheduler;
 mod schema_metadata;
