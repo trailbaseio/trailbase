@@ -103,11 +103,37 @@ add `--allow-http` for HTTPS. Configure TrailBase's `--public-url` as
 `https://trailbase.example.com` without the `/mcp` suffix so OAuth discovery,
 redirects, and token audience validation agree.
 
+The name directly below `"mcpServers"` is chosen by the user and can describe
+the connection. For example, `"trailbase"` can be changed to
+`"production-database"`, `"my-trailbase-server"`, or `"trailbase-local"`:
+
+```json
+{
+  "mcpServers": {
+    "production-database": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://trailbase.example.com/mcp",
+        "--static-oauth-client-metadata",
+        "{\"scope\":\"mcp\"}"
+      ]
+    }
+  }
+}
+```
+
+Do not rename `"mcp-remote"` in the arguments when using this configuration;
+it is the npm package that `npx` downloads and runs. IDEs with native remote
+HTTP MCP and OAuth support can use the `/mcp` URL directly without `npx` or
+`mcp-remote`.
+
 These command-based configurations assume Node.js 20.18.1 or newer, as required
-by the HTTP client currently used by `mcp-remote`. They do not require `NODE_OPTIONS`, a
-polyfill, a TrailBase bearer token, or any machine-specific paths. Upgrade the
-Node.js runtime selected by the IDE if an older runtime reports that `File` is
-not defined.
+by the HTTP client currently used by `mcp-remote`. They do not require
+`NODE_OPTIONS`, a polyfill, a TrailBase bearer token, or any machine-specific
+paths. Upgrade the Node.js runtime selected by the IDE if an older runtime
+reports that `File` is not defined.
 
 On the first connection, the client opens a browser at TrailBase's login page.
 Sign in with a TrailBase administrator account. Credentials are submitted only
