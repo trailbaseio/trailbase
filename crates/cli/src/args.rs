@@ -131,6 +131,10 @@ pub struct ServerArgs {
   #[arg(long)]
   pub demo: bool,
 
+  /// Enable the authenticated MCP endpoint at /mcp on the admin server.
+  #[arg(long, env, default_value_t = false)]
+  pub mcp: bool,
+
   #[arg(long, default_value_t = false)]
   pub stderr_logging: bool,
 

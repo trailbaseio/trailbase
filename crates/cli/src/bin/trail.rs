@@ -93,6 +93,7 @@ async fn async_main(
           tls_key: None,
           tls_cert: None,
           custom_router: None,
+          enable_mcp: cmd.mcp,
         },
       )
       .await?;
