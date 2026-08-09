@@ -81,6 +81,7 @@ quick_cache = "0.7.0"
 rand = { workspace = true }
 regex = "1.11.0"
 reqwest = { workspace = true }
+rmcp = { workspace = true }
 rusqlite = { workspace = true }
 rust-embed = { workspace = true }
 serde = { workspace = true }

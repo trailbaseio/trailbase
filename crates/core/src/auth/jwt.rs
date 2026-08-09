@@ -311,6 +311,17 @@ impl JwtHelper {
       .map(|data| data.claims);
   }
 
+  pub(crate) fn decode_with_audience<T: DeserializeOwned + Clone>(
+    &self,
+    token: &str,
+    audience: &str,
+  ) -> Result<T, JwtError> {
+    let mut validation = self.validation.clone();
+    validation.set_audience(&[audience]);
+    return jsonwebtoken::decode::<T>(token, &self.decoding_key, &validation)
+      .map(|data| data.claims);
+  }
+
   pub fn encode<T: Serialize>(&self, claims: &T) -> Result<String, JwtError> {
     return jsonwebtoken::encode::<T>(&self.header, claims, &self.encoding_key);
   }

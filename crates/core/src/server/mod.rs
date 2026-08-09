@@ -75,6 +75,9 @@ pub struct ServerOptions {
 
   /// Custom axum router.
   pub custom_router: Option<Router<AppState>>,
+
+  /// Expose the MCP endpoint on the admin server.
+  pub enable_mcp: bool,
 }
 
 pub struct Server {
@@ -108,6 +111,7 @@ impl Server {
       tls_cert,
       tls_key,
       custom_router,
+      enable_mcp,
     } = opts;
 
     let version_info = trailbase_build::get_version_info!();
@@ -174,7 +178,7 @@ impl Server {
       None
     };
 
-    let admin_router = Self::build_admin_router(&state);
+    let admin_router = Self::build_admin_router(&state, enable_mcp);
     let independent_admin_router = if let Some(admin_address) = admin_address
       && admin_address != address
     {
@@ -365,8 +369,8 @@ impl Server {
     return Ok(());
   }
 
-  fn build_admin_router(state: &AppState) -> Router<AppState> {
-    return Router::new()
+  fn build_admin_router(state: &AppState, enable_mcp: bool) -> Router<AppState> {
+    let mut router = Router::new()
       .nest(
         &format!("/{ADMIN_API_PATH}/"),
         admin::router().layer(middleware::from_fn_with_state(
@@ -391,6 +395,12 @@ impl Server {
           },
         ),
       );
+
+    if enable_mcp {
+      router = router.merge(crate::mcp::router(state));
+    }
+
+    return router;
   }
 
   async fn build_main_router(

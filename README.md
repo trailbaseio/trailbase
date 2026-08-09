@@ -141,6 +141,20 @@ trail components add trailbase/auth_ui
 endpoints, e.g.
 [http://localhost:4000/\_/auth/login](http://localhost:4000/_/auth/login).
 
+## MCP
+
+This fork includes an optional native MCP server in the main TrailBase binary.
+It uses TrailBase administrator login through OAuth and runs on the same port as
+TrailBase—no sidecar container or copied bearer token is required.
+
+```sh
+trail --public-url https://trailbase.example.com run --mcp
+```
+
+Connect an OAuth-capable MCP client to
+`https://trailbase.example.com/mcp`. See the [MCP guide](mcp/README.md) for IDE,
+Docker, Portainer, reverse-proxy, authentication, and security configuration.
+
 ## Building
 
 If you have all the necessary build dependencies (Rust, node.js, geos,
@@ -160,6 +174,15 @@ pnpm install
 # Build the executable. Adding `--release` will yield a more optimized binary
 # but slow builds significantly.
 cargo build --bin trail
+```
+
+On Debian/Ubuntu-style systems without sudo access to install build packages,
+this fork can populate the repo-local `.dev-tools/` cache used by
+`.cargo/config.toml`:
+
+```sh
+scripts/bootstrap-local-dev-tools.sh
+cargo check --workspace --all-targets
 ```
 
 Alternatively, if you want to build a Docker image or don't want to deal with
