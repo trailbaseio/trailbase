@@ -100,30 +100,49 @@ services:
   trail:
     image: docker.io/trailbase/trailbase:latest
     ports:
-      - "4000:4000"
+      - "4000:4000" # HOST_PORT:CONTAINER_PORT
     restart: unless-stopped
     volumes:
-      - /mnt/traildepot:/app/traildepot
+      - /mnt/traildepot:/app/traildepot # Persistent databases, files, and config.
     environment:
       RUST_BACKTRACE: "1"
     command:
-      - /app/trail
-      - --depot
-      - /app/traildepot
-      - --public-url
-      - https://trailbase.example.com
-      - run
-      - --address
-      - 0.0.0.0:4000
-      - --mcp
+      - /app/trail                     # TrailBase executable.
+      - --depot                        # Persistent TrailBase data directory.
+      - /app/traildepot                # Must match the container volume path above.
+      - --public-url                   # External origin used for OAuth and MCP tokens.
+      - https://trailbase.example.com  # No /mcp suffix; include a non-default public port.
+      - run                            # Start the TrailBase HTTP server.
+      - --address                      # Listen inside the container on all interfaces.
+      - 0.0.0.0:4000                  # Must match CONTAINER_PORT above.
+      - --mcp                          # Enable native MCP at /mcp on the same server.
 ```
+
+The command is explicit so the deployment does not depend on image defaults.
+`--depot` replaces the deprecated `--data-dir`. `--public-url` is the origin a
+browser and MCP client actually use; it must not include `/mcp` or an admin UI
+path. `--mcp` is the only MCP-specific startup flag.
+
+The port mapping does not need to be `4000:4000`. For example, to expose host
+port `5000` while TrailBase continues listening on container port `4000`, use:
+
+```yaml
+ports:
+  - "5000:4000" # Host port 5000 forwards to container port 4000.
+```
+
+Keep `--address 0.0.0.0:4000`. When connecting directly on localhost, set
+`--public-url` to `http://localhost:5000`; the MCP URL is then
+`http://localhost:5000/mcp`.
 
 Point the existing Cloudflare Tunnel or reverse proxy at port `4000`. The same
 hostname serves both TrailBase and `/mcp`; no public port `4001` or `8000` is
-needed. Do not place Cloudflare Access or another interactive login layer in
-front of only `/mcp`, because MCP clients need to reach TrailBase's OAuth
-discovery and authorization endpoints. TLS termination at Cloudflare or the
-reverse proxy is expected.
+needed. For example, the tunnel can forward `https://trailbase.example.com` to
+`http://trail:4000`; keep `--public-url https://trailbase.example.com`, and use
+`https://trailbase.example.com/mcp` in the MCP client. Do not place Cloudflare
+Access or another interactive login layer in front of only `/mcp`, because MCP
+clients also need to reach TrailBase's OAuth discovery and authorization
+endpoints. TLS termination at Cloudflare or the reverse proxy is expected.
 
 ## Authentication and security
 
