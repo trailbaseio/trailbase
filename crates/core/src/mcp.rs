@@ -9,7 +9,7 @@ use axum::routing::{get, post};
 use axum::{RequestExt, Router};
 use http_body_util::BodyExt;
 use rmcp::handler::server::{router::tool::ToolRouter, wrapper::Parameters};
-use rmcp::model::{ErrorData as McpError, ServerCapabilities, ServerInfo};
+use rmcp::model::{ErrorData as McpError, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::transport::{
   StreamableHttpServerConfig,
   streamable_http_server::{session::local::LocalSessionManager, tower::StreamableHttpService},
@@ -117,9 +117,16 @@ impl TrailBaseMcp {
 #[tool_handler]
 impl ServerHandler for TrailBaseMcp {
   fn get_info(&self) -> ServerInfo {
-    ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-      "TrailBase's native administrative MCP server. Use call_admin_api to perform the same operations as the admin dashboard. Destructive operations modify the active TrailBase depot.",
-    )
+    ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+      .with_server_info(
+        Implementation::new("trailbase", env!("CARGO_PKG_VERSION"))
+          .with_title("TrailBase MCP")
+          .with_description("Native administrative MCP server for TrailBase")
+          .with_website_url("https://trailbase.io"),
+      )
+      .with_instructions(
+        "TrailBase's native administrative MCP server. Use call_admin_api to perform the same operations as the admin dashboard. Destructive operations modify the active TrailBase depot.",
+      )
   }
 }
 

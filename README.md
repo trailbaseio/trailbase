@@ -141,20 +141,19 @@ trail components add trailbase/auth_ui
 endpoints, e.g.
 [http://localhost:4000/\_/auth/login](http://localhost:4000/_/auth/login).
 
-## MCP sidecar
+## MCP
 
-This fork includes a FastMCP sidecar in [`mcp/`](mcp/) that exposes TrailBase's
-admin and record APIs as MCP tools. It can run over stdio for local MCP clients
-or as an HTTP sidecar in Docker Compose.
+This fork includes an optional native MCP server in the main TrailBase binary.
+It uses TrailBase administrator login through OAuth and runs on the same port as
+TrailBase—no sidecar container or copied bearer token is required.
 
 ```sh
-# Start TrailBase plus the MCP sidecar at http://localhost:8000/mcp.
-TRAILBASE_AUTH_TOKEN=your-admin-token docker compose --profile mcp up --build
+trail --public-url https://trailbase.example.com run --mcp
 ```
 
-Write-capable tools are disabled by default. Set
-`TRAILBASE_MCP_ENABLE_WRITES=true` for the MCP process to allow create, update,
-delete, or mutating SQL tools.
+Connect an OAuth-capable MCP client to
+`https://trailbase.example.com/mcp`. See the [MCP guide](mcp/README.md) for IDE,
+Docker, Portainer, reverse-proxy, authentication, and security configuration.
 
 ## Building
 
