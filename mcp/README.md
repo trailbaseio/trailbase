@@ -115,6 +115,8 @@ The native MCP implementation follows the HTTP MCP authorization flow:
 - OAuth Authorization Server Metadata (RFC 8414).
 - Dynamic Client Registration (RFC 7591).
 - Authorization Code flow with PKCE S256.
+- MCP access tokens scoped to `mcp` and audience-bound to the instance's
+  public `/mcp` resource URL.
 - Access-token refresh.
 - `WWW-Authenticate` discovery on unauthenticated MCP requests.
 
@@ -188,7 +190,9 @@ Authorization: Bearer <auth_token>
 
 The access token returned by `/api/auth/v1/login` is short-lived. Clients using
 this mode must manage `/api/auth/v1/refresh` themselves. Do not put an admin
-password or long-lived refresh token in a shared project configuration.
+password or long-lived refresh token in a shared project configuration. This
+compatibility mode accepts only ordinary TrailBase tokens without an OAuth
+audience; an MCP token minted for another TrailBase resource is rejected.
 
 ## Development validation
 

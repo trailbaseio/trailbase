@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
+use axum::Router;
 use axum::body::Body;
 use axum::extract::{Form, Json as AxumJson, Path, Query, Request, State};
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
-use axum::{RequestExt, Router};
 use http_body_util::BodyExt;
 use rmcp::handler::server::{router::tool::ToolRouter, wrapper::Parameters};
 use rmcp::model::{ErrorData as McpError, Implementation, ServerCapabilities, ServerInfo};
@@ -22,7 +22,7 @@ use tower::ServiceExt;
 use crate::admin;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
-use crate::auth::{AuthError, User};
+use crate::auth::{AuthError, AuthTokenClaims, User};
 
 const MCP_SCOPE: &str = "mcp";
 const MCP_PATH: &str = "/mcp";
@@ -264,12 +264,18 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
 
 async fn assert_mcp_access(
   State(state): State<AppState>,
-  mut request: Request,
+  request: Request,
   next: Next,
 ) -> Response {
-  let authorized = match request.extract_parts_with_state::<User, _>(&state).await {
-    Ok(user) => is_admin(&state, &user.uuid).await,
-    Err(_) => false,
+  let user_id = request
+    .headers()
+    .get(header::AUTHORIZATION)
+    .and_then(|value| value.to_str().ok())
+    .and_then(|value| value.strip_prefix("Bearer "))
+    .and_then(|token| mcp_user_id(&state, token));
+  let authorized = match user_id {
+    Some(user_id) => is_admin(&state, &user_id).await,
+    None => false,
   };
   if authorized {
     return next.run(request).await;
@@ -285,6 +291,45 @@ async fn assert_mcp_access(
       .insert(header::WWW_AUTHENTICATE, value);
   }
   response
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct McpAccessTokenClaims {
+  #[serde(flatten)]
+  auth: AuthTokenClaims,
+  aud: String,
+  scope: String,
+}
+
+#[derive(Clone, Deserialize)]
+struct CompatibilityAccessTokenClaims {
+  #[serde(flatten)]
+  auth: AuthTokenClaims,
+  #[serde(default)]
+  aud: Option<String>,
+}
+
+fn mcp_user_id(state: &AppState, token: &str) -> Option<uuid::Uuid> {
+  let resource = external_url(state, MCP_PATH);
+  if let Ok(claims) = state
+    .jwt()
+    .decode_with_audience::<McpAccessTokenClaims>(token, &resource)
+  {
+    if !claims.scope.split(' ').any(|scope| scope == MCP_SCOPE) {
+      return None;
+    }
+    return crate::util::b64_to_uuid(&claims.auth.sub).ok();
+  }
+
+  // Compatibility mode for callers that explicitly supply a normal TrailBase admin token.
+  let claims = state
+    .jwt()
+    .decode::<CompatibilityAccessTokenClaims>(token)
+    .ok()?;
+  if claims.aud.is_some() {
+    return None;
+  }
+  crate::util::b64_to_uuid(&claims.auth.sub).ok()
 }
 
 #[derive(Serialize)]
@@ -595,13 +640,22 @@ async fn oauth_token(
     }
     _ => return Err(OAuthError::invalid_grant("unsupported grant_type")),
   };
-  let claims = crate::auth::AuthTokenClaims::from_auth_token(state.jwt(), &access_token)
+  let claims = AuthTokenClaims::from_auth_token(state.jwt(), &access_token)
     .map_err(|_| OAuthError::server("failed to decode issued access token"))?;
+  let expires_in = (claims.exp - chrono::Utc::now().timestamp()).max(0);
+  let access_token = state
+    .jwt()
+    .encode(&McpAccessTokenClaims {
+      auth: claims,
+      aud: external_url(&state, MCP_PATH),
+      scope: MCP_SCOPE.to_string(),
+    })
+    .map_err(|err| OAuthError::server(err.to_string()))?;
 
   Ok(AxumJson(TokenResponse {
     access_token,
     token_type: "Bearer",
-    expires_in: (claims.exp - chrono::Utc::now().timestamp()).max(0),
+    expires_in,
     refresh_token,
     scope: MCP_SCOPE,
   }))
@@ -806,5 +860,47 @@ mod tests {
       .unwrap();
     let tables = server.list_tables().await.unwrap();
     assert!(tables.0.to_string().contains("mcp_native_tool_test"));
+  }
+
+  #[tokio::test]
+  async fn mcp_tokens_are_bound_to_the_mcp_resource() {
+    let state = test_state(None).await.unwrap();
+    let user_id = uuid::Uuid::new_v4();
+    let now = chrono::Utc::now().timestamp();
+    let claims = AuthTokenClaims {
+      sub: crate::util::uuid_to_b64(&user_id),
+      iat: now,
+      exp: now + 60,
+      r#type: 1,
+      admin: true,
+      mfa: false,
+      provider: 0,
+      email: Some("admin@localhost".to_string()),
+      username: Some("admin".to_string()),
+      csrf_token: "csrf".to_string(),
+    };
+
+    let scoped = state
+      .jwt()
+      .encode(&McpAccessTokenClaims {
+        auth: claims.clone(),
+        aud: external_url(&state, MCP_PATH),
+        scope: MCP_SCOPE.to_string(),
+      })
+      .unwrap();
+    assert_eq!(mcp_user_id(&state, &scoped), Some(user_id));
+
+    let wrong_audience = state
+      .jwt()
+      .encode(&McpAccessTokenClaims {
+        auth: claims.clone(),
+        aud: "https://other.example/mcp".to_string(),
+        scope: MCP_SCOPE.to_string(),
+      })
+      .unwrap();
+    assert_eq!(mcp_user_id(&state, &wrong_audience), None);
+
+    let legacy = state.jwt().encode(&claims).unwrap();
+    assert_eq!(mcp_user_id(&state, &legacy), Some(user_id));
   }
 }
