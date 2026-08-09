@@ -1,14 +1,13 @@
 use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
-use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::{FileUploadInput, QualifiedNameEscaped};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::RECORD_API_PATH;
+use crate::constants::with_record_prefix;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams, Params};
 use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
@@ -73,7 +72,7 @@ fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, Reco
 /// Create new record.
 #[utoipa::path(
   post,
-  path = formatcp!("/{RECORD_API_PATH}/{{name}}"),
+  path = with_record_prefix!("/{name}"),
   tag = "records",
   params(CreateRecordQuery),
   request_body = serde_json::Value,

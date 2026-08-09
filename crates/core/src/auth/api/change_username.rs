@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::util::{validate_and_normalize_username, validate_redirect};
 use crate::auth::{AuthError, User};
 use crate::config::proto::UserIdentifier;
-use crate::constants::{AUTH_API_PATH, USER_TABLE};
+use crate::constants::{USER_TABLE, with_auth_prefix};
 use crate::extract::Either;
 use crate::util::urlencode;
 
@@ -35,7 +35,7 @@ pub struct ChangeUsernameRequest {
 /// Request a change of a user username.
 #[utoipa::path(
   post,
-  path = formatcp!("/{AUTH_API_PATH}/change_username"),
+  path = with_auth_prefix!("/change_username"),
   tag = "auth",
   params(ChangeUsernameParams),
   request_body = ChangeUsernameRequest,

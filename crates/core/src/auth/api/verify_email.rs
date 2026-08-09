@@ -12,7 +12,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::util::{user_by_email, validate_and_normalize_email_address, validate_redirect};
-use crate::constants::{AUTH_API_PATH, USER_TABLE};
+use crate::constants::{USER_TABLE, with_auth_prefix};
 use crate::email::Email;
 use crate::util::urlencode;
 
@@ -25,7 +25,7 @@ pub struct EmailVerificationParams {
 /// Request a new email to verify email address.
 #[utoipa::path(
   get,
-  path = formatcp!("/{AUTH_API_PATH}/verify_email/trigger"),
+  path = with_auth_prefix!("/verify_email/trigger"),
   tag = "auth",
   params(EmailVerificationParams),
   responses(
@@ -90,8 +90,7 @@ pub(crate) struct VerifyEmailParams {
 /// Request a new email to verify email address.
 #[utoipa::path(
   get,
-  // path = formatcp!("/{AUTH_API_PATH}/verify_email/confirm/:email_verification_code"),
-  path = formatcp!("/{AUTH_API_PATH}/verify_email/confirm/{{email_verification_token}}"),
+  path = with_auth_prefix!("/verify_email/confirm/{email_verification_token}"),
   tag = "auth",
   responses(
     (status = 200, description = "Email verified, when redirect_uri not present"),

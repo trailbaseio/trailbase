@@ -1,7 +1,6 @@
 use axum::extract::{Json, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
-use const_format::formatcp;
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use ts_rs::TS;
@@ -13,7 +12,7 @@ use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
 };
-use crate::constants::AUTH_API_PATH;
+use crate::constants::with_auth_prefix;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LogoutParams {
@@ -26,7 +25,7 @@ pub struct LogoutParams {
 /// bringing a logged out session back to live.
 #[utoipa::path(
   get,
-  path = formatcp!("/{AUTH_API_PATH}/logout"),
+  path = with_auth_prefix!("/logout"),
   tag = "auth",
   params(LogoutParams),
   responses(
@@ -67,7 +66,7 @@ pub struct LogoutRequest {
 /// Relies on the client to drop any auth tokens.
 #[utoipa::path(
   post,
-  path = formatcp!("/{AUTH_API_PATH}/logout"),
+  path = with_auth_prefix!("/logout"),
   tag = "auth",
   request_body = LogoutRequest,
   responses(

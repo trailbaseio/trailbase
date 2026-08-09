@@ -14,7 +14,7 @@ use crate::auth::api::register::RegisterUserParams;
 use crate::auth::user::DbUser;
 use crate::auth::util::validate_redirect;
 use crate::constants::{
-  AUTH_API_PATH, DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, DEFAULT_AUTH_TOKEN_TTL, USER_TABLE,
+  DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, DEFAULT_AUTH_TOKEN_TTL, USER_TABLE, with_auth_prefix,
 };
 use crate::extract::Either;
 
@@ -28,7 +28,7 @@ pub struct LoginAnonymousRequest {
 /// Registers a new user with email and password.
 #[utoipa::path(
   post,
-  path = formatcp!("/{AUTH_API_PATH}/login_anonymous"),
+  path = with_auth_prefix!("/login_anonymous"),
   tag = "auth",
   params(RegisterUserParams),
   request_body = LoginAnonymousRequest,

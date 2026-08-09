@@ -10,7 +10,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::mint_new_tokens;
 use crate::auth::util::{derive_pkce_code_challenge, get_user_by_id};
-use crate::constants::{AUTH_API_PATH, AUTHORIZATION_CODE_TABLE, VERIFICATION_CODE_LENGTH};
+use crate::constants::{AUTHORIZATION_CODE_TABLE, VERIFICATION_CODE_LENGTH, with_auth_prefix};
 
 #[derive(Clone, Debug, Deserialize, ToSchema, TS)]
 #[ts(export)]
@@ -32,7 +32,7 @@ pub struct TokenResponse {
 /// web-auth flow.
 #[utoipa::path(
   post,
-  path = formatcp!("/{AUTH_API_PATH}/token"),
+  path = with_auth_prefix!("/token"),
   tag = "auth",
   request_body = AuthCodeToTokenRequest,
   responses(

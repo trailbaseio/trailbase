@@ -8,12 +8,12 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::user::User;
 use crate::auth::util::{delete_all_sessions_for_user, remove_all_cookies};
-use crate::constants::{AUTH_API_PATH, USER_TABLE};
+use crate::constants::{USER_TABLE, with_auth_prefix};
 
 /// Get public profile of the given user.
 #[utoipa::path(
   delete,
-  path = formatcp!("/{AUTH_API_PATH}/delete"),
+  path = with_auth_prefix!("/delete"),
   tag = "auth",
   responses(
     (status = 200, description = "User deleted.")

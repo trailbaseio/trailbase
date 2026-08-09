@@ -1,5 +1,4 @@
 use axum::extract::{Json, State};
-use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use tower_cookies::Cookies;
 use ts_rs::TS;
@@ -9,7 +8,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{Tokens, reauth_with_refresh_token};
 use crate::auth::util::new_cookie;
-use crate::constants::{AUTH_API_PATH, COOKIE_AUTH_TOKEN};
+use crate::constants::{COOKIE_AUTH_TOKEN, with_auth_prefix};
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -22,7 +21,7 @@ pub struct LoginStatusResponse {
 /// Check login status.
 #[utoipa::path(
   get,
-  path = formatcp!("/{AUTH_API_PATH}/status"),
+  path = with_auth_prefix!("/status"),
   tag = "auth",
   responses(
     (status = 200, description = "Auth & refresh tokens.", body = LoginStatusResponse)

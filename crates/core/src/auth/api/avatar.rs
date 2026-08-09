@@ -19,7 +19,7 @@ use crate::util::uuid_to_b64;
 
 #[utoipa::path(
   get,
-  path = with_auth_prefix!("/avatar/{{b64_user_id}}"),
+  path = with_auth_prefix!("/avatar/{b64_user_id}"),
   tag = "auth",
   responses((status = 200, description = "Optional Avatar file"))
 )]

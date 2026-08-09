@@ -1,5 +1,4 @@
 use axum::extract::{Json, State};
-use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 use utoipa::ToSchema;
@@ -7,7 +6,7 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::reauth_with_refresh_token;
-use crate::constants::AUTH_API_PATH;
+use crate::constants::with_auth_prefix;
 
 #[derive(Debug, Deserialize, ToSchema, TS)]
 #[ts(export)]
@@ -27,7 +26,7 @@ pub struct RefreshResponse {
 /// NOTE: This is a json-only API, since cookies will be auto-refreshed.
 #[utoipa::path(
   post,
-  path = formatcp!("/{AUTH_API_PATH}/refresh"),
+  path = with_auth_prefix!("/refresh"),
   tag = "auth",
   request_body = RefreshRequest,
   responses(

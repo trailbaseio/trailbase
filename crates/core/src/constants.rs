@@ -44,15 +44,19 @@ pub const RECORD_API_PATH: &str = "api/records/v1";
 pub const AUTH_API_PATH: &str = "api/auth/v1";
 pub const ADMIN_API_PATH: &str = "api/_admin";
 
+// NOTE: We pull the formatting into a separate macro as not go confuse the utoipa::path
+// path-parameter extractor with the extra braces.
 macro_rules! with_auth_prefix {
   ($s:expr) => {
-    formatcp!("/{}{}", crate::constants::AUTH_API_PATH, $s)
+    const_format::formatcp!("/{}{}", crate::constants::AUTH_API_PATH, $s)
   };
 }
 
+// NOTE: We pull the formatting into a separate macro as not go confuse the utoipa::path
+// path-parameter extractor with the extra braces.
 macro_rules! with_record_prefix {
   ($s:expr) => {
-    formatcp!("/{}{}", crate::constants::AUTH_API_PATH, $s)
+    const_format::formatcp!("/{}{}", crate::constants::RECORD_API_PATH, $s)
   };
 }
 

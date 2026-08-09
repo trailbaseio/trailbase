@@ -3,13 +3,12 @@ use axum::{
   extract::{Path, Query, State},
   response::Response,
 };
-use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_schema::FileUploads;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::RECORD_API_PATH;
+use crate::constants::with_record_prefix;
 use crate::records::expand::expand_tables;
 use crate::records::expand::record_to_json_expand;
 use crate::records::files::read_file_into_response;
@@ -30,7 +29,7 @@ pub struct ReadRecordQuery {
 /// Read record.
 #[utoipa::path(
   get,
-  path = formatcp!("/{RECORD_API_PATH}/{{name}}/{{record}}"),
+  path = with_record_prefix!("/{name}/{record}"),
   tag = "records",
   responses(
     (status = 200, description = "Record contents.", body = serde_json::Value)
@@ -149,7 +148,7 @@ type GetUploadedFileFromRecordPath = Path<(
 /// filenames does help with the content life-cycle, such as caching.
 #[utoipa::path(
   get,
-  path = formatcp!("/{RECORD_API_PATH}/{{name}}/{{record}}/file/{{column_name}}"),
+  path = with_record_prefix!("/{name}/{record}/file/{column_name}"),
   tag = "records",
   responses(
     (status = 200, description = "File contents.")
@@ -205,7 +204,7 @@ type GetUploadedFilesFromRecordPath = Path<(
 /// Read single file from list associated with record.
 #[utoipa::path(
   get,
-  path = formatcp!("/{RECORD_API_PATH}/{{name}}/{{record}}/files/{{column_name}}/{{file_name}}"),
+  path = with_record_prefix!("/{name}/{record}/files/{column_name}/{file_name}"),
   tag = "records",
   responses(
     (status = 200, description = "File contents.")

@@ -3,7 +3,6 @@ use axum::{
   response::Redirect,
 };
 use chrono::Duration;
-use const_format::formatcp;
 use oauth2::{CsrfToken, PkceCodeChallenge, Scope};
 use tower_cookies::Cookies;
 
@@ -12,12 +11,12 @@ use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::util::{new_cookie_opts, secure_tls_only};
-use crate::constants::{AUTH_API_PATH, COOKIE_OAUTH_STATE};
+use crate::constants::{COOKIE_OAUTH_STATE, with_auth_prefix};
 
 /// Log in via external OAuth provider.
 #[utoipa::path(
   get,
-  path = formatcp!("/{AUTH_API_PATH}/oauth/{{provider}}/login"),
+  path = with_auth_prefix!("/oauth/{provider}/login"),
   tag = "oauth",
   params(LoginInputParams),
   responses(
