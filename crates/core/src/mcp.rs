@@ -234,13 +234,14 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
         .disable_allowed_hosts(),
     );
 
-  let protected_mcp =
-    Router::new()
-      .nest_service("/mcp", service)
-      .layer(middleware::from_fn_with_state(
-        state.clone(),
-        assert_mcp_access,
-      ));
+  let protected_mcp = Router::new()
+    .nest_service("/mcp", service)
+    // Keep MCP authentication scoped to the MCP route. A normal layer also wraps this
+    // router's fallback and would intercept auth UI routes after this router is merged.
+    .route_layer(middleware::from_fn_with_state(
+      state.clone(),
+      assert_mcp_access,
+    ));
 
   Router::new()
     .merge(protected_mcp)
