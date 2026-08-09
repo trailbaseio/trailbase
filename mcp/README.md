@@ -41,12 +41,11 @@ The official Docker image already contains the auth UI component.
 Clients with native remote-MCP and OAuth support can connect directly to:
 
 ```text
-https://trailbase.example.com/mcp
+http://localhost:4000/mcp
 ```
 
-For IDEs that accept only local command-based MCP servers, use the portable
-configuration below. Replace the example hostname with the public URL of the
-TrailBase installation:
+For IDEs that accept only local command-based MCP servers, this localhost
+configuration is a quick way to get started:
 
 ```json
 {
@@ -56,7 +55,8 @@ TrailBase installation:
       "args": [
         "-y",
         "mcp-remote",
-        "https://trailbase.example.com/mcp",
+        "http://localhost:4000/mcp",
+        "--allow-http",
         "--static-oauth-client-metadata",
         "{\"scope\":\"mcp\"}"
       ]
@@ -71,9 +71,15 @@ polyfill, a TrailBase bearer token, or any machine-specific paths. Upgrade the
 Node.js runtime selected by the IDE if an older runtime reports that `File` is
 not defined.
 
-For local development, change the URL to
-`http://127.0.0.1:4000/mcp` and add `"--allow-http"` after the URL. Do not use
-plain HTTP for a deployed instance.
+`localhost` can use any port on which TrailBase is listening, for example
+`http://localhost:4100/mcp`. `--allow-http` is intended only for local
+development.
+
+For Cloudflare Tunnel, a reverse proxy, or another deployed instance, replace
+the localhost URL with the public HTTPS URL, such as
+`https://trailbase.example.com/mcp`, and remove `"--allow-http"`. Configure
+TrailBase's `--public-url` with the same public HTTPS origin so OAuth discovery,
+redirects, and token audience validation agree.
 
 On the first connection, the client opens a browser at TrailBase's login page.
 Sign in with a TrailBase administrator account. Credentials are submitted only
