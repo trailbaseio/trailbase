@@ -44,7 +44,9 @@ Clients with native remote-MCP and OAuth support can connect directly to:
 https://trailbase.example.com/mcp
 ```
 
-For IDEs that accept only local command-based MCP servers, use `mcp-remote`:
+For IDEs that accept only local command-based MCP servers, use the portable
+configuration below. Replace the example hostname with the public URL of the
+TrailBase installation:
 
 ```json
 {
@@ -62,6 +64,16 @@ For IDEs that accept only local command-based MCP servers, use `mcp-remote`:
   }
 }
 ```
+
+This configuration assumes Node.js 20.18.1 or newer, as required by the HTTP
+client currently used by `mcp-remote`. It does not require `NODE_OPTIONS`, a
+polyfill, a TrailBase bearer token, or any machine-specific paths. Upgrade the
+Node.js runtime selected by the IDE if an older runtime reports that `File` is
+not defined.
+
+For local development, change the URL to
+`http://127.0.0.1:4000/mcp` and add `"--allow-http"` after the URL. Do not use
+plain HTTP for a deployed instance.
 
 On the first connection, the client opens a browser at TrailBase's login page.
 Sign in with a TrailBase administrator account. Credentials are submitted only
