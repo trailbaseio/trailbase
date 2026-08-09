@@ -134,6 +134,16 @@ Treat MCP as an administrative surface:
 
 ## Tools
 
+The native server provides focused tools for common work:
+
+- `list_tables`: table, view, column, index, trigger, and metadata discovery.
+- `execute_sql`: read or mutate the main database and refresh metadata after
+  recognized schema changes.
+- `get_config`: return redacted TrailBase protobuf-text configuration.
+- `update_config`: validate and save configuration while preserving existing
+  secrets.
+- `call_admin_api`: reach all remaining admin dashboard operations.
+
 `call_admin_api(method, path, body?)` dispatches directly to TrailBase's
 in-process admin router. `path` is relative to `/api/_admin`; it may also be the
 full `/api/_admin/...` path. This means MCP and the dashboard use the same Rust

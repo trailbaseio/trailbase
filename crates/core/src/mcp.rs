@@ -38,6 +38,21 @@ struct AdminRequest {
   body: Option<Value>,
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct SqlRequest {
+  /// One or more SQLite statements. Schema-changing statements refresh TrailBase metadata.
+  query: String,
+  /// Optional configured attached database names.
+  #[serde(default)]
+  attached_databases: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct ConfigUpdateRequest {
+  /// Complete TrailBase config in protobuf text format, as returned by get_config.
+  config: String,
+}
+
 #[derive(Clone)]
 struct TrailBaseMcp {
   state: AppState,
@@ -52,17 +67,8 @@ impl TrailBaseMcp {
       tool_router: Self::tool_router(),
     }
   }
-}
 
-#[tool_router]
-impl TrailBaseMcp {
-  #[tool(
-    description = "Call a TrailBase admin API in-process. Paths are relative to /api/_admin. This exposes the same table, index, row, config, schema, query, user, log, backup, job, and WASM operations as the admin dashboard."
-  )]
-  async fn call_admin_api(
-    &self,
-    Parameters(request): Parameters<AdminRequest>,
-  ) -> Result<Json<Value>, McpError> {
+  async fn dispatch_admin(&self, request: AdminRequest) -> Result<Json<Value>, McpError> {
     let method = Method::from_bytes(request.method.as_bytes())
       .map_err(|_| McpError::invalid_params("invalid HTTP method", None))?;
     let path = normalize_admin_path(&request.path)?;
@@ -111,6 +117,91 @@ impl TrailBaseMcp {
       "status": status.as_u16(),
       "body": response_body
     })))
+  }
+}
+
+#[tool_router]
+impl TrailBaseMcp {
+  #[tool(
+    description = "Call a TrailBase admin API in-process. Paths are relative to /api/_admin. This exposes the same table, index, row, config, schema, query, user, log, backup, job, and WASM operations as the admin dashboard."
+  )]
+  async fn call_admin_api(
+    &self,
+    Parameters(request): Parameters<AdminRequest>,
+  ) -> Result<Json<Value>, McpError> {
+    self.dispatch_admin(request).await
+  }
+
+  #[tool(description = "List TrailBase tables, views, columns, indexes, triggers, and metadata.")]
+  async fn list_tables(&self) -> Result<Json<Value>, McpError> {
+    self
+      .dispatch_admin(AdminRequest {
+        method: "GET".to_string(),
+        path: "tables".to_string(),
+        body: None,
+      })
+      .await
+  }
+
+  #[tool(
+    description = "Execute SQL using TrailBase's admin query handler. Supports reads and writes; schema changes refresh cached metadata."
+  )]
+  async fn execute_sql(
+    &self,
+    Parameters(request): Parameters<SqlRequest>,
+  ) -> Result<Json<Value>, McpError> {
+    self
+      .dispatch_admin(AdminRequest {
+        method: "POST".to_string(),
+        path: "query".to_string(),
+        body: Some(json!({
+          "query": request.query,
+          "attached_databases": request.attached_databases,
+        })),
+      })
+      .await
+  }
+
+  #[tool(
+    description = "Get the complete TrailBase configuration as protobuf text. Secret values are redacted."
+  )]
+  fn get_config(&self) -> Result<String, McpError> {
+    let (config, _) = crate::config::redact_secrets(&self.state.get_config())
+      .map_err(|err| McpError::internal_error(err.to_string(), None))?;
+    config
+      .to_text()
+      .map_err(|err| McpError::internal_error(err.to_string(), None))
+  }
+
+  #[tool(
+    description = "Validate and replace the TrailBase configuration using protobuf text from get_config. Existing secret values are preserved."
+  )]
+  async fn update_config(
+    &self,
+    Parameters(request): Parameters<ConfigUpdateRequest>,
+  ) -> Result<String, McpError> {
+    if self.state.demo_mode() {
+      return Err(McpError::invalid_request(
+        "config updates are disabled in demo mode",
+        None,
+      ));
+    }
+
+    let config = crate::config::proto::Config::from_text(&request.config)
+      .map_err(|err| McpError::invalid_params(err.to_string(), None))?;
+    let current = self.state.get_config();
+    let hash = crate::config::proto::hash_config(&current);
+    let (_, secrets) = crate::config::redact_secrets(&current)
+      .map_err(|err| McpError::internal_error(err.to_string(), None))?;
+    let config =
+      crate::config::merge_vault_and_env(config, crate::config::proto::Vault { secrets })
+        .map_err(|err| McpError::invalid_params(err.to_string(), None))?;
+    self
+      .state
+      .validate_and_update_config(config, Some(hash))
+      .await
+      .map_err(|err| McpError::invalid_params(err.to_string(), None))?;
+    Ok("Config updated".to_string())
   }
 }
 
@@ -673,5 +764,47 @@ mod tests {
     assert!(location.starts_with("/_/auth/login?"));
     assert!(location.contains("response_type=code"));
     assert!(location.contains("pkce_code_challenge="));
+  }
+
+  #[tokio::test]
+  async fn native_tools_use_live_admin_state() {
+    let state = test_state(None).await.unwrap();
+    let server = TrailBaseMcp::new(state);
+    let tool_names: Vec<_> = server
+      .tool_router
+      .list_all()
+      .into_iter()
+      .map(|tool| tool.name.to_string())
+      .collect();
+    assert_eq!(
+      tool_names,
+      [
+        "call_admin_api",
+        "execute_sql",
+        "get_config",
+        "list_tables",
+        "update_config"
+      ]
+    );
+
+    let config = server.get_config().unwrap();
+    assert!(config.contains("auth"));
+    assert_eq!(
+      server
+        .update_config(Parameters(ConfigUpdateRequest { config }))
+        .await
+        .unwrap(),
+      "Config updated"
+    );
+
+    server
+      .execute_sql(Parameters(SqlRequest {
+        query: "CREATE TABLE mcp_native_tool_test (id INTEGER PRIMARY KEY)".to_string(),
+        attached_databases: None,
+      }))
+      .await
+      .unwrap();
+    let tables = server.list_tables().await.unwrap();
+    assert!(tables.0.to_string().contains("mcp_native_tool_test"));
   }
 }
