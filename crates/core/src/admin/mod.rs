@@ -68,24 +68,18 @@ pub fn router() -> OpenApiRouter<AppState> {
     // Stats
     .routes(routes!(logs::stats::fetch_stats_handler))
     // Query execution handler for the UI editor
-    .route("/query", post(query::query_handler))
+    .routes(routes!(query::query_handler))
     // Parse handler for UI validation.
-    .route("/parse", post(parse::parse_handler))
+    .routes(routes!(parse::parse_handler))
     // List available oauth providers
-    .route(
-      "/oauth_providers",
-      get(oauth_providers::available_oauth_providers_handler),
-    )
-    .route("/public_key", get(jwt::get_public_key))
-    .route("/info", get(info::info_handler))
-    .route("/wasm", get(wasm::list_wasm_components_handler))
-    .route("/wasm/install", post(wasm::install_wasm_component_handler))
-    .route(
-      "/wasm/uninstall",
-      post(wasm::uninstall_wasm_component_handler),
-    )
-    .route("/jobs", get(jobs::list_jobs_handler))
-    .route("/job/run", post(jobs::run_job_handler))
+    .routes(routes!(oauth_providers::available_oauth_providers_handler))
+    .routes(routes!(jwt::get_public_key))
+    .routes(routes!(info::info_handler))
+    .routes(routes!(wasm::list_wasm_components_handler))
+    .routes(routes!(wasm::install_wasm_component_handler))
+    .routes(routes!(wasm::uninstall_wasm_component_handler))
+    .routes(routes!(jobs::list_jobs::list_jobs_handler))
+    .route("/job/run", post(jobs::run_job::run_job_handler))
     .route("/backups", get(backup::list_backups_handler))
     .route("/backups/trigger", get(backup::trigger_backup_handler))
     .route("/backups/delete", delete(backup::delete_backups_handler))

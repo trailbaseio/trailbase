@@ -10,7 +10,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
-#[derive(Debug, Default, Deserialize, Serialize, TS)]
+#[derive(Debug, Default, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(optional_fields)]
 pub struct WasmComponent {
   // QUESTION: Should we remove name in favor of "path". The name is a simple derivative and we
@@ -34,7 +34,7 @@ pub struct WasmComponent {
   pub admin_ui_path: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListWasmComponentsResponse {
   pub components: Vec<WasmComponent>,
@@ -77,6 +77,14 @@ fn build_entry(
   });
 }
 
+#[utoipa::path(
+  get,
+  path = "/wasm",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = ListWasmComponentsResponse),
+  )
+)]
 pub async fn list_wasm_components_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListWasmComponentsResponse>, Error> {
@@ -146,13 +154,22 @@ pub async fn list_wasm_components_handler(
   return Ok(Json(ListWasmComponentsResponse { components }));
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub enum WasmComponentRequest {
   Path(String),
   RepoId(String),
 }
 
+#[utoipa::path(
+  post,
+  path = "/wasm/install",
+  tag = "admin",
+  request_body = WasmComponentRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn install_wasm_component_handler(
   State(state): State<AppState>,
   Json(request): Json<WasmComponentRequest>,
@@ -193,6 +210,15 @@ pub async fn install_wasm_component_handler(
   return Ok(());
 }
 
+#[utoipa::path(
+  post,
+  path = "/wasm/uninstall",
+  tag = "admin",
+  request_body = WasmComponentRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn uninstall_wasm_component_handler(
   State(state): State<AppState>,
   Json(request): Json<WasmComponentRequest>,
