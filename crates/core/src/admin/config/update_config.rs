@@ -8,6 +8,14 @@ use crate::config::proto::{UpdateConfigRequest, Vault};
 use crate::config::{merge_vault_and_env, redact_secrets};
 use crate::extract::protobuf::Protobuf;
 
+#[utoipa::path(
+  post,
+  path = "/config",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn update_config_handler(
   State(state): State<AppState>,
   Protobuf(request): Protobuf<UpdateConfigRequest>,

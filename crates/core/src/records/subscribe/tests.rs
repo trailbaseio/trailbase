@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_sqlite::params;
 
 use crate::User;
-use crate::admin::user::*;
+use crate::admin::user::create_user::create_user_for_test;
 use crate::app_state::{AppState, TestStateOptions, test_config, test_state};
 use crate::auth::util::login_with_password;
 use crate::config::proto::RecordApiConfig;

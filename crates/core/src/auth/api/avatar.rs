@@ -222,7 +222,7 @@ mod tests {
   use axum_test::multipart::{MultipartForm, Part};
 
   use super::*;
-  use crate::admin::user::create_user_for_test;
+  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::{DbUser, User};
   use crate::auth::util::login_with_password;

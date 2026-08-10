@@ -30,6 +30,7 @@ thiserror = "2.0.12"
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
 ts-rs = { workspace = true }
+utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]

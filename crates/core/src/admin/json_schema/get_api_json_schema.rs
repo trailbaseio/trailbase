@@ -13,6 +13,16 @@ pub struct GetTableSchemaParams {
   mode: Option<JsonSchemaMode>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/schema/{record_api_name}/schema.json",
+  tag = "admin",
+  // FIXME: enum like JsonSchemaMode not supported.
+  // params(GetTableSchemaParams),
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn get_api_json_schema_handler(
   State(state): State<AppState>,
   Path(record_api_name): Path<String>,

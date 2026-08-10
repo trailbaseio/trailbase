@@ -220,7 +220,7 @@ fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, trailbase
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::admin::user::*;
+  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::util::login_with_password;
   use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};

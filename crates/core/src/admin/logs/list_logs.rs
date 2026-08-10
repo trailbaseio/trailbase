@@ -17,7 +17,7 @@ use crate::constants::{LOGS_TABLE, LOGS_TABLE_ID_COLUMN};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListLogsResponse {
   total_row_count: i64,
@@ -25,6 +25,14 @@ pub struct ListLogsResponse {
   entries: Vec<LogJson>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/logs/list",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = ListLogsResponse),
+  )
+)]
 pub async fn list_logs_handler(
   State(state): State<AppState>,
   RawQuery(raw_url_query): RawQuery,
@@ -200,13 +208,13 @@ async fn fetch_logs(
   );
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 pub struct GeoipCity {
   country_code: Option<String>,
   name: Option<String>,
 }
 
-#[derive(Debug, Serialize, TS)]
+#[derive(Debug, Serialize, TS, utoipa::ToSchema)]
 pub struct LogJson {
   pub id: i64,
   pub created: f64,

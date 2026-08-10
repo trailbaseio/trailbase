@@ -89,7 +89,7 @@ mod test {
   use trailbase_sqlite::params;
 
   use super::*;
-  use crate::admin::user::*;
+  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;

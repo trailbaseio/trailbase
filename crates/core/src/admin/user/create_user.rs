@@ -14,7 +14,7 @@ use crate::auth::util::{user_exists, validate_and_normalize_email_address};
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 
-#[derive(Debug, Serialize, Deserialize, Default, TS)]
+#[derive(Debug, Serialize, Deserialize, Default, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct CreateUserRequest {
   pub email: String,
@@ -23,11 +23,20 @@ pub struct CreateUserRequest {
   pub admin: bool,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, utoipa::ToSchema)]
 pub struct CreateUserResponse {
   pub id: Uuid,
 }
 
+#[utoipa::path(
+  post,
+  path = "/user",
+  tag = "admin",
+  request_body = CreateUserRequest,
+  responses(
+    (status = 200, description = "Success", body = CreateUserResponse),
+  )
+)]
 pub async fn create_user_handler(
   State(state): State<AppState>,
   Json(request): Json<CreateUserRequest>,

@@ -176,7 +176,7 @@ mod tests {
   use axum::body::Body;
   use axum::http::{Request, header};
 
-  use crate::admin::user::create_user_for_test;
+  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::test_state;
   use crate::auth::util::login_with_password;
   use crate::constants::COOKIE_REFRESH_TOKEN;

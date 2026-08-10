@@ -195,10 +195,7 @@ pub mod openapi {
           trailbase_sqlite::ConnectionType::Sqlite,
           true,
         ))
-        .nest(
-          &format!("/{ADMIN_API_PATH}/"),
-          crate::admin::router().into(),
-        )
+        .nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())
         .into_openapi()
         .paths,
     );
@@ -206,7 +203,7 @@ pub mod openapi {
 }
 
 pub mod api {
-  pub use crate::admin::user::{CreateUserRequest, create_user_handler};
+  pub use crate::admin::user::create_user::{CreateUserRequest, create_user_handler};
   pub use crate::app_state::InitArgs;
   pub use crate::auth::{AuthTokenClaims, JwtHelper, cli};
   pub use crate::backup::{Backup, backup_all, delete_backups, find_backups, restore_all};

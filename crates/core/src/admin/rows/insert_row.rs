@@ -12,18 +12,27 @@ use crate::records::params::Params;
 use crate::records::write_queries::run_insert_or_replace_query;
 use crate::util::row_id_column;
 
-#[derive(Debug, Serialize, Deserialize, TS)]
+#[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct InsertRowRequest {
   /// Row data, which is expected to be a map from column name to value.
   pub row: indexmap::IndexMap<String, SqlValue>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct InsertRowResponse {
   pub row_id: i64,
 }
 
+#[utoipa::path(
+  post,
+  path = "/table/{table_name}",
+  tag = "admin",
+  request_body = InsertRowRequest,
+  responses(
+    (status = 200, description = "Success", body = InsertRowResponse),
+  )
+)]
 pub async fn insert_row_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,

@@ -8481,6 +8481,7 @@ dependencies = [
  "trailbase-extension",
  "trailbase-sqlite",
  "ts-rs",
+ "utoipa",
  "uuid",
 ]
 
@@ -8526,6 +8527,7 @@ dependencies = [
  "thiserror 2.0.19",
  "trailbase-sqlite",
  "ts-rs",
+ "utoipa",
 ]
 
 [[package]]
@@ -8930,6 +8932,7 @@ dependencies = [
  "quote",
  "regex",
  "syn 2.0.119",
+ "uuid",
 ]
 
 [[package]]
