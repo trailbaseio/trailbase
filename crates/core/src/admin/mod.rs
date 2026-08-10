@@ -19,7 +19,6 @@ mod wasm;
 pub use error::AdminError;
 
 use crate::app_state::AppState;
-use axum::routing::{delete, get, patch, post};
 use utoipa_axum::router::OpenApiRouter;
 
 pub fn router() -> OpenApiRouter<AppState> {
@@ -79,10 +78,10 @@ pub fn router() -> OpenApiRouter<AppState> {
     .routes(routes!(wasm::install_wasm_component_handler))
     .routes(routes!(wasm::uninstall_wasm_component_handler))
     .routes(routes!(jobs::list_jobs::list_jobs_handler))
-    .route("/job/run", post(jobs::run_job::run_job_handler))
-    .route("/backups", get(backup::list_backups_handler))
-    .route("/backups/trigger", get(backup::trigger_backup_handler))
-    .route("/backups/delete", delete(backup::delete_backups_handler))
-    .route("/backups/restore", patch(backup::restore_backup_handler))
-    .route("/email/test", post(email::test_email_handler));
+    .routes(routes!(jobs::run_job::run_job_handler))
+    .routes(routes!(backup::list_backups_handler))
+    .routes(routes!(backup::trigger_backup_handler))
+    .routes(routes!(backup::delete_backups_handler))
+    .routes(routes!(backup::restore_backup_handler))
+    .routes(routes!(email::test_email_handler));
 }
