@@ -36,7 +36,7 @@ use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::connection::ConnectionEntry;
-use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
+use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
 use crate::extract::ip::RealIpKeyExtractor;
 use crate::init_error::InitError;
@@ -416,14 +416,17 @@ impl Server {
     let mut router = OpenApiRouter::new()
       // Public, stable and versioned APIs.
       .merge(records::router(conn.connection_type(), enable_transactions))
-      .merge(install_auth_rate_limiter.map_or_else(
-        || {
-          return auth::router(&state.get_config());
-        },
-        |inst| {
-          return inst(auth::router(&state.get_config()));
-        },
-      ))
+      .nest(
+        &format!("/{AUTH_API_PATH}/"),
+        install_auth_rate_limiter.map_or_else(
+          || {
+            return auth::router(&state.get_config());
+          },
+          |inst| {
+            return inst(auth::router(&state.get_config()));
+          },
+        ),
+      )
       .route("/api/healthcheck", get(healthcheck_handler));
 
     for custom_router in custom_routers {

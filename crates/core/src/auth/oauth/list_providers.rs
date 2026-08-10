@@ -6,7 +6,6 @@ use utoipa::ToSchema;
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::constants::with_auth_prefix;
 
 #[derive(Debug, Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -18,7 +17,7 @@ pub struct ConfiguredOAuthProvidersResponse {
 /// List configured OAuth providers.
 #[utoipa::path(
   get,
-  path = with_auth_prefix!("/oauth/providers"),
+  path = "/oauth/providers",
   tag = "oauth",
   responses(
     (status = 200, description = "List of OAuth providers.", body = ConfiguredOAuthProvidersResponse)

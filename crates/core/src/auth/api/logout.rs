@@ -12,7 +12,6 @@ use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
 };
-use crate::constants::with_auth_prefix;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LogoutParams {
@@ -25,7 +24,7 @@ pub struct LogoutParams {
 /// bringing a logged out session back to live.
 #[utoipa::path(
   get,
-  path = with_auth_prefix!("/logout"),
+  path = "/logout",
   tag = "auth",
   params(LogoutParams),
   responses(
@@ -66,7 +65,7 @@ pub struct LogoutRequest {
 /// Relies on the client to drop any auth tokens.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/logout"),
+  path = "/logout",
   tag = "auth",
   request_body = LogoutRequest,
   responses(

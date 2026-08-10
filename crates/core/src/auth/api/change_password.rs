@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::password::{check_user_password, hash_password, validate_password_policy};
 use crate::auth::util::{user_by_id, validate_redirect};
 use crate::auth::{AuthError, User};
-use crate::constants::{USER_TABLE, with_auth_prefix};
+use crate::constants::USER_TABLE;
 use crate::extract::Either;
 use crate::util::urlencode;
 
@@ -38,7 +38,7 @@ pub struct ChangePasswordRequest {
 /// Request a change of password.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/change_password"),
+  path = "/change_password",
   tag = "auth",
   params(ChangePasswordParams),
   request_body = ChangePasswordRequest,

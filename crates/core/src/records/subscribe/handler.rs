@@ -11,7 +11,6 @@ use ts_rs::TS;
 
 use crate::app_state::AppState;
 use crate::auth::User;
-use crate::constants::with_record_prefix;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
 use crate::records::subscribe::event::{EventError, EventErrorStatus, EventPayload};
@@ -42,7 +41,7 @@ impl SubscriptionQuery {
 /// Read record.
 #[utoipa::path(
   get,
-  path = with_record_prefix!("/{name}/subscribe/{record}"),
+  path = "/{name}/subscribe/{record}",
   tag = "records",
   // TODO: Document the params. Requires utoipa support in trailbase_qs or external impl.
   // params(SubscriptionParams),

@@ -20,7 +20,7 @@ use crate::auth::util::{
   get_user_by_id, user_by_email, user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username, validate_redirect,
 };
-use crate::constants::{OTP_CODE_TABLE, with_auth_prefix};
+use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::random_numeric_and_uppercase;
@@ -60,7 +60,7 @@ enum UserIdentifier {
 
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/otp/request"),
+  path = "/otp/request",
   tag = "auth",
   params(RequestOtpParams),
   request_body = RequestOtpRequest,
@@ -227,7 +227,7 @@ pub struct LoginOtpRequest {
 
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/otp/login"),
+  path = "/otp/login",
   tag = "auth",
   params(LoginOtpParams),
   request_body = LoginOtpRequest,

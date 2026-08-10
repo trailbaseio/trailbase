@@ -11,12 +11,12 @@ use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::util::{new_cookie_opts, secure_tls_only};
-use crate::constants::{COOKIE_OAUTH_STATE, with_auth_prefix};
+use crate::constants::COOKIE_OAUTH_STATE;
 
 /// Log in via external OAuth provider.
 #[utoipa::path(
   get,
-  path = with_auth_prefix!("/oauth/{provider}/login"),
+  path = "/oauth/{provider}/login",
   tag = "oauth",
   params(LoginInputParams),
   responses(

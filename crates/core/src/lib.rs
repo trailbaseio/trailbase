@@ -128,7 +128,7 @@ pub mod openapi {
 
   use crate::AppState;
   use crate::config::proto::Config;
-  use crate::constants::ADMIN_API_PATH;
+  use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH};
 
   fn version() -> String {
     let version_info = trailbase_build::get_version_info!();
@@ -188,17 +188,26 @@ pub mod openapi {
       return config;
     });
 
-    return from_paths(
+    let public_router = || {
       OpenApiRouter::new()
-        .merge(crate::auth::router(&config))
+        .nest(&format!("/{AUTH_API_PATH}/"), crate::auth::router(&config))
         .merge(crate::records::router(
           trailbase_sqlite::ConnectionType::Sqlite,
           true,
         ))
-        .nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())
-        .into_openapi()
-        .paths,
-    );
+    };
+
+    // Currently we only include the admin APIs in dev builds.
+    if cfg!(debug_assertions) {
+      return from_paths(
+        public_router()
+          .nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())
+          .into_openapi()
+          .paths,
+      );
+    }
+
+    return from_paths(public_router().into_openapi().paths);
   }
 }
 

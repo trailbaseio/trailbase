@@ -16,7 +16,7 @@ use crate::auth::util::{
   validate_and_normalize_email_address, validate_and_normalize_username, validate_redirect,
 };
 use crate::config::proto::UserIdentifier;
-use crate::constants::{USER_TABLE, with_auth_prefix};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
@@ -40,7 +40,7 @@ pub struct RegisterUserRequest {
 /// Registers a new user with email and password.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/register"),
+  path = "/register",
   tag = "auth",
   params(RegisterUserParams),
   request_body = RegisterUserRequest,

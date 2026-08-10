@@ -30,6 +30,7 @@ pub(crate) use validate::validate_record_api_config;
 
 use crate::AppState;
 use crate::config::proto::PermissionFlag;
+use crate::constants::RECORD_API_PATH;
 
 pub(crate) fn router(
   connection_type: ConnectionType,
@@ -40,27 +41,35 @@ pub(crate) fn router(
   // Inversely, using this macro ensures that the handlers do have metadata.
   use utoipa_axum::routes;
 
-  let mut router = OpenApiRouter::new()
-    .routes(routes!(create_record::create_record_handler))
-    .routes(routes!(read_record::read_record_handler))
-    .routes(routes!(update_record::update_record_handler))
-    .routes(routes!(delete_record::delete_record_handler))
-    .routes(routes!(list_records::list_records_handler))
-    .routes(routes!(read_record::get_uploaded_file_from_record_handler))
-    .routes(routes!(read_record::get_uploaded_files_from_record_handler))
-    .routes(routes!(json_schema::json_schema_handler));
+  let mut root_router = OpenApiRouter::new();
 
-  if matches!(connection_type, ConnectionType::Sqlite) {
-    router = router.routes(routes!(
-      subscribe::handler::add_subscription_sse_and_ws_handler
-    ));
+  // Note that transactions sit at a different path `/api/transaction/v1/` vs `/api/records/v1`,
+  // that's why we have to build a router relative "/" rather than nesting a layer above..
+  {
+    let mut router = OpenApiRouter::new()
+      .routes(routes!(create_record::create_record_handler))
+      .routes(routes!(read_record::read_record_handler))
+      .routes(routes!(update_record::update_record_handler))
+      .routes(routes!(delete_record::delete_record_handler))
+      .routes(routes!(list_records::list_records_handler))
+      .routes(routes!(read_record::get_uploaded_file_from_record_handler))
+      .routes(routes!(read_record::get_uploaded_files_from_record_handler))
+      .routes(routes!(json_schema::json_schema_handler));
+
+    if matches!(connection_type, ConnectionType::Sqlite) {
+      router = router.routes(routes!(
+        subscribe::handler::add_subscription_sse_and_ws_handler
+      ));
+    }
+
+    root_router = root_router.nest(&format!("/{RECORD_API_PATH}/"), router);
   }
 
   if enable_transactions {
-    router = router.routes(routes!(transaction::record_transactions_handler));
+    root_router = root_router.routes(routes!(transaction::record_transactions_handler));
   }
 
-  return router;
+  return root_router;
 }
 
 // Since this is for APIs access control, we'll use the API- space CRUD terminology instead of

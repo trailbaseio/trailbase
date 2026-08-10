@@ -15,7 +15,6 @@ use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::with_record_prefix;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
 use crate::records::expand::{
@@ -77,7 +76,7 @@ pub struct ListRecordsQuery {
 /// Lists records matching the given filters
 #[utoipa::path(
   get,
-  path = with_record_prefix!("/{name}"),
+  path = "/{name}",
   tag = "records",
   responses(
     (status = 200, description = "Matching records.")

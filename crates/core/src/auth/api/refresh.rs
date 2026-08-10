@@ -6,7 +6,6 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::reauth_with_refresh_token;
-use crate::constants::with_auth_prefix;
 
 #[derive(Debug, Deserialize, ToSchema, TS)]
 #[ts(export)]
@@ -26,7 +25,7 @@ pub struct RefreshResponse {
 /// NOTE: This is a json-only API, since cookies will be auto-refreshed.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/refresh"),
+  path = "/refresh",
   tag = "auth",
   request_body = RefreshRequest,
   responses(

@@ -12,7 +12,7 @@ use crate::auth::jwt::EmailVerificationTokenClaims;
 use crate::auth::password::{hash_password, validate_password_policy};
 use crate::auth::util::{user_by_id, validate_redirect};
 use crate::auth::{AuthError, User};
-use crate::constants::{USER_TABLE, with_auth_prefix};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
@@ -41,7 +41,7 @@ pub struct PromoteAnonymousRequest {
 /// Request a change of password.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/promote_anonymous"),
+  path = "/promote_anonymous",
   tag = "auth",
   params(PromoteAnonymousParams),
   request_body = PromoteAnonymousRequest,

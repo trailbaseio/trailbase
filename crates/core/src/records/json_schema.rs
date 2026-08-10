@@ -6,7 +6,6 @@ use trailbase_schema::json_schema::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::with_record_prefix;
 use crate::records::{Permission, RecordApi, RecordError};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -17,7 +16,7 @@ pub struct JsonSchemaQuery {
 /// Retrieve json schema associated with given record api.
 #[utoipa::path(
   get,
-  path = with_record_prefix!("/{name}/schema"),
+  path = "/{name}/schema",
   tag = "records",
   responses(
     (status = 200, description = "JSON schema.")

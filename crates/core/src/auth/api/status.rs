@@ -8,7 +8,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{Tokens, reauth_with_refresh_token};
 use crate::auth::util::new_cookie;
-use crate::constants::{COOKIE_AUTH_TOKEN, with_auth_prefix};
+use crate::constants::COOKIE_AUTH_TOKEN;
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
 #[ts(export)]
@@ -21,7 +21,7 @@ pub struct LoginStatusResponse {
 /// Check login status.
 #[utoipa::path(
   get,
-  path = with_auth_prefix!("/status"),
+  path = "/status",
   tag = "auth",
   responses(
     (status = 200, description = "Auth & refresh tokens.", body = LoginStatusResponse)

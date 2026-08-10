@@ -23,7 +23,6 @@ use crate::auth::util::{
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
-  with_auth_prefix,
 };
 use crate::extract::Either;
 use crate::rand::random_alphanumeric;
@@ -79,7 +78,7 @@ pub struct MfaTokenResponse {
 /// Log in users by email and password.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/login"),
+  path = "/login",
   tag= "auth",
   params(LoginInputParams),
   request_body = LoginRequest,
@@ -410,7 +409,7 @@ pub struct LoginMfaRequest {
 /// Log in users by email and password.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/login_mfa"),
+  path = "/login_mfa",
   tag= "auth",
   params(LoginInputParams),
   request_body = LoginMfaRequest,

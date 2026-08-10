@@ -7,7 +7,6 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::with_record_prefix;
 use crate::extract::Either;
 use crate::records::params::{JsonRow, LazyParams, Params};
 use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
@@ -72,7 +71,7 @@ fn extract_records(value: serde_json::Value) -> Result<Vec<RecordAndFiles>, Reco
 /// Create new record.
 #[utoipa::path(
   post,
-  path = with_record_prefix!("/{name}"),
+  path = "/{name}",
   tag = "records",
   params(CreateRecordQuery),
   request_body = serde_json::Value,

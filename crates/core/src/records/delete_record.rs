@@ -6,14 +6,13 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::constants::with_record_prefix;
 use crate::records::write_queries::run_delete_query;
 use crate::records::{Permission, RecordError};
 
 /// Delete record.
 #[utoipa::path(
   delete,
-  path = with_record_prefix!("/{name}/{record}"),
+  path = "/{name}/{record}",
   tag = "records",
   responses(
     (status = 200, description = "Successful deletion.")

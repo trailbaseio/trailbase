@@ -18,7 +18,7 @@ use crate::auth::util::{
   user_by_email, user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username, validate_redirect,
 };
-use crate::constants::{USER_TABLE, with_auth_prefix};
+use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
@@ -46,7 +46,7 @@ pub enum ResetPasswordRequest {
 /// Request a password reset.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/reset_password/request"),
+  path = "/reset_password/request",
   tag = "auth",
   params(ResetPasswordParams),
   request_body = ResetPasswordRequest,
@@ -156,7 +156,7 @@ pub struct ResetPasswordUpdateRequest {
 /// replacement password.
 #[utoipa::path(
   post,
-  path = with_auth_prefix!("/reset_password/update"),
+  path = "/reset_password/update",
   tag = "auth",
   params(ResetPasswordUpdateParams),
   request_body = ResetPasswordUpdateRequest,
