@@ -127,6 +127,7 @@ pub mod openapi {
   use utoipa_axum::router::OpenApiRouter;
 
   use crate::AppState;
+  use crate::config::proto::Config;
   use crate::constants::ADMIN_API_PATH;
 
   fn version() -> String {
@@ -179,10 +180,13 @@ pub mod openapi {
     return from_paths(api.paths);
   }
 
-  pub fn build_api_definitions() -> utoipa::openapi::OpenApi {
-    let mut config = crate::config::proto::Config::new_with_custom_defaults();
-    config.auth.enable_anonymous_signin = Some(true);
-    config.auth.enable_otp_signin = Some(true);
+  pub fn build_api_definitions(config: Option<Config>) -> utoipa::openapi::OpenApi {
+    let config = config.unwrap_or_else(|| {
+      let mut config = Config::new_with_custom_defaults();
+      config.auth.enable_anonymous_signin = Some(true);
+      config.auth.enable_otp_signin = Some(true);
+      return config;
+    });
 
     return from_paths(
       OpenApiRouter::new()
