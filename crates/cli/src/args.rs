@@ -62,6 +62,9 @@ pub enum SubCommands {
   OpenApi {
     #[command(subcommand)]
     cmd: Option<OpenApiSubCommands>,
+    /// Include admin endpoints.
+    #[arg(long)]
+    admin: bool,
   },
   /// Creates new empty migration file.
   Migration {

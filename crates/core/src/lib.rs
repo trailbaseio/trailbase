@@ -181,7 +181,10 @@ pub mod openapi {
     );
   }
 
-  pub fn build_api_definitions(config: Option<Config>) -> utoipa::openapi::OpenApi {
+  pub fn build_api_definitions(
+    config: Option<Config>,
+    include_admin: bool,
+  ) -> utoipa::openapi::OpenApi {
     let config = config.unwrap_or_else(|| {
       let mut config = Config::new_with_custom_defaults();
       config.auth.enable_anonymous_signin = Some(true);
@@ -199,13 +202,11 @@ pub mod openapi {
     };
 
     // Currently we only include the admin APIs in dev builds.
-    if cfg!(debug_assertions) {
-      return from_router(
-        public_router().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router()),
-      );
-    }
-
-    return from_router(public_router());
+    return if include_admin {
+      from_router(public_router().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router()))
+    } else {
+      from_router(public_router())
+    };
   }
 }
 

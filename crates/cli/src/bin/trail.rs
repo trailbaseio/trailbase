@@ -98,14 +98,14 @@ async fn async_main(
 
       app.serve().await?;
     }
-    SubCommands::OpenApi { cmd } => match cmd {
+    SubCommands::OpenApi { cmd, admin } => match cmd {
       Some(OpenApiSubCommands::Print) | None => {
         // QUESTION: Should we eventually require initialization and instead use
         // `build_api_definitions_from_state`? This may allow us to include routes form WASM
         // components.
         // TODO: Wire up config.
         let json =
-          trailbase::openapi::build_api_definitions(/* config= */ None).to_pretty_json()?;
+          trailbase::openapi::build_api_definitions(/* config= */ None, admin).to_pretty_json()?;
         println!("{json}");
       }
       #[cfg(feature = "swagger")]
@@ -113,7 +113,7 @@ async fn async_main(
         // TODO: Wire up config.
         let router = axum::Router::new().merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url(
           "/api/openapi.json",
-          trailbase::openapi::build_api_definitions(/* config= */ None),
+          trailbase::openapi::build_api_definitions(/* config= */ None, admin),
         ));
 
         let listener = tokio::net::TcpListener::bind(address.clone())
