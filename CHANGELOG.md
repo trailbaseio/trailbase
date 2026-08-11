@@ -1,3 +1,8 @@
+## v0.32.1
+
+- Share single source-of-truth for HTTP route construction and OpenAPI metadata. For prod, this is a no-op but the OpenApi published and included metadata is now more complete and guaranteed to be correct.
+- Update dependencies.
+
 ## v0.32.0
 
 - New WASM component browser in admin UI **and** experimental support for component-provided dashboards 🎉.
