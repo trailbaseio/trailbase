@@ -144,7 +144,9 @@ pub mod openapi {
       .unwrap_or_default();
   }
 
-  fn from_paths(paths: utoipa::openapi::Paths) -> utoipa::openapi::OpenApi {
+  fn from_router<S: Send + Sync + Clone + 'static>(
+    router: OpenApiRouter<S>,
+  ) -> utoipa::openapi::OpenApi {
     const LICENSE: &str = "OSL-3.0";
     return OpenApiBuilder::new()
       .info(
@@ -160,24 +162,23 @@ pub mod openapi {
           .version(version())
           .build(),
       )
-      .paths(paths)
-      .build();
+      .build()
+      .merge_from(router.into_openapi());
   }
 
   // Initializes routes from fully initialized TrailBase. This would allow to even pick up routes
   // from registered WASM components.
   pub fn build_api_definitions_from_state(state: &AppState) -> utoipa::openapi::OpenApi {
     type Installer = fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>;
-    let (_router, api) =
+
+    return from_router(
       crate::server::Server::build_main_router(state, None, false, &[], None::<&Installer>, vec![])
         .unwrap_or_else(|err| {
           log::error!("failed to build main_router: {err}");
 
           return OpenApiRouter::new();
-        })
-        .split_for_parts();
-
-    return from_paths(api.paths);
+        }),
+    );
   }
 
   pub fn build_api_definitions(config: Option<Config>) -> utoipa::openapi::OpenApi {
@@ -189,25 +190,22 @@ pub mod openapi {
     });
 
     let public_router = || {
-      OpenApiRouter::new()
+      return OpenApiRouter::new()
         .nest(&format!("/{AUTH_API_PATH}/"), crate::auth::router(&config))
         .merge(crate::records::router(
           trailbase_sqlite::ConnectionType::Sqlite,
           true,
-        ))
+        ));
     };
 
     // Currently we only include the admin APIs in dev builds.
     if cfg!(debug_assertions) {
-      return from_paths(
-        public_router()
-          .nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())
-          .into_openapi()
-          .paths,
+      return from_router(
+        public_router().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router()),
       );
     }
 
-    return from_paths(public_router().into_openapi().paths);
+    return from_router(public_router());
   }
 }
 

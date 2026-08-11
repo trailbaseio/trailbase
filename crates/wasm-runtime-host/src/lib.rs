@@ -162,7 +162,6 @@ impl Runtime {
     return Ok(Self { state });
   }
 
-  #[allow(unused)]
   pub fn component_path(&self) -> &Path {
     return &self.state.component_path;
   }
@@ -310,6 +309,7 @@ enum HttpStoreInternal {
 }
 
 impl HttpStoreInternal {
+  #[allow(unused)]
   fn component_path(&self) -> &Path {
     return match self {
       HttpStoreInternal::Unique { rt } => rt.component_path(),
