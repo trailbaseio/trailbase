@@ -17,7 +17,7 @@ use crate::constants::COOKIE_OAUTH_STATE;
 #[utoipa::path(
   get,
   path = "/oauth/{provider}/login",
-  tag = "oauth",
+  tag = "auth",
   params(LoginInputParams),
   responses(
     (status = 200, description = "Redirect.")

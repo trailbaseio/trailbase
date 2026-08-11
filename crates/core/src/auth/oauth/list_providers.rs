@@ -18,7 +18,7 @@ pub struct ConfiguredOAuthProvidersResponse {
 #[utoipa::path(
   get,
   path = "/oauth/providers",
-  tag = "oauth",
+  tag = "auth",
   responses(
     (status = 200, description = "List of OAuth providers.", body = ConfiguredOAuthProvidersResponse)
   )

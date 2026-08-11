@@ -8,6 +8,7 @@ mod json_schema;
 mod jwt;
 mod logs;
 mod oauth_providers;
+mod openapi;
 mod parse;
 mod query;
 pub(crate) mod rows;
@@ -76,16 +77,21 @@ pub fn router() -> OpenApiRouter<AppState> {
     .routes(routes!(parse::parse_handler))
     // List available oauth providers
     .routes(routes!(oauth_providers::available_oauth_providers_handler))
-    .routes(routes!(jwt::get_public_key))
-    .routes(routes!(info::info_handler))
+    // Wasm component management.
     .routes(routes!(wasm::list_wasm_components_handler))
     .routes(routes!(wasm::install_wasm_component_handler))
     .routes(routes!(wasm::uninstall_wasm_component_handler))
+    // Jobs
     .routes(routes!(jobs::list_jobs::list_jobs_handler))
     .routes(routes!(jobs::run_job::run_job_handler))
+    // Backup routes
     .routes(routes!(backup::list_backups_handler))
     .routes(routes!(backup::trigger_backup_handler))
     .routes(routes!(backup::delete_backups_handler))
     .routes(routes!(backup::restore_backup_handler))
+    // Misc:
+    .routes(routes!(jwt::get_public_key))
+    .routes(routes!(info::info_handler))
+    .routes(routes!(openapi::openapi_handler))
     .routes(routes!(email::test_email_handler));
 }

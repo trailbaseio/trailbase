@@ -56,7 +56,7 @@ pub struct TransactionResponse {
 #[utoipa::path(
   post,
   path = "/api/transaction/v1/execute",
-  tag = "transactions",
+  tag = "records",
   params(),
   request_body = TransactionRequest,
   responses(

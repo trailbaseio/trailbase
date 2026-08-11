@@ -36,7 +36,7 @@ pub struct AuthQuery {
 #[utoipa::path(
   get,
   path = "/oauth/{provider}/callback",
-  tag = "oauth",
+  tag = "auth",
   params(AuthQuery),
   responses(
     (status = 200, description = "Redirect.")
