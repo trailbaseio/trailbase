@@ -17,8 +17,13 @@ packages:
   - 'examples/wasm-guest-ts'
   - 'guests/typescript'
 allowBuilds:
+  '@scarf/scarf': true
+  '@tree-sitter-grammars/tree-sitter-yaml': true
+  core-js-pure: true
   esbuild: true
   protobufjs: true
   sharp: true
+  tree-sitter: true
+  tree-sitter-json: true
 minimumReleaseAgeExclude:
   - trailbase@0.13.1
