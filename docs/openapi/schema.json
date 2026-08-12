@@ -7,7 +7,7 @@
       "name": "OSL-3.0",
       "identifier": "OSL-3.0"
     },
-    "version": "v0.32.0 (6)"
+    "version": "v0.32.2 (0)"
   },
   "paths": {
     "/api/auth/v1/avatar": {
@@ -475,7 +475,7 @@
     },
     "/api/auth/v1/oauth/providers": {
       "get": {
-        "tags": ["oauth"],
+        "tags": ["auth"],
         "summary": "List configured OAuth providers.",
         "operationId": "list_configured_providers_handler",
         "responses": {
@@ -494,7 +494,7 @@
     },
     "/api/auth/v1/oauth/{provider}/callback": {
       "get": {
-        "tags": ["oauth"],
+        "tags": ["auth"],
         "summary": "This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the\nuser's information, creates a new local user if needed, and finally mints our own tokens.",
         "operationId": "callback_from_external_auth_provider",
         "parameters": [
@@ -532,7 +532,7 @@
     },
     "/api/auth/v1/oauth/{provider}/login": {
       "get": {
-        "tags": ["oauth"],
+        "tags": ["auth"],
         "summary": "Log in via external OAuth provider.",
         "operationId": "login_with_external_auth_provider",
         "parameters": [
@@ -1317,7 +1317,7 @@
     },
     "/api/transaction/v1/execute": {
       "post": {
-        "tags": ["transactions"],
+        "tags": ["records"],
         "summary": "Execute a batch of transactions.",
         "operationId": "record_transactions_handler",
         "requestBody": {

@@ -1,3 +1,8 @@
+## v0.32.2
+
+- Add a `rapidoc`-based interactive API browser to the admin UI. Authentication is wired up for interactively "trialing" the APIs.
+- Update dependencies.
+
 ## v0.32.1
 
 - Share single source-of-truth for HTTP route construction and OpenAPI metadata. For prod, this is a no-op but the OpenApi published and included metadata is now more complete and guaranteed to be correct.
