@@ -35,6 +35,8 @@ export default function Page() {
       ref={ref}
       load-fonts="false"
       theme={theme()} // "light" | "dark"
+      bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
+      primary-color={primary}
       render-style="view" // "read" | "view" | "focused"
       layout="row" // "row" | "column"
       schema-style="table" // "tree" | "table"
@@ -45,3 +47,5 @@ export default function Page() {
     </rapi-doc>
   );
 }
+
+const primary = "#0073a8" as const;
