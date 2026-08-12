@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Form, Json as AxumJson, Path, Query, Request, State};
-use axum::http::{HeaderValue, Method, StatusCode, header};
+use axum::http::{Method, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
@@ -69,42 +69,51 @@ impl TrailBaseMcp {
   }
 
   async fn dispatch_admin(&self, request: AdminRequest) -> Result<Json<Value>, McpError> {
-    let method = Method::from_bytes(request.method.as_bytes())
-      .map_err(|_| McpError::invalid_params("invalid HTTP method", None))?;
-    let path = normalize_admin_path(&request.path)?;
-    let body = request
-      .body
-      .map(|value| serde_json::to_vec(&value))
-      .transpose()
-      .map_err(|err| McpError::invalid_params(err.to_string(), None))?
-      .unwrap_or_default();
+    let request = {
+      let method = Method::from_bytes(request.method.as_bytes())
+        .map_err(|_| McpError::invalid_params("invalid HTTP method", None))?;
 
-    let request = Request::builder()
-      .method(method)
-      .uri(path)
-      .header(header::CONTENT_TYPE, "application/json")
-      .body(Body::from(body))
-      .map_err(|err| McpError::internal_error(err.to_string(), None))?;
+      let path = normalize_admin_path(&request.path)?;
+      let body = request
+        .body
+        .map(|value| serde_json::to_vec(&value))
+        .transpose()
+        .map_err(|err| McpError::invalid_params(err.to_string(), None))?
+        .unwrap_or_default();
 
+      Request::builder()
+        .method(method)
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body))
+        .map_err(|err| McpError::internal_error(err.to_string(), None))?
+    };
+
+    // QUESTION: Rather than building a dedicated router, why not just call ourselves? Will make
+    // sure non-admin endpoints are available, logging works, ...
     let (admin_router, _) = admin::router().split_for_parts();
     let response = admin_router
       .with_state(self.state.clone())
       .oneshot(request)
       .await
       .map_err(|never| match never {})?;
-    let status = response.status();
-    let bytes = response
-      .into_body()
-      .collect()
-      .await
-      .map_err(|err| McpError::internal_error(err.to_string(), None))?
-      .to_bytes();
 
-    let response_body = if bytes.is_empty() {
-      Value::Null
-    } else {
-      serde_json::from_slice(&bytes)
-        .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()))
+    let status = response.status();
+    let response_body = {
+      let bytes = response
+        .into_body()
+        .collect()
+        .await
+        .map_err(|err| McpError::internal_error(err.to_string(), None))?
+        .to_bytes();
+
+      // TODO: Should we rely on content-type instead?
+      if bytes.is_empty() {
+        Value::Null
+      } else {
+        serde_json::from_slice(&bytes)
+          .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()))
+      }
     };
 
     if !status.is_success() {
@@ -223,10 +232,12 @@ impl ServerHandler for TrailBaseMcp {
 }
 
 pub(crate) fn router(state: &AppState) -> Router<AppState> {
-  let state_for_service = state.clone();
   let service: StreamableHttpService<TrailBaseMcp, LocalSessionManager> =
     StreamableHttpService::new(
-      move || Ok(TrailBaseMcp::new(state_for_service.clone())),
+      {
+        let state = state.clone();
+        move || Ok(TrailBaseMcp::new(state.clone()))
+      },
       Arc::new(LocalSessionManager::default()),
       StreamableHttpServerConfig::default()
         .with_json_response(true)
@@ -248,20 +259,24 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
     .merge(protected_mcp)
     .route(
       "/.well-known/oauth-protected-resource",
-      get(protected_resource_metadata),
+      get(protected_resource_metadata_handler),
     )
     .route(
       "/.well-known/oauth-protected-resource/mcp",
-      get(protected_resource_metadata),
+      get(protected_resource_metadata_handler),
     )
     .route(
       "/.well-known/oauth-authorization-server",
-      get(authorization_server_metadata),
+      get(authorization_server_metadata_handler),
     )
-    .route("/_/mcp/authorize", get(authorize))
-    .route("/_/mcp/callback/{flow}", get(authorization_callback))
-    .route("/_/mcp/register", post(register_client))
-    .route("/_/mcp/token", post(oauth_token))
+    // TODO: Should the mcp be under /api/_mcp?
+    .route("/_/mcp/authorize", get(authorize_handler))
+    .route(
+      "/_/mcp/callback/{flow}",
+      get(authorization_callback_handler),
+    )
+    .route("/_/mcp/register", post(register_client_handler))
+    .route("/_/mcp/token", post(oauth_token_handler))
 }
 
 async fn assert_mcp_access(
@@ -275,24 +290,24 @@ async fn assert_mcp_access(
     .and_then(|value| value.to_str().ok())
     .and_then(|value| value.strip_prefix("Bearer "))
     .and_then(|token| mcp_user_id(&state, token));
-  let authorized = match user_id {
-    Some(user_id) => is_admin(&state, &user_id).await,
-    None => false,
-  };
-  if authorized {
+
+  if let Some(user_id) = user_id
+    && is_admin(&state, &user_id).await
+  {
     return next.run(request).await;
   }
 
-  let metadata_url = external_url(&state, "/.well-known/oauth-protected-resource");
-  let mut response = AuthError::Unauthorized.into_response();
-  if let Ok(value) = HeaderValue::from_str(&format!(
-    "Bearer resource_metadata=\"{metadata_url}\", scope=\"{MCP_SCOPE}\""
-  )) {
-    response
-      .headers_mut()
-      .insert(header::WWW_AUTHENTICATE, value);
-  }
-  response
+  return Response::builder()
+    .status(StatusCode::UNAUTHORIZED)
+    .header(
+      header::WWW_AUTHENTICATE,
+      format!(
+        r#"Bearer resource_metadata="{metadata}", scope="{MCP_SCOPE}""#,
+        metadata = external_url(&state, "/.well-known/oauth-protected-resource"),
+      ),
+    )
+    .body(axum::body::Body::empty())
+    .unwrap_or_default();
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -331,6 +346,7 @@ fn mcp_user_id(state: &AppState, token: &str) -> Option<uuid::Uuid> {
   if claims.aud.is_some() {
     return None;
   }
+
   crate::util::b64_to_uuid(&claims.auth.sub).ok()
 }
 
@@ -342,10 +358,14 @@ struct ProtectedResourceMetadata {
   bearer_methods_supported: Vec<&'static str>,
 }
 
-async fn protected_resource_metadata(
+async fn protected_resource_metadata_handler(
   State(state): State<AppState>,
 ) -> AxumJson<ProtectedResourceMetadata> {
   let issuer = external_url(&state, "");
+
+  // FIXME: Remove
+  println!("issuer: {issuer}");
+
   AxumJson(ProtectedResourceMetadata {
     resource: external_url(&state, MCP_PATH),
     authorization_servers: vec![issuer],
@@ -367,10 +387,10 @@ struct AuthorizationServerMetadata {
   scopes_supported: Vec<&'static str>,
 }
 
-async fn authorization_server_metadata(
+async fn authorization_server_metadata_handler(
   State(state): State<AppState>,
 ) -> AxumJson<AuthorizationServerMetadata> {
-  AxumJson(AuthorizationServerMetadata {
+  return AxumJson(AuthorizationServerMetadata {
     issuer: external_url(&state, ""),
     authorization_endpoint: external_url(&state, "/_/mcp/authorize"),
     token_endpoint: external_url(&state, "/_/mcp/token"),
@@ -380,7 +400,7 @@ async fn authorization_server_metadata(
     code_challenge_methods_supported: vec!["S256"],
     token_endpoint_auth_methods_supported: vec!["none"],
     scopes_supported: vec![MCP_SCOPE],
-  })
+  });
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -413,7 +433,7 @@ struct ClientRegistrationResponse {
   scope: &'static str,
 }
 
-async fn register_client(
+async fn register_client_handler(
   State(state): State<AppState>,
   AxumJson(request): AxumJson<ClientRegistration>,
 ) -> Result<AxumJson<ClientRegistrationResponse>, OAuthError> {
@@ -431,18 +451,17 @@ async fn register_client(
   }
 
   let now = chrono::Utc::now().timestamp();
-  let claims = ClientClaims {
-    iat: now,
-    exp: now + chrono::Duration::days(30).num_seconds(),
-    redirect_uris: request.redirect_uris.clone(),
-    client_name: request.client_name.clone(),
-  };
   let client_id = state
     .jwt()
-    .encode(&claims)
+    .encode(&ClientClaims {
+      iat: now,
+      exp: now + chrono::Duration::days(30).num_seconds(),
+      redirect_uris: request.redirect_uris.clone(),
+      client_name: request.client_name.clone(),
+    })
     .map_err(|err| OAuthError::server(err.to_string()))?;
 
-  Ok(AxumJson(ClientRegistrationResponse {
+  return Ok(AxumJson(ClientRegistrationResponse {
     client_id,
     client_id_issued_at: now,
     redirect_uris: request.redirect_uris,
@@ -451,7 +470,7 @@ async fn register_client(
     grant_types: vec!["authorization_code", "refresh_token"],
     response_types: vec!["code"],
     scope: MCP_SCOPE,
-  }))
+  }));
 }
 
 #[derive(Deserialize)]
@@ -474,7 +493,7 @@ struct FlowClaims {
   state: Option<String>,
 }
 
-async fn authorize(
+async fn authorize_handler(
   State(state): State<AppState>,
   user: Option<User>,
   Query(query): Query<AuthorizeQuery>,
@@ -483,6 +502,7 @@ async fn authorize(
     .jwt()
     .decode(&query.client_id)
     .map_err(|_| OAuthError::invalid_request("unknown or expired client_id"))?;
+
   if query.response_type != "code"
     || query.code_challenge_method != "S256"
     || !client.redirect_uris.contains(&query.redirect_uri)
@@ -498,42 +518,47 @@ async fn authorize(
     return Err(OAuthError::invalid_request("invalid authorization request"));
   }
 
-  let flow = state
-    .jwt()
-    .encode(&FlowClaims {
-      exp: chrono::Utc::now().timestamp() + chrono::Duration::minutes(10).num_seconds(),
-      redirect_uri: query.redirect_uri,
-      client_id: query.client_id,
-      state: query.state,
-    })
-    .map_err(|err| OAuthError::server(err.to_string()))?;
-  let callback = format!("/_/mcp/callback/{flow}");
-  let login_query = url::form_urlencoded::Serializer::new(String::new())
-    .append_pair("redirect_uri", &callback)
-    .append_pair("response_type", "code")
-    .append_pair("pkce_code_challenge", &query.code_challenge)
-    .finish();
+  let callback = format!(
+    "/_/mcp/callback/{flow}",
+    flow = state
+      .jwt()
+      .encode(&FlowClaims {
+        exp: chrono::Utc::now().timestamp() + chrono::Duration::minutes(10).num_seconds(),
+        redirect_uri: query.redirect_uri,
+        client_id: query.client_id,
+        state: query.state,
+      })
+      .map_err(|err| OAuthError::server(err.to_string()))?
+  );
 
-  if let Some(user) = user {
-    if !is_admin(&state, &user.uuid).await {
-      return Err(OAuthError::access_denied(
-        "MCP access requires an administrator",
-      ));
-    }
-    let db_user = crate::auth::util::user_by_id(&state, &user.uuid)
+  return match user {
+    Some(user) if is_admin(&state, &user.uuid).await => {
+      let db_user = crate::auth::util::user_by_id(&state, &user.uuid)
+        .await
+        .map_err(OAuthError::from_auth)?;
+
+      crate::auth::api::login::build_authorization_code_flow_and_pkce_response(
+        &state,
+        &db_user,
+        callback,
+        query.code_challenge,
+      )
       .await
-      .map_err(OAuthError::from_auth)?;
-    return crate::auth::api::login::build_authorization_code_flow_and_pkce_response(
-      &state,
-      &db_user,
-      callback,
-      query.code_challenge,
-    )
-    .await
-    .map_err(OAuthError::from_auth);
-  }
-
-  Ok(Redirect::to(&format!("/_/auth/login?{login_query}")).into_response())
+      .map_err(OAuthError::from_auth)
+    }
+    Some(_user) => Err(OAuthError::access_denied("not an admin")),
+    None => Ok(
+      Redirect::to(&format!(
+        "/_/auth/login?{query}",
+        query = url::form_urlencoded::Serializer::new(String::new())
+          .append_pair("redirect_uri", &callback)
+          .append_pair("response_type", "code")
+          .append_pair("pkce_code_challenge", &query.code_challenge)
+          .finish()
+      ))
+      .into_response(),
+    ),
+  };
 }
 
 #[derive(Deserialize)]
@@ -541,7 +566,7 @@ struct CallbackQuery {
   code: String,
 }
 
-async fn authorization_callback(
+async fn authorization_callback_handler(
   State(state): State<AppState>,
   Path(flow): Path<String>,
   Query(query): Query<CallbackQuery>,
@@ -579,7 +604,7 @@ struct TokenResponse {
   scope: &'static str,
 }
 
-async fn oauth_token(
+async fn oauth_token_handler(
   State(state): State<AppState>,
   Form(request): Form<TokenRequest>,
 ) -> Result<AxumJson<TokenResponse>, OAuthError> {
@@ -760,7 +785,8 @@ fn normalize_admin_path(path: &str) -> Result<String, McpError> {
     .strip_prefix("/api/_admin")
     .unwrap_or(path)
     .trim_start_matches('/');
-  Ok(format!("/{path}"))
+
+  return Ok(format!("/{path}"));
 }
 
 #[cfg(test)]
@@ -782,7 +808,7 @@ mod tests {
   async fn registers_client_and_builds_pkce_login_redirect() {
     let state = test_state(None).await.unwrap();
     let callback = "http://127.0.0.1:3334/oauth/callback".to_string();
-    let AxumJson(registration) = register_client(
+    let AxumJson(registration) = register_client_handler(
       State(state.clone()),
       AxumJson(ClientRegistration {
         redirect_uris: vec![callback.clone()],
@@ -793,7 +819,7 @@ mod tests {
     .await
     .unwrap();
 
-    let redirect = authorize(
+    let redirect = authorize_handler(
       State(state),
       None,
       Query(AuthorizeQuery {
