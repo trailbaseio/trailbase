@@ -1,8 +1,11 @@
-import { onMount } from "solid-js";
+import { onMount, JSX } from "solid-js";
+
+// Import with side-effects for the custom web component.
 import "rapidoc";
 
 import { adminFetch } from "@/lib/fetch";
 import { createTheme } from "@/lib/theme";
+import { $tokens } from "@/lib/client";
 
 declare module "solid-js" {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -11,28 +14,52 @@ declare module "solid-js" {
       "rapi-doc": JSX.HTMLAttributes<HTMLElement> & {
         "spec-url"?: string;
         theme?: string;
-        "render-style"?: string;
+        // https://github.com/rapi-doc/RapiDoc/blob/7f53d25959e5a4e1beb4b610aaef445b896838f2/src/rapidoc.js#L47
         [key: string]: any;
       };
     }
   }
 }
 
+type RapiDoc = JSX.IntrinsicElements["rapi-doc"];
+
 export default function Page() {
-  let ref: HTMLElement | undefined;
+  let ref: RapiDoc | undefined;
+
   const theme = createTheme();
 
   onMount(async () => {
     const res = await adminFetch("/openapi.json");
     const spec = await res.json();
 
-    // RapiDoc API for loading spec late.
-    (ref as any)?.loadSpec(spec);
+    if (!ref) {
+      return;
+    }
+
+    ref.loadSpec(spec);
+
+    const url = serverUrl();
+    if (url) {
+      ref.setAttribute("server-url", serverUrl());
+      ref.setAttribute("default-api-server", serverUrl());
+    }
+
+    ref.addEventListener("before-try", (e: any) => {
+      const tokens = $tokens.get();
+      if (tokens) {
+        e.detail.request.headers.append(
+          "Authorization",
+          `Bearer ${tokens.auth_token}`,
+        );
+        e.detail.request.headers.append("Refresh-Token", tokens.refresh_token);
+        e.detail.request.headers.append("CSRF-Token", tokens.csrf_token);
+      }
+    });
   });
 
   return (
     <rapi-doc
-      ref={ref}
+      ref={ref as any}
       load-fonts="false"
       theme={theme()} // "light" | "dark"
       bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
@@ -40,7 +67,11 @@ export default function Page() {
       render-style="view" // "read" | "view" | "focused"
       layout="row" // "row" | "column"
       schema-style="table" // "tree" | "table"
-      show-header="false" // removes the top header bar entirely (logo/title row)
+      show-header="false" // removes the top bar: logo + title
+      allow-try="true"
+      persist-auth="false"
+      allow-authentication="false"
+      allow-server-selection="false"
     >
       {/* Contents */}
       <div class="m-4"></div>
@@ -48,4 +79,6 @@ export default function Page() {
   );
 }
 
+const serverUrl = () =>
+  import.meta.env.DEV ? "http://localhost:4000" : undefined;
 const primary = "#0073a8" as const;

@@ -120,14 +120,15 @@ impl Server {
 
     Self::build_tracing(&state, log_responses).init();
 
-    let mut custom_routers: Vec<Router<AppState>> = Vec::from_iter(custom_router);
+    let mut custom_routers: Vec<OpenApiRouter<AppState>> =
+      custom_router.into_iter().map(|r| r.into()).collect();
 
     for rt in state.wasm_runtimes() {
       if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?
       {
-        custom_routers.push(wasm_router);
+        custom_routers.push(wasm_router.into());
       }
     }
 
@@ -196,7 +197,6 @@ impl Server {
       Some((admin_address.to_string(), admin_router))
     } else {
       // Simply add to the main router.
-      let (admin_router, _api) = admin_router.split_for_parts();
       custom_routers.push(admin_router);
       None
     };
@@ -370,7 +370,7 @@ impl Server {
     return Ok(());
   }
 
-  fn build_admin_router(state: &AppState) -> OpenApiRouter<AppState> {
+  pub(crate) fn build_admin_router(state: &AppState) -> OpenApiRouter<AppState> {
     return OpenApiRouter::new()
       .nest(
         &format!("/{ADMIN_API_PATH}/"),
@@ -404,7 +404,7 @@ impl Server {
     public_dir_spa: bool,
     cors_allowed_origins: &[String],
     install_auth_rate_limiter: Option<&impl Fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>>,
-    custom_routers: Vec<Router<AppState>>,
+    custom_routers: Vec<OpenApiRouter<AppState>>,
   ) -> Result<OpenApiRouter<()>, InitError> {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
@@ -430,7 +430,7 @@ impl Server {
       .route("/api/healthcheck", get(healthcheck_handler));
 
     for custom_router in custom_routers {
-      router = router.merge(custom_router.into());
+      router = router.merge(custom_router);
     }
 
     if let Some(public_dir) = public_dir {
