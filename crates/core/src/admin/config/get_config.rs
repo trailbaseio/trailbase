@@ -8,6 +8,14 @@ use crate::config::{
 };
 use crate::extract::protobuf::Protobuf;
 
+#[utoipa::path(
+  get,
+  path = "/config",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn get_config_handler(
   State(state): State<AppState>,
 ) -> Result<Protobuf<GetConfigResponse>, Error> {

@@ -12,15 +12,14 @@ use trailbase::api::cli::UserReference;
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::constants::USER_TABLE;
 use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
-use trailbase_cli::wasm::{
-  download_component, find_component, find_component_by_filename, install_wasm_component,
-  list_installed_wasm_components, repo,
+use trailbase_wasm_component_repo::{
+  ComponentReference, download_component, find_component, find_component_by_filename,
+  install_wasm_component, list_installed_wasm_components, repo,
 };
-use utoipa::OpenApi;
 
 use trailbase_cli::{
-  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentReference, ComponentSubCommands,
-  OpenApiSubCommands, SubCommands, UserSubCommands,
+  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, OpenApiSubCommands,
+  SubCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -99,17 +98,23 @@ async fn async_main(
 
       app.serve().await?;
     }
-    SubCommands::OpenApi { cmd } => match cmd {
+    SubCommands::OpenApi { cmd, admin } => match cmd {
       Some(OpenApiSubCommands::Print) | None => {
-        let json = trailbase::openapi::Doc::openapi().to_pretty_json()?;
+        // QUESTION: Should we eventually require initialization and instead use
+        // `build_api_definitions_from_state`? This may allow us to include routes form WASM
+        // components.
+        // TODO: Wire up config.
+        let json =
+          trailbase::openapi::build_api_definitions(/* config= */ None, admin).to_pretty_json()?;
         println!("{json}");
       }
       #[cfg(feature = "swagger")]
       Some(OpenApiSubCommands::Run { address }) => {
-        let router = axum::Router::new().merge(
-          utoipa_swagger_ui::SwaggerUi::new("/docs")
-            .url("/api/openapi.json", trailbase::openapi::Doc::openapi()),
-        );
+        // TODO: Wire up config.
+        let router = axum::Router::new().merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url(
+          "/api/openapi.json",
+          trailbase::openapi::build_api_definitions(/* config= */ None, admin),
+        ));
 
         let listener = tokio::net::TcpListener::bind(address.clone())
           .await
@@ -321,16 +326,23 @@ async fn async_main(
               let (url, bytes) = download_component(&component_def).await?;
 
               let filename = url.path();
-              install_wasm_component(&data_dir, filename, std::io::Cursor::new(bytes)).await?
+              install_wasm_component(&data_dir.wasm_path(), filename, std::io::Cursor::new(bytes))
+                .await?
             }
             ComponentReference::Url(url) => {
               log::info!("Downloading {url}");
               let bytes = reqwest::get(url.clone()).await?.bytes().await?;
-              install_wasm_component(&data_dir, url.path(), std::io::Cursor::new(bytes)).await?
+              install_wasm_component(
+                &data_dir.wasm_path(),
+                url.path(),
+                std::io::Cursor::new(bytes),
+              )
+              .await?
             }
             ComponentReference::Path(path) => {
               let bytes = std::fs::read(&path)?;
-              install_wasm_component(&data_dir, &path, std::io::Cursor::new(bytes)).await?
+              install_wasm_component(&data_dir.wasm_path(), &path, std::io::Cursor::new(bytes))
+                .await?
             }
           };
 
@@ -343,10 +355,10 @@ async fn async_main(
             }
             ComponentReference::Name(name) => {
               let component_def = find_component(&name).ok_or("component not found")?;
-              let wasm_dir = data_dir.root().join("wasm");
+              let wasm_dir = data_dir.wasm_path();
 
               let filenames: Vec<_> = component_def
-                .wasm_filenames
+                .files
                 .into_iter()
                 .map(|f| wasm_dir.join(f))
                 .collect();
@@ -364,10 +376,10 @@ async fn async_main(
           }
         }
         Some(ComponentSubCommands::List) => {
-          println!("Components:\n\n{}", repo().keys().join("\n"));
+          println!("Components:\n\n{}", repo().iter().map(|c| &c.id).join("\n"));
         }
         Some(ComponentSubCommands::Installed) => {
-          let components = list_installed_wasm_components(&data_dir)?;
+          let components = list_installed_wasm_components(&data_dir.wasm_path())?;
 
           for component in components {
             let output = serde_json::to_string_pretty(
@@ -387,14 +399,16 @@ async fn async_main(
           }
         }
         Some(ComponentSubCommands::Update) => {
-          let installed_components = list_installed_wasm_components(&data_dir)?;
+          let installed_components = list_installed_wasm_components(&data_dir.wasm_path())?;
 
           for installed_component in installed_components {
             let Some(filename) = installed_component.path.file_name() else {
               continue;
             };
 
-            let Some(component_def) = find_component_by_filename(&filename.to_string_lossy())
+            let components_repo = repo();
+            let Some(component_def) =
+              find_component_by_filename(&components_repo, &filename.to_string_lossy())
             else {
               log::warn!(
                 "Skipping {:?}, not a first-party component",
@@ -406,7 +420,8 @@ async fn async_main(
             let (url, bytes) = download_component(&component_def).await?;
             let filename = url.path();
             let paths =
-              install_wasm_component(&data_dir, filename, std::io::Cursor::new(bytes)).await?;
+              install_wasm_component(&data_dir.wasm_path(), filename, std::io::Cursor::new(bytes))
+                .await?;
 
             println!("Updated : {paths:?}");
           }
@@ -510,7 +525,8 @@ fn main() -> Result<(), BoxError> {
   if let Some(SubCommands::Run(ref cmd)) = cmd {
     init_logger(cmd.dev, Some("info"));
   } else {
-    // For none-run-server commands, lower the log level to keep the spam at bay, e.g. SMTP fallback.
+    // For none-run-server commands, lower the log level to keep the spam at bay, e.g. SMTP
+    // fallback.
     init_logger(false, Some("warn"));
   }
 

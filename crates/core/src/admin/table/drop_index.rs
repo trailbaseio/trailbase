@@ -8,19 +8,28 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::transaction_recorder::TransactionRecorder;
 
-#[derive(Clone, Debug, Deserialize, TS)]
+#[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DropIndexRequest {
   pub name: String,
   pub dry_run: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DropIndexResponse {
   pub sql: String,
 }
 
+#[utoipa::path(
+  delete,
+  path = "/index",
+  tag = "admin",
+  request_body = DropIndexRequest,
+  responses(
+    (status = 200, description = "Success", body = DropIndexResponse),
+  )
+)]
 pub async fn drop_index_handler(
   State(state): State<AppState>,
   Json(request): Json<DropIndexRequest>,

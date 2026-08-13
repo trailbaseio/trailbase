@@ -22,7 +22,7 @@ export async function deleteBackups(timestamps: bigint[]): Promise<void> {
 
 export async function triggerBackup(): Promise<void> {
   await adminFetch("/backups/trigger", {
-    method: "GET",
+    method: "POST",
   });
 }
 

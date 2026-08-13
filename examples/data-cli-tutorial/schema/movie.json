@@ -5,24 +5,10 @@
       "type": "string"
     },
     "gross": {
-      "type": [
-        "number",
-        "string",
-        "boolean",
-        "object",
-        "array",
-        "null"
-      ]
+      "type": ["number", "string", "boolean", "object", "array", "null"]
     },
     "metascore": {
-      "type": [
-        "number",
-        "string",
-        "boolean",
-        "object",
-        "array",
-        "null"
-      ]
+      "type": ["number", "string", "boolean", "object", "array", "null"]
     },
     "name": {
       "type": "string"
@@ -40,24 +26,10 @@
       "type": "integer"
     },
     "year": {
-      "type": [
-        "number",
-        "string",
-        "boolean",
-        "object",
-        "array",
-        "null"
-      ]
+      "type": ["number", "string", "boolean", "object", "array", "null"]
     }
   },
-  "required": [
-    "name",
-    "year",
-    "watch_time",
-    "rating",
-    "votes",
-    "description"
-  ],
+  "required": ["name", "year", "watch_time", "rating", "votes", "description"],
   "title": "movies",
   "type": "object"
 }

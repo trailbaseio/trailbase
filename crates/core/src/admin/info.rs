@@ -6,7 +6,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
-#[derive(Clone, Debug, Default, Serialize, TS)]
+#[derive(Clone, Debug, Default, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct InfoResponse {
   /// Build metadata.
@@ -24,6 +24,14 @@ pub struct InfoResponse {
   postgres: bool,
 }
 
+#[utoipa::path(
+  get,
+  path = "/info",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = InfoResponse),
+  )
+)]
 pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResponse>, Error> {
   return Ok(Json(build_info_response(&state)));
 }

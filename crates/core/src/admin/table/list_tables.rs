@@ -14,13 +14,13 @@ use crate::constants::SQLITE_SCHEMA_TABLE;
 
 // TODO: Rudimentary unparsed trigger representation, since sqlparser didn't currently support
 // parsing sqlite triggers. Now we're using sqlite3_parser and should return structured data
-#[derive(Clone, Default, Debug, Serialize, TS)]
+#[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
 pub struct TableTrigger {
   pub name: QualifiedName,
   pub table_name: String,
 }
 
-#[derive(Clone, Default, Debug, Serialize, TS)]
+#[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListSchemasResponse {
   pub tables: Vec<(Table, String)>,
@@ -29,6 +29,14 @@ pub struct ListSchemasResponse {
   pub views: Vec<(View, String)>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/tables",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = ListSchemasResponse),
+  )
+)]
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {

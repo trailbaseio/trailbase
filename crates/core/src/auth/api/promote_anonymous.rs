@@ -116,8 +116,8 @@ pub async fn promote_anonymous_user_handler(
       UPDATE \"{USER_TABLE}\" \
       SET \
         password_hash = :new_password_hash, \
-        email = :email,
-        verified = FALSE,
+        email = NULL,
+        unverified_email = :unverified_email,
         username = :username
       WHERE id = :user_id \
     "
@@ -130,7 +130,7 @@ pub async fn promote_anonymous_user_handler(
       named_params! {
         ":user_id": user.uuid.into_bytes().to_vec(),
         ":new_password_hash": new_password_hash,
-        ":email": normalized_email.clone(),
+        ":unverified_email": normalized_email.clone(),
         ":username": username,
       },
     )

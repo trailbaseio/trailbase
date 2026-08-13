@@ -1,0 +1,25 @@
+[package]
+name = "trailbase-wasm-component-repo"
+version = "0.1.0"
+edition = "2024"
+license = "OSL-3.0"
+description = "Repository of 1st-party WASM components for the TrailBase framework"
+homepage = "https://trailbase.io"
+repository = "https://github.com/trailbaseio/trailbase"
+readme = "../../README.md"
+
+[dependencies]
+bytes = "1.11.0"
+log = "^0.4.21"
+minijinja = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+trailbase-build = { workspace = true }
+trailbase-wasm-runtime-host = { workspace = true }
+trailbase-wasm-common = { workspace = true }
+url = "2.5.4"
+wit-component = "0.256.0"
+zip = { version = "8.1.0", default-features = false, features = ["deflate"] }
+
+[build-dependencies]
+trailbase-build = { workspace = true }

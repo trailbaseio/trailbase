@@ -4,3 +4,6 @@ package-lock.json
 yarn.lock
 
 src/components/ui
+
+# Generated:
+types/

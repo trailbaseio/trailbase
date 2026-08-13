@@ -11,13 +11,22 @@ use crate::email::Email;
 ///
 /// NOTE: Email contents are deliberately not exposed to reduce opportunity for abuse. It's a
 /// privilege for sys-admins using the CLI and the auth sub-system.
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct TestEmailRequest {
   /// Address to send test email to.
   email_address: String,
 }
 
+#[utoipa::path(
+  post,
+  path = "/email/test",
+  tag = "admin",
+  request_body = TestEmailRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn test_email_handler(
   State(state): State<AppState>,
   Json(request): Json<TestEmailRequest>,

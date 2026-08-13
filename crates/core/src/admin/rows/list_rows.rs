@@ -29,6 +29,19 @@ pub struct ListRowsResponse {
   pub cursor: Option<String>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/table/{table_name}/rows",
+  tag = "admin",
+  responses(
+    (
+      status = 200,
+      description = "Success.",
+      // TODO: Would require utoipa::Schema for SqlValue/Column.
+      // body = ListRowsResponse
+    ),
+  )
+)]
 pub async fn list_rows_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,

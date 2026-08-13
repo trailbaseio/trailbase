@@ -5,6 +5,7 @@ use axum::{
 use serde::Deserialize;
 use trailbase_schema::{FileUploads, QualifiedName};
 use ts_rs::TS;
+use utoipa::IntoParams;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
@@ -12,7 +13,7 @@ use crate::connection::ConnectionEntry;
 use crate::records::files::read_file_into_response;
 use crate::records::read_queries::run_get_files_query;
 
-#[derive(Debug, Deserialize, TS)]
+#[derive(Debug, Deserialize, TS, IntoParams)]
 #[ts(export)]
 pub(crate) struct ReadFilesQuery {
   pub pk_column: String,
@@ -22,6 +23,20 @@ pub(crate) struct ReadFilesQuery {
   pub file_name: Option<String>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/table/{table_name}/files",
+  tag = "admin",
+  params(ReadFilesQuery),
+  responses(
+    (
+      status = 200,
+      description = "Success.",
+      // TODO: Would require utoipa::Schema for SqlValue/Column.
+      // body = ListRowsResponse
+    ),
+  )
+)]
 pub async fn read_files_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,

@@ -13,9 +13,7 @@ use crate::app_state::AppState;
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::filter::{Filter, apply_filter_recursively_to_record};
-use crate::records::subscribe::event::{
-  EventError, EventErrorStatus, EventPayload, JsonEventPayload,
-};
+use crate::records::subscribe::event::{EventError, EventErrorStatus, EventPayload};
 use crate::records::subscribe::state::{EventCandidate, Subscription};
 use crate::records::{Permission, RecordError};
 
@@ -108,29 +106,32 @@ async fn validate_event(
     return Ok(Some(EVENT_LOSS_EVENT.clone()));
   }
 
-  let Some(ref record) = ev.record else {
-    // Established events.
-    return Ok(Some(ev.payload));
+  return match *ev.payload {
+    // None-Insert/Update/Delete events.
+    EventPayload::Insert { ref record, .. }
+    | EventPayload::Update { ref record, .. }
+    | EventPayload::Delete { ref record, .. } => {
+      let sub: &Subscription = &args.subscription;
+      if let Filter::Record(ref filter) = sub.filter
+        && !apply_filter_recursively_to_record(filter, record)
+      {
+        return Ok(None);
+      }
+
+      // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
+      // version.
+      let Some(api) = args.state.lookup_record_api(&sub.record_api_name) else {
+        return Ok(None);
+      };
+
+      api
+        .check_record_level_read_access_for_subscriptions(&ev.payload, sub.user.as_ref())
+        .await?;
+
+      Ok(Some(ev.payload))
+    }
+    _ => Ok(Some(ev.payload)),
   };
-
-  let sub: &Subscription = &args.subscription;
-  if let Filter::Record(ref filter) = sub.filter
-    && !apply_filter_recursively_to_record(filter, record)
-  {
-    return Ok(None);
-  }
-
-  // We don't memoize and eagerly look up the APIs to make sure we get an up-to-date
-  // version.
-  let Some(api) = args.state.lookup_record_api(&sub.record_api_name) else {
-    return Ok(None);
-  };
-
-  api
-    .check_record_level_read_access_for_subscriptions(record, sub.user.as_ref())
-    .await?;
-
-  return Ok(Some(ev.payload));
 }
 
 pub async fn subscribe_sse(
@@ -472,19 +473,15 @@ pub async fn subscribe_ws(
 }
 
 static ACCESS_DENIED_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
-  Arc::new(EventPayload::from(&JsonEventPayload::Error {
-    value: EventError {
-      status: EventErrorStatus::Forbidden,
-      message: Some("Access denied".into()),
-    },
+  Arc::new(EventPayload::error(&EventError {
+    status: EventErrorStatus::Forbidden,
+    message: Some("Access denied".into()),
   }))
 });
 static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
-  Arc::new(EventPayload::from(&JsonEventPayload::Error {
-    value: EventError {
-      status: EventErrorStatus::Loss,
-      message: None,
-    },
+  Arc::new(EventPayload::error(&EventError {
+    status: EventErrorStatus::Loss,
+    message: None,
   }))
 });
 

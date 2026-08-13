@@ -12,7 +12,5 @@
       "@bindings/*": ["./bindings/*"]
     }
   },
-  "include": [
-    "./src/**/*"
-  ]
+  "include": ["./src/**/*"]
 }

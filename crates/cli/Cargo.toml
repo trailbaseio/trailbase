@@ -20,15 +20,12 @@ ws = ["trailbase/ws"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
-bcrypt = "0.19.0"
-bytes = "1.11.0"
 chrono = "^0.4.38"
 clap = { workspace = true }
 env_logger = { workspace = true }
 itertools = "0.15.0"
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
-minijinja = { workspace = true }
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
@@ -40,13 +37,12 @@ trailbase = { workspace = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
+trailbase-wasm-component-repo = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
 url = "2.5.4"
-utoipa = { version = "5.0.0-beta.0", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "9.0.0", features = ["axum"], optional = true }
+utoipa = { workspace = true }
+utoipa-swagger-ui = { workspace = true, optional = true }
 uuid = { workspace = true }
-wit-component = "0.254.0"
-zip = { version = "8.1.0", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
 trailbase-build = { workspace = true }

@@ -2,15 +2,15 @@
   "openapi": "3.1.0",
   "info": {
     "title": "TrailBase",
-    "description": "TrailBase APIs",
+    "description": "OpenApi definitions of TrailBase's APIs",
     "license": {
       "name": "OSL-3.0",
       "identifier": "OSL-3.0"
     },
-    "version": "0.2.0"
+    "version": "v0.32.2 (0)"
   },
   "paths": {
-    "/api/auth/v1/avatar/": {
+    "/api/auth/v1/avatar": {
       "post": {
         "tags": ["auth"],
         "operationId": "create_avatar_handler",
@@ -30,10 +30,20 @@
         }
       }
     },
-    "/api/auth/v1/avatar/:b64_user_id": {
+    "/api/auth/v1/avatar/{b64_user_id}": {
       "get": {
         "tags": ["auth"],
         "operationId": "get_avatar_handler",
+        "parameters": [
+          {
+            "name": "b64_user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Optional Avatar file"
@@ -41,11 +51,21 @@
         }
       }
     },
-    "/api/auth/v1/change_email/confirm/:email_verification_code": {
+    "/api/auth/v1/change_email/confirm/{email_verification_code}": {
       "get": {
         "tags": ["auth"],
         "summary": "Confirm a change of email address.",
         "operationId": "change_email_confirm_handler",
+        "parameters": [
+          {
+            "name": "email_verification_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success, when redirect_uri is not present."
@@ -155,6 +175,57 @@
         }
       }
     },
+    "/api/auth/v1/change_username": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Request a change of a user username.",
+        "operationId": "change_username_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeUsernameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri present."
+          },
+          "409": {
+            "description": "Fail, username already taken."
+          },
+          "500": {
+            "description": "Fail, something went wrong."
+          }
+        }
+      }
+    },
     "/api/auth/v1/delete": {
       "delete": {
         "tags": ["auth"],
@@ -249,6 +320,41 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/auth/v1/login_anonymous": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Registers a new user with email and password.",
+        "operationId": "login_anonymous_user_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginAnonymousRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "303": {
+            "description": "Form fail OR success, new user registered, or user already exists."
+          },
+          "424": {
+            "description": "Failed to send verification Email."
           }
         }
       }
@@ -369,7 +475,7 @@
     },
     "/api/auth/v1/oauth/providers": {
       "get": {
-        "tags": ["oauth"],
+        "tags": ["auth"],
         "summary": "List configured OAuth providers.",
         "operationId": "list_configured_providers_handler",
         "responses": {
@@ -388,7 +494,7 @@
     },
     "/api/auth/v1/oauth/{provider}/callback": {
       "get": {
-        "tags": ["oauth"],
+        "tags": ["auth"],
         "summary": "This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the\nuser's information, creates a new local user if needed, and finally mints our own tokens.",
         "operationId": "callback_from_external_auth_provider",
         "parameters": [
@@ -426,7 +532,7 @@
     },
     "/api/auth/v1/oauth/{provider}/login": {
       "get": {
-        "tags": ["oauth"],
+        "tags": ["auth"],
         "summary": "Log in via external OAuth provider.",
         "operationId": "login_with_external_auth_provider",
         "parameters": [
@@ -492,6 +598,14 @@
         "parameters": [
           {
             "name": "email",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "username",
             "in": "query",
             "required": false,
             "schema": {
@@ -581,6 +695,51 @@
           },
           "429": {
             "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/api/auth/v1/promote_anonymous": {
+      "post": {
+        "tags": ["auth"],
+        "summary": "Request a change of password.",
+        "operationId": "promote_anonymous_user_handler",
+        "parameters": [
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          },
+          {
+            "name": "err_redirect_uri",
+            "in": "query",
+            "description": "Error redirect target for non-JSON requests.",
+            "required": false,
+            "schema": {
+              "type": ["string", "null"]
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromoteAnonymousRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Success, when redirect_uri not present."
+          },
+          "303": {
+            "description": "Success, when redirect_uri present."
           }
         }
       }
@@ -802,6 +961,16 @@
         "tags": ["auth"],
         "summary": "Sign-up user for TOTP second factor.",
         "operationId": "register_totp_request_handler",
+        "parameters": [
+          {
+            "name": "png",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": ["boolean", "null"]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "TOTP secret and QR code URI.",
@@ -837,11 +1006,21 @@
         }
       }
     },
-    "/api/auth/v1/verify_email/confirm/:email_verification_code": {
+    "/api/auth/v1/verify_email/confirm/{email_verification_token}": {
       "get": {
         "tags": ["auth"],
         "summary": "Request a new email to verify email address.",
         "operationId": "verify_email_handler",
+        "parameters": [
+          {
+            "name": "email_verification_token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Email verified, when redirect_uri not present"
@@ -986,7 +1165,7 @@
       "get": {
         "tags": ["records"],
         "summary": "Read record.",
-        "operationId": "add_subscription_sse_handler",
+        "operationId": "add_subscription_sse_and_ws_handler",
         "parameters": [
           {
             "name": "name",
@@ -1115,7 +1294,7 @@
       "get": {
         "tags": ["records"],
         "summary": "Read file associated with record.",
-        "description": "You may prefer using the more general \"files\" (plural) handler below. Since using unique\nfilenames does help with the content lifecycle, such as caching.",
+        "description": "You may prefer using the more general \"files\" (plural) handler below. Since using unique\nfilenames does help with the content life-cycle, such as caching.",
         "operationId": "get_uploaded_file_from_record_handler",
         "responses": {
           "200": {
@@ -1135,6 +1314,35 @@
           }
         }
       }
+    },
+    "/api/transaction/v1/execute": {
+      "post": {
+        "tags": ["records"],
+        "summary": "Execute a batch of transactions.",
+        "operationId": "record_transactions_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TransactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ids of successfully created records.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1150,23 +1358,48 @@
           }
         }
       },
-      "ChangeEmailRequest": {
+      "ChangeEmailParams": {
         "type": "object",
-        "required": ["csrf_token", "new_email"],
         "properties": {
-          "csrf_token": {
-            "type": "string"
-          },
           "err_redirect_uri": {
             "type": ["string", "null"],
             "description": "Error redirect target for non-JSON requests."
           },
-          "new_email": {
-            "type": "string"
-          },
-          "old_email": {
+          "redirect_uri": {
             "type": ["string", "null"],
-            "description": "Old email address. Only required in form mode."
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
+          }
+        }
+      },
+      "ChangeEmailRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ChangeEmailParams"
+          },
+          {
+            "type": "object",
+            "required": ["csrf_token"],
+            "properties": {
+              "csrf_token": {
+                "type": "string"
+              },
+              "new_email": {
+                "type": ["string", "null"]
+              },
+              "old_email": {
+                "type": ["string", "null"],
+                "description": "Old email address. Only required in form mode."
+              }
+            }
+          }
+        ]
+      },
+      "ChangePasswordParams": {
+        "type": "object",
+        "properties": {
+          "err_redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Error redirect target for non-JSON requests."
           },
           "redirect_uri": {
             "type": ["string", "null"],
@@ -1175,27 +1408,54 @@
         }
       },
       "ChangePasswordRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ChangePasswordParams"
+          },
+          {
+            "type": "object",
+            "required": ["old_password", "new_password"],
+            "properties": {
+              "new_password": {
+                "type": "string"
+              },
+              "new_password_repeat": {
+                "type": ["string", "null"]
+              },
+              "old_password": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ChangeUsernameParams": {
         "type": "object",
-        "required": ["old_password", "new_password", "new_password_repeat"],
         "properties": {
           "err_redirect_uri": {
             "type": ["string", "null"],
             "description": "Error redirect target for non-JSON requests."
-          },
-          "new_password": {
-            "type": "string"
-          },
-          "new_password_repeat": {
-            "type": "string"
-          },
-          "old_password": {
-            "type": "string"
           },
           "redirect_uri": {
             "type": ["string", "null"],
             "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
           }
         }
+      },
+      "ChangeUsernameRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ChangeUsernameParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "new_username": {
+                "type": ["string", "null"]
+              }
+            }
+          }
+        ]
       },
       "ConfiguredOAuthProvidersResponse": {
         "type": "object",
@@ -1253,15 +1513,18 @@
           }
         }
       },
-      "LoginMfaRequest": {
+      "LoginAnonymousRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RegisterUserParams"
+          }
+        ]
+      },
+      "LoginInputParams": {
         "type": "object",
-        "required": ["mfa_token"],
         "properties": {
           "mfa_redirect_uri": {
             "type": ["string", "null"]
-          },
-          "mfa_token": {
-            "type": "string"
           },
           "pkce_code_challenge": {
             "type": ["string", "null"]
@@ -1278,13 +1541,29 @@
                 "$ref": "#/components/schemas/ResponseType"
               }
             ]
-          },
-          "totp": {
-            "type": ["string", "null"]
           }
         }
       },
-      "LoginOtpRequest": {
+      "LoginMfaRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LoginInputParams"
+          },
+          {
+            "type": "object",
+            "required": ["mfa_token"],
+            "properties": {
+              "mfa_token": {
+                "type": "string"
+              },
+              "totp": {
+                "type": ["string", "null"]
+              }
+            }
+          }
+        ]
+      },
+      "LoginOtpParams": {
         "type": "object",
         "properties": {
           "code": {
@@ -1295,39 +1574,79 @@
           },
           "redirect_uri": {
             "type": ["string", "null"]
+          },
+          "username": {
+            "type": ["string", "null"]
           }
         }
       },
+      "LoginOtpRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/LoginOtpParams"
+          }
+        ]
+      },
       "LoginRequest": {
-        "type": "object",
-        "required": ["email", "password"],
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "mfa_redirect_uri": {
-            "type": ["string", "null"]
-          },
-          "password": {
-            "type": "string"
-          },
-          "pkce_code_challenge": {
-            "type": ["string", "null"]
-          },
-          "redirect_uri": {
-            "type": ["string", "null"]
-          },
-          "response_type": {
-            "oneOf": [
+        "oneOf": [
+          {
+            "allOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/LoginInputParams"
               },
               {
-                "$ref": "#/components/schemas/ResponseType"
+                "type": "object",
+                "required": ["email_or_username", "password"],
+                "properties": {
+                  "email_or_username": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LoginInputParams"
+              },
+              {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LoginInputParams"
+              },
+              {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "username": {
+                    "type": "string"
+                  }
+                }
               }
             ]
           }
-        }
+        ]
       },
       "LoginResponse": {
         "type": "object",
@@ -1376,6 +1695,101 @@
           }
         }
       },
+      "Operation": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["Create"],
+            "properties": {
+              "Create": {
+                "type": "object",
+                "required": ["api_name", "value"],
+                "properties": {
+                  "api_name": {
+                    "type": "string"
+                  },
+                  "value": {}
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Update"],
+            "properties": {
+              "Update": {
+                "type": "object",
+                "required": ["api_name", "record_id", "value"],
+                "properties": {
+                  "api_name": {
+                    "type": "string"
+                  },
+                  "record_id": {
+                    "type": "string"
+                  },
+                  "value": {}
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Delete"],
+            "properties": {
+              "Delete": {
+                "type": "object",
+                "required": ["api_name", "record_id"],
+                "properties": {
+                  "api_name": {
+                    "type": "string"
+                  },
+                  "record_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PromoteAnonymousParams": {
+        "type": "object",
+        "properties": {
+          "err_redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Error redirect target for non-JSON requests."
+          },
+          "redirect_uri": {
+            "type": ["string", "null"],
+            "description": "Success (and error if err_redirect_uri not present) redirect target for non-JSON requests."
+          }
+        }
+      },
+      "PromoteAnonymousRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PromoteAnonymousParams"
+          },
+          {
+            "type": "object",
+            "required": ["new_password"],
+            "properties": {
+              "new_email": {
+                "type": ["string", "null"]
+              },
+              "new_password": {
+                "type": "string"
+              },
+              "new_password_repeat": {
+                "type": ["string", "null"]
+              },
+              "new_username": {
+                "type": ["string", "null"]
+              }
+            }
+          }
+        ]
+      },
       "RefreshRequest": {
         "type": "object",
         "required": ["refresh_token"],
@@ -1409,65 +1823,172 @@
           }
         }
       },
-      "RegisterUserRequest": {
+      "RegisterUserParams": {
         "type": "object",
-        "required": ["email", "password", "password_repeat"],
         "properties": {
-          "email": {
-            "type": "string"
+          "redirect_uri": {
+            "type": ["string", "null"]
+          }
+        }
+      },
+      "RegisterUserRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RegisterUserParams"
           },
-          "password": {
-            "type": "string"
-          },
-          "password_repeat": {
-            "type": "string"
-          },
+          {
+            "type": "object",
+            "required": ["password", "password_repeat"],
+            "properties": {
+              "email": {
+                "type": ["string", "null"]
+              },
+              "password": {
+                "type": "string"
+              },
+              "password_repeat": {
+                "type": "string"
+              },
+              "username": {
+                "type": ["string", "null"]
+              }
+            }
+          }
+        ]
+      },
+      "RequestOtpParams": {
+        "type": "object",
+        "properties": {
           "redirect_uri": {
             "type": ["string", "null"]
           }
         }
       },
       "RequestOtpRequest": {
-        "type": "object",
-        "required": ["email"],
-        "properties": {
-          "email": {
-            "type": "string"
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RequestOtpParams"
+              },
+              {
+                "type": "object",
+                "required": ["email_or_username"],
+                "properties": {
+                  "email_or_username": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
           },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RequestOtpParams"
+              },
+              {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RequestOtpParams"
+              },
+              {
+                "type": "object",
+                "required": ["username"],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "ResetPasswordParams": {
+        "type": "object",
+        "properties": {
           "redirect_uri": {
             "type": ["string", "null"]
           }
         }
       },
       "ResetPasswordRequest": {
-        "type": "object",
-        "required": ["email"],
-        "properties": {
-          "email": {
-            "type": "string"
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResetPasswordParams"
+              },
+              {
+                "type": "object",
+                "required": ["email"],
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
           },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ResetPasswordParams"
+              },
+              {
+                "type": "object",
+                "required": ["username"],
+                "properties": {
+                  "username": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "ResetPasswordUpdateParams": {
+        "type": "object",
+        "properties": {
           "redirect_uri": {
             "type": ["string", "null"]
           }
         }
       },
       "ResetPasswordUpdateRequest": {
-        "type": "object",
-        "required": ["password", "password_repeat", "password_reset_token"],
-        "properties": {
-          "password": {
-            "type": "string"
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResetPasswordUpdateParams"
           },
-          "password_repeat": {
-            "type": "string"
-          },
-          "password_reset_token": {
-            "type": "string"
-          },
-          "redirect_uri": {
-            "type": ["string", "null"]
+          {
+            "type": "object",
+            "required": ["password", "password_repeat", "password_reset_token"],
+            "properties": {
+              "password": {
+                "type": "string"
+              },
+              "password_repeat": {
+                "type": "string"
+              },
+              "password_reset_token": {
+                "type": "string"
+              }
+            }
           }
-        }
+        ]
       },
       "ResponseType": {
         "type": "string",
@@ -1488,13 +2009,57 @@
             "type": "string"
           }
         }
+      },
+      "TransactionRequest": {
+        "type": "object",
+        "required": ["operations"],
+        "properties": {
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Operation"
+            }
+          },
+          "transaction": {
+            "type": ["boolean", "null"]
+          }
+        }
+      },
+      "TransactionResponse": {
+        "type": "object",
+        "required": ["results"],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransactionResult"
+            },
+            "description": "A 1:1 mapping of opreations to results."
+          }
+        }
+      },
+      "TransactionResult": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["Id"],
+            "properties": {
+              "Id": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["Error"],
+            "properties": {
+              "Error": {
+                "type": "string"
+              }
+            }
+          }
+        ]
       }
     }
-  },
-  "tags": [
-    {
-      "name": "auth",
-      "description": "Auth-related APIs"
-    }
-  ]
+  }
 }

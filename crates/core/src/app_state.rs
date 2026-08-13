@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, RegistrationIdentifier};
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
+use trailbase_wasm_common::manifest::Metadata;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
@@ -43,6 +44,8 @@ pub struct InitArgs {
   pub pg_uri: Option<String>,
 }
 
+type WasmMetadataAndRuntime = (Option<Metadata>, Runtime);
+
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
@@ -75,7 +78,7 @@ struct InternalState {
   object_store: Arc<dyn ObjectStore>,
 
   /// Actual WASM runtimes.
-  wasm_runtimes: Vec<Arc<RwLock<Runtime>>>,
+  wasm_runtimes: Vec<Arc<RwLock<WasmMetadataAndRuntime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   wasm_runtime_builders: Vec<Box<crate::wasm::WasmRuntimeBuilder>>,
 
@@ -223,7 +226,7 @@ impl AppState {
         object_store,
         wasm_runtimes: wasm_runtime_builders
           .iter()
-          .map(|builder| Arc::new(RwLock::new(builder().expect("startup"))))
+          .map(|builder| Arc::new(RwLock::new((None, builder().expect("startup")))))
           .collect(),
         wasm_runtime_builders,
         #[cfg(test)]
@@ -420,7 +423,7 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<Runtime>>] {
+  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<WasmMetadataAndRuntime>>] {
     return &self.state.wasm_runtimes;
   }
 
@@ -440,18 +443,22 @@ impl AppState {
     info!("Reloading WASM components. New HTTP routes and Jobs require a server restart.");
 
     for old_rt in &self.state.wasm_runtimes {
-      let component_path = old_rt.read().await.component_path().clone();
+      let (metadata, component_path) = {
+        let old_rt = old_rt.read().await;
+        (old_rt.0.clone(), old_rt.1.component_path().to_path_buf())
+      };
 
       let Some(index) = new_runtimes
         .iter()
-        .position(|rt| *rt.component_path() == component_path)
+        .position(|rt| *rt.component_path() == *component_path)
       else {
         warn!("WASM component: {component_path:?} was removed. Required server restart");
         continue;
       };
 
       // Swap out old with new WASM runtime for the given component.
-      *old_rt.write().await = new_runtimes.remove(index);
+      // TODO: We should probably also update Metadata.
+      *old_rt.write().await = (metadata, new_runtimes.remove(index));
     }
 
     for new_rt in new_runtimes {
@@ -1003,9 +1010,9 @@ async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
           format!(
             r#"
               INSERT INTO {USER_TABLE}
-                (email, username, password_hash, verified, admin)
+                (email, username, password_hash, admin)
               VALUES
-                ($1, $2, $3, TRUE, TRUE)
+                ($1, $2, $3, TRUE)
             "#
           ),
           trailbase_sqlite::params!(email.to_string(), username.to_string(), hashed_password),

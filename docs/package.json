@@ -9,6 +9,7 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check && eslint",
+    "check:format": "prettier -c .",
     "format": "prettier -w ."
   },
   "dependencies": {

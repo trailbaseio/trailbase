@@ -325,7 +325,7 @@ async function ssr(req: HttpRequest): Promise<string> {
 ### 3. Counter Increment API
 
 We could use record APIs and first read the current `value` and subsequently
-write `value+1`, however this would lead to data races potentially loosing
+write `value+1`, however this would lead to data races potentially losing
 concurrent updates and under-counting.
 Instead we want an atomic database update. For this we create a new TS endpoint
 in `traildepot/scripts/main.ts`:

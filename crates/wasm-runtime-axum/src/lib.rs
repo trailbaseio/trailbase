@@ -12,7 +12,9 @@ use log::*;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use trailbase_wasm_common::manifest::{
+  HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest, Metadata,
+};
 use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::{
   Error as WasmError, InitArgs, RuntimeOptions, find_wasm_components,
@@ -60,7 +62,7 @@ pub async fn build_sync_wasm_runtimes_for_components(
       .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
       .await?;
 
-    if !functions.scalar_functions.is_empty() {
+    if !functions.is_empty() {
       sync_runtimes.push((store, functions));
     }
   }
@@ -137,28 +139,54 @@ pub struct Job {
 pub struct InstallResult<S: Clone + Send + Sync> {
   pub router: Option<Router<S>>,
   pub jobs: Vec<Job>,
+  pub metadata: Option<Metadata>,
 }
 
 pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
-  runtime: Arc<RwLock<Runtime>>,
+  runtime: &Runtime,
   user_fn: for<'a> fn(&'a mut Parts, &'a S) -> BoxFuture<'a, Option<HttpContextUser>>,
   version: Option<String>,
 ) -> Result<InstallResult<S>, AnyError> {
-  let init_result = {
-    let store = HttpStore::new(&*runtime.read().await).await?;
-    store.initialize(InitArgs { version }).await?
-  };
+  let (
+    store,
+    InitManifest {
+      metadata,
+      http_handlers,
+      job_handlers,
+      sqlite_functions: _,
+    },
+  ) = HttpStore::initialize(runtime, InitArgs { version }).await?;
+
+  // Validate manifest.
+  if let Some(ref metadata) = metadata
+    && let Some(ref admin_ui_path) = metadata.admin_ui_path
+  {
+    url::Url::parse("https://trailbase.io")
+      .expect("static")
+      .join(admin_ui_path)
+      .map_err(|err| {
+        log::error!("expected path, got: {admin_ui_path}");
+        return err;
+      })?;
+  }
+
+  let http_handlers = http_handlers.unwrap_or_default();
+  let job_handlers = job_handlers.unwrap_or_default();
 
   debug!(
-    "Got {m} jobs and {n} http routes",
-    m = init_result.job_handlers.len(),
-    n = init_result.http_handlers.len()
+    "Component {path}: got {m} jobs and {n} http routes ({meta})",
+    path = runtime.component_path().to_string_lossy(),
+    m = job_handlers.len(),
+    n = http_handlers.len(),
+    meta = metadata
+      .as_ref()
+      .map_or_else(|| "".to_string(), |m| format!("{m}")),
   );
 
   let mut jobs: Vec<Job> = vec![];
-  for (name, spec) in init_result.job_handlers {
+  for JobManifest { name, spec } in job_handlers {
+    let store = store.clone();
     let schedule = cron::Schedule::from_str(&spec)?;
-    let store = HttpStore::new(&*runtime.read().await).await?;
 
     jobs.push(Job {
       name: name.clone(),
@@ -196,12 +224,11 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   }
 
   let mut router: Option<Router<S>> = None;
-  for (method, path) in init_result.http_handlers {
+  for HttpRouteManifest { method, path } in http_handlers {
     debug!("Installing WASM route: {method:?}: {path}");
 
-    // let runtime = runtime.clone();
-    let store = HttpStore::new(&*runtime.read().await).await?;
     let registered_path = path.clone();
+    let store = store.clone();
 
     use axum::response::Response;
 
@@ -270,13 +297,15 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
     );
   }
 
-  return Ok(InstallResult { router, jobs });
+  return Ok(InstallResult {
+    router,
+    jobs,
+    metadata,
+  });
 }
 
 #[inline]
-fn axum_method(method: trailbase_wasm_runtime_host::HttpMethodType) -> axum::routing::MethodFilter {
-  use trailbase_wasm_runtime_host::HttpMethodType;
-
+fn axum_method(method: HttpMethodType) -> axum::routing::MethodFilter {
   return match method {
     HttpMethodType::Delete => axum::routing::MethodFilter::DELETE,
     HttpMethodType::Get => axum::routing::MethodFilter::GET,

@@ -1,4 +1,4 @@
-import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.3";
+import { Fields, OutgoingBody, OutgoingResponse } from "wasi:http/types@0.2.12";
 import { StatusCode } from "./status";
 import { encodeBytes } from "./incoming";
 

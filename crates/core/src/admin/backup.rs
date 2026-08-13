@@ -6,17 +6,25 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::backup;
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 pub struct Backup {
   timestamp: i64,
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListBackupsResponse {
   backups: Vec<Backup>,
 }
 
+#[utoipa::path(
+  get,
+  path = "/backups",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = ListBackupsResponse),
+  )
+)]
 pub async fn list_backups_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListBackupsResponse>, Error> {
@@ -33,6 +41,14 @@ pub async fn list_backups_handler(
   }));
 }
 
+#[utoipa::path(
+  post,
+  path = "/backups/trigger",
+  tag = "admin",
+  responses(
+    (status = 200, description = "Success", body = ListBackupsResponse),
+  )
+)]
 pub async fn trigger_backup_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListBackupsResponse>, Error> {
@@ -68,12 +84,21 @@ pub async fn trigger_backup_handler(
   }));
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DeleteBackupsRequest {
   timestamps: Vec<i64>,
 }
 
+#[utoipa::path(
+  delete,
+  path = "/backups/delete",
+  tag = "admin",
+  request_body = DeleteBackupsRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn delete_backups_handler(
   State(state): State<AppState>,
   Json(request): Json<DeleteBackupsRequest>,
@@ -91,12 +116,21 @@ pub async fn delete_backups_handler(
   return Ok(());
 }
 
-#[derive(Debug, Deserialize, Serialize, TS)]
+#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct RestoreBackupRequest {
   timestamp: i64,
 }
 
+#[utoipa::path(
+  patch,
+  path = "/backups/restore",
+  tag = "admin",
+  request_body = RestoreBackupRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn restore_backup_handler(
   State(state): State<AppState>,
   Json(request): Json<RestoreBackupRequest>,

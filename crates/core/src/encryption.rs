@@ -1,7 +1,7 @@
-use aes_gcm_siv::{
-  Aes256GcmSiv, Key, KeyInit,
-  aead::{Aead, AeadInPlace, OsRng, Payload, generic_array::GenericArray},
-};
+use aes_gcm_siv::aead::{Aead, Generate, Payload};
+use aes_gcm_siv::aes::cipher::InOutBuf;
+use aes_gcm_siv::{AeadInOut, Aes256GcmSiv, Key, KeyInit, Nonce};
+use rand::Rng;
 
 type Cipher = Aes256GcmSiv;
 pub type KeyType = Key<Cipher>;
@@ -13,7 +13,6 @@ pub fn encrypt(
   associated_data: &[u8],
   data: &[u8],
 ) -> Result<Vec<u8>, &'static str> {
-  use rand::Rng;
   // Create a buffer to hold the [nonce | enc(payload) | tag].
   let mut buffer = vec![0; NONCE_LEN + data.len() + TAG_LEN];
 
@@ -26,14 +25,12 @@ pub fn encrypt(
   let mut rng = rand::rng();
   rng.fill_bytes(nonce);
 
+  let nonce: &Nonce = nonce.as_array::<NONCE_LEN>().ok_or("invalid nonce")?.into();
+
   // Perform the actual sealing operation, using the associated data to prevent value swapping.
   let cipher = Cipher::new(key);
   let aad_tag = cipher
-    .encrypt_in_place_detached(
-      &GenericArray::clone_from_slice(nonce),
-      associated_data,
-      in_out,
-    )
+    .encrypt_inout_detached(nonce, associated_data, InOutBuf::from(in_out))
     .map_err(|_| "encryption failure!")?;
 
   // Copy the tag into the tag piece.
@@ -53,13 +50,14 @@ pub fn decrypt(
   }
 
   let (nonce, msg) = cipher_text.split_at(NONCE_LEN);
+  let nonce: &Nonce = nonce.as_array::<NONCE_LEN>().ok_or("invalid nonce")?.into();
 
   // NOTE: We're not using the in-place variants like for encyrption, which results in more
   // allocations.
   let cipher = Cipher::new(key);
   return cipher
     .decrypt(
-      GenericArray::from_slice(nonce),
+      nonce,
       Payload {
         msg,
         aad: associated_data,
@@ -69,7 +67,7 @@ pub fn decrypt(
 }
 
 pub fn generate_random_key() -> KeyType {
-  return Cipher::generate_key(&mut OsRng);
+  return KeyType::generate_from_rng(&mut rand::rng());
 }
 
 const NONCE_LEN: usize = 12;

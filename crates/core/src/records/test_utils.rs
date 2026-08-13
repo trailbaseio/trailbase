@@ -58,16 +58,12 @@ pub struct Message {
   pub data: String,
 }
 
-pub fn to_message(v: serde_json::Value) -> Message {
-  return match v {
-    serde_json::Value::Object(ref obj) => {
-      let mut keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
-      keys.sort();
-      assert_eq!(keys, ["data", "mid", "room", "table"], "Got: {keys:?}");
-      serde_json::from_value::<Message>(v).unwrap()
-    }
-    _ => panic!("expected object, got {v:?}"),
-  };
+pub fn to_message(obj: crate::records::expand::JsonObject) -> Message {
+  let mut keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
+  keys.sort();
+  assert_eq!(keys, ["data", "mid", "room", "table"], "Got: {keys:?}");
+
+  return serde_json::from_value::<Message>(serde_json::Value::Object(obj)).unwrap();
 }
 
 pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {

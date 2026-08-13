@@ -1,14 +1,14 @@
 use parking_lot::{Mutex, RwLock};
 use std::collections::{HashMap, hash_map::Entry};
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, LazyLock};
 use trailbase_qs::ValueOrComposite;
 use trailbase_reactive::AsyncReactive;
 
 use crate::auth::User;
 use crate::records::RecordApi;
 use crate::records::RecordError;
-use crate::records::subscribe::event::{EventPayload, JsonEventPayload};
+use crate::records::subscribe::event::EventPayload;
 use crate::records::subscribe::state::{
   AutoCleanupEventStream, EventCandidate, PerConnectionState, PerConnectionStateInternal,
   Subscription,
@@ -103,8 +103,7 @@ impl SubscriptionManager {
     // Send an immediate comment to flush SSE headers and establish the connection
     if sender
       .send(EventCandidate {
-        record: None,
-        payload: ESTABLISHED_EVENT.clone(),
+        payload: Arc::new(EventPayload::ping()),
         seq: subscription.candidate_seq.fetch_add(1, Ordering::SeqCst),
       })
       .await
@@ -136,8 +135,7 @@ impl SubscriptionManager {
     // Send an immediate comment to flush SSE headers and establish the connection
     if sender
       .send(EventCandidate {
-        record: None,
-        payload: ESTABLISHED_EVENT.clone(),
+        payload: Arc::new(EventPayload::ping()),
         seq: subscription.candidate_seq.fetch_add(1, Ordering::SeqCst),
       })
       .await
@@ -221,17 +219,4 @@ fn filter_record_apis(
       return None;
     })
     .collect();
-}
-
-static ESTABLISHED_EVENT: LazyLock<Arc<EventPayload>> =
-  LazyLock::new(|| Arc::new(EventPayload::from(&JsonEventPayload::Ping)));
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn static_establish_event_test() {
-    let _y: Arc<EventPayload> = (*ESTABLISHED_EVENT).clone();
-  }
 }

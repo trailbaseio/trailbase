@@ -38,21 +38,66 @@ impl AsyncTransaction for Connection {
     &mut self,
     queries: T,
   ) -> Result<usize, Self::Error> {
-    let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
+    async fn execute_impl<'a, T: Iterator<Item = &'a str>>(
+      conn: &mut Connection,
+      queries: T,
+      foreign_keys: bool,
+    ) -> Result<usize, Error> {
+      let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
+      return conn
+        .transaction(move |mut tx| -> Result<_, Error> {
+          let mut count = 0;
+          for query in queries {
+            tx.execute_batch(query)?;
+            count += 1;
+          }
 
-    return self
-      .transaction(move |mut tx| -> Result<_, Error> {
-        let mut count = 0;
-        for query in queries {
-          tx.execute_batch(query)?;
-          count += 1;
-        }
+          // Check for potential foreign key violations before committing.
+          // Setting the "foreign_keys" PRAGMA in a transaction is a no-op:
+          //   https://www.sqlite.org/pragma.html#pragma_foreign_keys
+          if foreign_keys {
+            let violations: Vec<String> = tx
+              .query_rows("PRAGMA foreign_key_check;", ())?
+              .iter()
+              .map(|r| r.get::<String>(0))
+              .collect::<Result<_, _>>()?;
 
-        tx.commit()?;
+            if !violations.is_empty() {
+              return Err(Error::Other(
+                format!("FK violations: {violations:?}").into(),
+              ));
+            }
+          }
 
-        return Ok(count);
-      })
-      .await;
+          tx.commit()?;
+
+          return Ok(count);
+        })
+        .await;
+    }
+
+    let is_sqlite = self.connection_type() == ConnectionType::Sqlite;
+    let initial_fk: bool = is_sqlite
+      && self
+        .read_query_row_get("PRAGMA foreign_keys;", (), 0)
+        .await?
+        .unwrap_or(true);
+    if initial_fk {
+      // Turn off foreign key constraints temporarily (re-enabled as part of the transaction)
+      // to allow for a wider range of migrations.
+      //
+      // Ideally, we'd use `defer_foreign_key=ON` as part of the migration within the transaction,
+      // but it somehow doesn't seem to work or be less lenient than `foreign_keys=OFF`, which has
+      // to be applied to the connection rather than the transaction.
+      self.execute_batch("PRAGMA foreign_keys = OFF;").await?;
+    }
+
+    let result = execute_impl(self, queries, initial_fk).await;
+    if initial_fk {
+      self.execute_batch("PRAGMA foreign_keys = ON;").await?;
+    }
+
+    return result;
   }
 }
 

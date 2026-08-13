@@ -1,5 +1,5 @@
 ---
-import Form from "@/components/Form.astro";
+import FormLayout from "@/layouts/FormLayout.astro";
 import Button from "@/components/Button.astro";
 import TextFieldInput from "@/components/TextFieldInput.astro";
 import TextFieldLabel from "@/components/TextFieldLabel.astro";
@@ -9,7 +9,7 @@ import { AUTH_API } from "@/lib/constants";
 const formBaseAction = `${AUTH_API}/login_mfa`;
 ---
 
-<Form title="2nd Factor Login">
+<FormLayout title="2nd Factor Login">
   <div>
     <form
       id="login-form"
@@ -40,4 +40,4 @@ const formBaseAction = `${AUTH_API}/login_mfa`;
       </div>
     </form>
   </div>
-</Form>
+</FormLayout>

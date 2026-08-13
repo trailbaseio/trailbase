@@ -18,6 +18,8 @@ import {
   TbOutlineSettings,
   TbOutlineMoon,
   TbOutlineSun,
+  TbOutlinePackage,
+  TbOutlineApi,
 } from "solid-icons/tb";
 
 import { AuthButton } from "@/components/auth/AuthButton";
@@ -47,7 +49,9 @@ const options = [
   [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
   [`${BASE}/erd`, TbOutlineChartDots3, "Entity Relationship Diagram"],
   [`${BASE}/auth`, TbOutlineUsers, "User Accounts"],
+  [`${BASE}/wasm/`, TbOutlinePackage, "WASM Components"],
   [`${BASE}/logs`, TbOutlineTimeline, "Logs & Metrics"],
+  [`${BASE}/openapi`, TbOutlineApi, "OpenApi"],
   [`${BASE}/settings/`, TbOutlineSettings, "Settings"],
 ] as const;
 

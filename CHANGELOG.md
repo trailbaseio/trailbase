@@ -1,3 +1,47 @@
+## v0.32.2
+
+- Add a `rapidoc`-based interactive API browser to the admin UI. Authentication is wired up for interactively "trialing" the APIs.
+- Update dependencies.
+
+## v0.32.1
+
+- Share single source-of-truth for HTTP route construction and OpenAPI metadata. For prod, this is a no-op but the OpenApi published and included metadata is now more complete and guaranteed to be correct.
+- Update dependencies.
+
+## v0.32.0
+
+- New WASM component browser in admin UI **and** experimental support for component-provided dashboards 🎉.
+  - Beware, if you're using WASM components, this is a **breaking** change. In order to support the new capabilities the component interface had to be extended with additional metadata: name, version, dashboard url, ... . Ideally, this would have handled in a backwards compatible way, sadly WIT does not (yet) support adding optional methods to an existing interface. To reduce the frequency of breaking changes going forward until WIT catches up, we type-erased the init interface and are handling API versioning internally.
+  - Consequently, components will have to be re-build against the latest guest runtimes. This should be straight forward, since user facing APIs did not change in a breaking fashion. For the first-party AuthUi component, simply update to the latest version: `trail [--depot=..] components add trailbase/auth_ui`.
+  - The dashboard work was kicked off by @zyrakq - thanks 🙏.
+- The WASM component browser allows inspecting, installing and removing components.
+  - Live reloading components is not yet supported, a server restart is required for component changes to take effect.
+- A new "shared-preferences" interface helps to persist per-component-scoped settings similar to sandboxed apps on mobile.
+  - Arguably, the DB is already accessible for components, however longer-term we may want to move towards a more app-like model. Then, any component could store its settings and managed by the platform, while raw DB access may require explicit permissions. In a similar vein, we may also want to introduce packaged components to allow bundling assets and declerative manifests.
+- Update the AuthUi component to provide an admin dash with some initial customization for the login screen, i.e. add a title and/or logo.
+  - This uses both the experimental dashboard support and the shared preferences.
+- A guest-dependent, **lower overhead execution model** for Rust WASM components.
+  - Specifically, JS/TS components will continue to initialize their state anew for each HTTP request, whereas the state of Rust components is recycled across HTTP requests.
+  - Fun fact: this is similar to how state used to be managed, however JS components built with Wasmtime's `jco` become [defunct after a single request](https://github.com/bytecodealliance/StarlingMonkey/issues/321#issuecomment-4891054916). This had us switch to the consistent but slower pristine-state-model, which was a non-trivial performance regression for Rust components. We're now "rectifying" this with a guest-dependent execution model until the JS integration catches up.
+  - Benchmarking cheap requests - where overhead is amplified - show **throughput increased by 4+x and inversely latency reduced by 4+x** (with the standard deviation being 32% narrower) for Rust components.
+- Update dependencies.
+
+## v0.31.3
+
+- Properly expand nested JSON in change events to match JSON schemas and to match the behavior for record list and read.
+- Make change event construction lazy to minimize cost for events w/o pending subscriptions.
+- Reduce reference counting and remove proxy types from subscriptions handling.
+- Update dependencies.
+
+## v0.31.2
+
+- Fix token refresh for just promoted users with a yet unverified email address. Thanks @UserNobody14 🙏.
+- Move unverified email addresses into a separate column to simplify and gurantee that entries in `_user.email` are verified.
+- Disable FK constraints during SQLite migrations consistently across sync and async drivers.
+- Fix python client: promote anonymous users. Thanks @UserNobody14 🙏.
+- Fix dart client: SSE change event parsing. Thanks @devsdocs 🙏.
+- Update dependencies.
+
 ## v0.31.1
 
 - Add username parsing to CLI, i.e. users can now be specified by either email, username or id (both UUID or url-safe base64).
@@ -432,10 +476,12 @@
 ## v0.24.0
 
 - TrailBase received first-class support for geometric/geospatial data and querying 🎉
+
   - We published [`LiteGIS`](https://github.com/trailbaseio/LiteGIS), an in-house GEOS SQLite extension.
     It's early days but we hope for this to become useful to folks beyond TrailBase.
     Alternatively check out the amazing `SpatiaLite`.
   - TrailBase recognizes columns tagged as `CHECK(ST_IsValid(_))`, e.g.:
+
     ```sql
     CREATE TABLE table_with_geometry (
         id         INTEGER PRIMARY KEY,
@@ -444,21 +490,26 @@
 
     INSERT INTO table_with_geometry (geometry) VALUES (ST_MakeEnvelope(-180, -90, 180, 90));
     ```
+
     and updates its API/JSON schemas to expect and produce GeoJSON `Geometry` objects.
+
   - Internally geometries are represented in the "Well Known Binary" format (WKB). This enables `INDEX`es to accelerate filtering based on certain geometric relationships, see next.
   - The spatial filter operators `@within`, `@intersects` and `@contains` were added to the list API to allow filtering on spatial relations like:
+
     - List records with bounding boxes that contain my point.
     - List records with points, lines or polygons intersecting my bounding box.
 
     Reference geometries are specified in the "Well Known Text" (WKT) format, e.g. `?filter[geometry][@contains]=POINT (11.393  47.268)`.
     All clients were updated to support these new filter relations.
+
   - Using the new list query parameter `?geojson=<geo_column_name>` will return a GeoJSON `FeatureCollection` directly instead of a `ListResponse`.
     The geometry of the collection's features is derived from the column specified by `<geo_column_name>`.
   - The admin UI parses a geometry column's WKB and displays readable WKT but doesn't yet support convenient WKT insertion.
     Similarly clients don't aid in the construction of WKT parameters, this is left to the user, however WKT libraries exist in most languages.
   - Thanks for making it to here 🙏 - would love to hear your input.
+
 - For visibility, other notable changes since the prior major release:
-  - Much improved admin UI: better maps and stats on the logs page, improved accounts page, tables handle the loading state to reduce layout jank,  ...
+  - Much improved admin UI: better maps and stats on the logs page, improved accounts page, tables handle the loading state to reduce layout jank, ...
   - Allow change subscriptions via WebSockets in addition to SSE.
   - Support `bcrypt` password hashes for auth. Support importing auth data from Auth0: `trail user import --auth0-json=<file>`.
     - The goal is to provide more horizontal mobility, i.e. reduce lock-in, by allowing auth in and export.

@@ -90,7 +90,7 @@ pub(crate) struct VerifyEmailParams {
 /// Request a new email to verify email address.
 #[utoipa::path(
   get,
-  path = "/verify_email/confirm/:email_verification_code",
+  path = "/verify_email/confirm/{email_verification_token}",
   tag = "auth",
   responses(
     (status = 200, description = "Email verified, when redirect_uri not present"),
@@ -111,9 +111,10 @@ pub(crate) async fn verify_email_handler(
 
   const UPDATE_CODE_QUERY: &str = formatcp!(
     "\
-      UPDATE \"{USER_TABLE}\" \
-      SET verified = TRUE \
-      WHERE email = $1 \
+      UPDATE \"{USER_TABLE}\" SET
+        email = $1, \
+        unverified_email = NULL
+      WHERE unverified_email = $1 \
     "
   );
 

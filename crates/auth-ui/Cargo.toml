@@ -18,7 +18,9 @@ rust-embed = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 trailbase-auth-config = { workspace = true }
+trailbase-build = { workspace = true }
 trailbase-wasm = { workspace = true }
+ts-rs = { workspace = true }
 
 [build-dependencies]
 trailbase-build = { workspace = true }

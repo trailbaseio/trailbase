@@ -1,0 +1,57 @@
+name: "Release Component"
+description: "Builds and releases a WASM component"
+
+# RUST_TARGET: wasm32-wasip2
+# BINARY_PATH: target/$RUST_TARGET/release/trailbase_auth_ui_component.wasm
+# ARCHIVE_NAME: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
+
+inputs:
+  rust-target:
+    required: false
+  toolchain-version:
+    required: true
+  binary-path:
+    required: true
+  package-name:
+    description: "Cargo package name"
+    required: true
+  archive-name:
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        sudo apt-get update && \
+          sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 22
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+    - name: PNPM install
+      shell: bash
+      run: pnpm install
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ inputs.toolchain-version }}
+        target: ${{ inputs.rust-target }}
+        default: true
+
+    - name: Rust Build
+      shell: bash
+      run: |
+        env && cargo build -p ${{ inputs.package-name }} --target ${{ inputs.rust-target }} --release
+
+    - name: Package Artifacts
+      shell: bash
+      run: |
+        zip -r -j ${{ inputs.archive-name }} ${{ inputs.binary-path }} CHANGELOG.md LICENSE
+    - name: Release binaries
+      uses: softprops/action-gh-release@v2
+      with:
+        fail_on_unmatched_files: true
+        files: ${{ inputs.archive-name }}

@@ -7,8 +7,8 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_sqlite::params;
 
 use crate::User;
-use crate::admin::user::*;
-use crate::app_state::{AppState, test_state};
+use crate::admin::user::create_user::create_user_for_test;
+use crate::app_state::{AppState, TestStateOptions, test_config, test_state};
 use crate::auth::util::login_with_password;
 use crate::config::proto::RecordApiConfig;
 use crate::records::subscribe::event::{EventErrorStatus, TestChangeEvent, TestJsonEventPayload};
@@ -25,7 +25,12 @@ async fn setup_world_readable() -> AppState {
 
   conn
     .execute(
-      "CREATE TABLE test (id INTEGER PRIMARY KEY, text TEXT) STRICT",
+      "\
+      CREATE TABLE test ( \
+        id      INTEGER PRIMARY KEY, \
+        text    TEXT \
+      ) STRICT \
+      ",
       (),
     )
     .await
@@ -322,16 +327,38 @@ async fn subscription_lifecycle_test() {
 }
 
 async fn setup_with_tight_acls() -> AppState {
-  let state = test_state(None).await.unwrap();
+  #[derive(serde::Serialize, schemars::JsonSchema)]
+  struct StringArray(Vec<String>);
+
+  let config = {
+    let mut config = test_config();
+
+    config.schemas.push(crate::config::proto::JsonSchemaConfig {
+      name: Some("StringArray".to_string()),
+      schema: Some(serde_json::to_string_pretty(&schemars::schema_for!(StringArray)).unwrap()),
+    });
+
+    config
+  };
+
+  let state = test_state(Some(TestStateOptions {
+    config: Some(config),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
   let conn = state.conn().clone();
 
   conn
     .execute(
-      "CREATE TABLE test (
-            id          INTEGER PRIMARY KEY,
-            user        BLOB NOT NULL,
-            text        TEXT
-         ) STRICT",
+      "\
+      CREATE TABLE test ( \
+        id          INTEGER PRIMARY KEY, \
+        user        BLOB NOT NULL, \
+        text        TEXT, \
+        json        TEXT CHECK(jsonschema('StringArray', json)) DEFAULT '[]' \
+      ) STRICT \
+      ",
       (),
     )
     .await
@@ -523,6 +550,7 @@ async fn test_acl_selective_table_subs() {
           "id": record_id_raw,
           "user": uuid_to_b64(&user_x),
           "text": "foo",
+          "json": Vec::<String>::new(),
         });
         assert_eq!(Value::Object(obj.clone()), expected);
       }
@@ -631,6 +659,7 @@ async fn subscription_acl_change_owner() {
         "id": record_id,
         "user": uuid_to_b64(&user_x_id),
         "text": "bar",
+        "json": Vec::<String>::new(),
       });
       assert_eq!(Value::Object(obj), expected);
     }

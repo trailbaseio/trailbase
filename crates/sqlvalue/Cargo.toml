@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-sqlvalue"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 license = "OSL-3.0"
 description = "Common data structures for TrailBase"
@@ -18,3 +18,4 @@ serde = { workspace = true }
 thiserror = "2.0.12"
 ts-rs = { workspace = true }
 trailbase-sqlite = { workspace = true, optional = true }
+utoipa = { workspace = true }

@@ -2,6 +2,7 @@ use axum::Router;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use trailbase_wasm_common::HttpContextUser;
+use trailbase_wasm_common::manifest::Metadata;
 use trailbase_wasm_runtime_axum::Job;
 
 use crate::{AppState, User};
@@ -13,7 +14,7 @@ pub(crate) use trailbase_wasm_runtime_axum::{
 
 pub(crate) async fn install_routes_and_jobs(
   state: &AppState,
-  runtime: Arc<RwLock<Runtime>>,
+  runtime: Arc<RwLock<(Option<Metadata>, Runtime)>>,
 ) -> Result<Option<Router<AppState>>, AnyError> {
   use axum::extract::OptionalFromRequestParts;
   use axum::http::request::Parts;
@@ -39,8 +40,25 @@ pub(crate) async fn install_routes_and_jobs(
 
   let version = state.version().git_version_tag.clone();
 
-  let InstallResult { router, jobs } =
-    install_routes_and_jobs::<AppState>(runtime, extract_user, version).await?;
+  let mut metadata_and_rt = runtime.write().await;
+  let component_name = metadata_and_rt
+    .1
+    .component_path()
+    .file_stem()
+    .and_then(|s| s.to_str())
+    .unwrap_or("unknown")
+    .to_string();
+
+  let InstallResult {
+    router,
+    jobs,
+    metadata,
+  } = install_routes_and_jobs::<AppState>(&metadata_and_rt.1, extract_user, version).await?;
+
+  if let Some(metadata) = metadata {
+    log::debug!("Registering metadata manifest for WASM component '{component_name}'");
+    let _ = metadata_and_rt.0.insert(metadata);
+  }
 
   for Job {
     name,

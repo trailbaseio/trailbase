@@ -9,7 +9,8 @@
     "build": "npm run build:tsc && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && eslint",
     "deploy": "npm run build && cp dist/wasm_ts_guest_testfixture.wasm ../../wasm/",
-    "format": "prettier -w src"
+    "check:format": "prettier -c .",
+    "format": "prettier -w ."
   },
   "dependencies": {
     "trailbase-wasm": "workspace:*"

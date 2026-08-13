@@ -6,6 +6,7 @@ import {
   TbOutlineEdit,
   TbOutlineChartDots3,
   TbOutlineUsers,
+  TbOutlinePackage,
   TbOutlineTimeline,
   TbOutlineSettings,
 } from "solid-icons/tb";
@@ -87,6 +88,11 @@ const elements = [
     icon: TbOutlineUsers,
     content: "Browse and manage your application's user registry.",
     href: `${BASE}/auth`,
+  },
+  {
+    icon: TbOutlinePackage,
+    content: "Loaded WASM modules",
+    href: `${BASE}/wasm-modules`,
   },
   {
     icon: TbOutlineTimeline,
