@@ -17,11 +17,7 @@ declare module "trailbase:database/sqlite@0.1.1" {
     val: string;
   }
   export type Value =
-    | ValueNull
-    | ValueText
-    | ValueBlob
-    | ValueInteger
-    | ValueReal;
+    ValueNull | ValueText | ValueBlob | ValueInteger | ValueReal;
   export interface ValueNull {
     tag: "null";
   }

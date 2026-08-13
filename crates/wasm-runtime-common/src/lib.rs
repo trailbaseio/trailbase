@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
+pub mod manifest;
+
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
 pub struct SqliteRequest {
@@ -24,6 +26,19 @@ pub enum SqliteResponse {
   TxRollback,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum PrefsRequest {
+  Get { key: String },
+  Set { key: String, value: Option<String> },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, TS)]
+pub enum PrefsResponse {
+  Ok,
+  Value(Option<String>),
+  Error(String),
+}
+
 /// Used to pass extra information from host to guest via an HTTP request header "__context".
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 #[ts(export)]
@@ -40,11 +55,15 @@ pub enum HttpContextKind {
   Http,
   /// An incoming job request.
   Job,
+  // Fallback
+  #[serde(other)]
+  Unknown,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 pub struct HttpContextUser {
-  /// Url-safe Base64 encoded id of the current user.
+  // Host encodes with padded BASE64_URL_SAFE, but the guest's `is_admin` decodes
+  // with URL_SAFE_NO_PAD which rejects trailing `=`. Strip on deserialize.
   pub id: String,
   /// E-mail of the current user.
   pub email: Option<String>,
@@ -52,4 +71,15 @@ pub struct HttpContextUser {
   pub username: Option<String>,
   /// The "expected" CSRF token as included in the auth token claims [User] was constructed from.
   pub csrf_token: String,
+}
+
+#[inline]
+pub fn component_path_to_name(path: &std::path::Path) -> Result<String, String> {
+  return Ok(
+    path
+      .file_stem()
+      .and_then(|s| s.to_str())
+      .ok_or_else(|| format!("failed to get component name from '{path:?}'"))?
+      .to_string(),
+  );
 }

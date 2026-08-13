@@ -10,7 +10,7 @@ use crate::config::proto::hash_config;
 use crate::constants::SQLITE_SCHEMA_TABLE;
 use crate::transaction_recorder::TransactionRecorder;
 
-#[derive(Clone, Debug, Deserialize, TS)]
+#[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DropTableRequest {
   // TODO: Should be fully qualified.
@@ -18,12 +18,21 @@ pub struct DropTableRequest {
   pub dry_run: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DropTableResponse {
   pub sql: String,
 }
 
+#[utoipa::path(
+  delete,
+  path = "/table",
+  tag = "admin",
+  request_body = DropTableRequest,
+  responses(
+    (status = 200, description = "Success", body = DropTableResponse),
+  )
+)]
 pub async fn drop_table_handler(
   State(state): State<AppState>,
   Json(request): Json<DropTableRequest>,

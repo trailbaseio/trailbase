@@ -12,29 +12,11 @@
     "paths": {
       "@common/*": ["./generated/common/*"],
 
-      "wasi:http/types@0.2.3": [
-        "./generated/types/interfaces/wasi-http-types.d.ts"
-      ],
-      "wasi:random/random@0.2.3": [
-        "./generated/types/interfaces/wasi-random-random.d.ts"
-      ],
-      "wasi:filesystem/preopens@0.2.3": [
-        "./generated/types/interfaces/wasi-filesystem-preopens.d.ts"
-      ],
-      "wasi:filesystem/types@0.2.3": [
-        "./generated/types/interfaces/wasi-filesystem-types.d.ts"
-      ],
-      "wasi:keyvalue/store@0.2.0-draft": [
-        "./generated/types/interfaces/wasi-keyvalue-store.d.ts",
-      ],
-      "trailbase:database/sqlite@0.1.0": [
+      "trailbase:database/sqlite@0.1.1": [
         "./generated/types/interfaces/trailbase-database-sqlite.d.ts"
       ],
-      "trailbase:component/init-endpoint@0.1.0": [
-        "./generated/types/interfaces/trailbase-component-init-endpoint.d.ts"
-      ],
-      "trailbase:component/sqlite-function-endpoint@0.1.0": [
-        "./generated/types/interfaces/trailbase-component-sqlite-function-endpoint.d.ts"
+      "trailbase:component/interfaces@0.2.0": [
+        "./generated/types/interfaces.d.ts"
       ]
     }
   },

@@ -63,6 +63,10 @@ impl DataDir {
     return self.secrets_path().join("keys/");
   }
 
+  pub fn wasm_path(&self) -> PathBuf {
+    return self.0.join("wasm/");
+  }
+
   pub(crate) async fn ensure_directory_structure(&self) -> std::io::Result<()> {
     let directories = [
       self.data_path(),

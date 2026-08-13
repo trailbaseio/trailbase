@@ -32,6 +32,7 @@ fn query_applied_migrations(
 
 impl Transaction for RqlConnection {
   type Error = RqlError;
+
   fn execute<'a, T: Iterator<Item = &'a str>>(&mut self, queries: T) -> Result<usize, Self::Error> {
     fn execute_impl<'a, T: Iterator<Item = &'a str>>(
       conn: &mut RqlConnection,
@@ -46,10 +47,20 @@ impl Transaction for RqlConnection {
         count += 1;
       }
 
-      // Turn foreign_keys back on as part of the transaction, to avoid cases where transaction
-      // succeeds with FK support off, leaving us in a state were it cannot be turned back on.
+      // Check for potential foreign key violations before committing.
+      // Setting the "foreign_keys" PRAGMA in a transaction is a no-op:
+      //   https://www.sqlite.org/pragma.html#pragma_foreign_keys
       if foreign_keys {
-        transaction.pragma_update(None, "foreign_keys", true)?;
+        let violations: Vec<String> = transaction
+          .prepare("PRAGMA foreign_key_check;")?
+          .query_map([], |row| row.get::<_, String>(0))?
+          .collect::<Result<_, _>>()?;
+
+        if !violations.is_empty() {
+          return Err(RqlError::UserFunctionError(
+            format!("FK violations: {violations:?}").into(),
+          ));
+        }
       }
 
       transaction.commit()?;
@@ -63,15 +74,16 @@ impl Transaction for RqlConnection {
       // to allow for a wider range of migrations.
       //
       // Ideally, we'd use `defer_foreign_key=ON` as part of the migration within the transaction,
-      // but it somehow doesn't seem to work or be less leniant than `foreign_keys=OFF`, which has
+      // but it somehow doesn't seem to work or be less lenient than `foreign_keys=OFF`, which has
       // to be applied to the connection rather than the transaction.
       self.pragma_update(None, "foreign_keys", false)?;
     }
 
     let result = execute_impl(self, queries, initial_fk);
-    if result.is_err() && initial_fk {
+    if initial_fk {
       self.pragma_update(None, "foreign_keys", true)?;
     }
+
     return result;
   }
 }

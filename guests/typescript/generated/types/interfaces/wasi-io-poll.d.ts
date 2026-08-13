@@ -1,4 +1,4 @@
-declare module "wasi:io/poll@0.2.3" {
+declare module "wasi:io/poll@0.2.12" {
   /**
    * Poll for completion on a set of pollables.
    *

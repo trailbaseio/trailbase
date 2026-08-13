@@ -1,19 +1,21 @@
 #![forbid(unsafe_code, clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
+mod auth;
 
 use askama::Template;
-use serde::Deserialize;
-use std::sync::LazyLock;
+use serde::{Deserialize, Serialize};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use trailbase_auth_config::AuthConfig;
+use trailbase_wasm::auth::require_admin;
 use trailbase_wasm::http::{
   Html, HttpError, HttpRoute, IntoBody, IntoResponse, Redirect, Request, Response, StatusCode,
   User, header, routing,
 };
 use trailbase_wasm::kv::Store;
-use trailbase_wasm::{Guest, export};
-
-mod auth;
+use trailbase_wasm::{Guest, Metadata, export};
+use ts_rs::TS;
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -24,8 +26,8 @@ impl Guest for Endpoints {
       routing::get(
         LOGIN_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          let config: &AuthConfig = AUTH_CONFIG.as_ref().map_err(|err| err.clone())?;
-          return ui_login_handler(config, req.user(), req.query_parse()?).await;
+          let config = read_cached_config()?;
+          return ui_login_handler(&config, req.user(), req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -55,8 +57,8 @@ impl Guest for Endpoints {
       routing::get(
         REGISTER_USER_UI,
         async |req: Request| -> Result<Response, HttpError> {
-          let config: &AuthConfig = AUTH_CONFIG.as_ref().map_err(|err| err.clone())?;
-          return ui_register_handler(config, req.query_parse()?).await;
+          let config = read_cached_config()?;
+          return ui_register_handler(&config, req.query_parse()?).await;
         },
       ),
       routing::get(
@@ -98,6 +100,12 @@ impl Guest for Endpoints {
           return ui_change_username_handler(req.query_parse()?, user).await;
         },
       ),
+      // Admin UI routes.
+      routing::get("/_/auth/admin/ui/", admin_dashboard_handler),
+      routing::get("/_/auth/admin/settings/", get_settings_handler).require_admin(),
+      routing::post("/_/auth/admin/settings/", set_settings_handler).require_admin(),
+      // Wildcard match for static assets. Note `{*wildcard}` is not optional, i.e. this route
+      // does not match `/_/auth/`.
       routing::get("/_/auth/{*wildcard}", async |req: Request| {
         return static_assets_handler(
           req
@@ -107,6 +115,26 @@ impl Guest for Endpoints {
         .await;
       }),
     ];
+  }
+
+  fn metadata() -> Option<Metadata> {
+    let version_info = trailbase_build::get_version_info!();
+
+    return Some(Metadata {
+      display_name: Some("AuthUi".to_string()),
+      icon: Some(AUTH_ICON.to_string()),
+      description: Some("TrailBase's first-party auth UI.".to_string()),
+      version: version_info.git_version().map(|v| {
+        let git_tag = v.tag();
+        let extra_commits = v.commits_since.unwrap_or(0);
+        if extra_commits > 0 {
+          return format!("{git_tag} ({extra_commits})");
+        }
+        return git_tag;
+      }),
+      admin_ui_path: Some("/_/auth/admin/ui/".to_string()),
+      ..Default::default()
+    });
   }
 }
 
@@ -135,6 +163,8 @@ async fn ui_login_handler(
     }
     return Ok(Redirect::to(PROFILE_UI).into_response());
   }
+
+  let settings = read_cached_settings().await?;
 
   let redirect_uri = query.redirect_uri.as_deref().unwrap_or(LOGIN_UI);
   let oauth_query_params: Vec<(&str, &str)> = [
@@ -169,10 +199,16 @@ async fn ui_login_handler(
     login_identifier: config.login_identifier,
     oauth_providers: &config.oauth_providers,
     oauth_query_params: &oauth_query_params,
+    title: get_optional_non_empty(&settings.title),
+    icon_url: get_optional_non_empty(&settings.icon_url),
   }
   .render();
 
   return Ok(Html(html.map_err(internal)?).into_response());
+}
+
+fn get_optional_non_empty(v: &Option<String>) -> Option<&str> {
+  return v.as_deref().filter(|v| !v.is_empty());
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -431,24 +467,135 @@ async fn static_assets_handler(path: &str) -> Result<Response, HttpError> {
   .ok_or_else(|| HttpError::message(StatusCode::NOT_FOUND, "Not found"))?;
 
   let response_builder = Response::builder()
+    .header(
+      header::CONTENT_TYPE,
+      match path {
+        p if p.ends_with(".js") => "text/javascript",
+        p if p.ends_with(".css") => "text/css",
+        p if p.ends_with(".html") => "text/html",
+        _ => file.metadata.mimetype(),
+      },
+    )
     .header(header::CACHE_CONTROL, "public")
     .header(header::CACHE_CONTROL, "max-age=604800")
-    .header(header::CACHE_CONTROL, "immutable")
-    .header(header::CONTENT_TYPE, file.metadata.mimetype());
+    .header(header::CACHE_CONTROL, "immutable");
 
   return response_builder
     .body(file.data.into_body())
     .map_err(internal);
 }
 
-#[allow(unused)]
-fn internal(err: impl std::string::ToString) -> HttpError {
-  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
+async fn admin_dashboard_handler(req: Request) -> Result<Response, HttpError> {
+  // Since we're serving an SPA, i.e. static assets, we do NOT strictly need access protection as
+  // long as all the REST endpoints are protected. This may be different for dashboards using
+  // SSR, which may expose internal data. Ultimately, we have the check here to establish a safe
+  // default.
+  require_admin(&req).await?;
+
+  let file =
+    auth::AuthAssets::get("admin/ui/index.html").ok_or_else(|| internal("missing asset"))?;
+
+  let response_builder = Response::builder().header(header::CONTENT_TYPE, "text/html");
+
+  return response_builder
+    .body(file.data.into_body())
+    .map_err(internal);
 }
 
-// Read auth config. It may be a bit hacky to use KVStore :shrug:. Should we add a TTL
-// here to allow more flexible config updates?
-static AUTH_CONFIG: LazyLock<Result<AuthConfig, HttpError>> = LazyLock::new(|| {
+#[derive(Clone, Debug, Default, Deserialize, Serialize, TS)]
+#[ts(export, optional_fields)]
+pub struct AuthUiSettings {
+  title: Option<String>,
+  icon_url: Option<String>,
+  /*
+    NOTE: Ideas for further customization.
+
+    /// Typically a page or mailto://test@trailbase.io.
+    contact_url: Option<String>,
+    /// Typically a page detailing the terms.
+    terms_url: Option<String>,
+    /// Typically a page detailing PII usage.
+    privacy_url: Option<String>,
+    /// Typically a page declaring a legal entity for ownership and/or authorship.
+    impressum_url: Option<String>,
+  */
+}
+
+async fn read_settings() -> Result<AuthUiSettings, HttpError> {
+  return match trailbase_wasm::prefs::get_prefs(SETTINGS_KEY)
+    .await
+    .map_err(internal)?
+  {
+    Some(value) => serde_json::from_str(&value).map_err(internal),
+    None => Ok(AuthUiSettings {
+      ..Default::default()
+    }),
+  };
+}
+
+async fn read_cached_settings() -> Result<Arc<AuthUiSettings>, HttpError> {
+  {
+    if let Some((instant, settings)) = &*SETTINGS_CACHE.lock().map_err(internal)?
+      && instant.elapsed() < CACHE_TTL
+    {
+      return Ok(settings.clone());
+    }
+  }
+
+  // Update cache
+  let settings = Arc::new(read_settings().await?);
+  let mut guard = SETTINGS_CACHE.lock().map_err(internal)?;
+  *guard = Some((Instant::now(), settings.clone()));
+  return Ok(settings);
+}
+
+async fn get_settings_handler(_req: Request) -> Result<Response, HttpError> {
+  let settings = read_settings().await?;
+
+  return Response::builder()
+    .header(header::CONTENT_TYPE, "application/json")
+    .body(
+      serde_json::to_string(&settings)
+        .map_err(internal)?
+        .into_body(),
+    )
+    .map_err(internal);
+}
+
+async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
+  let body = req.body().bytes().await.map_err(internal)?;
+
+  let _ = SETTINGS_CACHE.lock().map(|mut guard| *guard = None);
+
+  trailbase_wasm::prefs::set_prefs(
+    SETTINGS_KEY,
+    Some({
+      // Input validation: make sure settings object has the right shape.
+      let settings: AuthUiSettings = serde_json::from_slice(&body).map_err(|_| bad_request())?;
+      serde_json::to_string(&settings).map_err(internal)?
+    }),
+  )
+  .await
+  .map_err(internal)?;
+
+  return Response::builder()
+    .header(header::CONTENT_TYPE, "application/json")
+    .body("Ok".into_body())
+    .map_err(internal);
+}
+
+fn read_cached_config() -> Result<Arc<AuthConfig>, HttpError> {
+  let mut guard = CONFIG_CACHE.lock().map_err(internal)?;
+  if let Some((instant, config)) = &*guard
+    && instant.elapsed() < CACHE_TTL
+  {
+    return Ok(config.clone());
+  }
+
+  // Update cache
+  //
+  // Read auth config. It may be a bit hacky to use KVStore :shrug:. Should we add a TTL
+  // here to allow more flexible config updates?
   let store = Store::open().map_err(internal)?;
   let value = store
     .get("config:auth")
@@ -459,8 +606,24 @@ static AUTH_CONFIG: LazyLock<Result<AuthConfig, HttpError>> = LazyLock::new(|| {
     return Err(internal("empty config"));
   }
 
-  return serde_json::from_slice(&value).map_err(internal);
-});
+  let config = Arc::new(serde_json::from_slice::<AuthConfig>(&value).map_err(internal)?);
+  *guard = Some((Instant::now(), config.clone()));
+  return Ok(config);
+}
+
+#[inline]
+fn internal(err: impl std::string::ToString) -> HttpError {
+  return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
+}
+
+#[inline]
+fn bad_request() -> HttpError {
+  return HttpError::status(StatusCode::BAD_REQUEST);
+}
+
+const CACHE_TTL: Duration = Duration::from_secs(120);
+static SETTINGS_CACHE: Mutex<Option<(Instant, Arc<AuthUiSettings>)>> = Mutex::new(None);
+static CONFIG_CACHE: Mutex<Option<(Instant, Arc<AuthConfig>)>> = Mutex::new(None);
 
 const AUTH_API: &str = "/api/auth/v1";
 
@@ -473,3 +636,14 @@ const REGISTER_USER_UI: &str = "/_/auth/register";
 const CHANGE_PASSWORD_UI: &str = "/_/auth/change_password";
 const CHANGE_EMAIL_UI: &str = "/_/auth/change_email";
 const CHANGE_USERNAME_UI: &str = "/_/auth/change_username";
+
+const AUTH_ICON: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-tabler icons-tabler-outline icon-tabler-user-key">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+  <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+  <path d="M6 21v-2a4 4 0 0 1 4 -4h5" />
+  <path d="M18.5 18.5l-3.5 3.5l-1.5 -1.5" />
+  <path d="M18.554 18.414a2 2 0 1 1 2.828 -2.828a2 2 0 0 1 -2.828 2.828" />
+  <path d="M16 19l1 1" />
+</svg>"##;
+
+const SETTINGS_KEY: &str = "settings";

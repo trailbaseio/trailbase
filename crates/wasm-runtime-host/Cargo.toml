@@ -37,3 +37,5 @@ wasmtime = { workspace = true }
 wasmtime-wasi = { workspace = true }
 wasmtime-wasi-http = { workspace = true }
 wasmtime-wasi-io = { workspace = true }
+const_format = "0.2.36"
+deadpool = "0.13.0"

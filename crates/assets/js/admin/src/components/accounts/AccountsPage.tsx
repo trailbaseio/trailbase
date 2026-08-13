@@ -11,7 +11,6 @@ import { useSearchParams } from "@solidjs/router";
 import {
   TbOutlineRefresh,
   TbOutlineCrown,
-  TbOutlineCheck,
   TbOutlineClipboardCopy,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
@@ -40,10 +39,10 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
+import { Callout } from "@/components/ui/callout";
 import { Header } from "@/components/Header";
 import { Table, buildTable } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
 import {
@@ -95,19 +94,11 @@ function buildColumns(): ColumnDef<UserJson>[] {
     },
     {
       accessorKey: "email",
-      size: 220,
+      minSize: 180,
     },
     {
-      accessorKey: "verified",
-      cell: (ctx) => {
-        return (
-          <Show when={ctx.row.original.verified}>
-            <div class="flex justify-center pr-6">
-              <TbOutlineCheck />
-            </div>
-          </Show>
-        );
-      },
+      accessorKey: "unverified_email",
+      minSize: 180,
     },
     {
       accessorKey: "admin",
@@ -224,9 +215,9 @@ function EditSheetContent(props: {
     defaultValues: {
       id: props.user.id,
       email: props.user.email,
+      unverified_email: props.user.unverified_email,
       username: props.user.username,
       password: null,
-      verified: props.user.verified,
     } as UpdateUserRequest,
     onSubmit: async ({ value }) => {
       try {
@@ -269,6 +260,13 @@ function EditSheetContent(props: {
             })}
           </form.Field>
 
+          <form.Field name="unverified_email">
+            {buildTextFormField({
+              label: () => <FixedWidthLabel children="Unverified Email" />,
+              type: "email",
+            })}
+          </form.Field>
+
           <form.Field name={"username"}>
             {buildTextFormField({
               label: () => <FixedWidthLabel children="Username" />,
@@ -281,50 +279,45 @@ function EditSheetContent(props: {
               label: () => <FixedWidthLabel children="Password" />,
             })}
           </form.Field>
-
-          <form.Field name="verified">
-            {(field) => (
-              <div class="flex w-full items-center justify-start gap-2">
-                <FixedWidthLabel>Verified</FixedWidthLabel>
-                <Checkbox
-                  checked={field().state.value ?? false}
-                  onChange={field().handleChange}
-                />
-              </div>
-            )}
-          </form.Field>
         </div>
 
         <SheetFooter>
-          <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-            children={(state) => {
-              return (
-                <div class="flex w-full justify-between gap-2 py-4">
-                  <DeleteUserButton
-                    userId={props.user.id}
-                    email={props.user.email}
-                    username={props.user.username}
-                    onDelete={() => {
-                      props.close();
-                      props.refetch();
-                    }}
-                  />
+          <div class="flex w-full flex-col">
+            <form.Subscribe
+              selector={(state) => ({
+                canSubmit: state.canSubmit,
+                isSubmitting: state.isSubmitting,
+              })}
+              children={(state) => {
+                return (
+                  <div class="flex w-full justify-between gap-2 py-4">
+                    <DeleteUserButton
+                      userId={props.user.id}
+                      email={props.user.email}
+                      username={props.user.username}
+                      onDelete={() => {
+                        props.close();
+                        props.refetch();
+                      }}
+                    />
 
-                  <Button
-                    type="submit"
-                    disabled={!state().canSubmit}
-                    variant="default"
-                  >
-                    {state().isSubmitting ? "..." : "Submit"}
-                  </Button>
-                </div>
-              );
-            }}
-          />
+                    <Button
+                      type="submit"
+                      disabled={!state().canSubmit}
+                      variant="default"
+                    >
+                      {state().isSubmitting ? "..." : "Submit"}
+                    </Button>
+                  </div>
+                );
+              }}
+            />
+
+            <Callout class="text-sm">
+              The admin status can only be toggled using the CLI to prevent
+              abuse.
+            </Callout>
+          </div>
         </SheetFooter>
       </form>
     </SheetContainer>
@@ -434,7 +427,7 @@ export function AccountsPage() {
               setFilter(value);
             }
           }}
-          placeholder={`Filter, e.g.: 'email ~ "admin@%" && verified = TRUE'`}
+          placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
         />
 
         <Suspense fallback={<div>Loading...</div>}>

@@ -7,19 +7,28 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::transaction_recorder::TransactionRecorder;
 
-#[derive(Clone, Debug, Deserialize, TS)]
+#[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct CreateTableRequest {
   pub schema: Table,
   pub dry_run: Option<bool>,
 }
 
-#[derive(Clone, Debug, Serialize, TS)]
+#[derive(Clone, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct CreateTableResponse {
   pub sql: String,
 }
 
+#[utoipa::path(
+  post,
+  path = "/table",
+  tag = "admin",
+  request_body = CreateTableRequest,
+  responses(
+    (status = 200, description = "Success", body = CreateTableResponse),
+  )
+)]
 pub async fn create_table_handler(
   State(state): State<AppState>,
   Json(request): Json<CreateTableRequest>,

@@ -90,12 +90,16 @@ try {
     ...(useWs ? ["tests/integration/websocket_integration.test.ts"] : []),
   ];
 
+  const isCi = process.env.CI === "1";
+
   {
     const ctx = await createVitest("test", {
       watch: false,
       environment: "jsdom",
       include: ["tests/integration/*test.ts"],
       exclude: nodeEnvTests(true),
+      // No fancy terminal sequences, append everything in order.
+      reporters: [isCi ? "tap" : "default"],
     });
 
     await ctx.start();
@@ -107,6 +111,8 @@ try {
       watch: false,
       environment: "node",
       include: nodeEnvTests(useWebSocket()),
+      // No fancy terminal sequences, append everything in order.
+      reporters: [isCi ? "tap" : "default"],
     });
 
     await ctx.start();

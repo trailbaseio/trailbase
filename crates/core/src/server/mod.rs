@@ -29,13 +29,14 @@ use tower_http::services::fs::{ServeDir, ServeFile};
 use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_assets::AssetService;
+use utoipa_axum::router::OpenApiRouter;
 
 use crate::admin;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::connection::ConnectionEntry;
-use crate::constants::{ADMIN_API_PATH, HEADER_CSRF_TOKEN};
+use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
 use crate::extract::ip::RealIpKeyExtractor;
 use crate::init_error::InitError;
@@ -119,14 +120,15 @@ impl Server {
 
     Self::build_tracing(&state, log_responses).init();
 
-    let mut custom_routers: Vec<Router<AppState>> = Vec::from_iter(custom_router);
+    let mut custom_routers: Vec<OpenApiRouter<AppState>> =
+      custom_router.into_iter().map(|r| r.into()).collect();
 
     for rt in state.wasm_runtimes() {
       if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
         .await
         .map_err(|err| InitError::ScriptError(err.to_string()))?
       {
-        custom_routers.push(wasm_router);
+        custom_routers.push(wasm_router.into());
       }
     }
 
@@ -167,7 +169,7 @@ impl Server {
         }
       });
 
-      Some(move |router: Router<crate::AppState>| {
+      Some(move |router: OpenApiRouter<crate::AppState>| {
         router.layer(GovernorLayer::new(governor_conf.clone()))
       })
     } else {
@@ -178,37 +180,40 @@ impl Server {
     let independent_admin_router = if let Some(admin_address) = admin_address
       && admin_address != address
     {
-      let router = Router::new()
-        .merge(
-          install_auth_rate_limiter
-            .as_ref()
-            .map_or_else(auth::admin_auth_router, |inst| {
-              inst(auth::admin_auth_router())
-            }),
-        )
+      let router = OpenApiRouter::new()
+        .merge(install_auth_rate_limiter.as_ref().map_or_else(
+          || {
+            return auth::admin_auth_router();
+          },
+          |inst| {
+            return inst(auth::admin_auth_router());
+          },
+        ))
         .merge(admin_router);
 
-      Some((
-        admin_address.to_string(),
-        Self::wrap_with_default_layers(&state, router, &cors_allowed_origins),
-      ))
+      let (admin_router, _api) =
+        Self::wrap_with_default_layers(&state, router, &cors_allowed_origins).split_for_parts();
+
+      Some((admin_address.to_string(), admin_router))
     } else {
+      // Simply add to the main router.
       custom_routers.push(admin_router);
       None
     };
 
+    let (main_router, _api) = Self::build_main_router(
+      &state,
+      public_dir.as_ref(),
+      public_dir_spa,
+      &cors_allowed_origins,
+      install_auth_rate_limiter.as_ref(),
+      custom_routers,
+    )?
+    .split_for_parts();
+
     Ok(Self {
       state: state.clone(),
-      main_router: Self::build_main_router(
-        &state,
-        &address,
-        public_dir.as_ref(),
-        public_dir_spa,
-        &cors_allowed_origins,
-        install_auth_rate_limiter.as_ref(),
-        custom_routers,
-      )
-      .await?,
+      main_router: (address, main_router),
       admin_router: independent_admin_router,
       tls: load_tls(state.data_dir(), tls_cert, tls_key),
     })
@@ -365,8 +370,8 @@ impl Server {
     return Ok(());
   }
 
-  fn build_admin_router(state: &AppState) -> Router<AppState> {
-    return Router::new()
+  pub(crate) fn build_admin_router(state: &AppState) -> OpenApiRouter<AppState> {
+    return OpenApiRouter::new()
       .nest(
         &format!("/{ADMIN_API_PATH}/"),
         admin::router().layer(middleware::from_fn_with_state(
@@ -393,15 +398,14 @@ impl Server {
       );
   }
 
-  async fn build_main_router(
+  pub(crate) fn build_main_router(
     state: &AppState,
-    address: &str,
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,
     cors_allowed_origins: &[String],
-    install_auth_rate_limiter: Option<&impl Fn(Router<AppState>) -> Router<AppState>>,
-    custom_routers: Vec<Router<AppState>>,
-  ) -> Result<(String, Router<()>), InitError> {
+    install_auth_rate_limiter: Option<&impl Fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>>,
+    custom_routers: Vec<OpenApiRouter<AppState>>,
+  ) -> Result<OpenApiRouter<()>, InitError> {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
 
@@ -409,13 +413,20 @@ impl Server {
       connection: conn, ..
     } = state.connection_manager().main_entry();
 
-    let mut router = Router::new()
+    let mut router = OpenApiRouter::new()
       // Public, stable and versioned APIs.
       .merge(records::router(conn.connection_type(), enable_transactions))
-      .merge(install_auth_rate_limiter.map_or_else(
-        || auth::router(&state.get_config()),
-        |inst| inst(auth::router(&state.get_config())),
-      ))
+      .nest(
+        &format!("/{AUTH_API_PATH}/"),
+        install_auth_rate_limiter.map_or_else(
+          || {
+            return auth::router(&state.get_config());
+          },
+          |inst| {
+            return inst(auth::router(&state.get_config()));
+          },
+        ),
+      )
       .route("/api/healthcheck", get(healthcheck_handler));
 
     for custom_router in custom_routers {
@@ -423,7 +434,7 @@ impl Server {
     }
 
     if let Some(public_dir) = public_dir {
-      if !tokio::fs::try_exists(public_dir).await.unwrap_or(false) {
+      if !std::fs::exists(public_dir).unwrap_or(false) {
         panic!("--public_dir={public_dir:?} path does not exist.")
       }
 
@@ -434,7 +445,7 @@ impl Server {
 
       router = if public_dir_spa {
         let spa_fallback = public_dir.join("index.html");
-        if tokio::fs::try_exists(&spa_fallback).await.unwrap_or(false) {
+        if std::fs::exists(&spa_fallback).unwrap_or(false) {
           let mut index_file = ServeFile::new(spa_fallback);
           let fallback = async move |req: Request| {
             static SUFFIX_RE: LazyLock<regex::Regex> =
@@ -467,17 +478,18 @@ impl Server {
       };
     }
 
-    return Ok((
-      address.to_string(),
-      Self::wrap_with_default_layers(state, router, cors_allowed_origins),
+    return Ok(Self::wrap_with_default_layers(
+      state,
+      router,
+      cors_allowed_origins,
     ));
   }
 
   pub fn wrap_with_default_layers(
     state: &AppState,
-    router: Router<AppState>,
+    router: OpenApiRouter<AppState>,
     cors_allowed_origins: &[String],
-  ) -> Router<()> {
+  ) -> OpenApiRouter<()> {
     #[cfg(feature = "otel")]
     let router = router
       .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer)
@@ -522,6 +534,8 @@ async fn assert_admin_api_access(
 ) -> Result<Response, AuthError> {
   let user = req.extract_parts_with_state::<User, _>(&state).await?;
 
+  // IMPORTANT: We cannot trust the admin bit in the auth-token, since it may be stale. We need to
+  // query the DB.
   if !is_admin(&state, &user.uuid).await {
     return Err(AuthError::Forbidden);
   }
@@ -567,6 +581,9 @@ fn build_cors(cors_allowed_origins: &[String], dev: bool) -> cors::CorsLayer {
   };
 
   // Cannot combine `Access-Control-Allow-Credentials: true` with `Access-Control-Allow-Methods: *`
+  //
+  // We cannot further limit the set of allowed methods or headers with routes potentially being
+  // provided by WASM components.
   return cors::CorsLayer::new()
     .allow_methods(cors::Any)
     .allow_headers(cors::Any)

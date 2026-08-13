@@ -163,7 +163,9 @@ async fn test_record_apis() {
     // NOTE: the wrapping is needed to have the OTEL layers touch the route.
     router = router.merge(Server::wrap_with_default_layers(
       &state,
-      axum::Router::new().route("/trace", axum::routing::get(trace_id)),
+      axum::Router::new()
+        .route("/trace", axum::routing::get(trace_id))
+        .into(),
       &options.cors_allowed_origins,
     ));
   }

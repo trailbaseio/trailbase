@@ -98,7 +98,7 @@ pub fn check_user_password(
   password: &str,
   is_demo: bool,
 ) -> Result<(), AuthError> {
-  if db_user.email.is_some() && !db_user.verified {
+  if db_user.unverified_email.is_some() {
     return Err(AuthError::Unauthorized);
   }
 

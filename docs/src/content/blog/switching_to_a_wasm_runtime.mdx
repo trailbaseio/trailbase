@@ -68,14 +68,14 @@ Finally, let's talk about some of the immediate and future benefits we can expec
 
 ### Rigorous State Isolation
 
-V8's isolates and JIT are expensive, thus they're typically re-used across
+V8's isolates and JIT are expensive, thus they're typically reused across
 requests opening up the gates for accidental state sharing.
 There are specialized JIT-free "edge" runtimes like
 [LLRT](https://github.com/awslabs/llrt) to specifically solve this issue at the
 expense of performance/throughput.
 Wasmtime, on the other hand, makes it cheap and easy to spawn fully isolated
 instances per request[^4].
-We expect this provide immediate safety benefits for users.
+We expect this to provide immediate safety benefits for users.
 
 
 ### Performance
@@ -98,7 +98,7 @@ For now, TrailBase supports JS/TS and Rust out-of-the-box.
 We have plans to support
 [more](https://github.com/bytecodealliance/wasmtime/blob/main/README.md#language-support)
 in the future.
-Independently and maybe more importantly, [WASI](https://wasi.dev/) makes it straight-forward to
+Independently and maybe more importantly, [WASI](https://wasi.dev/) makes it straightforward to
 support custom guests.
 
 Moreover, different endpoints can be implemented in different WASM components
@@ -112,7 +112,7 @@ Previously, isolates were given untethered I/O access, which together with a
 very dynamic guest language can pose a security risk.
 I/O is now limited to read-only file access for an explicitly provided sandbox
 root (`--runtime-root-fs`).
-We're planning ot extend I/O capabilities over time on a per-need basis.
+We're planning to extend I/O capabilities over time on a per-need basis.
 If you're missing anything, let us know.
 
 The new integration also fixes timers - such as `setTimeout` and `setInterval`, which
@@ -120,7 +120,7 @@ were unreliable in our previous V8 integration.
 
 ### Less Code
 
-As mentioned before, switching off V8 removes a lot of high-scrutiny codex and
+As mentioned before, switching off V8 removes a lot of high-scrutiny code and
 roughly cuts our binary size in half.
 Moreover, our Deno dependency bundles V8 as a pre-compiled binary limiting
 portability including static builds with MUSL instead of GLIBC[^1], but also

@@ -512,7 +512,7 @@ class Client:
         self, password: str, email: str | None = None, username: str | None = None
     ) -> None:
         self.fetch(
-            f"{_AUTH_API}/login_anonymous",
+            f"{_AUTH_API}/promote_anonymous",
             method="POST",
             data={
                 "new_password": password,

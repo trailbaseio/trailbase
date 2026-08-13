@@ -119,9 +119,9 @@ pub async fn register_user_handler(
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
       INSERT INTO \"{USER_TABLE}\" \
-        (email, username, password_hash) \
+        (unverified_email, username, password_hash) \
       VALUES \
-        (:email, :username, :password_hash) \
+        (:unverified_email, :username, :password_hash) \
       RETURNING * \
     "
   );
@@ -131,7 +131,7 @@ pub async fn register_user_handler(
     .write_query_value::<DbUser>(
       INSERT_USER_QUERY,
       named_params! {
-        ":email": normalized_email.clone(),
+        ":unverified_email": normalized_email.clone(),
         ":username": username,
         ":password_hash": hashed_password,
       },
@@ -151,7 +151,7 @@ pub async fn register_user_handler(
     }
   };
 
-  if let Some(ref email) = user.email {
+  if let Some(ref email) = user.unverified_email {
     let claims =
       EmailVerificationTokenClaims::new(&user.uuid(), email.clone(), chrono::Duration::hours(4));
     let token = state

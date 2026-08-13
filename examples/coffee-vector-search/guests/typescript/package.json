@@ -10,7 +10,8 @@
     "build": "vite build && npm run build:wasm",
     "check": "tsc --noEmit --skipLibCheck && vite build && eslint",
     "deploy": "npm run build && cp dist/component.wasm ../../traildepot/wasm/coffee_vector_search_guest.wasm",
-    "format": "prettier -w src"
+    "check:format": "prettier -c .",
+    "format": "prettier -w ."
   },
   "dependencies": {
     "trailbase-wasm": "workspace:*"

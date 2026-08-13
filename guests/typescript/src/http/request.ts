@@ -2,16 +2,16 @@ import {
   Headers,
   IncomingBody,
   Scheme as WasiScheme,
-} from "wasi:http/types@0.2.3";
-import type { HttpMethodType } from "trailbase:component/init-endpoint@0.1.1";
+} from "wasi:http/types@0.2.12";
 import type { HttpContextUser } from "@common/HttpContextUser";
+import type { HttpMethodType } from "@common/HttpMethodType";
 
 export type Scheme = "HTTP" | "HTTPS" | "other";
 export type Method = HttpMethodType;
 
 export type User = {
   id: string;
-  email: string;
+  email: string | null;
   csrf: string;
 };
 

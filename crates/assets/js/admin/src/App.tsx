@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
 import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
+import { WasmPage } from "@/components/wasm/WasmPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
@@ -79,6 +80,7 @@ function NotFoundPage() {
 const LazyEditorPage = lazy(() => import("@/components/editor/EditorPage"));
 const LazyLogsPage = lazy(() => import("@/components/logs/LogsPage"));
 const LazyErdPage = lazy(() => import("@/components/erd/ErdPage"));
+const LazyOpenApiPage = lazy(() => import("@/components/openapi/OpenApiPage"));
 
 const App: Component = () => {
   const user = useStore($user);
@@ -103,9 +105,11 @@ const App: Component = () => {
           <Route path="/" component={IndexPage} />
           <Route path="/table/:table?" component={TablePage} />
           <Route path="/auth" component={AccountsPage} />
+          <Route path="/wasm/:name?" component={WasmPage} />
           <Route path="/editor" component={LazyEditorPage} />
           <Route path="/erd" component={LazyErdPage} />
           <Route path="/logs" component={LazyLogsPage} />
+          <Route path="/openapi" component={LazyOpenApiPage} />
           <Route path="/settings/:group?" component={SettingsPage} />
 
           {/* fallback: */}

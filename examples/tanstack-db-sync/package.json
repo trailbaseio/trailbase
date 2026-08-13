@@ -7,7 +7,8 @@
     "build": "tsc -b && vite build",
     "check": "tsc --noEmit --skipLibCheck && eslint",
     "dev": "vite",
-    "format": "prettier -w src",
+    "check:format": "prettier -c .",
+    "format": "prettier -w .",
     "lint": "eslint .",
     "preview": "vite preview"
   },

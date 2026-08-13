@@ -19,7 +19,7 @@ use crate::constants::{
 use crate::rand::random_alphanumeric;
 use crate::util::get_header;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Tokens {
   pub auth_token_claims: AuthTokenClaims,
   pub refresh_token: Option<String>,
@@ -171,7 +171,7 @@ pub(crate) async fn mint_new_tokens(
   auth_token_ttl: &Duration,
   refresh_token_ttl: &Duration,
 ) -> Result<FreshTokens, AuthError> {
-  if db_user.email.is_some() && !db_user.verified {
+  if db_user.unverified_email.is_some() {
     return Err(AuthError::Internal(
       "Cannot mint tokens for unverified user".into(),
     ));
@@ -231,26 +231,30 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
-  const USER_QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
+  // NOTE: The `verified` condition mirrors `mint_new_tokens`: a user with an email must have it
+  // verified before we hand out tokens. Anonymous users are exempt, since they have no email.
+  const USER_QUERY: &str =
+    formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1 AND unverified_email IS NULL"#);
 
   let Some(db_user) = state
     .user_conn()
     .read_query_value::<DbUser>(USER_QUERY, params!(user_id))
     .await?
   else {
-    // Row not found case, typically expected in one of 4 cases:
+    // Row not found case, typically expected in one of 5 cases:
     //  1. Above where clause doesn't match, e.g. refresh token expired.
     //  2. Token was actively deleted and thus revoked.
     //  3. User explicitly logged out, which will delete **all** sessions for that user.
     //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
+    //  5. User's email is not verified (yet), e.g. right after promoting an anonymous user.
     #[cfg(debug_assertions)]
-    log::debug!("User not found");
+    log::debug!("User not found or unverified");
 
     return Err(AuthError::Unauthorized);
   };
 
   debug_assert!(
-    db_user.email.is_none() || db_user.verified,
+    db_user.unverified_email.is_none(),
     "unverified user, should have been caught by above query"
   );
 

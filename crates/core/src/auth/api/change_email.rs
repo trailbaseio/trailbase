@@ -83,6 +83,7 @@ pub async fn change_email_request_handler(
   let new_email = if let Some(new_email) = request.new_email {
     validate_and_normalize_email_address(&new_email)?
   } else {
+    // Remove email address.
     let user_identifier = state.access_config(|c| c.auth.user_identifier);
     match (
       user_identifier
@@ -95,9 +96,9 @@ pub async fn change_email_request_handler(
       {
         const UNSET_EMAIL_QUERY: &str = formatcp!(
           "\
-            UPDATE \"{USER_TABLE}\" \
-              SET email = NULL, \
-              verified = FALSE \
+            UPDATE \"{USER_TABLE}\" SET \
+              email = NULL, \
+              unverified_email = NULL \
             WHERE \
               id = $1; \
           "
@@ -199,7 +200,7 @@ pub(crate) struct ChangeEmailConfigParams {
 /// Confirm a change of email address.
 #[utoipa::path(
   get,
-  path = "/change_email/confirm/:email_verification_code",
+  path = "/change_email/confirm/{email_verification_code}",
   tag = "auth",
   responses(
     (status = 200, description = "Success, when redirect_uri is not present."),
@@ -225,7 +226,7 @@ pub async fn change_email_confirm_handler(
       UPDATE \"{USER_TABLE}\" \
       SET \
         email = $1, \
-        verified = TRUE \
+        unverified_email = NULL \
       WHERE \
         email = $2 \
     "

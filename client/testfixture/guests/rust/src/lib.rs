@@ -9,8 +9,9 @@ use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::job::Job;
+use trailbase_wasm::sqlite::SqliteFunctionFlag;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
-use trailbase_wasm::{Guest, SqliteFunction, export, sqlite::SqliteFunctionFlags};
+use trailbase_wasm::{Guest, Metadata, SqliteFunction, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
@@ -76,7 +77,12 @@ impl Guest for Endpoints {
         .await
         .map_err(internal)?[0][0];
 
-        eprintln!("[print from WASM guest] user id: {user_id:?}");
+        let user_id_str = match user_id {
+          Value::Blob(b) => BASE64_STANDARD.encode(b),
+          x => format!("{x:?}"),
+        };
+
+        eprintln!("[print from WASM guest] user id: {user_id_str}");
 
         let mut bytes: [u8; 32] = [0; 32];
         trailbase_wasm::rand::get_random_bytes(&mut bytes);
@@ -191,6 +197,7 @@ impl Guest for Endpoints {
         };
         return Ok(BASE64_STANDARD.encode(vec));
       }),
+      routing::get("/dash", async |_req| Ok(DASH)),
     ];
   }
 
@@ -211,8 +218,8 @@ impl Guest for Endpoints {
           return Ok(args[0].clone());
         },
         &[
-          SqliteFunctionFlags::Deterministic,
-          SqliteFunctionFlags::Innocuous,
+          SqliteFunctionFlag::Deterministic,
+          SqliteFunctionFlag::Innocuous,
         ],
       ),
       SqliteFunction::new::<0>(
@@ -225,6 +232,26 @@ impl Guest for Endpoints {
         &[],
       ),
     ];
+  }
+
+  fn metadata() -> Option<Metadata> {
+    let version_info = trailbase_build::get_version_info!();
+
+    return Some(Metadata {
+      display_name: Some("TestFixture Rust".to_string()),
+      icon: Some(ICON.to_string()),
+      description: Some("A component used within Trailbase's tests.".to_string()),
+      version: version_info.git_version().map(|v| {
+        let git_tag = v.tag();
+        let extra_commits = v.commits_since.unwrap_or(0);
+        if extra_commits > 0 {
+          return format!("{git_tag} ({extra_commits})");
+        }
+        return git_tag;
+      }),
+      admin_ui_path: Some("/dash".to_string()),
+      ..Default::default()
+    });
   }
 }
 
@@ -242,3 +269,62 @@ fn fibonacci(n: usize) -> usize {
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
 }
+
+const ICON: &str = r##"<svg height="800px" width="800px" version="1.1" id="_x32_" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512"  xml:space="preserve">
+<g>
+  <path class="st0" d="M424.712,0c-13.927-0.017-25.211,11.233-25.228,25.16c-0.016,13.91,11.25,25.193,25.16,25.21
+    c13.91,0.017,25.203-11.25,25.219-25.169C449.872,11.292,438.622,0.009,424.712,0z"/>
+  <path class="st0" d="M429.087,120.032c0.008-8.193-6.614-14.823-14.789-14.832c-8.192-0.008-14.83,6.622-14.839,14.806
+    c0,8.183,6.63,14.822,14.806,14.822C422.457,134.846,429.087,128.208,429.087,120.032z"/>
+  <path class="st0" d="M461.241,65.304c-9.781-0.026-17.736,7.888-17.736,17.668c-0.018,9.797,7.913,17.711,17.702,17.736
+    c9.764,0,17.719-7.906,17.719-17.694C478.942,73.242,471.02,65.304,461.241,65.304z"/>
+  <path class="st0" d="M78.238,395.333c-19.712,19.713-19.712,51.782,0,71.494c19.713,19.713,51.79,19.713,71.503,0l146.434-146.434
+    H153.186L78.238,395.333z"/>
+  <path class="st0" d="M332.374,121.181c-11.934-11.943-31.36-11.943-43.294,0c-7.72,7.72-10.439,18.564-8.175,28.496l-1.96,1.968
+    L56.752,373.839c-31.57,31.562-31.57,82.921,0,114.483c31.554,31.571,82.922,31.571,114.476,0l222.201-222.193l1.96-1.96
+    c9.932,2.264,20.785-0.456,28.505-8.175c11.934-11.943,11.943-31.36,0-43.294L332.374,121.181z M381.832,257.159l-57.474,57.482
+    L160.957,478.043c-25.946,25.937-67.99,25.937-93.935,0c-25.928-25.937-25.928-67.989,0-93.927l162.599-162.598l58.293-58.277
+    l2.787-2.804c0.388,0.422,0.778,0.828,1.182,1.232l91.52,91.52c0.397,0.405,0.81,0.794,1.225,1.182L381.832,257.159z
+     M413.606,245.715c-4.333,4.333-10.524,5.667-16.014,4.021l-4.164-4.164l-93.926-93.926l-4.164-4.164
+    c-1.656-5.49-0.312-11.689,4.02-16.022c6.276-6.275,16.461-6.275,22.736,0l91.511,91.51
+    C419.889,229.254,419.889,239.432,413.606,245.715z"/>
+</g>
+</svg>"##;
+
+const DASH: &str = r##"
+<html>
+<body style="background-color:#92a8d1;">
+  <h1>Testfixture Dash</h1>
+
+  <div style="display: flex; flex-direction: column; gap: 8px; width: fit-content;">
+    <pre id="location"></pre>
+
+    <button type="button" onclick="test();">
+      alert
+    </button>
+
+    <button type="button" onclick="externalFetch();">
+      fetch
+    </button>
+
+    <img src="https://picsum.photos/200" alt="external img" />
+  </div>
+</body>
+
+<script>
+  function test() {
+    alert("test");
+  }
+
+  async function externalFetch() {
+    const url = "https://trailbase.io";
+    console.debug("fetching:", url);
+    const resp = await fetch(url);
+    console.debug("got:", resp.status());
+  }
+
+  const el = document.getElementById("location");
+  el.textContent = JSON.stringify(window.location, null, 2);
+</script>
+</html>
+"##;

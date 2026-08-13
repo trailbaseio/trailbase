@@ -7,6 +7,7 @@ pub mod config;
 pub mod constants;
 pub mod logging;
 pub mod metadata;
+pub mod openapi;
 pub mod records;
 pub mod util;
 
@@ -35,9 +36,10 @@ mod wasm;
 #[cfg(not(feature = "wasm"))]
 mod wasm {
   use axum::Router;
-  use std::path::PathBuf;
-  use std::sync::Arc;
+  use std::path::{Path, PathBuf};
+  use std::sync::{Arc, LazyLock};
   use tokio::sync::RwLock;
+  use trailbase_wasm_common::manifest::Metadata;
 
   use crate::AppState;
 
@@ -60,14 +62,12 @@ mod wasm {
   pub(crate) struct Runtime;
 
   impl Runtime {
-    pub fn component_path(&self) -> PathBuf {
-      return std::path::PathBuf::default();
+    pub fn component_path(&self) -> &Path {
+      static DEFAULT: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::default());
+      return &DEFAULT;
     }
   }
 
-  // pub(crate) type WasmRuntimeBuilder =
-  //   Box<dyn Fn() -> Result<Vec<Runtime>, crate::wasm::AnyError> + Send + Sync>;
-  //
   pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, AnyError> + Send + Sync;
 
   pub(crate) fn wasm_runtime_builders(
@@ -98,7 +98,7 @@ mod wasm {
   #[cfg(not(feature = "wasm"))]
   pub(crate) async fn install_routes_and_jobs(
     _state: &AppState,
-    _runtime: Arc<RwLock<Runtime>>,
+    _runtime: Arc<RwLock<(Option<Metadata>, Runtime)>>,
   ) -> Result<Option<Router<AppState>>, AnyError> {
     return Ok(None);
   }
@@ -123,26 +123,8 @@ static DESCRIPTOR_POOL: LazyLock<DescriptorPool> = LazyLock::new(|| {
   DescriptorPool::decode(FILE_DESCRIPTOR_SET).expect("Failed to load file descriptor set")
 });
 
-pub mod openapi {
-  use utoipa::OpenApi;
-
-  #[derive(OpenApi)]
-  #[openapi(
-        info(
-            title = "TrailBase",
-            description = "TrailBase APIs",
-        ),
-        nest(
-            (path = "/api/auth/v1", api = crate::auth::AuthApi),
-            (path = "/api/records/v1", api = crate::records::RecordOpenApi),
-        ),
-        tags(),
-    )]
-  pub struct Doc;
-}
-
 pub mod api {
-  pub use crate::admin::user::{CreateUserRequest, create_user_handler};
+  pub use crate::admin::user::create_user::{CreateUserRequest, create_user_handler};
   pub use crate::app_state::InitArgs;
   pub use crate::auth::{AuthTokenClaims, JwtHelper, cli};
   pub use crate::backup::{Backup, backup_all, delete_backups, find_backups, restore_all};

@@ -1,19 +1,16 @@
-import * as JSON from "../json";
-
 import { Transaction as WasiTransaction } from "trailbase:database/sqlite@0.1.1";
-
 import type { SqliteRequest } from "@common/SqliteRequest";
-import type { Value } from "./value";
-
 import { SqlValue } from "@common/SqlValue";
+
+import * as JSON from "../json";
 import {
   fromJsonSqlValue,
   fromWitValue,
   toJsonSqlValue,
   toWitValue,
+  type Value,
 } from "./value";
 
-export type { Value } from "trailbase:database/sqlite@0.1.1";
 export { escape } from "./value";
 
 export class Transaction {

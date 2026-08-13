@@ -14,7 +14,7 @@ use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::write_queries::run_delete_query;
 
-#[derive(Debug, Serialize, Deserialize, TS)]
+#[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DeleteRowRequest {
   primary_key_column: String,
@@ -22,6 +22,15 @@ pub struct DeleteRowRequest {
   value: SqlValue,
 }
 
+#[utoipa::path(
+  delete,
+  path = "/table/{table_name}",
+  tag = "admin",
+  request_body = DeleteRowRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn delete_row_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,
@@ -81,7 +90,7 @@ pub(crate) async fn delete_row(
   return Ok(());
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, TS)]
+#[derive(Debug, Serialize, Deserialize, Default, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct DeleteRowsRequest {
   /// Name of the primary key column we use to identify which rows to delete.
@@ -92,6 +101,15 @@ pub struct DeleteRowsRequest {
   values: Vec<SqlValue>,
 }
 
+#[utoipa::path(
+  delete,
+  path = "/table/{table_name}/rows",
+  tag = "admin",
+  request_body = DeleteRowsRequest,
+  responses(
+    (status = 200, description = "Success"),
+  )
+)]
 pub async fn delete_rows_handler(
   State(state): State<AppState>,
   Path(table_name): Path<String>,
@@ -128,7 +146,7 @@ mod tests {
   use crate::admin::rows::insert_row::{InsertRowRequest, insert_row_handler};
   use crate::admin::rows::list_rows::list_rows_handler;
   use crate::admin::rows::update_row::{UpdateRowRequest, update_row_handler};
-  use crate::admin::table::{CreateTableRequest, create_table_handler};
+  use crate::admin::table::create_table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
   use crate::util::{row_id_column, uuid_to_b64};
 
