@@ -171,7 +171,7 @@ pub(super) fn sqlite_logger_make_span(request: &Request<Body>) -> Span {
       uri = %request.uri(),
       version = ?request.version(),
       host = get_header(headers, "host"),
-      client_ip = extract_ip(request).map(|ip| ip.to_string()),
+      client_ip = extract_ip(headers, request.extensions()).map(|ip| ip.to_string()),
       user_agent = get_header(headers, "user-agent"),
       referer = get_header(headers, "referer"),
       // Reserve placeholders that may be recorded later.

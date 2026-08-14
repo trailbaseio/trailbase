@@ -3,7 +3,8 @@ use std::sync::Arc;
 use axum::Router;
 use axum::body::Body;
 use axum::extract::{Form, Json as AxumJson, Path, Query, Request, State};
-use axum::http::{Method, StatusCode, header};
+use axum::http::uri::Scheme;
+use axum::http::{Method, StatusCode, header, uri};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
@@ -23,7 +24,7 @@ use crate::admin;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{AuthError, AuthTokenClaims, User};
-use crate::extract::ip::{Host, RealIp};
+use crate::extract::ip::Host;
 
 const MCP_SCOPE: &str = "mcp";
 const MCP_PATH: &str = "/mcp";
@@ -263,10 +264,10 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
       get(protected_resource_metadata_handler),
     )
     // QUESTION: Is this "/mcp" needed atop the root one above?
-    .route(
-      "/.well-known/oauth-protected-resource/mcp",
-      get(protected_resource_metadata_handler),
-    )
+    // .route(
+    //   "/.well-known/oauth-protected-resource/mcp",
+    //   get(protected_resource_metadata_handler),
+    // )
     .route(
       "/.well-known/oauth-authorization-server",
       get(authorization_server_metadata_handler),
@@ -283,15 +284,17 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
 
 async fn assert_mcp_access(
   State(state): State<AppState>,
+  Host(authority): Host,
   request: Request,
   next: Next,
 ) -> Response {
+  let authority = authority.unwrap_or_else(|| uri::Authority::from_static("localhost:4000"));
   let user_id = request
     .headers()
     .get(header::AUTHORIZATION)
     .and_then(|value| value.to_str().ok())
     .and_then(|value| value.strip_prefix("Bearer "))
-    .and_then(|token| mcp_user_id(&state, token));
+    .and_then(|token| mcp_user_id(&state, authority.clone(), token));
 
   if let Some(user_id) = user_id
     && is_admin(&state, &user_id).await
@@ -305,7 +308,7 @@ async fn assert_mcp_access(
       header::WWW_AUTHENTICATE,
       format!(
         r#"Bearer resource_metadata="{metadata}", scope="{MCP_SCOPE}""#,
-        metadata = external_url2(&state, "/.well-known/oauth-protected-resource"),
+        metadata = build_uri(&authority, "/.well-known/oauth-protected-resource").unwrap(),
       ),
     )
     .body(axum::body::Body::empty())
@@ -328,10 +331,12 @@ struct CompatibilityAccessTokenClaims {
   aud: Option<String>,
 }
 
-fn mcp_user_id(state: &AppState, token: &str) -> Option<uuid::Uuid> {
+fn mcp_user_id(state: &AppState, authority: uri::Authority, token: &str) -> Option<uuid::Uuid> {
+  let audience = build_uri(&authority, MCP_PATH)?.to_string();
+
   if let Ok(claims) = state
     .jwt()
-    .decode_with_audience::<McpAccessTokenClaims>(token, &external_url2(state, MCP_PATH))
+    .decode_with_audience::<McpAccessTokenClaims>(token, &audience)
   {
     if !claims.scope.split(' ').any(|scope| scope == MCP_SCOPE) {
       return None;
@@ -360,15 +365,14 @@ struct ProtectedResourceMetadata {
 }
 
 async fn protected_resource_metadata_handler(
-  State(state): State<AppState>,
-  RealIp(ip): RealIp,
   Host(authority): Host,
 ) -> AxumJson<ProtectedResourceMetadata> {
-  let issuer = external_url2(&state, "");
-  let resource = external_url2(&state, MCP_PATH);
+  let authority = authority.unwrap_or_else(|| uri::Authority::from_static("localhost:4000"));
+  let issuer = build_uri(&authority, "").unwrap().to_string();
+  let resource = build_uri(&authority, MCP_PATH).unwrap().to_string();
 
   // FIXME: Remove
-  log::debug!("ip: {ip:?}, authority: {authority:?}, issuer: {issuer}, resource: {resource}");
+  log::debug!("authority: {authority:?}, issuer: {issuer}, resource: {resource}");
 
   AxumJson(ProtectedResourceMetadata {
     resource,
@@ -393,12 +397,19 @@ struct AuthorizationServerMetadata {
 
 async fn authorization_server_metadata_handler(
   State(state): State<AppState>,
+  Host(authority): Host,
 ) -> AxumJson<AuthorizationServerMetadata> {
+  let authority = authority.unwrap_or_else(|| uri::Authority::from_static("localhost:4000"));
+
   return AxumJson(AuthorizationServerMetadata {
-    issuer: external_url2(&state, ""),
-    authorization_endpoint: external_url2(&state, "/_/mcp/authorize"),
-    token_endpoint: external_url2(&state, "/_/mcp/token"),
-    registration_endpoint: external_url2(&state, "/_/mcp/register"),
+    issuer: build_uri(&authority, "").unwrap().to_string(),
+    authorization_endpoint: build_uri(&authority, "/_/mcp/authorize")
+      .unwrap()
+      .to_string(),
+    token_endpoint: build_uri(&authority, "/_/mcp/token").unwrap().to_string(),
+    registration_endpoint: build_uri(&authority, "/_/mcp/register")
+      .unwrap()
+      .to_string(),
     response_types_supported: vec!["code"],
     grant_types_supported: vec!["authorization_code", "refresh_token"],
     code_challenge_methods_supported: vec!["S256"],
@@ -499,9 +510,12 @@ struct FlowClaims {
 
 async fn authorize_handler(
   State(state): State<AppState>,
+  Host(authority): Host,
   user: Option<User>,
   Query(query): Query<AuthorizeQuery>,
 ) -> Result<Response, OAuthError> {
+  let authority = authority.unwrap_or_else(|| uri::Authority::from_static("localhost:4000"));
+  let expected_resource = build_uri(&authority, MCP_PATH).unwrap().to_string();
   let client: ClientClaims = state
     .jwt()
     .decode(&query.client_id)
@@ -517,7 +531,7 @@ async fn authorize_handler(
     || query
       .resource
       .as_deref()
-      .is_some_and(|resource| resource != external_url2(&state, MCP_PATH))
+      .is_some_and(|resource| resource != expected_resource)
   {
     return Err(OAuthError::invalid_request("invalid authorization request"));
   }
@@ -610,12 +624,15 @@ struct TokenResponse {
 
 async fn oauth_token_handler(
   State(state): State<AppState>,
+  Host(authority): Host,
   Form(request): Form<TokenRequest>,
 ) -> Result<AxumJson<TokenResponse>, OAuthError> {
+  let authority = authority.unwrap_or_else(|| uri::Authority::from_static("localhost:4000"));
+  let expected_resource = build_uri(&authority, MCP_PATH).unwrap().to_string();
   if request
     .resource
     .as_deref()
-    .is_some_and(|resource| resource != external_url2(&state, MCP_PATH))
+    .is_some_and(|resource| resource != expected_resource)
   {
     return Err(OAuthError::invalid_grant("invalid resource"));
   }
@@ -678,7 +695,7 @@ async fn oauth_token_handler(
     .jwt()
     .encode(&McpAccessTokenClaims {
       auth: claims,
-      aud: external_url2(&state, MCP_PATH),
+      aud: expected_resource,
       scope: MCP_SCOPE.to_string(),
     })
     .map_err(|err| OAuthError::server(err.to_string()))?;
@@ -783,15 +800,46 @@ fn external_url(state: &AppState, path: &str) -> String {
   base.to_string().trim_end_matches('/').to_string()
 }
 
-fn external_url2(state: &AppState, path: &str) -> String {
-  // FIXME: Hard-coded port 4000.
-  // FIXME: Doesn't work for local workflow were site_url may be set.
-  let mut base = url::Url::parse("http://localhost:4000").expect("constant URL");
+// fn external_url2(state: &AppState, path: &str) -> String {
+//   // FIXME: Hard-coded port 4000.
+//   // FIXME: Doesn't work for local workflow were site_url may be set.
+//   let mut base = url::Url::parse("http://localhost:4000").expect("constant URL");
+//
+//   base.set_path(path);
+//   base.set_query(None);
+//   base.set_fragment(None);
+//   base.to_string().trim_end_matches('/').to_string()
+// }
 
-  base.set_path(path);
-  base.set_query(None);
-  base.set_fragment(None);
-  base.to_string().trim_end_matches('/').to_string()
+fn build_uri(authority: &uri::Authority, path: &str) -> Option<uri::Uri> {
+  return axum::http::uri::Uri::builder()
+    .scheme(if is_local_host(authority) {
+      Scheme::HTTP
+    } else {
+      Scheme::HTTPS
+    })
+    .authority(authority.clone())
+    .path_and_query(path)
+    .build()
+    .ok();
+}
+
+fn is_local_host(authority: &uri::Authority) -> bool {
+  let host = authority.host();
+
+  if host.eq_ignore_ascii_case("localhost") {
+    return true;
+  }
+
+  use std::net::IpAddr;
+  if let Ok(ip) = host.parse::<IpAddr>() {
+    return match ip {
+      IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local(),
+      IpAddr::V6(v6) => v6.is_loopback() || v6.is_unicast_link_local(),
+    };
+  }
+
+  return false;
 }
 
 fn normalize_admin_path(path: &str) -> Result<String, McpError> {
@@ -838,8 +886,10 @@ mod tests {
     .await
     .unwrap();
 
+    let authority = uri::Authority::from_static("localhost:4000");
     let redirect = authorize_handler(
       State(state),
+      Host(Some(authority)),
       None,
       Query(AuthorizeQuery {
         client_id: registration.client_id,
@@ -927,15 +977,19 @@ mod tests {
       csrf_token: "csrf".to_string(),
     };
 
+    let authority = uri::Authority::from_static("localhost:4000");
     let scoped = state
       .jwt()
       .encode(&McpAccessTokenClaims {
         auth: claims.clone(),
-        aud: external_url2(&state, MCP_PATH),
+        aud: build_uri(&authority, MCP_PATH),
         scope: MCP_SCOPE.to_string(),
       })
       .unwrap();
-    assert_eq!(mcp_user_id(&state, &scoped), Some(user_id));
+    assert_eq!(
+      mcp_user_id(&state, authority.clone(), &scoped),
+      Some(user_id)
+    );
 
     let wrong_audience = state
       .jwt()
@@ -945,9 +999,15 @@ mod tests {
         scope: MCP_SCOPE.to_string(),
       })
       .unwrap();
-    assert_eq!(mcp_user_id(&state, &wrong_audience), None);
+    assert_eq!(
+      mcp_user_id(&state, authority.clone(), &wrong_audience),
+      None
+    );
 
     let legacy = state.jwt().encode(&claims).unwrap();
-    assert_eq!(mcp_user_id(&state, &legacy), Some(user_id));
+    assert_eq!(
+      mcp_user_id(&state, authority.clone(), &legacy),
+      Some(user_id)
+    );
   }
 }
