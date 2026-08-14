@@ -3,6 +3,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
@@ -494,9 +495,14 @@ async fn async_main(
         csrf_token: String,
       }
 
-      let Tokens{
-                auth_token,refresh_token, csrf_token
-            }= serde_json::from_str(&tokens)?;
+      let tokens = BASE64_STANDARD
+        .decode(&tokens)
+        .map_or(tokens, |b| String::from_utf8_lossy(&b).to_string());
+      let Tokens {
+        auth_token,
+        refresh_token,
+        csrf_token,
+      } = serde_json::from_str(&tokens)?;
       let json = trailbase::openapi::build_api_definitions(
         /* config= */ None, /* include_admin= */ true,
       )
@@ -510,14 +516,8 @@ async fn async_main(
           AUTHORIZATION,
           HeaderValue::from_str(&format!("Bearer {auth_token}"))?,
         );
-        headers.insert(
-          "Refresh-Token",
-          HeaderValue::from_str(&refresh_token)?,
-        );
-        headers.insert(
-          "CSRF-Token",
-          HeaderValue::from_str(&csrf_token)?,
-        );
+        headers.insert("Refresh-Token", HeaderValue::from_str(&refresh_token)?);
+        headers.insert("CSRF-Token", HeaderValue::from_str(&csrf_token)?);
 
         headers
       };

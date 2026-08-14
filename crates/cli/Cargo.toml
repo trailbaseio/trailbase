@@ -20,6 +20,7 @@ ws = ["trailbase/ws"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
+base64 = { workspace = true }
 chrono = "^0.4.38"
 clap = { workspace = true }
 env_logger = { workspace = true }

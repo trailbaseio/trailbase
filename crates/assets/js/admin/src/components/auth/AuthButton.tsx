@@ -35,9 +35,16 @@ export function AuthButton(props: { iconSize: number }) {
         </Show>
 
         {import.meta.env.DEV && (
-          <div class="flex flex-col gap-2 overflow-scroll">
-            <span>Tokens </span>
-            {JSON.stringify(client.tokens())}
+          <div class="flex w-full flex-col gap-2">
+            <span>Tokens:</span>
+
+            <div class="w-full overflow-x-scroll">
+              {JSON.stringify(client.tokens())}
+            </div>
+
+            <div class="w-full overflow-x-scroll">
+              {btoa(JSON.stringify(client.tokens()))}
+            </div>
           </div>
         )}
 
