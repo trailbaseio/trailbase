@@ -356,7 +356,7 @@ pub(crate) async fn build_auth_token_flow_response(
 ///
 /// An example using the two-step "authentication code flow" with PKCE can be found in
 /// `/examples/blog/flutter`.
-async fn build_authorization_code_flow_and_pkce_response(
+pub(crate) async fn build_authorization_code_flow_and_pkce_response(
   state: &AppState,
   db_user: &DbUser,
   redirect: String,
