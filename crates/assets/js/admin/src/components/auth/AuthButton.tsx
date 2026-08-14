@@ -34,6 +34,13 @@ export function AuthButton(props: { iconSize: number }) {
           <Profile user={user()!} twoFactorEnabled={hasTotp()} />
         </Show>
 
+        {import.meta.env.DEV && (
+          <div class="flex flex-col gap-2 overflow-scroll">
+            <span>Tokens </span>
+            {JSON.stringify(client.tokens())}
+          </div>
+        )}
+
         <DialogFooter>
           <Show when={user()}>
             <TotpToggleButton client={client} user={user()!} />
