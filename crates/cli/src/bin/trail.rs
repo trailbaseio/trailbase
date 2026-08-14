@@ -3,6 +3,7 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
@@ -157,7 +158,7 @@ async fn async_main(
       let mut migration_file = std::fs::File::create_new(&path)?;
       migration_file.write_all(b"-- new database migration\n")?;
 
-      println!("Created empty migration file: {path:?}");
+      eprintln!("Created empty migration file: {path:?}");
     }
     SubCommands::Admin { cmd } => {
       let (_new_db, state) = AppState::init(InitArgs {
@@ -190,13 +191,13 @@ async fn async_main(
           let id =
             api::cli::demote_admin_to_user(state.user_conn(), UserReference::parse(user)?).await?;
 
-          println!("Demoted admin to user for '{id}'");
+          eprintln!("Demoted admin to user for '{id}'");
         }
         Some(AdminSubCommands::Promote { user }) => {
           let id =
             api::cli::promote_user_to_admin(state.user_conn(), UserReference::parse(user)?).await?;
 
-          println!("Promoted user to admin for '{id}'");
+          eprintln!("Promoted user to admin for '{id}'");
         }
         None => {
           CommandLineArgs::command()
@@ -219,14 +220,14 @@ async fn async_main(
             api::cli::change_password(state.user_conn(), UserReference::parse(user)?, &password)
               .await?;
 
-          println!("Updated password for '{id}'");
+          eprintln!("Updated password for '{id}'");
         }
         Some(UserSubCommands::ChangeEmail { user, new_email }) => {
           let id =
             api::cli::change_email(state.user_conn(), UserReference::parse(user)?, &new_email)
               .await?;
 
-          println!("Updated email for '{id}'");
+          eprintln!("Updated email for '{id}'");
         }
         Some(UserSubCommands::ChangeUsername { user, new_username }) => {
           api::cli::change_username(
@@ -239,18 +240,18 @@ async fn async_main(
         Some(UserSubCommands::Add { email, password }) => {
           api::cli::add_user(state.user_conn(), &email, &password).await?;
 
-          println!("Added user '{email}'");
+          eprintln!("Added user '{email}'");
         }
         Some(UserSubCommands::Delete { user }) => {
           api::cli::delete_user(state.user_conn(), UserReference::parse(&user)?).await?;
 
-          println!("Deleted user '{user}'");
+          eprintln!("Deleted user '{user}'");
         }
         Some(UserSubCommands::Verify { user, verified }) => {
           let id = api::cli::set_verified(state.user_conn(), UserReference::parse(user)?, verified)
             .await?;
 
-          println!("Set verified={verified} for '{id}'");
+          eprintln!("Set verified={verified} for '{id}'");
         }
         Some(UserSubCommands::InvalidateSession { user }) => {
           api::cli::invalidate_sessions(
@@ -260,7 +261,7 @@ async fn async_main(
           )
           .await?;
 
-          println!("Sessions invalidated for '{user}'");
+          eprintln!("Sessions invalidated for '{user}'");
         }
         Some(UserSubCommands::MintToken { user }) => {
           let auth_token = api::cli::mint_auth_token(
@@ -270,7 +271,7 @@ async fn async_main(
             UserReference::parse(&user)?,
           )
           .await?;
-          println!("Bearer {auth_token}");
+          eprintln!("Bearer {auth_token}");
         }
         Some(UserSubCommands::Import {
           dry_run,
@@ -280,7 +281,7 @@ async fn async_main(
             let contents = std::fs::read_to_string(&auth0_json)?;
             let users = trailbase_cli::import::read_auth0_nd_json(&contents)?;
 
-            println!("Importing {} users.", users.len());
+            eprintln!("Importing {} users.", users.len());
 
             if !dry_run {
               api::cli::import_users(state.user_conn(), users).await?;
@@ -310,10 +311,10 @@ async fn async_main(
       let c = state.get_config().email.clone();
       match (c.smtp_host, c.smtp_port, c.smtp_username, c.smtp_password) {
         (Some(host), Some(port), Some(username), Some(_)) => {
-          println!("Sent email using: {username}@{host}:{port}");
+          eprintln!("Sent email using: {username}@{host}:{port}");
         }
         _ => {
-          println!("Sent email using system's sendmail");
+          eprintln!("Sent email using system's sendmail");
         }
       };
     }
@@ -346,7 +347,7 @@ async fn async_main(
             }
           };
 
-          println!("Added: {paths:?}");
+          eprintln!("Added: {paths:?}");
         }
         Some(ComponentSubCommands::Remove { reference }) => {
           match ComponentReference::try_from(reference.as_str())? {
@@ -366,12 +367,12 @@ async fn async_main(
               for filename in &filenames {
                 std::fs::remove_file(filename)?;
               }
-              println!("Removed: {filenames:?}");
+              eprintln!("Removed: {filenames:?}");
             }
             ComponentReference::Path(path) => {
               std::fs::remove_file(&path)?;
 
-              println!("Removed: {path:?}");
+              eprintln!("Removed: {path:?}");
             }
           }
         }
@@ -423,7 +424,7 @@ async fn async_main(
               install_wasm_component(&data_dir.wasm_path(), filename, std::io::Cursor::new(bytes))
                 .await?;
 
-            println!("Updated : {paths:?}");
+            eprintln!("Updated : {paths:?}");
           }
         }
         _ => {
@@ -459,14 +460,14 @@ async fn async_main(
           state.access_config(|c| c.server.backup_window_size.unwrap_or(5)) as usize;
 
         if backup_window_size == 0 {
-          println!("Skipping backup. Window size explicitly set to 0");
+          eprintln!("Skipping backup. Window size explicitly set to 0");
           return Ok(());
         }
 
         api::backup_all(&data_dir, &state.connection_manager(), &state.get_config()).await?;
         api::delete_backups(&data_dir, backup_window_size).await?;
 
-        println!("Backup succeeded.");
+        eprintln!("Backup succeeded.");
       }
       Some(BackupSubCommands::Restore { timestamp }) => {
         let instant = chrono::DateTime::from_timestamp(timestamp, 0).ok_or("invalid timestamp")?;
@@ -478,7 +479,7 @@ async fn async_main(
 
         api::restore_all(&data_dir, &backup).await?;
 
-        println!("Backup restored.");
+        eprintln!("Backup restored.");
       }
       _ => {
         CommandLineArgs::command()
@@ -486,6 +487,81 @@ async fn async_main(
           .map(|cmd| cmd.print_help());
       }
     },
+    SubCommands::Mcp { address, tokens } => {
+      use trailbase_client::{Client, ClientOptions, Tokens};
+
+      let address = url::Url::parse(address.as_deref().unwrap_or("http://localhost:4000"))?;
+      let tokens = BASE64_STANDARD
+        .decode(&tokens)
+        .map_or(tokens, |b| String::from_utf8_lossy(&b).to_string());
+
+      let client = Client::new(
+        address.clone(),
+        Some(ClientOptions {
+          tokens: Some(serde_json::from_str::<Tokens>(&tokens)?),
+          ..Default::default()
+        }),
+      )?;
+
+      // Make sure tokens are valid and up-to-date.
+      let refreshed = client.refresh().await?;
+      eprintln!("tokens refreshed: {refreshed}");
+
+      let json = trailbase::openapi::build_api_definitions(
+        /* config= */ None, /* include_admin= */ true,
+      )
+      .to_json()?;
+
+      let headers = {
+        use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
+
+        let Some(Tokens {
+          auth_token,
+          refresh_token,
+          csrf_token,
+        }) = client.tokens()
+        else {
+          return Err("Missing tokens".into());
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+          AUTHORIZATION,
+          HeaderValue::from_str(&format!("Bearer {auth_token}"))?,
+        );
+        if let Some(refresh_token) = refresh_token {
+          headers.insert("Refresh-Token", HeaderValue::from_str(&refresh_token)?);
+        }
+        if let Some(csrf_token) = csrf_token {
+          headers.insert("CSRF-Token", HeaderValue::from_str(&csrf_token)?);
+        }
+
+        headers
+      };
+
+      let mut server = rmcp_openapi::Server::builder()
+        // QUESTION: Can we avoid the serialization/deserialization detour?
+        .openapi_spec(serde_json::from_str(&json)?)
+        .default_headers(headers)
+        .base_url(address)
+        // .authorization_mode(rmcp_openapi::AuthorizationMode::PassthroughSilent)
+        .build();
+
+      server.load_openapi_spec()?;
+
+      // Serve over stdio instead of HTTP
+      eprintln!("start listening on stdio");
+      let service = rmcp::service::serve_server(
+        trailbase_cli::mcp::McpServer::from(client, server),
+        rmcp::transport::stdio(),
+      )
+      .await?;
+
+      eprintln!("started waiting");
+
+      // QUESTION: is this needed?
+      service.waiting().await?;
+    }
   }
 
   return Ok(());

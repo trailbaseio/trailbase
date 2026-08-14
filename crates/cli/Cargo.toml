@@ -20,6 +20,7 @@ ws = ["trailbase/ws"]
 
 [dependencies]
 axum = { version = "^0.8.1", features=["multipart"] }
+base64 = { workspace = true }
 chrono = "^0.4.38"
 clap = { workspace = true }
 env_logger = { workspace = true }
@@ -27,6 +28,9 @@ itertools = "0.15.0"
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 reqwest = { workspace = true }
+# Version constrained to v1 by rmcp-openapi.
+rmcp = { version = "^1.0.0", default-features = false, features = ["server", "transport-io"] }
+rmcp-openapi = { version = "0.31.3", default-features = false }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -35,6 +39,7 @@ tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 trailbase = { workspace = true }
 trailbase-build = { workspace = true }
+trailbase-client = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-component-repo = { workspace = true }

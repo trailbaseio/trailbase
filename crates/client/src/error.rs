@@ -16,7 +16,7 @@ pub enum Error {
   InvalidRecord,
 
   #[error("InvalidUrl: {0}")]
-  InvalidUrl(url::ParseError),
+  InvalidUrl(#[from] url::ParseError),
 
   // NOTE: This error is leaky but comprehensively unpacking reqwest is unsustainable.
   #[error("Reqwest: {0}")]
@@ -25,6 +25,12 @@ pub enum Error {
   #[cfg(feature = "ws")]
   #[error("WebSocket: {0}")]
   WebSocket(#[from] reqwest_websocket::Error),
+}
+
+impl From<std::convert::Infallible> for Error {
+  fn from(err: std::convert::Infallible) -> Self {
+    match err {}
+  }
 }
 
 impl From<reqwest::Error> for Error {

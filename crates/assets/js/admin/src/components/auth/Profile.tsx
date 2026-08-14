@@ -42,8 +42,8 @@ export function Profile(props: {
   return (
     <div class="flex w-full shrink flex-col">
       <div class="flex shrink items-center gap-4">
-        <div class="flex items-center">
-          <Avatar user={props.user} size={60} />
+        <div class="m-1 flex items-center">
+          <Avatar user={props.user} size={40} />
         </div>
 
         <div class="flex w-full flex-col gap-2 break-all">

@@ -95,6 +95,14 @@ pub enum SubCommands {
     #[command(subcommand)]
     cmd: Option<BackupSubCommands>,
   },
+  /// Starts a dev-only MCP server.
+  Mcp {
+    /// Address of the TrailBase server the MCP talks to.
+    address: Option<String>,
+    /// Admin credentials to authenticate requests.
+    #[arg(long, env)]
+    tokens: String,
+  },
 }
 
 #[derive(Args, Clone, Debug)]
@@ -291,5 +299,8 @@ pub enum BackupSubCommands {
   /// Trigger a new backup
   Trigger,
   /// List available first-party components.
-  Restore { timestamp: i64 },
+  Restore {
+    /// Backup to restore.
+    timestamp: i64,
+  },
 }

@@ -2,6 +2,7 @@
 
 mod args;
 pub mod import;
+pub mod mcp;
 
 pub use args::{
   AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, EmailArgs,

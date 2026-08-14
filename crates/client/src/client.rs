@@ -176,12 +176,16 @@ pub struct Client {
 }
 
 impl Client {
-  pub fn new(
-    base_url: impl TryInto<url::Url, Error = url::ParseError>,
+  pub fn new<E>(
+    base_url: impl TryInto<url::Url, Error = E>,
     opts: Option<ClientOptions>,
-  ) -> Result<Client, Error> {
+  ) -> Result<Client, Error>
+  where
+    Error: From<E>,
+  {
     let opts = opts.unwrap_or_default();
-    let base_url = base_url.try_into().map_err(Error::InvalidUrl)?;
+    let base_url: url::Url = base_url.try_into()?;
+
     return Ok(Client {
       state: Arc::new(ClientState {
         transport: opts.transport.unwrap_or_else(|| {
