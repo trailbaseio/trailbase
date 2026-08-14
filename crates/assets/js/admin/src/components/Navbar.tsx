@@ -109,7 +109,14 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
         back={() => setDirtyDialog(null)}
       />
 
-      <a href={`${BASE}/`} onClick={(e) => onClick(e, `${BASE}/`)}>
+      {/* Hide the logo if it would shrink otherwise */}
+      <a
+        class={
+          props.horizontal ? "hidden shrink-0 min-[486px]:block" : undefined
+        }
+        href={`${BASE}/`}
+        onClick={(e) => onClick(e, `${BASE}/`)}
+      >
         <img src={logo} width={props.horizontal ? "34" : "42"} alt="Logo" />
       </a>
 
@@ -138,17 +145,11 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
   );
 }
 
-function NavFooter(props: { horizontal: boolean }) {
+function NavFooterItems(props: { horizontal: boolean }) {
   const systemInfo = createSystemInfoQuery();
 
   return (
-    <div
-      class={
-        props.horizontal
-          ? "flex items-center gap-4"
-          : "flex flex-col items-center"
-      }
-    >
+    <>
       <Tooltip>
         <TooltipTrigger as="div">
           <SwitchThemeButton horizontal={props.horizontal} />
@@ -168,7 +169,7 @@ function NavFooter(props: { horizontal: boolean }) {
           <Version info={systemInfo.data} />
         </div>
       </Show>
-    </div>
+    </>
   );
 }
 
@@ -179,28 +180,32 @@ export function HorizontalNavbar(props: {
   return (
     <nav
       style={{ height: `${props.height}px` }}
-      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between gap-2 border-b p-2"
+      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between gap-2 overflow-x-auto overflow-y-hidden border-b p-2"
     >
       <NavbarItems location={props.location} horizontal={true} />
 
-      <NavFooter horizontal={true} />
+      <div class="flex items-center gap-2">
+        <NavFooterItems horizontal={true} />
+      </div>
     </nav>
   );
 }
 
 export function VerticalNavbar(props: { location: Location }) {
   return (
-    <div
+    <nav
       class={
         "border-border bg-sidebar text-sidebar-foreground flex h-dvh grow flex-col items-center justify-between gap-4 border-r py-2"
       }
     >
-      <nav class="flex flex-col items-center gap-4">
+      <div class="flex flex-col items-center gap-4">
         <NavbarItems location={props.location} horizontal={false} />
-      </nav>
+      </div>
 
-      <NavFooter horizontal={false} />
-    </div>
+      <div class="flex flex-col items-center">
+        <NavFooterItems horizontal={false} />
+      </div>
+    </nav>
   );
 }
 
