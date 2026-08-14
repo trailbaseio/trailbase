@@ -23,6 +23,7 @@ use crate::admin;
 use crate::app_state::AppState;
 use crate::auth::util::is_admin;
 use crate::auth::{AuthError, AuthTokenClaims, User};
+use crate::extract::ip::{Host, RealIp};
 
 const MCP_SCOPE: &str = "mcp";
 const MCP_PATH: &str = "/mcp";
@@ -261,6 +262,7 @@ pub(crate) fn router(state: &AppState) -> Router<AppState> {
       "/.well-known/oauth-protected-resource",
       get(protected_resource_metadata_handler),
     )
+    // QUESTION: Is this "/mcp" needed atop the root one above?
     .route(
       "/.well-known/oauth-protected-resource/mcp",
       get(protected_resource_metadata_handler),
@@ -303,7 +305,7 @@ async fn assert_mcp_access(
       header::WWW_AUTHENTICATE,
       format!(
         r#"Bearer resource_metadata="{metadata}", scope="{MCP_SCOPE}""#,
-        metadata = external_url(&state, "/.well-known/oauth-protected-resource"),
+        metadata = external_url2(&state, "/.well-known/oauth-protected-resource"),
       ),
     )
     .body(axum::body::Body::empty())
@@ -327,10 +329,9 @@ struct CompatibilityAccessTokenClaims {
 }
 
 fn mcp_user_id(state: &AppState, token: &str) -> Option<uuid::Uuid> {
-  let resource = external_url(state, MCP_PATH);
   if let Ok(claims) = state
     .jwt()
-    .decode_with_audience::<McpAccessTokenClaims>(token, &resource)
+    .decode_with_audience::<McpAccessTokenClaims>(token, &external_url2(state, MCP_PATH))
   {
     if !claims.scope.split(' ').any(|scope| scope == MCP_SCOPE) {
       return None;
@@ -360,14 +361,17 @@ struct ProtectedResourceMetadata {
 
 async fn protected_resource_metadata_handler(
   State(state): State<AppState>,
+  RealIp(ip): RealIp,
+  Host(authority): Host,
 ) -> AxumJson<ProtectedResourceMetadata> {
-  let issuer = external_url(&state, "");
+  let issuer = external_url2(&state, "");
+  let resource = external_url2(&state, MCP_PATH);
 
   // FIXME: Remove
-  println!("issuer: {issuer}");
+  log::debug!("ip: {ip:?}, authority: {authority:?}, issuer: {issuer}, resource: {resource}");
 
   AxumJson(ProtectedResourceMetadata {
-    resource: external_url(&state, MCP_PATH),
+    resource,
     authorization_servers: vec![issuer],
     scopes_supported: vec![MCP_SCOPE],
     bearer_methods_supported: vec!["header"],
@@ -391,10 +395,10 @@ async fn authorization_server_metadata_handler(
   State(state): State<AppState>,
 ) -> AxumJson<AuthorizationServerMetadata> {
   return AxumJson(AuthorizationServerMetadata {
-    issuer: external_url(&state, ""),
-    authorization_endpoint: external_url(&state, "/_/mcp/authorize"),
-    token_endpoint: external_url(&state, "/_/mcp/token"),
-    registration_endpoint: external_url(&state, "/_/mcp/register"),
+    issuer: external_url2(&state, ""),
+    authorization_endpoint: external_url2(&state, "/_/mcp/authorize"),
+    token_endpoint: external_url2(&state, "/_/mcp/token"),
+    registration_endpoint: external_url2(&state, "/_/mcp/register"),
     response_types_supported: vec!["code"],
     grant_types_supported: vec!["authorization_code", "refresh_token"],
     code_challenge_methods_supported: vec!["S256"],
@@ -513,7 +517,7 @@ async fn authorize_handler(
     || query
       .resource
       .as_deref()
-      .is_some_and(|resource| resource != external_url(&state, MCP_PATH))
+      .is_some_and(|resource| resource != external_url2(&state, MCP_PATH))
   {
     return Err(OAuthError::invalid_request("invalid authorization request"));
   }
@@ -611,7 +615,7 @@ async fn oauth_token_handler(
   if request
     .resource
     .as_deref()
-    .is_some_and(|resource| resource != external_url(&state, MCP_PATH))
+    .is_some_and(|resource| resource != external_url2(&state, MCP_PATH))
   {
     return Err(OAuthError::invalid_grant("invalid resource"));
   }
@@ -674,7 +678,7 @@ async fn oauth_token_handler(
     .jwt()
     .encode(&McpAccessTokenClaims {
       auth: claims,
-      aud: external_url(&state, MCP_PATH),
+      aud: external_url2(&state, MCP_PATH),
       scope: MCP_SCOPE.to_string(),
     })
     .map_err(|err| OAuthError::server(err.to_string()))?;
@@ -764,11 +768,26 @@ fn valid_client_redirect(uri: &str) -> bool {
 }
 
 fn external_url(state: &AppState, path: &str) -> String {
+  // FIXME: Hard-coded port 4000.
+  // FIXME: Doesn't work for local workflow were site_url may be set.
   let mut base = state
     .site_url()
     .as_ref()
     .clone()
     .unwrap_or_else(|| url::Url::parse("http://localhost:4000").expect("constant URL"));
+  // let mut base = url::Url::parse("http://localhost:4000").expect("constant URL");
+
+  base.set_path(path);
+  base.set_query(None);
+  base.set_fragment(None);
+  base.to_string().trim_end_matches('/').to_string()
+}
+
+fn external_url2(state: &AppState, path: &str) -> String {
+  // FIXME: Hard-coded port 4000.
+  // FIXME: Doesn't work for local workflow were site_url may be set.
+  let mut base = url::Url::parse("http://localhost:4000").expect("constant URL");
+
   base.set_path(path);
   base.set_query(None);
   base.set_fragment(None);
@@ -912,7 +931,7 @@ mod tests {
       .jwt()
       .encode(&McpAccessTokenClaims {
         auth: claims.clone(),
-        aud: external_url(&state, MCP_PATH),
+        aud: external_url2(&state, MCP_PATH),
         scope: MCP_SCOPE.to_string(),
       })
       .unwrap();
