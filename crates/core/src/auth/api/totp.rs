@@ -6,7 +6,7 @@ use axum::{
 use base64::prelude::*;
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
-use totp_rs::{Algorithm, Secret, TOTP};
+use totp_rs::{Algorithm, Builder, Secret, Totp};
 use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
@@ -49,7 +49,7 @@ pub async fn register_totp_request_handler(
     return Err(AuthError::BadRequest("Disallowed in demo"));
   }
 
-  let secret = Secret::generate_secret();
+  let secret = Secret::generate();
 
   // Generate QR code URI for authenticator apps
   let app_name = state
@@ -62,12 +62,15 @@ pub async fn register_totp_request_handler(
 
   return Ok(
     Json(RegisterTotpResponse {
-      totp_url: totp.get_url(),
+      // Fails if no account was set or includes ":" (The latter is disallowed).
+      totp_url: totp
+        .to_url()
+        .map_err(|err| AuthError::Internal(err.into()))?,
       png: if query.png.unwrap_or(false) {
         Some(
           BASE64_STANDARD.encode(
             totp
-              .get_qr_png()
+              .to_qr_png()
               .map_err(|err| AuthError::Internal(err.into()))?,
           ),
         )
@@ -108,16 +111,16 @@ pub async fn register_totp_confirm_handler(
   };
 
   let totp =
-    TOTP::from_url(&request.totp_url).map_err(|_err| AuthError::BadRequest("invalid totp url"))?;
-  if !totp.check_current(&request.totp).unwrap_or(false) {
-    return Err(AuthError::BadRequest("invalid totp code"));
+    Totp::from_url(&request.totp_url).map_err(|_err| AuthError::BadRequest("invalid totp url"))?;
+  if totp.check_current(&request.totp).is_none() {
+    return Err(AuthError::BadRequest("invalid TOTP code"));
   }
 
   const UPDATE_QUERY: &str =
     formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
 
   let user_id_bytes = user.uuid.into_bytes().to_vec();
-  let secret = totp.get_secret_base32();
+  let secret = totp.secret().to_base32();
 
   state
     .user_conn()
@@ -163,34 +166,38 @@ pub async fn unregister_totp_handler(
     ));
   };
 
-  let Some(secret) = db_user.totp_secret.map(Secret::Encoded) else {
+  let Some(secret) = db_user
+    .totp_secret
+    .as_deref()
+    .map(Secret::try_from_base32)
+    .and_then(|r| r.ok())
+  else {
     return Err(AuthError::BadRequest("TOTP not enabled for this user"));
   };
 
   let totp = new_totp(&secret, None, None)?;
-
-  if totp.check_current(&request.totp).unwrap_or(false) {
-    const UPDATE_QUERY: &str =
-      formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
-
-    let user_id_bytes = user.uuid.into_bytes().to_vec();
-    state
-      .user_conn()
-      .execute(UPDATE_QUERY, params!(Option::<String>::None, user_id_bytes))
-      .await?;
-
-    return Ok((StatusCode::OK, "TOTP disabled").into_response());
+  if totp.check_current(&request.totp).is_none() {
+    return Err(AuthError::Unauthorized);
   }
 
-  return Err(AuthError::BadRequest("Invalid TOTP code"));
+  const UPDATE_QUERY: &str =
+    formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
+
+  let user_id_bytes = user.uuid.into_bytes().to_vec();
+  state
+    .user_conn()
+    .execute(UPDATE_QUERY, params!(Option::<String>::None, user_id_bytes))
+    .await?;
+
+  return Ok((StatusCode::OK, "TOTP disabled").into_response());
 }
 
 pub(crate) fn new_totp(
   secret: &Secret,
   app_name: Option<&str>,
   account: Option<&str>,
-) -> Result<TOTP, AuthError> {
-  return TOTP::new(
+) -> Result<Totp, AuthError> {
+  return Builder::new()
     // QUESTION: should we require a stronger hashing algorithm. Presumably most serious
     // authenticator apps support it but not all client library implementations. Many will just
     // ignore it.
@@ -199,15 +206,13 @@ pub(crate) fn new_totp(
     //   current step and one step after are valid.
     // * `step` is the number of seconds per step. [rfc-6238](https://tools.ietf.org/html/rfc6238#section-5.2)
     //   recommends 30 seconds.
-    Algorithm::SHA1,
-    /* num digits= */ 6,
-    /* skew= */ 1,
-    /* step= */ 30,
-    secret
-      .to_bytes()
-      .map_err(|err| AuthError::Internal(err.into()))?,
-    app_name.map(|name| name.to_string()),
-    account.unwrap_or_default().to_string(),
-  )
-  .map_err(|err| AuthError::Internal(err.into()));
+    .with_algorithm(Algorithm::SHA1)
+    .with_digits(6)
+    .with_skew(1)
+    .with_step_duration(30)
+    .with_secret(secret.as_bytes())
+    .with_issuer(app_name)
+    .with_account_name(account.unwrap_or_default())
+    .build()
+    .map_err(|err| AuthError::Internal(err.into()));
 }

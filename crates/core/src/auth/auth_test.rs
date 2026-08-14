@@ -556,14 +556,14 @@ async fn test_auth_password_login_flow_with_totp() {
 
   let totp::RegisterTotpResponse { totp_url, .. } = serde_json::from_slice(&body).unwrap();
 
-  let t = totp_rs::TOTP::from_url(&totp_url).unwrap();
+  let t = totp_rs::Totp::from_url(&totp_url).unwrap();
 
   let response = totp::register_totp_confirm_handler(
     State(state.clone()),
     user.clone(),
     Either::Json(totp::ConfirmRegisterTotpRequest {
       totp_url: totp_url.clone(),
-      totp: t.generate_current().unwrap(),
+      totp: t.generate_current().to_string(),
     }),
   )
   .await
@@ -596,7 +596,7 @@ async fn test_auth_password_login_flow_with_totp() {
     Cookies::default(),
     Either::Json(LoginMfaRequest {
       mfa_token,
-      totp: Some(t.generate_current().unwrap()),
+      totp: Some(t.generate_current().to_string()),
       params: Default::default(),
     }),
   )

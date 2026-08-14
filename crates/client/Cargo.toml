@@ -43,4 +43,4 @@ reqwest = { version = "0.13.1", features = ["stream", "multipart", "json"] }
 rustix = { version = "1.1.4", features = ["process"] }
 temp-dir = "0.2.0"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread", "process"] }
-totp-rs = { version = "5.7.1", default-features = false, features = ["otpauth"] }
+totp-rs = { version = "^6.0.0", default-features = false, features = ["otpauth"] }

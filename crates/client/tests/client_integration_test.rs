@@ -242,20 +242,25 @@ async fn login_multi_factor_test() {
     panic!("expected multi-factor token");
   };
 
-  let totp = totp_rs::TOTP::new(
-    totp_rs::Algorithm::SHA1,
-    /* num digits= */ 6,
-    /* skew= */ 1,
-    /* step= */ 30,
-    totp_rs::Secret::Encoded("YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5".to_string())
-      .to_bytes()
-      .unwrap(),
-    None,
-    "alice".to_string(),
-  )
-  .unwrap();
+  let totp = totp_rs::Builder::new()
+    .with_algorithm(totp_rs::Algorithm::SHA1)
+    .with_digits(6)
+    .with_skew(1)
+    .with_step_duration(30)
+    .with_secret(
+      totp_rs::Secret::try_from_base32("YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5")
+        .unwrap()
+        .as_bytes(),
+    )
+    .with_account_name("alice")
+    .build()
+    .unwrap();
 
-  let code = totp.generate_current().unwrap();
+  let now = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .unwrap()
+    .as_secs();
+  let code = totp.generate(now).to_string();
 
   client.login_second(&mfa_token, &code).await.unwrap();
 

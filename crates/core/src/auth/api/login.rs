@@ -478,8 +478,13 @@ pub(crate) async fn login_mfa_handler(
     return Err(AuthError::FailedDependency("TOTP not enabled".into()));
   };
 
-  let totp = new_totp(&totp_rs::Secret::Encoded(totp_secret.clone()), None, None)?;
-  if !totp.check_current(&user_totp).unwrap_or(false) {
+  let totp = new_totp(
+    &totp_rs::Secret::try_from_base32(totp_secret)
+      .map_err(|err| AuthError::Internal(err.into()))?,
+    None,
+    None,
+  )?;
+  if totp.check_current(&user_totp).is_none() {
     return Err(AuthError::Unauthorized);
   }
 
