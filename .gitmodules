@@ -4,3 +4,6 @@
 [submodule "vendor/pgrow2serde"]
 	path = vendor/pgrow2serde
 	url = https://github.com/ignatz/pgrow2serde.git
+[submodule "vendor/rmcp-openapi"]
+	path = vendor/rmcp-openapi
+	url = https://github.com/ignatz/rmcp-openapi.git

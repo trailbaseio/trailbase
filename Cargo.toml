@@ -70,6 +70,7 @@ minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.0"
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
+rmcp-openapi = { git = "https://github.com/ignatz/rmcp-openapi.git", branch = "optional-actix" }
 rusqlite = { version = "0.40.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
 serde = { version = "^1.0.203", features = ["derive", "rc"] }
@@ -123,3 +124,6 @@ sqlite-vec = { path = "vendor/sqlite-vec/bindings/rust" }
 
 [patch."https://github.com/ignatz/pgrow2serde"]
 trailbase-pgrow2serde = { path = "vendor/pgrow2serde" }
+
+[patch."https://github.com/ignatz/rmcp-openapi.git"]
+rmcp-openapi = { path = "vendor/rmcp-openapi/crates/rmcp-openapi" }
