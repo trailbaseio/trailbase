@@ -7,6 +7,12 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 
 #[derive(Clone, Debug, Default, Serialize, TS, utoipa::ToSchema)]
+pub struct GitVersion {
+  tag: String,
+  offset: usize,
+}
+
+#[derive(Clone, Debug, Default, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct InfoResponse {
   /// Build metadata.
@@ -14,7 +20,7 @@ pub struct InfoResponse {
   /// Git metadata
   commit_hash: Option<String>,
   commit_date: Option<String>,
-  git_version: Option<(String, usize)>,
+  git_version: Option<GitVersion>,
   /// Runtime metadata.
   threads: usize,
   command_line_arguments: Option<Vec<String>>,
@@ -38,9 +44,10 @@ pub async fn info_handler(State(state): State<AppState>) -> Result<Json<InfoResp
 
 fn build_info_response(state: &AppState) -> InfoResponse {
   let version_info = state.version();
-  let git_version = version_info
-    .git_version()
-    .map(|v| (v.tag(), v.commits_since.unwrap_or(0) as usize));
+  let git_version = version_info.git_version().map(|v| GitVersion {
+    tag: v.tag(),
+    offset: v.commits_since.unwrap_or(0) as usize,
+  });
 
   return InfoResponse {
     compiler: version_info.host_compiler,

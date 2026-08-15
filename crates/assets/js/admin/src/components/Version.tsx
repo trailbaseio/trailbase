@@ -5,8 +5,8 @@ export function Version(props: { info: InfoResponse | undefined }) {
   // Version tags have the shape <tag>[-<n>-<hash>], where the latter part is
   // missing if it's an exact match. Otherwise, it will contain a reference to
   // the actual commit and how many commits `n` are in between.
-  const version = () => props.info?.git_version?.[0] ?? "?";
-  const commits_since = () => props.info?.git_version?.[1] ?? 0;
+  const version = () => props.info?.git_version?.tag ?? "?";
+  const commits_since = () => props.info?.git_version?.offset ?? 0;
 
   return (
     <Switch>
