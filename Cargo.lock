@@ -8804,6 +8804,7 @@ dependencies = [
  "tokio-rustls",
  "trailbase",
  "trailbase-build",
+ "trailbase-client",
  "trailbase-extension",
  "trailbase-sqlite",
  "trailbase-wasm-component-repo",

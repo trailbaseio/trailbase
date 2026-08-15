@@ -488,21 +488,25 @@ async fn async_main(
       }
     },
     SubCommands::Mcp { address, tokens } => {
-      #[derive(Deserialize)]
-      struct Tokens {
-        auth_token: String,
-        refresh_token: String,
-        csrf_token: String,
-      }
+      use trailbase_client::{Client, ClientOptions, Tokens};
 
+      let address = url::Url::parse(address.as_deref().unwrap_or("http://localhost:4000"))?;
       let tokens = BASE64_STANDARD
         .decode(&tokens)
         .map_or(tokens, |b| String::from_utf8_lossy(&b).to_string());
-      let Tokens {
-        auth_token,
-        refresh_token,
-        csrf_token,
-      } = serde_json::from_str(&tokens)?;
+
+      let client = Client::new(
+        address.clone(),
+        Some(ClientOptions {
+          tokens: Some(serde_json::from_str::<Tokens>(&tokens)?),
+          ..Default::default()
+        }),
+      )?;
+
+      // Make sure tokens are valid and up-to-date.
+      let refreshed = client.refresh().await?;
+      eprintln!("tokens refreshed: {refreshed}");
+
       let json = trailbase::openapi::build_api_definitions(
         /* config= */ None, /* include_admin= */ true,
       )
@@ -511,13 +515,26 @@ async fn async_main(
       let headers = {
         use reqwest::header::{AUTHORIZATION, HeaderMap, HeaderValue};
 
+        let Some(Tokens {
+          auth_token,
+          refresh_token,
+          csrf_token,
+        }) = client.tokens()
+        else {
+          return Err("Missing tokens".into());
+        };
+
         let mut headers = HeaderMap::new();
         headers.insert(
           AUTHORIZATION,
           HeaderValue::from_str(&format!("Bearer {auth_token}"))?,
         );
-        headers.insert("Refresh-Token", HeaderValue::from_str(&refresh_token)?);
-        headers.insert("CSRF-Token", HeaderValue::from_str(&csrf_token)?);
+        if let Some(refresh_token) = refresh_token {
+          headers.insert("Refresh-Token", HeaderValue::from_str(&refresh_token)?);
+        }
+        if let Some(csrf_token) = csrf_token {
+          headers.insert("CSRF-Token", HeaderValue::from_str(&csrf_token)?);
+        }
 
         headers
       };
@@ -526,16 +543,21 @@ async fn async_main(
         // QUESTION: Can we avoid the serialization/deserialization detour?
         .openapi_spec(serde_json::from_str(&json)?)
         .default_headers(headers)
-        .base_url(url::Url::parse(
-          address.as_deref().unwrap_or("http://localhost:4000"),
-        )?)
+        .base_url(address)
+        // .authorization_mode(rmcp_openapi::AuthorizationMode::PassthroughSilent)
         .build();
 
       server.load_openapi_spec()?;
 
       // Serve over stdio instead of HTTP
       eprintln!("start listening on stdio");
-      let service = rmcp::service::serve_server(server, rmcp::transport::stdio()).await?;
+      let service = rmcp::service::serve_server(
+        trailbase_cli::mcp::McpServer::from(client, server),
+        rmcp::transport::stdio(),
+      )
+      .await?;
+
+      eprintln!("started waiting");
 
       // QUESTION: is this needed?
       service.waiting().await?;

@@ -39,6 +39,7 @@ tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 trailbase = { workspace = true }
 trailbase-build = { workspace = true }
+trailbase-client = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-component-repo = { workspace = true }
