@@ -30,7 +30,7 @@ mimalloc = { version = "^0.1.41", default-features = false }
 reqwest = { workspace = true }
 # Version constrained to v1 by rmcp-openapi.
 rmcp = { version = "^1.0.0", default-features = false, features = ["server", "transport-io"] }
-rmcp-openapi = { version = "0.31.3", default-features = false }
+rmcp-openapi = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
