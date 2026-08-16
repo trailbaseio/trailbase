@@ -2,6 +2,7 @@ use rmcp::model::*;
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData as McpError, RoleServer, ServerHandler};
 use rmcp_openapi::Server as OpenApiServer;
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use trailbase_client::{Client, Tokens};
 
@@ -23,7 +24,21 @@ impl McpServer {
   async fn update_tokens(&self, inner: &mut OpenApiServer) -> Result<(), McpError> {
     use reqwest::header::{AUTHORIZATION, HeaderValue};
 
-    // TODO: We can be smarter here and only refresh when token is close to expiry.
+    let Some(Tokens { auth_token, .. }) = self.client.tokens() else {
+      return Err(McpError::internal_error("Not authenticated?", None));
+    };
+
+    let jwt: JwtTokenClaims = decode_auth_token(&auth_token)?;
+    let now = std::time::SystemTime::now()
+      .duration_since(std::time::UNIX_EPOCH)
+      .expect("Duration since epoch")
+      .as_secs() as i64;
+
+    if jwt.exp - 20 > now {
+      // Still valid for another 20 seconds, no refresh needed
+      return Ok(());
+    }
+
     let refreshed = self
       .client
       .refresh()
@@ -37,7 +52,7 @@ impl McpServer {
       csrf_token,
     }) = self.client.tokens()
     else {
-      return Err(McpError::internal_error("Missing tokens", None));
+      return Err(McpError::internal_error("Not authenticated?", None));
     };
 
     fn header_value(value: &str) -> Result<HeaderValue, McpError> {
@@ -88,7 +103,6 @@ impl McpServer {
 }
 
 impl ServerHandler for McpServer {
-  // Delegate everything else unchanged.
   fn get_info(&self) -> ServerInfo {
     self.inner.blocking_lock().get_info()
   }
@@ -122,4 +136,17 @@ impl ServerHandler for McpServer {
     self.update_tokens(&mut lock).await?;
     return lock.call_tool(request, context).await;
   }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+struct JwtTokenClaims {
+  sub: String,
+  iat: i64,
+  exp: i64,
+}
+
+fn decode_auth_token<T: serde::de::DeserializeOwned + Clone>(token: &str) -> Result<T, McpError> {
+  return jsonwebtoken::dangerous::insecure_decode::<T>(token)
+    .map(|data| data.claims)
+    .map_err(|err| McpError::internal_error(err.to_string(), None));
 }

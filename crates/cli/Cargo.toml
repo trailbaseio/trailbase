@@ -25,11 +25,11 @@ chrono = "^0.4.38"
 clap = { workspace = true }
 env_logger = { workspace = true }
 itertools = "0.15.0"
+jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 reqwest = { workspace = true }
-# Version constrained to v1 by rmcp-openapi.
-rmcp = { version = "^1.0.0", default-features = false, features = ["server", "transport-io"] }
+rmcp = { version = "^1.0.0", default-features = false, features = ["server", "transport-io"] } # Version constrained to v1 by rmcp-openapi.
 rmcp-openapi = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
