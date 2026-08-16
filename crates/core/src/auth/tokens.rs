@@ -59,8 +59,6 @@ pub(crate) async fn extract_tokens_from_request_parts(
   state: &AppState,
   parts: &Parts,
 ) -> Result<Tokens, AuthError> {
-  eprintln!("HEADERS: {:?}", parts.headers);
-
   // Headers take priority over cookies.
   //
   // NOTE: We don't "auto-refresh" stale auth tokens in the header case, since we don't have the
