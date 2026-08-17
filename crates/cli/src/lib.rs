@@ -2,6 +2,7 @@
 
 mod args;
 pub mod import;
+#[cfg(feature = "mcp")]
 pub mod mcp;
 
 pub use args::{

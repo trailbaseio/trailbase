@@ -96,6 +96,7 @@ pub enum SubCommands {
     cmd: Option<BackupSubCommands>,
   },
   /// Starts a dev-only MCP server.
+  #[cfg(feature = "mcp")]
   Mcp {
     /// Address of the TrailBase server the MCP talks to.
     address: Option<String>,

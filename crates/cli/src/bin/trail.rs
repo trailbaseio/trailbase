@@ -3,7 +3,6 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
@@ -487,7 +486,9 @@ async fn async_main(
           .map(|cmd| cmd.print_help());
       }
     },
+    #[cfg(feature = "mcp")]
     SubCommands::Mcp { address, tokens } => {
+      use base64::prelude::*;
       use trailbase_client::{Client, ClientOptions, Tokens};
 
       let address = url::Url::parse(address.as_deref().unwrap_or("http://localhost:4000"))?;
