@@ -12,9 +12,10 @@ doctest = false
 name = "trail"
 
 [features]
-default = ["trailbase/wasm", "trailbase/geos"]
+default = ["trailbase/wasm", "geos", "mcp"]
 geos-static = ["trailbase/geos-static"]
 geos = ["trailbase/geos"]
+mcp = ["dep:rmcp", "dep:rmcp-openapi"]
 swagger = ["dep:utoipa-swagger-ui"]
 ws = ["trailbase/ws"]
 
@@ -29,8 +30,8 @@ jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 reqwest = { workspace = true }
-rmcp = { version = "^3.1.2", default-features = false, features = ["server", "transport-io"] }
-rmcp-openapi = { workspace = true }
+rmcp = { version = "^3.1.2", default-features = false, features = ["server", "transport-io"], optional = true }
+rmcp-openapi = { workspace = true, optional = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
