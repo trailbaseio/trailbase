@@ -131,7 +131,7 @@ impl ServerHandler for McpServer {
     &self,
     request: CallToolRequestParams,
     context: RequestContext<RoleServer>,
-  ) -> Result<CallToolResult, McpError> {
+  ) -> Result<CallToolResponse, McpError> {
     let mut lock = self.inner.lock().await;
     self.update_tokens(&mut lock).await?;
     return lock.call_tool(request, context).await;
