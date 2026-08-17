@@ -36,8 +36,10 @@ pub(crate) const DEFAULT_MFA_TOKEN_TTL: Duration = Duration::minutes(2);
 pub(crate) const DEFAULT_REFRESH_TOKEN_TTL: Duration = Duration::days(30);
 pub(crate) const DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL: Duration = Duration::days(90);
 
-pub(crate) const VERIFICATION_CODE_LENGTH: usize = 24;
-pub(crate) const REFRESH_TOKEN_LENGTH: usize = 32;
+/// A common length for refresh tokens is 64 bytes. We us alphanumeric encoding (5.95 bits/char) =>
+/// 86 characters.
+pub(crate) const REFRESH_TOKEN_LENGTH: usize = 86;
+pub(crate) const VERIFICATION_CODE_LENGTH: usize = 48;
 
 // Public APIs
 pub const RECORD_API_PATH: &str = "api/records/v1";

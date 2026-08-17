@@ -1,5 +1,6 @@
 use base64::prelude::*;
 use const_format::formatcp;
+use serde::{Deserialize, Serialize};
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use trailbase_sqlite::{Connection, params};
 use uuid::Uuid;
@@ -8,7 +9,7 @@ use validator::ValidateEmail;
 use crate::DataDir;
 use crate::auth::AuthError;
 use crate::auth::password::hash_password;
-use crate::auth::tokens::mint_new_tokens;
+use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   get_user_by_email, get_user_by_id, get_user_by_username, validate_and_normalize_email_address,
@@ -177,12 +178,18 @@ pub async fn invalidate_sessions(
   return Ok(());
 }
 
-pub async fn mint_auth_token(
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AuthTokens {
+  pub auth_token: String,
+  pub refresh_token: String,
+}
+
+pub async fn mint_auth_tokens(
   data_dir: &DataDir,
   user_conn: &trailbase_sqlite::Connection,
   session_conn: &trailbase_sqlite::Connection,
   user: UserReference,
-) -> Result<String, AuthError> {
+) -> Result<AuthTokens, AuthError> {
   let jwt = crate::api::JwtHelper::init_from_path(data_dir)
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
@@ -191,13 +198,19 @@ pub async fn mint_auth_token(
   // NOTE: we just discard the refresh token.
   let auth_token_ttl = chrono::Duration::hours(12);
   let refresh_token_ttl = chrono::Duration::hours(12);
-  let tokens = mint_new_tokens(session_conn, &db_user, &auth_token_ttl, &refresh_token_ttl).await?;
+  let FreshTokens {
+    auth_token_claims,
+    refresh_token,
+  } = mint_new_tokens(session_conn, &db_user, &auth_token_ttl, &refresh_token_ttl).await?;
 
   let auth_token = jwt
-    .encode(&tokens.auth_token_claims)
+    .encode(&auth_token_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  return Ok(auth_token);
+  return Ok(AuthTokens {
+    auth_token,
+    refresh_token,
+  });
 }
 
 pub async fn promote_user_to_admin(
