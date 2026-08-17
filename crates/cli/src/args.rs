@@ -68,7 +68,7 @@ pub enum SubCommands {
   },
   /// Creates new empty migration file.
   Migration {
-    /// Optional suffix used for the generated migration file: U<timetamp>__<suffix>.sql.
+    /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
     suffix: Option<String>,
     /// Optional database name
     db: Option<String>,
@@ -95,14 +95,20 @@ pub enum SubCommands {
     #[command(subcommand)]
     cmd: Option<BackupSubCommands>,
   },
-  /// Starts a dev-only MCP server.
+  /// Starts a local MCP server connected to a running TrailBase server @[ADDRESS].
   #[cfg(feature = "mcp")]
   Mcp {
-    /// Address of the TrailBase server the MCP talks to.
+    /// Address of the TrailBase server the MCP talks to (Default: http://localhost:4000).
     address: Option<String>,
-    /// Admin credentials to authenticate requests.
-    #[arg(long, env)]
-    tokens: String,
+    /// Credentials (auth+refresh tokens) of an admin user to authenticate requests to the
+    /// TrailBase server. Either from the admin UI's profile dialog or `trail user mint`.
+    /// For example:
+    ///   `trail mcp --tokens=$(trail --depot=client/testfixture user mint admin@localhost)`
+    #[arg(long, env, conflicts_with = "user", required_unless_present = "user")]
+    tokens: Option<String>,
+    /// When the `--depot` is accessible, tokens can be minted internally for a given user.
+    #[arg(long)]
+    user: Option<String>,
   },
 }
 

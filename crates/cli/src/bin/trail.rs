@@ -506,18 +506,59 @@ async fn async_main(
       }
     },
     #[cfg(feature = "mcp")]
-    SubCommands::Mcp { address, tokens } => {
+    SubCommands::Mcp {
+      address,
+      tokens,
+      user,
+    } => {
       use trailbase_client::{Client, ClientOptions, Tokens};
 
       let address = url::Url::parse(address.as_deref().unwrap_or("http://localhost:4000"))?;
-      let tokens = BASE64_STANDARD
-        .decode(&tokens)
-        .map_or(tokens, |b| String::from_utf8_lossy(&b).to_string());
+      let tokens: Tokens = match (tokens, user) {
+        (Some(tokens), None) => {
+          let tokens = BASE64_STANDARD
+            .decode(&tokens)
+            .map_or(tokens, |b| String::from_utf8_lossy(&b).to_string());
+
+          serde_json::from_str(&tokens)?
+        }
+        (None, Some(user)) => {
+          let (_new_db, state) = AppState::init(InitArgs {
+            data_dir,
+            public_url,
+            ..Default::default()
+          })
+          .await?;
+
+          let tokens = api::cli::mint_auth_tokens(
+            state.data_dir(),
+            state.user_conn(),
+            state.session_conn(),
+            UserReference::parse(&user)?,
+          )
+          .await?;
+
+          Tokens {
+            auth_token: tokens.auth_token,
+            refresh_token: Some(tokens.refresh_token),
+            csrf_token: None,
+          }
+        }
+        _ => {
+          CommandLineArgs::command()
+            .find_subcommand_mut("mcp")
+            .map(|cmd| cmd.print_help());
+
+          eprintln!("\nEither `--tokens` or `--user` (plus `--depot`) need to be provided");
+
+          std::process::exit(1);
+        }
+      };
 
       let client = Client::new(
         address.clone(),
         Some(ClientOptions {
-          tokens: Some(serde_json::from_str::<Tokens>(&tokens)?),
+          tokens: Some(tokens),
           ..Default::default()
         }),
       )?;
