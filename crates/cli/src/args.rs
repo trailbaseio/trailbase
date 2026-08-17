@@ -260,8 +260,8 @@ pub enum UserSubCommands {
     /// User in question, either email, username or UUID.
     user: String,
   },
-  /// Mint auth token for the given user.
-  MintToken {
+  /// Mint tokens for the given user: auth & refresh.
+  Mint {
     /// User in question, either email, username or UUID.
     user: String,
   },

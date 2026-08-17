@@ -3,12 +3,13 @@
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
 use serde::Deserialize;
 use std::io::Write;
-use trailbase::api::cli::UserReference;
+use trailbase::api::cli::{AuthTokens, UserReference};
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::constants::USER_TABLE;
 use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
@@ -262,15 +263,33 @@ async fn async_main(
 
           eprintln!("Sessions invalidated for '{user}'");
         }
-        Some(UserSubCommands::MintToken { user }) => {
-          let auth_token = api::cli::mint_auth_token(
+        Some(UserSubCommands::Mint { user }) => {
+          let tokens = api::cli::mint_auth_tokens(
             state.data_dir(),
             state.user_conn(),
             state.session_conn(),
             UserReference::parse(&user)?,
           )
           .await?;
-          eprintln!("Bearer {auth_token}");
+
+          {
+            let AuthTokens {
+              ref auth_token,
+              ref refresh_token,
+            } = tokens;
+
+            eprintln!(
+              "\
+              auth: \"Bearer {auth_token}\"\n\
+              🔄: \"{refresh_token}\"\n\
+              ",
+            );
+          }
+
+          println!(
+            "{}",
+            BASE64_STANDARD.encode(serde_json::to_string(&tokens)?)
+          );
         }
         Some(UserSubCommands::Import {
           dry_run,
@@ -488,7 +507,6 @@ async fn async_main(
     },
     #[cfg(feature = "mcp")]
     SubCommands::Mcp { address, tokens } => {
-      use base64::prelude::*;
       use trailbase_client::{Client, ClientOptions, Tokens};
 
       let address = url::Url::parse(address.as_deref().unwrap_or("http://localhost:4000"))?;
