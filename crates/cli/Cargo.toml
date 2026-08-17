@@ -29,7 +29,7 @@ jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust
 log = "^0.4.21"
 mimalloc = { version = "^0.1.41", default-features = false }
 reqwest = { workspace = true }
-rmcp = { version = "^1.0.0", default-features = false, features = ["server", "transport-io"] } # Version constrained to v1 by rmcp-openapi.
+rmcp = { version = "^3.1.2", default-features = false, features = ["server", "transport-io"] }
 rmcp-openapi = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
