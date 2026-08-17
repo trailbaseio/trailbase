@@ -2,6 +2,12 @@ import { createSignal, Show } from "solid-js";
 import { useStore } from "@nanostores/solid";
 import { TbOutlineClipboard } from "solid-icons/tb";
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -37,12 +43,9 @@ export function AuthButton(props: { iconSize: number }) {
         </DialogHeader>
 
         <Show when={user()}>
-          <Card>
-            <CardContent class="pt-4">
-              <Profile user={user()!} twoFactorEnabled={hasTotp()} />
-            </CardContent>
-          </Card>
+          <Profile user={user()!} twoFactorEnabled={hasTotp()} />
 
+          {/*
           <Card>
             <CardContent class="pt-4">
               <div class="flex shrink items-center gap-4">
@@ -53,7 +56,7 @@ export function AuthButton(props: { iconSize: number }) {
                   onClick={() => {
                     navigator.clipboard.writeText(base64Tokens());
                     showToast({
-                      title: `Copied to clippboard`,
+                      title: `Copied to clipboard`,
                       variant: "success",
                     });
                   }}
@@ -65,6 +68,39 @@ export function AuthButton(props: { iconSize: number }) {
               </div>
             </CardContent>
           </Card>
+          */}
+
+          <Accordion multiple={false} collapsible>
+            <AccordionItem class="border-none" value="foo">
+              <AccordionTrigger>
+                <div class="flex w-full items-center justify-between px-4">
+                  <span>Tokens</span>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation();
+
+                      navigator.clipboard.writeText(base64Tokens());
+                      showToast({
+                        title: `Copied to clipboard`,
+                        variant: "success",
+                      });
+                    }}
+                  >
+                    <TbOutlineClipboard />
+                  </Button>
+                </div>
+              </AccordionTrigger>
+
+              <AccordionContent>
+                <span class="h-20 overflow-y-scroll font-mono text-sm break-all">
+                  {base64Tokens()}
+                </span>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </Show>
 
         <DialogFooter>

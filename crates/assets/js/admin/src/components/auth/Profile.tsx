@@ -1,4 +1,4 @@
-import { Switch, Match, Show } from "solid-js";
+import { Switch, Match, Show, createEffect } from "solid-js";
 import { TbFillUser } from "solid-icons/tb";
 import type { User } from "trailbase";
 
@@ -39,6 +39,12 @@ export function Profile(props: {
   showId?: boolean;
   twoFactorEnabled?: boolean;
 }) {
+  if (import.meta.env.DEV) {
+    createEffect(() => {
+      console.debug("user:", props.user);
+    });
+  }
+
   return (
     <div class="flex w-full shrink flex-col">
       <div class="flex shrink items-center gap-4">
@@ -59,10 +65,6 @@ export function Profile(props: {
               ? "Enabled"
               : "Disabled"}
           </div>
-
-          <Show when={import.meta.env.DEV}>
-            <span class="bg-red-200">{JSON.stringify(props.user)}</span>
-          </Show>
         </div>
       </div>
     </div>

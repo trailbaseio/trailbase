@@ -6,8 +6,6 @@ import { createWritableMemo } from "@solid-primitives/memo";
 
 import { client, $user } from "@/lib/client";
 
-import { Profile } from "@/components/auth/Profile";
-import { showToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +15,7 @@ import {
   CardTitle,
   CardFooter,
 } from "@/components/ui/card";
+import { Profile } from "@/components/auth/Profile";
 import {
   Select,
   SelectContent,
@@ -29,6 +28,7 @@ import {
   TextFieldLabel,
   TextFieldInput,
 } from "@/components/ui/text-field";
+import { showToast } from "@/components/ui/toast";
 
 export function LoginPage() {
   const user = useStore($user);
