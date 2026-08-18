@@ -7,7 +7,7 @@ import { Aside, Code } from '@astrojs/starlight/components';
 import { repo } from "@/config";
 
 Welcome! In this *Getting Started* guide, we'll first see how to install
-TrailBase, followed by tutorials on building our first small applications.
+TrailBase, followed by tutorials on building a first application.
 
 TrailBase is a **single executable** and therefore very easy to install.
 It's as simple as downloading the latest
@@ -29,7 +29,8 @@ Once installed, you can run
 to check that the executable is properly installed and list all available
 command line options.
 
-## Optional Auth UI
+### Install Optional Auth UI
+
 
 If you want to install the auth UI, you can simply run:
 
@@ -37,9 +38,9 @@ If you want to install the auth UI, you can simply run:
 trail components add trailbase/auth_ui
 ```
 
-, which will add a WASM component exposing additional UI endpoints.
+which will add a WASM component exposing additional UI endpoints.
 
-## Starting the Server & Admin Dashboard
+## Start the Server with Dashboard
 
 After successfully installing TrailBase above, you can run
 
@@ -47,7 +48,7 @@ After successfully installing TrailBase above, you can run
 
 to bring up the server on `localhost:4000`.
 
-On first start, a `./traildepot` folder will be created. It contains
+On first start, a `./traildepot` *depot* directory will be created. It contains
 configuration, databases, secrets and a few more things.
 Moreover, an admin user will be created and their credentials printed to the
 terminal.
@@ -59,15 +60,18 @@ Created new admin user:
         password: '<random>'
 ```
 
-Optionally, you can change the credentials to something more fitting:
+Optionally, you can change the credentials to something more deliberate:
 
 <Code lang="sh" code={`
 trail user change-password admin@localhost mypassword
 trail user change-email admin@localhost me@mydomain.org
 `} frame={false} />
 
+Note that no authentication is necessary, since you already have privileged
+OS-level access to the local *depot*.
+
 <Aside type="tip" title="Starting Over">
-Don't worry about breaking anything, you can always delete `traildepot` and start from scratch.
+Don't worry about breaking anything, you can always delete `./traildepot` and start from scratch.
 </Aside>
 
 Armed with your new credentials, open
@@ -81,11 +85,35 @@ schema migration file will be created in `traildepot/migrations`. This allows
 TrailBase to enforce consistent schemas across multiple database instances for
 dev, test, prod, ... .
 
-If you installed the auth UI above, feel free to also explore
+If you installed the auth UI above, feel free to explore it as well:
 [http://localhost:4000/_/auth/login](http://localhost:4000/_/auth/login).
 
 If you like what you see and want to get your hands dirty, consider checking
 out some of the tutorials.
-Lastly, if you have any issues or feedback, don't hesitate and reach out either
-on [GitHub](https://github.com/trailbaseio/trailbase) or via
+Lastly, if you have any issues or feedback, don't hesitate to reach out either
+on [GitHub](https://github.com/trailbaseio/trailbase), Discord or via
 *contact@trailbase.io*.
+
+## Start an MCP
+
+The binary also ships with a built-in local MCP server that can be started
+independently and pointed at a running TrailBase instance to support agentic
+workflows.
+
+In order for the MCP to proxy tool requests, especially for admin APIs,
+authentication is required. If you have local access to the *depot*,
+the MCP can authenticate itself by running:
+
+```sh
+trail [--depot=./traildepot] mcp --user=admin@localhost http://localhost:4000
+```
+
+Or if you're trying to connect to a remote TrailBase instance, you can look up
+an admin's tokens in the dashboard in the profile dialog when clicking the user
+icon on the bottom left. They can then passed as follows:
+
+```sh
+TOKENS=<eyJhd...> trail mcp https://mytrailbase.org
+```
+
+Agents can communicate with the MCP using stdin.

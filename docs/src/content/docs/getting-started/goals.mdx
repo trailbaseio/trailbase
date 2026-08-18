@@ -7,15 +7,15 @@ best-practices, while being simple, fast, avoiding lock-in and not getting in
 your way.
 
 It's enough to wrangle your evolving product needs, you shouldn't also have to
-fight your platform or be held hostage.
-There's never a single best solution for all problems at all scales. Typically,
-as you scale up you'll address growing pain points with more specialized
-solutions.
+fight your platform and then be held hostage by it.
+There's never a single best solution for all problems, especially at scale.
+Typically, as you scale up you'll address growing pains one-by-one with more
+suitable, more specialized solutions.
 That's why we believe in the importance of *loose coupling* and *simple*[^1],
 *standard* solutions.
 
-Not wanting to sound like empty marketing speak, we believe that these
-properties can provide practical, material benefits. For example:
+At the expense of sounding like a marketing department, we believe that simplicity
+and standardization can provide practical, material benefits. For example:
 
 - TrailBase being a simple single-executable allows for **consistent** setups
   across development, testing, pre-prod, and prod. In contrast, spinning up a
@@ -29,32 +29,30 @@ properties can provide practical, material benefits. For example:
   TrailBase if necessary, but also makes it easier and lower risk for you to just
   give it a go both in full or as piecemeal. If you like it, great. If you
   don't, ...
-- We can address your feedback more quickly to keep making TrailBase better and
-  better ❤️.
+
+If you have any feedback, here or later, don't hesitate and reach out. We truly
+appreciate your input ❤️.
 
 
 ## Inspiration
 
-Honor to whom honor is due, we're big fans of both SupaBase and PocketBase.
-TrailBase tries to be the love child of PocketBase's architectural simplicity
-with SupaBase's coupling sprinkled with a generous dash of performance.
+Honor to whom honor is due, we're big fans of [SupaBase](https://supabase.com)
+and [PocketBase](https://pocketbase.io).
+TrailBase tries to be the love child of both: with PocketBase's architectural
+simplicity, SupaBase's looser coupling and sprinkled with some extra
+performance as well as quality-of-life features.
 
-For example, TrailBase does not prescribe an ORMs and gives you untethered
-access to the underling SQL in line with SupaBase.
-ORMs often yield pleasing example code but eventually fall apart, sometimes as
-early as simple joins.
-Data models and architectural decisions driven by the short-comings of an
-abstraction are a big smell.
-That said, ORMs aren't without merit. Better ones can provide type-safety
-within their set of constraints.
-TrailBase attempts to give you the best of both worlds:
+For example, TrailBase encourages SQL best-practices and gives you untethered
+access much in line with SupaBase's philosophy[^2].
+Eventually, all paths lead to SQL as the only truly cross-platform,
+cross-database, cross-language solution[^3] 😉.
 
- * Type-safe cross-language client bindings leaning into HTTP, JSON and JSON-schemas
-   giving you the freedom to pick the "right" language for the job.
- * And untethered server-side SQL.
+At the same time, TrailBase understands your schemas to provide you with
+type-safe end-to-end cross-language client bindings giving you the freedom to
+pick the "right" language for the job.
+Additionally, we ship first-party clients for 8 environments:
+JavaScript/TypeScript, Dart, Dotnet, Kotlin, Swift, Python, Rust and Go.
 
-In the end, all paths lead to SQL as the only truly cross-platform,
-cross-database, cross-language solution[^2] 😉.
 
 ---
 
@@ -66,4 +64,8 @@ cross-database, cross-language solution[^2] 😉.
     beaten path. Magic solutions will always lead to tight coupling and lock-in.
 
 [^2]:
+    As opposed to normalized relations in PocketBase. Nowadays, PocketBase does provide
+    an SQL prompt for debugging but any schema mutations may lead to out-of-sync metadata.
+
+[^3]:
     [FireBase finally added SQL support 12 years after its introduction](https://firebase.blog/posts/2024/05/introducing-firebase-data-connect/)

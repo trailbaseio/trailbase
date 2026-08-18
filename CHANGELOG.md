@@ -1,3 +1,13 @@
+## v0.33.0
+
+- Allow starting a local MCP server to support agentic workflows.
+  - Simply run `trail mcp [--user=|--tokens=] http://mytrailbase:4000` to start a local MCP that listens on `stdin`. Tool requests will be proxied to a running TrailBase instance at the given address.
+  - Since many operations require permissions, especially the admin APIs, authentication is required.
+    - If you have access to the `--depot=` locally, you can mint tokens internally, e.g.: `trail --depot=./mydepot mcp --user=admin@localhost http://localhost:4000`.
+    - If the target TrailBase instance is remote, you can log into the admin UI and copy the tokens from the profile dialog (user icon on the bottom left) and run: `TOKENS=<eyJhd...> trail mcp https://mytrailbase.org`.
+- Increase entropy of refresh/session tokens.
+- Update dependencies.
+
 ## v0.32.2
 
 - Add a `rapidoc`-based interactive API browser to the admin UI. Authentication is wired up for interactively "trialing" the APIs.
@@ -5,7 +15,7 @@
 
 ## v0.32.1
 
-- Share single source-of-truth for HTTP route construction and OpenAPI metadata. For prod, this is a no-op but the OpenApi published and included metadata is now more complete and guaranteed to be correct.
+- Share single source-of-truth for HTTP route construction and OpenApi metadata. For prod, this is a no-op but the OpenApi published and included metadata is now more complete and guaranteed to be correct.
 - Update dependencies.
 
 ## v0.32.0
@@ -36,7 +46,7 @@
 ## v0.31.2
 
 - Fix token refresh for just promoted users with a yet unverified email address. Thanks @UserNobody14 🙏.
-- Move unverified email addresses into a separate column to simplify and gurantee that entries in `_user.email` are verified.
+- Move unverified email addresses into a separate column to simplify and guarantee that entries in `_user.email` are verified.
 - Disable FK constraints during SQLite migrations consistently across sync and async drivers.
 - Fix python client: promote anonymous users. Thanks @UserNobody14 🙏.
 - Fix dart client: SSE change event parsing. Thanks @devsdocs 🙏.
