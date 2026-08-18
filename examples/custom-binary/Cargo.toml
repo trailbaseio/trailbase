@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-axum = "^0.8.1"
+axum = { workspace = true }
 env_logger = { workspace = true }
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }

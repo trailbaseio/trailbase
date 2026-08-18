@@ -56,16 +56,20 @@ opt-level = 1
 
 [workspace.dependencies]
 askama = { version = "0.16.0", default-features = false, features = ["derive", "std", "config"] }
-axum = { version = "^0.8.1", features = ["multipart"] }
+axum = { version = "^0.8.1", default-features = false, features = ["multipart"] }
 base64 = { version = "0.23.0", default-features = false, features = ["alloc", "std"] }
+chrono = { version = "0.4.43", default-features = false }
 clap = { version = "^4.4.11", features=["derive", "env"] }
 cron = "0.17.0"
 crossfire = { version = "3.1.16", default-features = false, features = ["tokio"] }
 env_logger = { version = "^0.11.8", default-features = false, features = ["auto-color", "humantime"] }
 flume = { version = "0.12.0", default-features = false, features = ["select", "async"] }
 futures-util = { version = "0.3.32", default-features = false, features = ["alloc", "spin"] }
+itertools = { version = "0.15.0", default-features = false, features = ["use_std"] }
+jsonwebtoken = { version = "11.0.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 libsqlite3-sys = { version = "0.37.0", default-features = false, features = ["bundled", "preupdate_hook"] }
 litegis = { version = "0.0.7", default-features = false }
+log = { version = "0.4.29", default-features = false }
 minijinja = { version = "2.1.2", default-features = false }
 parking_lot = { version = "0.12.3", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.0"
@@ -73,8 +77,8 @@ reqwest = { version = "0.13.1", default-features = false, features = ["rustls", 
 rmcp-openapi = { git = "https://github.com/ignatz/rmcp-openapi-minimal.git", branch = "main" }
 rusqlite = { version = "0.40.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
 rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
-serde = { version = "^1.0.203", features = ["derive", "rc"] }
-serde_json = { version = "^1.0.117" }
+serde = { version = "^1.0.203", default-features = false, features = ["derive", "rc", "std"] }
+serde_json = { version = "^1.0.117", default-features = false }
 serde_qs = { version = "1.0.0", default-features = false, features = [] }
 serde_rusqlite = "0.43.0"
 sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-alpha.4-fork", default-features = false }
@@ -105,7 +109,7 @@ trailbase-wasm-component-repo = { path = "crates/wasm-component-repo", version =
 trailbase-wasm-runtime-axum= { path = "crates/wasm-runtime-axum", version = "0.1.0" }
 trailbase-wasm-runtime-host = { path = "crates/wasm-runtime-host", version = "0.1.0" }
 ts-rs = { version = "12", features = ["uuid-impl", "serde-json-impl", "indexmap-impl"] }
-utoipa = { version = "5.5.0", features = ["axum_extras", "debug", "indexmap", "uuid"] }
+utoipa = { version = "5.5.0", default-features = false, features = ["axum_extras", "debug", "indexmap", "uuid"] }
 utoipa-axum = { version = "0.2.0" }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }

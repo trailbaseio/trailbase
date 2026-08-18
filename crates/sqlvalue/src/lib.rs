@@ -14,7 +14,8 @@ pub enum DecodeError {
   Hex,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub enum Blob {
   Array(Vec<u8>),
@@ -58,7 +59,8 @@ impl Blob {
 }
 
 /// Mimic's rusqlite's Value but is JS/JSON serializable and supports multiple blob encodings..
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS, utoipa::ToSchema)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, TS)]
+#[cfg_attr(feature = "utoipa", derive(utoipa::ToSchema))]
 #[ts(export)]
 pub enum SqlValue {
   Null,

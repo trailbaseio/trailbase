@@ -10,7 +10,7 @@ readme = "../../README.md"
 
 [dependencies]
 bytes = "1.11.0"
-log = "^0.4.21"
+log = { workspace = true }
 minijinja = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

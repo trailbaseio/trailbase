@@ -14,8 +14,8 @@ exclude = [
 
 [dependencies]
 axum = { workspace = true }
-itertools = "0.15.0"
-log = "0.4.27"
+itertools = { workspace = true }
+log = { workspace = true }
 rust-embed = { workspace = true }
 tower-service = { version = "0.3.3", default-features = false }
 

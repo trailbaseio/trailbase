@@ -12,7 +12,7 @@ readme = "../../README.md"
 async-trait = "0.1"
 cfg-if = "1.0"
 futures = { version = "0.3.16", optional = true, features = ["async-await"] }
-log = "0.4"
+log = { workspace = true }
 regex = "1"
 rusqlite = { workspace = true }
 siphasher = "1.0"

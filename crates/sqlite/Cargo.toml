@@ -27,7 +27,7 @@ pg = ["dep:postgres", "dep:bytes", "dep:trailbase-pgrow2serde", "dep:regex", "de
 [dependencies]
 bytes = { version = "1.11.1", optional = true }
 crossfire = { workspace = true }
-log = { version = "^0.4.21", default-features = false }
+log = { workspace = true }
 parking_lot = { workspace = true }
 postgres = { version = "0.19.12", optional = true, features = ["with-serde_json-1"] }
 regex = { version = "1.12.3", optional = true}
@@ -43,13 +43,13 @@ tokio = { workspace = true }
 trailbase-pgrow2serde = { workspace = true, optional = true }
 
 [dev-dependencies]
-chrono = "0.4.43"
+chrono = { workspace = true }
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 csv = "1.4.0"
 env_logger.workspace = true
 futures-util = { workspace = true }
 glob = "0.3.3"
-itertools = "0.15.0"
+itertools = { workspace = true }
 pglite-oxide = "0.5.0"
 rand = { workspace = true }
 tempfile = "3.19.1"

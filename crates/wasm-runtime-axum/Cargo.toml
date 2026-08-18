@@ -14,7 +14,7 @@ form_urlencoded = "1.2.2"
 futures-util = { workspace = true }
 http-body-util = "0.1.3"
 hyper = "1.10.1"
-log = "0.4.33"
+log = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 tokio = { version = "^1.38.0", features = ["macros", "rt-multi-thread"] }

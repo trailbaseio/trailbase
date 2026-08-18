@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 askama = { workspace = true }
-itertools = "0.15.0"
+itertools = { workspace = true }
 rust-embed = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

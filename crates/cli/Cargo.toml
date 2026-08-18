@@ -20,14 +20,14 @@ swagger = ["dep:utoipa-swagger-ui"]
 ws = ["trailbase/ws"]
 
 [dependencies]
-axum = { version = "^0.8.1", features=["multipart"] }
+axum = { workspace = true }
 base64 = { workspace = true }
-chrono = "^0.4.38"
+chrono = { workspace = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
-itertools = "0.15.0"
-jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
-log = "^0.4.21"
+itertools = { workspace = true }
+jsonwebtoken = { workspace = true }
+log = { workspace = true }
 mimalloc = { version = "^0.1.41", default-features = false }
 reqwest = { workspace = true }
 rmcp = { version = "^3.1.2", default-features = false, features = ["server", "transport-io"], optional = true }
