@@ -16,7 +16,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
-use crate::auth::oauth::simple_provider::generic_factory;
+use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 #[derive(Debug, Error)]
@@ -44,21 +44,38 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderRegist
       #[cfg(test)]
       test::TestOAuthProvider::factory(),
       // NOTE: In the future we might want to have more than one OIDC factory.
-      oidc::OidcProvider::factory(0),
+      oidc::OidcProvider::registry_entry(0),
       // "Social" OAuth providers.
-      apple::AppleOAuthProvider::factory(),
-      generic_factory::<discord::DiscordOAuthProvider>(),
-      generic_factory::<gitlab::GitlabOAuthProvider>(),
-      github::GithubOAuthProvider::factory(),
-      generic_factory::<google::GoogleOAuthProvider>(),
-      generic_factory::<facebook::FacebookOAuthProvider>(),
-      generic_factory::<microsoft::MicrosoftOAuthProvider>(),
-      twitch::TwitchOAuthProvider::factory(),
-      generic_factory::<yandex::YandexOAuthProvider>(),
+      apple::AppleOAuthProvider::registry_entry(),
+      simple_provider_registry_entry::<discord::DiscordOAuthProvider>(),
+      simple_provider_registry_entry::<gitlab::GitlabOAuthProvider>(),
+      github::GithubOAuthProvider::registry_entry(),
+      simple_provider_registry_entry::<google::GoogleOAuthProvider>(),
+      simple_provider_registry_entry::<facebook::FacebookOAuthProvider>(),
+      simple_provider_registry_entry::<microsoft::MicrosoftOAuthProvider>(),
+      twitch::TwitchOAuthProvider::registry_entry(),
+      simple_provider_registry_entry::<yandex::YandexOAuthProvider>(),
     ]
   });
 
   return REGISTRY.as_slice();
+}
+
+fn simple_provider_registry_entry<T: SimpleOAuthProvider + Sized + 'static>()
+-> OAuthProviderRegistryEntry {
+  #[cfg(test)]
+  url::Url::parse(T::USER_API_URL).expect("test-only");
+
+  return OAuthProviderRegistryEntry {
+    id: T::ID,
+    factory_name: T::NAME,
+    factory_display_name: T::DISPLAY_NAME,
+    factory: Box::new(|name: &str, config: &OAuthProviderConfig| {
+      debug_assert_eq!(T::NAME, name);
+
+      return Ok(Box::new(T::new(config)?));
+    }),
+  };
 }
 
 #[cfg(test)]

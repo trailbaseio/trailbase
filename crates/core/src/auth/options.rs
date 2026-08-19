@@ -1,15 +1,16 @@
-use log::*;
+use scopeguard::defer;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{self, OAuthClient};
+use crate::auth::oauth::provider::{OAuthClient, OAuthProvider};
 use crate::auth::oauth::providers::oauth_providers_static_registry;
 use crate::auth::password::PasswordOptions;
 use crate::config::proto::AuthConfig;
 
 pub struct OAuthEntry {
   pub name: String,
-  pub provider: Box<dyn provider::OAuthProvider + Send + Sync>,
+  pub display_name: String,
+  pub provider: Box<dyn OAuthProvider + Send + Sync>,
   pub client: OAuthClient,
 }
 
@@ -17,11 +18,6 @@ pub struct AuthOptions {
   password_options: PasswordOptions,
   /// List of OAuth providers by `name`.
   oauth_providers: Vec<OAuthEntry>,
-}
-
-pub struct OAuthProvider {
-  pub name: String,
-  pub display_name: String,
 }
 
 impl AuthOptions {
@@ -56,18 +52,9 @@ impl AuthOptions {
     return None;
   }
 
-  /// Returns list of tuples with (name, display_name);
-  pub fn list_oauth_providers(&self) -> Vec<OAuthProvider> {
-    return self
-      .oauth_providers
-      .iter()
-      .map(|e| {
-        return OAuthProvider {
-          name: e.provider.name().to_string(),
-          display_name: e.provider.display_name().to_string(),
-        };
-      })
-      .collect();
+  /// Returns list of configured OAuth providers;
+  pub fn list_oauth_providers(&self) -> &Vec<OAuthEntry> {
+    return &self.oauth_providers;
   }
 }
 
@@ -79,15 +66,31 @@ fn build_oauth_providers_from_config(
     return vec![];
   }
 
+  let errors = parking_lot::Mutex::new(Vec::<String>::new());
+  defer! {
+      let errors = errors.lock();
+      if errors.is_empty() {
+          return;
+      }
+
+      log::error!("Encountered errors during OAuth initialization:\n\t{}", errors.join("\n\t"));
+
+      #[cfg(debug_assertions)]
+      panic!("Fail on OAuth errors in debug builds.");
+  }
+
+  let mut errors = errors.lock();
   let Some(site_url) = site_url else {
-    error!("Missing config.server.site_url. OAuth sign-in not possible");
+    errors.push("Missing config.server.site_url. OAuth sign-in not possible".into());
     return vec![];
   };
 
   let site = match Url::parse(site_url) {
     Ok(site) => site,
     Err(err) => {
-      error!("Failed to parse site_url. OAuth sign-in not possible: {err}");
+      errors.push(format!(
+        "Failed to parse site_url. OAuth sign-in not possible: {err}"
+      ));
       return vec![];
     }
   };
@@ -101,14 +104,14 @@ fn build_oauth_providers_from_config(
       .find(|registered| config.provider_id == Some(registered.id as i32));
 
     let Some(entry) = entry else {
-      error!("Missing implementation for oauth provider: {key}");
+      errors.push(format!("missing implementation for oauth provider: {key}"));
       continue;
     };
 
     let provider = match (entry.factory)(key, config) {
       Ok(provider) => provider,
       Err(err) => {
-        error!("failed to build OAuth provider: {err}");
+        errors.push(format!("failed to build OAuth provider: {err}"));
         continue;
       }
     };
@@ -116,13 +119,14 @@ fn build_oauth_providers_from_config(
     let client = match build_oauth_client(&site, provider.as_ref()) {
       Ok(client) => client,
       Err(err) => {
-        error!("failed to build OAuth client: {err}");
+        errors.push(format!("failed to build OAuth client: {err}"));
         continue;
       }
     };
 
     providers.push(OAuthEntry {
       name: provider.name().to_string(),
+      display_name: provider.display_name().to_string(),
       provider,
       client,
     })
@@ -136,7 +140,7 @@ fn build_oauth_providers_from_config(
 
 fn build_oauth_client(
   site: &Url,
-  provider: &(dyn provider::OAuthProvider + Send + Sync),
+  provider: &(dyn OAuthProvider + Send + Sync),
 ) -> Result<OAuthClient, AuthError> {
   use crate::constants::AUTH_API_PATH;
   use oauth2::{AuthUrl, Client, ClientId, ClientSecret, RedirectUrl, TokenUrl};

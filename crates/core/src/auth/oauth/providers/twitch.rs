@@ -39,7 +39,7 @@ impl TwitchOAuthProvider {
     });
   }
 
-  pub fn factory() -> OAuthProviderRegistryEntry {
+  pub fn registry_entry() -> OAuthProviderRegistryEntry {
     OAuthProviderRegistryEntry {
       id: OAuthProviderId::Twitch,
       factory_name: Self::NAME,

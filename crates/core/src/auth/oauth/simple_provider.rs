@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{OAuthClientSettings, OAuthProvider, OAuthUser, TokenResponse};
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
+use crate::auth::oauth::providers::OAuthProviderError;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId, UserIdentifier};
 
 /// This is a wrapper on top of OAuthProvider that should work for most social providers, just to
@@ -29,19 +29,6 @@ pub trait SimpleOAuthProvider: Send + Sync {
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError>
   where
     Self: Sized;
-}
-
-pub fn generic_factory<T: SimpleOAuthProvider + Sized + 'static>() -> OAuthProviderRegistryEntry {
-  return OAuthProviderRegistryEntry {
-    id: T::ID,
-    factory_name: T::NAME,
-    factory_display_name: T::DISPLAY_NAME,
-    factory: Box::new(|name: &str, config: &OAuthProviderConfig| {
-      debug_assert_eq!(T::NAME, name);
-
-      return Ok(Box::new(T::new(config)?));
-    }),
-  };
 }
 
 #[async_trait]
@@ -81,24 +68,32 @@ impl<T: SimpleOAuthProvider> OAuthProvider for T {
     http_client: &reqwest::Client,
     token_response: &TokenResponse,
   ) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = http_client
-      .get(T::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<T::User>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    return user.try_into();
+    return get_user_helper::<T::User>(http_client, T::USER_API_URL, token_response).await;
   }
+}
+
+pub(crate) async fn get_user_helper<U: DeserializeOwned + TryInto<OAuthUser, Error = AuthError>>(
+  http_client: &reqwest::Client,
+  user_api_url: &str,
+  token_response: &TokenResponse,
+) -> Result<OAuthUser, AuthError> {
+  if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
+    return Err(AuthError::Internal(
+      format!("Unexpected token type: {:?}", token_response.token_type()).into(),
+    ));
+  }
+
+  let response = http_client
+    .get(user_api_url)
+    .bearer_auth(token_response.access_token().secret())
+    .send()
+    .await
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  let user = response
+    .json::<U>()
+    .await
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  return user.try_into();
 }

@@ -40,7 +40,7 @@ impl GithubOAuthProvider {
     });
   }
 
-  pub fn factory() -> OAuthProviderRegistryEntry {
+  pub fn registry_entry() -> OAuthProviderRegistryEntry {
     OAuthProviderRegistryEntry {
       id: OAuthProviderId::Github,
       factory_name: Self::NAME,

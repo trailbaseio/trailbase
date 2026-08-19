@@ -31,8 +31,8 @@ pub(crate) async fn list_configured_providers_handler(
   return Ok(Json(ConfiguredOAuthProvidersResponse {
     providers: auth_options
       .list_oauth_providers()
-      .into_iter()
-      .map(|p| (p.name, p.display_name))
+      .iter()
+      .map(|p| (p.name.clone(), p.display_name.clone()))
       .collect(),
   }));
 }

@@ -126,6 +126,7 @@ utoipa-axum = { workspace = true }
 uuid = { workspace = true }
 validator = { version = "0.21.0", default-features = false }
 walkdir = "2.5.0"
+scopeguard = "1.2.0"
 
 [build-dependencies]
 trailbase-build = { workspace = true }

@@ -69,7 +69,7 @@ impl AppleOAuthProvider {
     });
   }
 
-  pub fn factory() -> OAuthProviderRegistryEntry {
+  pub fn registry_entry() -> OAuthProviderRegistryEntry {
     OAuthProviderRegistryEntry {
       id: OAuthProviderId::Apple,
       factory_name: Self::NAME,

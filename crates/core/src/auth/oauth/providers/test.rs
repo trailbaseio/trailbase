@@ -1,13 +1,35 @@
 use async_trait::async_trait;
-use oauth2::TokenResponse as _;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
 use crate::auth::oauth::providers::OAuthProviderRegistryEntry;
+use crate::auth::oauth::simple_provider::get_user_helper;
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+
+#[derive(Default, Debug, Deserialize, Serialize)]
+pub struct TestUser {
+  pub id: String,
+  pub email: String,
+  pub verified: bool,
+}
+
+impl TryFrom<TestUser> for OAuthUser {
+  type Error = AuthError;
+
+  fn try_from(user: TestUser) -> Result<Self, Self::Error> {
+    return Ok(OAuthUser {
+      provider_user_id: user.id,
+      provider_id: OAuthProviderId::Test,
+      email: Some(user.email),
+      username: None,
+      verified: user.verified,
+      avatar: None,
+    });
+  }
+}
 
 #[derive(Debug)]
 pub struct TestOAuthProvider {
@@ -54,13 +76,6 @@ impl TestOAuthProvider {
   }
 }
 
-#[derive(Default, Debug, Deserialize, Serialize)]
-pub struct TestUser {
-  pub id: String,
-  pub email: String,
-  pub verified: bool,
-}
-
 #[async_trait]
 impl OAuthProvider for TestOAuthProvider {
   fn name(&self) -> &'static str {
@@ -95,31 +110,6 @@ impl OAuthProvider for TestOAuthProvider {
     http_client: &reqwest::Client,
     token_response: &TokenResponse,
   ) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = http_client
-      .get(&self.user_api_url)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<TestUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    return Ok(OAuthUser {
-      provider_user_id: user.id,
-      provider_id: OAuthProviderId::Test,
-      email: Some(user.email),
-      username: None,
-      verified: user.verified,
-      avatar: None,
-    });
+    return get_user_helper::<TestUser>(http_client, &self.user_api_url, token_response).await;
   }
 }
