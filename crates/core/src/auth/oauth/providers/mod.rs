@@ -52,7 +52,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderRegist
       github::GithubOAuthProvider::factory(),
       google::GoogleOAuthProvider::factory(),
       facebook::FacebookOAuthProvider::factory(),
-      microsoft::MicrosoftOAuthProvider::factory(),
+      generic_factory::<microsoft::MicrosoftOAuthProvider>(),
       twitch::TwitchOAuthProvider::factory(),
       yandex::YandexOAuthProvider::factory(),
     ]
