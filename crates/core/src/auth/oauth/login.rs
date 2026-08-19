@@ -9,8 +9,8 @@ use tower_cookies::Cookies;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
-use crate::auth::oauth::provider::build_oauth_client;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
+use crate::auth::options::OAuthEntry;
 use crate::auth::util::{new_cookie_opts, secure_tls_only};
 use crate::config::proto::UserIdentifier;
 use crate::constants::COOKIE_OAUTH_STATE;
@@ -32,9 +32,15 @@ pub(crate) async fn login_with_external_auth_provider(
   cookies: Cookies,
 ) -> Result<Redirect, AuthError> {
   let auth_options = state.auth_options();
-  let Some(provider) = auth_options.lookup_oauth_provider(&provider) else {
+  let Some(oauth_entry) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
   };
+
+  let OAuthEntry {
+    provider,
+    client: oauth_client,
+    ..
+  } = oauth_entry;
 
   let login_params = build_and_validate_input_params(&state, login_input_query)?;
   let user_identifier = state
@@ -47,7 +53,7 @@ pub(crate) async fn login_with_external_auth_provider(
   let (server_pkce_code_challenge, server_pkce_code_verifier) =
     PkceCodeChallenge::new_random_sha256();
 
-  let (authorize_url, csrf_state) = build_oauth_client(&state, provider.as_ref())?
+  let (authorize_url, csrf_state) = oauth_client
     .authorize_url(CsrfToken::new_random)
     .add_scopes(
       provider

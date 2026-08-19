@@ -21,11 +21,12 @@ use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 #[derive(Debug, Error)]
 pub enum OAuthProviderError {
-  #[error("Missing error: {0}")]
+  #[error("Missing: {0}")]
   Missing(String),
 }
 
-pub type OAuthProviderType = Box<dyn OAuthProvider + Send + Sync>;
+type OAuthProviderType = Box<dyn OAuthProvider + Send + Sync>;
+
 type OAuthFactoryType =
   dyn Fn(&str, &OAuthProviderConfig) -> Result<OAuthProviderType, OAuthProviderError> + Send + Sync;
 

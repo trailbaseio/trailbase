@@ -1,15 +1,10 @@
 use async_trait::async_trait;
-use oauth2::{
-  AuthType, AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
-  StandardRevocableToken, TokenUrl,
-};
+use oauth2::{AuthType, EndpointNotSet, EndpointSet, StandardRevocableToken};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::config::proto::OAuthProviderId;
-use crate::constants::AUTH_API_PATH;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExtraTokenFields {
@@ -100,41 +95,4 @@ pub trait OAuthProvider {
     #[cfg(not(debug_assertions))]
     return Err(AuthError::FailedDependency("invalid token reply".into()));
   }
-}
-
-pub(crate) fn build_oauth_client(
-  state: &AppState,
-  provider: &(dyn OAuthProvider + Send + Sync),
-) -> Result<OAuthClient, AuthError> {
-  let Some(ref site_url) = *state.site_url() else {
-    return Err(AuthError::Internal(
-      "Missing site_url for redirect back from external provider to your TB instance".into(),
-    ));
-  };
-
-  let name = provider.name();
-  let redirect_url: Url = site_url
-    .join(&format!("/{AUTH_API_PATH}/oauth/{name}/callback",))
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-  let settings = provider.settings()?;
-  if settings.client_id.is_empty() {
-    return Err(AuthError::Internal(
-      format!("Missing client id for {name}").into(),
-    ));
-  }
-  if settings.client_secret.is_empty() {
-    return Err(AuthError::Internal(
-      format!("Missing client secret for {name}").into(),
-    ));
-  }
-
-  return Ok(
-    Client::new(ClientId::new(settings.client_id))
-      .set_client_secret(ClientSecret::new(settings.client_secret))
-      .set_auth_uri(AuthUrl::from_url(settings.auth_url))
-      .set_token_uri(TokenUrl::from_url(settings.token_url))
-      .set_redirect_uri(RedirectUrl::from_url(redirect_url))
-      .set_auth_type(provider.auth_type()),
-  );
 }

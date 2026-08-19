@@ -9,6 +9,7 @@ use crate::auth::oauth::providers::OAuthProviderFactory;
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
+#[derive(Debug)]
 pub struct TestOAuthProvider {
   client_id: String,
   client_secret: String,
@@ -23,7 +24,11 @@ impl TestOAuthProvider {
   pub const DISPLAY_NAME: &'static str = "Test OAuth";
 
   pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
+    fn fallback_url(s: &str) -> String {
+      return format!("http://auth.org/{s}");
+    }
+
+    return OAuthProviderFactory {
       id: OAuthProviderId::Test,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,
@@ -31,12 +36,21 @@ impl TestOAuthProvider {
         Ok(Box::new(TestOAuthProvider {
           client_id: config.client_id.clone().unwrap(),
           client_secret: config.client_secret.clone().unwrap(),
-          auth_url: config.auth_url.clone().unwrap_or("not set".to_string()),
-          token_url: config.token_url.clone().unwrap_or("not set".to_string()),
-          user_api_url: config.user_api_url.clone().unwrap_or("not set".to_string()),
+          auth_url: config
+            .auth_url
+            .clone()
+            .unwrap_or_else(|| fallback_url("auth")),
+          token_url: config
+            .token_url
+            .clone()
+            .unwrap_or_else(|| fallback_url("token")),
+          user_api_url: config
+            .user_api_url
+            .clone()
+            .unwrap_or_else(|| fallback_url("user")),
         }))
       }),
-    }
+    };
   }
 }
 
@@ -61,8 +75,8 @@ impl OAuthProvider for TestOAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
     return Ok(OAuthClientSettings {
-      auth_url: Url::parse(&self.auth_url).unwrap(),
-      token_url: Url::parse(&self.token_url).unwrap(),
+      auth_url: Url::parse(&self.auth_url).expect(&format!("GOT: {self:?}")),
+      token_url: Url::parse(&self.token_url).expect(&format!("GOT: {self:?}")),
       client_id: self.client_id.clone(),
       client_secret: self.client_secret.clone(),
     });

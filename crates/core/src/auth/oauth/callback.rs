@@ -11,10 +11,9 @@ use utoipa::IntoParams;
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::build_oauth_client;
-use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::oauth::{OAuthUser, ReqwestClient};
+use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
@@ -51,7 +50,7 @@ pub(crate) async fn callback_from_external_auth_provider(
   cookies: Cookies,
 ) -> Result<Response, AuthError> {
   let auth_options = state.auth_options();
-  let Some(provider) = auth_options.lookup_oauth_provider(&provider) else {
+  let Some(oauth_entry) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
   };
 
@@ -89,7 +88,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       callback_from_oauth_provider_using_auth_code_flow(
         &state,
         &cookies,
-        provider,
+        oauth_entry,
         redirect_uri,
         query.code,
         pkce_code_verifier,
@@ -101,7 +100,7 @@ pub(crate) async fn callback_from_external_auth_provider(
       callback_from_oauth_provider_setting_token_cookies(
         &state,
         &cookies,
-        provider,
+        oauth_entry,
         redirect_uri,
         query.code,
         pkce_code_verifier,
@@ -115,12 +114,13 @@ pub(crate) async fn callback_from_external_auth_provider(
 async fn callback_from_oauth_provider_setting_token_cookies(
   state: &AppState,
   cookies: &Cookies,
-  provider: &OAuthProviderType,
+  oauth_entry: &OAuthEntry,
   redirect: Option<String>,
   auth_code: String,
   server_pkce_code_verifier: String,
 ) -> Result<Response, AuthError> {
-  let db_user = get_or_create_user(state, provider, auth_code, server_pkce_code_verifier).await?;
+  let db_user =
+    get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
 
   // Mint user token and start a session.
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
@@ -180,7 +180,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
 async fn callback_from_oauth_provider_using_auth_code_flow(
   state: &AppState,
   cookies: &Cookies,
-  provider: &OAuthProviderType,
+  oauth_entry: &OAuthEntry,
   redirect: Option<String>,
   auth_code: String,
   server_pkce_code_verifier: String,
@@ -194,7 +194,8 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
     return Err(AuthError::BadRequest("invalid state"));
   };
 
-  let db_user = get_or_create_user(state, provider, auth_code, server_pkce_code_verifier).await?;
+  let db_user =
+    get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
 
   // For the auth_code flow we generate a random code.
   let authorization_code = random_alphanumeric(VERIFICATION_CODE_LENGTH);
@@ -236,17 +237,21 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
 
 async fn get_or_create_user(
   state: &AppState,
-  provider: &OAuthProviderType,
+  oauth_entry: &OAuthEntry,
   auth_code: String,
   server_pkce_code_verifier: String,
 ) -> Result<DbUser, AuthError> {
+  let OAuthEntry {
+    provider,
+    client: oauth_client,
+    ..
+  } = oauth_entry;
+
   let http_client = reqwest::ClientBuilder::new()
     // Following redirects might set us up for server-side request forgery (SSRF).
     .redirect(reqwest::redirect::Policy::none())
     .build()
     .map_err(|err| AuthError::Internal(err.into()))?;
-
-  let oauth_client = build_oauth_client(state, provider.as_ref())?;
 
   let token_response = oauth_client
     .exchange_code(AuthorizationCode::new(auth_code))

@@ -192,7 +192,12 @@ impl AppState {
         site_url,
         dev: args.dev,
         demo: args.demo,
-        auth: config.derive_unchecked(|c| Arc::new(AuthOptions::from_config(c.auth.clone()))),
+        auth: config.derive_unchecked(|c| {
+          Arc::new(AuthOptions::from_config(
+            c.server.site_url.as_deref(),
+            c.auth.clone(),
+          ))
+        }),
         jobs: config.derive_unchecked(move |c| {
           debug!("(re-)building jobs from config");
 
@@ -884,7 +889,12 @@ mod test_utils {
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
         dev: true,
         demo: false,
-        auth: config.derive_unchecked(|c| Arc::new(AuthOptions::from_config(c.auth.clone()))),
+        auth: config.derive_unchecked(|c| {
+          Arc::new(AuthOptions::from_config(
+            c.server.site_url.as_deref(),
+            c.auth.clone(),
+          ))
+        }),
         jobs: config.derive_unchecked(|_c| Arc::new(JobRegistry::new())),
         mailer: mailer.map_or_else(
           || config.derive_unchecked(Mailer::new_from_config),
