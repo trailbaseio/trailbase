@@ -79,8 +79,12 @@ impl OAuthProvider for YandexOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["login:email", "login:avatar", "login:info"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec![
+      "login:email".to_string(),
+      "login:avatar".to_string(),
+      "login:info".to_string(),
+    ];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

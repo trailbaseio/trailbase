@@ -77,10 +77,10 @@ impl OAuthProvider for GoogleOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<String> {
     return vec![
-      "https://www.googleapis.com/auth/userinfo.profile",
-      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile".to_string(),
+      "https://www.googleapis.com/auth/userinfo.email".to_string(),
     ];
   }
 

@@ -64,7 +64,7 @@ pub struct OAuthClientSettings {
 /// Common trait for OAuth providers like Discord, etc.
 #[async_trait]
 pub trait OAuthProvider {
-  #[allow(unused)]
+  #[cfg_attr(not(test), allow(unused))]
   fn provider(&self) -> OAuthProviderId;
 
   fn name(&self) -> &str;
@@ -77,61 +77,21 @@ pub trait OAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
-  fn oauth_client(&self, state: &AppState) -> Result<OAuthClient, AuthError> {
-    let Some(ref site_url) = *state.site_url() else {
-      return Err(AuthError::Internal(
-        "Missing site_url for redirect back from external provider to your TB instance".into(),
-      ));
-    };
+  fn oauth_scopes(&self) -> Vec<String>;
 
-    let redirect_url: Url = site_url
-      .join(&format!(
-        "/{AUTH_API_PATH}/oauth/{name}/callback",
-        name = self.name()
-      ))
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let settings = self.settings()?;
-    if settings.client_id.is_empty() {
-      return Err(AuthError::Internal(
-        format!("Missing client id for {}", self.name()).into(),
-      ));
-    }
-    if settings.client_secret.is_empty() {
-      return Err(AuthError::Internal(
-        format!("Missing client secret for {}", self.name()).into(),
-      ));
-    }
-
-    let client = Client::new(ClientId::new(settings.client_id))
-      .set_client_secret(ClientSecret::new(settings.client_secret))
-      .set_auth_uri(AuthUrl::from_url(settings.auth_url))
-      .set_token_uri(TokenUrl::from_url(settings.token_url))
-      .set_redirect_uri(RedirectUrl::from_url(redirect_url))
-      .set_auth_type(self.auth_type());
-
-    return Ok(client);
-  }
-
-  fn oauth_scopes(&self) -> Vec<&'static str>;
+  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError>;
 
   async fn get_token(
     &self,
-    state: &AppState,
+    http_client: &ReqwestClient,
+    oauth_client: OAuthClient,
     auth_code: String,
     server_pkce_code_verifier: String,
   ) -> Result<TokenResponse, AuthError> {
-    let http_client = reqwest::ClientBuilder::new()
-      // Following redirects might set us up for server-side request forgery (SSRF).
-      .redirect(reqwest::redirect::Policy::none())
-      .build()
-      .map_err(|err| AuthError::Internal(err.into()))?;
-
-    let client = self.oauth_client(state)?;
-    let token_response: TokenResponse = client
+    return oauth_client
       .exchange_code(AuthorizationCode::new(auth_code))
       .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-      .request_async(&ReqwestClient(http_client))
+      .request_async(http_client)
       .await
       .map_err(|err| {
         #[cfg(debug_assertions)]
@@ -144,10 +104,43 @@ pub trait OAuthProvider {
 
         #[cfg(not(debug_assertions))]
         return AuthError::FailedDependency(err.into());
-      })?;
+      });
+  }
+}
 
-    return Ok(token_response);
+pub(crate) fn build_oauth_client(
+  state: &AppState,
+  provider: &(dyn OAuthProvider + Send + Sync),
+) -> Result<OAuthClient, AuthError> {
+  let Some(ref site_url) = *state.site_url() else {
+    return Err(AuthError::Internal(
+      "Missing site_url for redirect back from external provider to your TB instance".into(),
+    ));
+  };
+
+  let name = provider.name();
+  let redirect_url: Url = site_url
+    .join(&format!("/{AUTH_API_PATH}/oauth/{name}/callback",))
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  let settings = provider.settings()?;
+  if settings.client_id.is_empty() {
+    return Err(AuthError::Internal(
+      format!("Missing client id for {name}").into(),
+    ));
+  }
+  if settings.client_secret.is_empty() {
+    return Err(AuthError::Internal(
+      format!("Missing client secret for {name}").into(),
+    ));
   }
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError>;
+  return Ok(
+    Client::new(ClientId::new(settings.client_id))
+      .set_client_secret(ClientSecret::new(settings.client_secret))
+      .set_auth_uri(AuthUrl::from_url(settings.auth_url))
+      .set_token_uri(TokenUrl::from_url(settings.token_url))
+      .set_redirect_uri(RedirectUrl::from_url(redirect_url))
+      .set_auth_type(provider.auth_type()),
+  );
 }

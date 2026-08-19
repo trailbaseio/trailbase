@@ -77,8 +77,8 @@ impl OAuthProvider for DiscordOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["identify", "email"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec!["identify".to_string(), "email".to_string()];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

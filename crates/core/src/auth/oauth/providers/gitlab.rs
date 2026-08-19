@@ -77,8 +77,8 @@ impl OAuthProvider for GitlabOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["read_user"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec!["read_user".to_string()];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

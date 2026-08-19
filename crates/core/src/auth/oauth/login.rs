@@ -9,6 +9,7 @@ use tower_cookies::Cookies;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
+use crate::auth::oauth::provider::build_oauth_client;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::util::{new_cookie_opts, secure_tls_only};
 use crate::constants::COOKIE_OAUTH_STATE;
@@ -40,15 +41,9 @@ pub(crate) async fn login_with_external_auth_provider(
   let (server_pkce_code_challenge, server_pkce_code_verifier) =
     PkceCodeChallenge::new_random_sha256();
 
-  let (authorize_url, csrf_state) = provider
-    .oauth_client(&state)?
+  let (authorize_url, csrf_state) = build_oauth_client(&state, provider.as_ref())?
     .authorize_url(CsrfToken::new_random)
-    .add_scopes(
-      provider
-        .oauth_scopes()
-        .into_iter()
-        .map(|s| Scope::new(s.to_string())),
-    )
+    .add_scopes(provider.oauth_scopes().into_iter().map(Scope::new))
     .set_pkce_challenge(server_pkce_code_challenge)
     .url();
 

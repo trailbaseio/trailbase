@@ -137,8 +137,8 @@ impl OAuthProvider for AppleOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["name", "email"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec!["name".to_string(), "email".to_string()];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

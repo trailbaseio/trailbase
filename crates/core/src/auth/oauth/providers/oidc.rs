@@ -96,8 +96,10 @@ impl OAuthProvider for OidcProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["openid", "email", "profile"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    // TODO: Should be configurable.
+    const DEFAULT_SCOPES: &[&str] = &["openid", "email", "profile"];
+    return DEFAULT_SCOPES.iter().map(|s| s.to_string()).collect();
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

@@ -87,8 +87,8 @@ impl OAuthProvider for MicrosoftOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["User.Read"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec!["User.Read".to_string()];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

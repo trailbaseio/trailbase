@@ -11,6 +11,8 @@ use utoipa::IntoParams;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::ReqwestClient;
+use crate::auth::oauth::provider::build_oauth_client;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
@@ -238,8 +240,19 @@ async fn get_or_create_user(
   auth_code: String,
   server_pkce_code_verifier: String,
 ) -> Result<DbUser, AuthError> {
+  let http_client = reqwest::ClientBuilder::new()
+    // Following redirects might set us up for server-side request forgery (SSRF).
+    .redirect(reqwest::redirect::Policy::none())
+    .build()
+    .map_err(|err| AuthError::Internal(err.into()))?;
+
   let token_response = provider
-    .get_token(state, auth_code, server_pkce_code_verifier)
+    .get_token(
+      &ReqwestClient(http_client),
+      build_oauth_client(state, provider.as_ref())?,
+      auth_code,
+      server_pkce_code_verifier,
+    )
     .await?;
 
   // Call provider's USER_INFO endpoint with the tokens acquired above.

@@ -58,3 +58,29 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
 
   return REGISTRY.as_slice();
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_registry() {
+    let registry = oauth_providers_static_registry();
+
+    let config = OAuthProviderConfig {
+      client_id: Some("id".to_string()),
+      client_secret: Some("secret".to_string()),
+      auth_url: Some("http://auth.org/".to_string()),
+      user_api_url: Some("http://auth.org/".to_string()),
+      token_url: Some("http://auth.org/".to_string()),
+      ..Default::default()
+    };
+
+    for entry in registry {
+      let provider = (*entry.factory)(&entry.factory_name, &config).unwrap();
+
+      assert_eq!(entry.id, provider.provider());
+      assert_eq!(entry.factory_name, provider.name());
+    }
+  }
+}

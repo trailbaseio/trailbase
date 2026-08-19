@@ -68,8 +68,12 @@ impl OAuthProvider for TestOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["identity", "email", "preferences"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec![
+      "identity".to_string(),
+      "email".to_string(),
+      "preferences".to_string(),
+    ];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {

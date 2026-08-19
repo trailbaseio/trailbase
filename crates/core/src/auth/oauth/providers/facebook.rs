@@ -98,8 +98,8 @@ impl OAuthProvider for FacebookOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["email"];
+  fn oauth_scopes(&self) -> Vec<String> {
+    return vec!["email".to_string()];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
