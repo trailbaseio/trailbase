@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
-use crate::auth::oauth::providers::OAuthProviderFactory;
+use crate::auth::oauth::providers::OAuthProviderRegistryEntry;
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
@@ -23,12 +23,12 @@ impl TestOAuthProvider {
   pub const NAME: &'static str = "test";
   pub const DISPLAY_NAME: &'static str = "Test OAuth";
 
-  pub fn factory() -> OAuthProviderFactory {
+  pub fn factory() -> OAuthProviderRegistryEntry {
     fn fallback_url(s: &str) -> String {
       return format!("http://auth.org/{s}");
     }
 
-    return OAuthProviderFactory {
+    return OAuthProviderRegistryEntry {
       id: OAuthProviderId::Test,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,

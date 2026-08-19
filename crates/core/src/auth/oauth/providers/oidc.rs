@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
+use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
@@ -23,13 +23,13 @@ pub struct OidcProvider {
 }
 
 impl OidcProvider {
-  pub fn factory(index: u64) -> OAuthProviderFactory {
+  pub fn factory(index: u64) -> OAuthProviderRegistryEntry {
     let (id, factory_name, factory_display_name) = match index {
       0 => (OAuthProviderId::Oidc0, "oidc0", "OpenID Connect"),
       _ => panic!("Multiple OIDC provider not implemented"),
     };
 
-    OAuthProviderFactory {
+    OAuthProviderRegistryEntry {
       id,
       factory_name,
       factory_display_name,

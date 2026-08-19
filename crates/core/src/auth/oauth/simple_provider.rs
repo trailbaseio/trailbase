@@ -5,7 +5,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{OAuthClientSettings, OAuthProvider, OAuthUser, TokenResponse};
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
+use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId, UserIdentifier};
 
 /// This is a wrapper on top of OAuthProvider that should work for most social providers, just to
@@ -31,8 +31,8 @@ pub trait SimpleOAuthProvider: Send + Sync {
     Self: Sized;
 }
 
-pub fn generic_factory<T: SimpleOAuthProvider + Sized + 'static>() -> OAuthProviderFactory {
-  return OAuthProviderFactory {
+pub fn generic_factory<T: SimpleOAuthProvider + Sized + 'static>() -> OAuthProviderRegistryEntry {
+  return OAuthProviderRegistryEntry {
     id: T::ID,
     factory_name: T::NAME,
     factory_display_name: T::DISPLAY_NAME,

@@ -6,7 +6,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
+use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
@@ -39,8 +39,8 @@ impl YandexOAuthProvider {
     });
   }
 
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
+  pub fn factory() -> OAuthProviderRegistryEntry {
+    OAuthProviderRegistryEntry {
       id: OAuthProviderId::Yandex,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,
