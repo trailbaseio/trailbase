@@ -77,6 +77,7 @@ impl OAuthProvider for TwitchOAuthProvider {
     });
   }
 
+  // NOTE: Twitch overrides the AuthType.
   fn auth_type(&self) -> oauth2::AuthType {
     return oauth2::AuthType::RequestBody;
   }
@@ -97,6 +98,7 @@ impl OAuthProvider for TwitchOAuthProvider {
       ));
     }
 
+    // NOTE: Twitch requires the special "Client-Id" header.
     let response = http_client
       .get(Self::USER_API_URL)
       .header("Client-Id", &self.client_id)
