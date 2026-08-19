@@ -51,7 +51,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderRegist
       generic_factory::<gitlab::GitlabOAuthProvider>(),
       github::GithubOAuthProvider::factory(),
       google::GoogleOAuthProvider::factory(),
-      facebook::FacebookOAuthProvider::factory(),
+      generic_factory::<facebook::FacebookOAuthProvider>(),
       generic_factory::<microsoft::MicrosoftOAuthProvider>(),
       twitch::TwitchOAuthProvider::factory(),
       yandex::YandexOAuthProvider::factory(),

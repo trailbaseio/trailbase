@@ -36,7 +36,11 @@ pub fn generic_factory<T: SimpleOAuthProvider + Sized + 'static>() -> OAuthProvi
     id: T::ID,
     factory_name: T::NAME,
     factory_display_name: T::DISPLAY_NAME,
-    factory: Box::new(|_name: &str, config: &OAuthProviderConfig| Ok(Box::new(T::new(config)?))),
+    factory: Box::new(|name: &str, config: &OAuthProviderConfig| {
+      debug_assert_eq!(T::NAME, name);
+
+      return Ok(Box::new(T::new(config)?));
+    }),
   };
 }
 

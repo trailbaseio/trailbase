@@ -1,31 +1,44 @@
-use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
+use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::provider::UserIdentifier;
+use crate::auth::oauth::providers::OAuthProviderError;
+use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 #[derive(Default, Deserialize, Debug)]
-struct FacebookUserPictureData {
+pub struct FacebookUserPictureData {
   url: String,
 }
 
 #[derive(Default, Deserialize, Debug)]
-struct FacebookUserPicture {
+pub struct FacebookUserPicture {
   data: FacebookUserPictureData,
 }
 
+// https://developers.facebook.com/docs/graph-api/reference/user/#default-public-profile-fields
 #[derive(Default, Deserialize, Debug)]
-struct FacebookUser {
+pub struct FacebookUser {
   id: String,
   email: String,
   // name: Option<String>,
   picture: Option<FacebookUserPicture>,
+}
+
+impl TryFrom<FacebookUser> for OAuthUser {
+  type Error = AuthError;
+
+  fn try_from(user: FacebookUser) -> Result<Self, Self::Error> {
+    return Ok(OAuthUser {
+      provider_user_id: user.id,
+      provider_id: OAuthProviderId::Facebook,
+      email: Some(user.email),
+      username: None,
+      verified: true,
+      avatar: user.picture.map(|p| p.data.url),
+    });
+  }
 }
 
 pub(crate) struct FacebookOAuthProvider {
@@ -33,7 +46,8 @@ pub(crate) struct FacebookOAuthProvider {
   client_secret: String,
 }
 
-impl FacebookOAuthProvider {
+impl SimpleOAuthProvider for FacebookOAuthProvider {
+  const ID: OAuthProviderId = OAuthProviderId::Facebook;
   const NAME: &'static str = "facebook";
   const DISPLAY_NAME: &'static str = "Facebook";
 
@@ -41,6 +55,21 @@ impl FacebookOAuthProvider {
   const TOKEN_URL: &'static str = "https://graph.facebook.com/v3.2/oauth/access_token";
   const USER_API_URL: &'static str =
     "https://graph.facebook.com/me?fields=name,email,picture.type(large)";
+
+  type User = FacebookUser;
+
+  fn client_id(&self) -> String {
+    return self.client_id.clone();
+  }
+
+  fn client_secret(&self) -> String {
+    return self.client_secret.clone();
+  }
+
+  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+    // TODO: Pick scopes based on user-id policy.
+    return vec!["email".to_string()];
+  }
 
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
@@ -57,82 +86,6 @@ impl FacebookOAuthProvider {
     return Ok(Self {
       client_id,
       client_secret,
-    });
-  }
-
-  pub fn factory() -> OAuthProviderRegistryEntry {
-    OAuthProviderRegistryEntry {
-      id: OAuthProviderId::Facebook,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
-}
-
-#[async_trait]
-impl OAuthProvider for FacebookOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Facebook
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
-
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(FacebookOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(FacebookOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
-    // TODO: Pick scopes based on user-id policy.
-    return vec!["email".to_string()];
-  }
-
-  async fn get_user(
-    &self,
-    http_client: &reqwest::Client,
-    token_response: &TokenResponse,
-  ) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = http_client
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<FacebookUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    return Ok(OAuthUser {
-      provider_user_id: user.id,
-      provider_id: OAuthProviderId::Facebook,
-      email: Some(user.email),
-      username: None,
-      verified: true,
-      avatar: user.picture.map(|p| p.data.url),
     });
   }
 }
