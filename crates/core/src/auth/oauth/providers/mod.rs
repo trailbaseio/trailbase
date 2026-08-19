@@ -50,7 +50,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderRegist
       generic_factory::<discord::DiscordOAuthProvider>(),
       generic_factory::<gitlab::GitlabOAuthProvider>(),
       github::GithubOAuthProvider::factory(),
-      google::GoogleOAuthProvider::factory(),
+      generic_factory::<google::GoogleOAuthProvider>(),
       generic_factory::<facebook::FacebookOAuthProvider>(),
       generic_factory::<microsoft::MicrosoftOAuthProvider>(),
       twitch::TwitchOAuthProvider::factory(),
@@ -67,22 +67,24 @@ mod tests {
 
   #[test]
   fn test_registry() {
-    let registry = oauth_providers_static_registry();
-
     let config = OAuthProviderConfig {
       client_id: Some("id".to_string()),
       client_secret: Some("secret".to_string()),
-      auth_url: Some("http://auth.org/".to_string()),
-      user_api_url: Some("http://auth.org/".to_string()),
-      token_url: Some("http://auth.org/".to_string()),
+      // Below URLs will be ignored by the SocialProviders.
+      auth_url: Some("http://auth.org/auth".to_string()),
+      token_url: Some("http://auth.org/token".to_string()),
+      user_api_url: Some("http://auth.org/user".to_string()),
       ..Default::default()
     };
 
-    for entry in registry {
+    for entry in oauth_providers_static_registry() {
       let provider = (*entry.factory)(&entry.factory_name, &config).unwrap();
 
       assert_eq!(entry.id, provider.provider());
       assert_eq!(entry.factory_name, provider.name());
+
+      // Make sure URLs parse.
+      provider.settings().unwrap();
     }
   }
 }

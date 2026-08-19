@@ -1,27 +1,68 @@
-use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
+use crate::auth::oauth::OAuthUser;
+use crate::auth::oauth::provider::UserIdentifier;
+use crate::auth::oauth::providers::OAuthProviderError;
+use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+
+// https://developers.google.com/resources/api-libraries/documentation/oauth2/v2/python/latest/oauth2_v2.userinfo.html
+#[derive(Default, Deserialize, Debug)]
+pub struct GoogleUser {
+  id: String,
+  // name: Option<String>,
+  email: String,
+  verified_email: bool,
+  picture: Option<String>,
+}
+
+impl TryFrom<GoogleUser> for OAuthUser {
+  type Error = AuthError;
+
+  fn try_from(user: GoogleUser) -> Result<Self, Self::Error> {
+    return Ok(OAuthUser {
+      provider_user_id: user.id,
+      provider_id: OAuthProviderId::Google,
+      email: Some(user.email),
+      username: None,
+      verified: user.verified_email,
+      avatar: user.picture,
+    });
+  }
+}
 
 pub(crate) struct GoogleOAuthProvider {
   client_id: String,
   client_secret: String,
 }
 
-impl GoogleOAuthProvider {
+impl SimpleOAuthProvider for GoogleOAuthProvider {
+  const ID: OAuthProviderId = OAuthProviderId::Google;
   const NAME: &'static str = "google";
   const DISPLAY_NAME: &'static str = "Google";
 
   const AUTH_URL: &'static str = "https://accounts.google.com/o/oauth2/auth";
   const TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
   const USER_API_URL: &'static str = "https://www.googleapis.com/oauth2/v1/userinfo";
+
+  type User = GoogleUser;
+
+  fn client_id(&self) -> String {
+    return self.client_id.clone();
+  }
+
+  fn client_secret(&self) -> String {
+    return self.client_secret.clone();
+  }
+
+  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+    // TODO: Pick scopes based on user-id policy.
+    return vec![
+      "https://www.googleapis.com/auth/userinfo.profile".to_string(),
+      "https://www.googleapis.com/auth/userinfo.email".to_string(),
+    ];
+  }
 
   fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
@@ -36,97 +77,6 @@ impl GoogleOAuthProvider {
     return Ok(Self {
       client_id,
       client_secret,
-    });
-  }
-
-  pub fn factory() -> OAuthProviderRegistryEntry {
-    OAuthProviderRegistryEntry {
-      id: OAuthProviderId::Google,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
-}
-
-#[async_trait]
-impl OAuthProvider for GoogleOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Google
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
-
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GoogleOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(GoogleOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
-    // TODO: Pick scopes based on user-id policy.
-    return vec![
-      "https://www.googleapis.com/auth/userinfo.profile".to_string(),
-      "https://www.googleapis.com/auth/userinfo.email".to_string(),
-    ];
-  }
-
-  async fn get_user(
-    &self,
-    http_client: &reqwest::Client,
-    token_response: &TokenResponse,
-  ) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = http_client
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    #[derive(Default, Deserialize, Debug)]
-    struct GoogleUser {
-      id: String,
-      // name: Option<String>,
-      email: String,
-      verified_email: bool,
-      picture: Option<String>,
-    }
-
-    let user = response
-      .json::<GoogleUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-    if !user.verified_email {
-      return Err(AuthError::Unauthorized);
-    }
-
-    return Ok(OAuthUser {
-      provider_user_id: user.id,
-      provider_id: OAuthProviderId::Google,
-      email: Some(user.email),
-      username: None,
-      verified: user.verified_email,
-      avatar: user.picture,
     });
   }
 }
