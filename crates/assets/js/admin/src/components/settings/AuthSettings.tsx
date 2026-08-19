@@ -16,6 +16,7 @@ import {
   buildOptionalBoolFormField,
   buildOptionalSecretFormField,
   buildOptionalTextFormField,
+  buildStringListFormField,
 } from "@/components/FormFields";
 import {
   Accordion,
@@ -257,6 +258,25 @@ function ProviderSettingsSubForm(props: {
               name={`namedOAuthProviders[${props.index}].state.userApiUrl`}
             >
               {buildOptionalTextFormField({ label: () => <L>User API URL</L> })}
+            </props.form.Field>
+
+            <props.form.Field
+              name={`namedOAuthProviders[${props.index}].state.scopes`}
+            >
+              {buildStringListFormField({
+                label: () => <L>Scopes</L>,
+                placeholder: "openid profile [email]",
+                info: (
+                  <p>
+                    Space-separated list of scopes to request. If empty, the
+                    default of "openid profile email" or "openid profile" will
+                    be applied depending on your "User Identifier" policy.
+                    Generally, the claims covered by the specified scopes need
+                    to satisfy the policy, i.e. email and/or username must be
+                    present.
+                  </p>
+                ),
+              })}
             </props.form.Field>
           </Show>
         </div>
