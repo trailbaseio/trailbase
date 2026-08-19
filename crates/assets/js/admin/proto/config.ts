@@ -440,7 +440,18 @@ export interface OAuthProviderConfig {
   displayName?: string | undefined;
   authUrl?: string | undefined;
   tokenUrl?: string | undefined;
-  userApiUrl?: string | undefined;
+  userApiUrl?:
+    | string
+    | undefined;
+  /**
+   * Replaces the provider's default scopes, when set. Needed for providers that
+   * don't offer the defaults, e.g. an OIDC provider w/o `email` or `profile`.
+   *
+   * NOTE: Claims not covered by the requested scopes won't be returned by the
+   * provider's user-info endpoint, i.e. dropping `email` requires a
+   * username-based `UserIdentifier`.
+   */
+  scopes: string[];
 }
 
 export interface AuthConfig {
@@ -1076,7 +1087,7 @@ export const EmailConfig: MessageFns<EmailConfig> = {
 };
 
 function createBaseOAuthProviderConfig(): OAuthProviderConfig {
-  return {};
+  return { scopes: [] };
 }
 
 export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
@@ -1101,6 +1112,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     }
     if (message.userApiUrl !== undefined && message.userApiUrl !== "") {
       writer.uint32(114).string(message.userApiUrl);
+    }
+    for (const v of message.scopes) {
+      writer.uint32(122).string(v!);
     }
     return writer;
   },
@@ -1168,6 +1182,14 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
           message.userApiUrl = reader.string();
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.scopes.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1214,6 +1236,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
         : isSet(object.user_api_url)
         ? globalThis.String(object.user_api_url)
         : undefined,
+      scopes: globalThis.Array.isArray(object?.scopes)
+        ? object.scopes.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -1240,6 +1265,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.userApiUrl !== undefined && message.userApiUrl !== "") {
       obj.userApiUrl = message.userApiUrl;
     }
+    if (message.scopes?.length) {
+      obj.scopes = message.scopes;
+    }
     return obj;
   },
 
@@ -1255,6 +1283,7 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     message.authUrl = object.authUrl ?? "";
     message.tokenUrl = object.tokenUrl ?? "";
     message.userApiUrl = object.userApiUrl ?? "";
+    message.scopes = object.scopes?.map((e) => e) || [];
     return message;
   },
 };

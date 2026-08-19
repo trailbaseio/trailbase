@@ -1,3 +1,5 @@
+pub(crate) mod providers;
+
 mod callback;
 mod list_providers;
 mod login;
@@ -13,7 +15,7 @@ use utoipa_axum::router::OpenApiRouter;
 
 use crate::AppState;
 
-pub(crate) use provider::{OAuthClientSettings, OAuthProvider, OAuthUser};
+pub(crate) use providers::interface::{OAuthClientSettings, OAuthProvider, OAuthUser};
 pub(crate) use reqwest_client::ReqwestClient;
 
 pub fn oauth_router() -> OpenApiRouter<AppState> {

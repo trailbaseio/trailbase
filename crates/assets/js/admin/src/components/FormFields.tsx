@@ -133,6 +133,40 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
   };
 }
 
+/// Used for repeated proto string fields, entered as a whitespace-separated list.
+export function buildStringListFormField(opts: Omit<TextFieldOptions, "type">) {
+  return function builder(field: () => FieldApiT<string[]>) {
+    return (
+      <TextField class="w-full">
+        <div
+          class={cn("grid items-center", gapStyle)}
+          style={{ "grid-template-columns": "auto 1fr" }}
+        >
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
+
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type="text"
+            value={(field().state.value ?? []).join(" ")}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            autocomplete={opts.autocomplete}
+            onChange={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(value.split(/\s+/).filter((s) => s !== ""));
+            }}
+            onInput={opts.onInput}
+            data-testid="input"
+          />
+
+          <GridFieldInfo field={field()} />
+          <InfoColumn info={opts.info} />
+        </div>
+      </TextField>
+    );
+  };
+}
+
 export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
   const [type, setType] = createSignal<TextFieldType>("password");
 

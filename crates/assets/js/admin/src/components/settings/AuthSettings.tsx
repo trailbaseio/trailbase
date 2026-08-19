@@ -16,6 +16,7 @@ import {
   buildOptionalBoolFormField,
   buildOptionalSecretFormField,
   buildOptionalTextFormField,
+  buildStringListFormField,
 } from "@/components/FormFields";
 import {
   Accordion,
@@ -137,11 +138,11 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
     const clientSecret = entry.state?.clientSecret?.trim();
 
     if (clientId && clientSecret) {
-      config.oauthProviders[p.name] = {
+      config.oauthProviders[p.name] = OAuthProviderConfig.fromPartial({
         providerId: p.id,
 
         ...entry.state,
-      };
+      });
     } else {
       console.debug("Skipping incomplete: ", entry);
     }
@@ -177,7 +178,7 @@ function ProviderSettingsSubForm(props: {
       }
 
       const s = state.values.namedOAuthProviders[props.index].state;
-      setOnce({ ...s });
+      setOnce(s && OAuthProviderConfig.fromPartial(s));
       return s;
     })(),
   );
@@ -257,6 +258,23 @@ function ProviderSettingsSubForm(props: {
               name={`namedOAuthProviders[${props.index}].state.userApiUrl`}
             >
               {buildOptionalTextFormField({ label: () => <L>User API URL</L> })}
+            </props.form.Field>
+
+            <props.form.Field
+              name={`namedOAuthProviders[${props.index}].state.scopes`}
+            >
+              {buildStringListFormField({
+                label: () => <L>Scopes</L>,
+                placeholder: "openid email profile",
+                info: (
+                  <p>
+                    Space-separated scopes to request. Empty means the defaults:
+                    "openid email profile". Only claims covered by the requested
+                    scopes are returned, so dropping "email" requires a
+                    username-based user identifier above.
+                  </p>
+                ),
+              })}
             </props.form.Field>
           </Show>
         </div>

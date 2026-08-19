@@ -46,7 +46,9 @@ pub struct OAuthUser {
   pub provider_user_id: String,
   pub provider_id: OAuthProviderId,
 
-  pub email: String,
+  /// Absent when the provider wasn't asked for, or doesn't expose, an email address. Requires a
+  /// username-based `UserIdentifier`, see `create_user_for_external_provider`.
+  pub email: Option<String>,
   pub username: Option<String>,
   pub verified: bool,
 
@@ -64,11 +66,10 @@ pub struct OAuthClientSettings {
 /// Common trait for OAuth providers like Discord, etc.
 #[async_trait]
 pub trait OAuthProvider {
-  #[allow(unused)]
-  fn provider(&self) -> OAuthProviderId;
-
+  /// Config key and URL path segment, i.e. what users authenticate against.
   fn name(&self) -> &str;
 
+  /// Human-readable name, shown in the admin UI and returned by the providers API.
   fn display_name(&self) -> &str;
 
   fn auth_type(&self) -> AuthType {
@@ -113,7 +114,17 @@ pub trait OAuthProvider {
     return Ok(client);
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str>;
+  /// Scopes to request from the provider.
+  ///
+  /// NOTE: Tied to `&self`'s lifetime rather than `'static`, so providers can return scopes
+  /// that were read from the config.
+  fn oauth_scopes(&self) -> Vec<&str>;
+
+  /// Salvages a token response that failed to parse because the provider doesn't comply with
+  /// RFC-6749. Returning `None` propagates the original parse error.
+  fn recover_token_response(&self, _body: &[u8]) -> Option<Result<TokenResponse, AuthError>> {
+    return None;
+  }
 
   async fn get_token(
     &self,
@@ -128,25 +139,29 @@ pub trait OAuthProvider {
       .map_err(|err| AuthError::Internal(err.into()))?;
 
     let client = self.oauth_client(state)?;
-    let token_response: TokenResponse = client
+    return client
       .exchange_code(AuthorizationCode::new(auth_code))
       .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
       .request_async(&ReqwestClient(http_client))
       .await
-      .map_err(|err| {
+      .or_else(|err| {
+        if let oauth2::RequestTokenError::Parse(ref _path, ref body) = err
+          && let Some(recovered) = self.recover_token_response(body)
+        {
+          return recovered;
+        }
+
         #[cfg(debug_assertions)]
-        return match err {
+        return Err(match err {
           oauth2::RequestTokenError::Parse(_path, resp) => {
             AuthError::Internal(String::from_utf8_lossy(&resp).into())
           }
           err => AuthError::FailedDependency(format!("{err:?}").into()),
-        };
+        });
 
         #[cfg(not(debug_assertions))]
-        return AuthError::FailedDependency(err.into());
-      })?;
-
-    return Ok(token_response);
+        return Err(AuthError::FailedDependency(err.into()));
+      });
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError>;

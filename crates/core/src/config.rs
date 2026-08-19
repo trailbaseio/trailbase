@@ -630,6 +630,22 @@ pub async fn validate_config(
       {
         return ierr(format!("Invalid user api url for '{name}"));
       }
+
+      // Scopes are space-delimited on the wire, so an embedded space would silently turn into two
+      // scopes.
+      for scope in &provider.scopes {
+        if scope.is_empty() || scope.split_whitespace().count() != 1 {
+          return ierr(format!(
+            "OAuth provider {name}'s scopes must be non-empty and whitespace-free: '{scope}'"
+          ));
+        }
+      }
+    } else if !provider.scopes.is_empty() {
+      // The built-in providers parse a fixed set of claims out of their user-info response, so
+      // narrowing their scopes would only break them at login time.
+      return ierr(format!(
+        "Custom scopes are only supported for OIDC, not: {name}"
+      ));
     }
   }
 
@@ -1009,6 +1025,72 @@ mod test {
     let merged = merge_vault_and_env(stripped, vault).unwrap();
 
     assert_eq!(config, merged);
+  }
+
+  #[tokio::test]
+  async fn test_oauth_provider_scope_validation() {
+    let state = test_state(None).await.unwrap();
+
+    let config_with_scopes = |name: &str, provider_id: OAuthProviderId, scopes: &[&str]| {
+      let mut config = Config::new_with_custom_defaults();
+      config.auth.oauth_providers = HashMap::from([(
+        name.to_string(),
+        OAuthProviderConfig {
+          client_id: Some("client_id".to_string()),
+          client_secret: Some("client_secret".to_string()),
+          provider_id: Some(provider_id as i32),
+          auth_url: Some("https://example.com/auth".to_string()),
+          token_url: Some("https://example.com/token".to_string()),
+          user_api_url: Some("https://example.com/user".to_string()),
+          scopes: scopes.iter().map(|s| s.to_string()).collect(),
+          ..Default::default()
+        },
+      )]);
+      config
+    };
+
+    let validate = async |config: Config| {
+      validate_config(&state.connection_manager(), &config)
+        .await
+        .map(|_| ())
+    };
+
+    const OIDC: OAuthProviderId = OAuthProviderId::Oidc0;
+    assert!(
+      validate(config_with_scopes("oidc0", OIDC, &[]))
+        .await
+        .is_ok()
+    );
+    assert!(
+      validate(config_with_scopes("oidc0", OIDC, &["openid", "email"]))
+        .await
+        .is_ok()
+    );
+
+    // A scope containing whitespace would silently expand into multiple scopes on the wire.
+    assert!(
+      validate(config_with_scopes("oidc0", OIDC, &["openid email"]))
+        .await
+        .is_err()
+    );
+    assert!(
+      validate(config_with_scopes("oidc0", OIDC, &[""]))
+        .await
+        .is_err()
+    );
+
+    // Built-in providers parse a fixed set of claims, so their scopes are not negotiable.
+    const GOOGLE: OAuthProviderId = OAuthProviderId::Google;
+    assert!(
+      validate(config_with_scopes("google", GOOGLE, &[]))
+        .await
+        .is_ok()
+    );
+    assert!(
+      validate(config_with_scopes("google", GOOGLE, &["email"]))
+        .await
+        .is_err()
+    );
   }
 
   #[test]

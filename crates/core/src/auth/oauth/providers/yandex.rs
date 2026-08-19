@@ -1,21 +1,46 @@
-use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
+use crate::config::proto::OAuthProviderId;
 
-pub(crate) struct YandexOAuthProvider {
-  client_id: String,
-  client_secret: String,
+pub(crate) struct Yandex;
+
+// Checkout available fields on:
+// * https://yandex.com/dev/id/doc/en/user-information
+// * https://authjs.dev/reference/core/providers/yandex.
+#[derive(Default, Deserialize, Debug)]
+pub(crate) struct YandexUser {
+  id: String,
+  // real_name: String,
+  login: Option<String>,
+  default_email: String,
+  is_avatar_empty: bool,
+  default_avatar_id: String,
 }
 
-impl YandexOAuthProvider {
+impl TryFrom<YandexUser> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(user: YandexUser) -> Result<Self, AuthError> {
+    return Ok(Self {
+      provider_user_id: user.id,
+      email: Some(user.default_email),
+      username: user.login,
+      verified: true,
+      // NOTE: Yandex sends a placeholder id alongside the flag, so the flag decides.
+      avatar: (!user.is_avatar_empty).then(|| {
+        format!(
+          "https://avatars.yandex.net/get-yapic/{}/islands-200",
+          user.default_avatar_id
+        )
+      }),
+    });
+  }
+}
+
+impl SocialSpec for Yandex {
+  const ID: OAuthProviderId = OAuthProviderId::Yandex;
   const NAME: &'static str = "yandex";
   const DISPLAY_NAME: &'static str = "Yandex";
 
@@ -23,114 +48,48 @@ impl YandexOAuthProvider {
   const TOKEN_URL: &'static str = "https://oauth.yandex.com/token";
   const USER_API_URL: &'static str = "https://login.yandex.ru/info";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Yandex client id".to_string()));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Yandex client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &["login:email", "login:avatar", "login:info"];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
-  }
-
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Yandex,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
+  type User = YandexUser;
 }
 
-#[async_trait]
-impl OAuthProvider for YandexOAuthProvider {
-  fn name(&self) -> &'static str {
-    return Self::NAME;
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::auth::oauth::providers::social::resolve_user;
+
+  #[tokio::test]
+  async fn test_yandex_user_mapping() {
+    let user = resolve_user::<Yandex>(serde_json::json!({
+      "id": "1234",
+      "login": "ivan",
+      "default_email": "ivan@yandex.ru",
+      "is_avatar_empty": false,
+      "default_avatar_id": "abcdef",
+    }))
+    .await
+    .unwrap();
+
+    assert_eq!(user.email.as_deref(), Some("ivan@yandex.ru"));
+    assert_eq!(user.username.as_deref(), Some("ivan"));
+    assert_eq!(
+      user.avatar.as_deref(),
+      Some("https://avatars.yandex.net/get-yapic/abcdef/islands-200")
+    );
   }
 
-  fn provider(&self) -> OAuthProviderId {
-    return OAuthProviderId::Yandex;
-  }
+  #[tokio::test]
+  async fn test_yandex_user_without_avatar() {
+    let user = resolve_user::<Yandex>(serde_json::json!({
+      "id": "1234",
+      "default_email": "ivan@yandex.ru",
+      // Yandex sends a placeholder id alongside this flag, which must not become a URL.
+      "is_avatar_empty": true,
+      "default_avatar_id": "0/0-0",
+    }))
+    .await
+    .unwrap();
 
-  fn display_name(&self) -> &'static str {
-    return Self::DISPLAY_NAME;
-  }
-
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(YandexOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(YandexOAuthProvider::TOKEN_URL).expect("infallible");
-    }
-
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["login:email", "login:avatar", "login:info"];
-  }
-
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    // Checkout available fields on:
-    // * https://yandex.com/dev/id/doc/en/user-information
-    // * https://authjs.dev/reference/core/providers/yandex.
-    #[derive(Default, Deserialize, Debug)]
-    struct YandexUser {
-      id: String,
-      // real_name: String,
-      login: Option<String>,
-      default_email: String,
-      is_avatar_empty: bool,
-      default_avatar_id: String,
-    }
-
-    let user = response
-      .json::<YandexUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let avatar = if !user.is_avatar_empty {
-      Some(format!(
-        "https://avatars.yandex.net/get-yapic/{}/islands-200",
-        user.default_avatar_id
-      ))
-    } else {
-      None
-    };
-
-    return Ok(OAuthUser {
-      provider_user_id: user.id,
-      provider_id: OAuthProviderId::Yandex,
-      email: user.default_email,
-      username: user.login,
-      verified: true,
-      avatar,
-    });
+    assert_eq!(user.avatar, None);
   }
 }

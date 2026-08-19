@@ -1,28 +1,34 @@
-use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
+use crate::config::proto::OAuthProviderId;
+
+pub(crate) struct Microsoft;
 
 #[derive(Default, Deserialize, Debug)]
-struct MicrosoftUser {
+pub(crate) struct MicrosoftUser {
   id: String,
   mail: String,
   // displayName: String,
 }
 
-pub(crate) struct MicrosoftOAuthProvider {
-  client_id: String,
-  client_secret: String,
+impl TryFrom<MicrosoftUser> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(user: MicrosoftUser) -> Result<Self, AuthError> {
+    return Ok(Self {
+      provider_user_id: user.id,
+      email: Some(user.mail),
+      // username: Some(user.displayName),
+      verified: true,
+      ..Default::default()
+    });
+  }
 }
 
-impl MicrosoftOAuthProvider {
+impl SocialSpec for Microsoft {
+  const ID: OAuthProviderId = OAuthProviderId::Microsoft;
   const NAME: &'static str = "microsoft";
   const DISPLAY_NAME: &'static str = "Microsoft";
 
@@ -30,94 +36,28 @@ impl MicrosoftOAuthProvider {
   const TOKEN_URL: &'static str = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
   const USER_API_URL: &'static str = "https://graph.microsoft.com/v1.0/me";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Microsoft client id".to_string(),
-      ));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Microsoft client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &["User.Read"];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
-  }
-
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Microsoft,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
+  type User = MicrosoftUser;
 }
 
-#[async_trait]
-impl OAuthProvider for MicrosoftOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Microsoft
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::auth::oauth::providers::social::resolve_user;
 
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(MicrosoftOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url =
-        Url::parse(MicrosoftOAuthProvider::TOKEN_URL).expect("infallible");
-    }
+  #[tokio::test]
+  async fn test_microsoft_user_mapping() {
+    let user = resolve_user::<Microsoft>(serde_json::json!({
+      "id": "1234",
+      "mail": "user@contoso.com",
+      "displayName": "User",
+    }))
+    .await
+    .unwrap();
 
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec!["User.Read"];
-  }
-
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<MicrosoftUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    return Ok(OAuthUser {
-      provider_user_id: user.id,
-      provider_id: OAuthProviderId::Microsoft,
-      email: user.mail,
-      // username: Some(user.displayName),
-      username: None,
-      verified: true,
-      avatar: None,
-    });
+    assert_eq!(user.provider_user_id, "1234");
+    assert_eq!(user.email.as_deref(), Some("user@contoso.com"));
+    assert!(user.verified);
   }
 }

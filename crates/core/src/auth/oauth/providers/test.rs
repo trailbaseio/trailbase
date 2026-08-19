@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use oauth2::TokenResponse as _;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::OAuthProviderFactory;
+use crate::auth::oauth::providers::client::UserApi;
+use crate::auth::oauth::providers::interface::TokenResponse;
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
@@ -49,14 +49,11 @@ pub struct TestUser {
 
 #[async_trait]
 impl OAuthProvider for TestOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
+  fn name(&self) -> &str {
+    return Self::NAME;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Test
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+  fn display_name(&self) -> &str {
+    return Self::DISPLAY_NAME;
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
@@ -68,33 +65,18 @@ impl OAuthProvider for TestOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<&'static str> {
+  fn oauth_scopes(&self) -> Vec<&str> {
     return vec!["identity", "email", "preferences"];
   }
 
   async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
-
-    let response = reqwest::Client::new()
-      .get(&self.user_api_url)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    let user = response
-      .json::<TestUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    let api = UserApi::new(token_response, &self.user_api_url, vec![])?;
+    let user = api.get_json::<TestUser>(api.user_api_url()).await?;
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Test,
-      email: user.email,
+      email: Some(user.email),
       username: None,
       verified: user.verified,
       avatar: None,

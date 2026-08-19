@@ -64,6 +64,14 @@ message OAuthProviderConfig {
   optional string auth_url = 12;
   optional string token_url = 13;
   optional string user_api_url = 14;
+
+  // Replaces the provider's default scopes, when set. Needed for providers that
+  // don't offer the defaults, e.g. an OIDC provider w/o `email` or `profile`.
+  //
+  // NOTE: Claims not covered by the requested scopes won't be returned by the
+  // provider's user-info endpoint, i.e. dropping `email` requires a
+  // username-based `UserIdentifier`.
+  repeated string scopes = 15;
 }
 
 // What user identifier to use for new user registrations as well as

@@ -1,21 +1,36 @@
-use async_trait::async_trait;
-use lazy_static::lazy_static;
-use oauth2::TokenResponse as _;
 use serde::Deserialize;
-use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
-use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
-use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::auth::oauth::providers::social::{ExternalUser, SocialSpec};
+use crate::config::proto::OAuthProviderId;
 
-pub(crate) struct GoogleOAuthProvider {
-  client_id: String,
-  client_secret: String,
+pub(crate) struct Google;
+
+#[derive(Default, Deserialize, Debug)]
+pub(crate) struct GoogleUser {
+  id: String,
+  // name: Option<String>,
+  email: String,
+  verified_email: bool,
+  picture: Option<String>,
 }
 
-impl GoogleOAuthProvider {
+impl TryFrom<GoogleUser> for ExternalUser {
+  type Error = AuthError;
+
+  fn try_from(user: GoogleUser) -> Result<Self, AuthError> {
+    return Ok(Self {
+      provider_user_id: user.id,
+      email: Some(user.email),
+      verified: user.verified_email,
+      avatar: user.picture,
+      ..Default::default()
+    });
+  }
+}
+
+impl SocialSpec for Google {
+  const ID: OAuthProviderId = OAuthProviderId::Google;
   const NAME: &'static str = "google";
   const DISPLAY_NAME: &'static str = "Google";
 
@@ -23,105 +38,48 @@ impl GoogleOAuthProvider {
   const TOKEN_URL: &'static str = "https://accounts.google.com/o/oauth2/token";
   const USER_API_URL: &'static str = "https://www.googleapis.com/oauth2/v1/userinfo";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
-    let Some(client_id) = config.client_id.clone() else {
-      return Err(OAuthProviderError::Missing("Google client id".to_string()));
-    };
-    let Some(client_secret) = config.client_secret.clone() else {
-      return Err(OAuthProviderError::Missing(
-        "Google client secret".to_string(),
-      ));
-    };
+  const SCOPES: &'static [&'static str] = &[
+    "https://www.googleapis.com/auth/userinfo.profile",
+    "https://www.googleapis.com/auth/userinfo.email",
+  ];
 
-    return Ok(Self {
-      client_id,
-      client_secret,
-    });
-  }
-
-  pub fn factory() -> OAuthProviderFactory {
-    OAuthProviderFactory {
-      id: OAuthProviderId::Google,
-      factory_name: Self::NAME,
-      factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-        Ok(Box::new(Self::new(config)?))
-      }),
-    }
-  }
+  type User = GoogleUser;
 }
 
-#[async_trait]
-impl OAuthProvider for GoogleOAuthProvider {
-  fn name(&self) -> &'static str {
-    Self::NAME
-  }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Google
-  }
-  fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
-  }
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::auth::oauth::providers::social::resolve_user;
 
-  fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GoogleOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(GoogleOAuthProvider::TOKEN_URL).expect("infallible");
-    }
+  #[tokio::test]
+  async fn test_google_user_mapping() {
+    let user = resolve_user::<Google>(serde_json::json!({
+      "id": "1234",
+      "email": "user@gmail.com",
+      "verified_email": true,
+      "picture": "https://lh3.googleusercontent.com/a/avatar",
+    }))
+    .await
+    .unwrap();
 
-    return Ok(OAuthClientSettings {
-      auth_url: AUTH_URL.clone(),
-      token_url: TOKEN_URL.clone(),
-      client_id: self.client_id.clone(),
-      client_secret: self.client_secret.clone(),
-    });
-  }
-
-  fn oauth_scopes(&self) -> Vec<&'static str> {
-    return vec![
-      "https://www.googleapis.com/auth/userinfo.profile",
-      "https://www.googleapis.com/auth/userinfo.email",
-    ];
+    assert_eq!(user.provider_user_id, "1234");
+    assert_eq!(user.email.as_deref(), Some("user@gmail.com"));
+    assert!(user.verified);
+    assert_eq!(
+      user.avatar.as_deref(),
+      Some("https://lh3.googleusercontent.com/a/avatar")
+    );
   }
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
-    if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
-      return Err(AuthError::Internal(
-        format!("Unexpected token type: {:?}", token_response.token_type()).into(),
-      ));
-    }
+  #[tokio::test]
+  async fn test_google_rejects_unverified_email() {
+    let result = resolve_user::<Google>(serde_json::json!({
+      "id": "1234",
+      "email": "user@gmail.com",
+      "verified_email": false,
+    }))
+    .await;
 
-    let response = reqwest::Client::new()
-      .get(Self::USER_API_URL)
-      .bearer_auth(token_response.access_token().secret())
-      .send()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-
-    #[derive(Default, Deserialize, Debug)]
-    struct GoogleUser {
-      id: String,
-      // name: Option<String>,
-      email: String,
-      verified_email: bool,
-      picture: Option<String>,
-    }
-
-    let user = response
-      .json::<GoogleUser>()
-      .await
-      .map_err(|err| AuthError::FailedDependency(err.into()))?;
-    if !user.verified_email {
-      return Err(AuthError::Unauthorized);
-    }
-
-    return Ok(OAuthUser {
-      provider_user_id: user.id,
-      provider_id: OAuthProviderId::Google,
-      email: user.email,
-      username: None,
-      verified: user.verified_email,
-      avatar: user.picture,
-    });
+    assert!(matches!(result, Err(AuthError::Unauthorized)), "{result:?}");
   }
 }

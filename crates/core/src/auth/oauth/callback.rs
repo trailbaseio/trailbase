@@ -300,6 +300,19 @@ async fn create_user_for_external_provider(
     return Err(AuthError::Unauthorized);
   }
 
+  // Providers only return claims covered by the scopes we requested, so the email may be missing,
+  // e.g. for an OIDC provider configured w/o the `email` scope. Only username-based identifiers
+  // can do without one.
+  let email: Option<String> = match (email, user_identifier) {
+    (Some(email), _) => Some(email),
+    (None, UserIdentifier::OnlyUsername | UserIdentifier::RequireUsername) => None,
+    (None, _) => {
+      return Err(AuthError::BadRequest(
+        "OAuth provider returned no email address. Requires a username-based `user_identifier`",
+      ));
+    }
+  };
+
   let mut username: Option<String> = match (user_identifier, username) {
     (UserIdentifier::OnlyEmail | UserIdentifier::Undefined, _) => None,
     (
@@ -400,7 +413,7 @@ mod tests {
       return OAuthUser {
         provider_user_id: rand.clone(),
         provider_id: OAuthProviderId::Test,
-        email: format!("email_{rand}@test.org"),
+        email: Some(format!("email_{rand}@test.org")),
         username,
         verified: true,
         avatar: None,
