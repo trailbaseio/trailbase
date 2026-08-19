@@ -8,7 +8,7 @@ use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 // https://docs.gitlab.com/ee/api/users.html#for-user
-#[derive(Default, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct GitlabUser {
   id: i64,
   // name: String,
@@ -63,7 +63,7 @@ impl SimpleOAuthProvider for GitlabOAuthProvider {
     return vec!["read_user".to_string()];
   }
 
-  fn factory(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("GitLab client id".to_string()));
     };

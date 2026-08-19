@@ -86,7 +86,8 @@ pub trait OAuthProvider {
     #[allow(unused)] path: &serde_path_to_error::Error<serde_json::error::Error>,
     #[allow(unused)] body: &[u8],
   ) -> Result<TokenResponse, AuthError> {
-    // By default OAuthProviders don't custom parse response. They expect it to be RFC-6749 compliant.
+    // By default OAuthProviders don't custom parse response. They expect it to be RFC-6749
+    // compliant.
     #[cfg(debug_assertions)]
     return Err(AuthError::FailedDependency(
       format!("{path}: {}", String::from_utf8_lossy(body)).into(),

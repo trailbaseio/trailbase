@@ -47,7 +47,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderRegist
       oidc::OidcProvider::factory(0),
       // "Social" OAuth providers.
       apple::AppleOAuthProvider::factory(),
-      discord::DiscordOAuthProvider::factory(),
+      generic_factory::<discord::DiscordOAuthProvider>(),
       generic_factory::<gitlab::GitlabOAuthProvider>(),
       github::GithubOAuthProvider::factory(),
       google::GoogleOAuthProvider::factory(),

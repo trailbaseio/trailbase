@@ -26,7 +26,7 @@ pub trait SimpleOAuthProvider: Send + Sync {
   fn client_secret(&self) -> String;
   fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String>;
 
-  fn factory(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError>
+  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError>
   where
     Self: Sized;
 }
@@ -36,9 +36,7 @@ pub fn generic_factory<T: SimpleOAuthProvider + Sized + 'static>() -> OAuthProvi
     id: T::ID,
     factory_name: T::NAME,
     factory_display_name: T::DISPLAY_NAME,
-    factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
-      Ok(Box::new(T::factory(config)?))
-    }),
+    factory: Box::new(|_name: &str, config: &OAuthProviderConfig| Ok(Box::new(T::new(config)?))),
   };
 }
 
