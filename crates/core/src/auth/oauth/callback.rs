@@ -11,7 +11,6 @@ use utoipa::IntoParams;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::provider::build_oauth_client;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
@@ -248,7 +247,7 @@ async fn get_or_create_user(
 
   let token_response = provider
     .get_token(
-      &ReqwestClient(http_client),
+      &http_client,
       build_oauth_client(state, provider.as_ref())?,
       auth_code,
       server_pkce_code_verifier,
@@ -256,7 +255,7 @@ async fn get_or_create_user(
     .await?;
 
   // Call provider's USER_INFO endpoint with the tokens acquired above.
-  let oauth_user = provider.get_user(&token_response).await?;
+  let oauth_user = provider.get_user(&http_client, &token_response).await?;
   if !oauth_user.verified {
     return Err(AuthError::BadRequest("External OAuth user unverified"));
   }
@@ -309,9 +308,30 @@ async fn create_user_for_external_provider(
     avatar,
   } = user;
 
-  if !verified {
-    return Err(AuthError::Unauthorized);
-  }
+  let email: Option<String> = match (user_identifier, email) {
+    (
+      UserIdentifier::OnlyEmail
+      | UserIdentifier::RequireEmail
+      | UserIdentifier::RequireEmailAndUsername,
+      None,
+    ) => {
+      return Err(AuthError::FailedDependency("missing email address".into()));
+    }
+    (_, None) => None,
+    (UserIdentifier::OnlyUsername, Some(_)) => {
+      // Drop the email even if present.
+      None
+    }
+    (_, Some(email)) => {
+      // Otherwise make sure it's verified.
+      if !verified {
+        return Err(AuthError::FailedDependency(
+          "email address not verified".into(),
+        ));
+      }
+      Some(email)
+    }
+  };
 
   let mut username: Option<String> = match (user_identifier, username) {
     (UserIdentifier::OnlyEmail | UserIdentifier::Undefined, _) => None,
@@ -324,7 +344,7 @@ async fn create_user_for_external_provider(
       username
         .and_then(|u| validate_and_normalize_username(&u).ok())
         .unwrap_or_else(|| {
-          // Since we strictly need a username, make one up.
+          // Since we strictly need a username, make one up. Users can change it later.
           format!(
             "user{suffix}",
             suffix = crate::rand::random_numeric_and_lowercase(6)
@@ -413,7 +433,7 @@ mod tests {
       return OAuthUser {
         provider_user_id: rand.clone(),
         provider_id: OAuthProviderId::Test,
-        email: format!("email_{rand}@test.org"),
+        email: Some(format!("email_{rand}@test.org")),
         username,
         verified: true,
         avatar: None,

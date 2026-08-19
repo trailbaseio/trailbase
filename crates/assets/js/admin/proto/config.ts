@@ -417,7 +417,7 @@ export interface EmailConfig {
   smtpPassword?:
     | string
     | undefined;
-  /** Which encryption method to use. STARTTLS by default. */
+  /** Which encryption method to use. [Default: STARTTLS] */
   smtpEncryption?: SmtpEncryption | undefined;
   senderName?: string | undefined;
   senderAddress?: string | undefined;
@@ -433,18 +433,28 @@ export interface OAuthProviderConfig {
   providerId?:
     | OAuthProviderId
     | undefined;
-  /**
-   * Settings for generic OpenID Connect provider. Name is implicitly provided
-   * via the `AuthConfig.oauth_provders` map key.
-   */
-  displayName?: string | undefined;
+  /** / Name to display in auth and admin UI. */
+  displayName?:
+    | string
+    | undefined;
+  /** / Urls */
   authUrl?: string | undefined;
   tokenUrl?: string | undefined;
-  userApiUrl?: string | undefined;
+  userApiUrl?:
+    | string
+    | undefined;
+  /**
+   * / User-info scopes to request. [Default: ["openid", "email", "profile"]]
+   * /
+   * / NOTE: Claims not covered by the requested scopes won't be returned by the
+   * / provider's user-info endpoint, e.g. dropping the "email" scope requires a
+   * / username-based `UserIdentifier`.
+   */
+  scopes: string[];
 }
 
 export interface AuthConfig {
-  /** / Time-to-live in seconds for auth tokens. [Default: 1h]. */
+  /** / Time-to-live in seconds for auth tokens. [Default: 1h] */
   authTokenTtlSec?:
     | bigint
     | undefined;
@@ -486,7 +496,7 @@ export interface AuthConfig {
   enableAnonymousSignin?:
     | boolean
     | undefined;
-  /** / Minimal password length. [Default: 8]. */
+  /** / Minimal password length. [Default: 8] */
   passwordMinimalLength?:
     | number
     | undefined;
@@ -515,7 +525,7 @@ export interface AuthConfig {
   redirectUriAllowlist: string[];
   /**
    * / Policy covering user registration and change (username|email) flows around
-   * / what user identifier is expected and accepted. Default: ONLY_EMAIL.
+   * / what user identifier is expected and accepted. [Default: ONLY_EMAIL]
    */
   userIdentifier?: UserIdentifier | undefined;
 }
@@ -696,7 +706,7 @@ export interface RecordApiConfig {
    * / allowed to be expanded.
    */
   expand: string[];
-  /** / Hard limit for listing records. [Default: 1024]. */
+  /** / Hard limit for listing records. [Default: 1024] */
   listingHardLimit?: bigint | undefined;
 }
 
@@ -1076,7 +1086,7 @@ export const EmailConfig: MessageFns<EmailConfig> = {
 };
 
 function createBaseOAuthProviderConfig(): OAuthProviderConfig {
-  return {};
+  return { scopes: [] };
 }
 
 export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
@@ -1101,6 +1111,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     }
     if (message.userApiUrl !== undefined && message.userApiUrl !== "") {
       writer.uint32(114).string(message.userApiUrl);
+    }
+    for (const v of message.scopes) {
+      writer.uint32(122).string(v!);
     }
     return writer;
   },
@@ -1168,6 +1181,14 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
           message.userApiUrl = reader.string();
           continue;
         }
+        case 15: {
+          if (tag !== 122) {
+            break;
+          }
+
+          message.scopes.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1214,6 +1235,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
         : isSet(object.user_api_url)
         ? globalThis.String(object.user_api_url)
         : undefined,
+      scopes: globalThis.Array.isArray(object?.scopes)
+        ? object.scopes.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -1240,6 +1264,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.userApiUrl !== undefined && message.userApiUrl !== "") {
       obj.userApiUrl = message.userApiUrl;
     }
+    if (message.scopes?.length) {
+      obj.scopes = message.scopes;
+    }
     return obj;
   },
 
@@ -1255,6 +1282,7 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     message.authUrl = object.authUrl ?? "";
     message.tokenUrl = object.tokenUrl ?? "";
     message.userApiUrl = object.userApiUrl ?? "";
+    message.scopes = object.scopes?.map((e) => e) || [];
     return message;
   },
 };

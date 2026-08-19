@@ -6,7 +6,7 @@ use url::Url;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::ReqwestClient;
-use crate::auth::oauth::provider::{OAuthClient, TokenResponse};
+use crate::auth::oauth::provider::{OAuthClient, TokenResponse, UserIdentifier};
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -82,13 +82,14 @@ impl OAuthProvider for TwitchOAuthProvider {
     return oauth2::AuthType::RequestBody;
   }
 
-  fn oauth_scopes(&self) -> Vec<String> {
+  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+    // TODO: Pick scopes based on user-id policy.
     return vec!["user:read:email".to_string()];
   }
 
   async fn get_token(
     &self,
-    http_client: &ReqwestClient,
+    http_client: &reqwest::Client,
     oauth_client: OAuthClient,
     auth_code: String,
     server_pkce_code_verifier: String,
@@ -96,7 +97,7 @@ impl OAuthProvider for TwitchOAuthProvider {
     return oauth_client
       .exchange_code(AuthorizationCode::new(auth_code))
       .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-      .request_async(http_client)
+      .request_async(&ReqwestClient(http_client))
       .await
       .or_else(|err| match err {
         // Twitch returns non-RFC-6749 compliant body: scopes are an array rather than space
@@ -106,14 +107,18 @@ impl OAuthProvider for TwitchOAuthProvider {
       });
   }
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
+  async fn get_user(
+    &self,
+    http_client: &reqwest::Client,
+    token_response: &TokenResponse,
+  ) -> Result<OAuthUser, AuthError> {
     if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
       return Err(AuthError::Internal(
         format!("Unexpected token type: {:?}", token_response.token_type()).into(),
       ));
     }
 
-    let response = reqwest::Client::new()
+    let response = http_client
       .get(Self::USER_API_URL)
       .header("Client-Id", &self.client_id)
       .bearer_auth(token_response.access_token().secret())
@@ -144,7 +149,7 @@ impl OAuthProvider for TwitchOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Twitch,
-      email: user.email,
+      email: Some(user.email),
       username: user.login,
       verified: true,
       avatar: user.profile_image_url,

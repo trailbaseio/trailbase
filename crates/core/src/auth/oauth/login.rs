@@ -12,6 +12,7 @@ use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validat
 use crate::auth::oauth::provider::build_oauth_client;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::util::{new_cookie_opts, secure_tls_only};
+use crate::config::proto::UserIdentifier;
 use crate::constants::COOKIE_OAUTH_STATE;
 
 /// Log in via external OAuth provider.
@@ -34,7 +35,12 @@ pub(crate) async fn login_with_external_auth_provider(
   let Some(provider) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
   };
+
   let login_params = build_and_validate_input_params(&state, login_input_query)?;
+  let user_identifier = state
+    .access_config(|c| c.auth.user_identifier)
+    .and_then(|ui| ui.try_into().ok())
+    .unwrap_or(UserIdentifier::Undefined);
 
   // Also use PKCE between TrailBase and the external auth provider. Is is independent from PKCE
   // between the client and TrailBase.
@@ -43,7 +49,12 @@ pub(crate) async fn login_with_external_auth_provider(
 
   let (authorize_url, csrf_state) = build_oauth_client(&state, provider.as_ref())?
     .authorize_url(CsrfToken::new_random)
-    .add_scopes(provider.oauth_scopes().into_iter().map(Scope::new))
+    .add_scopes(
+      provider
+        .oauth_scopes(user_identifier)
+        .into_iter()
+        .map(Scope::new),
+    )
     .set_pkce_challenge(server_pkce_code_challenge)
     .url();
 

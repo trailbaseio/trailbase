@@ -2,10 +2,10 @@ use oauth2::{AsyncHttpClient, HttpClientError, HttpRequest, HttpResponse};
 use std::future::Future;
 use std::pin::Pin;
 
-pub struct ReqwestClient(pub reqwest::Client);
+pub struct ReqwestClient<'a>(pub &'a reqwest::Client);
 
 // Yanked from oauth2's `reqwest::Client` implementation.
-impl<'c> AsyncHttpClient<'c> for ReqwestClient {
+impl<'c, 'a> AsyncHttpClient<'c> for ReqwestClient<'a> {
   type Error = HttpClientError<reqwest::Error>;
 
   #[cfg(target_arch = "wasm32")]

@@ -137,11 +137,11 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
     const clientSecret = entry.state?.clientSecret?.trim();
 
     if (clientId && clientSecret) {
-      config.oauthProviders[p.name] = {
+      config.oauthProviders[p.name] = OAuthProviderConfig.fromPartial({
         providerId: p.id,
 
         ...entry.state,
-      };
+      });
     } else {
       console.debug("Skipping incomplete: ", entry);
     }
@@ -177,7 +177,7 @@ function ProviderSettingsSubForm(props: {
       }
 
       const s = state.values.namedOAuthProviders[props.index].state;
-      setOnce({ ...s });
+      setOnce(s && OAuthProviderConfig.fromPartial(s));
       return s;
     })(),
   );

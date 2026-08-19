@@ -5,7 +5,7 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
+use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -98,18 +98,23 @@ impl OAuthProvider for FacebookOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<String> {
+  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+    // TODO: Pick scopes based on user-id policy.
     return vec!["email".to_string()];
   }
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
+  async fn get_user(
+    &self,
+    http_client: &reqwest::Client,
+    token_response: &TokenResponse,
+  ) -> Result<OAuthUser, AuthError> {
     if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
       return Err(AuthError::Internal(
         format!("Unexpected token type: {:?}", token_response.token_type()).into(),
       ));
     }
 
-    let response = reqwest::Client::new()
+    let response = http_client
       .get(Self::USER_API_URL)
       .bearer_auth(token_response.access_token().secret())
       .send()
@@ -124,7 +129,7 @@ impl OAuthProvider for FacebookOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: user.id,
       provider_id: OAuthProviderId::Facebook,
-      email: user.email,
+      email: Some(user.email),
       username: None,
       verified: true,
       avatar: user.picture.map(|p| p.data.url),

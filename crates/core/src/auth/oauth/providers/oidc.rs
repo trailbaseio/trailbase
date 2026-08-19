@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
+use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -19,6 +19,7 @@ pub struct OidcProvider {
   auth_url: String,
   token_url: String,
   user_api_url: String,
+  scopes: Option<Vec<String>>,
 }
 
 impl OidcProvider {
@@ -57,6 +58,11 @@ impl OidcProvider {
           auth_url,
           token_url,
           user_api_url,
+          scopes: if config.scopes.is_empty() {
+            None
+          } else {
+            Some(config.scopes.clone())
+          },
         }))
       }),
     }
@@ -67,11 +73,11 @@ impl OidcProvider {
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct OidcUser {
   pub sub: String,
-  pub email: String,
+  /// Requires the `email` scope. Absent for providers that don't offer it.
+  pub email: Option<String>,
   pub email_verified: Option<bool>,
-
+  /// Requires the `profile` scope.
   pub preferred_username: Option<String>,
-  // pub name: Option<String>,
   pub picture: Option<String>,
 }
 
@@ -96,20 +102,32 @@ impl OAuthProvider for OidcProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<String> {
-    // TODO: Should be configurable.
-    const DEFAULT_SCOPES: &[&str] = &["openid", "email", "profile"];
-    return DEFAULT_SCOPES.iter().map(|s| s.to_string()).collect();
+  fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String> {
+    return self.scopes.as_ref().map_or_else(
+      || match user_identifier {
+        UserIdentifier::OnlyUsername => vec!["openid".to_string(), "profile".to_string()],
+        _ => vec![
+          "openid".to_string(),
+          "email".to_string(),
+          "profile".to_string(),
+        ],
+      },
+      |scopes| scopes.clone(),
+    );
   }
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
+  async fn get_user(
+    &self,
+    http_client: &reqwest::Client,
+    token_response: &TokenResponse,
+  ) -> Result<OAuthUser, AuthError> {
     if *token_response.token_type() != oauth2::basic::BasicTokenType::Bearer {
       return Err(AuthError::Internal(
         format!("Unexpected token type: {:?}", token_response.token_type()).into(),
       ));
     }
 
-    let response = reqwest::Client::new()
+    let response = http_client
       .get(&self.user_api_url)
       .bearer_auth(token_response.access_token().secret())
       .send()

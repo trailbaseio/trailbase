@@ -4,7 +4,7 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::TokenResponse;
+use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -80,7 +80,11 @@ impl AppleOAuthProvider {
     }
   }
 
-  async fn verify_apple_id_token(&self, id_token: &str) -> Result<AppleIdToken, AuthError> {
+  async fn verify_apple_id_token(
+    &self,
+    http_client: &reqwest::Client,
+    id_token: &str,
+  ) -> Result<AppleIdToken, AuthError> {
     let header = jsonwebtoken::decode_header(id_token)
       .map_err(|err| AuthError::FailedDependency(err.into()))?;
     let Some(kid) = header.kid else {
@@ -90,7 +94,7 @@ impl AppleOAuthProvider {
     };
 
     // TODO: Should maybe cache the JWK responses.
-    let public_keys = fetch_apple_public_keys().await?;
+    let public_keys = fetch_apple_public_keys(http_client).await?;
 
     // Find the key.
     let Some(public_key) = public_keys.keys.iter().find(|key| key.kid == kid) else {
@@ -137,16 +141,21 @@ impl OAuthProvider for AppleOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self) -> Vec<String> {
+  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+    // TODO: Pick scopes based on user-id policy.
     return vec!["name".to_string(), "email".to_string()];
   }
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError> {
+  async fn get_user(
+    &self,
+    http_client: &reqwest::Client,
+    token_response: &TokenResponse,
+  ) -> Result<OAuthUser, AuthError> {
     let Some(ref id_token) = token_response.extra_fields().id_token else {
       return Err(AuthError::BadRequest("missing id token"));
     };
 
-    let apple_id_token = self.verify_apple_id_token(id_token).await?;
+    let apple_id_token = self.verify_apple_id_token(http_client, id_token).await?;
 
     let Some(email) = apple_id_token.email else {
       return Err(AuthError::BadRequest("missing email"));
@@ -155,7 +164,7 @@ impl OAuthProvider for AppleOAuthProvider {
     return Ok(OAuthUser {
       provider_user_id: apple_id_token.sub,
       provider_id: OAuthProviderId::Apple,
-      email,
+      email: Some(email),
       username: None,
       verified: apple_id_token.email_verified.is_some_and(|v| v == "true"),
       avatar: None,
@@ -163,14 +172,10 @@ impl OAuthProvider for AppleOAuthProvider {
   }
 }
 
-async fn fetch_apple_public_keys() -> Result<ApplePublicKeys, AuthError> {
+async fn fetch_apple_public_keys(
+  http_client: &reqwest::Client,
+) -> Result<ApplePublicKeys, AuthError> {
   const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
-
-  let http_client = reqwest::ClientBuilder::new()
-    // Following redirects might set us up for server-side request forgery (SSRF).
-    .redirect(reqwest::redirect::Policy::none())
-    .build()
-    .map_err(|err| AuthError::Internal(err.into()))?;
 
   let response = http_client
     .get(JWK_URL)

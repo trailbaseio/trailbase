@@ -24,7 +24,7 @@ message EmailConfig {
   optional string smtp_username = 3;
   optional string smtp_password = 4 [ (secret) = true ];
 
-  // Which encryption method to use. STARTTLS by default.
+  // Which encryption method to use. [Default: STARTTLS]
   optional SmtpEncryption smtp_encryption = 5;
 
   optional string sender_name = 11;
@@ -58,12 +58,23 @@ message OAuthProviderConfig {
 
   optional OAuthProviderId provider_id = 3;
 
-  // Settings for generic OpenID Connect provider. Name is implicitly provided
-  // via the `AuthConfig.oauth_provders` map key.
+  /// Settings for generic OpenID Connect provider. Name is implicitly provided
+  /// via the `AuthConfig.oauth_providers` map key.
+
+  /// Name to display in auth and admin UI.
   optional string display_name = 11;
+
+  /// Urls
   optional string auth_url = 12;
   optional string token_url = 13;
   optional string user_api_url = 14;
+
+  /// User-info scopes to request. [Default: ["openid", "email", "profile"]]
+  ///
+  /// NOTE: Claims not covered by the requested scopes won't be returned by the
+  /// provider's user-info endpoint, e.g. dropping the "email" scope requires a
+  /// username-based `UserIdentifier`.
+  repeated string scopes = 15;
 }
 
 // What user identifier to use for new user registrations as well as
@@ -88,7 +99,7 @@ enum UserIdentifier {
 }
 
 message AuthConfig {
-  /// Time-to-live in seconds for auth tokens. [Default: 1h].
+  /// Time-to-live in seconds for auth tokens. [Default: 1h]
   optional int64 auth_token_ttl_sec = 1;
   /// Time-to-live in seconds for refresh tokens. [Default: 30 days]
   ///
@@ -114,7 +125,7 @@ message AuthConfig {
   /// trial.
   optional bool enable_anonymous_signin = 12;
 
-  /// Minimal password length. [Default: 8].
+  /// Minimal password length. [Default: 8]
   optional uint32 password_minimal_length = 4;
 
   /// Password must contain lower and upper-case letters.
@@ -139,7 +150,7 @@ message AuthConfig {
   repeated string redirect_uri_allowlist = 22;
 
   /// Policy covering user registration and change (username|email) flows around
-  /// what user identifier is expected and accepted. Default: ONLY_EMAIL.
+  /// what user identifier is expected and accepted. [Default: ONLY_EMAIL]
   optional UserIdentifier user_identifier = 31;
 }
 
@@ -316,7 +327,7 @@ message RecordApiConfig {
   /// allowed to be expanded.
   repeated string expand = 21;
 
-  /// Hard limit for listing records. [Default: 1024].
+  /// Hard limit for listing records. [Default: 1024]
   optional uint64 listing_hard_limit = 22;
 }
 

@@ -41,12 +41,14 @@ pub type OAuthClient<
   HasTokenUrl,
 >;
 
+pub use crate::config::proto::UserIdentifier;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OAuthUser {
   pub provider_user_id: String,
   pub provider_id: OAuthProviderId,
 
-  pub email: String,
+  pub email: Option<String>,
   pub username: Option<String>,
   pub verified: bool,
 
@@ -77,13 +79,18 @@ pub trait OAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
-  fn oauth_scopes(&self) -> Vec<String>;
+  fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String>;
 
-  async fn get_user(&self, token_response: &TokenResponse) -> Result<OAuthUser, AuthError>;
+  async fn get_user(
+    &self,
+    http_client: &reqwest::Client,
+    token_response: &TokenResponse,
+  ) -> Result<OAuthUser, AuthError>;
 
+  // TODO: We could probably turn this into a process_token response method.
   async fn get_token(
     &self,
-    http_client: &ReqwestClient,
+    http_client: &reqwest::Client,
     oauth_client: OAuthClient,
     auth_code: String,
     server_pkce_code_verifier: String,
@@ -91,7 +98,7 @@ pub trait OAuthProvider {
     return oauth_client
       .exchange_code(AuthorizationCode::new(auth_code))
       .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-      .request_async(http_client)
+      .request_async(&ReqwestClient(http_client))
       .await
       .map_err(|err| {
         #[cfg(debug_assertions)]
