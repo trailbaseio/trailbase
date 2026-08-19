@@ -16,6 +16,7 @@ use std::sync::LazyLock;
 use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
+use crate::auth::oauth::simple_provider::generic_factory;
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
 
 #[derive(Debug, Error)]
@@ -46,7 +47,7 @@ pub(crate) fn oauth_providers_static_registry() -> &'static [OAuthProviderFactor
       // "Social" OAuth providers.
       apple::AppleOAuthProvider::factory(),
       discord::DiscordOAuthProvider::factory(),
-      gitlab::GitlabOAuthProvider::factory(),
+      generic_factory::<gitlab::GitlabOAuthProvider>(),
       github::GithubOAuthProvider::factory(),
       google::GoogleOAuthProvider::factory(),
       facebook::FacebookOAuthProvider::factory(),

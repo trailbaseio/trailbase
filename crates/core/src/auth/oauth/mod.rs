@@ -4,6 +4,7 @@ mod login;
 pub(crate) mod provider;
 pub(crate) mod providers;
 mod reqwest_client;
+pub(crate) mod simple_provider;
 mod state;
 
 #[cfg(test)]
