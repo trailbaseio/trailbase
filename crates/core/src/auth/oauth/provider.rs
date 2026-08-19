@@ -1,14 +1,13 @@
 use async_trait::async_trait;
 use oauth2::{
-  AuthType, AuthUrl, AuthorizationCode, Client, ClientId, ClientSecret, EndpointNotSet,
-  EndpointSet, PkceCodeVerifier, RedirectUrl, StandardRevocableToken, TokenUrl,
+  AuthType, AuthUrl, Client, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl,
+  StandardRevocableToken, TokenUrl,
 };
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::oauth::ReqwestClient;
 use crate::config::proto::OAuthProviderId;
 use crate::constants::AUTH_API_PATH;
 
@@ -87,31 +86,19 @@ pub trait OAuthProvider {
     token_response: &TokenResponse,
   ) -> Result<OAuthUser, AuthError>;
 
-  // TODO: We could probably turn this into a process_token response method.
-  async fn get_token(
+  fn parse_token_response(
     &self,
-    http_client: &reqwest::Client,
-    oauth_client: OAuthClient,
-    auth_code: String,
-    server_pkce_code_verifier: String,
+    #[allow(unused)] path: &serde_path_to_error::Error<serde_json::error::Error>,
+    #[allow(unused)] body: &[u8],
   ) -> Result<TokenResponse, AuthError> {
-    return oauth_client
-      .exchange_code(AuthorizationCode::new(auth_code))
-      .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-      .request_async(&ReqwestClient(http_client))
-      .await
-      .map_err(|err| {
-        #[cfg(debug_assertions)]
-        return match err {
-          oauth2::RequestTokenError::Parse(_path, resp) => {
-            AuthError::Internal(String::from_utf8_lossy(&resp).into())
-          }
-          err => AuthError::FailedDependency(format!("{err:?}").into()),
-        };
+    // By default OAuthProviders don't custom parse response. They expect it to be RFC-6749 compliant.
+    #[cfg(debug_assertions)]
+    return Err(AuthError::FailedDependency(
+      format!("{path}: {}", String::from_utf8_lossy(body)).into(),
+    ));
 
-        #[cfg(not(debug_assertions))]
-        return AuthError::FailedDependency(err.into());
-      });
+    #[cfg(not(debug_assertions))]
+    return Err(AuthError::FailedDependency("invalid token reply".into()));
   }
 }
 

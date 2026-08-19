@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::Utc;
 use const_format::formatcp;
+use oauth2::{AuthorizationCode, PkceCodeVerifier};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
@@ -10,10 +11,10 @@ use utoipa::IntoParams;
 
 use crate::AppState;
 use crate::auth::AuthError;
-use crate::auth::oauth::OAuthUser;
 use crate::auth::oauth::provider::build_oauth_client;
 use crate::auth::oauth::providers::OAuthProviderType;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
+use crate::auth::oauth::{OAuthUser, ReqwestClient};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
@@ -245,14 +246,17 @@ async fn get_or_create_user(
     .build()
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  let token_response = provider
-    .get_token(
-      &http_client,
-      build_oauth_client(state, provider.as_ref())?,
-      auth_code,
-      server_pkce_code_verifier,
-    )
-    .await?;
+  let oauth_client = build_oauth_client(state, provider.as_ref())?;
+
+  let token_response = oauth_client
+    .exchange_code(AuthorizationCode::new(auth_code))
+    .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
+    .request_async(&ReqwestClient(&http_client))
+    .await
+    .or_else(|err| match err {
+      oauth2::RequestTokenError::Parse(path, resp) => provider.parse_token_response(&path, &resp),
+      err => Err(AuthError::FailedDependency(err.into())),
+    })?;
 
   // Call provider's USER_INFO endpoint with the tokens acquired above.
   let oauth_user = provider.get_user(&http_client, &token_response).await?;

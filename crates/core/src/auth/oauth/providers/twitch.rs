@@ -1,12 +1,11 @@
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse as _};
+use oauth2::TokenResponse as _;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::ReqwestClient;
-use crate::auth::oauth::provider::{OAuthClient, TokenResponse, UserIdentifier};
+use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderFactory};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
 use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
@@ -87,26 +86,6 @@ impl OAuthProvider for TwitchOAuthProvider {
     return vec!["user:read:email".to_string()];
   }
 
-  async fn get_token(
-    &self,
-    http_client: &reqwest::Client,
-    oauth_client: OAuthClient,
-    auth_code: String,
-    server_pkce_code_verifier: String,
-  ) -> Result<TokenResponse, AuthError> {
-    return oauth_client
-      .exchange_code(AuthorizationCode::new(auth_code))
-      .set_pkce_verifier(PkceCodeVerifier::new(server_pkce_code_verifier))
-      .request_async(&ReqwestClient(http_client))
-      .await
-      .or_else(|err| match err {
-        // Twitch returns non-RFC-6749 compliant body: scopes are an array rather than space
-        // delimited list.
-        oauth2::RequestTokenError::Parse(_path, resp) => parse_twitch_token_response(&resp),
-        err => Err(AuthError::FailedDependency(err.into())),
-      });
-  }
-
   async fn get_user(
     &self,
     http_client: &reqwest::Client,
@@ -154,6 +133,14 @@ impl OAuthProvider for TwitchOAuthProvider {
       verified: true,
       avatar: user.profile_image_url,
     });
+  }
+
+  fn parse_token_response(
+    &self,
+    _path: &serde_path_to_error::Error<serde_json::error::Error>,
+    body: &[u8],
+  ) -> Result<TokenResponse, AuthError> {
+    return parse_twitch_token_response(body);
   }
 }
 
