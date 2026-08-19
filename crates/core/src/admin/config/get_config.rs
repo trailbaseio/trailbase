@@ -2,10 +2,8 @@ use axum::extract::State;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::config::{
-  proto::{GetConfigResponse, hash_config},
-  redact_secrets,
-};
+use crate::config::proto::{GetConfigResponse, hash_config};
+use crate::config::redact_secrets;
 use crate::extract::protobuf::Protobuf;
 
 #[utoipa::path(
@@ -13,7 +11,7 @@ use crate::extract::protobuf::Protobuf;
   path = "/config",
   tag = "admin",
   responses(
-    (status = 200, description = "Success"),
+    (status = 200, content_type = "application/x-protobuf", description = "config::GetConfigResponse protobuf"),
   )
 )]
 pub async fn get_config_handler(

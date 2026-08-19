@@ -12,6 +12,7 @@ use crate::extract::protobuf::Protobuf;
   post,
   path = "/config",
   tag = "admin",
+  request_body(content = Vec<u8>, content_type = "application/x-protobuf", description = "config::UpdateConfigRequest protobuf"),
   responses(
     (status = 200, description = "Success"),
   )
