@@ -1,3 +1,10 @@
+## v0.33.1
+
+- Allow setting custom scopes for the OIDC OAuth provider. Thanks @UserNobody14 🙏
+- Let Social OAuth provider scope down based on `UserIdentifier` policy. Still needs to be implemented and verified on a per-provider basis.
+- Internal: overhaul and simplify the `OAuthProvider` interface.
+- Improve OpenApi schema and thus MCP tool export of `admin::(get_config|update_config)`.
+
 ## v0.33.0
 
 - Allow starting a local MCP server to support agentic workflows.
