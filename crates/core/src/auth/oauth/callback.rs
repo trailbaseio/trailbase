@@ -1,6 +1,6 @@
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::http::{HeaderName, HeaderValue, StatusCode};
+use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
 use chrono::Utc;
 use const_format::formatcp;
 use oauth2::{AuthorizationCode, PkceCodeVerifier};
@@ -159,10 +159,17 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   // transient issues, letting users retry.
   remove_cookie(cookies, COOKIE_OAUTH_STATE);
 
+  // Unset the "Referer" on redirect, to make clear the redirect is coming from the local site (as
+  // opposed to the external OAuth provider) and same-site cookies get properly passed along.
+  const NO_REFERER_HEADER: [(HeaderName, HeaderValue); 1] = [(
+    ::axum::http::header::REFERRER_POLICY,
+    ::axum::http::HeaderValue::from_static("no-referrer"),
+  )];
+
   return if let Some(ref redirect) = redirect {
-    Ok(Redirect::to(redirect).into_response())
+    Ok((AppendHeaders(NO_REFERER_HEADER), Redirect::to(redirect)).into_response())
   } else if state.public_dir().is_some() {
-    Ok(Redirect::to("/").into_response())
+    Ok((AppendHeaders(NO_REFERER_HEADER), Redirect::to("/")).into_response())
   } else {
     Ok((StatusCode::OK, "logged in").into_response())
   };
