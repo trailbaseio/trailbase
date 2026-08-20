@@ -9,12 +9,12 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.1",
-    "eslint": "^10.6.0",
-    "prettier": "^3.9.4",
+    "@types/node": "^26.2.0",
+    "eslint": "^10.8.1",
+    "prettier": "^3.9.6",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.63.0",
-    "vitest": "^4.1.10"
+    "typescript-eslint": "^8.67.0",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "trailbase": "workspace:*"
