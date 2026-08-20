@@ -228,6 +228,7 @@ pub(crate) fn new_cookie(
   key: &'static str,
   value: String,
   ttl: Duration,
+  same_site_strict: bool,
 ) -> Cookie<'static> {
   // TODO: We may want to make `same_site` configurable. By default we pick the strict setting,
   // i.e. have browsers not attach the cookie when coming from another site. This can prevent
@@ -239,25 +240,30 @@ pub(crate) fn new_cookie(
     value,
     ttl,
     /* tls_only= */ secure_tls_only(state),
-    /* same_site= */ true,
+    /* same_site_strict= */ same_site_strict,
   );
 }
 
 #[inline]
-pub(crate) fn secure_tls_only(state: &AppState) -> bool {
+fn secure_tls_only(state: &AppState) -> bool {
   // Be strict in prod-mode and when the site is configured with HTTPS/TLS.
-  return !state.dev_mode()
-    && (*state.site_url())
-      .as_ref()
-      .is_some_and(|url| url.scheme() == "https");
+  if state.dev_mode() {
+    return false;
+  }
+
+  if let Some(ref url) = *state.site_url() {
+    return url.scheme() == "https";
+  }
+  return false;
 }
 
-pub(crate) fn new_cookie_opts(
+#[inline]
+fn new_cookie_opts(
   key: &'static str,
   value: String,
   ttl: Duration,
   tls_only: bool,
-  same_site: bool,
+  same_site_strict: bool,
 ) -> Cookie<'static> {
   return Cookie::build((key, value))
     .path("/")
@@ -266,7 +272,7 @@ pub(crate) fn new_cookie_opts(
     // Only send cookie over HTTPs.
     .secure(tls_only)
     // Only include cookie if request originates from origin site.
-    .same_site(if same_site {
+    .same_site(if same_site_strict {
       SameSite::Strict
     } else {
       SameSite::Lax
@@ -286,7 +292,7 @@ pub(crate) fn remove_cookie(cookies: &Cookies, key: &'static str) {
       "".to_string(),
       Duration::seconds(1),
       /* tls_only= */ false,
-      /* same_site= */ false,
+      /* same_site_strict= */ false,
     ));
   }
 }

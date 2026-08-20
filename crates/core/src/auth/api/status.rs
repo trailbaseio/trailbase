@@ -62,6 +62,7 @@ pub(crate) async fn login_status_handler(
         COOKIE_AUTH_TOKEN,
         auth_token.clone(),
         ttl,
+        /*same_site_strict=*/ true,
       ));
     }
 

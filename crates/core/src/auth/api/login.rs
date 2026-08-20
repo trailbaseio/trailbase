@@ -294,12 +294,14 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
         COOKIE_AUTH_TOKEN,
         response.auth_token,
         auth_token_ttl,
+        /* same_site_strict= */ true,
       ));
       cookies.add(new_cookie(
         state,
         COOKIE_REFRESH_TOKEN,
         response.refresh_token,
         refresh_token_ttl,
+        /* same_site_strict= */ true,
       ));
 
       if let Some(ref redirect) = redirect {

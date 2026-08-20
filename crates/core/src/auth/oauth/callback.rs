@@ -142,17 +142,22 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     .encode(&auth_token_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
+  // NOTE: The auth cookie must be same-site=lax in order to be forwarded with the final redirect
+  // (e.g. to auth UI), since browsers will still consider this redirection chain as originating
+  // from the external oauth provider and thus not to be same site..
   cookies.add(new_cookie(
     state,
     COOKIE_AUTH_TOKEN,
     auth_token,
     auth_token_ttl,
+    /* same_site_strict= */ false,
   ));
   cookies.add(new_cookie(
     state,
     COOKIE_REFRESH_TOKEN,
     refresh_token,
     refresh_token_ttl,
+    /* same_site_strict= */ true,
   ));
 
   // NOTE: we're removing the OAUTH_STATE cookie deliberately late in case there are any
@@ -434,8 +439,8 @@ async fn user_by_provider_id(
   );
 }
 
-// Unset the "Referer" on redirect, to make clear the redirect is coming from the local site (as
-// opposed to the external OAuth provider) and same-site cookies get properly passed along.
+// Unset the "Referer" on final redirect to not leak a user's provider to an arbitrary redirect
+// target.
 const NO_REFERER_HEADER: [(HeaderName, HeaderValue); 1] = [(
   http::header::REFERRER_POLICY,
   HeaderValue::from_static("no-referrer"),

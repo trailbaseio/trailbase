@@ -55,6 +55,7 @@ test("OIDC", async () => {
   expect(location).toContain(`http://localhost:${authPort}/authorize`);
   const stateCookie = login.headers.get("set-cookie")!.split(";")[0];
 
+  // NOTE: The fake OAuth provider uses a 302, we use 303 which has more consistent semantics across browsers.
   const authorize = await fetch(location, { redirect: "manual" });
   expect(authorize.status).toBe(302);
 

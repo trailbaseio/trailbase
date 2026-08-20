@@ -1,7 +1,5 @@
-use axum::{
-  extract::{Path, Query, State},
-  response::Redirect,
-};
+use axum::extract::{Path, Query, State};
+use axum::response::Redirect;
 use chrono::Duration;
 use oauth2::{CsrfToken, PkceCodeChallenge, Scope};
 use tower_cookies::Cookies;
@@ -11,7 +9,7 @@ use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
-use crate::auth::util::{new_cookie_opts, secure_tls_only};
+use crate::auth::util::new_cookie;
 use crate::config::proto::UserIdentifier;
 use crate::constants::COOKIE_OAUTH_STATE;
 
@@ -88,20 +86,20 @@ pub(crate) async fn login_with_external_auth_provider(
     },
   };
 
-  cookies.add(new_cookie_opts(
+  cookies.add(new_cookie(
+    &state,
     COOKIE_OAUTH_STATE,
     // Encoding as JWT token for tamper proofing. This doesn't encrypt anything but merely adds a
     // signature. None of the state handed to the user needs to be hidden from the user.
     //
-    // NOTE: we need cookie to be included redirected back from oauth provider, thus
-    // `same_site=false`.
+    // NOTE: we need cookie to be included when redirected back from oauth provider, thus
+    // `same_site_strict = false`.
     state
       .jwt()
       .encode(&oauth_state)
       .map_err(|err| AuthError::Internal(err.into()))?,
     Duration::minutes(5),
-    /* secure/tls_only= */ secure_tls_only(&state),
-    /* same_site= */ false,
+    /* same_site_strict= */ false,
   ));
 
   Ok(Redirect::to(authorize_url.as_str()))
