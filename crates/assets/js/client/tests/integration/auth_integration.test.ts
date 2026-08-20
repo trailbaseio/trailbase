@@ -56,16 +56,26 @@ test("OIDC", async () => {
   const stateCookie = login.headers.get("set-cookie")!.split(";")[0];
 
   const authorize = await fetch(location, { redirect: "manual" });
-
   expect(authorize.status).toBe(302);
+
+  // The redirect by the Auth-UI is constructed using the `config.server.site_url`, which is set to `localhost.trailbase.io:4000`.
+  // Unless we want to change the config for each test setup, we're rewriting the address here.
   const callbackUrl = authorize.headers.get("location")!;
-  const callback = await fetch(callbackUrl, {
-    redirect: "manual",
-    credentials: "include",
-    headers: {
-      cookie: stateCookie,
+  console.info("redirects: ", location, callbackUrl);
+
+  const expected = "http://localhost.trailbase.io:4000";
+  expect(callbackUrl).contains(expected);
+
+  const callback = await fetch(
+    callbackUrl.replace(expected, `http://${serverAddress()}`),
+    {
+      redirect: "manual",
+      credentials: "include",
+      headers: {
+        cookie: stateCookie,
+      },
     },
-  });
+  );
 
   expect(callback.status).toBe(303);
   expect(callback.headers.get("location")).toBe(redirectUri);

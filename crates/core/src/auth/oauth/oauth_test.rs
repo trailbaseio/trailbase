@@ -174,7 +174,9 @@ async fn test_oauth_login_flow_without_pkce() {
     .unwrap();
 
   // Call the fake server's auth endpoint.
-  let redirect_uri_external_login = get_redirect_location(external_redirect).unwrap();
+  let (redirect_uri_external_login, referrer_policy) = get_redirect_location(external_redirect);
+  assert_eq!(None, referrer_policy);
+  let redirect_uri_external_login = redirect_uri_external_login.unwrap();
   // NOTE: The dummy implementation just pipes the input query params through. We could do the
   // following assertions equally on `redirect_uri_external_login`
   let redirect_uri_external_login_url = url::Url::parse(&redirect_uri_external_login).unwrap();
@@ -218,8 +220,9 @@ async fn test_oauth_login_flow_without_pkce() {
   .await
   .unwrap();
 
-  let location = get_redirect_location(internal_redirect).unwrap();
-  assert_eq!(location, redirect_uri);
+  let (location, referrer_policy) = get_redirect_location(internal_redirect);
+  assert_eq!(location, Some(redirect_uri));
+  assert_eq!(referrer_policy.as_deref(), Some("no-referrer"));
 
   // Check user exists.
   let db_user = state
@@ -279,7 +282,9 @@ async fn test_oauth_login_flow_with_pkce() {
     .unwrap();
 
   // Call the fake server's auth endpoint.
-  let redirect_uri_external_login = get_redirect_location(external_redirect).unwrap();
+  let (redirect_uri_external_login, referrer_policy) = get_redirect_location(external_redirect);
+  let redirect_uri_external_login = redirect_uri_external_login.unwrap();
+  assert_eq!(None, referrer_policy);
   // NOTE: The dummy implementation just pipes the input query params through. We could do the
   // following assertions equally on `redirect_uri_external_login`
   let redirect_uri_external_login_url = url::Url::parse(&redirect_uri_external_login).unwrap();
@@ -323,7 +328,9 @@ async fn test_oauth_login_flow_with_pkce() {
   .await
   .unwrap();
 
-  let location_str = get_redirect_location(internal_redirect).unwrap();
+  let (location_str, referrer_policy) = get_redirect_location(internal_redirect);
+  let location_str = location_str.unwrap();
+  assert_eq!(referrer_policy.as_deref(), Some("no-referrer"));
   let location = url::Url::parse(&location_str).unwrap();
   assert!(location_str.starts_with(&format!("{redirect_uri}?code=")));
 
@@ -378,12 +385,18 @@ async fn test_oauth_login_flow_with_pkce() {
   );
 }
 
-fn get_redirect_location<T: IntoResponse>(response: T) -> Option<String> {
-  return response
-    .into_response()
-    .headers()
-    .get("location")
-    .and_then(|h| h.to_str().map(|s| s.to_string()).ok());
+fn get_redirect_location<T: IntoResponse>(response: T) -> (Option<String>, Option<String>) {
+  let response = response.into_response();
+  let headers = response.headers();
+
+  return (
+    headers
+      .get("location")
+      .and_then(|h| h.to_str().map(|s| s.to_string()).ok()),
+    headers
+      .get("referrer-policy")
+      .and_then(|h| h.to_str().map(|s| s.to_string()).ok()),
+  );
 }
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
