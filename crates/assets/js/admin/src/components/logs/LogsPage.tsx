@@ -30,7 +30,7 @@ import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
 import type { FeatureCollection } from "geojson";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import maplibregl from "maplibre-gl";
+import * as maplibregl from "maplibre-gl";
 
 import { Button } from "@/components/ui/button";
 import {
