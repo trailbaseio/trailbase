@@ -11,15 +11,15 @@ requires-poetry = ">=2.0"
 
 [tool.poetry.dependencies]
 python = "^3.13"
-httpx = "^0.27.2"
+httpx = "^0.28.1"
 pyjwt = "^2.10.0"
-cryptography = "^43.0.3"
+cryptography = "^50.0.0"
 
 [tool.poetry.group.dev.dependencies]
-black = "^24.10.0"
+black = "^26.5.1"
 mintotp = "^0.3.0"
 pyright = "^1.1.408"
-pytest = "^8.3.3"
+pytest = "^9.1.1"
 flake8 = "^7.3.0"
 
 [build-system]
