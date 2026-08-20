@@ -1,3 +1,11 @@
+## v0.33.2
+
+- Fix callback redirect: set `no-referrer` policy header so same-site cookies get properly passed along.
+- Prolong `OAuthClient` lifetime to match `OAuthProvider`'s. This pulls some failure modes earlier and off the request-handling path. Fewer allocations.
+- Internally add a `SimpleOAuthProvider` abstraction to make simple providers less verbose and share more code. This is inspired by #273. Thanks @UserNobody14 🙏
+- Improve error-handling and logging for invalid OAuth provider configurations.
+- Update Rust, JavaScript & Python dependencies.
+
 ## v0.33.1
 
 - Allow setting custom scopes for the OIDC OAuth provider. Thanks @UserNobody14 🙏
