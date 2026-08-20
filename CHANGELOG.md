@@ -1,3 +1,13 @@
+## v0.33.2
+
+- OAuth `/callback` redirect fix: set cookie's same-site policy to lax to include it in the final redirect leg.
+  - Otherwise browsers will consider the final leg as part of a cross-site redirect chain originating at the OAuth provider, even though the final leg may be same-site.
+- Set `no-referrer` referrer policy on final log of redirect chain (extOauth => /callback => `&redirect_to=`) to avoid leaking a user's provider.
+- Prolong `OAuthClient` lifetime to match `OAuthProvider`'s. This pulls some failure modes earlier and off the request-handling path. Fewer allocations.
+- Internally add a `SimpleOAuthProvider` abstraction to make simple providers less verbose and share more code. This is inspired by #273. Thanks @UserNobody14 🙏
+- Improve error-handling and logging for invalid OAuth provider configurations.
+- Update Rust, JavaScript & Python dependencies.
+
 ## v0.33.1
 
 - Allow setting custom scopes for the OIDC OAuth provider. Thanks @UserNobody14 🙏
