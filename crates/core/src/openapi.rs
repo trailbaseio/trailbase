@@ -50,8 +50,6 @@ pub fn build_api_definitions_from_state(
   state: &AppState,
   include_admin: bool,
 ) -> utoipa::openapi::OpenApi {
-  type Installer = fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>;
-
   let custom_routers = if include_admin {
     vec![OpenApiRouter::new().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())]
   } else {
@@ -63,8 +61,8 @@ pub fn build_api_definitions_from_state(
       state,
       None,
       false,
-      None::<&Installer>,
       custom_routers,
+      /* auth_rate_limit= */ None,
     )
     .unwrap_or_else(|err| {
       log::error!("failed to build main_router: {err}");
