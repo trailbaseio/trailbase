@@ -76,7 +76,7 @@ rand = "^0.10.0"
 reqwest = { version = "0.13.1", default-features = false, features = ["rustls", "json"] }
 rmcp-openapi = { git = "https://github.com/ignatz/rmcp-openapi-minimal.git", branch = "main" }
 rusqlite = { version = "0.40.0", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
-rust-embed = { version = "8.4.0", default-features = false, features = ["mime-guess"] }
+rust-embed = { version = "^8.12.0", default-features = false, features = ["mime-guess", "compression"] }
 serde = { version = "^1.0.203", default-features = false, features = ["derive", "rc", "std"] }
 serde_json = { version = "^1.0.117", default-features = false }
 serde_qs = { version = "1.0.0", default-features = false, features = [] }
