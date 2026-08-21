@@ -8963,16 +8963,19 @@ dependencies = [
  "deadpool",
  "futures-util",
  "http",
+ "http-body",
  "http-body-util",
  "hyper",
  "log",
  "parking_lot",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "sqlite3-parser",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "trailbase-schema",
  "trailbase-sqlite",
@@ -8983,6 +8986,7 @@ dependencies = [
  "wasmtime-wasi",
  "wasmtime-wasi-http",
  "wasmtime-wasi-io",
+ "webpki-roots",
 ]
 
 [[package]]

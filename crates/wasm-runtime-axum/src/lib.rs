@@ -241,6 +241,8 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
         // Construct WASI request form hyper/axum request.
         let (mut parts, body) = req.into_parts();
 
+        warn!("AUTHORITY: {:?}", parts);
+
         let Ok(header_value) = to_header_value(&HttpContext {
           kind: HttpContextKind::Http,
           registered_path,
@@ -288,7 +290,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
           }
           Err(err) => {
             warn!("`Error calling WASM component - call_incoming_http_handler` returned: {err}");
-            return internal("component responded unexpectedly");
+            return internal(format!("component responded unexpectedly: {err}"));
           }
         };
       };
@@ -327,10 +329,10 @@ fn empty() -> UnsyncBoxBody<Bytes, hyper::Error> {
   return UnsyncBoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
 }
 
-fn internal(msg: &'static str) -> axum::response::Response {
+fn internal(msg: impl Into<std::borrow::Cow<'static, str>>) -> axum::response::Response {
   return axum::response::Response::builder()
     .status(StatusCode::INTERNAL_SERVER_ERROR)
-    .body(msg.into())
+    .body(axum::body::Body::from(msg.into()))
     .unwrap_or_default();
 }
 

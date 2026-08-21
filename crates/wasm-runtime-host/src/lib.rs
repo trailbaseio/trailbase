@@ -2,6 +2,7 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
+mod default_send_request;
 pub mod functions;
 mod host;
 mod prefs;

@@ -175,15 +175,16 @@ impl WasiHttpHooks for Hooks {
           ))
         })
       }
-      _ => {
-        Box::new(async move {
-          let (res, io) = wasmtime_wasi_http::default_send_request(request, options).await?;
-          Ok((
-            res.map(BodyExt::boxed_unsync),
-            Box::new(io) as Box<dyn Future<Output = _> + Send>,
-          ))
-        })
-      }
+      _ => Box::new(async move {
+        log::warn!("HERE {request:?}");
+
+        // let (res, io) = wasmtime_wasi_http::default_send_request(request, options).await?;
+        let (res, io) = crate::default_send_request::default_send_request(request, options).await?;
+        Ok((
+          res.map(BodyExt::boxed_unsync),
+          Box::new(io) as Box<dyn Future<Output = _> + Send>,
+        ))
+      }),
     };
   }
 }

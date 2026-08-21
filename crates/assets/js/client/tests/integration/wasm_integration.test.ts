@@ -34,10 +34,12 @@ test("WASM runtime", async () => {
     const json = await (await fetch(jsonUrl)).json();
     expect(json).toMatchObject(expected);
 
-    const response = await fetch(
-      `http://${serverAddress()}/fetch?url=${encodeURI(jsonUrl)}`,
-    );
-    expect(await response.json()).toMatchObject(expected);
+    const addr = `http://${serverAddress()}/fetch?url=${encodeURI(jsonUrl)}`;
+    const response = await fetch(addr);
+
+    const body = await response.text();
+    console.info(`BODY: ${addr}`, body);
+    expect(JSON.parse(body)).toMatchObject(expected);
 
     const errResp = await fetch(`http://${serverAddress()}/error`);
     expect(errResp.status).equals(status.IM_A_TEAPOT);
@@ -56,9 +58,11 @@ test("WASM runtime", async () => {
 
 test("WASM runtime outgoing TLS/HTTPS", async ({ expect }) => {
   const response = await fetch(
-    `http://${serverAddress()}/fetch?url=${encodeURI("https://example.com")}`,
+    `http://${serverAddress()}/fetch?url=${encodeURI("https://www.example.com")}`,
   );
   expect(response.ok);
+
+  console.log("RESPONSE:", await response.text());
 });
 
 test("WASM runtime DB Query & Execute", async ({ expect }) => {
