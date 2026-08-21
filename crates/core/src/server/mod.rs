@@ -15,7 +15,7 @@ use log::*;
 use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
@@ -24,7 +24,7 @@ use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObj
 use tower::Service;
 use tower_cookies::CookieManagerLayer;
 use tower_governor::GovernorLayer;
-use tower_governor::governor::GovernorConfigBuilder;
+use tower_governor::governor::{GovernorConfig, GovernorConfigBuilder};
 use tower_http::services::fs::{ServeDir, ServeFile};
 use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
@@ -145,66 +145,35 @@ impl Server {
       }
     }
 
-    // Install an Ip-based rate limiter on auth APIs to avoid abuse.
+    // Install an Ip-based rate limiter *ONLY* for auth APIs to avoid abuse.
     //
     // NOTE: If you run into rate-limits and are running behind a reverse proxy, please set the
     // "x-forwarded-for" header correctly to ensure ip-based rate limiting and request logging
     // works correctly.
-    // NOTE: We're using a closure here because of the awkward typing.
-    let install_auth_rate_limiter = if !state.dev_mode()
-      && let Some(rate_limit) = state.get_config().server.auth_ip_rate_limit
-      && rate_limit > 0
-    {
-      let governor_conf = Arc::new(
-        GovernorConfigBuilder::default()
-          // Quota.
-          .burst_size(rate_limit)
-          // Replenish one after 1 seconds.
-          .per_second(1)
-          .key_extractor(RealIpKeyExtractor)
-          // Set rate limiting headers on reply.
-          .use_headers()
-          // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited
-          // GET auth status.
-          .methods(vec![axum::http::Method::POST])
-          .finish()
-          .expect("startup"),
-      );
+    let auth_rate_limit = state.get_config().server.auth_ip_rate_limit.unwrap_or(0);
+    let install_auth_rate_limiter = !state.dev_mode() && auth_rate_limit > 0;
 
-      // Periodically clean up governor.
-      let governor_limiter = governor_conf.limiter().clone();
-      tokio::spawn(async move {
-        let interval = tokio::time::Duration::from_secs(60);
-        loop {
-          tokio::time::sleep(interval).await;
-          log::trace!("rate limiting storage size: {}", governor_limiter.len());
-          governor_limiter.retain_recent();
-        }
-      });
-
-      Some(move |router: OpenApiRouter<crate::AppState>| {
-        router.layer(GovernorLayer::new(governor_conf.clone()))
-      })
-    } else {
-      None
-    };
+    // router.layer(GovernorLayer::new(governor_conf.clone()))
 
     let independent_admin_router = if let Some(admin_address) = admin_address
       && admin_address != address
     {
       let (router, _api) = OpenApiRouter::new()
-        .merge(install_auth_rate_limiter.as_ref().map_or_else(
-          || {
-            return auth::admin_auth_router();
-          },
-          |inst| {
-            return inst(auth::admin_auth_router());
-          },
-        ))
+        .merge({
+          let auth_router = auth::admin_auth_router();
+          if install_auth_rate_limiter {
+            // NOTE: Only on auth router.
+            auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
+              auth_rate_limit,
+            )))
+          } else {
+            auth_router
+          }
+        })
         .merge(Self::build_admin_router(&state))
         .split_for_parts();
 
-      // NOTE: For a separate admin router is no root (GET, "/") path installed.
+      // NOTE: For the admin router no (GET, "/") is path installed => has_root=false.
       let admin_router = Self::wrap_with_default_layers(
         &state,
         router,
@@ -219,14 +188,24 @@ impl Server {
       None
     };
 
-    let (main_router, api) = Self::build_main_router(
-      &state,
-      public_dir.as_ref(),
-      public_dir_spa,
-      install_auth_rate_limiter.as_ref(),
-      custom_routers,
-    )?
-    .split_for_parts();
+    custom_routers.push({
+      let auth_router = OpenApiRouter::new().nest(
+        &format!("/{AUTH_API_PATH}/"),
+        auth::router(&state.get_config()),
+      );
+      if install_auth_rate_limiter {
+        // NOTE: Only on auth router.
+        auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
+          auth_rate_limit,
+        )))
+      } else {
+        auth_router
+      }
+    });
+
+    let (main_router, api) =
+      Self::build_main_router(&state, public_dir.as_ref(), public_dir_spa, custom_routers)?
+        .split_for_parts();
 
     let main_router =
       Self::wrap_with_default_layers(&state, main_router, &cors_allowed_origins, has_root);
@@ -286,7 +265,6 @@ impl Server {
         .expect("startup");
 
       // TODO: We have to keep this alive. Let's find something better than a singleton.
-      use std::sync::OnceLock;
       static SINGLETON: OnceLock<init_tracing_opentelemetry::Guard> = OnceLock::new();
       SINGLETON.get_or_init(move || init_tracing_opentelemetry::Guard::global(Some(otel_guard)));
 
@@ -434,7 +412,6 @@ impl Server {
     state: &AppState,
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,
-    install_auth_rate_limiter: Option<&impl Fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>>,
     custom_routers: Vec<OpenApiRouter<AppState>>,
   ) -> Result<OpenApiRouter<AppState>, InitError> {
     let enable_transactions =
@@ -447,17 +424,6 @@ impl Server {
     let mut router = OpenApiRouter::new()
       // Public, stable and versioned APIs.
       .merge(records::router(conn.connection_type(), enable_transactions))
-      .nest(
-        &format!("/{AUTH_API_PATH}/"),
-        install_auth_rate_limiter.map_or_else(
-          || {
-            return auth::router(&state.get_config());
-          },
-          |inst| {
-            return inst(auth::router(&state.get_config()));
-          },
-        ),
-      )
       .route("/api/healthcheck", get(healthcheck_handler));
 
     for custom_router in custom_routers {
@@ -846,4 +812,46 @@ fn load_tls(
     }
     (None, None) => None,
   };
+}
+
+type Governor =
+  GovernorConfig<RealIpKeyExtractor, governor::middleware::StateInformationMiddleware>;
+
+fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
+  static GOVERNOR_CONF: OnceLock<Arc<Governor>> = OnceLock::new();
+
+  let governor_conf = GOVERNOR_CONF.get_or_init(|| {
+    let governor_conf = Arc::new(
+      GovernorConfigBuilder::default()
+        // Quota.
+        .burst_size(rate_limit)
+        // Replenish one after 1 seconds.
+        .per_second(1)
+        .key_extractor(RealIpKeyExtractor)
+        // Set rate limiting headers on reply.
+        .use_headers()
+        // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited
+        // GET auth status.
+        .methods(vec![axum::http::Method::POST])
+        .finish()
+        .expect("startup"),
+    );
+
+    // Periodically clean up governor.
+    tokio::spawn({
+      let governor_limiter = governor_conf.limiter().clone();
+      async move {
+        let interval = tokio::time::Duration::from_secs(60);
+        loop {
+          tokio::time::sleep(interval).await;
+          log::trace!("rate limiting storage size: {}", governor_limiter.len());
+          governor_limiter.retain_recent();
+        }
+      }
+    });
+
+    return governor_conf;
+  });
+
+  return governor_conf.clone();
 }
