@@ -83,24 +83,6 @@ struct InternalState {
   test_cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
 }
 
-pub(crate) struct AppStateArgs {
-  pub data_dir: DataDir,
-  pub public_url: Option<url::Url>,
-  pub public_dir: Option<PathBuf>,
-  pub runtime_root_fs: Option<PathBuf>,
-  pub dev: bool,
-  pub demo: bool,
-  pub config: Config,
-  pub json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
-  pub session_conn: trailbase_sqlite::Connection,
-  pub logs_conn: trailbase_sqlite::Connection,
-  pub connection_manager: ConnectionManager,
-  pub jwt: JwtHelper,
-  pub object_store: Box<dyn ObjectStore>,
-  #[cfg_attr(not(feature = "wasm"), allow(unused))]
-  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
-}
-
 #[derive(Clone)]
 pub struct AppState {
   state: Arc<InternalState>,
@@ -108,106 +90,214 @@ pub struct AppState {
 
 impl AppState {
   pub async fn init(args: InitArgs) -> Result<(bool, Self), InitError> {
-    return init_app_state(args).await;
-  }
+    validate_path(args.public_dir.as_ref())?;
+    validate_path(args.runtime_root_fs.as_ref())?;
+    validate_path(args.geoip_db_path.as_ref())?;
 
-  async fn new(args: AppStateArgs) -> Self {
-    let config = Reactive::new(args.config);
+    // First create directory structure.
+    args.data_dir.ensure_directory_structure().await?;
 
-    let public_url = args.public_url.clone();
-    let site_url = config.derive(move |config| {
-      if let Some(ref public_url) = public_url {
-        debug!("Public url provided: {public_url:?}");
-        return Arc::new(Some(public_url.clone()));
-      }
+    // Then open or init new databases.
+    let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
+    let session_conn = crate::connection::init_session_db(Some(&args.data_dir))?;
 
-      return Arc::new(
-        build_site_url(config)
-          .map_err(|err| {
-            error!("Failed to parse `site_url`: {err}");
-            return err;
-          })
-          .ok()
-          .flatten(),
-      );
-    });
+    let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+      trailbase_schema::registry::build_json_schema_registry(vec![])?,
+    ));
 
-    let record_apis = build_record_apis(
-      args.connection_manager.clone(),
-      config.derive(|c| c.record_apis.clone()),
-    )
-    .await;
+    if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
+      update_json_schema_registry(&config.schemas, &json_schema_registry)?;
+    }
 
-    let main_conn = args.connection_manager.main_entry().connection;
-    let object_store: Arc<dyn ObjectStore> = args.object_store.into();
-    let jobs_input = (
-      args.data_dir.clone(),
-      args.connection_manager.clone(),
-      args.logs_conn.clone(),
-      args.session_conn.clone(),
-      object_store.clone(),
-    );
+    let (connection_manager, new_db) = ConnectionManager::new(crate::connection::Options {
+      data_dir: args.data_dir.clone(),
+      json_schema_registry: json_schema_registry.clone(),
+      sqlite_function_runtimes: cfg_select! {
+          feature = "wasm" => {
+              crate::wasm::build_sync_wasm_runtimes_for_components(
+                args.data_dir.root().join("wasm"),
+                args.runtime_root_fs.as_deref(),
+                args.dev,
+              )
+              .await
+              .map_err(|err| InitError::ScriptError(err.to_string()))?
+          },
+          _ => vec![],
+      },
+      // TODO: Wire up from config, if/when PG is supported.
+      pg_uri: cfg_select! {
+          feature = "pg" => args.pg_uri,
+          _ => None,
+      },
+    })
+    .await?;
 
-    AppState {
-      state: Arc::new(InternalState {
-        data_dir: args.data_dir.clone(),
-        public_dir: args.public_dir,
-        start_time: std::time::SystemTime::now(),
-        site_url,
-        dev: args.dev,
-        demo: args.demo,
-        auth: config.derive_unchecked(|c| {
-          Arc::new(AuthOptions::from_config(
-            c.server.site_url.as_deref(),
-            c.auth.clone(),
-          ))
-        }),
-        jobs: config.derive_unchecked(move |c| {
-          debug!("(re-)building jobs from config");
+    // Read config or write default one. Ensures config is validated.
+    let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
 
-          let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
+    // Load the `<depot>/metadata.textproto`.
+    let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
+
+    let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
+
+    // Init geoip if present.
+    let geoip_db_path = args
+      .geoip_db_path
+      .unwrap_or_else(|| args.data_dir.root().join("GeoLite2-Country.mmdb"));
+    if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
+      debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
+    }
+
+    let object_store = Arc::new(build_objectstore(
+      &args.data_dir,
+      config.server.s3_storage_config.as_ref(),
+    )?);
+
+    let app_state = {
+      // Build reactive stuff.
+      let config = Reactive::new(config);
+
+      let site_url = config.derive({
+        let public_url = args.public_url.clone();
+        move |config| {
+          if let Some(ref public_url) = public_url {
+            debug!("Public url provided: {public_url:?}");
+            return Arc::new(Some(public_url.clone()));
+          }
 
           return Arc::new(
-            build_job_registry_from_config(
-              c,
-              data_dir,
-              conn_mgr,
-              logs_conn,
-              session_conn,
-              object_store.clone(),
-            )
-            .unwrap_or_else(|err| {
-              error!("Failed to build JobRegistry for cron jobs: {err}");
-              return JobRegistry::new();
-            }),
+            build_site_url(config)
+              .map_err(|err| {
+                error!("Failed to parse `site_url`: {err}");
+                return err;
+              })
+              .ok()
+              .flatten(),
           );
+        }
+      });
+
+      let record_apis = build_record_apis(
+        connection_manager.clone(),
+        config.derive(|c| c.record_apis.clone()),
+      )
+      .await;
+
+      let main_conn = connection_manager.main_entry().connection;
+
+      AppState {
+        state: Arc::new(InternalState {
+          data_dir: args.data_dir.clone(),
+          public_dir: args.public_dir,
+          start_time: std::time::SystemTime::now(),
+          site_url,
+          dev: args.dev,
+          demo: args.demo,
+          auth: config.derive_unchecked(|c| {
+            Arc::new(AuthOptions::from_config(
+              c.server.site_url.as_deref(),
+              c.auth.clone(),
+            ))
+          }),
+          jobs: config.derive_unchecked({
+            let jobs_input = (
+              args.data_dir.clone(),
+              connection_manager.clone(),
+              logs_conn.clone(),
+              session_conn.clone(),
+              object_store.clone(),
+            );
+            move |c| {
+              debug!("(re-)building jobs from config");
+
+              let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
+
+              return Arc::new(
+                build_job_registry_from_config(
+                  c,
+                  data_dir,
+                  conn_mgr,
+                  logs_conn,
+                  session_conn,
+                  object_store.clone(),
+                )
+                .unwrap_or_else(|err| {
+                  error!("Failed to build JobRegistry for cron jobs: {err}");
+                  return JobRegistry::new();
+                }),
+              );
+            }
+          }),
+          mailer: config.derive_unchecked(Mailer::new_from_config),
+          config: config.clone(),
+          json_schema_registry,
+          conn: (*main_conn).clone(),
+          session_conn,
+          logs_conn,
+          connection_manager,
+          jwt,
+          record_apis: record_apis.clone(),
+          subscription_manager: SubscriptionManager::new(record_apis),
+          object_store,
+          #[cfg(feature = "wasm")]
+          wasm: crate::wasm::WasmState::init(
+            &args.data_dir,
+            config,
+            (*main_conn).clone(),
+            args.wasm_tokio_runtime,
+            args.runtime_root_fs,
+            args.dev,
+          ),
+          #[cfg(test)]
+          pg_uri: None,
+          #[cfg(test)]
+          test_cleanup: vec![],
         }),
-        mailer: config.derive_unchecked(Mailer::new_from_config),
-        config: config.clone(),
-        json_schema_registry: args.json_schema_registry,
-        conn: (*main_conn).clone(),
-        session_conn: args.session_conn,
-        logs_conn: args.logs_conn,
-        connection_manager: args.connection_manager,
-        jwt: args.jwt,
-        record_apis: record_apis.clone(),
-        subscription_manager: SubscriptionManager::new(record_apis),
-        object_store,
-        #[cfg(feature = "wasm")]
-        wasm: crate::wasm::WasmState::init(
-          &args.data_dir,
-          config,
-          (*main_conn).clone(),
-          args.wasm_tokio_runtime,
-          args.runtime_root_fs,
-          args.dev,
-        ),
-        #[cfg(test)]
-        pg_uri: None,
-        #[cfg(test)]
-        test_cleanup: vec![],
-      }),
+      }
+    };
+
+    if new_db {
+      let num_admins: i64 = app_state
+        .user_conn()
+        .read_query_row_get(
+          format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
+          (),
+          0,
+        )
+        .await?
+        .unwrap_or(0);
+
+      if num_admins == 0 {
+        let email = "admin@localhost";
+        let username = "admin";
+        let password = random_alphanumeric(20);
+        let hashed_password = crate::auth::password::hash_password(&password)?;
+
+        app_state
+          .user_conn()
+          .execute(
+            format!(
+              r#"
+              INSERT INTO {USER_TABLE}
+                (email, username, password_hash, admin)
+              VALUES
+                ($1, $2, $3, TRUE)
+            "#
+            ),
+            trailbase_sqlite::params!(email.to_string(), username.to_string(), hashed_password),
+          )
+          .await?;
+
+        info!("Created new admin user:\n\temail: '{email}'\n\tpassword: '{password}'");
+      }
     }
+
+    if cfg!(debug_assertions) {
+      let text_config = app_state.get_config().to_text()?;
+      debug!("Config: {text_config}");
+    }
+
+    return Ok((new_db, app_state));
   }
 
   /// Path where TrailBase stores its data, config, migrations, and secrets.
@@ -775,129 +865,6 @@ mod test_utils {
       }),
     });
   }
-}
-
-async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
-  validate_path(args.public_dir.as_ref())?;
-  validate_path(args.runtime_root_fs.as_ref())?;
-  validate_path(args.geoip_db_path.as_ref())?;
-
-  // First create directory structure.
-  args.data_dir.ensure_directory_structure().await?;
-
-  // Then open or init new databases.
-  let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
-  let session_conn = crate::connection::init_session_db(Some(&args.data_dir))?;
-
-  let json_schema_registry = Arc::new(parking_lot::RwLock::new(
-    trailbase_schema::registry::build_json_schema_registry(vec![])?,
-  ));
-
-  if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
-    update_json_schema_registry(&config.schemas, &json_schema_registry)?;
-  }
-
-  let (connection_manager, new_db) = ConnectionManager::new(crate::connection::Options {
-    data_dir: args.data_dir.clone(),
-    json_schema_registry: json_schema_registry.clone(),
-    sqlite_function_runtimes: cfg_select! {
-        feature = "wasm" => {
-            crate::wasm::build_sync_wasm_runtimes_for_components(
-              args.data_dir.root().join("wasm"),
-              args.runtime_root_fs.as_deref(),
-              args.dev,
-            )
-            .await
-            .map_err(|err| InitError::ScriptError(err.to_string()))?
-        },
-        _ => vec![],
-    },
-    // TODO: Wire up from config, if/when PG is supported.
-    pg_uri: cfg_select! {
-        feature = "pg" => args.pg_uri,
-        _ => None,
-    },
-  })
-  .await?;
-
-  // Read config or write default one. Ensures config is validated.
-  let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
-
-  // Load the `<depot>/metadata.textproto`.
-  let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
-
-  let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
-
-  // Init geoip if present.
-  let geoip_db_path = args
-    .geoip_db_path
-    .unwrap_or_else(|| args.data_dir.root().join("GeoLite2-Country.mmdb"));
-  if let Err(err) = trailbase_extension::geoip::load_geoip_db(geoip_db_path.clone()) {
-    debug!("Failed to load maxmind geoip DB '{geoip_db_path:?}': {err}");
-  }
-
-  let object_store = build_objectstore(&args.data_dir, config.server.s3_storage_config.as_ref())?;
-
-  let app_state = AppState::new(AppStateArgs {
-    data_dir: args.data_dir.clone(),
-    public_url: args.public_url,
-    public_dir: args.public_dir,
-    runtime_root_fs: args.runtime_root_fs,
-    dev: args.dev,
-    demo: args.demo,
-    config,
-    json_schema_registry,
-    session_conn,
-    logs_conn,
-    connection_manager,
-    jwt,
-    object_store,
-    wasm_tokio_runtime: args.wasm_tokio_runtime,
-  })
-  .await;
-
-  if new_db {
-    let num_admins: i64 = app_state
-      .user_conn()
-      .read_query_row_get(
-        format!("SELECT COUNT(*) FROM {USER_TABLE} WHERE admin = TRUE"),
-        (),
-        0,
-      )
-      .await?
-      .unwrap_or(0);
-
-    if num_admins == 0 {
-      let email = "admin@localhost";
-      let username = "admin";
-      let password = random_alphanumeric(20);
-      let hashed_password = crate::auth::password::hash_password(&password)?;
-
-      app_state
-        .user_conn()
-        .execute(
-          format!(
-            r#"
-              INSERT INTO {USER_TABLE}
-                (email, username, password_hash, admin)
-              VALUES
-                ($1, $2, $3, TRUE)
-            "#
-          ),
-          trailbase_sqlite::params!(email.to_string(), username.to_string(), hashed_password),
-        )
-        .await?;
-
-      info!("Created new admin user:\n\temail: '{email}'\n\tpassword: '{password}'");
-    }
-  }
-
-  if cfg!(debug_assertions) {
-    let text_config = app_state.get_config().to_text()?;
-    debug!("Config: {text_config}");
-  }
-
-  return Ok((new_db, app_state));
 }
 
 fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
