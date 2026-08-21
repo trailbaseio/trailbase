@@ -59,7 +59,6 @@ async fn test_record_apis() {
 
   let (_new, state) = AppState::init(InitArgs {
     data_dir: DataDir(data_dir.path().to_path_buf()),
-    public_dir: None,
     dev: false,
 
     #[cfg(feature = "pg-test")]
@@ -167,6 +166,7 @@ async fn test_record_apis() {
         .route("/trace", axum::routing::get(trace_id))
         .into(),
       &options.cors_allowed_origins,
+      /* has_root= */ false,
     ));
   }
 

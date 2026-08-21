@@ -19,7 +19,6 @@ async fn test_without_spa_fallback() {
 
   let (_new, state) = AppState::init(InitArgs {
     data_dir: DataDir(data_dir.path().to_path_buf()),
-    public_dir: Some(public_dir.path().to_path_buf()),
     dev: false,
     ..Default::default()
   })

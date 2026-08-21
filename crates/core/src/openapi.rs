@@ -60,7 +60,6 @@ pub fn build_api_definitions_from_state(
       state,
       None,
       false,
-      &[],
       None::<&Installer>,
       custom_routers,
     )

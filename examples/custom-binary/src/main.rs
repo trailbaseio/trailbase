@@ -47,7 +47,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
   let (new_db, state) = AppState::init(InitArgs {
     data_dir: DataDir::default(),
-    public_dir: None,
     dev: false,
     ..Default::default()
   })

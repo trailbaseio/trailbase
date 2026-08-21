@@ -1,4 +1,4 @@
-use axum::extract::{Json, Path, Query, State};
+use axum::extract::{Extension, Json, Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
 use base64::prelude::*;
@@ -45,7 +45,7 @@ use crate::auth::util::{login_with_password, login_with_password_for_test};
 use crate::config::proto::{Config, EmailTemplate, UserIdentifier};
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
-use crate::extract::Either;
+use crate::extract::{Either, HasRoot};
 
 fn build_test_config_with_trivial_tokens() -> Config {
   let mut config = crate::app_state::test_config();
@@ -161,6 +161,7 @@ async fn register_test_user(
       login_handler(
         State(state.clone()),
         Query(LoginInputParams::default()),
+        Extension(HasRoot(false)),
         Cookies::default(),
         Either::Json(match identifier {
           Identifier::Email(ref email) | Identifier::EmailAndUsername(ref email, _) =>
@@ -283,6 +284,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      Extension(HasRoot(false)),
       Cookies::default(),
       request,
     )
@@ -408,6 +410,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
+    Extension(HasRoot(false)),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -427,6 +430,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      Extension(HasRoot(false)),
       Cookies::default(),
       request,
     )
@@ -516,6 +520,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
+    Extension(HasRoot(false)),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -535,6 +540,7 @@ async fn test_auth_password_login_flow_with_totp() {
     return login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      Extension(HasRoot(false)),
       Cookies::default(),
       request,
     )
@@ -593,6 +599,7 @@ async fn test_auth_password_login_flow_with_totp() {
   let response = login_mfa_handler(
     State(state.clone()),
     Query(Default::default()),
+    Extension(HasRoot(false)),
     Cookies::default(),
     Either::Json(LoginMfaRequest {
       mfa_token,
@@ -737,6 +744,7 @@ async fn test_auth_reset_password_flow() {
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
+    Extension(HasRoot(false)),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -836,6 +844,7 @@ async fn test_auth_change_email_flow() {
     State(state.clone()),
     Path(change_email_token.clone()),
     Query(ChangeEmailConfigParams { redirect_uri: None }),
+    Extension(HasRoot(false)),
   )
   .await
   .expect(&format!("CODE: '{change_email_token}'"));
@@ -1004,6 +1013,7 @@ async fn test_auth_register_handle_only() {
   login_handler(
     State(state.clone()),
     Query(LoginInputParams::default()),
+    Extension(HasRoot(false)),
     Cookies::default(),
     Either::Json(LoginRequest::Username {
       username: username.clone(),
@@ -1067,6 +1077,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
+    Extension(HasRoot(false)),
     Some(user.clone()),
     Cookies::default(),
   )
@@ -1180,8 +1191,9 @@ async fn test_auth_otp_flow_using_email() {
   assert!(
     otp::login_otp_handler(
       State(state.clone()),
-      Cookies::default(),
       Query(Default::default()),
+      Extension(HasRoot(false)),
+      Cookies::default(),
       Either::Form(otp::LoginOtpRequest {
         params: otp::LoginOtpParams {
           email: user.email.clone(),
@@ -1207,8 +1219,9 @@ async fn test_auth_otp_flow_using_email() {
 
   let response = otp::login_otp_handler(
     State(state.clone()),
-    Cookies::default(),
     Query(Default::default()),
+    Extension(HasRoot(false)),
+    Cookies::default(),
     Either::Json(otp::LoginOtpRequest {
       params: otp::LoginOtpParams {
         // Make sure trimming/normalization works.
@@ -1302,8 +1315,9 @@ async fn test_auth_otp_flow_using_username() {
   assert!(
     otp::login_otp_handler(
       State(state.clone()),
-      Cookies::default(),
       Query(Default::default()),
+      Extension(HasRoot(false)),
+      Cookies::default(),
       Either::Form(otp::LoginOtpRequest {
         params: otp::LoginOtpParams {
           username: Some(username.clone()),
@@ -1329,8 +1343,9 @@ async fn test_auth_otp_flow_using_username() {
 
   let response = otp::login_otp_handler(
     State(state.clone()),
-    Cookies::default(),
     Query(Default::default()),
+    Extension(HasRoot(false)),
+    Cookies::default(),
     Either::Json(otp::LoginOtpRequest {
       params: otp::LoginOtpParams {
         // Make sure trimming/normalization works.
@@ -1372,6 +1387,7 @@ async fn test_auth_annonymous_signin() {
   let response = login_anonymous_user_handler(
     State(state.clone()),
     Query(Default::default()),
+    Extension(HasRoot(false)),
     Cookies::default(),
     Either::Json(LoginAnonymousRequest {
       params: Default::default(),
@@ -1420,6 +1436,7 @@ async fn test_auth_annonymous_signin() {
     login_handler(
       State(state.clone()),
       Query(LoginInputParams::default()),
+      Extension(HasRoot(false)),
       Cookies::default(),
       Either::Json(LoginRequest::Username {
         username: new_username.clone(),
@@ -1447,6 +1464,7 @@ async fn test_auth_annonymous_signin() {
   login_handler(
     State(state.clone()),
     Query(LoginInputParams::default()),
+    Extension(HasRoot(false)),
     Cookies::default(),
     Either::Json(LoginRequest::Username {
       username: new_username.clone(),
@@ -1479,6 +1497,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
   let response = login_anonymous_user_handler(
     State(state.clone()),
     Query(Default::default()),
+    Extension(HasRoot(false)),
     Cookies::default(),
     Either::Json(LoginAnonymousRequest {
       params: Default::default(),

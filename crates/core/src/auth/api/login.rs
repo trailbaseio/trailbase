@@ -1,4 +1,4 @@
-use axum::extract::{Json, Query, State};
+use axum::extract::{Extension, Json, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::{Duration, Utc};
@@ -24,7 +24,7 @@ use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
 };
-use crate::extract::Either;
+use crate::extract::{Either, HasRoot};
 use crate::rand::random_alphanumeric;
 use crate::util::{b64_to_uuid, urlencode};
 
@@ -92,6 +92,7 @@ pub struct MfaTokenResponse {
 pub(crate) async fn login_handler(
   State(state): State<AppState>,
   Query(query_login_input): Query<LoginInputParams>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
   cookies: Cookies,
   either_request: Either<LoginRequest>,
 ) -> Result<Response, AuthError> {
@@ -231,7 +232,7 @@ pub(crate) async fn login_handler(
   return match login_params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json).await
+      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json, has_root).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
@@ -265,6 +266,7 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
+  has_root: bool,
   (auth_token_ttl, refresh_token_ttl): (Duration, Duration),
 ) -> Result<Response, AuthError> {
   let build_new_tokens = async || {
@@ -306,7 +308,7 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
 
       if let Some(ref redirect) = redirect {
         Ok(Redirect::to(redirect).into_response())
-      } else if state.public_dir().is_some() {
+      } else if has_root {
         Ok(Redirect::to("/").into_response())
       } else {
         Ok((StatusCode::OK, "logged in").into_response())
@@ -323,6 +325,7 @@ pub(crate) async fn build_auth_token_flow_response(
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
+  has_root: bool,
 ) -> Result<Response, AuthError> {
   return build_auth_token_flow_response_with_ttl(
     state,
@@ -330,6 +333,7 @@ pub(crate) async fn build_auth_token_flow_response(
     cookies,
     redirect,
     is_json,
+    has_root,
     state.access_config(|c| c.auth.token_ttls()),
   )
   .await;
@@ -422,6 +426,7 @@ pub struct LoginMfaRequest {
 pub(crate) async fn login_mfa_handler(
   State(state): State<AppState>,
   Query(query_login_input): Query<LoginInputParams>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
   cookies: Cookies,
   either_request: Either<LoginMfaRequest>,
 ) -> Result<Response, AuthError> {
@@ -494,7 +499,7 @@ pub(crate) async fn login_mfa_handler(
   return match params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json).await
+      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json, has_root).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {

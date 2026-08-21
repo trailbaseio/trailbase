@@ -1,4 +1,4 @@
-use axum::extract::{Json, Query, State};
+use axum::extract::{Extension, Json, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use serde::Deserialize;
@@ -12,6 +12,7 @@ use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
 };
+use crate::extract::HasRoot;
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LogoutParams {
@@ -34,6 +35,7 @@ pub struct LogoutParams {
 pub async fn logout_handler(
   State(state): State<AppState>,
   Query(query): Query<LogoutParams>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
   user: Option<User>,
   cookies: Cookies,
 ) -> Result<Response, AuthError> {
@@ -47,7 +49,7 @@ pub async fn logout_handler(
 
   return if let Some(redirect) = redirect_uri {
     Ok(Redirect::to(&redirect).into_response())
-  } else if state.public_dir().is_some() {
+  } else if has_root {
     Ok(Redirect::to("/").into_response())
   } else {
     Ok((StatusCode::OK, "logged out").into_response())

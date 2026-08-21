@@ -28,7 +28,6 @@ fn test_https_serving() {
 
     let (_new, state) = AppState::init(InitArgs {
       data_dir: DataDir(data_dir.path().to_path_buf()),
-      public_dir: None,
       dev: false,
       ..Default::default()
     })

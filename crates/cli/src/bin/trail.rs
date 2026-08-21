@@ -71,9 +71,8 @@ async fn async_main(
       let (_new, state) = AppState::init(InitArgs {
         data_dir: data_dir.clone(),
         public_url: public_url.clone(),
-        public_dir: cmd.public_dir.as_ref().map(|p| p.into()).clone(),
-        runtime_root_fs: cmd.runtime_root_fs.as_ref().map(|p| p.into()).clone(),
-        geoip_db_path: cmd.geoip_db_path.as_ref().map(|p| p.into()).clone().clone(),
+        runtime_root_fs: cmd.runtime_root_fs.as_ref().map(|p| p.into()),
+        geoip_db_path: cmd.geoip_db_path.as_ref().map(|p| p.into()),
         dev: cmd.dev,
         demo: cmd.demo,
         wasm_tokio_runtime,

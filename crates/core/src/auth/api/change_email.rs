@@ -1,8 +1,6 @@
-use axum::{
-  extract::{Path, Query, State},
-  http::StatusCode,
-  response::{IntoResponse, Redirect, Response},
-};
+use axum::extract::{Extension, Path, Query, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Redirect, Response};
 use const_format::formatcp;
 use serde::Deserialize;
 use trailbase_sqlite::params;
@@ -16,7 +14,7 @@ use crate::auth::{AuthError, User};
 use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
-use crate::extract::Either;
+use crate::extract::{Either, HasRoot};
 use crate::util::urlencode;
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
@@ -211,6 +209,7 @@ pub async fn change_email_confirm_handler(
   State(state): State<AppState>,
   Path(email_verification_token): Path<String>,
   Query(query): Query<ChangeEmailConfigParams>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
   // user: Option<User>,
 ) -> Result<Response, AuthError> {
   if state.demo_mode() {
@@ -242,7 +241,7 @@ pub async fn change_email_confirm_handler(
     1 => {
       if let Some(redirect) = redirect_uri {
         Ok(Redirect::to(&redirect).into_response())
-      } else if state.public_dir().is_some() {
+      } else if has_root {
         Ok(Redirect::to("/").into_response())
       } else {
         Ok((StatusCode::OK, "email changed").into_response())

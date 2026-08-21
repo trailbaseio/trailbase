@@ -1,7 +1,7 @@
 mod serve;
 
 use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, Request, State};
+use axum::extract::{DefaultBodyLimit, Extension, Request, State};
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
@@ -32,12 +32,13 @@ use trailbase_assets::AssetService;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::admin;
-use crate::app_state::AppState;
+use crate::app_state::{AppState, validate_path};
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::connection::ConnectionEntry;
 use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
+use crate::extract::HasRoot;
 use crate::extract::ip::RealIpKeyExtractor;
 use crate::init_error::InitError;
 use crate::logging;
@@ -111,6 +112,8 @@ impl Server {
       custom_router,
     } = opts;
 
+    validate_path(public_dir.as_ref())?;
+
     let version_info = trailbase_build::get_version_info!();
     info!(
       "Initializing server version: {version} {date}",
@@ -124,21 +127,19 @@ impl Server {
       custom_router.into_iter().map(|r| r.into()).collect();
 
     // Whether any of the components provides GET "/" route.
-    // TODO: We should inspect if (GET, "/") is a match.
-    #[allow(unused_variables, unused_mut)]
-    let mut has_wasm_root = false;
+    #[allow(unused_mut)]
+    let mut has_root = public_dir.is_some();
 
-    #[allow(unused_assignments)]
     #[cfg(feature = "wasm")]
     {
       for rt in state.wasm().runtimes() {
         if let crate::wasm::InstallResult {
-          router: Some((wasm_router, has_root)),
+          router: Some((wasm_router, has_wasm_root)),
         } = crate::wasm::install_routes_and_jobs(&state, rt.clone())
           .await
           .map_err(|err| InitError::ScriptError(err.to_string()))?
         {
-          has_wasm_root |= has_root;
+          has_root |= has_wasm_root;
           custom_routers.push(wasm_router);
         }
       }
@@ -203,8 +204,14 @@ impl Server {
         ))
         .merge(admin_router);
 
-      let (admin_router, _api) =
-        Self::wrap_with_default_layers(&state, router, &cors_allowed_origins).split_for_parts();
+      // NOTE: For a separate admin router is no root (GET, "/") path installed.
+      let (admin_router, _api) = Self::wrap_with_default_layers(
+        &state,
+        router,
+        &cors_allowed_origins,
+        /* has_root= */ false,
+      )
+      .split_for_parts();
 
       Some((admin_address.to_string(), admin_router))
     } else {
@@ -213,14 +220,18 @@ impl Server {
       None
     };
 
-    let (main_router, _api) = Self::build_main_router(
+    let (main_router, _api) = Self::wrap_with_default_layers(
       &state,
-      public_dir.as_ref(),
-      public_dir_spa,
+      Self::build_main_router(
+        &state,
+        public_dir.as_ref(),
+        public_dir_spa,
+        install_auth_rate_limiter.as_ref(),
+        custom_routers,
+      )?,
       &cors_allowed_origins,
-      install_auth_rate_limiter.as_ref(),
-      custom_routers,
-    )?
+      has_root,
+    )
     .split_for_parts();
 
     Ok(Self {
@@ -415,10 +426,9 @@ impl Server {
     state: &AppState,
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,
-    cors_allowed_origins: &[String],
     install_auth_rate_limiter: Option<&impl Fn(OpenApiRouter<AppState>) -> OpenApiRouter<AppState>>,
     custom_routers: Vec<OpenApiRouter<AppState>>,
-  ) -> Result<OpenApiRouter<()>, InitError> {
+  ) -> Result<OpenApiRouter<AppState>, InitError> {
     let enable_transactions =
       state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
 
@@ -491,17 +501,14 @@ impl Server {
       };
     }
 
-    return Ok(Self::wrap_with_default_layers(
-      state,
-      router,
-      cors_allowed_origins,
-    ));
+    return Ok(router);
   }
 
   pub fn wrap_with_default_layers(
     state: &AppState,
     router: OpenApiRouter<AppState>,
     cors_allowed_origins: &[String],
+    has_root: bool,
   ) -> OpenApiRouter<()> {
     #[cfg(feature = "otel")]
     let router = router
@@ -509,6 +516,7 @@ impl Server {
       .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
 
     return router
+      .layer(Extension(HasRoot(has_root)))
       .layer(CookieManagerLayer::new())
       .layer(build_cors(cors_allowed_origins, state.dev_mode()))
       .layer(

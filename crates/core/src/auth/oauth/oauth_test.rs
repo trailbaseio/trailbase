@@ -1,4 +1,4 @@
-use axum::extract::{Form, Json, Path, Query, State};
+use axum::extract::{Extension, Form, Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect};
 use axum::routing::{Router, get, post};
 use axum_test::{TestServer, TestServerConfig};
@@ -26,6 +26,7 @@ use crate::constants::{
   AUTH_API_PATH, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE,
   USER_TABLE,
 };
+use crate::extract::HasRoot;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct AuthQuery {
@@ -215,6 +216,7 @@ async fn test_oauth_login_flow_without_pkce() {
       state: auth_query.state.clone(),
       code: auth_query.code_challenge.clone(),
     }),
+    Extension(HasRoot(false)),
     cookies.clone(),
   )
   .await
@@ -323,6 +325,7 @@ async fn test_oauth_login_flow_with_pkce() {
       state: auth_query.state.clone(),
       code: auth_query.code_challenge.clone(),
     }),
+    Extension(HasRoot(false)),
     cookies.clone(),
   )
   .await

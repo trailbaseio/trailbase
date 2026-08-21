@@ -1,7 +1,7 @@
 use log::*;
 use object_store::ObjectStore;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
@@ -29,7 +29,6 @@ use crate::scheduler::{JobRegistry, build_job_registry_from_config};
 pub struct InitArgs {
   pub data_dir: DataDir,
   pub public_url: Option<url::Url>,
-  pub public_dir: Option<PathBuf>,
   pub runtime_root_fs: Option<PathBuf>,
   pub geoip_db_path: Option<PathBuf>,
 
@@ -44,7 +43,6 @@ pub struct InitArgs {
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
   data_dir: DataDir,
-  public_dir: Option<PathBuf>,
   start_time: std::time::SystemTime,
 
   site_url: Reactive<Arc<Option<url::Url>>>,
@@ -90,7 +88,6 @@ pub struct AppState {
 
 impl AppState {
   pub async fn init(args: InitArgs) -> Result<(bool, Self), InitError> {
-    validate_path(args.public_dir.as_ref())?;
     validate_path(args.runtime_root_fs.as_ref())?;
     validate_path(args.geoip_db_path.as_ref())?;
 
@@ -188,7 +185,6 @@ impl AppState {
       AppState {
         state: Arc::new(InternalState {
           data_dir: args.data_dir.clone(),
-          public_dir: args.public_dir,
           start_time: std::time::SystemTime::now(),
           site_url,
           dev: args.dev,
@@ -303,11 +299,6 @@ impl AppState {
   /// Path where TrailBase stores its data, config, migrations, and secrets.
   pub fn data_dir(&self) -> &DataDir {
     return &self.state.data_dir;
-  }
-
-  /// Optional user-provided public directory from where static assets are served.
-  pub fn public_dir(&self) -> Option<&Path> {
-    return self.state.public_dir.as_deref();
   }
 
   pub fn start_time(&self) -> std::time::SystemTime {
@@ -830,7 +821,6 @@ mod test_utils {
     return Ok(AppState {
       state: Arc::new(InternalState {
         data_dir,
-        public_dir: None,
         start_time: std::time::SystemTime::now(),
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
         dev: true,
@@ -867,7 +857,7 @@ mod test_utils {
   }
 }
 
-fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
+pub(crate) fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
   if let Some(path) = path
     && !std::fs::exists(path)?
   {

@@ -1,4 +1,4 @@
-use axum::extract::{Query, State};
+use axum::extract::{Extension, Query, State};
 use axum::response::Response;
 use chrono::Duration;
 use const_format::formatcp;
@@ -14,7 +14,7 @@ use crate::auth::api::register::RegisterUserParams;
 use crate::auth::user::DbUser;
 use crate::auth::util::validate_redirect;
 use crate::constants::{DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, DEFAULT_AUTH_TOKEN_TTL, USER_TABLE};
-use crate::extract::Either;
+use crate::extract::{Either, HasRoot};
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
@@ -38,6 +38,7 @@ pub struct LoginAnonymousRequest {
 pub async fn login_anonymous_user_handler(
   State(state): State<AppState>,
   Query(query): Query<RegisterUserParams>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
   cookies: Cookies,
   either_request: Either<LoginAnonymousRequest>,
 ) -> Result<Response, AuthError> {
@@ -100,6 +101,7 @@ pub async fn login_anonymous_user_handler(
           &cookies,
           redirect_uri,
           json,
+          has_root,
           // TODO: Separate config setting for anonymous token TTLs. Folks may want this to be
           // longer than normal refresh token TTL in the absence of re-sign-in.
           (auth_token_ttl, anonymous_refresh_token_ttl),

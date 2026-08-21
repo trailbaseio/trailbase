@@ -15,7 +15,6 @@ fn test_admin_permissions() {
   let _ = runtime.block_on(async move {
     let (_new, state) = AppState::init(InitArgs {
       data_dir: DataDir(data_dir.path().to_path_buf()),
-      public_dir: None,
       dev: false,
       ..Default::default()
     })
@@ -32,7 +31,6 @@ fn test_admin_permissions() {
       ServerOptions {
         address: "localhost:4040".to_string(),
         admin_address: None,
-        public_dir: None,
         cors_allowed_origins: vec![],
         ..Default::default()
       },

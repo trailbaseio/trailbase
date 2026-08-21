@@ -1,4 +1,4 @@
-use axum::extract::{Path, Query, State};
+use axum::extract::{Extension, Path, Query, State};
 use axum::http::{self, HeaderName, HeaderValue, StatusCode};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
 use chrono::Utc;
@@ -24,6 +24,7 @@ use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
 };
+use crate::extract::HasRoot;
 use crate::rand::random_alphanumeric;
 
 #[derive(Debug, Deserialize, IntoParams)]
@@ -47,6 +48,7 @@ pub(crate) async fn callback_from_external_auth_provider(
   State(state): State<AppState>,
   Path(provider): Path<String>,
   Query(query): Query<AuthQuery>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
   cookies: Cookies,
 ) -> Result<Response, AuthError> {
   let auth_options = state.auth_options();
@@ -104,6 +106,7 @@ pub(crate) async fn callback_from_external_auth_provider(
         redirect_uri,
         query.code,
         pkce_code_verifier,
+        has_root,
       )
       .await
     }
@@ -118,6 +121,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   redirect: Option<String>,
   auth_code: String,
   server_pkce_code_verifier: String,
+  has_root: bool,
 ) -> Result<Response, AuthError> {
   let db_user =
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
@@ -166,7 +170,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
 
   return if let Some(ref redirect) = redirect {
     Ok((AppendHeaders(NO_REFERER_HEADER), Redirect::to(redirect)).into_response())
-  } else if state.public_dir().is_some() {
+  } else if has_root {
     Ok((AppendHeaders(NO_REFERER_HEADER), Redirect::to("/")).into_response())
   } else {
     Ok((StatusCode::OK, "logged in").into_response())

@@ -1,4 +1,4 @@
-use axum::extract::{Query, State};
+use axum::extract::{Extension, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use chrono::{Duration, Utc};
@@ -22,7 +22,7 @@ use crate::auth::util::{
 };
 use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
-use crate::extract::Either;
+use crate::extract::{Either, HasRoot};
 use crate::rand::random_numeric_and_uppercase;
 use crate::util::urlencode;
 
@@ -239,8 +239,9 @@ pub struct LoginOtpRequest {
 )]
 pub async fn login_otp_handler(
   State(state): State<AppState>,
-  cookies: Cookies,
   Query(query): Query<LoginOtpParams>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
+  cookies: Cookies,
   either_request: Either<LoginOtpRequest>,
 ) -> Result<Response, AuthError> {
   if !state.access_config(|c| c.auth.enable_otp_signin()) {
@@ -336,6 +337,7 @@ pub async fn login_otp_handler(
     &cookies,
     redirect_uri.map(|uri| uri.to_string()),
     json,
+    has_root,
   )
   .await;
 }
