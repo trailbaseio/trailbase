@@ -1,3 +1,4 @@
+use http_body_util::BodyExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -9,7 +10,7 @@ use wasmtime::Result;
 use wasmtime::component::{HasData, Resource, ResourceTable};
 use wasmtime_wasi::{WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p2::{WasiHttpHooks, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpHooks, WasiHttpView};
 use wasmtime_wasi_io::IoView;
 
 // Documentation: https://docs.wasmtime.dev/api/wasmtime/component/macro.bindgen.html
@@ -105,10 +106,20 @@ pub(crate) struct Hooks {
 impl WasiHttpHooks for Hooks {
   fn send_request(
     &mut self,
-    request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-    config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
-  ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
-  {
+    request: http::Request<wasmtime_wasi_http::WasiBody>,
+    options: Option<wasmtime_wasi_http::RequestOptions>,
+    _fut: Box<dyn Future<Output = Result<(), wasmtime_wasi_http::Error>> + Send>,
+  ) -> Box<
+    dyn Future<
+        Output = Result<
+          (
+            http::Response<wasmtime_wasi_http::WasiBody>,
+            Box<dyn Future<Output = Result<(), wasmtime_wasi_http::Error>> + Send>,
+          ),
+          wasmtime_wasi_http::Error,
+        >,
+      > + Send,
+  > {
     #[cfg(debug_assertions)]
     log::debug!(
       "WasiHttpHooks::send_request() {host}{path} ({name}, id={id:?})",
@@ -120,59 +131,66 @@ impl WasiHttpHooks for Hooks {
 
     return match request.uri().host() {
       Some("__sqlite") => {
-        let conn = self.shared.conn.clone().ok_or_else(|| {
-          debug_assert!(false, "missing SQLite connection");
+        let conn = self.shared.conn.clone();
 
-          wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
-            "missing SQLite connection".to_string(),
+        Box::new(async move {
+          let conn = conn.ok_or_else(|| {
+            debug_assert!(false, "missing SQLite connection");
+            return wasmtime_wasi_http::Error::InternalError(Some(
+              "missing SQLite connection".to_string(),
+            ));
+          })?;
+
+          let res = crate::sqlite::handle_sqlite_request2(conn, request).await?;
+          Ok((
+            res.map(BodyExt::boxed_unsync),
+            Box::new(async { Ok(()) }) as Box<dyn Future<Output = _> + Send>,
           ))
-        })?;
-
-        Ok(
-          wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
-            wasmtime_wasi::runtime::spawn(async move {
-              Ok(crate::sqlite::handle_sqlite_request(conn, request).await)
-            }),
-          ),
-        )
+        })
       }
       Some("__prefs") => {
-        let component_name = match crate::component_path_to_name(&self.wasm_source_file) {
-          Ok(name) => name,
-          Err(err) => {
-            return Err(
-              wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(err))
-                .into(),
-            );
-          }
-        };
+        let component_name = crate::component_path_to_name(&self.wasm_source_file);
+        let conn = self.shared.conn.clone();
 
-        let conn = self.shared.conn.clone().ok_or_else(|| {
-          debug_assert!(false, "missing SQLite connection");
+        Box::new(async move {
+          let component_name = match component_name {
+            Ok(name) => name,
+            Err(err) => {
+              return Err(wasmtime_wasi_http::Error::InternalError(Some(err)).into());
+            }
+          };
 
-          wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
-            "missing SQLite connection".to_string(),
+          let conn = conn.ok_or_else(|| {
+            debug_assert!(false, "missing SQLite connection");
+
+            wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::InternalError(Some(
+              "missing SQLite connection".to_string(),
+            ))
+          })?;
+
+          let res = crate::prefs::handle_prefs_request2(conn, component_name, request).await?;
+          Ok((
+            res.map(BodyExt::boxed_unsync),
+            Box::new(async { Ok(()) }) as Box<dyn Future<Output = _> + Send>,
           ))
-        })?;
-
-        Ok(
-          wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(
-            wasmtime_wasi::runtime::spawn(async move {
-              Ok(crate::prefs::handle_prefs_request(conn, component_name, request).await)
-            }),
-          ),
-        )
+        })
       }
-      _ => Ok(wasmtime_wasi_http::p2::default_send_request(
-        request, config,
-      )),
+      _ => {
+        Box::new(async move {
+          let (res, io) = wasmtime_wasi_http::default_send_request(request, options).await?;
+          Ok((
+            res.map(BodyExt::boxed_unsync),
+            Box::new(io) as Box<dyn Future<Output = _> + Send>,
+          ))
+        })
+      }
     };
   }
 }
 
 impl WasiHttpView for State {
-  fn http(&mut self) -> wasmtime_wasi_http::p2::WasiHttpCtxView<'_> {
-    wasmtime_wasi_http::p2::WasiHttpCtxView {
+  fn http(&mut self) -> wasmtime_wasi_http::WasiHttpCtxView<'_> {
+    wasmtime_wasi_http::WasiHttpCtxView {
       ctx: &mut self.http_ctx,
       table: &mut self.resource_table,
       hooks: &mut self.hooks,

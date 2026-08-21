@@ -21,10 +21,9 @@ use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use trailbase_wasm_common::manifest::InitManifest;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{AsContextMut, Config, Engine, Result, Store};
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtxBuilder};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p2::WasiHttpView;
+use wasmtime_wasi::{FsPerms, WasiCtxBuilder};
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
 use crate::host::TransactionImpl;
 
@@ -226,7 +225,7 @@ impl StoreBuilder<State> for Arc<SharedState> {
 
     if let Some(ref path) = self.fs_root_path {
       wasi_ctx
-        .preopened_dir(path, "/", DirPerms::READ, FilePerms::READ)
+        .preopened_dir(path, "/", FsPerms::ReadOnly)
         .map_err(|err| Error::Other(err.to_string()))?;
     }
 
@@ -853,7 +852,7 @@ mod tests {
     runtime: &Runtime,
     uri: &str,
     registered_path: &str,
-  ) -> Result<Response<UnsyncBoxBody<Bytes, ErrorCode>>, Error> {
+  ) -> Result<Response<UnsyncBoxBody<Bytes, wasmtime_wasi_http::Error>>, Error> {
     let (store, _manifest) = HttpStore::initialize(&runtime, InitArgs { version: None })
       .await
       .unwrap();
@@ -862,7 +861,7 @@ mod tests {
     return store.call_incoming_http_handler(request).await;
   }
 
-  async fn response_to_i64(resp: Response<UnsyncBoxBody<Bytes, ErrorCode>>) -> i64 {
+  async fn response_to_i64(resp: Response<UnsyncBoxBody<Bytes, wasmtime_wasi_http::Error>>) -> i64 {
     let (head, body) = resp.into_parts();
     let body: Bytes = body.collect().await.unwrap().to_bytes();
     assert_eq!(head.status, StatusCode::OK, "{body:?}");

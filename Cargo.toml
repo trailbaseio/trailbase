@@ -117,10 +117,10 @@ utoipa = { version = "5.5.0", default-features = false, features = ["axum_extras
 utoipa-axum = { version = "0.2.0" }
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum", "vendored"] }
 uuid = { version = "1", default-features = false, features = ["std", "v4", "v7", "serde"] }
-wasmtime = { version = "47.0.1", features = ["winch"] }
-wasmtime-wasi = { version = "47.0.1", default-features = false, features = [] }
-wasmtime-wasi-http = { version = "47.0.1", features = [] }
-wasmtime-wasi-io = { version = "47.0.1", features = [] }
+wasmtime = { version = "48.0.0", features = ["winch"] }
+wasmtime-wasi = { version = "48.0.0", default-features = false, features = [] }
+wasmtime-wasi-http = { version = "48.0.0", features = ["p2"] }
+wasmtime-wasi-io = { version = "48.0.0", features = [] }
 
 # When building TrailBase as a standalone workspace, use local submodule paths.
 # These [patch] sections are ignored when TrailBase is consumed as a dependency

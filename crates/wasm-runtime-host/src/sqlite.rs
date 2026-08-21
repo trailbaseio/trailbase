@@ -214,14 +214,14 @@ async fn handle_sqlite_query(
   };
 }
 
-pub(crate) async fn handle_sqlite_request(
+pub(crate) async fn handle_sqlite_request2(
   conn: trailbase_sqlite::Connection,
-  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
+  request: http::Request<wasmtime_wasi_http::WasiBody>,
+) -> Result<http::Response<wasmtime_wasi_http::WasiBody>, wasmtime_wasi_http::Error> {
   let (uri, sqlite_request) = match to_request(request).await {
     Ok(request) => request,
     Err(err) => {
-      return to_response(SqliteResponse::Error(err));
+      return to_response2(SqliteResponse::Error(err));
     }
   };
 
@@ -231,20 +231,49 @@ pub(crate) async fn handle_sqlite_request(
     _ => {
       // NOTE: Should not happen and doesn't need to be handled by the client as
       // SqliteResponse::Error.
-      return Err(ErrorCode::InternalError(Some(format!(
+      return Err(wasmtime_wasi_http::Error::InternalError(Some(format!(
         "Invalid path: {uri}"
       ))));
     }
   };
 
   return match response {
-    Ok(response) => to_response(response),
-    Err(err) => to_response(SqliteResponse::Error(err)),
+    Ok(response) => to_response2(response),
+    Err(err) => to_response2(SqliteResponse::Error(err)),
   };
 }
 
+// pub(crate) async fn handle_sqlite_request(
+//   conn: trailbase_sqlite::Connection,
+//   request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+// ) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
+//   let (uri, sqlite_request) = match to_request(request).await {
+//     Ok(request) => request,
+//     Err(err) => {
+//       return to_response(SqliteResponse::Error(err));
+//     }
+//   };
+//
+//   let response = match uri.path() {
+//     "/execute" => handle_sqlite_execute(conn, sqlite_request).await,
+//     "/query" => handle_sqlite_query(conn, sqlite_request).await,
+//     _ => {
+//       // NOTE: Should not happen and doesn't need to be handled by the client as
+//       // SqliteResponse::Error.
+//       return Err(ErrorCode::InternalError(Some(format!(
+//         "Invalid path: {uri}"
+//       ))));
+//     }
+//   };
+//
+//   return match response {
+//     Ok(response) => to_response(response),
+//     Err(err) => to_response(SqliteResponse::Error(err)),
+//   };
+// }
+
 async fn to_request(
-  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+  request: http::Request<wasmtime_wasi_http::WasiBody>,
 ) -> Result<(Uri, SqliteRequest), String> {
   let (parts, body) = request.into_parts();
   let bytes: Bytes = body.collect().await.map_err(sqlite_err)?.to_bytes();
@@ -254,9 +283,23 @@ async fn to_request(
   ));
 }
 
-fn to_response(
+// fn to_response(
+//   response: SqliteResponse,
+// ) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
+//   let body =
+//     serde_json::to_vec(&response).map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
+//
+//   let resp = http::Response::builder()
+//     .status(200)
+//     .body(bytes_to_body(Bytes::from_owner(body)))
+//     .map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
+//
+//   return Ok(wasmtime_wasi_http::p2::types::IncomingResponse { resp, worker: None });
+// }
+
+fn to_response2(
   response: SqliteResponse,
-) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
+) -> Result<http::Response<wasmtime_wasi_http::WasiBody>, wasmtime_wasi_http::Error> {
   let body =
     serde_json::to_vec(&response).map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
 
@@ -265,11 +308,7 @@ fn to_response(
     .body(bytes_to_body(Bytes::from_owner(body)))
     .map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
 
-  return Ok(wasmtime_wasi_http::p2::types::IncomingResponse {
-    resp,
-    worker: None,
-    between_bytes_timeout: std::time::Duration::ZERO,
-  });
+  return Ok(resp);
 }
 
 pub(crate) fn sql_values_to_sqlite_params(
