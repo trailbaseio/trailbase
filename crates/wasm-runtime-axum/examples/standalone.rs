@@ -1,4 +1,3 @@
-use axum::Router;
 use axum::http::request::Parts;
 use clap::Parser;
 use futures_util::future::BoxFuture;
@@ -48,9 +47,8 @@ async fn main() {
     wasm_runtime_builder(args.path, shared_state, None, None, /* dev= */ false);
   let runtime = runtimes_builder().unwrap();
 
-  let mut router = Router::new();
   let InstallResult {
-    router: r,
+    router,
     jobs,
     metadata,
   }: InstallResult<State> = install_routes_and_jobs::<State>(&runtime, extract_user, None)
@@ -58,10 +56,6 @@ async fn main() {
     .unwrap();
 
   log::info!("{metadata:?}");
-
-  if let Some(routes) = r {
-    router = router.merge(routes);
-  }
 
   if !jobs.is_empty() {
     log::info!("ignoring {} jobs", jobs.len());
@@ -72,7 +66,12 @@ async fn main() {
 
   log::info!("Listening: {address}");
 
-  axum::serve(listener, router.with_state(State))
-    .await
-    .unwrap();
+  axum::serve(
+    listener,
+    router
+      .map_or_else(|| Default::default(), |(r, _)| r.split_for_parts().0)
+      .with_state(State),
+  )
+  .await
+  .unwrap();
 }

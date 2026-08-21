@@ -1,7 +1,6 @@
 #![forbid(unsafe_code, clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 
-use axum::Router;
 use axum::extract::{RawPathParams, Request, State};
 use axum::http::request::Parts;
 use bytes::Bytes;
@@ -19,6 +18,7 @@ use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
 use trailbase_wasm_runtime_host::{
   Error as WasmError, InitArgs, RuntimeOptions, find_wasm_components,
 };
+use utoipa_axum::router::OpenApiRouter;
 
 pub use trailbase_wasm_runtime_host::functions::{SqliteFunctions, SqliteStore};
 pub use trailbase_wasm_runtime_host::{HttpStore, KvStore, Runtime, SharedState};
@@ -137,7 +137,8 @@ pub struct Job {
 }
 
 pub struct InstallResult<S: Clone + Send + Sync> {
-  pub router: Option<Router<S>>,
+  /// Tuple of router and whether that router has GET "/" route.
+  pub router: Option<(OpenApiRouter<S>, bool)>,
   pub jobs: Vec<Job>,
   pub metadata: Option<Metadata>,
 }
@@ -223,9 +224,12 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
     });
   }
 
-  let mut router: Option<Router<S>> = None;
+  let mut has_root = false;
+  let mut router: Option<OpenApiRouter<S>> = None;
   for HttpRouteManifest { method, path } in http_handlers {
     debug!("Installing WASM route: {method:?}: {path}");
+
+    has_root |= method == HttpMethodType::Get && path == "/";
 
     let registered_path = path.clone();
     let store = store.clone();
@@ -292,13 +296,13 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
     router = Some(
       router
         .take()
-        .unwrap_or_else(|| Router::<S>::new())
+        .unwrap_or_else(|| OpenApiRouter::<S>::new())
         .route(&path, axum::routing::on(axum_method(method), handler)),
     );
   }
 
   return Ok(InstallResult {
-    router,
+    router: router.map(|r| (r, has_root)),
     jobs,
     metadata,
   });

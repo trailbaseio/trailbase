@@ -40,6 +40,7 @@ pub struct ListWasmComponentsResponse {
   pub components: Vec<WasmComponent>,
 }
 
+#[cfg_attr(not(feature = "wasm"), allow(unused))]
 fn build_entry(
   filepath: &Path,
   metadata: Option<&Metadata>,
@@ -86,8 +87,18 @@ fn build_entry(
   )
 )]
 pub async fn list_wasm_components_handler(
-  State(state): State<AppState>,
+  State(_state): State<AppState>,
 ) -> Result<Json<ListWasmComponentsResponse>, Error> {
+  return cfg_select! {
+      not(feature = "wasm") => Ok(Json(ListWasmComponentsResponse { components: vec![] })),
+      _ => Ok(Json(list_wasm_components_handler_impl(_state).await?)),
+  };
+}
+
+#[cfg(feature = "wasm")]
+async fn list_wasm_components_handler_impl(
+  state: AppState,
+) -> Result<ListWasmComponentsResponse, Error> {
   let depot_path = state.data_dir().root();
 
   let r = repo();
@@ -95,7 +106,7 @@ pub async fn list_wasm_components_handler(
 
   let mut components: Vec<WasmComponent> = vec![];
 
-  for rt in state.wasm_runtimes() {
+  for rt in state.wasm().runtimes() {
     let metadata_and_rt = rt.read().await;
 
     let filepath = metadata_and_rt.1.component_path();
@@ -151,7 +162,7 @@ pub async fn list_wasm_components_handler(
     )?);
   }
 
-  return Ok(Json(ListWasmComponentsResponse { components }));
+  return Ok(ListWasmComponentsResponse { components });
 }
 
 #[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]

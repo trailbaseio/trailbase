@@ -9,7 +9,7 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
 [dependencies]
-bytes = "1.11.0"
+bytes = { workspace = true }
 log = { workspace = true }
 minijinja = { workspace = true }
 reqwest = { workspace = true }

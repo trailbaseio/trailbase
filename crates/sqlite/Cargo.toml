@@ -25,7 +25,7 @@ generic = ["pg"]
 pg = ["dep:postgres", "dep:bytes", "dep:trailbase-pgrow2serde", "dep:regex", "dep:sqlparser"]
 
 [dependencies]
-bytes = { version = "1.11.1", optional = true }
+bytes = { workspace = true, optional = true }
 crossfire = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }

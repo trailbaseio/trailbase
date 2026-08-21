@@ -35,73 +35,11 @@ mod wasm;
 
 #[cfg(not(feature = "wasm"))]
 mod wasm {
-  use axum::Router;
-  use std::path::{Path, PathBuf};
-  use std::sync::{Arc, LazyLock};
-  use tokio::sync::RwLock;
-  use trailbase_wasm_common::manifest::Metadata;
-
-  use crate::AppState;
-
-  pub(crate) type AnyError = Box<dyn std::error::Error + Send + Sync>;
-
-  #[derive(Clone, Default)]
-  pub(crate) struct KvStore;
-
-  impl KvStore {
-    pub(crate) fn new() -> Self {
-      #[allow(clippy::default_constructed_unit_structs)]
-      return Self::default();
-    }
-
-    pub(crate) fn set(&self, _key: String, _value: Vec<u8>) -> Option<Vec<u8>> {
-      return None;
-    }
-  }
-
-  pub(crate) struct Runtime;
-
-  impl Runtime {
-    pub fn component_path(&self) -> &Path {
-      static DEFAULT: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::default());
-      return &DEFAULT;
-    }
-  }
-
-  pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, AnyError> + Send + Sync;
-
-  pub(crate) fn wasm_runtime_builders(
-    _path_to_components: PathBuf,
-    _conn: trailbase_sqlite::Connection,
-    _rt: Option<tokio::runtime::Handle>,
-    _runtime_root_fs: Option<PathBuf>,
-    _shared_kv_store: Option<KvStore>,
-    _dev: bool,
-  ) -> Vec<Box<WasmRuntimeBuilder>> {
-    return vec![];
-  }
-
   #[derive(Clone)]
   pub struct SqliteFunctions;
 
   #[derive(Clone)]
   pub struct SqliteStore;
-
-  pub(crate) async fn build_sync_wasm_runtimes_for_components(
-    _components_path: PathBuf,
-    _fs_root_path: Option<&std::path::Path>,
-    _dev: bool,
-  ) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
-    return Ok(vec![]);
-  }
-
-  #[cfg(not(feature = "wasm"))]
-  pub(crate) async fn install_routes_and_jobs(
-    _state: &AppState,
-    _runtime: Arc<RwLock<(Option<Metadata>, Runtime)>>,
-  ) -> Result<Option<Router<AppState>>, AnyError> {
-    return Ok(None);
-  }
 }
 
 #[cfg(test)]

@@ -110,7 +110,7 @@ pub(crate) async fn extract_tokens_from_request_parts(
         COOKIE_AUTH_TOKEN,
         new_auth_token,
         ttl,
-        /*same_site_strict=*/ true,
+        /* same_site_strict= */ true,
       ));
 
       return Ok(Tokens {

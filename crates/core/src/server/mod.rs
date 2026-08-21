@@ -123,12 +123,24 @@ impl Server {
     let mut custom_routers: Vec<OpenApiRouter<AppState>> =
       custom_router.into_iter().map(|r| r.into()).collect();
 
-    for rt in state.wasm_runtimes() {
-      if let Some(wasm_router) = crate::wasm::install_routes_and_jobs(&state, rt.clone())
-        .await
-        .map_err(|err| InitError::ScriptError(err.to_string()))?
-      {
-        custom_routers.push(wasm_router.into());
+    // Whether any of the components provides GET "/" route.
+    // TODO: We should inspect if (GET, "/") is a match.
+    #[allow(unused_variables, unused_mut)]
+    let mut has_wasm_root = false;
+
+    #[allow(unused_assignments)]
+    #[cfg(feature = "wasm")]
+    {
+      for rt in state.wasm().runtimes() {
+        if let crate::wasm::InstallResult {
+          router: Some((wasm_router, has_root)),
+        } = crate::wasm::install_routes_and_jobs(&state, rt.clone())
+          .await
+          .map_err(|err| InitError::ScriptError(err.to_string()))?
+        {
+          has_wasm_root |= has_root;
+          custom_routers.push(wasm_router);
+        }
       }
     }
 
@@ -291,8 +303,9 @@ impl Server {
             "Received SIGHUP: reloading WASM components (dev), re-apply db migrations, and finally re-load config."
           );
 
+          #[cfg(feature = "wasm")]
           if state.dev_mode()
-            && let Err(err) = state.reload_wasm_runtimes().await
+            && let Err(err) = state.wasm().reload_runtimes().await
           {
             warn!("Reloading WASM failed: {err}");
           }

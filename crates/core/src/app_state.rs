@@ -3,16 +3,13 @@ use object_store::ObjectStore;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::RwLock;
-use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, RegistrationIdentifier};
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
-use trailbase_wasm_common::manifest::Metadata;
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
 use crate::config::proto::{
-  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, UserIdentifier, hash_config,
+  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
 };
 use crate::config::{
   ConfigError, load_or_init_config_textproto, validate_config, write_config_and_vault_textproto,
@@ -27,7 +24,6 @@ use crate::rand::random_alphanumeric;
 use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::wasm::Runtime;
 
 #[derive(Default)]
 pub struct InitArgs {
@@ -44,14 +40,11 @@ pub struct InitArgs {
   pub pg_uri: Option<String>,
 }
 
-type WasmMetadataAndRuntime = (Option<Metadata>, Runtime);
-
 /// The app's internal state. AppState needs to be clonable which puts unnecessary constraints on
 /// the internals. Thus rather arc once than many times.
 struct InternalState {
   data_dir: DataDir,
   public_dir: Option<PathBuf>,
-  runtime_root_fs: Option<PathBuf>,
   start_time: std::time::SystemTime,
 
   site_url: Reactive<Arc<Option<url::Url>>>,
@@ -78,9 +71,8 @@ struct InternalState {
   object_store: Arc<dyn ObjectStore>,
 
   /// Actual WASM runtimes.
-  wasm_runtimes: Vec<Arc<RwLock<WasmMetadataAndRuntime>>>,
-  /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
-  wasm_runtime_builders: Vec<Box<crate::wasm::WasmRuntimeBuilder>>,
+  #[cfg(feature = "wasm")]
+  wasm: crate::wasm::WasmState,
 
   #[cfg(test)]
   #[allow(unused)]
@@ -105,6 +97,7 @@ pub(crate) struct AppStateArgs {
   pub connection_manager: ConnectionManager,
   pub jwt: JwtHelper,
   pub object_store: Box<dyn ObjectStore>,
+  #[cfg_attr(not(feature = "wasm"), allow(unused))]
   pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 }
 
@@ -155,39 +148,10 @@ impl AppState {
       object_store.clone(),
     );
 
-    let shared_kv_store = crate::wasm::KvStore::new();
-    // Assign right away.
-    {
-      config.with_value(|c| {
-        shared_kv_store.set(
-          AUTH_CONFIG_KEY.to_string(),
-          serde_json::to_vec(&build_auth_config(c)).expect("startup"),
-        );
-      });
-
-      // Register an observer for continuous updates.
-      let shared_kv_store = shared_kv_store.clone();
-      config.add_observer(move |c| {
-        if let Ok(v) = serde_json::to_vec(&build_auth_config(c)) {
-          shared_kv_store.set(AUTH_CONFIG_KEY.to_string(), v);
-        }
-      });
-    }
-
-    let wasm_runtime_builders = crate::wasm::wasm_runtime_builders(
-      args.data_dir.root().join("wasm"),
-      (*main_conn).clone(),
-      args.wasm_tokio_runtime,
-      args.runtime_root_fs.clone(),
-      Some(shared_kv_store),
-      args.dev,
-    );
-
     AppState {
       state: Arc::new(InternalState {
-        data_dir: args.data_dir,
+        data_dir: args.data_dir.clone(),
         public_dir: args.public_dir,
-        runtime_root_fs: args.runtime_root_fs,
         start_time: std::time::SystemTime::now(),
         site_url,
         dev: args.dev,
@@ -219,7 +183,7 @@ impl AppState {
           );
         }),
         mailer: config.derive_unchecked(Mailer::new_from_config),
-        config,
+        config: config.clone(),
         json_schema_registry: args.json_schema_registry,
         conn: (*main_conn).clone(),
         session_conn: args.session_conn,
@@ -229,11 +193,15 @@ impl AppState {
         record_apis: record_apis.clone(),
         subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
-        wasm_runtimes: wasm_runtime_builders
-          .iter()
-          .map(|builder| Arc::new(RwLock::new((None, builder().expect("startup")))))
-          .collect(),
-        wasm_runtime_builders,
+        #[cfg(feature = "wasm")]
+        wasm: crate::wasm::WasmState::init(
+          &args.data_dir,
+          config,
+          (*main_conn).clone(),
+          args.wasm_tokio_runtime,
+          args.runtime_root_fs,
+          args.dev,
+        ),
         #[cfg(test)]
         pg_uri: None,
         #[cfg(test)]
@@ -250,11 +218,6 @@ impl AppState {
   /// Optional user-provided public directory from where static assets are served.
   pub fn public_dir(&self) -> Option<&Path> {
     return self.state.public_dir.as_deref();
-  }
-
-  /// Optional user-provided public directory from where static assets are served.
-  pub fn runtime_root_fs(&self) -> Option<&Path> {
-    return self.state.runtime_root_fs.as_deref();
   }
 
   pub fn start_time(&self) -> std::time::SystemTime {
@@ -428,52 +391,9 @@ impl AppState {
     return Ok(());
   }
 
-  pub(crate) fn wasm_runtimes(&self) -> &[Arc<RwLock<WasmMetadataAndRuntime>>] {
-    return &self.state.wasm_runtimes;
-  }
-
-  pub(crate) async fn reload_wasm_runtimes(&self) -> Result<(), crate::wasm::AnyError> {
-    let mut new_runtimes = self
-      .state
-      .wasm_runtime_builders
-      .iter()
-      .map(|builder| builder())
-      .collect::<Result<Vec<_>, _>>()?;
-    if new_runtimes.is_empty() {
-      return Ok(());
-    }
-
-    // TODO: We could also compare manifest of old and new runtime to warn/fail explicitly if
-    // routes and or jobs changed.
-    info!("Reloading WASM components. New HTTP routes and Jobs require a server restart.");
-
-    for old_rt in &self.state.wasm_runtimes {
-      let (metadata, component_path) = {
-        let old_rt = old_rt.read().await;
-        (old_rt.0.clone(), old_rt.1.component_path().to_path_buf())
-      };
-
-      let Some(index) = new_runtimes
-        .iter()
-        .position(|rt| *rt.component_path() == *component_path)
-      else {
-        warn!("WASM component: {component_path:?} was removed. Required server restart");
-        continue;
-      };
-
-      // Swap out old with new WASM runtime for the given component.
-      // TODO: We should probably also update Metadata.
-      *old_rt.write().await = (metadata, new_runtimes.remove(index));
-    }
-
-    for new_rt in new_runtimes {
-      warn!(
-        "New WASM component found {:?}. Requires server restart.",
-        new_rt.component_path()
-      );
-    }
-
-    return Ok(());
+  #[cfg(feature = "wasm")]
+  pub(crate) fn wasm(&self) -> &crate::wasm::WasmState {
+    return &self.state.wasm;
   }
 }
 
@@ -643,69 +563,6 @@ fn build_site_url(c: &Config) -> Result<Option<url::Url>, url::ParseError> {
 
   return Ok(None);
 }
-
-fn build_auth_config(config: &Config) -> AuthConfig {
-  let oauth_providers: Vec<_> = config
-    .auth
-    .oauth_providers
-    .iter()
-    .filter_map(|(key, config)| {
-      let entry = crate::auth::oauth::providers::oauth_providers_static_registry()
-        .iter()
-        .find(|registered| config.provider_id == Some(registered.id as i32))?;
-
-      let provider = (entry.factory)(key, config).ok()?;
-      let name = provider.name();
-
-      // NOTE: Could instead be a provider trait property.
-      fn oauth_provider_name_to_img(name: &str) -> &'static str {
-        return match name {
-          "discord" => "discord.svg",
-          "facebook" => "facebook.svg",
-          "github" => "github.svg",
-          "gitlab" => "gitlab.svg",
-          "google" => "google.svg",
-          "microsoft" => "microsoft.svg",
-          "twitch" => "twitch.svg",
-          "yandex" => "yandex.svg",
-          _ => "oidc.svg",
-        };
-      }
-
-      return Some(OAuthProvider {
-        name: name.to_string(),
-        display_name: provider.display_name().to_string(),
-        img_name: oauth_provider_name_to_img(name).to_string(),
-      });
-    })
-    .collect();
-
-  let user_identifier = config
-    .auth
-    .user_identifier
-    .and_then(|i| i.try_into().ok())
-    .unwrap_or(UserIdentifier::Undefined);
-
-  return AuthConfig {
-    disable_password_auth: config.auth.disable_password_auth(),
-    enable_otp_signin: config.auth.enable_otp_signin(),
-    oauth_providers,
-    login_identifier: match user_identifier {
-      UserIdentifier::OnlyEmail | UserIdentifier::Undefined => LoginIdentifier::OnlyEmail,
-      UserIdentifier::OnlyUsername => LoginIdentifier::OnlyUsername,
-      _ => LoginIdentifier::EmailOrUsername,
-    },
-    registration_identifier: match user_identifier {
-      UserIdentifier::OnlyEmail | UserIdentifier::Undefined => RegistrationIdentifier::OnlyEmail,
-      UserIdentifier::OnlyUsername => RegistrationIdentifier::OnlyUsername,
-      UserIdentifier::RequireUsername => RegistrationIdentifier::RequireUsername,
-      UserIdentifier::RequireEmail => RegistrationIdentifier::RequireEmail,
-      UserIdentifier::RequireEmailAndUsername => RegistrationIdentifier::RequireEmailAndUsername,
-    },
-  };
-}
-
-const AUTH_CONFIG_KEY: &str = "config:auth";
 
 #[cfg(test)]
 mod test_utils {
@@ -884,7 +741,6 @@ mod test_utils {
       state: Arc::new(InternalState {
         data_dir,
         public_dir: None,
-        runtime_root_fs: None,
         start_time: std::time::SystemTime::now(),
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
         dev: true,
@@ -910,8 +766,8 @@ mod test_utils {
         record_apis: record_apis.clone(),
         subscription_manager: SubscriptionManager::new(record_apis),
         object_store,
-        wasm_runtimes: vec![],
-        wasm_runtime_builders: vec![],
+        #[cfg(feature = "wasm")]
+        wasm: crate::wasm::WasmState::default(),
         pg_uri,
         // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
         // write new artifacts to the already deleted dir.
@@ -941,18 +797,21 @@ async fn init_app_state(args: InitArgs) -> Result<(bool, AppState), InitError> {
     update_json_schema_registry(&config.schemas, &json_schema_registry)?;
   }
 
-  let sync_wasm_runtimes = crate::wasm::build_sync_wasm_runtimes_for_components(
-    args.data_dir.root().join("wasm"),
-    args.runtime_root_fs.as_deref(),
-    args.dev,
-  )
-  .await
-  .map_err(|err| InitError::ScriptError(err.to_string()))?;
-
   let (connection_manager, new_db) = ConnectionManager::new(crate::connection::Options {
     data_dir: args.data_dir.clone(),
     json_schema_registry: json_schema_registry.clone(),
-    sqlite_function_runtimes: sync_wasm_runtimes,
+    sqlite_function_runtimes: cfg_select! {
+        feature = "wasm" => {
+            crate::wasm::build_sync_wasm_runtimes_for_components(
+              args.data_dir.root().join("wasm"),
+              args.runtime_root_fs.as_deref(),
+              args.dev,
+            )
+            .await
+            .map_err(|err| InitError::ScriptError(err.to_string()))?
+        },
+        _ => vec![],
+    },
     // TODO: Wire up from config, if/when PG is supported.
     pg_uri: cfg_select! {
         feature = "pg" => args.pg_uri,
