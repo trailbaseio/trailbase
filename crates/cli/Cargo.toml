@@ -16,7 +16,6 @@ default = ["trailbase/wasm", "geos", "mcp"]
 geos-static = ["trailbase/geos-static"]
 geos = ["trailbase/geos"]
 mcp = ["dep:rmcp", "dep:rmcp-openapi"]
-swagger = ["dep:utoipa-swagger-ui"]
 ws = ["trailbase/ws"]
 
 [dependencies]
@@ -47,7 +46,6 @@ trailbase-wasm-component-repo = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
 url = "2.5.4"
 utoipa = { workspace = true }
-utoipa-swagger-ui = { workspace = true, optional = true }
 uuid = { workspace = true }
 
 [build-dependencies]

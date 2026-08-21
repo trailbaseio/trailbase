@@ -193,12 +193,6 @@ pub struct EmailArgs {
 #[derive(Subcommand, Debug, Clone)]
 pub enum OpenApiSubCommands {
   Print,
-  #[cfg(feature = "swagger")]
-  Run {
-    /// Authority (<host>:<port>) the HTTP server binds to (Default: localhost:4000).
-    #[arg(short, long, env, default_value = "localhost:4004")]
-    address: String,
-  },
 }
 
 #[derive(Subcommand, Debug, Clone)]

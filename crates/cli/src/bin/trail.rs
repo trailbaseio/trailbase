@@ -109,21 +109,6 @@ async fn async_main(
           trailbase::openapi::build_api_definitions(/* config= */ None, admin).to_pretty_json()?;
         println!("{json}");
       }
-      #[cfg(feature = "swagger")]
-      Some(OpenApiSubCommands::Run { address }) => {
-        // TODO: Wire up config.
-        let router = axum::Router::new().merge(utoipa_swagger_ui::SwaggerUi::new("/docs").url(
-          "/api/openapi.json",
-          trailbase::openapi::build_api_definitions(/* config= */ None, admin),
-        ));
-
-        let listener = tokio::net::TcpListener::bind(address.clone())
-          .await
-          .unwrap();
-        log::info!("docs @ http://{address}/docs 🚀");
-
-        axum::serve(listener, router).await.unwrap();
-      }
     },
     SubCommands::Schema(cmd) => {
       let (_new_db, state) = AppState::init(InitArgs {
