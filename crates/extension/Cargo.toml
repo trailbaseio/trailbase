@@ -12,19 +12,19 @@ readme = "../../README.md"
 crate-type=["rlib"]
 
 [dependencies]
-arc-swap = "1.7.1"
+arc-swap = "1.9.2"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand", "std"] }
 base64 = { workspace = true }
-bcrypt = "0.19.0"
+bcrypt = "0.19.3"
 jsonschema = { version = "0.51.0", default-features = false }
-maxminddb = "0.30.0"
+maxminddb = "0.30.3"
 parking_lot = { workspace = true }
 quick_cache = { version = "0.7.0", default-features = false }
-regex = "1.11.0"
+regex = "1.13.1"
 # NOTE: rusqlite must not enable "bundled" for the .so built to work.
-rusqlite = { version = "0.40.0", default-features = false, features = ["functions"] }
+rusqlite = { version = "0.40.2", default-features = false, features = ["functions"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = "2.0.12"
+thiserror = "2.0.20"
 uuid = { workspace = true }
 validator = { version = "0.21.0", default-features = false }

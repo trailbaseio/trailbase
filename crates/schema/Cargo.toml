@@ -12,7 +12,7 @@ readme = "../../README.md"
 default = []
 
 [dependencies]
-base64 = { version = "0.23.0", default-features = false, features = ["alloc"] }
+base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
 fallible-iterator = "0.3.0"
 infer = "0.22.0"
 itertools = { workspace = true }
@@ -21,12 +21,12 @@ lazy_static = "1.5.0"
 log = { workspace = true }
 parking_lot = { workspace = true }
 rand = { workspace = true }
-regex = "1.11.1"
-schemars = "1.0.0"
+regex = "1.13.1"
+schemars = "1.2.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite3-parser = { workspace = true }
-thiserror = "2.0.12"
+thiserror = "2.0.20"
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
 ts-rs = { workspace = true }
@@ -34,8 +34,8 @@ utoipa = { workspace = true }
 uuid = { workspace = true }
 
 [dev-dependencies]
-anyhow = "1.0.97"
-indoc = "2.0.6"
+anyhow = "1.0.104"
+indoc = "2.0.7"
 litegis = { workspace = true }
 rusqlite = { workspace = true }
 tokio = { workspace = true }

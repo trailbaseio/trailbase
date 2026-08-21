@@ -16,7 +16,7 @@ default = []
 ws = ["dep:reqwest-websocket"]
 
 [dependencies]
-async-trait = "0.1.89"
+async-trait = "0.1.92"
 bytes = { workspace = true }
 eventsource-stream = { version = "0.2.3", features = [] }
 futures-lite = "2.6.1"
@@ -24,23 +24,23 @@ http = { workspace = true }
 http-body-util = { workspace = true }
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
-reqwest = { version = "0.13.1", features = ["stream"] }
+reqwest = { version = "0.13.4", features = ["stream"] }
 reqwest-websocket = { version = "0.6.0", features = ["json"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_repr = "0.1.20"
-thiserror = "2.0.12"
-tracing = "0.1.41"
-url = "2.5.4"
+serde_repr = "0.1.21"
+thiserror = "2.0.20"
+tracing = "0.1.44"
+url = "2.5.8"
 
 [dev-dependencies]
-base64 = { version = "0.23.0", default-features = false, features = ["alloc"] }
+base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
 env_logger = { workspace = true }
 futures-util = { workspace = true }
-lazy_static = "1.4.0"
+lazy_static = "1.5.0"
 log = { workspace = true }
-reqwest = { version = "0.13.1", features = ["stream", "multipart", "json"] }
+reqwest = { version = "0.13.4", features = ["stream", "multipart", "json"] }
 rustix = { version = "1.1.4", features = ["process"] }
 temp-dir = "0.2.0"
-tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread", "process"] }
+tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "process"] }
 totp-rs = { version = "^6.0.0", default-features = false, features = ["otpauth"] }

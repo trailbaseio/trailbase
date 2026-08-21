@@ -35,11 +35,11 @@ wasm = ["dep:trailbase-wasm-runtime-axum", "dep:trailbase-wasm-runtime-host"]
 ws = ["axum/ws"]
 
 [dependencies]
-aes-gcm-siv = "0.12.0"
+aes-gcm-siv = "0.12.1"
 argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
 askama = { workspace = true }
-async-channel = "2.3.1"
-async-trait = "0.1.80"
+async-channel = "2.5.0"
+async-trait = "0.1.92"
 axum = { workspace = true }
 axum-tracing-opentelemetry = { version = "0.38.0", optional = true }
 base32 = "0.5.1"
@@ -47,64 +47,64 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 client-ip = "0.2.1"
-const_format = "0.2.35"
+const_format = "0.2.36"
 cron = { workspace = true }
 ed25519-dalek = { version = "3.0.0", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
 flume = { workspace = true }
-form_urlencoded = "1.2.1"
+form_urlencoded = "1.2.2"
 futures-util = { workspace = true }
-geos = { version = "11.0.0", default-features = false, features = ["geo", "json"], optional = true }
+geos = { version = "11.1.1", default-features = false, features = ["geo", "json"], optional = true }
 getrandom = "0.4.3"
 governor = "0.10.4"
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-util = "0.1.7"
-indexmap = "2.11.4"
-init-tracing-opentelemetry = { version = "0.38.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
+hyper-util = "0.1.20"
+indexmap = "2.14.0"
+init-tracing-opentelemetry = { version = "0.38.1", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
 jsonschema = { version = "0.51.0", default-features = false }
 jsonwebtoken = { workspace = true }
-lazy_static = "1.4.0"
-lettre = { version = "^0.11.7", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
+lazy_static = "1.5.0"
+lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
 litegis = { workspace = true, optional = true }
 log = { workspace = true }
 mini-moka = "0.10.3"
 minijinja = { workspace = true }
-oauth2 = { version = "5.0.0-alpha.4", default-features = false, features = ["rustls-tls"] }
-object_store = { version = "0.14.0", default-features = false, features = ["aws", "fs"] }
+oauth2 = { version = "5.0.0", default-features = false, features = ["rustls-tls"] }
+object_store = { version = "0.14.1", default-features = false, features = ["aws", "fs"] }
 once_cell = "1.21.4"
 parking_lot = { workspace = true }
-pin-project-lite = "0.2.16"
-prost = { version = "^0.14.1", default-features = false }
-prost-reflect = { version = "^0.16.0", default-features = false, features = ["derive", "text-format"] }
+pin-project-lite = "0.2.17"
+prost = { version = "^0.14.4", default-features = false }
+prost-reflect = { version = "^0.16.5", default-features = false, features = ["derive", "text-format"] }
 quick_cache = "0.7.0"
 rand = { workspace = true }
-regex = "1.11.0"
+regex = "1.13.1"
 reqwest = { workspace = true }
 rusqlite = { workspace = true }
 rust-embed = { workspace = true, features = ["compression"] }
 scopeguard = "1.2.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_path_to_error = "0.1.16"
+serde_path_to_error = "0.1.20"
 serde_qs = { workspace = true }
-serde_repr = "0.1.20"
+serde_repr = "0.1.21"
 serde_urlencoded = "0.7.1"
 sha2 = "0.11.0"
 sqlformat = "0.5.0"
 sqlite3-parser = { workspace = true }
-thiserror = "2.0.12"
+thiserror = "2.0.20"
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 totp-rs = { version = "^6.0.0", features = ["gen_secret", "qr", "otpauth"] }
-tower = "0.5.0"
+tower = "0.5.3"
 tower-cookies = "0.11.0"
 tower-http = { version = "^0.7.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tracing = { workspace = true }
-tracing-opentelemetry-instrumentation-sdk = "0.38.0"
+tracing-opentelemetry-instrumentation-sdk = "0.38.1"
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-auth-config = { workspace = true }
@@ -122,7 +122,7 @@ trailbase-wasm-component-repo = { workspace = true }
 trailbase-wasm-runtime-axum = { workspace = true, optional = true }
 trailbase-wasm-runtime-host = { workspace = true, optional = true }
 ts-rs = { workspace = true }
-url = { version = "^2.4.1", default-features = false }
+url = { version = "^2.5.8", default-features = false }
 utoipa = { workspace = true }
 utoipa-axum = { workspace = true }
 uuid = { workspace = true }
@@ -133,16 +133,16 @@ walkdir = "2.5.0"
 trailbase-build = { workspace = true }
 
 [dev-dependencies]
-anyhow = "^1.0.86"
-axum-test = "21.0.0"
+anyhow = "^1.0.104"
+axum-test = "21.1.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
-indoc = "2.0.5"
-pglite-oxide = "0.5.0"
-quoted_printable = "0.5.1"
-rcgen = "0.14.1"
-schemars = "1.0.0"
+indoc = "2.0.7"
+pglite-oxide = "0.5.1"
+quoted_printable = "0.5.2"
+rcgen = "0.14.9"
+schemars = "1.2.2"
 temp-dir = "0.2.0"
-tokio-metrics = "0.5.0"
-tower = { version = "0.5.0", features = ["util"] }
+tokio-metrics = "0.5.1"
+tower = { version = "0.5.3", features = ["util"] }
 trailbase-extension = { workspace = true }

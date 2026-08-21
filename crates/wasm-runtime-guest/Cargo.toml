@@ -10,18 +10,18 @@ readme = "../../README.md"
 
 [dependencies]
 base64 = { workspace = true }
-bytes = { version = "1.10.1", default-features = false }
+bytes = { version = "1.12.1", default-features = false }
 futures-util = { workspace = true }
 http = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_path_to_error = "0.1.19"
+serde_path_to_error = "0.1.20"
 serde_urlencoded = "0.7.1"
 static_assertions = "1.1.0"
-thiserror = "2.0.14"
+thiserror = "2.0.20"
 trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
-url = "2.5.7"
-wit-bindgen = "0.60.0"
+url = "2.5.8"
+wit-bindgen = "0.61.0"
 wstd = "=0.5.6"

@@ -8,7 +8,7 @@ description = "Sync WASI KV store - fork of upstream"
 homepage = "https://trailbase.io"
 
 [dependencies]
-anyhow = "1.0.99"
+anyhow = "1.0.104"
 parking_lot = { workspace = true }
 wasmtime = { workspace = true }
 

@@ -27,9 +27,9 @@ env_logger = { workspace = true }
 itertools = { workspace = true }
 jsonwebtoken = { workspace = true }
 log = { workspace = true }
-mimalloc = { version = "^0.1.41", default-features = false }
+mimalloc = { version = "^0.1.52", default-features = false }
 reqwest = { workspace = true }
-rmcp = { version = "^3.1.2", default-features = false, features = ["server", "transport-io"], optional = true }
+rmcp = { version = "^3.1.4", default-features = false, features = ["server", "transport-io"], optional = true }
 rmcp-openapi = { workspace = true, optional = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
@@ -44,7 +44,7 @@ trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
 trailbase-wasm-component-repo = { workspace = true }
 trailbase-wasm-runtime-host = { workspace = true }
-url = "2.5.4"
+url = "2.5.8"
 utoipa = { workspace = true }
 uuid = { workspace = true }
 

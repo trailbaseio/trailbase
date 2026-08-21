@@ -10,8 +10,8 @@ type KeyValueStore = std::collections::btree_map::BTreeMap<String, String>;
 pub(crate) async fn handle_prefs_request(
   conn: trailbase_sqlite::Connection,
   component_name: String,
-  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
+  request: http::Request<wasmtime_wasi_http::WasiBody>,
+) -> Result<http::Response<wasmtime_wasi_http::WasiBody>, wasmtime_wasi_http::Error> {
   let prefs_request = match to_request(request).await {
     Ok(request) => request,
     Err(err) => {
@@ -95,7 +95,7 @@ pub(crate) async fn handle_prefs_request(
 }
 
 async fn to_request(
-  request: hyper::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
+  request: http::Request<wasmtime_wasi_http::WasiBody>,
 ) -> Result<PrefsRequest, String> {
   let (_parts, body) = request.into_parts();
   let bytes: Bytes = body
@@ -108,7 +108,7 @@ async fn to_request(
 
 fn to_response(
   response: PrefsResponse,
-) -> Result<wasmtime_wasi_http::p2::types::IncomingResponse, ErrorCode> {
+) -> Result<http::Response<wasmtime_wasi_http::WasiBody>, wasmtime_wasi_http::Error> {
   let body =
     serde_json::to_vec(&response).map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
 
@@ -117,11 +117,7 @@ fn to_response(
     .body(bytes_to_body(Bytes::from_owner(body)))
     .map_err(|err| ErrorCode::InternalError(Some(err.to_string())))?;
 
-  return Ok(wasmtime_wasi_http::p2::types::IncomingResponse {
-    resp,
-    worker: None,
-    between_bytes_timeout: std::time::Duration::ZERO,
-  });
+  return Ok(resp);
 }
 
 #[inline]

@@ -16,7 +16,7 @@ utoipa = ["dep:utoipa"]
 [dependencies]
 base64 = { workspace = true }
 serde = { workspace = true }
-thiserror = "2.0.12"
+thiserror = "2.0.20"
 ts-rs = { workspace = true }
 trailbase-sqlite = { workspace = true, optional = true }
 utoipa = { workspace = true, optional = true }
