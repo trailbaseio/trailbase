@@ -189,11 +189,10 @@ impl Server {
       None
     };
 
-    let admin_router = Self::build_admin_router(&state);
     let independent_admin_router = if let Some(admin_address) = admin_address
       && admin_address != address
     {
-      let router = OpenApiRouter::new()
+      let (router, _api) = OpenApiRouter::new()
         .merge(install_auth_rate_limiter.as_ref().map_or_else(
           || {
             return auth::admin_auth_router();
@@ -202,44 +201,53 @@ impl Server {
             return inst(auth::admin_auth_router());
           },
         ))
-        .merge(admin_router);
+        .merge(Self::build_admin_router(&state))
+        .split_for_parts();
 
       // NOTE: For a separate admin router is no root (GET, "/") path installed.
-      let (admin_router, _api) = Self::wrap_with_default_layers(
+      let admin_router = Self::wrap_with_default_layers(
         &state,
         router,
         &cors_allowed_origins,
         /* has_root= */ false,
-      )
-      .split_for_parts();
+      );
 
       Some((admin_address.to_string(), admin_router))
     } else {
       // Simply add to the main router.
-      custom_routers.push(admin_router);
+      custom_routers.push(Self::build_admin_router(&state));
       None
     };
 
-    let (main_router, _api) = Self::wrap_with_default_layers(
+    let (main_router, api) = Self::build_main_router(
       &state,
-      Self::build_main_router(
-        &state,
-        public_dir.as_ref(),
-        public_dir_spa,
-        install_auth_rate_limiter.as_ref(),
-        custom_routers,
-      )?,
-      &cors_allowed_origins,
-      has_root,
-    )
+      public_dir.as_ref(),
+      public_dir_spa,
+      install_auth_rate_limiter.as_ref(),
+      custom_routers,
+    )?
     .split_for_parts();
 
-    Ok(Self {
-      state: state.clone(),
-      main_router: (address, main_router),
-      admin_router: independent_admin_router,
-      tls: load_tls(state.data_dir(), tls_cert, tls_key),
-    })
+    let main_router =
+      Self::wrap_with_default_layers(&state, main_router, &cors_allowed_origins, has_root);
+    let api = crate::openapi::add_info(api);
+    let tls = load_tls(state.data_dir(), tls_cert, tls_key);
+
+    return if let Some((admin_address, admin_router)) = independent_admin_router {
+      Ok(Self {
+        state,
+        main_router: (address, main_router),
+        admin_router: Some((admin_address, admin_router.layer(Extension(api)))),
+        tls,
+      })
+    } else {
+      Ok(Self {
+        state,
+        main_router: (address, main_router.layer(Extension(api))),
+        admin_router: None,
+        tls,
+      })
+    };
   }
 
   fn build_tracing(
@@ -506,10 +514,10 @@ impl Server {
 
   pub fn wrap_with_default_layers(
     state: &AppState,
-    router: OpenApiRouter<AppState>,
+    router: Router<AppState>,
     cors_allowed_origins: &[String],
     has_root: bool,
-  ) -> OpenApiRouter<()> {
+  ) -> Router<()> {
     #[cfg(feature = "otel")]
     let router = router
       .layer(axum_tracing_opentelemetry::middleware::OtelInResponseLayer)

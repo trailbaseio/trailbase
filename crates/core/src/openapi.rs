@@ -1,4 +1,4 @@
-use utoipa::openapi::{InfoBuilder, LicenseBuilder, OpenApiBuilder};
+use utoipa::openapi::{ContactBuilder, InfoBuilder, LicenseBuilder, OpenApi, OpenApiBuilder};
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::AppState;
@@ -19,15 +19,18 @@ fn version() -> String {
     .unwrap_or_default();
 }
 
-fn from_router<S: Send + Sync + Clone + 'static>(
-  router: OpenApiRouter<S>,
-) -> utoipa::openapi::OpenApi {
+pub(crate) fn add_info(openapi: OpenApi) -> OpenApi {
   const LICENSE: &str = "OSL-3.0";
   return OpenApiBuilder::new()
     .info(
       InfoBuilder::new()
         .title("TrailBase")
         .description(Some("OpenApi definitions of TrailBase's APIs"))
+        .contact(Some(
+          ContactBuilder::new()
+            .email(Some("contact@trailbase.io"))
+            .build(),
+        ))
         .license(Some(
           LicenseBuilder::new()
             .name(LICENSE)
@@ -38,7 +41,7 @@ fn from_router<S: Send + Sync + Clone + 'static>(
         .build(),
     )
     .build()
-    .merge_from(router.into_openapi());
+    .merge_from(openapi);
 }
 
 // Initializes routes from fully initialized TrailBase. This would allow to even pick up routes
@@ -55,7 +58,7 @@ pub fn build_api_definitions_from_state(
     vec![]
   };
 
-  return from_router(
+  return add_info(
     crate::server::Server::build_main_router(
       state,
       None,
@@ -67,7 +70,8 @@ pub fn build_api_definitions_from_state(
       log::error!("failed to build main_router: {err}");
 
       return OpenApiRouter::new();
-    }),
+    })
+    .into_openapi(),
   );
 }
 
@@ -93,8 +97,12 @@ pub fn build_api_definitions(
 
   // Currently we only include the admin APIs in dev builds.
   return if include_admin {
-    from_router(public_router().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router()))
+    add_info(
+      public_router()
+        .nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())
+        .into_openapi(),
+    )
   } else {
-    from_router(public_router())
+    add_info(public_router().into_openapi())
   };
 }

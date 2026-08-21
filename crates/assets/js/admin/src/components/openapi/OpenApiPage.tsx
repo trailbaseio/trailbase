@@ -36,6 +36,7 @@ export default function Page() {
       return;
     }
 
+    // Lazy load the actual OpenApi spec.
     ref.loadSpec(spec);
 
     const url = serverUrl();
@@ -43,6 +44,14 @@ export default function Page() {
       ref.setAttribute("server-url", serverUrl());
       ref.setAttribute("default-api-server", serverUrl());
     }
+
+    ref.addEventListener("spec-loaded", () => {
+      // HACK: Fix `api-info` style, which has a margin-left of -15px.
+      const apiInfo = ref.shadowRoot.getElementById("api-info");
+      if (apiInfo) {
+        apiInfo.style.marginLeft = "0";
+      }
+    });
 
     ref.addEventListener("before-try", (e: any) => {
       const tokens = $tokens.get();
@@ -61,6 +70,7 @@ export default function Page() {
     <rapi-doc
       ref={ref as any}
       load-fonts="false"
+      sort-tags="true"
       theme={theme()} // "light" | "dark"
       bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
       primary-color={primary}

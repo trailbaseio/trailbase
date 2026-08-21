@@ -14,11 +14,13 @@ use std::sync::Arc;
 use trailbase_wasm_common::manifest::{
   HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest, Metadata,
 };
-use trailbase_wasm_common::{HttpContext, HttpContextKind, HttpContextUser};
+use trailbase_wasm_common::{
+  HttpContext, HttpContextKind, HttpContextUser, component_path_to_name,
+};
 use trailbase_wasm_runtime_host::{
   Error as WasmError, InitArgs, RuntimeOptions, find_wasm_components,
 };
-use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::router::{OpenApiRouter, UtoipaMethodRouter};
 
 pub use trailbase_wasm_runtime_host::functions::{SqliteFunctions, SqliteStore};
 pub use trailbase_wasm_runtime_host::{HttpStore, KvStore, Runtime, SharedState};
@@ -174,9 +176,9 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   let http_handlers = http_handlers.unwrap_or_default();
   let job_handlers = job_handlers.unwrap_or_default();
 
+  let name = component_path_to_name(runtime.component_path()).unwrap_or_default();
   debug!(
-    "Component {path}: got {m} jobs and {n} http routes ({meta})",
-    path = runtime.component_path().to_string_lossy(),
+    "Component '{name}': got {m} jobs and {n} http routes ({meta})",
     m = job_handlers.len(),
     n = http_handlers.len(),
     meta = metadata
@@ -293,12 +295,31 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
         };
       };
 
-    router = Some(
-      router
-        .take()
-        .unwrap_or_else(|| OpenApiRouter::<S>::new())
-        .route(&path, axum::routing::on(axum_method(method), handler)),
-    );
+    router = Some({
+      let router = router.take().unwrap_or_else(|| OpenApiRouter::<S>::new());
+
+      // use utoipa::PartialSchema;
+      use utoipa::openapi::path::OperationBuilder;
+      use utoipa::openapi::{PathItem, PathsBuilder};
+
+      // router.route(&path, axum::routing::on(axum_method(method), handler))
+      router.routes(UtoipaMethodRouter::from((
+        /* schemas= */ vec![],
+        PathsBuilder::new()
+          .path(
+            path,
+            PathItem::new(
+              utoipa_method(method),
+              OperationBuilder::new()
+                .tag("wasm")
+                .description(Some(name.clone()))
+                .build(),
+            ),
+          )
+          .build(),
+        axum::routing::on(axum_method(method), handler),
+      )))
+    });
   }
 
   return Ok(InstallResult {
@@ -310,16 +331,34 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
 
 #[inline]
 fn axum_method(method: HttpMethodType) -> axum::routing::MethodFilter {
+  use axum::routing::MethodFilter;
   return match method {
-    HttpMethodType::Delete => axum::routing::MethodFilter::DELETE,
-    HttpMethodType::Get => axum::routing::MethodFilter::GET,
-    HttpMethodType::Head => axum::routing::MethodFilter::HEAD,
-    HttpMethodType::Options => axum::routing::MethodFilter::OPTIONS,
-    HttpMethodType::Patch => axum::routing::MethodFilter::PATCH,
-    HttpMethodType::Post => axum::routing::MethodFilter::POST,
-    HttpMethodType::Put => axum::routing::MethodFilter::PUT,
-    HttpMethodType::Trace => axum::routing::MethodFilter::TRACE,
-    HttpMethodType::Connect => axum::routing::MethodFilter::CONNECT,
+    HttpMethodType::Delete => MethodFilter::DELETE,
+    HttpMethodType::Get => MethodFilter::GET,
+    HttpMethodType::Head => MethodFilter::HEAD,
+    HttpMethodType::Options => MethodFilter::OPTIONS,
+    HttpMethodType::Patch => MethodFilter::PATCH,
+    HttpMethodType::Post => MethodFilter::POST,
+    HttpMethodType::Put => MethodFilter::PUT,
+    HttpMethodType::Trace => MethodFilter::TRACE,
+    HttpMethodType::Connect => MethodFilter::CONNECT,
+  };
+}
+
+#[inline]
+fn utoipa_method(method: HttpMethodType) -> utoipa::openapi::HttpMethod {
+  use utoipa::openapi::HttpMethod;
+  return match method {
+    HttpMethodType::Delete => HttpMethod::Delete,
+    HttpMethodType::Get => HttpMethod::Get,
+    HttpMethodType::Head => HttpMethod::Head,
+    HttpMethodType::Options => HttpMethod::Options,
+    HttpMethodType::Patch => HttpMethod::Patch,
+    HttpMethodType::Post => HttpMethod::Post,
+    HttpMethodType::Put => HttpMethod::Put,
+    HttpMethodType::Trace => HttpMethod::Trace,
+    // NOTE: Not available.
+    HttpMethodType::Connect => HttpMethod::Trace,
   };
 }
 

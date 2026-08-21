@@ -8872,6 +8872,7 @@ dependencies = [
  "trailbase-wasm-common",
  "trailbase-wasm-runtime-host",
  "url",
+ "utoipa",
  "utoipa-axum",
 ]
 
