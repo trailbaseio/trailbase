@@ -165,6 +165,17 @@ pub struct PromoteOptions {
 }
 
 #[derive(Default)]
+pub struct RegisterOptions {
+  pub password: String,
+  pub email: Option<String>,
+  pub username: Option<String>,
+  /// Defaults to `password`.
+  pub password_repeat: Option<String>,
+  /// Where the verification link sends the user after confirming.
+  pub redirect_uri: Option<String>,
+}
+
+#[derive(Default)]
 pub struct ClientOptions {
   pub tokens: Option<Tokens>,
   pub transport: Option<Box<dyn Transport + Send + Sync>>,
@@ -273,6 +284,41 @@ impl Client {
 
     *self.state.tokens.write() = new_tokens;
     return Ok(true);
+  }
+
+  /// Register a new user. Does not sign them in: accounts with an email address
+  /// have to verify it before they can sign in.
+  pub async fn register(&self, opts: RegisterOptions) -> Result<(), Error> {
+    #[derive(Serialize)]
+    struct Request<'a> {
+      email: Option<&'a str>,
+      username: Option<&'a str>,
+      password: &'a str,
+      password_repeat: &'a str,
+      redirect_uri: Option<&'a str>,
+    }
+
+    self
+      .state
+      .fetch(
+        &format!("/{AUTH_API}/register"),
+        Method::POST,
+        Some(
+          serde_json::to_vec(&Request {
+            email: opts.email.as_deref(),
+            username: opts.username.as_deref(),
+            password: &opts.password,
+            password_repeat: opts.password_repeat.as_deref().unwrap_or(&opts.password),
+            redirect_uri: opts.redirect_uri.as_deref(),
+          })
+          .map_err(Error::RecordSerialization)?,
+        ),
+        None,
+        /* error_for_status= */ true,
+      )
+      .await?;
+
+    return Ok(());
   }
 
   pub async fn login(

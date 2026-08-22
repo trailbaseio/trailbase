@@ -402,6 +402,31 @@ class Client:
     def site(self) -> str:
         return self._site
 
+    def register(
+        self,
+        password: str,
+        email: str | None = None,
+        username: str | None = None,
+        password_repeat: str | None = None,
+        redirect_uri: str | None = None,
+    ) -> None:
+        """Register a new user.
+
+        Does not sign them in: accounts with an email address have to verify it
+        before they can sign in.
+        """
+        self.fetch(
+            f"{_AUTH_API}/register",
+            method="POST",
+            data={
+                "email": email,
+                "username": username,
+                "password": password,
+                "password_repeat": password_repeat or password,
+                "redirect_uri": redirect_uri,
+            },
+        )
+
     def login(self, email_or_username: str, password: str) -> MultiFactorAuthToken | None:
         response = self.fetch(
             f"{_AUTH_API}/login",

@@ -210,6 +210,33 @@ async fn login_test() {
   client.refresh().await.unwrap();
 }
 
+async fn register_test() {
+  let client = Client::new(&*site(), None).unwrap();
+
+  let now = now();
+  let email = format!("test_rust_register_{now}@test.org");
+  let password = "Secret123.".to_string();
+
+  // NOTE: The test fixture requires an email address, which has to be verified
+  // before the new account can sign in.
+  client
+    .register(trailbase_client::RegisterOptions {
+      password: password.clone(),
+      email: Some(email.clone()),
+      ..Default::default()
+    })
+    .await
+    .unwrap();
+  assert!(client.user().is_none());
+
+  assert!(matches!(
+    client.login(&email, &password).await,
+    Err(trailbase_client::Error::HttpStatus(
+      reqwest::StatusCode::UNAUTHORIZED
+    ))
+  ));
+}
+
 async fn login_anonymous_test() {
   let client = Client::new(&*site(), None).unwrap();
 
@@ -1007,6 +1034,9 @@ fn client_integration_test() {
 
   runtime.block_on(login_test());
   println!("Ran login tests");
+
+  runtime.block_on(register_test());
+  println!("Ran register tests");
 
   runtime.block_on(login_anonymous_test());
   println!("Ran login anonymous tests");
