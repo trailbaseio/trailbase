@@ -296,29 +296,73 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
       };
 
     router = Some({
-      let router = router.take().unwrap_or_else(|| OpenApiRouter::<S>::new());
+      use utoipa::PartialSchema;
+      use utoipa::openapi::path::{
+        OperationBuilder, ParameterBuilder, ParameterIn, ParameterStyle,
+      };
+      use utoipa::openapi::{PathItem, PathsBuilder, Required};
 
-      // use utoipa::PartialSchema;
-      use utoipa::openapi::path::OperationBuilder;
-      use utoipa::openapi::{PathItem, PathsBuilder};
+      let path_router = {
+        let mut path_router = matchit::Router::new();
+        let _ = path_router.insert(&path, ());
+        path_router
+      };
 
-      // router.route(&path, axum::routing::on(axum_method(method), handler))
-      router.routes(UtoipaMethodRouter::from((
-        /* schemas= */ vec![],
-        PathsBuilder::new()
-          .path(
-            path,
-            PathItem::new(
-              utoipa_method(method),
-              OperationBuilder::new()
-                .tag("wasm")
-                .description(Some(name.clone()))
-                .build(),
-            ),
-          )
-          .build(),
-        axum::routing::on(axum_method(method), handler),
-      )))
+      let parameters = match path_router.at(&path) {
+        Ok(matched) => {
+          let parameters: Vec<_> = matched
+            .params
+            .iter()
+            .filter_map(|(key, v)| {
+              return if v.contains("*") {
+                // Wild card matchers don't represent parameters but path suffixes.
+                None
+              } else {
+                Some(
+                  ParameterBuilder::new()
+                    .name(key)
+                    .parameter_in(ParameterIn::Path)
+                    .style(Some(ParameterStyle::Form))
+                    .required(Required::True)
+                    .schema(Some(String::schema()))
+                    .build(),
+                )
+              };
+            })
+            .collect();
+
+          if parameters.is_empty() {
+            None
+          } else {
+            Some(parameters)
+          }
+        }
+        Err(err) => {
+          warn!("path parameter extraction failed: {err}");
+          None
+        }
+      };
+
+      router
+        .take()
+        .unwrap_or_else(|| OpenApiRouter::<S>::new())
+        .routes(UtoipaMethodRouter::from((
+          /* schemas= */ vec![],
+          PathsBuilder::new()
+            .path(
+              path,
+              PathItem::new(
+                utoipa_method(method),
+                OperationBuilder::new()
+                  .tag("wasm")
+                  .description(Some(name.clone()))
+                  .parameters(parameters)
+                  .build(),
+              ),
+            )
+            .build(),
+          axum::routing::on(axum_method(method), handler),
+        )))
     });
   }
 
@@ -329,7 +373,6 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   });
 }
 
-#[inline]
 fn axum_method(method: HttpMethodType) -> axum::routing::MethodFilter {
   use axum::routing::MethodFilter;
   return match method {
@@ -345,7 +388,6 @@ fn axum_method(method: HttpMethodType) -> axum::routing::MethodFilter {
   };
 }
 
-#[inline]
 fn utoipa_method(method: HttpMethodType) -> utoipa::openapi::HttpMethod {
   use utoipa::openapi::HttpMethod;
   return match method {
