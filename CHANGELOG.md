@@ -1,8 +1,19 @@
+## v0.33.3
+
+- Wire up WASM routes with OpenApi to make endpoints exposed by WASM components show up in spec.
+- Besides TCP, allow binding the server to a unix-domain-socket (UDS).
+  - Note that this changes pulls the `Server::init()` address argument out of the options, which is a breaking API change in case you use TrailBase-as-a-library. This is sneakily pulled into a minor release since we don't yet semantically version the library APIs. If this is an nusance for you, let us know and next time we'll push a major release 🙏.
+- Compress assets to reduce binary size.
+- Bump hard Job timeouts to 1 hour. We should make this user-configurable going forward.
+- Remove off-by-default SwaggerUi feature now that `rapidoc` is better integrated into admin UI.
+- Shared rate-limit governor if admin APIs are exposed on a different port.
+- Update dependencies.
+
 ## v0.33.2
 
 - OAuth `/callback` redirect fix: set cookie's same-site policy to lax to include it in the final redirect leg.
   - Otherwise browsers will consider the final leg as part of a cross-site redirect chain originating at the OAuth provider, even though the final leg may be same-site.
-- Set `no-referrer` referrer policy on final log of redirect chain (extOauth => /callback => `&redirect_to=`) to avoid leaking a user's provider.
+- Set `no-referrer` referrer policy on final leg of redirect chain (extOauth => /callback => `&redirect_to=`) to avoid leaking a user's provider.
 - Prolong `OAuthClient` lifetime to match `OAuthProvider`'s. This pulls some failure modes earlier and off the request-handling path. Fewer allocations.
 - Internally add a `SimpleOAuthProvider` abstraction to make simple providers less verbose and share more code. This is inspired by #273. Thanks @UserNobody14 🙏
 - Improve error-handling and logging for invalid OAuth provider configurations.
