@@ -368,8 +368,16 @@ impl HttpStore {
       Some(trailbase_wasm_common::manifest::GuestRuntime::Rust) => {
         // We use a generous hard limit and then periodically prune the pool to a
         // smaller number of stand-by stores.
+        use deadpool::managed::Timeouts;
         let pool = deadpool::managed::Pool::builder(StoreManager { rt: rt.clone() })
           .max_size(POOL_HARD_LIMIT)
+          .runtime(deadpool::Runtime::Tokio1)
+          .timeouts(Timeouts {
+            wait: Some(WASM_WAIT_TIMEOUT),
+            // create: Some(WASM_WAIT_TIMEOUT.into()),
+            // recycle: Some(WASM_WAIT_TIMEOUT.into()),
+            ..Default::default()
+          })
           .build()
           .expect("deadpool construction");
 
@@ -423,6 +431,7 @@ impl HttpStore {
   pub async fn call_incoming_http_handler(
     &self,
     request: hyper::Request<UnsyncBoxBody<Bytes, hyper::Error>>,
+    timeout: Option<Duration>,
   ) -> Result<hyper::Response<wasmtime_wasi_http::p2::body::HyperOutgoingBody>, Error> {
     let rt = match &*self.state {
       HttpStoreInternal::Unique { rt } => rt,
@@ -430,6 +439,7 @@ impl HttpStore {
     };
 
     return Self::call(rt, {
+      let timeout = timeout.unwrap_or(DEFAULT_CALL_TIMEOUT);
       let state = self.state.clone();
       async move {
         let uri = request.uri().clone();
@@ -468,7 +478,7 @@ impl HttpStore {
               )?;
               let out = store.data_mut().http().new_response_outparam(sender)?;
               tokio::time::timeout(
-                WASM_CALL_TIMEOUT,
+                timeout,
                 proxy_bindings.wasi_http_incoming_handler().call_handle(
                   store.as_context_mut(),
                   req,
@@ -483,9 +493,7 @@ impl HttpStore {
               let StoreAndBindings {
                 ref mut store,
                 ref proxy_bindings,
-              } = *tokio::time::timeout(WASM_WAIT_TIMEOUT, pool.get())
-                .await
-                .map_err(|_err| Error::Timeout(None))??;
+              } = *pool.get().await.map_err(|_err| Error::Timeout(None))?;
 
               let req = store.data_mut().http().new_incoming_request(
                 wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
@@ -493,7 +501,7 @@ impl HttpStore {
               )?;
               let out = store.data_mut().http().new_response_outparam(sender)?;
               tokio::time::timeout(
-                WASM_CALL_TIMEOUT,
+                timeout,
                 proxy_bindings.wasi_http_incoming_handler().call_handle(
                   store.as_context_mut(),
                   req,
@@ -502,7 +510,7 @@ impl HttpStore {
               )
               .await
               .map_err(|_err| {
-                log::warn!("HTTP call to WASM timed out: {uri} ({WASM_CALL_TIMEOUT:?})");
+                log::warn!("HTTP call to WASM timed out: {uri} ({timeout:?})");
                 return Error::Timeout(Some(uri));
               })?
             }
@@ -731,7 +739,10 @@ mod tests {
       .unwrap();
 
     let request = build_http_request("http://localhost:4000/transaction", "/transaction");
-    let response = store.call_incoming_http_handler(request).await.unwrap();
+    let response = store
+      .call_incoming_http_handler(request, None)
+      .await
+      .unwrap();
 
     assert_eq!(response.status(), StatusCode::OK, "{response:?}");
 
@@ -859,7 +870,7 @@ mod tests {
       .unwrap();
 
     let request = build_http_request(uri, registered_path);
-    return store.call_incoming_http_handler(request).await;
+    return store.call_incoming_http_handler(request, None).await;
   }
 
   async fn response_to_i64(resp: Response<UnsyncBoxBody<Bytes, ErrorCode>>) -> i64 {
@@ -870,6 +881,6 @@ mod tests {
   }
 }
 
-const WASM_CALL_TIMEOUT: Duration = Duration::from_secs(20);
+const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(20);
 const WASM_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
 const POOL_HARD_LIMIT: usize = 65536;

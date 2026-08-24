@@ -11,6 +11,7 @@ use log::*;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use tokio::time::Duration;
 use trailbase_wasm_common::manifest::{
   HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest, Metadata,
 };
@@ -218,7 +219,9 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
             .body(empty())
             .map_err(|err| WasmError::Other(err.to_string()))?;
 
-          store.call_incoming_http_handler(request).await?;
+          store
+            .call_incoming_http_handler(request, Some(Duration::from_mins(60)))
+            .await?;
 
           Ok::<_, AnyError>(())
         });
@@ -278,7 +281,10 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
         );
 
         // Call WASM.
-        return match store.call_incoming_http_handler(request).await {
+        return match store
+          .call_incoming_http_handler(request, Some(Duration::from_secs(20)))
+          .await
+        {
           Ok(response) => {
             // Construct hyper/axum response from WASI response.
             let (parts, body) = response.into_parts();
