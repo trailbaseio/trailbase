@@ -98,7 +98,7 @@ pub enum SubCommands {
   /// Starts a local MCP server connected to a running TrailBase server @[ADDRESS].
   #[cfg(feature = "mcp")]
   Mcp {
-    /// Address of the TrailBase server the MCP talks to (Default: http://localhost:4000).
+    /// URL of the TrailBase server the MCP talks to (Default: http://localhost:4000).
     address: Option<String>,
     /// Credentials (auth+refresh tokens) of an admin user to authenticate requests to the
     /// TrailBase server. Either from the admin UI's profile dialog or `trail user mint`.
@@ -114,11 +114,12 @@ pub enum SubCommands {
 
 #[derive(Args, Clone, Debug)]
 pub struct ServerArgs {
-  /// Authority (<host>:<port>) the HTTP server binds to (Default: localhost:4000).
+  /// Socket address the HTTP server binds to, e.g. "0.0.0.0:80" for TCP or "unix:/tmp/tb.sock" for
+  /// UDS (Default: localhost:4000).
   #[arg(short, long, env, default_value = "localhost:4000")]
   pub address: String,
 
-  /// When set, UI and admin APIs will be served separately.
+  /// Optional socket address to start a separately served admin server for both UI and APIs.
   #[arg(long, env)]
   pub admin_address: Option<String>,
 

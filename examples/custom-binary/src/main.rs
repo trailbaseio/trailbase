@@ -3,7 +3,7 @@ use axum::{
   response::{Html, IntoResponse, Response},
   routing::{Router, get},
 };
-use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, User};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr, User};
 
 #[derive(Clone)]
 struct CustomState {
@@ -58,8 +58,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
   let server = Server::init(
     state.clone(),
+    SocketAddr::parse("localhost:4004")?,
     ServerOptions {
-      address: "localhost:4004".to_string(),
       admin_address: None,
       public_dir: None,
       log_responses: true,

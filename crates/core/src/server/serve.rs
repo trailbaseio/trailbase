@@ -1,6 +1,6 @@
 //! Serve services.
 //!
-//! Ripped straight from axum::serve to add rustls support.
+//! Ripped straight from axum::serve to add rustls & UDS support.
 
 use axum::{body::Body, extract::Request, response::Response};
 use futures_util::{FutureExt, pin_mut};
@@ -49,6 +49,24 @@ impl Listener for TcpListener {
   type Io = TcpStream;
   type Addr = std::net::SocketAddr;
 
+  async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
+    loop {
+      match Self::accept(self).await {
+        Ok(tup) => return Ok(tup),
+        Err(e) => handle_accept_error(e).await,
+      }
+    }
+  }
+
+  #[inline]
+  fn local_addr(&self) -> io::Result<Self::Addr> {
+    Self::local_addr(self)
+  }
+}
+
+impl Listener for tokio::net::UnixListener {
+  type Io = tokio::net::UnixStream;
+  type Addr = tokio::net::unix::SocketAddr;
   async fn accept(&mut self) -> io::Result<(Self::Io, Self::Addr)> {
     loop {
       match Self::accept(self).await {
@@ -333,6 +351,14 @@ where
 impl axum::extract::connect_info::Connected<IncomingStream<'_, TcpListener>> for SocketAddr {
   fn connect_info(stream: IncomingStream<'_, TcpListener>) -> Self {
     *stream.remote_addr()
+  }
+}
+
+impl axum::extract::connect_info::Connected<IncomingStream<'_, tokio::net::UnixListener>>
+  for tokio::net::unix::SocketAddr
+{
+  fn connect_info(stream: IncomingStream<'_, tokio::net::UnixListener>) -> Self {
+    stream.remote_addr().clone()
   }
 }
 

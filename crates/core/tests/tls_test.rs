@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio_rustls::rustls::pki_types::{PrivateKeyDer, pem::PemObject};
 use tracing::*;
 
-use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr};
 
 #[test]
 fn test_https_serving() {
@@ -36,8 +36,8 @@ fn test_https_serving() {
 
     let app = Server::init(
       state,
+      SocketAddr::parse(&address).unwrap(),
       ServerOptions {
-        address: address.to_string(),
         admin_address: None,
         public_dir: None,
         cors_allowed_origins: vec![],

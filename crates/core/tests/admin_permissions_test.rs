@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 use axum_test::TestServer;
 
-use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr};
 
 #[test]
 fn test_admin_permissions() {
@@ -28,8 +28,8 @@ fn test_admin_permissions() {
       tls,
     } = Server::init(
       state,
+      SocketAddr::parse("localhost:4040").unwrap(),
       ServerOptions {
-        address: "localhost:4040".to_string(),
         admin_address: None,
         cors_allowed_origins: vec![],
         ..Default::default()

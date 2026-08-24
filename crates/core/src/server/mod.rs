@@ -13,14 +13,13 @@ use http_body_util::BodyExt;
 use http_body_util::combinators::UnsyncBoxBody;
 use log::*;
 use std::borrow::Cow;
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, OnceLock};
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
-use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+use tokio_rustls::rustls::{ServerConfig, crypto};
 use tower::Service;
 use tower_cookies::CookieManagerLayer;
 use tower_governor::GovernorLayer;
@@ -43,17 +42,18 @@ use crate::extract::ip::RealIpKeyExtractor;
 use crate::init_error::InitError;
 use crate::logging;
 use crate::records;
+use crate::socket_address::SocketAddr;
+
+type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A set of options to configure serving behaviors. Changing any of these options
 /// requires a server restart, which makes them a natural fit for being exposed as command line
 /// arguments.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct ServerOptions {
-  // Authority (<host>:<port>) the HTTP server binds to, e.g. "localhost:4000".
-  pub address: String,
-
-  // Optional address of the admin UI + API.
-  pub admin_address: Option<String>,
+  /// Optional socket address for a dedicated admin HTTP server (UI + API). Similar to address
+  /// above.
+  pub admin_address: Option<SocketAddr>,
 
   /// Optional path to static assets that will be served at the HTTP root.
   pub public_dir: Option<PathBuf>,
@@ -67,15 +67,19 @@ pub struct ServerOptions {
   /// Limit the set of allowed origins the HTTP server will answer to.
   pub cors_allowed_origins: Vec<String>,
 
-  /// Optional dedicated Tokio runtime to execute async WASM code on.
-  // pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
-
   /// TLS certificate path.
   pub tls_cert: Option<CertificateDer<'static>>,
   /// TLS key path.
   pub tls_key: Option<Arc<PrivateKeyDer<'static>>>,
 
   /// Custom axum router.
+  ///
+  /// The `custom_router` will be registered with the http server and `on_first_init` will be
+  /// called only when a new data directory and therefore databases are created. This hook can
+  /// be used to customize the setup in a simple manner, e.g. create tables, etc.
+  /// Note, however, that for a multi-stage deployment (dev, test, staging, prod, ...) or prod
+  /// setups migrations are a more robust approach to consistent and continuous management of
+  /// schemas.
   pub custom_router: Option<Router<AppState>>,
 }
 
@@ -83,8 +87,8 @@ pub struct Server {
   pub state: AppState,
 
   // Routers.
-  pub main_router: (String, Router),
-  pub admin_router: Option<(String, Router)>,
+  pub main_router: (SocketAddr, Router),
+  pub admin_router: Option<(SocketAddr, Router)>,
 
   // TLS/SSL
   pub tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
@@ -93,15 +97,14 @@ pub struct Server {
 impl Server {
   /// Initializes the server. Will create a new data directory on first start.
   ///
-  /// The `custom_routes` will be registered with the http server and `on_first_init` will be
-  /// called only when a new data directory and therefore databases are created. This hook can
-  /// be used to customize the setup in a simple manner, e.g. create tables, etc.
-  /// Note, however, that for a multi-stage deployment (dev, test, staging, prod, ...) or prod
-  /// setups migrations are a more robust approach to consistent and continuous management of
-  /// schemas.
-  pub async fn init(state: AppState, opts: ServerOptions) -> Result<Self, InitError> {
+  /// Socket `address` the HTTP server binds to, e.g. "localhost:4000" for TCP or "unix:/test" for
+  /// a unix-domain-socket (UDS).
+  pub async fn init(
+    state: AppState,
+    address: SocketAddr,
+    opts: ServerOptions,
+  ) -> Result<Self, InitError> {
     let ServerOptions {
-      address,
       admin_address,
       public_dir,
       public_dir_spa,
@@ -185,7 +188,7 @@ impl Server {
         /* has_root= */ false,
       );
 
-      Some((admin_address.to_string(), admin_router))
+      Some((admin_address, admin_router))
     } else {
       // Simply add to the main router.
       custom_routers.push(Self::build_admin_router(&state));
@@ -277,99 +280,77 @@ impl Server {
       ));
   }
 
-  pub async fn serve(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Install a HUP/hangup signal handler to reload config.
-    #[cfg(unix)]
-    {
-      let state = self.state.clone();
-
-      // An infinite stream of hangup signals.
-      let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
-
-      tokio::spawn(async move {
-        loop {
-          stream.recv().await;
-
-          info!(
-            "Received SIGHUP: reloading WASM components (dev), re-apply db migrations, and finally re-load config."
-          );
-
-          #[cfg(feature = "wasm")]
-          if state.dev_mode()
-            && let Err(err) = state.wasm().reload_runtimes().await
-          {
-            warn!("Reloading WASM failed: {err}");
-          }
-
-          // Re-apply migrations. This needs to happen before reloading the config, which is
-          // consistent with the startup order. Otherwise, we may validate a configuration
-          // against a stale database schema.
-          //
-          // TODO: Right now we're only re-applying main migrations.
-          let user_migrations_path = state.data_dir().migrations_path();
-          let conn = state.connection_manager().main_entry().connection;
-
-          match crate::migrations::apply_main_migrations(&conn, Some(user_migrations_path))
-            .await
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
-          {
-            Err(err) => {
-              // NOTE: it's not clear what the best error behavior here is. Should the server
-              // continue to run when migrations fail?
-              error!("Failed to apply migrations: {err}");
-            }
-            Ok(_new_db) => {
-              let user_migrations_path = state.data_dir().migrations_path();
-              info!("Migrations applied: {user_migrations_path:?}");
-            }
-          }
-
-          // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
-          // when no new migrations were applied :shrug:.
-          if let Err(err) = state.rebuild_connection_metadata().await {
-            error!("Failed to invalidate schema cache: {err}");
-          }
-
-          // Reload config:
-          match crate::config::load_or_init_config_textproto(
-            state.data_dir(),
-            &state.connection_manager(),
-          )
-          .await
-          {
-            Ok(config) => {
-              if let Err(err) = state.validate_and_update_config(config, None).await {
-                error!("Failed to reload config: {err}");
-              }
-            }
-            Err(err) => {
-              error!("Failed to reload config: {err}");
-            }
-          }
-        }
-      });
+  pub async fn serve(self) -> Result<(), AnyError> {
+    // Make sure TLS provider is installed. Required for both incoming and outgoing traffic,
+    // including traffic from WASM components, e.g. `fetch("https://example.com")`.
+    if crypto::CryptoProvider::get_default().is_none() {
+      info!("No process-wide TLS provider found. Falling back to `aws_lc_rs`.");
+      if let Err(_provider) = crypto::aws_lc_rs::default_provider().install_default() {
+        // QUESTION: Should this be a panic or is this still acceptable for users who don't
+        // need TLS (neither to serve nor for WASM components).
+        error!("Installing fallback TLS provider failed.");
+      }
     }
 
-    let (cleanup_sender, cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
+    // Install a SIGHUP/hangup signal handler to reload config and WASM runtimes (in dev mode).
+    #[cfg(unix)]
+    start_sighup_reload_task(self.state.clone());
 
-    tokio::spawn(async move {
-      if cleanup_receiver.await.is_ok() {
-        log::debug!("cleanup started");
+    // Graceful shutdown is handled by axum (this is independent from SIGHUP handler above).
+    let cleanup_sender = {
+      let (cleanup_sender, cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
 
-        self.state.subscription_manager().shutdown();
+      tokio::spawn(async move {
+        if cleanup_receiver.await.is_ok() {
+          log::debug!("cleanup started");
+          self.state.subscription_manager().shutdown();
+        }
+      });
+
+      cleanup_sender
+    };
+
+    // Finally start to listen.
+    {
+      let protocol = if self.tls.is_some() { "https" } else { "http" };
+      let (is_uds, base_uri) = match self.main_router.0 {
+        SocketAddr::Uds(ref path) => (true, format!("unix:{}", path.to_string_lossy())),
+        SocketAddr::Tcp(ref a) => (false, format!("{protocol}://{a}")),
+      };
+      let mut admin_uri: Option<String> = None;
+
+      let mut set = JoinSet::new();
+
+      if let Some((admin_addr, admin_router)) = self.admin_router {
+        if let SocketAddr::Tcp(aa) = admin_addr {
+          admin_uri = Some(format!("{protocol}://{aa}/_/admin/"));
+        }
+
+        let cloned_tls = self
+          .tls
+          .as_ref()
+          .map(|(cert, key)| (cert.clone(), key.clone_key()));
+
+        set.spawn(async move { start_listen(admin_addr, admin_router, cloned_tls, None).await });
+      } else if is_uds {
+        admin_uri = Some(format!("{base_uri}/_/admin/"));
       }
-    });
 
-    // Finally start serving.
-    //
-    // NOTE: This will only return when graceful shutdown succeeded.
-    serve_impl(
-      self.main_router,
-      self.admin_router,
-      self.tls,
-      cleanup_sender,
-    )
-    .await?;
+      set.spawn({
+        let (addr, router) = self.main_router;
+        async move { start_listen(addr, router, self.tls, Some(cleanup_sender)).await }
+      });
+
+      if let Some(admin_uri) = admin_uri {
+        info!("Listening on {base_uri} 🚀 (Admin UI: {admin_uri})");
+      } else {
+        info!("Listening on {base_uri} 🚀");
+      }
+
+      set.join_all().await;
+    }
+
+    println!("Shut down gracefully 👋");
 
     return Ok(());
   }
@@ -665,79 +646,69 @@ async fn shutdown_signal() {
   // Ready to shut down.
 }
 
-pub async fn serve_impl(
-  main_router: (String, Router),
-  admin_router: Option<(String, Router)>,
-  tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
-  cleanup_sender: tokio::sync::oneshot::Sender<()>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-  // Make sure TLS provider is installed (both for incoming and outgoing traffic, including traffic
-  // from WASM components).
-  use tokio_rustls::rustls::crypto;
-  if crypto::CryptoProvider::get_default().is_none() {
-    info!("No process-wide TLS provider found. Falling back to `aws_lc_rs`.");
-    if let Err(_provider) = crypto::aws_lc_rs::default_provider().install_default() {
-      // QUESTION: Should this be a panic or is this still acceptable for users who don't
-      // need TLS (neither to serve nor for WASM components).
-      error!("Installing fallback TLS provider failed.");
-    }
-  }
-
-  let has_tls = tls.is_some();
-  let addr = main_router.0.clone();
-  let admin_addr = admin_router
-    .as_ref()
-    .map_or_else(|| addr.clone(), |(addr, _)| addr.clone());
-
-  let mut set = JoinSet::new();
-
-  if let Some((addr, router)) = admin_router {
-    set.spawn({
-      let tls = tls
-        .as_ref()
-        .map(|(cert, key)| (cert.clone(), key.clone_key()));
-      async move { start_listen(&addr, router, tls, None).await }
-    });
-  }
-
-  set.spawn({
-    let (addr, router) = main_router;
-    async move { start_listen(&addr, router, tls, Some(cleanup_sender)).await }
-  });
-
-  info!(
-    "Listening on {protocol}://{addr} 🚀 (Admin UI http://{admin_addr}/_/admin/)",
-    protocol = if has_tls { "https" } else { "http" },
-  );
-
-  set.join_all().await;
-
-  println!("Shut down gracefully 👋");
-
-  return Ok(());
-}
-
 async fn start_listen(
-  addr: &str,
+  addr: SocketAddr,
   router: Router<()>,
   tls: Option<(CertificateDer<'static>, PrivateKeyDer<'static>)>,
   cleanup_sender: Option<tokio::sync::oneshot::Sender<()>>,
 ) {
-  let tcp_listener = match tokio::net::TcpListener::bind(addr).await {
-    Ok(listener) => listener,
-    Err(err) => {
-      error!("Failed to listen on: {addr}: {err}");
-      std::process::exit(1);
+  fn listen_err(err: std::io::Error) {
+    error!("Failed to listen: {err}");
+    std::process::exit(1);
+  }
+
+  let graceful_shutdown = async {
+    shutdown_signal().await;
+
+    if let Some(cleanup) = cleanup_sender {
+      let _ = cleanup.send(());
     }
   };
 
-  if let Err(err) = match tls {
-    Some((cert, key)) => {
-      info!("TLS enabled");
+  let result = match (addr, tls) {
+    (SocketAddr::Uds(_), Some(_)) => {
+      error!("TLS + UDS not supported");
+      std::process::exit(1);
+    }
+    (SocketAddr::Uds(path), None) => {
+      let listener: tokio::net::UnixListener = tokio::net::UnixListener::bind(&path)
+        .map_err(listen_err)
+        .expect("terminate");
+
+      serve::serve(
+        listener,
+        router.into_make_service_with_connect_info::<tokio::net::unix::SocketAddr>(),
+      )
+      .with_graceful_shutdown(async move {
+        graceful_shutdown.await;
+
+        // Delete the socket.
+        let _ = std::fs::remove_file(path);
+      })
+      .await
+    }
+    (SocketAddr::Tcp(a), None) => {
+      let listener = tokio::net::TcpListener::bind(a)
+        .await
+        .map_err(listen_err)
+        .expect("terminate");
+
+      serve::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+      )
+      .with_graceful_shutdown(graceful_shutdown)
+      .await
+    }
+    (SocketAddr::Tcp(a), Some((cert, key))) => {
+      let listener = tokio::net::TcpListener::bind(a)
+        .await
+        .map_err(listen_err)
+        .expect("terminate");
 
       serve::serve(
         serve::TlsListener {
-          listener: tcp_listener,
+          listener,
           acceptor: TlsAcceptor::from(Arc::new({
             ServerConfig::builder()
               .with_no_client_auth()
@@ -745,32 +716,14 @@ async fn start_listen(
               .expect("Failed to build server config")
           })),
         },
-        router.into_make_service_with_connect_info::<SocketAddr>(),
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
       )
-      .with_graceful_shutdown(async {
-        shutdown_signal().await;
-
-        if let Some(cleanup) = cleanup_sender {
-          let _ = cleanup.send(());
-        }
-      })
+      .with_graceful_shutdown(graceful_shutdown)
       .await
     }
-    _ => {
-      serve::serve(
-        tcp_listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-      )
-      .with_graceful_shutdown(async {
-        shutdown_signal().await;
+  };
 
-        if let Some(cleanup) = cleanup_sender {
-          let _ = cleanup.send(());
-        }
-      })
-      .await
-    }
-  } {
+  if let Err(err) = result {
     error!("Failed to start server: {err}");
     std::process::exit(1);
   }
@@ -859,4 +812,73 @@ fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
   });
 
   return governor_conf.clone();
+}
+
+#[cfg(unix)]
+fn start_sighup_reload_task(state: AppState) {
+  // An infinite stream of hangup signals.
+  let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
+
+  tokio::spawn(async move {
+    loop {
+      stream.recv().await;
+
+      info!(
+        "Received SIGHUP: reloading WASM components (dev), re-apply db migrations, and finally re-load config."
+      );
+
+      #[cfg(feature = "wasm")]
+      if state.dev_mode()
+        && let Err(err) = state.wasm().reload_runtimes().await
+      {
+        warn!("Reloading WASM failed: {err}");
+      }
+
+      // Re-apply migrations. This needs to happen before reloading the config, which is
+      // consistent with the startup order. Otherwise, we may validate a configuration
+      // against a stale database schema.
+      //
+      // TODO: Right now we're only re-applying main migrations.
+      let user_migrations_path = state.data_dir().migrations_path();
+      let conn = state.connection_manager().main_entry().connection;
+
+      match crate::migrations::apply_main_migrations(&conn, Some(user_migrations_path))
+        .await
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
+      {
+        Err(err) => {
+          // NOTE: it's not clear what the best error behavior here is. Should the server
+          // continue to run when migrations fail?
+          error!("Failed to apply migrations: {err}");
+        }
+        Ok(_new_db) => {
+          let user_migrations_path = state.data_dir().migrations_path();
+          info!("Migrations applied: {user_migrations_path:?}");
+        }
+      }
+
+      // NOTE: we're always invalidating: simple & safe. We could also avoid invalidation
+      // when no new migrations were applied :shrug:.
+      if let Err(err) = state.rebuild_connection_metadata().await {
+        error!("Failed to invalidate schema cache: {err}");
+      }
+
+      // Reload config:
+      match crate::config::load_or_init_config_textproto(
+        state.data_dir(),
+        &state.connection_manager(),
+      )
+      .await
+      {
+        Ok(config) => {
+          if let Err(err) = state.validate_and_update_config(config, None).await {
+            error!("Failed to reload config: {err}");
+          }
+        }
+        Err(err) => {
+          error!("Failed to reload config: {err}");
+        }
+      }
+    }
+  });
 }

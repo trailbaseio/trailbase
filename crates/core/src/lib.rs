@@ -28,6 +28,7 @@ mod migrations;
 mod scheduler;
 mod schema_metadata;
 mod server;
+mod socket_address;
 mod transaction_recorder;
 
 #[cfg(feature = "wasm")]
@@ -50,6 +51,7 @@ pub use auth::User;
 pub use data_dir::DataDir;
 pub use init_error::InitError;
 pub use server::{Server, ServerOptions};
+pub use socket_address::SocketAddr;
 
 use prost_reflect::DescriptorPool;
 use std::sync::LazyLock;

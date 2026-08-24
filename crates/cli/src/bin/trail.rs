@@ -12,7 +12,7 @@ use std::io::Write;
 use trailbase::api::cli::{AuthTokens, UserReference};
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::constants::USER_TABLE;
-use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr};
 use trailbase_wasm_component_repo::{
   ComponentReference, download_component, find_component, find_component_by_filename,
   install_wasm_component, list_installed_wasm_components, repo,
@@ -82,9 +82,12 @@ async fn async_main(
 
       let app = Server::init(
         state,
+        SocketAddr::parse(&cmd.address)?,
         ServerOptions {
-          address: cmd.address,
-          admin_address: cmd.admin_address,
+          admin_address: cmd
+            .admin_address
+            .map(|a| SocketAddr::parse(&a))
+            .transpose()?,
           public_dir: cmd.public_dir.map(|p| p.into()),
           public_dir_spa: cmd.spa,
           log_responses: cmd.dev || cmd.stderr_logging,

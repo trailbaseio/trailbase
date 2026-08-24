@@ -10,12 +10,12 @@ use hyper::StatusCode;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
-use trailbase::AppState;
 use trailbase::api::{
   CreateUserRequest, InitArgs, create_user_handler, login_with_password_for_test,
 };
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::RECORD_API_PATH;
+use trailbase::{AppState, SocketAddr};
 use trailbase::{DataDir, Server, ServerOptions};
 use trailbase_sqlite::params;
 
@@ -116,8 +116,8 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
 
   let app = Server::init(
     state,
+    SocketAddr::parse("localhost:4020").unwrap(),
     ServerOptions {
-      address: "localhost".to_string(),
       ..Default::default()
     },
   )

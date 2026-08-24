@@ -15,7 +15,7 @@ use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::{COOKIE_AUTH_TOKEN, RECORD_API_PATH};
 use trailbase::test_utils::*;
 use trailbase::util::id_to_b64;
-use trailbase::{DataDir, Server, ServerOptions};
+use trailbase::{DataDir, Server, ServerOptions, SocketAddr};
 
 async fn add_record_api_config(
   state: &AppState,
@@ -73,7 +73,6 @@ async fn test_record_apis() {
   .unwrap();
 
   let options = ServerOptions {
-    address: "localhost:4041".to_string(),
     ..Default::default()
   };
 
@@ -82,7 +81,13 @@ async fn test_record_apis() {
     main_router,
     admin_router,
     tls,
-  } = Server::init(state, options.clone()).await.unwrap();
+  } = Server::init(
+    state,
+    SocketAddr::parse("localhost:4041").unwrap(),
+    options.clone(),
+  )
+  .await
+  .unwrap();
 
   assert!(admin_router.is_none());
   assert!(tls.is_none());

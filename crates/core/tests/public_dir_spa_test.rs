@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use std::io::Write;
 
-use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions};
+use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr};
 
 #[tokio::test]
 async fn test_spa_fallback() {
@@ -44,7 +44,6 @@ async fn test_spa_fallback() {
 
   // Test SPA mode enabled - "most" non-existent routes return index.html
   let options = ServerOptions {
-    address: "localhost:4051".to_string(),
     admin_address: None,
     public_dir: Some(public_dir.path().to_path_buf()),
     public_dir_spa: true,
@@ -52,7 +51,10 @@ async fn test_spa_fallback() {
     ..Default::default()
   };
 
-  let Server { main_router, .. } = Server::init(state, options).await.unwrap();
+  let Server { main_router, .. } =
+    Server::init(state, SocketAddr::parse("localhost:4051").unwrap(), options)
+      .await
+      .unwrap();
 
   let (_address, router) = main_router;
   let server = TestServer::new(router);
