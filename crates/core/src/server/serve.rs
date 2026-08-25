@@ -64,6 +64,7 @@ impl Listener for TcpListener {
   }
 }
 
+#[cfg(unix)]
 impl Listener for tokio::net::UnixListener {
   type Io = tokio::net::UnixStream;
   type Addr = tokio::net::unix::SocketAddr;
@@ -354,6 +355,7 @@ impl axum::extract::connect_info::Connected<IncomingStream<'_, TcpListener>> for
   }
 }
 
+#[cfg(unix)]
 impl axum::extract::connect_info::Connected<IncomingStream<'_, tokio::net::UnixListener>>
   for tokio::net::unix::SocketAddr
 {

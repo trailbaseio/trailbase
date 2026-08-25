@@ -671,21 +671,27 @@ async fn start_listen(
       std::process::exit(1);
     }
     (SocketAddr::Uds(path), None) => {
-      let listener: tokio::net::UnixListener = tokio::net::UnixListener::bind(&path)
-        .map_err(listen_err)
-        .expect("terminate");
+      #[cfg(unix)]
+      {
+        let listener: tokio::net::UnixListener = tokio::net::UnixListener::bind(&path)
+          .map_err(listen_err)
+          .expect("terminate");
 
-      serve::serve(
-        listener,
-        router.into_make_service_with_connect_info::<tokio::net::unix::SocketAddr>(),
-      )
-      .with_graceful_shutdown(async move {
-        graceful_shutdown.await;
+        serve::serve(
+          listener,
+          router.into_make_service_with_connect_info::<tokio::net::unix::SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+          graceful_shutdown.await;
 
-        // Delete the socket.
-        let _ = std::fs::remove_file(path);
-      })
-      .await
+          // Delete the socket.
+          let _ = std::fs::remove_file(path);
+        })
+        .await
+      }
+
+      #[cfg(not(unix))]
+      panic!("UDS not supported on Windows")
     }
     (SocketAddr::Tcp(a), None) => {
       let listener = tokio::net::TcpListener::bind(a)
