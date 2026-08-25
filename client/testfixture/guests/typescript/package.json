@@ -16,13 +16,13 @@
     "trailbase-wasm": "workspace:*"
   },
   "devDependencies": {
-    "@bytecodealliance/jco": "^1.29.0",
+    "@bytecodealliance/jco": "^1.32.1",
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.2.0",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0",
-    "vite": "^8.2.1"
+    "typescript-eslint": "^8.68.0",
+    "vite": "^8.2.2"
   }
 }

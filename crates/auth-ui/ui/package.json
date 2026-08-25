@@ -18,11 +18,11 @@
     "@kobalte/core": "^0.13.13",
     "@nanostores/persistent": "^1.3.5",
     "@nanostores/solid": "^1.1.1",
-    "astro": "^7.2.3",
+    "astro": "^7.2.6",
     "astro-icon": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "nanostores": "^1.5.1",
+    "nanostores": "^1.5.2",
     "solid-icons": "^1.2.0",
     "solid-js": "^1.9.15",
     "tailwind-merge": "^3.6.0",
@@ -35,10 +35,10 @@
     "@kobalte/tailwindcss": "^0.9.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "eslint-plugin-astro": "^3.1.0",
     "eslint-plugin-better-tailwindcss": "^4.7.0",
-    "eslint-plugin-solid": "^0.15.0",
+    "eslint-plugin-solid": "^0.16.0",
     "globals": "^17.11.0",
     "prettier": "^3.9.6",
     "prettier-plugin-astro": "^0.14.1",
@@ -47,6 +47,6 @@
     "tailwindcss": "^4.3.3",
     "tw-animate-css": "^1.4.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.68.0"
   }
 }

@@ -15,10 +15,10 @@
   "dependencies": {
     "@astrojs/check": "^0.9.10",
     "@astrojs/rss": "^4.0.19",
-    "@astrojs/starlight": "^0.41.7",
+    "@astrojs/starlight": "^0.41.8",
     "@astrojs/starlight-tailwind": "^5.0.0",
     "@iconify-json/tabler": "^1.2.38",
-    "astro": "^7.2.3",
+    "astro": "^7.2.6",
     "astro-icon": "^1.2.0",
     "chart.js": "^4.5.1",
     "chartjs-chart-error-bars": "^4.4.5",
@@ -37,15 +37,15 @@
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "astro-robots-txt": "^1.0.0",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "eslint-plugin-astro": "^3.1.0",
     "eslint-plugin-better-tailwindcss": "^4.7.0",
-    "eslint-plugin-solid": "^0.15.0",
+    "eslint-plugin-solid": "^0.16.0",
     "globals": "^17.11.0",
     "prettier": "^3.9.6",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.67.0"
+    "typescript-eslint": "^8.68.0"
   }
 }

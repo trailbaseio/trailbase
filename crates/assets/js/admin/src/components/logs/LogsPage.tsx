@@ -31,6 +31,7 @@ import type { FeatureCollection } from "geojson";
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import * as maplibregl from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -64,6 +65,9 @@ import countriesGeoJSON from "@/assets/countries-110m.json";
 
 import type { LogJson } from "@bindings/LogJson";
 import type { StatsResponse } from "@bindings/StatsResponse";
+
+// Needed for bundlers like vite: https://github.com/maplibre/maplibre-gl-js/blob/main/docs/index.md#installation
+maplibregl.setWorkerUrl(workerUrl);
 
 const columns: ColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
