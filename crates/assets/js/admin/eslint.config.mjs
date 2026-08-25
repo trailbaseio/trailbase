@@ -67,7 +67,10 @@ export default [
         },
       ],
       // http://eslint.org/docs/rules/no-unassigned-vars
-      "no-unassigned-vars": "warn",
+      //
+      // Eslint doesn't understand that solid's pattern <El ref={ref} />,
+      // which will be compiled into an assignment.
+      "no-unassigned-vars": "off",
     },
     languageOptions: { globals: globals.browser },
   },

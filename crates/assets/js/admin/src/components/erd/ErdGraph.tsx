@@ -1,4 +1,4 @@
-import { createEffect, onMount } from "solid-js";
+import { createEffect } from "solid-js";
 import { Graph, Cell, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 
 import { cn } from "@/lib/utils";

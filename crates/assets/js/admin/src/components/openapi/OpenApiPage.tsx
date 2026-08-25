@@ -15,6 +15,8 @@ declare module "solid-js" {
         "spec-url"?: string;
         theme?: string;
         // https://github.com/rapi-doc/RapiDoc/blob/7f53d25959e5a4e1beb4b610aaef445b896838f2/src/rapidoc.js#L47
+        //
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         [key: string]: any;
       };
     }
@@ -53,6 +55,7 @@ export default function Page() {
       }
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ref.addEventListener("before-try", (e: any) => {
       const tokens = $tokens.get();
       if (tokens) {
@@ -68,7 +71,10 @@ export default function Page() {
 
   return (
     <rapi-doc
-      ref={ref as any}
+      ref={
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ref as any
+      }
       load-fonts="false"
       sort-tags="true"
       theme={theme()} // "light" | "dark"
@@ -84,7 +90,7 @@ export default function Page() {
       allow-server-selection="false"
     >
       {/* Contents */}
-      <div class="m-4"></div>
+      <div class="m-4" />
     </rapi-doc>
   );
 }
