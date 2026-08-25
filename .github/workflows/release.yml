@@ -75,7 +75,7 @@ jobs:
             -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
             -e PNPM_OFFLINE=FALSE \
             builder:latest \
-              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail"
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail"
 
       - name: Package Artifacts
         run: |
@@ -130,7 +130,7 @@ jobs:
             -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
             -e PNPM_OFFLINE=FALSE \
             builder:latest \
-              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail"
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail"
 
       - name: Package Artifacts
         run: |
@@ -172,7 +172,7 @@ jobs:
       - name: Rust Build
         run: |
           env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
 
       - name: Package Artifacts
         run: |
@@ -214,7 +214,7 @@ jobs:
       - name: Rust Build
         run: |
           env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
 
       - name: Package Artifacts
         run: |
@@ -257,7 +257,7 @@ jobs:
         shell: bash
         run: |
           env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin trail
+            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
 
       - name: Package Artifacts
         run: |

@@ -24,7 +24,7 @@ jobs:
       - id: setup_build
         uses: ./.github/actions/setup_build
 
-      - name: "Build With All Features"
+      - name: "Build with All Features"
         env:
           RUST_BACKTRACE: 1
         run: cargo build --all-features
@@ -48,7 +48,7 @@ jobs:
       - id: setup_build
         uses: ./.github/actions/setup_build
 
-      - name: "Build With Minimal Features"
+      - name: "Build with Minimal Features"
         env:
           RUST_BACKTRACE: 1
         run: cargo build --all-targets --no-default-features
@@ -56,6 +56,34 @@ jobs:
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
         run: df -h
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+
+      - uses: MinoruSekine/setup-scoop@v4.0.1
+        with:
+          buckets: extras
+          apps: nodejs pnpm protobuf zip
+      - name: PNPM install
+        shell: bash
+        run: pnpm install
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+          default: true
+
+      - name: "Build with Release Features"
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo build --features=geos-static --bin=trail
 
   test:
     runs-on: ubuntu-latest
