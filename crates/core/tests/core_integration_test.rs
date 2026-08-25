@@ -42,19 +42,21 @@ async fn test_record_apis() {
   #[allow(unused)]
   #[cfg(feature = "pg")]
   let db = cfg_select! {
-      feature = "pg-test" => Some(pglite_oxide::PgliteServer::builder()
-      .fresh_temporary()
-      .extensions([
-        // Enable case-insensitive text columns.
-        pglite_oxide::extensions::CITEXT,
-        // Enable UUIDv7 support.
-        pglite_oxide::extensions::PG_UUIDV7,
-        // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
-        // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-      ])
-      .start()
-      .unwrap()),
-   _ => None::<()>,
+    feature = "pg-test" => Some(
+      pglite_oxide::PgliteServer::builder()
+        .fresh_temporary()
+        .extensions([
+          // Enable case-insensitive text columns.
+          pglite_oxide::extensions::CITEXT,
+          // Enable UUIDv7 support.
+          pglite_oxide::extensions::PG_UUIDV7,
+          // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
+          // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+        ])
+        .start()
+        .unwrap(),
+    ),
+    _ => None::<()>,
   };
 
   let (_new, state) = AppState::init(InitArgs {

@@ -90,8 +90,8 @@ pub async fn list_wasm_components_handler(
   State(_state): State<AppState>,
 ) -> Result<Json<ListWasmComponentsResponse>, Error> {
   return cfg_select! {
-      not(feature = "wasm") => Ok(Json(ListWasmComponentsResponse { components: vec![] })),
-      _ => Ok(Json(list_wasm_components_handler_impl(_state).await?)),
+    not(feature = "wasm") => Ok(Json(ListWasmComponentsResponse { components: vec![] })),
+    _ => Ok(Json(list_wasm_components_handler_impl(_state).await?)),
   };
 }
 

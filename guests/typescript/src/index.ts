@@ -10,9 +10,10 @@ export { addPeriodicCallback } from "./timer";
 
 import type { InitArguments } from "@common/InitArguments";
 import type { InitManifest } from "@common/InitManifest";
+import type { Job } from "@common/Job";
 import type { Metadata } from "@common/Metadata";
-export type { Metadata } from "@common/Metadata";
 
+export type { Metadata } from "@common/Metadata";
 export * from "./util";
 
 export interface Config {
@@ -62,8 +63,13 @@ export function defineConfig(opts: {
           : null;
 
         const job_handlers = subsystems?.find((v) => v === "jobs")
-          ? (opts.jobHandlers?.map((h) => ({ name: h.name, spec: h.spec })) ??
-            null)
+          ? (opts.jobHandlers?.map((h) => {
+              return {
+                name: h.name,
+                spec: h.spec,
+                timeout: h.timeout ?? null,
+              } as Job;
+            }) ?? null)
           : null;
 
         const manifest: InitManifest = {

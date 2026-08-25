@@ -137,6 +137,8 @@ pub struct Job {
   pub name: String,
   pub schedule: cron::Schedule,
   pub callback: Box<dyn Fn() -> BoxFuture<'static, Result<(), AnyError>> + Send + Sync>,
+  /// Optional timeout in [ms].
+  pub timeout: Option<u64>,
 }
 
 pub struct InstallResult<S: Clone + Send + Sync> {
@@ -188,13 +190,19 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
   );
 
   let mut jobs: Vec<Job> = vec![];
-  for JobManifest { name, spec } in job_handlers {
+  for JobManifest {
+    name,
+    spec,
+    timeout,
+  } in job_handlers
+  {
     let store = store.clone();
     let schedule = cron::Schedule::from_str(&spec)?;
 
     jobs.push(Job {
       name: name.clone(),
       schedule,
+      timeout,
       callback: Box::new(move || {
         let name = name.clone();
         let store = store.clone();
@@ -220,7 +228,10 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
             .map_err(|err| WasmError::Other(err.to_string()))?;
 
           store
-            .call_incoming_http_handler(request, Some(Duration::from_mins(60)))
+            .call_incoming_http_handler(
+              request,
+              Some(timeout.map_or_else(|| Duration::from_mins(60), Duration::from_millis)),
+            )
             .await?;
 
           Ok::<_, AnyError>(())

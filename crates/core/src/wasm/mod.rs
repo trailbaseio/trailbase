@@ -183,9 +183,13 @@ pub(crate) async fn install_routes_and_jobs(
     name,
     schedule,
     callback,
+    timeout,
   } in jobs
   {
-    let Some(job) = state.jobs().new_job(None, name, schedule, callback) else {
+    let Some(job) = state
+      .jobs()
+      .new_job(None, name, schedule, timeout, callback)
+    else {
       return Err("Failed to add job".into());
     };
 

@@ -14,6 +14,8 @@ pub type JobHandler = Box<dyn Fn(Responder) -> LocalBoxFuture<'static, Finished>
 pub struct Job {
   pub name: String,
   pub spec: String,
+  /// Timeout in milliseconds.
+  pub timeout: Option<u64>,
   pub handler: JobHandler,
 }
 
@@ -21,6 +23,7 @@ impl Job {
   pub fn new<F, R, B>(
     name: impl std::string::ToString,
     spec: impl std::string::ToString,
+    timeout_ms: Option<u64>,
     f: F,
   ) -> Result<Self, Error>
   where
@@ -36,6 +39,7 @@ impl Job {
     return Ok(Self {
       name: name.to_string(),
       spec,
+      timeout: timeout_ms,
       handler: Box::new(move |responder| {
         let f = f.clone();
         Box::pin(async move { responder.respond(f().await.into_response()).await })
@@ -49,7 +53,7 @@ impl Job {
     R: IntoResponse<B>,
     B: wstd::http::body::Body,
   {
-    return Self::new(name, "37 * * * * *", f).expect("valid spec");
+    return Self::new(name, "37 * * * * *", Some(60 * 1000), f).expect("valid spec");
   }
 
   pub fn hourly<F, R, B>(name: impl std::string::ToString, f: F) -> Self
@@ -58,7 +62,7 @@ impl Job {
     R: IntoResponse<B>,
     B: wstd::http::body::Body,
   {
-    return Self::new(name, "@hourly", f).expect("valid spec");
+    return Self::new(name, "@hourly", Some(3600 * 1000), f).expect("valid spec");
   }
 
   pub fn daily<F, R, B>(name: impl std::string::ToString, f: F) -> Self
@@ -67,7 +71,7 @@ impl Job {
     R: IntoResponse<B>,
     B: wstd::http::body::Body,
   {
-    return Self::new(name, "@daily", f).expect("valid spec");
+    return Self::new(name, "@daily", Some(24 * 3600 * 1000), f).expect("valid spec");
   }
 }
 

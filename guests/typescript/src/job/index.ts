@@ -1,8 +1,13 @@
 export type JobHandlerType = () => void | Promise<void>;
 
 export type JobHandlerInterface = {
+  /// Unique name of the job.
   name: string;
+  /// Cron spec.
   spec: string;
+  /// Timeout in milliseconds.
+  timeout?: number;
+  /// The callback doing the work.
   handler: JobHandlerType;
 };
 
@@ -11,17 +16,22 @@ export class JobHandler implements JobHandlerInterface {
     public readonly name: string,
     public readonly spec: string,
     public readonly handler: JobHandlerType,
+    public readonly timeout?: number,
   ) {
     validateSpec(this.spec);
   }
 
+  static daily(name: string, handler: JobHandlerType): JobHandler {
+    return new JobHandler(name, "@daily", handler, 24 * 3600 * 1000);
+  }
+
   static hourly(name: string, handler: JobHandlerType): JobHandler {
-    return new JobHandler(name, "@hourly", handler);
+    return new JobHandler(name, "@hourly", handler, 3600 * 1000);
   }
 
   static minutely(name: string, handler: JobHandlerType): JobHandler {
     const second: number = 5;
-    return new JobHandler(name, `${second} * * * * *`, handler);
+    return new JobHandler(name, `${second} * * * * *`, handler, 60 * 1000);
   }
 }
 

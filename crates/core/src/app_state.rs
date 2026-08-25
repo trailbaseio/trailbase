@@ -110,21 +110,21 @@ impl AppState {
       data_dir: args.data_dir.clone(),
       json_schema_registry: json_schema_registry.clone(),
       sqlite_function_runtimes: cfg_select! {
-          feature = "wasm" => {
-              crate::wasm::build_sync_wasm_runtimes_for_components(
-                args.data_dir.root().join("wasm"),
-                args.runtime_root_fs.as_deref(),
-                args.dev,
-              )
-              .await
-              .map_err(|err| InitError::ScriptError(err.to_string()))?
-          },
-          _ => vec![],
+        feature = "wasm" => {
+          crate::wasm::build_sync_wasm_runtimes_for_components(
+            args.data_dir.root().join("wasm"),
+            args.runtime_root_fs.as_deref(),
+            args.dev,
+          )
+          .await
+          .map_err(|err| InitError::ScriptError(err.to_string()))?
+        }
+        _ => vec![],
       },
       // TODO: Wire up from config, if/when PG is supported.
       pg_uri: cfg_select! {
-          feature = "pg" => args.pg_uri,
-          _ => None,
+        feature = "pg" => args.pg_uri,
+        _ => None,
       },
     })
     .await?;

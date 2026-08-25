@@ -175,30 +175,33 @@ impl ConnectionManager {
     pg_uri: Option<String>,
   ) -> Self {
     let (main_conn, main_metadata, new_db) = cfg_select! {
-    feature = "pg-test" =>
-      init_db_pg(
-        InitDbOptions {
-          data_path: None,
+      feature = "pg-test" => {
+        init_db_pg(
+          InitDbOptions {
+            data_path: None,
+            migration_path: None,
+            is_main_db: true,
+            json_registry: &json_schema_registry,
+            runtimes: &sqlite_function_runtimes,
+            attach: vec![],
+            num_threads: None,
+          },
+          pg_uri.as_ref().expect("test").clone(),
+        )
+        .await
+      }
+      _ => {
+        init_db_sqlite(InitDbOptions {
+          data_path: Some(&data_dir.data_path().join("main.db")),
           migration_path: None,
           is_main_db: true,
           json_registry: &json_schema_registry,
           runtimes: &sqlite_function_runtimes,
           attach: vec![],
           num_threads: None,
-        },
-        pg_uri.as_ref().expect("test").clone(),
-      )
-      .await,
-    _ => init_db_sqlite(InitDbOptions {
-        data_path: Some(&data_dir.data_path().join("main.db")),
-        migration_path: None,
-        is_main_db: true,
-        json_registry: &json_schema_registry,
-        runtimes: &sqlite_function_runtimes,
-        attach: vec![],
-        num_threads: None,
-      })
-      .await,
+        })
+        .await
+      }
     }
     .unwrap();
 
@@ -278,8 +281,8 @@ impl ConnectionManager {
     }
 
     let pg_uri: Option<&String> = cfg_select! {
-        feature = "pg" => self.state.pg_uri.as_ref(),
-        _ => None,
+      feature = "pg" => self.state.pg_uri.as_ref(),
+      _ => None,
     };
 
     debug_assert!(

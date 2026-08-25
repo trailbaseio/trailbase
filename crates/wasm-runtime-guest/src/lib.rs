@@ -196,6 +196,7 @@ impl<T: Guest> crate::wit::exports::trailbase::component::init_endpoint::Guest
             .map(|config| Job {
               name: config.name,
               spec: config.spec,
+              timeout: config.timeout,
             })
             .collect(),
         )

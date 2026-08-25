@@ -30,7 +30,7 @@ type CallbackFunction = dyn Fn() -> BoxFuture<'static, Result<(), CallbackError>
 pub struct ExecutionResult {
   pub start_time: DateTime<Utc>,
   pub end_time: DateTime<Utc>,
-  pub error: Option<CallbackError>,
+  pub error: Option<String>,
 }
 
 static JOB_ID_COUNTER: AtomicI32 = AtomicI32::new(1024);
@@ -53,8 +53,10 @@ impl<T: Into<CallbackError>> CallbackResultTrait for Result<(), T> {
 
 struct JobState {
   name: String,
-
   schedule: Schedule,
+  /// Timeout in [ms].
+  timeout: Option<u64>,
+
   callback: Arc<CallbackFunction>,
 
   handle: Option<tokio::task::AbortHandle>,
@@ -68,12 +70,19 @@ pub struct Job {
 }
 
 impl Job {
-  fn new(id: i32, name: String, schedule: Schedule, callback: Box<CallbackFunction>) -> Self {
+  fn new(
+    id: i32,
+    name: String,
+    schedule: Schedule,
+    timeout: Option<u64>,
+    callback: Box<CallbackFunction>,
+  ) -> Self {
     return Job {
       id,
       state: Arc::new(Mutex::new(JobState {
         name,
         schedule,
+        timeout,
         callback: callback.into(),
         handle: None,
         latest: None,
@@ -112,20 +121,30 @@ impl Job {
     );
   }
 
-  async fn run_now(&self) -> Result<(), String> {
-    let callback = self.state.lock().callback.clone();
+  async fn run_now(&self) -> Result<(), CallbackError> {
+    let (timeout, callback) = {
+      let lock = self.state.lock();
+      (lock.timeout, lock.callback.clone())
+    };
 
     let start_time = Utc::now();
-    let result = callback().await;
+    let result: Result<(), CallbackError> = if let Some(timeout) = timeout {
+      match tokio::time::timeout(tokio::time::Duration::from_millis(timeout), callback()).await {
+        Ok(result) => result,
+        Err(err) => Err(Box::new(err)),
+      }
+    } else {
+      callback().await
+    };
     let end_time = Utc::now();
 
-    let result_str = result.as_ref().map_err(|err| err.to_string()).copied();
     self.state.lock().latest = Some(ExecutionResult {
       start_time,
       end_time,
-      error: result.err(),
+      error: result.as_ref().err().map(|err| err.to_string()),
     });
-    return result_str;
+
+    return result;
   }
 
   pub fn next_run(&self) -> Option<DateTime<Utc>> {
@@ -184,6 +203,7 @@ impl JobRegistry {
     id: Option<i32>,
     name: impl Into<String>,
     schedule: Schedule,
+    timeout: Option<u64>,
     callback: Box<CallbackFunction>,
   ) -> Option<Job> {
     let id = id.unwrap_or_else(|| JOB_ID_COUNTER.fetch_add(1, Ordering::SeqCst));
@@ -191,13 +211,13 @@ impl JobRegistry {
       Entry::Occupied(_) => None,
       Entry::Vacant(entry) => Some(
         entry
-          .insert(Job::new(id, name.into(), schedule, callback))
+          .insert(Job::new(id, name.into(), schedule, timeout, callback))
           .clone(),
       ),
     };
   }
 
-  pub async fn run_job(&self, id: i32) -> Option<Result<(), String>> {
+  pub async fn run_job(&self, id: i32) -> Option<Result<(), CallbackError>> {
     let job = {
       let jobs = self.jobs.lock();
       jobs.get(&id)?.clone()
@@ -236,7 +256,8 @@ where
 
 struct DefaultSystemJob {
   name: &'static str,
-  default: SystemJob,
+  /// Default/fallback config if not set in config.textproto.
+  default_config: SystemJob,
   callback: Box<CallbackFunction>,
 }
 
@@ -252,7 +273,7 @@ fn build_job(
   return match id {
     SystemJobId::Undefined => DefaultSystemJob {
       name: "",
-      default: SystemJob::default(),
+      default_config: SystemJob::default(),
       #[allow(unreachable_code)]
       callback: build_callback(move || {
         panic!("undefined job");
@@ -266,10 +287,12 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Backup",
-        default: SystemJob {
+        default_config: SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
           disabled: Some(true),
+          //
+          timeout: Some(24 * 3600 * 1000),
         },
         callback: build_callback(move || {
           let data_dir = data_dir.clone();
@@ -290,11 +313,12 @@ fn build_job(
     }
     SystemJobId::Heartbeat => DefaultSystemJob {
       name: "Heartbeat",
-      default: SystemJob {
+      default_config: SystemJob {
         id: Some(id as i32),
         // sec   min   hour   day of month   month   day of week   year
         schedule: Some("17 * * * * * *".into()),
         disabled: Some(false),
+        timeout: None,
       },
       callback: build_callback(|| async {
         debug!("alive");
@@ -309,10 +333,11 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Logs Cleanup",
-        default: SystemJob {
+        default_config: SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
+          timeout: None,
         },
         callback: build_callback(move || {
           let logs_conn = logs_conn.clone();
@@ -337,10 +362,12 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Session Cleanup",
-        default: SystemJob {
+        default_config: SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
+
+          timeout: None,
         },
         callback: build_callback(move || {
           let session_conn = session_conn.clone();
@@ -369,10 +396,11 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Query Optimizer",
-        default: SystemJob {
+        default_config: SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
           disabled: Some(false),
+          timeout: None,
         },
         callback: build_callback(move || {
           let conn = main_conn.clone();
@@ -394,10 +422,11 @@ fn build_job(
 
       DefaultSystemJob {
         name: "File Deletions",
-        default: SystemJob {
+        default_config: SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
+          timeout: None,
         },
         callback: build_callback(move || {
           let connection_manager = connection_manager.clone();
@@ -450,10 +479,11 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Anonymous User Cleanup",
-        default: SystemJob {
+        default_config: SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
           disabled: Some(false),
+          timeout: None,
         },
         callback: build_callback(move || {
           let main_conn = main_conn.clone();
@@ -518,7 +548,7 @@ pub fn build_job_registry_from_config(
   for job_id in job_ids {
     let DefaultSystemJob {
       name,
-      default,
+      default_config,
       callback,
     } = build_job(
       job_id,
@@ -535,15 +565,21 @@ pub fn build_job_registry_from_config(
       .system_jobs
       .iter()
       .find(|j| j.id == Some(job_id as i32))
-      .unwrap_or(&default);
+      .unwrap_or(&default_config);
 
     let schedule = config
       .schedule
       .as_ref()
-      .unwrap_or_else(|| default.schedule.as_ref().expect("startup"));
+      .unwrap_or_else(|| default_config.schedule.as_ref().expect("startup"));
 
     match Schedule::from_str(schedule) {
-      Ok(schedule) => match jobs.new_job(Some(job_id as i32), name, schedule, callback) {
+      Ok(schedule) => match jobs.new_job(
+        Some(job_id as i32),
+        name,
+        schedule,
+        config.timeout,
+        callback,
+      ) {
         Some(job) => {
           if config.disabled != Some(true) {
             job.start();
@@ -637,6 +673,7 @@ mod tests {
         None,
         "Test Task",
         Schedule::from_str(expression).unwrap(),
+        None,
         build_callback(move || {
           let sender = sender.clone();
           return async move {

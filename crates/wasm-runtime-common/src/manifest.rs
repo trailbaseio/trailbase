@@ -43,8 +43,12 @@ pub struct HttpRoute {
 
 #[derive(Clone, Debug, Deserialize, Serialize, TS)]
 pub struct Job {
+  /// Name of the job.
   pub name: String,
+  /// Cron spec, e.g. "37 * * * * *".
   pub spec: String,
+  /// Optional timeout in [ms].
+  pub timeout: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, TS)]
