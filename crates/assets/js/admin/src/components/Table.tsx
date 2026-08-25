@@ -2,8 +2,8 @@ import { Index, For, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
 import {
   flexRender,
-  createSolidTable,
-  getCoreRowModel,
+  createTable,
+  createCoreRowModel,
   createColumnHelper,
 } from "@tanstack/solid-table";
 import type {
@@ -16,6 +16,8 @@ import type {
   TableOptions as SolidTableOptions,
   SortingState,
   Updater,
+  TableFeatures,
+  RowData,
 } from "@tanstack/solid-table";
 import {
   TbOutlinePin,
@@ -46,7 +48,7 @@ import { createIsMobile } from "@/lib/signals";
 
 export type { Updater } from "@tanstack/solid-table";
 
-type TableOptions<TData, TValue> = {
+type TableOptions<TData extends TableFeatures, TValue extends RowData> = {
   data: TData[] | undefined;
   columns: ColumnDef<TData, TValue>[];
 
@@ -54,15 +56,15 @@ type TableOptions<TData, TValue> = {
   pagination?: PaginationState;
   onPaginationChange?: (state: PaginationState) => void;
 
-  onRowSelection?: (rows: Row<TData>[], value: boolean) => void;
+  onRowSelection?: (rows: Row<TData, TValue>[], value: boolean) => void;
 
   columnPinning?: Accessor<ColumnPinningState>;
   onColumnPinningChange?: (state: ColumnPinningState) => void;
 };
 
-export function buildTable<TData, TValue>(
+export function buildTable<TData extends TableFeatures, TValue extends RowData>(
   opts: TableOptions<TData, TValue>,
-  overrides?: Partial<SolidTableOptions<TData>>,
+  overrides?: Partial<SolidTableOptions<TData, TValue>>,
 ) {
   console.debug(
     `buildTable(): columns=${opts.columns.length}, rows=${opts.data?.length}`,
@@ -74,13 +76,13 @@ export function buildTable<TData, TValue>(
       return opts.columns;
     }
 
-    const helper = createColumnHelper<TData>();
+    const helper = createColumnHelper<TData, TValue>();
 
     return [
       helper.display({
         id: "__select__",
-        enablePinning: true,
-        enableHiding: false,
+        // enablePinning: true,
+        // enableHiding: false,
         header: (ctx) => (
           <Checkbox
             checked={ctx.table.getIsAllPageRowsSelected()}
@@ -132,15 +134,15 @@ export function buildTable<TData, TValue>(
   const enableColumnPinning =
     opts.columnPinning !== undefined && opts.columns.length > 1;
 
-  const t = createSolidTable({
+  const t = createTable({
     data: opts.data ?? [],
     state: {
       pagination:
         opts.pagination !== undefined
           ? {
-              pageIndex: opts.pagination.pageIndex ?? 0,
-              pageSize: opts.pagination.pageSize ?? 20,
-            }
+            pageIndex: opts.pagination.pageIndex ?? 0,
+            pageSize: opts.pagination.pageSize ?? 20,
+          }
           : undefined,
       // rowSelection: rowSelection(),
       columnPinning: buildColumnPinningState(),
@@ -148,7 +150,7 @@ export function buildTable<TData, TValue>(
       ...(overrides?.state ?? {}),
     },
     columns: buildColumns(),
-    getCoreRowModel: getCoreRowModel(),
+    createCoreRowModel: createCoreRowModel(),
 
     // Column default sizing
     defaultColumn: {
@@ -166,13 +168,13 @@ export function buildTable<TData, TValue>(
     onPaginationChange:
       opts.onPaginationChange !== undefined
         ? (updater) => {
-            const newState =
-              typeof updater === "function"
-                ? updater(t.getState().pagination)
-                : updater;
+          const newState =
+            typeof updater === "function"
+              ? updater(t.getState().pagination)
+              : updater;
 
-            opts.onPaginationChange!(newState);
-          }
+          opts.onPaginationChange!(newState);
+        }
         : undefined,
     // If set to true, pagination will be reset to the first page when page-altering state changes
     // eg. data is updated, filters change, grouping changes, etc.
@@ -193,13 +195,13 @@ export function buildTable<TData, TValue>(
     onColumnPinningChange:
       opts.onColumnPinningChange !== undefined
         ? (updater) => {
-            const newState =
-              typeof updater === "function"
-                ? updater(t.getState().columnPinning)
-                : updater;
+          const newState =
+            typeof updater === "function"
+              ? updater(t.getState().columnPinning)
+              : updater;
 
-            opts.onColumnPinningChange!(newState);
-          }
+          opts.onColumnPinningChange!(newState);
+        }
         : undefined,
 
     ...omit(overrides ?? {}, "state"),
