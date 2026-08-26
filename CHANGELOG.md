@@ -1,3 +1,12 @@
+## v0.33.4
+
+- Wire Job timeouts from both `config.textproto` and WASM components.
+- Disable asset compression again. Unlike debug builds, release builds got bigger.
+- Check and update `metadata.textproto`.
+- Fix auth API's offset in dedicated admin router (`--admin-address`). Thanks @konradhuebner 🙏.
+- Update dependencies.
+  - Update Wasmtime v47 => v48.
+
 ## v0.33.3
 
 - Wire up WASM routes with OpenApi to make endpoints exposed by WASM components show up in spec.
