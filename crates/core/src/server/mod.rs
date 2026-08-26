@@ -166,7 +166,7 @@ impl Server {
       && admin_address != address
     {
       let (router, _api) = OpenApiRouter::new()
-        .merge({
+        .nest(&format!("/{AUTH_API_PATH}/"), {
           let auth_router = auth::admin_auth_router();
           if let Some(auth_rate_limit) = auth_rate_limit {
             // Limit access to the auth routes only.
