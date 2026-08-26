@@ -29,6 +29,7 @@ mod scheduler;
 mod schema_metadata;
 mod server;
 mod socket_address;
+mod textproto;
 mod transaction_recorder;
 
 #[cfg(feature = "wasm")]

@@ -6,20 +6,26 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::config::proto::{UpdateConfigRequest, Vault};
 use crate::config::{merge_vault_and_env, redact_secrets};
-use crate::extract::protobuf::Protobuf;
+use crate::extract::protobuf::ProtobufOrTextproto;
 
 #[utoipa::path(
   post,
   path = "/config",
   tag = "admin",
-  request_body(content = Vec<u8>, content_type = "application/x-protobuf", description = "config::UpdateConfigRequest protobuf"),
+  request_body(
+    description = "config::UpdateConfigRequest protobuf",
+    content(
+      (Vec<u8> = "application/x-protobuf"),
+      (String = "text/plain"),
+    ),
+  ),
   responses(
     (status = 200, description = "Success"),
   )
 )]
 pub async fn update_config_handler(
   State(state): State<AppState>,
-  Protobuf(request): Protobuf<UpdateConfigRequest>,
+  ProtobufOrTextproto(request): ProtobufOrTextproto<UpdateConfigRequest>,
 ) -> Result<impl IntoResponse, Error> {
   if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
