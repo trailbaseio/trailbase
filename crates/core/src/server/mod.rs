@@ -303,7 +303,23 @@ impl Server {
       tokio::spawn(async move {
         if cleanup_receiver.await.is_ok() {
           log::debug!("cleanup started");
+
+          // Shutdown established subscriptions streams.
           self.state.subscription_manager().shutdown();
+
+          // NOTE: Disabled since prost-reflect prints map entries in random order (uses
+          // HashMap internally).
+          //
+          // Write the latest config state back to disk. Right now we only do this in debug builds
+          // to make sure our checked-in configurations are stable and up-to-date.
+          // #[cfg(debug_assertions)]
+          // if let Err(err) = self
+          //   .state
+          //   .validate_and_update_config((*self.state.get_config()).clone(), None)
+          //   .await
+          // {
+          //   panic!("Failed to write configs: {err}");
+          // }
         }
       });
 

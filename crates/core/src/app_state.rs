@@ -19,7 +19,7 @@ use crate::constants::USER_TABLE;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
 use crate::init_error::InitError;
-use crate::metadata::load_or_init_metadata_textproto;
+use crate::metadata::load_check_and_update_metadata_textproto;
 use crate::rand::random_alphanumeric;
 use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
@@ -133,7 +133,7 @@ impl AppState {
     let config = load_or_init_config_textproto(&args.data_dir, &connection_manager).await?;
 
     // Load the `<depot>/metadata.textproto`.
-    let _metadata = load_or_init_metadata_textproto(&args.data_dir).await?;
+    load_check_and_update_metadata_textproto(&args.data_dir).await?;
 
     let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 

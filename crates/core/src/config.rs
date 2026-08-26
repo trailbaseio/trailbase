@@ -99,13 +99,13 @@ pub mod proto {
     }
 
     pub fn to_text(&self) -> Result<String, ConfigError> {
-      const PREFACE: &str = "# Auto-generated config.Vault textproto";
+      const PREAMBLE: &str = "# Auto-generated `config.Vault` textproto.\n#\n# Schema: https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/vault.proto";
 
       let text: String = self
         .transcode_to_dynamic()
         .to_text_format_with_options(&FORMAT_OPTIONS);
 
-      return Ok(format!("{PREFACE}\n{text}"));
+      return Ok(format!("{PREAMBLE}\n{text}"));
     }
   }
 
@@ -138,13 +138,13 @@ pub mod proto {
     }
 
     pub fn to_text(&self) -> Result<String, ConfigError> {
-      const PREFACE: &str = "# Auto-generated config.Config textproto";
+      const PREAMBLE: &str = "# Auto-generated `config.Config` textproto.\n#\n# Schema: https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/config.proto";
 
       let text: String = self
         .transcode_to_dynamic()
         .to_text_format_with_options(&FORMAT_OPTIONS);
 
-      return Ok(format!("{PREFACE}\n{text}"));
+      return Ok(format!("{PREAMBLE}\n{text}"));
     }
   }
 

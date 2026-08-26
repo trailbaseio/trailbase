@@ -78,8 +78,58 @@ pub struct GitVersion {
 }
 
 impl GitVersion {
+  pub fn parse(version_tag: &str) -> Option<Self> {
+    // NOTE: We're not currently parsing the hash.
+    let re =
+      regex::Regex::new(r#"v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)-(?P<since>[0-9a-z]+)"#)
+        .expect("static");
+
+    let cap = re.captures(version_tag)?;
+    return Some(Self {
+      major: cap["major"].parse().ok()?,
+      minor: cap["minor"].parse().ok()?,
+      patch: cap["patch"].parse().ok()?,
+      commits_since: cap["since"].parse().ok(),
+    });
+  }
+
   pub fn tag(&self) -> String {
     return format!("v{}.{}.{}", self.major, self.minor, self.patch);
+  }
+}
+
+impl std::fmt::Display for GitVersion {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    return if let Some(since) = self.commits_since {
+      write!(f, "v{}.{}.{}-{since}", self.major, self.minor, self.patch)
+    } else {
+      write!(f, "v{}.{}.{}", self.major, self.minor, self.patch)
+    };
+  }
+}
+
+impl PartialEq for GitVersion {
+  fn eq(&self, other: &Self) -> bool {
+    return self.major == other.major
+      && self.minor == other.minor
+      && self.patch == other.patch
+      && self.commits_since == other.commits_since;
+  }
+}
+
+impl PartialOrd for GitVersion {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    if self.major != other.major {
+      return self.major.partial_cmp(&other.major);
+    }
+    if self.minor != other.minor {
+      return self.minor.partial_cmp(&other.minor);
+    }
+    if self.patch != other.patch {
+      return self.patch.partial_cmp(&other.patch);
+    }
+
+    return self.commits_since.partial_cmp(&other.commits_since);
   }
 }
 
@@ -107,19 +157,7 @@ pub struct VersionInfo {
 
 impl VersionInfo {
   pub fn git_version(&self) -> Option<GitVersion> {
-    let version_tag = self.git_version_tag.as_ref()?;
-
-    let re =
-      regex::Regex::new(r#"v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)-(?P<since>[0-9a-z]+)"#)
-        .unwrap();
-
-    let cap = re.captures(version_tag)?;
-    return Some(GitVersion {
-      major: cap["major"].parse().ok()?,
-      minor: cap["minor"].parse().ok()?,
-      patch: cap["patch"].parse().ok()?,
-      commits_since: cap["since"].parse().ok(),
-    });
+    return GitVersion::parse(self.git_version_tag.as_ref()?);
   }
 }
 

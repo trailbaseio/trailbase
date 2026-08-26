@@ -1,4 +1,6 @@
-# Auto-generated config.Config textproto
+# Auto-generated `config.Config` textproto.
+#
+# Schema: https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/config.proto
 email {}
 server {
   application_name: "TrailBase"

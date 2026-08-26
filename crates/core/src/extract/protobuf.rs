@@ -90,3 +90,73 @@ where
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use axum::body::Body;
+  use axum::http::{Request, StatusCode};
+  use axum::routing::{Router, post};
+  use tower::ServiceExt;
+
+  use super::*;
+  use crate::config::proto::Config;
+
+  #[tokio::test]
+  async fn test_protobuf_deserialization() {
+    async fn handler(Protobuf(config): Protobuf<Config>) -> String {
+      return config.to_text().unwrap();
+    }
+
+    async fn oneshot(req: Request<Body>) -> (StatusCode, Vec<u8>) {
+      let router = Router::new().route("/", post(handler));
+      let resp = router.oneshot(req).await.unwrap();
+      let status = resp.status();
+      let body = resp
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec();
+
+      return (status, body);
+    }
+
+    let (status, _) = oneshot(
+      Request::builder()
+        .method("POST")
+        .uri("/")
+        .body(Body::from("NOT A PROTO"))
+        .unwrap(),
+    )
+    .await;
+
+    assert_eq!(StatusCode::UNPROCESSABLE_ENTITY, status);
+
+    let config = Config::default();
+    let (status, body) = oneshot(
+      Request::builder()
+        .method("POST")
+        .uri("/")
+        .body(Body::from(config.encode_to_vec()))
+        .unwrap(),
+    )
+    .await;
+
+    assert_eq!(StatusCode::OK, status);
+    assert_eq!(config.to_text().unwrap(), String::from_utf8_lossy(&body));
+
+    let (status, _) = oneshot(
+      Request::builder()
+        .method("POST")
+        .uri("/")
+        .body(Body::from(config.to_text().unwrap()))
+        .unwrap(),
+    )
+    .await;
+
+    // The Protobuf extractor currently only supports binary proto. Should we support textproto
+    // as well? DynamicMessage::parse_text_format(body)?.transcode_to::<T>()?.
+    assert_eq!(StatusCode::UNPROCESSABLE_ENTITY, status);
+  }
+}
