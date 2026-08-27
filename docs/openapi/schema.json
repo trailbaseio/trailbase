@@ -3,11 +3,14 @@
   "info": {
     "title": "TrailBase",
     "description": "OpenApi definitions of TrailBase's APIs",
+    "contact": {
+      "email": "contact@trailbase.io"
+    },
     "license": {
       "name": "OSL-3.0",
       "identifier": "OSL-3.0"
     },
-    "version": "v0.32.2 (0)"
+    "version": "v0.33.5 (1)"
   },
   "paths": {
     "/api/auth/v1/avatar": {
@@ -1069,6 +1072,24 @@
           },
           "400": {
             "description": "Malformed email address."
+          }
+        }
+      }
+    },
+    "/api/healthcheck": {
+      "get": {
+        "tags": ["status"],
+        "operationId": "healthcheck_handler",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }

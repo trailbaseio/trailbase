@@ -12,11 +12,11 @@ use crate::admin::AdminError as Error;
   )
 )]
 pub async fn openapi_handler(openapi: Option<Extension<OpenApi>>) -> Result<String, Error> {
-  // NOTE: If memoizing Exnteion<OpenApi> was too much overhead but we still want the WASM
-  // result. We could memoize WASM only. Rebuild OpenApiRouter for everything else here and merge
-  // :shrug:. Feels kinda pointless.
+  // NOTE: If memoizing Extension<OpenApi> turns out to be too much overhead but we still want the
+  // WASM result. We could memoize WASM only. Rebuild OpenApiRouter for everything else here and
+  // merge :shrug:. Feels overly complicated.
   //
-  // let api = crate::openapi::build_api_definitions_from_state(&state, /* include_admin= */ true);
+  // let api = crate::openapi::build_api_definitions_from_config(.., /* include_admin= */ true);
   //
   // return api
   //   .to_pretty_json()

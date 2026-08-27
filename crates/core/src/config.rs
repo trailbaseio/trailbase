@@ -6,6 +6,7 @@ use proto::{EmailTemplate, OAuthProviderId, SmtpEncryption};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fs;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::LazyLock;
 use thiserror::Error;
@@ -434,8 +435,13 @@ pub(crate) fn redact_secrets(
   return Ok((stripped, secrets));
 }
 
+pub fn vault_path(data_dir: &DataDir) -> PathBuf {
+  const VAULT_FILENAME: &str = "secrets.textproto";
+  return data_dir.secrets_path().join(VAULT_FILENAME);
+}
+
 fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Vault, ConfigError> {
-  let vault_path = data_dir.secrets_path().join(VAULT_FILENAME);
+  let vault_path = vault_path(data_dir);
 
   let vault = match fs::read_to_string(&vault_path) {
     Ok(contents) => proto::Vault::from_text(&contents)?,
@@ -452,30 +458,28 @@ fn load_vault_textproto_or_default(data_dir: &DataDir) -> Result<proto::Vault, C
   return Ok(vault);
 }
 
-pub(crate) fn maybe_load_config_textproto_unverified(
+pub fn config_path(data_dir: &DataDir) -> PathBuf {
+  const CONFIG_FILENAME: &str = "config.textproto";
+  return data_dir.config_path().join(CONFIG_FILENAME);
+}
+
+pub fn maybe_load_config_textproto_unverified(
   data_dir: &DataDir,
 ) -> Result<Option<proto::Config>, ConfigError> {
-  return match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
+  return match fs::read_to_string(config_path(data_dir)) {
     Ok(contents) => Ok(Some(proto::Config::from_text(&contents)?)),
     Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
     Err(err) => Err(err.into()),
   };
 }
 
-// TODO: Initialization order is currently borked and worked-around by rebuilding
-// ConnectionMetadata. Specifically, building SchemaMatadataCache, which contains JSON metadata,
-// requires custom JSON schemas to be built from the config and globally registered. However,
-// validation currently depends on ConnectionMetadata. Instead we should probably validate
-// against a schema representation that does not contain JSON metadata.
-//
-// Right now this leads to a warning log on first load when SchemaMatadataCache is first built
-// but custom schemas are not yet registered :/.
+/// Load or initialize the `config.textproto` from `data_dir`.
 pub async fn load_or_init_config_textproto(
   data_dir: &DataDir,
   connection_manager: &ConnectionManager,
 ) -> Result<proto::Config, ConfigError> {
   let merged_config = {
-    let config = match fs::read_to_string(data_dir.config_path().join(CONFIG_FILENAME)) {
+    let config = match fs::read_to_string(config_path(data_dir)) {
       Ok(contents) => proto::Config::from_text(&contents)?,
       Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
         warn!("`config.textproto` not found, initializing new default.");
@@ -523,8 +527,8 @@ pub async fn write_config_and_vault_textproto(
     return Ok(());
   }
 
-  let config_path = data_dir.config_path().join(CONFIG_FILENAME);
-  let vault_path = data_dir.secrets_path().join(VAULT_FILENAME);
+  let config_path = config_path(data_dir);
+  let vault_path = vault_path(data_dir);
   debug!("Writing config files: {config_path:?}, {vault_path:?}");
   fs::write(&config_path, stripped_config.to_text()?.as_bytes())?;
   fs::write(&vault_path, vault.to_text()?.as_bytes())?;
@@ -888,9 +892,6 @@ mod test_env {
     ENV.lock().clear();
   }
 }
-
-const CONFIG_FILENAME: &str = "config.textproto";
-const VAULT_FILENAME: &str = "secrets.textproto";
 
 #[cfg(test)]
 mod test {

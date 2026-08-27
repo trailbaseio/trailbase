@@ -74,6 +74,7 @@ pub mod api {
   pub use crate::migrations::new_unique_migration_filename;
   pub use crate::records::json_schema::build_api_json_schema;
   pub use crate::schema_metadata::ConnectionMetadata;
+  pub use crate::textproto::Textproto;
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
 

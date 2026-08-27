@@ -27,7 +27,7 @@ docker:
 	docker buildx build --platform linux/arm64,linux/amd64 --output=type=registry -t trailbase/trailbase:latest .
 
 openapi:
-	cargo run --bin trail -- --depot client/testfixture openapi print | prettier --stdin-filepath openapi.json >| docs/openapi/schema.json
+	cargo run --release --bin trail -- --depot client/testfixture openapi print | prettier --stdin-filepath openapi.json >| docs/openapi/schema.json
 
 cloc:
 	cloc --not-match-d=".*(/target|/dist|/node_modules|/vendor|.astro|.build|.venv|/traildepot|/flutter|lock|_benchmark|/bin|/obj).*" .

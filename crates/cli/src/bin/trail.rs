@@ -11,6 +11,7 @@ use serde::Deserialize;
 use std::io::Write;
 use trailbase::api::cli::{AuthTokens, UserReference};
 use trailbase::api::{self, Email, JsonSchemaMode};
+use trailbase::config::proto::Config;
 use trailbase::constants::USER_TABLE;
 use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr};
 use trailbase_wasm_component_repo::{
@@ -101,15 +102,21 @@ async fn async_main(
 
       app.serve().await?;
     }
-    SubCommands::OpenApi { cmd, admin } => match cmd {
-      Some(OpenApiSubCommands::Print) | None => {
-        // QUESTION: Should we eventually require initialization and instead use
-        // `build_api_definitions_from_state`? This may allow us to include routes form WASM
-        // components.
-        // TODO: Wire up config.
-        let json =
-          trailbase::openapi::build_api_definitions(/* config= */ None, admin).to_pretty_json()?;
+    SubCommands::OpenApi { cmd } => match cmd {
+      Some(OpenApiSubCommands::Print { admin }) => {
+        let config = config_textproto_or_default(&data_dir);
+        let json = trailbase::openapi::build_api_definitions_from_config(
+          &config,
+          trailbase_sqlite::ConnectionType::Sqlite,
+          admin,
+        )
+        .to_pretty_json()?;
         println!("{json}");
+      }
+      None => {
+        CommandLineArgs::command()
+          .find_subcommand_mut("openapi")
+          .map(|cmd| cmd.print_help());
       }
     },
     SubCommands::Schema(cmd) => {
@@ -501,6 +508,8 @@ async fn async_main(
       use trailbase_client::{Client, ClientOptions, Tokens};
 
       let address = url::Url::parse(address.as_deref().unwrap_or("http://localhost:4000"))?;
+      let config = config_textproto_or_default(&data_dir);
+
       let tokens: Tokens = match (tokens, user) {
         (Some(tokens), None) => {
           let tokens = BASE64_STANDARD
@@ -554,8 +563,10 @@ async fn async_main(
       let refreshed = client.refresh().await?;
       eprintln!("tokens refreshed: {refreshed}");
 
-      let json = trailbase::openapi::build_api_definitions(
-        /* config= */ None, /* include_admin= */ true,
+      let json = trailbase::openapi::build_api_definitions_from_config(
+        &config,
+        trailbase_sqlite::ConnectionType::Sqlite,
+        /* include_admin= */ true,
       )
       .to_json()?;
 
@@ -730,4 +741,11 @@ extern "C" fn init_vector_search(
   }
 
   return 0;
+}
+
+fn config_textproto_or_default(data_dir: &DataDir) -> Config {
+  return trailbase::config::maybe_load_config_textproto_unverified(data_dir)
+    .ok()
+    .flatten()
+    .unwrap_or_else(Config::new_with_custom_defaults);
 }

@@ -34,6 +34,7 @@ use crate::admin;
 use crate::app_state::{AppState, validate_path};
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
+use crate::config::proto::Config;
 use crate::connection::ConnectionEntry;
 use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
@@ -195,8 +196,13 @@ impl Server {
       None
     };
 
+    let ConnectionEntry {
+      connection: conn, ..
+    } = state.connection_manager().main_entry();
+
     let (main_router, api) = Self::build_main_router(
-      &state,
+      &state.get_config(),
+      conn.connection_type(),
       public_dir.as_ref(),
       public_dir_spa,
       custom_routers,
@@ -400,24 +406,20 @@ impl Server {
   }
 
   pub(crate) fn build_main_router(
-    state: &AppState,
+    config: &Config,
+    connection_type: trailbase_sqlite::ConnectionType,
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,
     custom_routers: Vec<OpenApiRouter<AppState>>,
     auth_rate_limit: Option<u32>,
   ) -> Result<OpenApiRouter<AppState>, InitError> {
-    let enable_transactions =
-      state.access_config(|conn| conn.server.enable_record_transactions.unwrap_or(false));
-
-    let ConnectionEntry {
-      connection: conn, ..
-    } = state.connection_manager().main_entry();
+    let enable_transactions = config.server.enable_record_transactions();
 
     let mut router = OpenApiRouter::new()
       // Public, stable and versioned APIs.
-      .merge(records::router(conn.connection_type(), enable_transactions))
+      .merge(records::router(connection_type, enable_transactions))
       .nest(&format!("/{AUTH_API_PATH}/"), {
-        let auth_router = auth::router(&state.get_config());
+        let auth_router = auth::router(config);
         if let Some(auth_rate_limit) = auth_rate_limit {
           auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
             auth_rate_limit,
@@ -885,7 +887,9 @@ fn start_sighup_reload_task(state: AppState) {
       //
       // TODO: Right now we're only re-applying main migrations.
       let user_migrations_path = state.data_dir().migrations_path();
-      let conn = state.connection_manager().main_entry().connection;
+      let ConnectionEntry {
+        connection: conn, ..
+      } = state.connection_manager().main_entry();
 
       match crate::migrations::apply_main_migrations(&conn, Some(user_migrations_path))
         .await

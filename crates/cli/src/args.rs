@@ -62,9 +62,6 @@ pub enum SubCommands {
   OpenApi {
     #[command(subcommand)]
     cmd: Option<OpenApiSubCommands>,
-    /// Include admin endpoints.
-    #[arg(long)]
-    admin: bool,
   },
   /// Creates new empty migration file.
   Migration {
@@ -193,7 +190,11 @@ pub struct EmailArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum OpenApiSubCommands {
-  Print,
+  Print {
+    /// Include admin endpoints.
+    #[arg(long)]
+    admin: bool,
+  },
 }
 
 #[derive(Subcommand, Debug, Clone)]

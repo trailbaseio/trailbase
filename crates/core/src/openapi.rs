@@ -1,9 +1,8 @@
 use utoipa::openapi::{ContactBuilder, InfoBuilder, LicenseBuilder, OpenApi, OpenApiBuilder};
 use utoipa_axum::router::OpenApiRouter;
 
-use crate::AppState;
 use crate::config::proto::Config;
-use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH};
+use crate::constants::ADMIN_API_PATH;
 
 fn version() -> String {
   let version_info = trailbase_build::get_version_info!();
@@ -46,8 +45,9 @@ pub(crate) fn add_info(openapi: OpenApi) -> OpenApi {
 
 // Initializes routes from fully initialized TrailBase. This would allow to even pick up routes
 // from registered WASM components.
-pub fn build_api_definitions_from_state(
-  state: &AppState,
+pub fn build_api_definitions_from_config(
+  config: &Config,
+  connection_type: trailbase_sqlite::ConnectionType,
   include_admin: bool,
 ) -> utoipa::openapi::OpenApi {
   let custom_routers = if include_admin {
@@ -58,7 +58,8 @@ pub fn build_api_definitions_from_state(
 
   return add_info(
     crate::server::Server::build_main_router(
-      state,
+      config,
+      connection_type,
       None,
       false,
       custom_routers,
@@ -71,36 +72,4 @@ pub fn build_api_definitions_from_state(
     })
     .into_openapi(),
   );
-}
-
-pub fn build_api_definitions(
-  config: Option<Config>,
-  include_admin: bool,
-) -> utoipa::openapi::OpenApi {
-  let config = config.unwrap_or_else(|| {
-    let mut config = Config::new_with_custom_defaults();
-    config.auth.enable_anonymous_signin = Some(true);
-    config.auth.enable_otp_signin = Some(true);
-    return config;
-  });
-
-  let public_router = || {
-    return OpenApiRouter::new()
-      .nest(&format!("/{AUTH_API_PATH}/"), crate::auth::router(&config))
-      .merge(crate::records::router(
-        trailbase_sqlite::ConnectionType::Sqlite,
-        true,
-      ));
-  };
-
-  // Currently we only include the admin APIs in dev builds.
-  return if include_admin {
-    add_info(
-      public_router()
-        .nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())
-        .into_openapi(),
-    )
-  } else {
-    add_info(public_router().into_openapi())
-  };
 }
