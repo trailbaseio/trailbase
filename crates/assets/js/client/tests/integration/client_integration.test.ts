@@ -57,6 +57,17 @@ test("Auth integration tests", async () => {
   expect(await client.refreshAuthToken({ force: true })).toBe(true);
   expect(await client.refreshAuthToken({ force: true })).toBe(true);
 
+  // Check token-based client initialization.
+  const other0 = initClient(client.base, {
+    tokens: client.tokens(),
+  });
+  expect(await other0.refreshAuthToken({ force: true })).toBe(true);
+
+  const other1 = initClient(client.base, {
+    tokens: btoa(JSON.stringify(client.tokens())),
+  });
+  expect(await other1.refreshAuthToken({ force: true })).toBe(true);
+
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
   expect(client.tokens()).toBe(undefined);

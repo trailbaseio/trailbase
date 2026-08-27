@@ -7,6 +7,7 @@ mod jobs;
 mod json_schema;
 mod jwt;
 mod logs;
+mod mint;
 mod oauth_providers;
 mod openapi;
 mod parse;
@@ -62,6 +63,7 @@ pub fn router() -> OpenApiRouter<AppState> {
       user::update_user::update_user_handler,
       user::delete_user::delete_user_handler,
     ))
+    .routes(routes!(mint::mint_auth_tokens))
     // Schema actions
     .routes(routes!(json_schema::list_schemas_handler))
     .routes(routes!(

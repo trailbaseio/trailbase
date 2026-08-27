@@ -1,5 +1,5 @@
 use axum::{Json, extract::State};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -11,7 +11,7 @@ use crate::email::Email;
 ///
 /// NOTE: Email contents are deliberately not exposed to reduce opportunity for abuse. It's a
 /// privilege for sys-admins using the CLI and the auth sub-system.
-#[derive(Debug, Deserialize, Serialize, TS, utoipa::ToSchema)]
+#[derive(Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct TestEmailRequest {
   /// Address to send test email to.

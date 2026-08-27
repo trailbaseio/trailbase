@@ -12,6 +12,7 @@ import {
   TbOutlineRefresh,
   TbOutlineCrown,
   TbOutlineClipboardCopy,
+  TbOutlineCookie,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
@@ -52,6 +53,7 @@ import {
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 import { assets } from "@/components/settings/AuthSettings";
 
+import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
@@ -66,7 +68,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
       accessorKey: "id",
       size: 350,
       cell: (ctx) => {
-        const userId = ctx.row.original.id;
+        const { id } = ctx.row.original;
         return (
           <div class="flex items-center gap-2">
             <Button
@@ -74,13 +76,13 @@ function buildColumns(): ColumnDef<UserJson>[] {
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                copyToClipboard(userId, true);
+                copyToClipboard(id, true);
               }}
             >
               <TbOutlineClipboardCopy />
             </Button>
 
-            {userId}
+            <span>{id}</span>
           </div>
         );
       },
@@ -301,13 +303,41 @@ function EditSheetContent(props: {
                       }}
                     />
 
-                    <Button
-                      type="submit"
-                      disabled={!state().canSubmit}
-                      variant="default"
-                    >
-                      {state().isSubmitting ? "..." : "Submit"}
-                    </Button>
+                    <div class="flex gap-2">
+                      <Show
+                        when={!props.user.admin && !props.user.unverified_email}
+                      >
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+
+                            (async () => {
+                              const loginResponse = await mintTokens({
+                                user: props.user.id,
+                              });
+
+                              copyToClipboard(
+                                btoa(JSON.stringify(loginResponse)),
+                                true,
+                                "Copied tokens to clipboard",
+                              );
+                            })();
+                          }}
+                        >
+                          <TbOutlineCookie />
+                        </Button>
+                      </Show>
+
+                      <Button
+                        type="submit"
+                        disabled={!state().canSubmit}
+                        variant="default"
+                      >
+                        {state().isSubmitting ? "..." : "Submit"}
+                      </Button>
+                    </div>
                   </div>
                 );
               }}

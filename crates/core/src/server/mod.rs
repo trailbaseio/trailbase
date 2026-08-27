@@ -5,8 +5,7 @@ use axum::extract::{DefaultBodyLimit, Extension, Request, State};
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Response};
-use axum::routing::get;
+use axum::response::Response;
 use axum::{RequestExt, Router};
 use bytes::Bytes;
 use http_body_util::BodyExt;
@@ -29,6 +28,7 @@ use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
 use trailbase_assets::AssetService;
 use utoipa_axum::router::OpenApiRouter;
+use utoipa_axum::routes;
 
 use crate::admin;
 use crate::app_state::{AppState, validate_path};
@@ -426,7 +426,24 @@ impl Server {
           auth_router
         }
       })
-      .route("/api/healthcheck", get(healthcheck_handler));
+      .routes(routes!(healthcheck_handler));
+
+    #[cfg(debug_assertions)]
+    {
+      use crate::auth::user::User;
+
+      #[utoipa::path(
+          get,
+          path = "/api/whoami",
+          tag = "status",
+          responses((status = 200, description = "Success", body = String))
+      )]
+      pub async fn whoami_handler(user: Option<User>) -> String {
+        return format!("{user:?}");
+      }
+
+      router = router.routes(routes!(whoami_handler));
+    }
 
     for custom_router in custom_routers {
       router = router.merge(custom_router);
@@ -516,8 +533,14 @@ impl Server {
   }
 }
 
-async fn healthcheck_handler() -> Response {
-  return (StatusCode::OK, "Ok").into_response();
+#[utoipa::path(
+    get,
+    path = "/api/healthcheck",
+    tag = "status",
+    responses((status = 200, description = "Success", body = String))
+)]
+async fn healthcheck_handler() -> &'static str {
+  return "Ok";
 }
 
 /// Assert that the caller is an admin and provides a valid CSRF token. Unlike the access to the

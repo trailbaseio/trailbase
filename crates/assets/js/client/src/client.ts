@@ -184,7 +184,7 @@ export class FetchError implements Error {
 }
 
 export interface ClientOptions {
-  tokens?: Tokens;
+  tokens?: Tokens | string;
   onAuthChange?: (client: Client, user?: User) => void;
   transport?: Transport;
 }
@@ -272,7 +272,17 @@ class ClientImpl implements Client {
     this._transport = opts?.transport ?? new DefaultTransport(this._base);
     this._authChange = opts?.onAuthChange;
 
-    const tokens = opts?.tokens;
+    function extractTokens(tokens?: Tokens | string): Tokens | undefined {
+      if (!tokens) {
+        return undefined;
+      }
+      if (typeof tokens === "string") {
+        return JSON.parse(atob(tokens)) as Tokens;
+      }
+      return tokens;
+    }
+
+    const tokens = extractTokens(opts?.tokens);
     // Note: this is a double assignment to _tokenState to ensure the linter
     // that it's really initialized in the constructor.
     this._tokenState = this.setTokenState(buildTokenState(tokens), true);
