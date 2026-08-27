@@ -13,6 +13,7 @@ import {
   TbOutlineCrown,
   TbOutlineClipboardCopy,
   TbOutlineCookie,
+  TbOutlineQuestionMark,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
@@ -65,6 +66,9 @@ function buildColumns(): ColumnDef<UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
+      header: () => {
+        return <div class="ml-3">id</div>;
+      },
       accessorKey: "id",
       size: 350,
       cell: (ctx) => {
@@ -89,22 +93,42 @@ function buildColumns(): ColumnDef<UserJson>[] {
     },
     {
       accessorKey: "username",
-      size: 220,
+      minSize: 180,
       cell: (ctx) => {
-        return ctx.row.original.username ?? "NULL";
+        return (
+          <span class="w-full text-wrap">
+            {ctx.row.original.username ?? "NULL"}
+          </span>
+        );
       },
     },
     {
+      header: "email (? = unverified)",
       accessorKey: "email",
-      minSize: 180,
-    },
-    {
-      accessorKey: "unverified_email",
-      minSize: 180,
+      minSize: 260,
+      cell: (ctx) => {
+        const { email, unverified_email } = ctx.row.original;
+
+        return (
+          <Switch>
+            <Match when={unverified_email}>
+              <div class="flex w-full items-center gap-2">
+                <TbOutlineQuestionMark />
+
+                <span class="text-muted-foreground w-[calc(100%-24px)] text-wrap">
+                  {unverified_email}
+                </span>
+              </div>
+            </Match>
+
+            <Match when={true}>{email}</Match>
+          </Switch>
+        );
+      },
     },
     {
       accessorKey: "admin",
-      size: 64,
+      size: 60,
       cell: (ctx) => (
         <div class="px-2">
           {ctx.row.original.admin ? <TbOutlineCrown size={18} /> : null}
@@ -113,7 +137,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
     },
     {
       header: "OAuth",
-      size: 64,
+      size: 60,
       enableSorting: false,
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
