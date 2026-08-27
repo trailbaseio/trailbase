@@ -38,4 +38,4 @@ wasmtime-wasi = { workspace = true }
 wasmtime-wasi-http = { workspace = true }
 wasmtime-wasi-io = { workspace = true }
 const_format = "0.2.36"
-deadpool = { version = "0.13.0", default-features = false, features = ["managed", "rt_tokio_1"] }
+deadpool = { version = "0.13.1", default-features = false, features = ["managed", "rt_tokio_1"] }
