@@ -24,7 +24,7 @@ export function FilterBar(props: {
   return (
     <div class="flex w-full flex-col">
       <form
-        class="flex w-full items-center gap-2"
+        class="flex w-full items-center gap-1.5"
         method="dialog"
         onSubmit={onSubmit}
       >
@@ -37,7 +37,12 @@ export function FilterBar(props: {
           />
         </TextField>
 
-        <Button size="icon" variant="outline" type="submit">
+        <Button
+          size="icon"
+          variant="outline"
+          type="submit"
+          aria-label="Apply filter"
+        >
           <TbOutlineSearch />
         </Button>
       </form>

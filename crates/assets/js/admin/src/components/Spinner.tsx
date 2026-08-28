@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 export function Spinner(props: { class?: string; size?: number }) {
   return (
     <svg
-      class={cn("animate-spin", props.class)}
+      class={cn("text-primary animate-spin", props.class)}
       style={{
         width: `${props.size ?? 32}px`,
         height: `${props.size ?? 32}px`,
