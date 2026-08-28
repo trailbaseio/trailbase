@@ -27,6 +27,7 @@ pub struct RegisterUserParams {
 }
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
+#[ts(export)]
 pub struct RegisterUserRequest {
   pub email: Option<String>,
   pub username: Option<String>,

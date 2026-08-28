@@ -1,4 +1,6 @@
 import { onMount, JSX } from "solid-js";
+import type { Tokens } from "trailbase";
+import { TbOutlineInfoCircle } from "solid-icons/tb";
 
 // Import with side-effects for the custom web component.
 import "rapidoc";
@@ -6,6 +8,17 @@ import "rapidoc";
 import { adminFetch } from "@/lib/fetch";
 import { createTheme } from "@/lib/theme";
 import { $tokens } from "@/lib/client";
+
+import {
+  TextField,
+  TextFieldLabel,
+  TextFieldInput,
+} from "@/components/ui/text-field";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 declare module "solid-js" {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -27,6 +40,7 @@ type RapiDoc = JSX.IntrinsicElements["rapi-doc"];
 
 export default function Page() {
   let ref: RapiDoc | undefined;
+  let tokensRef: HTMLInputElement | undefined;
 
   const theme = createTheme();
 
@@ -57,7 +71,16 @@ export default function Page() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ref.addEventListener("before-try", (e: any) => {
-      const tokens = $tokens.get();
+      function getTokens(): Tokens | null {
+        const inputTokens = tokensRef?.value;
+        if (inputTokens) {
+          return JSON.parse(atob(inputTokens)) as Tokens;
+        }
+
+        return $tokens.get();
+      }
+
+      const tokens = getTokens();
       if (tokens) {
         e.detail.request.headers.append(
           "Authorization",
@@ -90,7 +113,30 @@ export default function Page() {
       allow-server-selection="false"
     >
       {/* Contents */}
-      <div class="m-4" />
+      <div class="mx-4 my-4 lg:mx-8">
+        <TextField class="flex items-center gap-2">
+          <TextFieldLabel>
+            <Tooltip>
+              <TooltipTrigger class="flex gap-2">
+                <span class="underline">Tokens:</span>
+                <TbOutlineInfoCircle class="inline-block" />
+              </TooltipTrigger>
+
+              <TooltipContent>
+                You can optionally provide explicit tokens to impersonate
+                another user. To get the tokens of verified, non-admin users,
+                click a user on the accounts page.
+              </TooltipContent>
+            </Tooltip>
+          </TextFieldLabel>
+
+          <TextFieldInput
+            ref={tokensRef}
+            type="password"
+            autocomplete="new-password"
+          />
+        </TextField>
+      </div>
     </rapi-doc>
   );
 }

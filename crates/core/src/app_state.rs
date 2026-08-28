@@ -24,6 +24,7 @@ use crate::rand::random_alphanumeric;
 use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
+use crate::textproto::Textproto;
 
 #[derive(Default)]
 pub struct InitArgs {
@@ -288,8 +289,9 @@ impl AppState {
       }
     }
 
-    if cfg!(debug_assertions) {
-      let text_config = app_state.get_config().to_text()?;
+    if cfg!(debug_assertions)
+      && let Ok(text_config) = app_state.get_config().to_text()
+    {
       debug!("Config: {text_config}");
     }
 

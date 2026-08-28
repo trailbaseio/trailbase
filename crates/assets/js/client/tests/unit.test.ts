@@ -2,6 +2,7 @@ import { test } from "vitest";
 import { describe, it, expect } from "vitest";
 
 import { FetchError, initClient } from "../src/index";
+import type { Transport } from "../src/index";
 import { parseJSON } from "../src/json";
 import {
   exportedForTesting,
@@ -52,6 +53,85 @@ test("ChangeEvent parsing", ({ expect }) => {
       status: ChangeEventStatusForbidden,
       message: "test",
     },
+  });
+});
+
+class RecordingTransport implements Transport {
+  public readonly paths: string[] = [];
+  public readonly bodies: Record<string, unknown>[] = [];
+
+  constructor(
+    private readonly handler: (path: string) => Response,
+    private readonly base = "http://localhost",
+  ) {}
+
+  async fetch(path: string, init?: RequestInit): Promise<Response> {
+    this.paths.push(new URL(path, this.base).pathname);
+    this.bodies.push(JSON.parse((init?.body as string | undefined) ?? "null"));
+    return this.handler(path);
+  }
+}
+
+describe("register", () => {
+  it("registers an email account without signing in", async () => {
+    const transport = new RecordingTransport(
+      () => new Response("registered", { status: 200 }),
+    );
+    const client = initClient("http://localhost", { transport });
+
+    await client.register({
+      email: "alice@example.org",
+      password: "s3cr3t!",
+    });
+
+    expect(client.user()).toBe(undefined);
+    expect(transport.paths).toStrictEqual(["/api/auth/v1/register"]);
+    expect(transport.bodies[0]).toStrictEqual({
+      email: "alice@example.org",
+      username: null,
+      password: "s3cr3t!",
+      password_repeat: "s3cr3t!",
+      redirect_uri: null,
+    });
+  });
+
+  it("registers a username account and forwards the redirect uri", async () => {
+    const transport = new RecordingTransport(
+      () => new Response("registered", { status: 200 }),
+    );
+    const client = initClient("http://localhost", { transport });
+
+    await client.register({
+      username: "alice",
+      password: "s3cr3t!",
+      passwordRepeat: "s3cr3t!",
+      options: { redirectUri: "my-app://callback" },
+    });
+
+    expect(transport.paths).toStrictEqual(["/api/auth/v1/register"]);
+    expect(transport.bodies[0]).toStrictEqual({
+      email: null,
+      username: "alice",
+      password: "s3cr3t!",
+      password_repeat: "s3cr3t!",
+      redirect_uri: "my-app://callback",
+    });
+  });
+
+  it("propagates registration errors", async () => {
+    const transport = new RecordingTransport(
+      () => new Response("Missing email", { status: 400 }),
+    );
+    const client = initClient("http://localhost", { transport });
+
+    const err = await client.register({ password: "s3cr3t!" }).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+
+    expect(err).toBeInstanceOf(FetchError);
+    expect((err as FetchError).status).toBe(400);
+    expect((err as FetchError).msg).toBe("Missing email");
   });
 });
 

@@ -61,7 +61,8 @@ OAuth via WebView, can be used by both web and mobile/desktop apps[^2].
 When using the built-in UIs, the general approach is to send users to
 `/_/auth/(login|logout|profile)`.
 
-When building your own UIs, login is handled by:
+When building your own UIs, [sign-up](#sign-up) is handled by
+[`/api/auth/v1/register`](/api/operations/register_user_handler/) and login by:
 
 * [`/api/auth/v1/login`](/api/operations/login_handler/) for password auth.
   It directly exchanges valid credentials for tokens.
@@ -234,6 +235,122 @@ You should avoid changing the policy post launch.
 For example, switching from `OnlyUsername` to `OnlyEmail`
 will lead to an inconsistent user DB and when using the first-party auth UI
 leave username-only users w/o the means to re-authenticate.
+
+
+## Sign-Up
+
+New accounts are created via
+[`/api/auth/v1/register`](/api/operations/register_user_handler/), which takes an
+`email` and/or a `username` alongside `password` and `password_repeat`, subject
+to the identifier policy above.
+
+Whenever an account carries an email address, TrailBase sends out a verification
+email and the account cannot sign in until that address has been confirmed.
+Username-only accounts have nothing to verify and can sign in right away.
+All clients expose this as a `register` method, which registers the account but
+never signs it in; follow up with a login where that is applicable.
+
+export const registerTs = `
+// A confirmation mail is sent, the account cannot sign in yet.
+await client.register({ email: "alice@example.com", password: "s3cr3t!" });
+
+// Username-only accounts have nothing to verify and can sign in right away.
+await client.register({ username: "alice", password: "s3cr3t!" });
+await client.login("alice", "s3cr3t!");
+`;
+
+export const registerDart = `
+await client.register(email: 'alice@example.com', password: 's3cr3t!');
+`;
+
+export const registerSwift = `
+try await client.register(password: "s3cr3t!", email: "alice@example.com")
+`;
+
+export const registerKotlin = `
+client.register(password = "s3cr3t!", email = "alice@example.com")
+`;
+
+export const registerDotnet = `
+await client.Register(password: "s3cr3t!", email: "alice@example.com");
+`;
+
+export const registerRust = `
+client
+  .register(RegisterOptions {
+    password: "s3cr3t!".to_string(),
+    email: Some("alice@example.com".to_string()),
+    ..Default::default()
+  })
+  .await?;
+`;
+
+export const registerGo = `
+email := "alice@example.com"
+err := client.Register(trailbase.RegisterOptions{
+	Password: "s3cr3t!",
+	Email:    &email,
+})
+`;
+
+export const registerPy = `
+client.register(password="s3cr3t!", email="alice@example.com")
+`;
+
+export const registerCurl = `
+curl
+  --header "Content-Type: application/json"
+  --request POST
+  --data '{ "email": "alice@example.com", "password": "s3cr3t!", "password_repeat": "s3cr3t!" }'
+  http://localhost:4000/api/auth/v1/register
+`;
+
+<Tabs>
+  <TabItem label="JS/TS">
+    <Code lang="ts" code={registerTs} />
+  </TabItem>
+
+  <TabItem label="Dart">
+    <Code lang="dart" code={registerDart} />
+  </TabItem>
+
+  <TabItem label="Swift">
+    <Code lang="swift" code={registerSwift} />
+  </TabItem>
+
+  <TabItem label="Kotlin">
+    <Code lang="kotlin" code={registerKotlin} />
+  </TabItem>
+
+  <TabItem label="C#/.NET">
+    <Code lang="cs" code={registerDotnet} />
+  </TabItem>
+
+  <TabItem label="Rust">
+    <Code lang="rust" code={registerRust} />
+  </TabItem>
+
+  <TabItem label="Go">
+    <Code lang="go" code={registerGo} />
+  </TabItem>
+
+  <TabItem label="Python">
+    <Code lang="python" code={registerPy} />
+  </TabItem>
+
+  <TabItem label="curl">
+    <Code lang="sh" frame="code" code={registerCurl} />
+  </TabItem>
+</Tabs>
+
+An optional redirect URI controls where the link in the verification email sends
+users after confirming. The target needs to be covered by the
+`redirect_uri_allowlist` configuration.
+
+Note that registration reports success even when the account already exists, so
+that the endpoint cannot be used to enumerate your users' email addresses.
+Password-based sign-up can be disabled altogether under *Settings → Auth*, in
+which case registration is rejected with `403`.
 
 
 ## Anonymous Authentication

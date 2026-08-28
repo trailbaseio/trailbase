@@ -195,7 +195,6 @@ pub async fn mint_auth_tokens(
     .map_err(|err| AuthError::FailedDependency(err.into()))?;
   let db_user = user.lookup_user(user_conn).await?;
 
-  // NOTE: we just discard the refresh token.
   let auth_token_ttl = chrono::Duration::hours(12);
   let refresh_token_ttl = chrono::Duration::hours(12);
   let FreshTokens {

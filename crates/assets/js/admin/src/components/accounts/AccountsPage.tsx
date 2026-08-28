@@ -12,6 +12,8 @@ import {
   TbOutlineRefresh,
   TbOutlineCrown,
   TbOutlineClipboardCopy,
+  TbOutlineCookie,
+  TbOutlineQuestionMark,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
@@ -52,6 +54,7 @@ import {
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 import { assets } from "@/components/settings/AuthSettings";
 
+import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
@@ -63,10 +66,13 @@ function buildColumns(): ColumnDef<UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
+      header: () => {
+        return <div class="ml-3">id</div>;
+      },
       accessorKey: "id",
       size: 350,
       cell: (ctx) => {
-        const userId = ctx.row.original.id;
+        const { id } = ctx.row.original;
         return (
           <div class="flex items-center gap-2">
             <Button
@@ -74,35 +80,55 @@ function buildColumns(): ColumnDef<UserJson>[] {
               size="icon"
               onClick={(e) => {
                 e.stopPropagation();
-                copyToClipboard(userId, true);
+                copyToClipboard(id, true);
               }}
             >
               <TbOutlineClipboardCopy />
             </Button>
 
-            {userId}
+            <span>{id}</span>
           </div>
         );
       },
     },
     {
       accessorKey: "username",
-      size: 220,
+      minSize: 180,
       cell: (ctx) => {
-        return ctx.row.original.username ?? "NULL";
+        return (
+          <span class="w-full text-wrap">
+            {ctx.row.original.username ?? "NULL"}
+          </span>
+        );
       },
     },
     {
+      header: "email (? = unverified)",
       accessorKey: "email",
-      minSize: 180,
-    },
-    {
-      accessorKey: "unverified_email",
-      minSize: 180,
+      minSize: 260,
+      cell: (ctx) => {
+        const { email, unverified_email } = ctx.row.original;
+
+        return (
+          <Switch>
+            <Match when={unverified_email}>
+              <div class="flex w-full items-center gap-2">
+                <TbOutlineQuestionMark />
+
+                <span class="text-muted-foreground w-[calc(100%-24px)] text-wrap">
+                  {unverified_email}
+                </span>
+              </div>
+            </Match>
+
+            <Match when={true}>{email}</Match>
+          </Switch>
+        );
+      },
     },
     {
       accessorKey: "admin",
-      size: 64,
+      size: 60,
       cell: (ctx) => (
         <div class="px-2">
           {ctx.row.original.admin ? <TbOutlineCrown size={18} /> : null}
@@ -111,7 +137,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
     },
     {
       header: "OAuth",
-      size: 64,
+      size: 60,
       enableSorting: false,
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
@@ -301,13 +327,41 @@ function EditSheetContent(props: {
                       }}
                     />
 
-                    <Button
-                      type="submit"
-                      disabled={!state().canSubmit}
-                      variant="default"
-                    >
-                      {state().isSubmitting ? "..." : "Submit"}
-                    </Button>
+                    <div class="flex gap-2">
+                      <Show
+                        when={!props.user.admin && !props.user.unverified_email}
+                      >
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+
+                            (async () => {
+                              const loginResponse = await mintTokens({
+                                user: props.user.id,
+                              });
+
+                              copyToClipboard(
+                                btoa(JSON.stringify(loginResponse)),
+                                true,
+                                "Copied tokens to clipboard",
+                              );
+                            })();
+                          }}
+                        >
+                          <TbOutlineCookie />
+                        </Button>
+                      </Show>
+
+                      <Button
+                        type="submit"
+                        disabled={!state().canSubmit}
+                        variant="default"
+                      >
+                        {state().isSubmitting ? "..." : "Submit"}
+                      </Button>
+                    </div>
                   </div>
                 );
               }}

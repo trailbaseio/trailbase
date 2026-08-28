@@ -1,3 +1,10 @@
+## v0.33.5
+
+- Add impersonation to admin UI: first click "cookie" button on user edit/details sheet (verified and non-admin users only) to copy the tokens, then go to the OpenApi page and paste the explicit tokens.
+- Add `register` user method to all clients. Thanks @UserNobody14 🙏.
+- Support textproto in addition to binary protobuf for admin `(get|update)_config` endpoints to ease use with MCPs.
+- Update dependencies.
+
 ## v0.33.4
 
 - Wire Job timeouts from both `config.textproto` and WASM components.

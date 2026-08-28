@@ -300,6 +300,25 @@ Future<void> main() async {
       expect(newTokens, equals(client.tokens()));
     });
 
+    test('register', () async {
+      final client = Client('http://${address}');
+
+      final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+      final email = 'test_dart_register_${now}@test.org';
+      const password = 'secret123.';
+
+      // NOTE: The test fixture requires an email address, which has to be
+      // verified before the new account can sign in.
+      await client.register(password: password, email: email);
+      expect(client.user(), isNull);
+
+      expect(
+        () async => await client.login(email, password),
+        throwsA(isA<HttpException>()
+            .having((e) => e.status, 'status', equals(401))),
+      );
+    });
+
     test('anonymous auth', () async {
       final client = Client('http://${address}');
 

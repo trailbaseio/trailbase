@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use log::*;
 use prost_reflect::{
   DynamicMessage, ExtensionDescriptor, FieldDescriptor, Kind, MapKey, ReflectMessage, Value,
@@ -8,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::fs;
 use std::str::FromStr;
+use std::sync::LazyLock;
 use thiserror::Error;
 use trailbase_sqlite::ConnectionType;
 use validator::{ValidateEmail, ValidateUrl};
@@ -17,99 +17,88 @@ use crate::auth::oauth::providers::oauth_providers_static_registry;
 use crate::connection::ConnectionManager;
 use crate::data_dir::DataDir;
 use crate::records::validate_record_api_config;
+use crate::textproto::Textproto;
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-  #[error("Decode error: {0}")]
+  #[error("Decode: {0}")]
   Decode(#[from] prost::DecodeError),
-  #[error("Parse error: {0}")]
+  #[error("Parse: {0}")]
   Parse(#[from] prost_reflect::text_format::ParseError),
-  #[error("Parse int error: {0}")]
+  #[error("ParseInt: {0}")]
   ParseInt(#[from] std::num::ParseIntError),
-  #[error("Parse bool error: {0}")]
+  #[error("ParseBool: {0}")]
   ParseBool(#[from] std::str::ParseBoolError),
-  #[error("Valiation error: {0}")]
+  #[error("Validation: {0}")]
   Invalid(String),
-  #[error("Update error: {0}")]
+  #[error("Update: {0}")]
   Update(String),
-  #[error("IO error: {0}")]
+  #[error("IO: {0}")]
   IO(#[from] std::io::Error),
-  #[error("Id error: {0}")]
+  #[error("Id: {0}")]
   Id(#[from] uuid::Error),
-  #[error("Schema error: {0}")]
+  #[error("Schema: {0}")]
   Schema(#[from] trailbase_schema::sqlite::SchemaError),
-}
-
-#[cfg(not(test))]
-fn parse_env_var<T: std::str::FromStr>(
-  name: &str,
-) -> Result<Option<T>, <T as std::str::FromStr>::Err> {
-  if let Ok(value) = std::env::var(name) {
-    return Ok(Some(value.parse::<T>()?));
-  }
-  Ok(None)
-}
-
-#[cfg(test)]
-use test_env::parse_env_var;
-
-pub(super) fn apply_parsed_env_var<T: std::str::FromStr>(
-  msg: &mut DynamicMessage,
-  field_desc: &FieldDescriptor,
-  var_name: &str,
-  f: impl Fn(T) -> prost_reflect::Value,
-) -> Result<(), <T as std::str::FromStr>::Err> {
-  if let Some(v) = parse_env_var::<T>(var_name)? {
-    msg.set_field(field_desc, f(v));
-  }
-  Ok(())
+  #[error("Textproto: {0}")]
+  Textproto(#[from] crate::textproto::Error),
 }
 
 pub mod proto {
   use base64::prelude::*;
   use chrono::Duration;
-  use lazy_static::lazy_static;
   use prost::Message;
   use prost_reflect::text_format::FormatOptions;
   use prost_reflect::{DynamicMessage, MessageDescriptor, ReflectMessage};
   use std::hash::{DefaultHasher, Hash, Hasher};
+  use std::sync::LazyLock;
 
   use crate::DESCRIPTOR_POOL;
-  use crate::config::ConfigError;
   use crate::constants::{
     DEFAULT_AUTH_TOKEN_TTL, DEFAULT_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
   };
+  use crate::textproto::{self, Textproto};
 
   include!(concat!(env!("OUT_DIR"), "/config.rs"));
 
-  lazy_static! {
-    static ref CONFIG_DESCRIPTOR: MessageDescriptor = DESCRIPTOR_POOL
-      .get_message_by_name("config.Config")
-      .expect("infallible");
-    static ref VAULT_DESCRIPTOR: MessageDescriptor = DESCRIPTOR_POOL
-      .get_message_by_name("config.Vault")
-      .expect("infallible");
-    static ref FORMAT_OPTIONS: FormatOptions = FormatOptions::new().pretty(true).expand_any(true);
+  impl Vault {
+    pub fn descriptor() -> MessageDescriptor {
+      static VAULT_DESCRIPTOR: LazyLock<MessageDescriptor> = LazyLock::new(|| {
+        DESCRIPTOR_POOL
+          .get_message_by_name("config.Vault")
+          .expect("infallible")
+      });
+      return VAULT_DESCRIPTOR.clone();
+    }
   }
 
-  impl Vault {
-    pub fn from_text(text: &str) -> Result<Self, ConfigError> {
-      let dyn_config = DynamicMessage::parse_text_format(VAULT_DESCRIPTOR.clone(), text)?;
+  impl Textproto<Vault> for Vault {
+    fn from_text(text: &str) -> Result<Self, textproto::Error> {
+      let dyn_config = DynamicMessage::parse_text_format(Self::descriptor(), text)?;
       return Ok(dyn_config.transcode_to::<Self>()?);
     }
 
-    pub fn to_text(&self) -> Result<String, ConfigError> {
+    fn to_text(&self) -> Result<String, textproto::Error> {
       const PREAMBLE: &str = "# Auto-generated `config.Vault` textproto.\n#\n# Schema: https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/vault.proto";
 
+      let options = FormatOptions::new().pretty(true).expand_any(true);
       let text: String = self
         .transcode_to_dynamic()
-        .to_text_format_with_options(&FORMAT_OPTIONS);
+        .to_text_format_with_options(&options);
 
       return Ok(format!("{PREAMBLE}\n{text}"));
     }
   }
 
   impl Config {
+    pub fn descriptor() -> MessageDescriptor {
+      static CONFIG_DESCRIPTOR: LazyLock<MessageDescriptor> = LazyLock::new(|| {
+        DESCRIPTOR_POOL
+          .get_message_by_name("config.Config")
+          .expect("infallible")
+      });
+      return CONFIG_DESCRIPTOR.clone();
+    }
+
     pub fn new_with_custom_defaults() -> Self {
       // NOTE: It's arguable if copying custom defaults into the config is the cleanest approach,
       // however it lets us tie into the set update-config Admin UI flow to let users change the
@@ -131,20 +120,75 @@ pub mod proto {
 
       return config;
     }
+  }
 
-    pub fn from_text(text: &str) -> Result<Self, ConfigError> {
-      let dyn_config = DynamicMessage::parse_text_format(CONFIG_DESCRIPTOR.clone(), text)?;
+  impl Textproto<Config> for Config {
+    fn from_text(text: &str) -> Result<Self, textproto::Error> {
+      let dyn_config = DynamicMessage::parse_text_format(Self::descriptor(), text)?;
       return Ok(dyn_config.transcode_to::<Self>()?);
     }
 
-    pub fn to_text(&self) -> Result<String, ConfigError> {
+    fn to_text(&self) -> Result<String, textproto::Error> {
       const PREAMBLE: &str = "# Auto-generated `config.Config` textproto.\n#\n# Schema: https://github.com/trailbaseio/trailbase/blob/main/crates/core/proto/config.proto";
 
+      let options = FormatOptions::new().pretty(true).expand_any(true);
       let text: String = self
         .transcode_to_dynamic()
-        .to_text_format_with_options(&FORMAT_OPTIONS);
+        .to_text_format_with_options(&options);
 
       return Ok(format!("{PREAMBLE}\n{text}"));
+    }
+  }
+
+  impl GetConfigResponse {
+    pub fn descriptor() -> MessageDescriptor {
+      static DESCRIPTOR: LazyLock<MessageDescriptor> = LazyLock::new(|| {
+        DESCRIPTOR_POOL
+          .get_message_by_name("config.GetConfigResponse")
+          .expect("infallible")
+      });
+      return DESCRIPTOR.clone();
+    }
+  }
+
+  impl Textproto<GetConfigResponse> for GetConfigResponse {
+    fn from_text(text: &str) -> Result<Self, textproto::Error> {
+      let dyn_config = DynamicMessage::parse_text_format(Self::descriptor(), text)?;
+      return Ok(dyn_config.transcode_to::<Self>()?);
+    }
+
+    fn to_text(&self) -> Result<String, textproto::Error> {
+      let options = FormatOptions::new().pretty(true).expand_any(true);
+      let text: String = self
+        .transcode_to_dynamic()
+        .to_text_format_with_options(&options);
+      return Ok(text);
+    }
+  }
+
+  impl UpdateConfigRequest {
+    pub fn descriptor() -> MessageDescriptor {
+      static DESCRIPTOR: LazyLock<MessageDescriptor> = LazyLock::new(|| {
+        DESCRIPTOR_POOL
+          .get_message_by_name("config.UpdateConfigRequest")
+          .expect("infallible")
+      });
+      return DESCRIPTOR.clone();
+    }
+  }
+
+  impl Textproto<UpdateConfigRequest> for UpdateConfigRequest {
+    fn from_text(text: &str) -> Result<Self, textproto::Error> {
+      let dyn_config = DynamicMessage::parse_text_format(Self::descriptor(), text)?;
+      return Ok(dyn_config.transcode_to::<Self>()?);
+    }
+
+    fn to_text(&self) -> Result<String, textproto::Error> {
+      let options = FormatOptions::new().pretty(true).expand_any(true);
+      let text: String = self
+        .transcode_to_dynamic()
+        .to_text_format_with_options(&options);
+      return Ok(text);
     }
   }
 
@@ -172,11 +216,11 @@ pub mod proto {
 }
 
 fn is_secret(field_descriptor: &FieldDescriptor) -> bool {
-  lazy_static! {
-    static ref SECRET_EXT_DESCRIPTOR: ExtensionDescriptor = DESCRIPTOR_POOL
+  static SECRET_EXT_DESCRIPTOR: LazyLock<ExtensionDescriptor> = LazyLock::new(|| {
+    DESCRIPTOR_POOL
       .get_extension_by_name("config.secret")
-      .expect("infallible");
-  }
+      .expect("infallible")
+  });
 
   let options = field_descriptor.options();
   if let Value::Bool(value) = *options.get_extension(&SECRET_EXT_DESCRIPTOR) {
@@ -199,6 +243,18 @@ fn recursively_merge_vault_and_env(
   vault: &proto::Vault,
   parent_path: Vec<String>,
 ) -> Result<(), ConfigError> {
+  fn apply_parsed_env_var<T: std::str::FromStr>(
+    msg: &mut DynamicMessage,
+    field_desc: &FieldDescriptor,
+    var_name: &str,
+    f: impl Fn(T) -> prost_reflect::Value,
+  ) -> Result<(), <T as std::str::FromStr>::Err> {
+    if let Some(v) = parse_env_var::<T>(var_name)? {
+      msg.set_field(field_desc, f(v));
+    }
+    Ok(())
+  }
+
   for field_descr in msg.descriptor().fields() {
     let path = {
       let mut path = parent_path.clone();
@@ -677,6 +733,10 @@ pub async fn validate_config(
   return Ok(());
 }
 
+fn is_valid_hostname_or_ip(host: &str) -> bool {
+  return url::Host::parse(host).is_ok();
+}
+
 pub(crate) fn validate_email_config(email: &proto::EmailConfig) -> Result<(), ConfigError> {
   validate_email_template(
     email.user_verification_template.as_ref(),
@@ -785,6 +845,19 @@ fn ierr(msg: impl std::string::ToString) -> Result<(), ConfigError> {
   return Err(ConfigError::Invalid(msg.to_string()));
 }
 
+#[cfg(not(test))]
+fn parse_env_var<T: std::str::FromStr>(
+  name: &str,
+) -> Result<Option<T>, <T as std::str::FromStr>::Err> {
+  if let Ok(value) = std::env::var(name) {
+    return Ok(Some(value.parse::<T>()?));
+  }
+  Ok(None)
+}
+
+#[cfg(test)]
+use test_env::parse_env_var;
+
 #[cfg(test)]
 mod test_env {
   use lazy_static::lazy_static;
@@ -814,10 +887,6 @@ mod test_env {
   pub fn clear() {
     ENV.lock().clear();
   }
-}
-
-fn is_valid_hostname_or_ip(host: &str) -> bool {
-  return url::Host::parse(host).is_ok();
 }
 
 const CONFIG_FILENAME: &str = "config.textproto";
@@ -1058,5 +1127,14 @@ mod test {
       ..Default::default()
     };
     validate_email_template(Some(&template), &["TOKEN"]).unwrap();
+  }
+
+  #[test]
+  fn test_get_descriptors() {
+    // Make sure they don't panic.
+    let _ = proto::Vault::descriptor();
+    let _ = proto::Config::descriptor();
+    let _ = proto::UpdateConfigRequest::descriptor();
+    let _ = proto::GetConfigResponse::descriptor();
   }
 }

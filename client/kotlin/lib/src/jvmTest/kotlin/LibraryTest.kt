@@ -209,6 +209,23 @@ class ClientTest {
   }
 
   @Test
+  fun `client register`() = runTest {
+    val client = Client("http://${address}")
+
+    val now = Clock.System.now().toEpochMilliseconds() / 1000
+    val email = "test_kotlin_register_${now}@test.org"
+    val password = "secret123."
+
+    // NOTE: The test fixture requires an email address, which has to be verified before the new
+    // account can sign in.
+    client.register(password = password, email = email)
+    assertNull(client.user())
+
+    val err = assertFailsWith<HttpException> { client.login(email, password) }
+    assertEquals(401, err.status)
+  }
+
+  @Test
   fun `client authentication anonymous`() = runTest {
     val client = Client("http://${address}")
 
