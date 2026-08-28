@@ -1,0 +1,25 @@
+name: 'Setup PNPM'
+description: 'Installs pnpm and restores/saves the pnpm store cache'
+
+runs:
+  using: "composite"
+  steps:
+    - uses: pnpm/setup@v2
+      with:
+        runtime: bun@latest
+        version: "^12.0.0"
+
+    - name: Get pnpm store directory
+      shell: bash
+      run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+    - uses: actions/cache@v6
+      with:
+        path: ${{ env.STORE_PATH }}
+        key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          pnpm-${{ runner.os }}-
+
+    - name: PNPM install
+      shell: bash
+      run: pnpm install
