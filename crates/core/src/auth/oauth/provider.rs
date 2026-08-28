@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::config::proto::OAuthProviderId;
+use crate::config::proto;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ExtraTokenFields {
@@ -35,12 +35,10 @@ pub type OAuthClient<
   HasTokenUrl,
 >;
 
-pub use crate::config::proto::UserIdentifier;
-
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct OAuthUser {
   pub provider_user_id: String,
-  pub provider_id: OAuthProviderId,
+  pub provider_id: proto::OAuthProviderId,
 
   pub email: Option<String>,
   pub username: Option<String>,
@@ -61,7 +59,7 @@ pub struct OAuthClientSettings {
 #[async_trait]
 pub trait OAuthProvider {
   #[cfg_attr(not(test), allow(unused))]
-  fn provider(&self) -> OAuthProviderId;
+  fn provider(&self) -> proto::OAuthProviderId;
 
   fn name(&self) -> &str;
 
@@ -73,7 +71,7 @@ pub trait OAuthProvider {
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
-  fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String>;
+  fn oauth_scopes(&self, user_identifier: proto::UserIdentifier) -> Vec<String>;
 
   async fn get_user(
     &self,

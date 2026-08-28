@@ -8,7 +8,7 @@ use utoipa::ToSchema;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::config::proto::ConflictResolutionStrategy;
+use crate::config::proto;
 use crate::records::params::LazyParams;
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
@@ -219,7 +219,7 @@ fn apply_ops<T: SyncConnection>(
 
           let conflict_resolution_strategy = api
             .insert_conflict_resolution_strategy()
-            .unwrap_or(ConflictResolutionStrategy::Undefined);
+            .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
 
           let (query, _files) = WriteQuery::new_insert_or_replace(
             conn.connection_type(),
@@ -241,7 +241,7 @@ fn apply_ops<T: SyncConnection>(
             )?)),
             // Skip over errors for `Ignore` conflict strategy.
             Err(err)
-              if conflict_resolution_strategy == ConflictResolutionStrategy::Ignore
+              if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Ignore
                 && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
             {
               Ok(TransactionResult::Error(err.to_string()))
@@ -372,7 +372,7 @@ mod tests {
       RecordApiConfig {
         name: Some("test_api".to_string()),
         table_name: Some("test".to_string()),
-        conflict_resolution: Some(ConflictResolutionStrategy::Replace as i32),
+        conflict_resolution: Some(proto::ConflictResolutionStrategy::Replace as i32),
         acl_world: [
           PermissionFlag::Create as i32,
           PermissionFlag::Create as i32,
@@ -481,7 +481,7 @@ mod tests {
       RecordApiConfig {
         name: Some("test_api_ignore".to_string()),
         table_name: Some("test".to_string()),
-        conflict_resolution: Some(ConflictResolutionStrategy::Ignore as i32),
+        conflict_resolution: Some(proto::ConflictResolutionStrategy::Ignore as i32),
         acl_world: [
           PermissionFlag::Create as i32,
           PermissionFlag::Create as i32,

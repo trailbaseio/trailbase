@@ -1,14 +1,14 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
 use oauth2::TokenResponse as _;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
+use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 pub(crate) struct TwitchOAuthProvider {
   client_id: String,
@@ -23,7 +23,7 @@ impl TwitchOAuthProvider {
   const TOKEN_URL: &'static str = "https://id.twitch.tv/oauth2/token";
   const USER_API_URL: &'static str = "https://api.twitch.tv/helix/users";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("Twitch client id".to_string()));
     };
@@ -41,10 +41,10 @@ impl TwitchOAuthProvider {
 
   pub fn registry_entry() -> OAuthProviderRegistryEntry {
     OAuthProviderRegistryEntry {
-      id: OAuthProviderId::Twitch,
+      id: proto::OAuthProviderId::Twitch,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
+      factory: Box::new(|_name: &str, config: &proto::OAuthProviderConfig| {
         Ok(Box::new(Self::new(config)?))
       }),
     }
@@ -54,20 +54,22 @@ impl TwitchOAuthProvider {
 #[async_trait]
 impl OAuthProvider for TwitchOAuthProvider {
   fn name(&self) -> &'static str {
-    Self::NAME
+    return Self::NAME;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Twitch
+
+  fn provider(&self) -> proto::OAuthProviderId {
+    return proto::OAuthProviderId::Twitch;
   }
+
   fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+    return Self::DISPLAY_NAME;
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(TwitchOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(TwitchOAuthProvider::TOKEN_URL).expect("infallible");
-    }
+    static AUTH_URL: LazyLock<Url> =
+      LazyLock::new(|| Url::parse(TwitchOAuthProvider::AUTH_URL).expect("infallible"));
+    static TOKEN_URL: LazyLock<Url> =
+      LazyLock::new(|| Url::parse(TwitchOAuthProvider::TOKEN_URL).expect("infallible"));
 
     return Ok(OAuthClientSettings {
       auth_url: AUTH_URL.clone(),
@@ -82,7 +84,7 @@ impl OAuthProvider for TwitchOAuthProvider {
     return oauth2::AuthType::RequestBody;
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec!["user:read:email".to_string()];
   }
@@ -129,7 +131,7 @@ impl OAuthProvider for TwitchOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Twitch,
+      provider_id: proto::OAuthProviderId::Twitch,
       email: Some(user.email),
       username: user.login,
       verified: true,

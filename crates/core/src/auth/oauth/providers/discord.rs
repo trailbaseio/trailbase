@@ -2,10 +2,9 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::UserIdentifier;
 use crate::auth::oauth::providers::OAuthProviderError;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 // Checkout available fields on: https://discord.com/developers/docs/resources/user
 #[derive(Deserialize, Debug)]
@@ -38,7 +37,7 @@ impl TryFrom<DiscordUser> for OAuthUser {
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Discord,
+      provider_id: proto::OAuthProviderId::Discord,
       email: Some(user.email),
       username: user.username,
       verified: user.verified,
@@ -53,7 +52,7 @@ pub(crate) struct DiscordOAuthProvider {
 }
 
 impl SimpleOAuthProvider for DiscordOAuthProvider {
-  const ID: OAuthProviderId = OAuthProviderId::Discord;
+  const ID: proto::OAuthProviderId = proto::OAuthProviderId::Discord;
   const NAME: &'static str = "discord";
   const DISPLAY_NAME: &'static str = "Discord";
 
@@ -71,12 +70,12 @@ impl SimpleOAuthProvider for DiscordOAuthProvider {
     return self.client_secret.clone();
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec!["identify".to_string(), "email".to_string()];
   }
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("Discord client id".to_string()));
     };

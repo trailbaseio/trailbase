@@ -16,7 +16,7 @@ use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, named_params, params};
 
 use crate::DataDir;
-use crate::config::proto::{Config, SystemJob, SystemJobId};
+use crate::config::proto;
 use crate::connection::{BuildOptions, ConnectionManager};
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
@@ -257,23 +257,25 @@ where
 struct DefaultSystemJob {
   name: &'static str,
   /// Default/fallback config if not set in config.textproto.
-  default_config: SystemJob,
+  default_config: proto::SystemJob,
   callback: Box<CallbackFunction>,
 }
 
 fn build_job(
-  id: SystemJobId,
+  id: proto::SystemJobId,
   data_dir: &DataDir,
-  config: &Config,
+  config: &proto::Config,
   connection_manager: &ConnectionManager,
   logs_conn: &Connection,
   session_conn: &Connection,
   object_store: Arc<dyn ObjectStore>,
 ) -> DefaultSystemJob {
+  use crate::config::proto::SystemJobId;
+
   return match id {
     SystemJobId::Undefined => DefaultSystemJob {
       name: "",
-      default_config: SystemJob::default(),
+      default_config: proto::SystemJob::default(),
       #[allow(unreachable_code)]
       callback: build_callback(move || {
         panic!("undefined job");
@@ -287,7 +289,7 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Backup",
-        default_config: SystemJob {
+        default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
           disabled: Some(true),
@@ -313,7 +315,7 @@ fn build_job(
     }
     SystemJobId::Heartbeat => DefaultSystemJob {
       name: "Heartbeat",
-      default_config: SystemJob {
+      default_config: proto::SystemJob {
         id: Some(id as i32),
         // sec   min   hour   day of month   month   day of week   year
         schedule: Some("17 * * * * * *".into()),
@@ -333,7 +335,7 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Logs Cleanup",
-        default_config: SystemJob {
+        default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
@@ -362,7 +364,7 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Session Cleanup",
-        default_config: SystemJob {
+        default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
@@ -396,7 +398,7 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Query Optimizer",
-        default_config: SystemJob {
+        default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
           disabled: Some(false),
@@ -422,7 +424,7 @@ fn build_job(
 
       DefaultSystemJob {
         name: "File Deletions",
-        default_config: SystemJob {
+        default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
           disabled: Some(false),
@@ -479,7 +481,7 @@ fn build_job(
 
       DefaultSystemJob {
         name: "Anonymous User Cleanup",
-        default_config: SystemJob {
+        default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
           disabled: Some(false),
@@ -528,13 +530,15 @@ async fn delete_pending_files_job(
 }
 
 pub fn build_job_registry_from_config(
-  config: &Config,
+  config: &proto::Config,
   data_dir: &DataDir,
   connection_manager: &ConnectionManager,
   logs_conn: &Connection,
   session_conn: &Connection,
   object_store: Arc<dyn ObjectStore>,
 ) -> Result<JobRegistry, CallbackError> {
+  use crate::config::proto::SystemJobId;
+
   let job_ids = [
     SystemJobId::Backup,
     SystemJobId::Heartbeat,

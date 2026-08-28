@@ -10,7 +10,7 @@ use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validat
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
 use crate::auth::util::new_cookie;
-use crate::config::proto::UserIdentifier;
+use crate::config::proto;
 use crate::constants::COOKIE_OAUTH_STATE;
 
 /// Log in via external OAuth provider.
@@ -44,7 +44,7 @@ pub(crate) async fn login_with_external_auth_provider(
   let user_identifier = state
     .access_config(|c| c.auth.user_identifier)
     .and_then(|ui| ui.try_into().ok())
-    .unwrap_or(UserIdentifier::Undefined);
+    .unwrap_or(proto::UserIdentifier::Undefined);
 
   // Also use PKCE between TrailBase and the external auth provider. Is is independent from PKCE
   // between the client and TrailBase.

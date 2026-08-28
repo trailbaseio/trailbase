@@ -19,7 +19,7 @@ use crate::auth::user::DbUser;
 use crate::auth::util::{
   new_cookie, remove_cookie, validate_and_normalize_username, validate_redirect,
 };
-use crate::config::proto::{OAuthProviderId, UserIdentifier};
+use crate::config::proto;
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
@@ -302,7 +302,7 @@ async fn get_or_create_user(
   let user_identifier = state
     .access_config(|c| c.auth.user_identifier)
     .and_then(|ui| ui.try_into().ok())
-    .unwrap_or(UserIdentifier::Undefined);
+    .unwrap_or(proto::UserIdentifier::Undefined);
 
   // Otherwise, create a new user and return that.
   let db_user =
@@ -320,9 +320,11 @@ async fn get_or_create_user(
 
 async fn create_user_for_external_provider(
   conn: &trailbase_sqlite::Connection,
-  user_identifier: UserIdentifier,
+  user_identifier: proto::UserIdentifier,
   user: OAuthUser,
 ) -> Result<DbUser, AuthError> {
+  use crate::config::proto::UserIdentifier;
+
   let OAuthUser {
     provider_user_id,
     provider_id,
@@ -430,7 +432,7 @@ async fn create_user_for_external_provider(
 
 async fn user_by_provider_id(
   conn: &trailbase_sqlite::Connection,
-  provider_id: OAuthProviderId,
+  provider_id: proto::OAuthProviderId,
   provider_user_id: String,
 ) -> Result<Option<DbUser>, AuthError> {
   const QUERY: &str =
@@ -454,6 +456,7 @@ const NO_REFERER_HEADER: [(HeaderName, HeaderValue); 1] = [(
 mod tests {
   use super::*;
   use crate::app_state::test_state;
+  use crate::config::proto::UserIdentifier;
 
   #[tokio::test]
   async fn test_oauth_create_user() {
@@ -463,7 +466,7 @@ mod tests {
       let rand = crate::rand::random_numeric_and_lowercase(20);
       return OAuthUser {
         provider_user_id: rand.clone(),
-        provider_id: OAuthProviderId::Test,
+        provider_id: proto::OAuthProviderId::Test,
         email: Some(format!("email_{rand}@test.org")),
         username,
         verified: true,

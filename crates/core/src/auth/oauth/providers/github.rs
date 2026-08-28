@@ -1,14 +1,14 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
 use oauth2::TokenResponse as _;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
+use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 pub(crate) struct GithubOAuthProvider {
   client_id: String,
@@ -24,7 +24,7 @@ impl GithubOAuthProvider {
   // const DEVICE_AUTH_URL: &'static str = "https://github.com/login/device/code";
   const USER_API_URL: &'static str = "https://api.github.com/user";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("Github client id".to_string()));
     };
@@ -42,10 +42,10 @@ impl GithubOAuthProvider {
 
   pub fn registry_entry() -> OAuthProviderRegistryEntry {
     OAuthProviderRegistryEntry {
-      id: OAuthProviderId::Github,
+      id: proto::OAuthProviderId::Github,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
+      factory: Box::new(|_name: &str, config: &proto::OAuthProviderConfig| {
         Ok(Box::new(Self::new(config)?))
       }),
     }
@@ -55,20 +55,22 @@ impl GithubOAuthProvider {
 #[async_trait]
 impl OAuthProvider for GithubOAuthProvider {
   fn name(&self) -> &'static str {
-    Self::NAME
+    return Self::NAME;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Github
+
+  fn provider(&self) -> proto::OAuthProviderId {
+    return proto::OAuthProviderId::Github;
   }
+
   fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+    return Self::DISPLAY_NAME;
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(GithubOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(GithubOAuthProvider::TOKEN_URL).expect("infallible");
-    }
+    static AUTH_URL: LazyLock<Url> =
+      LazyLock::new(|| Url::parse(GithubOAuthProvider::AUTH_URL).expect("infallible"));
+    static TOKEN_URL: LazyLock<Url> =
+      LazyLock::new(|| Url::parse(GithubOAuthProvider::TOKEN_URL).expect("infallible"));
 
     return Ok(OAuthClientSettings {
       auth_url: AUTH_URL.clone(),
@@ -78,7 +80,7 @@ impl OAuthProvider for GithubOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec!["read:user".to_string(), "user:email".to_string()];
   }
@@ -160,7 +162,7 @@ impl OAuthProvider for GithubOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.id.to_string(),
-      provider_id: OAuthProviderId::Github,
+      provider_id: proto::OAuthProviderId::Github,
       email: Some(email),
       username: user.login,
       verified: true,

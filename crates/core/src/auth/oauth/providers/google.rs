@@ -2,10 +2,9 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::UserIdentifier;
 use crate::auth::oauth::providers::OAuthProviderError;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 // https://developers.google.com/resources/api-libraries/documentation/oauth2/v2/python/latest/oauth2_v2.userinfo.html
 #[derive(Default, Deserialize, Debug)]
@@ -23,7 +22,7 @@ impl TryFrom<GoogleUser> for OAuthUser {
   fn try_from(user: GoogleUser) -> Result<Self, Self::Error> {
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Google,
+      provider_id: proto::OAuthProviderId::Google,
       email: Some(user.email),
       username: None,
       verified: user.verified_email,
@@ -38,7 +37,7 @@ pub(crate) struct GoogleOAuthProvider {
 }
 
 impl SimpleOAuthProvider for GoogleOAuthProvider {
-  const ID: OAuthProviderId = OAuthProviderId::Google;
+  const ID: proto::OAuthProviderId = proto::OAuthProviderId::Google;
   const NAME: &'static str = "google";
   const DISPLAY_NAME: &'static str = "Google";
 
@@ -56,7 +55,7 @@ impl SimpleOAuthProvider for GoogleOAuthProvider {
     return self.client_secret.clone();
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec![
       "https://www.googleapis.com/auth/userinfo.profile".to_string(),
@@ -64,7 +63,7 @@ impl SimpleOAuthProvider for GoogleOAuthProvider {
     ];
   }
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("Google client id".to_string()));
     };

@@ -6,12 +6,12 @@ use url::Url;
 use crate::auth::AuthError;
 use crate::auth::oauth::provider::{OAuthClientSettings, OAuthProvider, OAuthUser, TokenResponse};
 use crate::auth::oauth::providers::OAuthProviderError;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId, UserIdentifier};
+use crate::config::proto;
 
 /// This is a wrapper on top of OAuthProvider that should work for most social providers, just to
 /// make their implementation a bit more straight forward.
 pub trait SimpleOAuthProvider: Send + Sync {
-  const ID: OAuthProviderId;
+  const ID: proto::OAuthProviderId;
   const NAME: &'static str;
   const DISPLAY_NAME: &'static str;
 
@@ -24,16 +24,16 @@ pub trait SimpleOAuthProvider: Send + Sync {
 
   fn client_id(&self) -> String;
   fn client_secret(&self) -> String;
-  fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String>;
+  fn oauth_scopes(&self, user_identifier: proto::UserIdentifier) -> Vec<String>;
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError>
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError>
   where
     Self: Sized;
 }
 
 #[async_trait]
 impl<T: SimpleOAuthProvider> OAuthProvider for T {
-  fn provider(&self) -> OAuthProviderId {
+  fn provider(&self) -> proto::OAuthProviderId {
     return T::ID;
   }
 
@@ -45,7 +45,7 @@ impl<T: SimpleOAuthProvider> OAuthProvider for T {
     return T::DISPLAY_NAME;
   }
 
-  fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, user_identifier: proto::UserIdentifier) -> Vec<String> {
     return (self as &T).oauth_scopes(user_identifier);
   }
 

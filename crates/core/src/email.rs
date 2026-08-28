@@ -8,7 +8,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 use crate::AppState;
-use crate::config::proto::{Config, EmailConfig, SmtpEncryption};
+use crate::config::proto;
 use crate::constants::AUTH_API_PATH;
 
 #[derive(Debug, Error)]
@@ -331,8 +331,10 @@ impl Mailer {
     port: u16,
     user: Option<String>,
     pass: Option<String>,
-    encryption: SmtpEncryption,
+    encryption: proto::SmtpEncryption,
   ) -> Result<Mailer, EmailError> {
+    use crate::config::proto::SmtpEncryption;
+
     let transport = match encryption {
       SmtpEncryption::None => {
         let mut transport =
@@ -367,8 +369,8 @@ impl Mailer {
     return Mailer::Local(Arc::new(AsyncSendmailTransport::<Tokio1Executor>::new()));
   }
 
-  pub(crate) fn new_from_config(config: &Config) -> Mailer {
-    fn smtp_from_config(email: &EmailConfig) -> Result<Mailer, EmailError> {
+  pub(crate) fn new_from_config(config: &proto::Config) -> Mailer {
+    fn smtp_from_config(email: &proto::EmailConfig) -> Result<Mailer, EmailError> {
       let host = email
         .smtp_host
         .as_deref()

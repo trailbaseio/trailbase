@@ -4,10 +4,10 @@ use serde::Deserialize;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
+use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 pub(crate) struct AppleOAuthProvider {
   client_id: String,
@@ -53,7 +53,7 @@ impl AppleOAuthProvider {
   const AUTH_URL: &str = "https://appleid.apple.com/auth/authorize";
   const TOKEN_URL: &str = "https://appleid.apple.com/auth/token";
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("Apple client id".to_string()));
     };
@@ -71,10 +71,10 @@ impl AppleOAuthProvider {
 
   pub fn registry_entry() -> OAuthProviderRegistryEntry {
     OAuthProviderRegistryEntry {
-      id: OAuthProviderId::Apple,
+      id: proto::OAuthProviderId::Apple,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
+      factory: Box::new(|_name: &str, config: &proto::OAuthProviderConfig| {
         Ok(Box::new(Self::new(config)?))
       }),
     }
@@ -120,8 +120,8 @@ impl OAuthProvider for AppleOAuthProvider {
   fn name(&self) -> &'static str {
     Self::NAME
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Apple
+  fn provider(&self) -> proto::OAuthProviderId {
+    proto::OAuthProviderId::Apple
   }
   fn display_name(&self) -> &'static str {
     Self::DISPLAY_NAME
@@ -141,7 +141,7 @@ impl OAuthProvider for AppleOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec!["name".to_string(), "email".to_string()];
   }
@@ -163,7 +163,7 @@ impl OAuthProvider for AppleOAuthProvider {
 
     return Ok(OAuthUser {
       provider_user_id: apple_id_token.sub,
-      provider_id: OAuthProviderId::Apple,
+      provider_id: proto::OAuthProviderId::Apple,
       email: Some(email),
       username: None,
       verified: apple_id_token.email_verified.is_some_and(|v| v == "true"),

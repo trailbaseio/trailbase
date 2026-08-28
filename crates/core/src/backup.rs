@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::DataDir;
-use crate::config::proto::Config;
+use crate::config::proto;
 use crate::connection::{ConnectionError, ConnectionManager};
 
 #[derive(Debug, Error)]
@@ -24,7 +24,7 @@ pub enum BackupError {
 pub async fn backup_all(
   data_dir: &DataDir,
   mgr: &ConnectionManager,
-  config: &Config,
+  config: &proto::Config,
 ) -> Result<(), BackupError> {
   if !matches!(
     mgr.main_entry().connection.connection_type(),

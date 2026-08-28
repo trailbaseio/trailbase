@@ -5,7 +5,7 @@ use crate::auth::AuthError;
 use crate::auth::oauth::provider::{OAuthClient, OAuthProvider};
 use crate::auth::oauth::providers::oauth_providers_static_registry;
 use crate::auth::password::PasswordOptions;
-use crate::config::proto::AuthConfig;
+use crate::config::proto;
 
 pub struct OAuthEntry {
   pub name: String,
@@ -21,7 +21,7 @@ pub struct AuthOptions {
 }
 
 impl AuthOptions {
-  pub fn from_config(site_url: Option<&str>, config: AuthConfig) -> Self {
+  pub fn from_config(site_url: Option<&str>, config: proto::AuthConfig) -> Self {
     return Self {
       password_options: PasswordOptions {
         min_length: config.password_minimal_length.unwrap_or(8) as usize,
@@ -60,7 +60,7 @@ impl AuthOptions {
 
 fn build_oauth_providers_from_config(
   site_url: Option<&str>,
-  config: AuthConfig,
+  config: proto::AuthConfig,
 ) -> Vec<OAuthEntry> {
   if config.oauth_providers.is_empty() {
     return vec![];

@@ -52,7 +52,7 @@ pub async fn delete_record_handler(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
   use axum::extract::Query;
   use trailbase_sqlite::params;
 

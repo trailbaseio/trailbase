@@ -21,7 +21,7 @@ use crate::auth::oauth::state::OAuthStateClaims;
 use crate::auth::oauth::{callback, list_providers, login};
 use crate::auth::user::DbUser;
 use crate::auth::util::derive_pkce_code_challenge;
-use crate::config::proto::{Config, OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 use crate::constants::{
   AUTH_API_PATH, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE,
   USER_TABLE,
@@ -107,14 +107,14 @@ async fn setup_fake_oauth_server(site_url: &str) -> (TestServer, AppState) {
 
   let state = test_state(Some(TestStateOptions {
     config: Some({
-      let mut config = Config::new_with_custom_defaults();
+      let mut config = proto::Config::new_with_custom_defaults();
       config.server.site_url = Some(site_url.to_string());
       config.auth.oauth_providers = [(
         TestOAuthProvider::NAME.to_string(),
-        OAuthProviderConfig {
+        proto::OAuthProviderConfig {
           client_id: Some("test_client_id".to_string()),
           client_secret: Some("test_client_secret".to_string()),
-          provider_id: Some(OAuthProviderId::Test as i32),
+          provider_id: Some(proto::OAuthProviderId::Test as i32),
           // OIDC paths
           auth_url: Some(server.server_url(AUTH_PATH).unwrap().to_string()),
           token_url: Some(server.server_url(TOKEN_PATH).unwrap().to_string()),

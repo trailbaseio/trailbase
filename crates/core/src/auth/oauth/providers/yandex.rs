@@ -2,10 +2,9 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::UserIdentifier;
 use crate::auth::oauth::providers::OAuthProviderError;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 // Available fields:
 // * https://yandex.com/dev/id/doc/en/user-information
@@ -35,7 +34,7 @@ impl TryFrom<YandexUser> for OAuthUser {
 
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Yandex,
+      provider_id: proto::OAuthProviderId::Yandex,
       email: Some(user.default_email),
       username: user.login,
       verified: true,
@@ -50,7 +49,7 @@ pub(crate) struct YandexOAuthProvider {
 }
 
 impl SimpleOAuthProvider for YandexOAuthProvider {
-  const ID: OAuthProviderId = OAuthProviderId::Yandex;
+  const ID: proto::OAuthProviderId = proto::OAuthProviderId::Yandex;
   const NAME: &'static str = "yandex";
   const DISPLAY_NAME: &'static str = "Yandex";
 
@@ -68,7 +67,7 @@ impl SimpleOAuthProvider for YandexOAuthProvider {
     return self.client_secret.clone();
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     return vec![
       "login:email".to_string(),
       "login:avatar".to_string(),
@@ -76,7 +75,7 @@ impl SimpleOAuthProvider for YandexOAuthProvider {
     ];
   }
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("Yandex client id".to_string()));
     };

@@ -4,8 +4,8 @@ use axum::response::IntoResponse;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::config::proto::{UpdateConfigRequest, Vault};
-use crate::config::{merge_vault_and_env, redact_secrets};
+use crate::config::proto;
+use crate::config::vault::{merge_vault_and_env, redact_secrets};
 use crate::extract::protobuf::ProtobufOrTextproto;
 
 #[utoipa::path(
@@ -13,7 +13,7 @@ use crate::extract::protobuf::ProtobufOrTextproto;
   path = "/config",
   tag = "admin",
   request_body(
-    description = "config::UpdateConfigRequest protobuf",
+    description = "config.UpdateConfigRequest protobuf",
     content(
       (Vec<u8> = "application/x-protobuf"),
       (String = "text/plain"),
@@ -25,7 +25,7 @@ use crate::extract::protobuf::ProtobufOrTextproto;
 )]
 pub async fn update_config_handler(
   State(state): State<AppState>,
-  ProtobufOrTextproto(request): ProtobufOrTextproto<UpdateConfigRequest>,
+  ProtobufOrTextproto(request): ProtobufOrTextproto<proto::UpdateConfigRequest>,
 ) -> Result<impl IntoResponse, Error> {
   if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
@@ -40,7 +40,7 @@ pub async fn update_config_handler(
   let current = state.get_config();
   let (_, secrets) = redact_secrets(&current)?;
 
-  let merged = merge_vault_and_env(config, Vault { secrets })?;
+  let merged = merge_vault_and_env(config, proto::Vault { secrets })?;
 
   state.validate_and_update_config(merged, Some(hash)).await?;
 

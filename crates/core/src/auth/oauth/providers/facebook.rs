@@ -2,10 +2,9 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::UserIdentifier;
 use crate::auth::oauth::providers::OAuthProviderError;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 #[derive(Default, Deserialize, Debug)]
 pub struct FacebookUserPictureData {
@@ -32,7 +31,7 @@ impl TryFrom<FacebookUser> for OAuthUser {
   fn try_from(user: FacebookUser) -> Result<Self, Self::Error> {
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Facebook,
+      provider_id: proto::OAuthProviderId::Facebook,
       email: Some(user.email),
       username: None,
       verified: true,
@@ -47,7 +46,7 @@ pub(crate) struct FacebookOAuthProvider {
 }
 
 impl SimpleOAuthProvider for FacebookOAuthProvider {
-  const ID: OAuthProviderId = OAuthProviderId::Facebook;
+  const ID: proto::OAuthProviderId = proto::OAuthProviderId::Facebook;
   const NAME: &'static str = "facebook";
   const DISPLAY_NAME: &'static str = "Facebook";
 
@@ -66,12 +65,12 @@ impl SimpleOAuthProvider for FacebookOAuthProvider {
     return self.client_secret.clone();
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec!["email".to_string()];
   }
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing(
         "Facebook client id".to_string(),

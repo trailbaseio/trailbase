@@ -42,22 +42,22 @@ use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
 use crate::auth::util::{login_with_password, login_with_password_for_test};
-use crate::config::proto::{Config, EmailTemplate, UserIdentifier};
+use crate::config::proto;
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::{Either, HasRoot};
 
-fn build_test_config_with_trivial_tokens() -> Config {
+fn build_test_config_with_trivial_tokens() -> proto::Config {
   let mut config = crate::app_state::test_config();
-  config.email.password_reset_template = Some(EmailTemplate {
+  config.email.password_reset_template = Some(proto::EmailTemplate {
     subject: None,
     body: Some("{{ TOKEN }}".to_string()),
   });
-  config.email.change_email_template = Some(EmailTemplate {
+  config.email.change_email_template = Some(proto::EmailTemplate {
     subject: None,
     body: Some("{{ TOKEN }}".to_string()),
   });
-  config.email.user_verification_template = Some(EmailTemplate {
+  config.email.user_verification_template = Some(proto::EmailTemplate {
     subject: None,
     body: Some("{{ TOKEN }}".to_string()),
   });
@@ -67,7 +67,7 @@ fn build_test_config_with_trivial_tokens() -> Config {
 async fn setup_state_and_test_user(
   email: &str,
   password: &str,
-  config: Option<Config>,
+  config: Option<proto::Config>,
 ) -> (AppState, TestAsyncSmtpTransport, User) {
   let _ = env_logger::try_init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn"),
@@ -920,7 +920,7 @@ async fn test_auth_change_username_flow() {
     &password,
     Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireEmail.into());
+      config.auth.user_identifier = Some(proto::UserIdentifier::RequireEmail as i32);
       config
     }),
   )
@@ -975,7 +975,7 @@ async fn test_auth_register_handle_only() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::OnlyUsername.into());
+      config.auth.user_identifier = Some(proto::UserIdentifier::OnlyUsername as i32);
       config
     }),
     ..Default::default()
@@ -1038,7 +1038,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireUsername.into());
+      config.auth.user_identifier = Some(proto::UserIdentifier::RequireUsername as i32);
       config
     }),
     ..Default::default()
@@ -1253,7 +1253,7 @@ async fn test_auth_otp_flow_using_username() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireUsername.into());
+      config.auth.user_identifier = Some(proto::UserIdentifier::RequireUsername as i32);
       config.auth.enable_otp_signin = Some(true);
       config
     }),
@@ -1375,7 +1375,7 @@ async fn test_auth_annonymous_signin() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireUsername.into());
+      config.auth.user_identifier = Some(proto::UserIdentifier::RequireUsername as i32);
       config.auth.enable_anonymous_signin = Some(true);
       config
     }),
@@ -1485,7 +1485,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
     config: Some({
       let mut config = build_test_config_with_trivial_tokens();
-      config.auth.user_identifier = Some(UserIdentifier::RequireEmail.into());
+      config.auth.user_identifier = Some(proto::UserIdentifier::RequireEmail as i32);
       config.auth.enable_anonymous_signin = Some(true);
       config
     }),

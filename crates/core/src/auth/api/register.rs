@@ -15,7 +15,7 @@ use crate::auth::user::DbUser;
 use crate::auth::util::{
   validate_and_normalize_email_address, validate_and_normalize_username, validate_redirect,
 };
-use crate::config::proto::UserIdentifier;
+use crate::config::proto;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
@@ -172,10 +172,12 @@ pub async fn register_user_handler(
 }
 
 pub(super) fn validate_email_and_username(
-  user_identifier: Option<UserIdentifier>,
+  user_identifier: Option<proto::UserIdentifier>,
   email: Option<&str>,
   username: Option<&str>,
 ) -> Result<(Option<String>, Option<String>), AuthError> {
+  use crate::config::proto::UserIdentifier;
+
   return match user_identifier.unwrap_or(UserIdentifier::Undefined) {
     UserIdentifier::OnlyEmail | UserIdentifier::Undefined => match (email, username) {
       (_, u) if u.is_some_and(|u| !u.is_empty()) => {

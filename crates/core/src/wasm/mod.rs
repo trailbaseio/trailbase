@@ -8,7 +8,7 @@ use trailbase_wasm_common::manifest::Metadata;
 use trailbase_wasm_runtime_axum::Job;
 use utoipa_axum::router::OpenApiRouter;
 
-use crate::config::proto::{Config, UserIdentifier};
+use crate::config::proto;
 use crate::{AppState, DataDir, User};
 
 use trailbase_wasm_runtime_axum::{AnyError, KvStore, Runtime, WasmRuntimeBuilder};
@@ -29,7 +29,7 @@ pub struct WasmState {
 impl WasmState {
   pub fn init(
     data_dir: &DataDir,
-    config: Reactive<Config>,
+    config: Reactive<proto::Config>,
     conn: trailbase_sqlite::Connection,
     tokio_rt: Option<tokio::runtime::Handle>,
     root_fs: Option<PathBuf>,
@@ -199,7 +199,9 @@ pub(crate) async fn install_routes_and_jobs(
   return Ok(InstallResult { router });
 }
 
-fn build_auth_config(config: &Config) -> AuthConfig {
+fn build_auth_config(config: &proto::Config) -> AuthConfig {
+  use crate::config::proto::UserIdentifier;
+
   let oauth_providers: Vec<_> = config
     .auth
     .oauth_providers

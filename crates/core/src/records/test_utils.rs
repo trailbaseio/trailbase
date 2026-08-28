@@ -2,10 +2,10 @@ use serde::{Deserialize, Serialize};
 use trailbase_sqlite::params;
 
 use crate::AppState;
+use crate::config::proto;
 use crate::records::params::JsonRow;
 use crate::records::{AccessRules, Acls};
 
-pub use crate::config::proto::RecordApiConfig;
 pub use crate::test_utils::*;
 
 // NOTE: Prefer add_record_api_config below.
@@ -18,7 +18,7 @@ pub(crate) async fn add_record_api(
 ) -> Result<(), crate::config::ConfigError> {
   let mut config = (*state.get_config()).clone();
 
-  config.record_apis.push(RecordApiConfig {
+  config.record_apis.push(proto::RecordApiConfig {
     name: Some(api_name.to_string()),
     table_name: Some(table_name.to_string()),
     attached_databases: vec![],
@@ -43,7 +43,7 @@ pub(crate) async fn add_record_api(
 
 pub(crate) async fn add_record_api_config(
   state: &AppState,
-  api: RecordApiConfig,
+  api: proto::RecordApiConfig,
 ) -> Result<(), crate::config::ConfigError> {
   let mut config = (*state.get_config()).clone();
   config.record_apis.push(api);

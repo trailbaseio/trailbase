@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
+use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::OAuthProviderRegistryEntry;
 use crate::auth::oauth::simple_provider::get_user_helper;
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 #[derive(Default, Debug, Deserialize, Serialize)]
 pub struct TestUser {
@@ -22,7 +22,7 @@ impl TryFrom<TestUser> for OAuthUser {
   fn try_from(user: TestUser) -> Result<Self, Self::Error> {
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Test,
+      provider_id: proto::OAuthProviderId::Test,
       email: Some(user.email),
       username: None,
       verified: user.verified,
@@ -51,10 +51,10 @@ impl TestOAuthProvider {
     }
 
     return OAuthProviderRegistryEntry {
-      id: OAuthProviderId::Test,
+      id: proto::OAuthProviderId::Test,
       factory_name: Self::NAME,
       factory_display_name: Self::DISPLAY_NAME,
-      factory: Box::new(|_name: &str, config: &OAuthProviderConfig| {
+      factory: Box::new(|_name: &str, config: &proto::OAuthProviderConfig| {
         Ok(Box::new(TestOAuthProvider {
           client_id: config.client_id.clone().unwrap(),
           client_secret: config.client_secret.clone().unwrap(),
@@ -79,13 +79,15 @@ impl TestOAuthProvider {
 #[async_trait]
 impl OAuthProvider for TestOAuthProvider {
   fn name(&self) -> &'static str {
-    Self::NAME
+    return Self::NAME;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Test
+
+  fn provider(&self) -> proto::OAuthProviderId {
+    return proto::OAuthProviderId::Test;
   }
+
   fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+    return Self::DISPLAY_NAME;
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
@@ -97,7 +99,7 @@ impl OAuthProvider for TestOAuthProvider {
     });
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     return vec![
       "identity".to_string(),
       "email".to_string(),

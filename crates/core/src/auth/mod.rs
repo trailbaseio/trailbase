@@ -20,10 +20,10 @@ pub use jwt::{AuthTokenClaims, JwtHelper};
 pub use user::User;
 
 use crate::AppState;
-use crate::config::proto::Config;
+use crate::config::proto;
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
-pub(super) fn router(config: &Config) -> OpenApiRouter<AppState> {
+pub(super) fn router(config: &proto::Config) -> OpenApiRouter<AppState> {
   // We support the following authentication flows:
   //
   //  * unauthed: register (anonymous + normal), login, get-avatar-url

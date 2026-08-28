@@ -12,6 +12,8 @@ use bytes::BytesMut;
 use http_body_util::BodyExt;
 use prost::Message;
 
+use crate::config::textproto;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
   #[error("Decode: {0}")]
@@ -22,9 +24,9 @@ pub enum Error {
   Parse(#[from] prost_reflect::text_format::ParseError),
 }
 
-impl From<crate::textproto::Error> for Error {
-  fn from(value: crate::textproto::Error) -> Self {
-    use crate::textproto::Error;
+impl From<textproto::Error> for Error {
+  fn from(value: textproto::Error) -> Self {
+    use textproto::Error;
     return match value {
       Error::Decode(err) => Self::Decode(err),
       Error::Parse(err) => Self::Parse(err),
@@ -108,7 +110,7 @@ pub struct Textproto<T>(pub T);
 
 impl<T, S> FromRequest<S> for Textproto<T>
 where
-  T: Message + crate::textproto::Textproto<T> + Default,
+  T: Message + textproto::Textproto<T> + Default,
   S: Send + Sync,
 {
   type Rejection = Error;
@@ -133,7 +135,7 @@ impl<T> From<T> for Textproto<T> {
 
 impl<T> IntoResponse for Textproto<T>
 where
-  T: Message + crate::textproto::Textproto<T> + Default,
+  T: Message + textproto::Textproto<T> + Default,
 {
   fn into_response(self) -> Response {
     match self.0.to_text() {
@@ -149,7 +151,7 @@ pub struct ProtobufOrTextproto<T>(pub T);
 
 impl<T, S> FromRequest<S> for ProtobufOrTextproto<T>
 where
-  T: Message + crate::textproto::Textproto<T> + Default,
+  T: Message + textproto::Textproto<T> + Default,
   S: Send + Sync,
 {
   type Rejection = Error;
@@ -189,12 +191,12 @@ mod tests {
   use tower::ServiceExt;
 
   use super::*;
-  use crate::config::proto::Config;
-  use crate::textproto::Textproto;
+  use crate::config::proto;
+  use crate::config::textproto::Textproto;
 
   #[tokio::test]
   async fn test_protobuf_deserialization() {
-    async fn handler(Protobuf(config): Protobuf<Config>) -> String {
+    async fn handler(Protobuf(config): Protobuf<proto::Config>) -> String {
       return config.to_text().unwrap();
     }
 
@@ -224,7 +226,7 @@ mod tests {
 
     assert_eq!(StatusCode::UNPROCESSABLE_ENTITY, status);
 
-    let config = Config::default();
+    let config = proto::Config::new_with_custom_defaults();
     let (status, body) = oneshot(
       Request::builder()
         .method("POST")
@@ -253,7 +255,7 @@ mod tests {
 
   #[tokio::test]
   async fn test_textproto_deserialization() {
-    async fn handler(ProtobufOrTextproto(config): ProtobufOrTextproto<Config>) -> String {
+    async fn handler(ProtobufOrTextproto(config): ProtobufOrTextproto<proto::Config>) -> String {
       return config.to_text().unwrap();
     }
 
@@ -283,7 +285,7 @@ mod tests {
 
     assert_eq!(StatusCode::UNPROCESSABLE_ENTITY, status);
 
-    let config = Config::default();
+    let config = proto::Config::new_with_custom_defaults();
     let (status, body) = oneshot(
       Request::builder()
         .method("POST")

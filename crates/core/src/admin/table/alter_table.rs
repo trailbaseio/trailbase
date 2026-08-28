@@ -7,7 +7,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::config::proto::hash_config;
+use crate::config::proto;
 use crate::transaction_recorder::{TransactionLog, TransactionRecorder};
 
 #[derive(Clone, Debug, Deserialize, TS, utoipa::ToSchema)]
@@ -177,7 +177,7 @@ pub async fn alter_table_handler(
     // Fix configuration: update all table references by existing APIs.
     if source_table_schema.name != target_table_name {
       let mut config = (*state.get_config()).clone();
-      let old_config_hash = hash_config(&config);
+      let old_config_hash = proto::hash_config(&config);
 
       for api in &mut config.record_apis {
         if let Some(ref name) = api.table_name
@@ -421,7 +421,7 @@ mod tests {
   use super::*;
   use crate::admin::table::create_table::{CreateTableRequest, create_table_handler};
   use crate::app_state::*;
-  use crate::config::proto::{PermissionFlag, RecordApiConfig};
+  use crate::config::proto;
   use crate::connection::ConnectionEntry;
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::*;
@@ -751,10 +751,14 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some(API_NAME.to_string()),
         table_name: Some(TABLE_NAME.to_string()),
-        acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+        acl_world: [
+          proto::PermissionFlag::Create as i32,
+          proto::PermissionFlag::Read as i32,
+        ]
+        .into(),
         ..Default::default()
       },
     )

@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::oauth::provider::{TokenResponse, UserIdentifier};
+use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 // TODO: Add name/display name and this would already be a generic CustomOAuthProvider.
 pub struct OidcProvider {
@@ -25,7 +25,7 @@ pub struct OidcProvider {
 impl OidcProvider {
   pub fn registry_entry(index: u64) -> OAuthProviderRegistryEntry {
     let (id, factory_name, factory_display_name) = match index {
-      0 => (OAuthProviderId::Oidc0, "oidc0", "OpenID Connect"),
+      0 => (proto::OAuthProviderId::Oidc0, "oidc0", "OpenID Connect"),
       _ => panic!("Multiple OIDC provider not implemented"),
     };
 
@@ -33,7 +33,7 @@ impl OidcProvider {
       id,
       factory_name,
       factory_display_name,
-      factory: Box::new(|name: &str, config: &OAuthProviderConfig| {
+      factory: Box::new(|name: &str, config: &proto::OAuthProviderConfig| {
         // NOTE: Below errors should not trigger, since already checked by config validation.
         let Some(auth_url) = config.auth_url.clone() else {
           return Err(OAuthProviderError::Missing("Auth url missing".into()));
@@ -86,9 +86,11 @@ impl OAuthProvider for OidcProvider {
   fn name(&self) -> &str {
     return &self.name;
   }
-  fn provider(&self) -> OAuthProviderId {
-    OAuthProviderId::Oidc0
+
+  fn provider(&self) -> proto::OAuthProviderId {
+    return proto::OAuthProviderId::Oidc0;
   }
+
   fn display_name(&self) -> &str {
     return &self.display_name;
   }
@@ -102,10 +104,10 @@ impl OAuthProvider for OidcProvider {
     });
   }
 
-  fn oauth_scopes(&self, user_identifier: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, user_identifier: proto::UserIdentifier) -> Vec<String> {
     return self.scopes.as_ref().map_or_else(
       || match user_identifier {
-        UserIdentifier::OnlyUsername => vec!["openid".to_string(), "profile".to_string()],
+        proto::UserIdentifier::OnlyUsername => vec!["openid".to_string(), "profile".to_string()],
         _ => vec![
           "openid".to_string(),
           "email".to_string(),
@@ -141,7 +143,7 @@ impl OAuthProvider for OidcProvider {
 
     return Ok(OAuthUser {
       provider_user_id: user.sub,
-      provider_id: OAuthProviderId::Oidc0,
+      provider_id: proto::OAuthProviderId::Oidc0,
       email: user.email,
       username: user.preferred_username,
       verified: user.email_verified.unwrap_or(true),

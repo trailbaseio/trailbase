@@ -11,7 +11,6 @@ use crate::app_state::AppState;
 use crate::auth::jwt::EmailChangeTokenClaims;
 use crate::auth::util::{user_by_id, validate_and_normalize_email_address, validate_redirect};
 use crate::auth::{AuthError, User};
-use crate::config::proto::UserIdentifier;
 use crate::constants::USER_TABLE;
 use crate::email::Email;
 use crate::extract::{Either, HasRoot};
@@ -58,6 +57,8 @@ pub async fn change_email_request_handler(
   Query(query): Query<ChangeEmailParams>,
   either_request: Either<ChangeEmailRequest>,
 ) -> Result<Response, AuthError> {
+  use crate::config::proto::UserIdentifier;
+
   if state.demo_mode() {
     return Err(AuthError::BadRequest("Disallowed in demo"));
   }

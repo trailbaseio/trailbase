@@ -4,8 +4,8 @@ use axum::response::{IntoResponse, Response};
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::config::proto::{GetConfigResponse, hash_config};
-use crate::config::redact_secrets;
+use crate::config::proto;
+use crate::config::vault::redact_secrets;
 use crate::extract::protobuf::{Protobuf, Textproto};
 
 #[utoipa::path(
@@ -13,8 +13,8 @@ use crate::extract::protobuf::{Protobuf, Textproto};
   path = "/config",
   tag = "admin",
   responses(
-    (status = 200, content_type = "application/x-protobuf", description = "config::GetConfigResponse protobuf"),
-    (status = 200, content_type = "text/plain", description = "config::GetConfigResponse textproto"),
+    (status = 200, content_type = "application/x-protobuf", description = "config.GetConfigResponse protobuf"),
+    (status = 200, content_type = "text/plain", description = "config.GetConfigResponse textproto"),
   )
 )]
 pub async fn get_config_handler(
@@ -22,20 +22,20 @@ pub async fn get_config_handler(
   headers: HeaderMap,
 ) -> Result<Response, Error> {
   let config = state.get_config();
-  let hash = hash_config(&config);
+  let hash = proto::hash_config(&config);
 
   let (stripped, _secrets) = redact_secrets(&config)?;
 
   return match headers.get(CONTENT_TYPE) {
     Some(content_type) if content_type == "text/plain" => Ok(
-      Textproto(GetConfigResponse {
+      Textproto(proto::GetConfigResponse {
         config: Some(stripped),
         hash: Some(hash),
       })
       .into_response(),
     ),
     _ => Ok(
-      Protobuf(GetConfigResponse {
+      Protobuf(proto::GetConfigResponse {
         config: Some(stripped),
         hash: Some(hash),
       })

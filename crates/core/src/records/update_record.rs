@@ -81,7 +81,7 @@ pub async fn update_record_handler(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
   use axum::extract::Query;
   use base64::prelude::*;
   use serde_json::json;
@@ -92,7 +92,7 @@ mod test {
   use crate::app_state::*;
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
-  use crate::config::proto::PermissionFlag;
+  use crate::config::proto::{self, PermissionFlag};
   use crate::extract::Either;
   use crate::records::create_record::{
     CreateRecordQuery, CreateRecordResponse, create_record_handler,
@@ -126,7 +126,7 @@ mod test {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("update_api".to_string()),
         table_name: Some("update".to_string()),
         acl_world: [
@@ -365,7 +365,7 @@ mod test {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("test_api".to_string()),
         table_name: Some("test".to_string()),
         acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Update as i32].into(),

@@ -2,10 +2,9 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::UserIdentifier;
 use crate::auth::oauth::providers::OAuthProviderError;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 // https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0&tabs=http#response-1
 #[derive(Default, Deserialize, Debug)]
@@ -21,7 +20,7 @@ impl TryFrom<MicrosoftUser> for OAuthUser {
   fn try_from(user: MicrosoftUser) -> Result<Self, Self::Error> {
     return Ok(OAuthUser {
       provider_user_id: user.id,
-      provider_id: OAuthProviderId::Microsoft,
+      provider_id: proto::OAuthProviderId::Microsoft,
       email: Some(user.mail),
       // username: Some(user.displayName),
       username: None,
@@ -37,7 +36,7 @@ pub(crate) struct MicrosoftOAuthProvider {
 }
 
 impl SimpleOAuthProvider for MicrosoftOAuthProvider {
-  const ID: OAuthProviderId = OAuthProviderId::Microsoft;
+  const ID: proto::OAuthProviderId = proto::OAuthProviderId::Microsoft;
   const NAME: &'static str = "microsoft";
   const DISPLAY_NAME: &'static str = "Microsoft";
 
@@ -55,11 +54,11 @@ impl SimpleOAuthProvider for MicrosoftOAuthProvider {
     return self.client_secret.clone();
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     return vec!["User.Read".to_string()];
   }
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing(
         "Microsoft client id".to_string(),

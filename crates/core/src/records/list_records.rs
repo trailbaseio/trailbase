@@ -534,7 +534,7 @@ mod tests {
   use crate::app_state::*;
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
-  use crate::config::proto::PermissionFlag;
+  use crate::config::proto::{self, PermissionFlag};
   use crate::connection::ConnectionEntry;
   use crate::records::RecordError;
   use crate::records::test_utils::*;
@@ -668,7 +668,7 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("api".to_string()),
         table_name: Some("table".to_string()),
         acl_world: [PermissionFlag::Read as i32].into(),
@@ -781,7 +781,7 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("api".to_string()),
         table_name: Some("table".to_string()),
         acl_world: [PermissionFlag::Read as i32].into(),
@@ -874,7 +874,7 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("messages_api".to_string()),
         table_name: Some("message".to_string()),
         acl_authenticated: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
@@ -1302,7 +1302,7 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("data_view_api".to_string()),
         table_name: Some("data_view".to_string()),
         acl_world: [PermissionFlag::Read as i32].into(),
@@ -1331,7 +1331,7 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some("data_view_filtered_api".to_string()),
         table_name: Some("data_view_filtered".to_string()),
         acl_world: [PermissionFlag::Read as i32].into(),
@@ -1414,7 +1414,7 @@ mod tests {
 
     add_record_api_config(
       &state,
-      RecordApiConfig {
+      proto::RecordApiConfig {
         name: Some(name.to_string()),
         table_name: Some(name.to_string()),
         acl_world: [PermissionFlag::Read as i32].into(),

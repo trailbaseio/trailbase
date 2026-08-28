@@ -246,7 +246,7 @@ pub async fn get_uploaded_files_from_record_handler(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
   use axum::Json;
   use axum::extract::{Path, Query, State};
   use object_store::{ObjectStore, ObjectStoreExt};

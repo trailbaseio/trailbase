@@ -8,7 +8,7 @@ use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_sqlite::{Connection, ConnectionType, NamedParams, Value};
 
-use crate::config::proto::ConflictResolutionStrategy;
+use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, Params};
@@ -41,9 +41,11 @@ impl WriteQuery {
     table_name: &QualifiedNameEscaped,
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
-    conflict_resolution: ConflictResolutionStrategy,
+    conflict_resolution: proto::ConflictResolutionStrategy,
     params: Params,
   ) -> Result<(Self, FileMetadataContents), RecordError> {
+    use crate::config::proto::ConflictResolutionStrategy;
+
     let Params::Insert {
       named_params,
       files,
@@ -292,7 +294,7 @@ pub(crate) async fn run_insert_or_replace_query(
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   column_metadata: &[ColumnMetadata],
-  conflict_resolution: ConflictResolutionStrategy,
+  conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
   params: Params,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
@@ -322,7 +324,7 @@ pub(crate) async fn run_insert_or_replace_query(
   if let Some(mut file_manager) = file_manager {
     file_manager.release();
 
-    if conflict_resolution == ConflictResolutionStrategy::Replace {
+    if conflict_resolution == proto::ConflictResolutionStrategy::Replace {
       delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
         .await
         .map_err(|err| RecordError::Internal(err.into()))?;

@@ -93,7 +93,7 @@ fn coerce_and_push_array(
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
   use super::*;
   use indoc::indoc;
 

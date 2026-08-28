@@ -1,7 +1,7 @@
 use utoipa::openapi::{ContactBuilder, InfoBuilder, LicenseBuilder, OpenApi, OpenApiBuilder};
 use utoipa_axum::router::OpenApiRouter;
 
-use crate::config::proto::Config;
+use crate::config::proto;
 use crate::constants::ADMIN_API_PATH;
 
 fn version() -> String {
@@ -46,7 +46,7 @@ pub(crate) fn add_info(openapi: OpenApi) -> OpenApi {
 // Initializes routes from fully initialized TrailBase. This would allow to even pick up routes
 // from registered WASM components.
 pub fn build_api_definitions_from_config(
-  config: &Config,
+  config: &proto::Config,
   connection_type: trailbase_sqlite::ConnectionType,
   include_admin: bool,
 ) -> utoipa::openapi::OpenApi {

@@ -10,13 +10,13 @@ use crate::User;
 use crate::admin::user::create_user::create_user_for_test;
 use crate::app_state::{AppState, TestStateOptions, test_config, test_state};
 use crate::auth::util::login_with_password;
-use crate::config::proto::RecordApiConfig;
+use crate::config::proto;
 use crate::records::subscribe::event::{EventErrorStatus, TestChangeEvent, TestJsonEventPayload};
 use crate::records::subscribe::handler::{
   SubscriptionQuery, add_subscription_sse_and_ws_handler, subscribe_sse,
 };
 use crate::records::test_utils::add_record_api_config;
-use crate::records::{PermissionFlag, RecordApi, RecordError};
+use crate::records::{RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
 async fn setup_world_readable() -> AppState {
@@ -41,11 +41,15 @@ async fn setup_world_readable() -> AppState {
   // Register message table as record api with moderator read access.
   add_record_api_config(
     &state,
-    RecordApiConfig {
+    proto::RecordApiConfig {
       name: Some("api_name".to_string()),
       table_name: Some("test".to_string()),
       enable_subscriptions: Some(true),
-      acl_world: [PermissionFlag::Create as i32, PermissionFlag::Read as i32].into(),
+      acl_world: [
+        proto::PermissionFlag::Create as i32,
+        proto::PermissionFlag::Read as i32,
+      ]
+      .into(),
       ..Default::default()
     },
   )
@@ -369,11 +373,11 @@ async fn setup_with_tight_acls() -> AppState {
   // Register message table as record api with moderator read access.
   add_record_api_config(
     &state,
-    RecordApiConfig {
+    proto::RecordApiConfig {
       name: Some("api_name".to_string()),
       table_name: Some("test".to_string()),
       enable_subscriptions: Some(true),
-      acl_authenticated: [PermissionFlag::Read as i32].into(),
+      acl_authenticated: [proto::PermissionFlag::Read as i32].into(),
       read_access_rule: Some(
         "EXISTS(SELECT 1 FROM test AS m WHERE _USER_.id = _ROW_.user)".to_string(),
       ),

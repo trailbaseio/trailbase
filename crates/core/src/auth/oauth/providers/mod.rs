@@ -17,7 +17,7 @@ use thiserror::Error;
 
 use crate::auth::oauth::OAuthProvider;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 #[derive(Debug, Error)]
 pub enum OAuthProviderError {
@@ -27,11 +27,12 @@ pub enum OAuthProviderError {
 
 type OAuthProviderType = Box<dyn OAuthProvider + Send + Sync>;
 
-type OAuthFactoryType =
-  dyn Fn(&str, &OAuthProviderConfig) -> Result<OAuthProviderType, OAuthProviderError> + Send + Sync;
+type OAuthFactoryType = dyn Fn(&str, &proto::OAuthProviderConfig) -> Result<OAuthProviderType, OAuthProviderError>
+  + Send
+  + Sync;
 
 pub(crate) struct OAuthProviderRegistryEntry {
-  pub id: OAuthProviderId,
+  pub id: proto::OAuthProviderId,
   pub factory_name: &'static str,
   pub factory_display_name: &'static str,
   pub factory: Box<OAuthFactoryType>,
@@ -70,7 +71,7 @@ fn simple_provider_registry_entry<T: SimpleOAuthProvider + Sized + 'static>()
     id: T::ID,
     factory_name: T::NAME,
     factory_display_name: T::DISPLAY_NAME,
-    factory: Box::new(|name: &str, config: &OAuthProviderConfig| {
+    factory: Box::new(|name: &str, config: &proto::OAuthProviderConfig| {
       debug_assert_eq!(T::NAME, name);
 
       return Ok(Box::new(T::new(config)?));
@@ -84,7 +85,7 @@ mod tests {
 
   #[test]
   fn test_registry() {
-    let config = OAuthProviderConfig {
+    let config = proto::OAuthProviderConfig {
       client_id: Some("id".to_string()),
       client_secret: Some("secret".to_string()),
       // Below URLs will be ignored by the SocialProviders.

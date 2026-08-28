@@ -29,7 +29,7 @@ pub use record_api::RecordApi;
 pub(crate) use validate::validate_record_api_config;
 
 use crate::AppState;
-use crate::config::proto::PermissionFlag;
+use crate::config::proto;
 use crate::constants::RECORD_API_PATH;
 
 pub(crate) fn router(
@@ -87,8 +87,8 @@ pub enum Permission {
 
 #[derive(Default)]
 pub struct Acls {
-  pub world: Vec<PermissionFlag>,
-  pub authenticated: Vec<PermissionFlag>,
+  pub world: Vec<proto::PermissionFlag>,
+  pub authenticated: Vec<proto::PermissionFlag>,
 }
 
 #[derive(Default)]

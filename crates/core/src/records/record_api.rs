@@ -10,7 +10,7 @@ use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, ConnectionType, NamedParams, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
-use crate::config::proto::{ConflictResolutionStrategy, RecordApiConfig};
+use crate::config::proto;
 use crate::constants::USER_TABLE;
 use crate::records::params::{LazyParams, Params};
 use crate::records::subscribe::event::EventPayload;
@@ -45,7 +45,10 @@ pub(crate) struct RecordApiSchema {
 //   Box<dyn (FnOnce(&T) -> Result<(), RecordError>) + Send>;
 
 impl RecordApiSchema {
-  fn from_table(table_metadata: &TableMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+  fn from_table(
+    table_metadata: &TableMetadata,
+    config: &proto::RecordApiConfig,
+  ) -> Result<Self, String> {
     assert_name(config, table_metadata.name());
 
     let Some(record_pk_column) = table_metadata.record_pk_column() else {
@@ -87,7 +90,10 @@ impl RecordApiSchema {
     });
   }
 
-  fn from_view(view_metadata: &ViewMetadata, config: &RecordApiConfig) -> Result<Self, String> {
+  fn from_view(
+    view_metadata: &ViewMetadata,
+    config: &proto::RecordApiConfig,
+  ) -> Result<Self, String> {
     assert_name(config, view_metadata.name());
 
     let Some(record_pk_column) = view_metadata.record_pk_column() else {
@@ -143,7 +149,7 @@ struct RecordApiState {
   // Below properties are filled from `proto::RecordApiConfig`.
   api_name: String,
   acl: [u8; 2],
-  insert_conflict_resolution_strategy: Option<ConflictResolutionStrategy>,
+  insert_conflict_resolution_strategy: Option<proto::ConflictResolutionStrategy>,
   insert_autofill_missing_user_id_columns: bool,
   enable_subscriptions: bool,
 
@@ -171,7 +177,7 @@ impl RecordApiState {
     conn: Arc<Connection>,
     metadata: Arc<ConnectionMetadata>,
     table_metadata: &TableMetadata,
-    config: RecordApiConfig,
+    config: proto::RecordApiConfig,
   ) -> Result<Self, String> {
     assert_name(&config, table_metadata.name());
 
@@ -187,7 +193,7 @@ impl RecordApiState {
     conn: Arc<Connection>,
     metadata: Arc<ConnectionMetadata>,
     view_metadata: &ViewMetadata,
-    config: RecordApiConfig,
+    config: proto::RecordApiConfig,
   ) -> Result<Self, String> {
     assert_name(&config, view_metadata.name());
 
@@ -203,7 +209,7 @@ impl RecordApiState {
     conn: Arc<Connection>,
     metadata: Arc<ConnectionMetadata>,
     schema: RecordApiSchema,
-    config: RecordApiConfig,
+    config: proto::RecordApiConfig,
   ) -> Result<Self, String> {
     let Some(api_name) = config.name.clone() else {
       return Err(format!("RecordApi misses name: {config:?}"));
@@ -359,7 +365,7 @@ impl RecordApi {
   pub(crate) fn build(
     conn: Arc<trailbase_sqlite::Connection>,
     metadata: Arc<trailbase_schema::metadata::ConnectionMetadata>,
-    config: RecordApiConfig,
+    config: proto::RecordApiConfig,
   ) -> Result<Self, String> {
     let table_name = QualifiedName::parse(config.table_name()).map_err(|err| err.to_string())?;
 
@@ -487,7 +493,7 @@ impl RecordApi {
   }
 
   #[inline]
-  pub fn insert_conflict_resolution_strategy(&self) -> Option<ConflictResolutionStrategy> {
+  pub fn insert_conflict_resolution_strategy(&self) -> Option<proto::ConflictResolutionStrategy> {
     return self.state.insert_conflict_resolution_strategy;
   }
 
@@ -909,7 +915,7 @@ enum Entity {
 }
 
 fn filter_excluded_columns(
-  config: &RecordApiConfig,
+  config: &proto::RecordApiConfig,
   column_metadata: &[ColumnMetadata],
 ) -> Vec<ColumnMetadata> {
   if config.excluded_columns.is_empty() {
@@ -928,7 +934,7 @@ fn filter_excluded_columns(
 }
 
 #[inline]
-fn assert_name(config: &RecordApiConfig, name: &QualifiedName) {
+fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
   // QUESTION: Should this be disabled in prod? This can only trigger during start and config
   // reload.
   match name.database_schema.as_deref() {

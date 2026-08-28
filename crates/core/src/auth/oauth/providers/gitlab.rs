@@ -2,10 +2,9 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::provider::UserIdentifier;
 use crate::auth::oauth::providers::OAuthProviderError;
 use crate::auth::oauth::simple_provider::SimpleOAuthProvider;
-use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
+use crate::config::proto;
 
 // https://docs.gitlab.com/ee/api/users.html#for-user
 #[derive(Deserialize, Debug)]
@@ -25,7 +24,7 @@ impl TryFrom<GitlabUser> for OAuthUser {
     let verified = user.state == "active";
     return Ok(OAuthUser {
       provider_user_id: user.id.to_string(),
-      provider_id: OAuthProviderId::Gitlab,
+      provider_id: proto::OAuthProviderId::Gitlab,
       email: Some(user.email),
       username: user.username,
       verified,
@@ -40,7 +39,7 @@ pub(crate) struct GitlabOAuthProvider {
 }
 
 impl SimpleOAuthProvider for GitlabOAuthProvider {
-  const ID: OAuthProviderId = OAuthProviderId::Gitlab;
+  const ID: proto::OAuthProviderId = proto::OAuthProviderId::Gitlab;
   const NAME: &'static str = "gitlab";
   const DISPLAY_NAME: &'static str = "GitLab";
 
@@ -58,12 +57,12 @@ impl SimpleOAuthProvider for GitlabOAuthProvider {
     return self.client_secret.clone();
   }
 
-  fn oauth_scopes(&self, _: UserIdentifier) -> Vec<String> {
+  fn oauth_scopes(&self, _: proto::UserIdentifier) -> Vec<String> {
     // TODO: Pick scopes based on user-id policy.
     return vec!["read_user".to_string()];
   }
 
-  fn new(config: &OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
+  fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
       return Err(OAuthProviderError::Missing("GitLab client id".to_string()));
     };

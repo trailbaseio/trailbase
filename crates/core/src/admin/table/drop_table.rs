@@ -6,7 +6,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::config::proto::hash_config;
+use crate::config::proto;
 use crate::constants::SQLITE_SCHEMA_TABLE;
 use crate::transaction_recorder::TransactionRecorder;
 
@@ -107,7 +107,7 @@ pub async fn drop_table_handler(
     // Fix configuration: remove all APIs reference the no longer existing table.
     {
       let mut config = (*state.get_config()).clone();
-      let old_config_hash = hash_config(&config);
+      let old_config_hash = proto::hash_config(&config);
 
       config.record_apis.retain(|c| {
         if let Some(ref name) = c.table_name

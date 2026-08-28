@@ -34,7 +34,7 @@ use crate::admin;
 use crate::app_state::{AppState, validate_path};
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
-use crate::config::proto::Config;
+use crate::config::proto;
 use crate::connection::ConnectionEntry;
 use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
@@ -406,7 +406,7 @@ impl Server {
   }
 
   pub(crate) fn build_main_router(
-    config: &Config,
+    config: &proto::Config,
     connection_type: trailbase_sqlite::ConnectionType,
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,

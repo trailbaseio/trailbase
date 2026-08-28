@@ -8,11 +8,9 @@ use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
-use crate::config::proto::{
-  Config, JsonSchemaConfig, RecordApiConfig, S3StorageConfig, hash_config,
-};
 use crate::config::{
-  ConfigError, load_or_init_config_textproto, validate_config, write_config_and_vault_textproto,
+  ConfigError, Textproto, load_or_init_config_textproto, proto, validate_config,
+  write_config_and_vault_textproto,
 };
 use crate::connection::{BuildOptions, ConnectionEntry, ConnectionError, ConnectionManager};
 use crate::constants::USER_TABLE;
@@ -24,7 +22,6 @@ use crate::rand::random_alphanumeric;
 use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
 use crate::scheduler::{JobRegistry, build_job_registry_from_config};
-use crate::textproto::Textproto;
 
 #[derive(Default)]
 pub struct InitArgs {
@@ -53,7 +50,7 @@ struct InternalState {
   auth: Reactive<Arc<AuthOptions>>,
   jobs: Reactive<Arc<JobRegistry>>,
   mailer: Reactive<Mailer>,
-  config: Reactive<Config>,
+  config: Reactive<proto::Config>,
   json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
 
   // TODO: Maybe remove main `conn` in favor of connection manager. Note that this is currently
@@ -410,20 +407,20 @@ impl AppState {
     return self.state.record_apis.snapshot().get(name).cloned();
   }
 
-  pub fn get_config(&self) -> Arc<Config> {
+  pub fn get_config(&self) -> Arc<proto::Config> {
     return self.state.config.ptr();
   }
 
   pub fn access_config<F, T>(&self, f: F) -> T
   where
-    F: FnOnce(&Config) -> T,
+    F: FnOnce(&proto::Config) -> T,
   {
     return f(&self.state.config.ptr());
   }
 
   pub async fn validate_and_update_config(
     &self,
-    config: Config,
+    config: proto::Config,
     hash: Option<String>,
   ) -> Result<(), ConfigError> {
     let connection_manager = self.connection_manager();
@@ -434,7 +431,7 @@ impl AppState {
         let mut error: Option<ConfigError> = None;
         let err = &mut error;
         self.state.config.update(move |old| {
-          if hash_config(old) != hash {
+          if proto::hash_config(old) != hash {
             let _ = err.insert(ConfigError::Update(
               "Config update failed: mismatching or stale hash".to_string(),
             ));
@@ -482,7 +479,7 @@ impl AppState {
 
 /// Returns true if schemas were registered.
 pub(crate) fn update_json_schema_registry(
-  config: &[JsonSchemaConfig],
+  config: &[proto::JsonSchemaConfig],
   registry: &parking_lot::RwLock<JsonSchemaRegistry>,
 ) -> Result<bool, ConfigError> {
   if !config.is_empty() {
@@ -523,7 +520,7 @@ pub(crate) fn update_json_schema_registry(
 
 async fn build_record_apis(
   connection_manager: ConnectionManager,
-  record_api_configs: Reactive<Vec<RecordApiConfig>>,
+  record_api_configs: Reactive<Vec<proto::RecordApiConfig>>,
 ) -> AsyncReactive<HashMap<String, RecordApi>> {
   return record_api_configs
     .derive_unchecked_async(move |DeriveInput { prev, dep: configs }| {
@@ -535,7 +532,7 @@ async fn build_record_apis(
 async fn build_record_apis_impl(
   connection_manager: ConnectionManager,
   prev: Option<Arc<HashMap<String, RecordApi>>>,
-  record_api_configs: Arc<Vec<RecordApiConfig>>,
+  record_api_configs: Arc<Vec<proto::RecordApiConfig>>,
 ) -> HashMap<String, RecordApi> {
   // Re-use existing connection when possible to keep subscriptions alive.
   //
@@ -600,7 +597,7 @@ async fn build_record_apis_impl(
 
 pub(crate) fn build_objectstore(
   data_dir: &DataDir,
-  config: Option<&S3StorageConfig>,
+  config: Option<&proto::S3StorageConfig>,
 ) -> Result<Box<dyn ObjectStore>, object_store::Error> {
   if let Some(config) = config {
     let mut builder = object_store::aws::AmazonS3Builder::from_env();
@@ -639,7 +636,7 @@ pub(crate) fn build_objectstore(
   ));
 }
 
-fn build_site_url(c: &Config) -> Result<Option<url::Url>, url::ParseError> {
+fn build_site_url(c: &proto::Config) -> Result<Option<url::Url>, url::ParseError> {
   if let Some(ref site_url) = c.server.site_url {
     return Ok(Some(url::Url::parse(site_url)?));
   }
@@ -650,13 +647,12 @@ fn build_site_url(c: &Config) -> Result<Option<url::Url>, url::ParseError> {
 #[cfg(test)]
 mod test_utils {
   use super::*;
+  use crate::auth::oauth::providers::test::TestOAuthProvider;
+  use crate::config::proto;
 
   /// Construct a fabricated config for tests and make sure it's valid.
-  pub fn test_config() -> Config {
-    use crate::auth::oauth::providers::test::TestOAuthProvider;
-    use crate::config::proto::{OAuthProviderConfig, OAuthProviderId};
-
-    let mut config = Config::new_with_custom_defaults();
+  pub fn test_config() -> proto::Config {
+    let mut config = proto::Config::new_with_custom_defaults();
 
     config.server.site_url = Some("https://test.org".to_string());
     config.email.smtp_host = Some("smtp.test.org".to_string());
@@ -668,10 +664,10 @@ mod test_utils {
 
     config.auth.oauth_providers.insert(
       TestOAuthProvider::NAME.to_string(),
-      OAuthProviderConfig {
+      proto::OAuthProviderConfig {
         client_id: Some("test_client_id".to_string()),
         client_secret: Some("test_client_secret".to_string()),
-        provider_id: Some(OAuthProviderId::Test as i32),
+        provider_id: Some(proto::OAuthProviderId::Test as i32),
         ..Default::default()
       },
     );
@@ -685,7 +681,7 @@ mod test_utils {
 
   #[derive(Default)]
   pub struct TestStateOptions {
-    pub config: Option<Config>,
+    pub config: Option<proto::Config>,
     pub json_schema_registry: Option<JsonSchemaRegistry>,
     pub(crate) mailer: Option<Mailer>,
   }
@@ -798,7 +794,7 @@ mod test_utils {
 
       build_objectstore(
         &data_dir,
-        Some(&S3StorageConfig {
+        Some(&proto::S3StorageConfig {
           endpoint: Some("http://127.0.0.1:9000".to_string()),
           region: None,
           bucket_name: Some("test".to_string()),

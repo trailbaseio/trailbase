@@ -8,7 +8,7 @@ use trailbase_schema::{FileUploadInput, QualifiedName};
 
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
-use crate::config::proto::ConflictResolutionStrategy;
+use crate::config::proto;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
@@ -105,7 +105,7 @@ pub async fn create_avatar_handler(
     state.objectstore(),
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     &AVATAR_TABLE_METADATA.column_metadata,
-    ConflictResolutionStrategy::Replace,
+    proto::ConflictResolutionStrategy::Replace,
     "user",
     params,
   )
