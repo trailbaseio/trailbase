@@ -13,7 +13,10 @@ export function applyResolvedTheme(theme: ResolvedTheme) {
 }
 
 export function currentTheme(): ResolvedTheme {
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  return document.documentElement.getAttribute("data-kb-theme") === "dark" ||
+    document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light";
 }
 
 export function initializeTheme() {
@@ -32,7 +35,10 @@ export function createTheme(): Accessor<ResolvedTheme> {
 
   const attrObserver = new MutationObserver((mutations) => {
     mutations.forEach((mu) => {
-      if (mu.type === "attributes" && mu.attributeName === "class") {
+      if (
+        mu.type === "attributes" &&
+        (mu.attributeName === "class" || mu.attributeName === "data-kb-theme")
+      ) {
         setTheme(currentTheme());
       }
     });

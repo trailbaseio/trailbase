@@ -54,7 +54,7 @@ const SheetOverlay = <T extends ValidComponent = "div">(
 }
 
 const sheetVariants = cva(
-  "fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[closed=]:duration-300 data-[expanded=]:duration-500 data-[expanded=]:animate-in data-[closed=]:animate-out",
+  "fixed z-50 gap-4 border bg-popover p-4 text-popover-foreground shadow-md transition ease-in-out data-[closed=]:duration-300 data-[expanded=]:duration-500 data-[expanded=]:animate-in data-[closed=]:animate-out",
   {
     variants: {
       position: {

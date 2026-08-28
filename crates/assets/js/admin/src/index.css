@@ -249,6 +249,21 @@
       BlinkMacSystemFont,
       "Segoe UI",
       sans-serif;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  :where(button, input, textarea, select) {
+    transition:
+      color 150ms ease,
+      background-color 150ms ease,
+      border-color 150ms ease;
+  }
+
+  :where(button, input, textarea, select):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
   ::selection {
