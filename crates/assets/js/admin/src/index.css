@@ -7,104 +7,81 @@
 @custom-variant dark (&:where(.dark, .dark *, [data-kb-theme=dark], [data-kb-theme=dark] *));
 
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 3.9%);
-
-  --muted: hsl(240 4.8% 95.9%);
-  --muted-foreground: hsl(240 3.8% 46.1%);
-
+  color-scheme: light;
+  --background: hsl(210 40% 98%);
+  --foreground: hsl(215 28% 17%);
+  --muted: hsl(214 32% 94%);
+  --muted-foreground: hsl(215 16% 47%);
   --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 3.9%);
-
-  --border: hsl(240 5.9% 90%);
-  --input: hsl(240 5.9% 90%);
-
+  --popover-foreground: hsl(215 28% 17%);
+  --border: hsl(214 24% 86%);
+  --input: hsl(214 24% 82%);
   --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 3.9%);
-
+  --card-foreground: hsl(215 28% 17%);
   --primary: hsl(199 100% 33%);
-  --primary-foreground: hsl(0 0% 98%);
-
-  --secondary: hsl(240 4.8% 95.9%);
-  --secondary-foreground: hsl(240 5.9% 10%);
-
-  --accent: hsl(240 4.8% 95.9%);
-  --accent-foreground: hsl(240 5.9% 10%);
-
-  --destructive: hsl(0 84.2% 60.2%);
-  --destructive-foreground: hsl(0 0% 98%);
-
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(214 32% 94%);
+  --secondary-foreground: hsl(215 28% 17%);
+  --accent: hsl(214 32% 94%);
+  --accent-foreground: hsl(215 28% 17%);
+  --destructive: hsl(0 72% 51%);
+  --destructive-foreground: hsl(0 0% 100%);
   --info: hsl(204 94% 94%);
-  --info-foreground: hsl(199 89% 48%);
-  --success: hsl(149 80% 90%);
-  --success-foreground: hsl(160 84% 39%);
+  --info-foreground: hsl(199 89% 35%);
+  --success: hsl(149 60% 91%);
+  --success-foreground: hsl(160 70% 30%);
   --warning: hsl(48 96% 89%);
-  --warning-foreground: hsl(25 95% 53%);
-  --error: hsl(0 93% 94%);
-  --error-foreground: hsl(0 84% 60%);
-
-  --ring: hsl(240 5.9% 10%);
-
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5.3% 26.1%);
-  --sidebar-primary: hsl(240 5.9% 10%);
-  --sidebar-primary-foreground: hsl(0 0% 98%);
-  --sidebar-accent: hsl(240 4.8% 95.9%);
-  --sidebar-accent-foreground: hsl(240 5.9% 10%);
-  --sidebar-border: hsl(220 13% 91%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  --warning-foreground: hsl(25 80% 35%);
+  --error: hsl(0 80% 94%);
+  --error-foreground: hsl(0 72% 40%);
+  --ring: hsl(199 100% 33%);
+  --sidebar: hsl(210 30% 96%);
+  --sidebar-foreground: hsl(215 28% 17%);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
-
 .dark,
 [data-kb-theme="dark"] {
-  --background: hsl(240 10% 3.9%);
-  --foreground: hsl(0 0% 98%);
-
-  --muted: hsl(240 3.7% 15.9%);
-  --muted-foreground: hsl(240 5% 64.9%);
-
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
-
-  --popover: hsl(240 10% 3.9%);
-  --popover-foreground: hsl(0 0% 98%);
-
-  --border: hsl(240 3.7% 15.9%);
-  --input: hsl(240 3.7% 15.9%);
-
-  --card: hsl(240 10% 3.9%);
-  --card-foreground: hsl(0 0% 98%);
-
-  /* --primary: hsl(0 0% 98%); */
-  --primary: hsl(199 100% 33%);
-  /* --primary: #92d1fe; */
-  --primary-foreground: hsl(240 5.9% 10%);
-
-  --secondary: hsl(240 3.7% 15.9%);
-  --secondary-foreground: hsl(0 0% 98%);
-
-  --destructive: hsl(0 62.8% 30.6%);
-  --destructive-foreground: hsl(0 0% 98%);
-
-  --info: hsl(204 94% 94%);
-  --info-foreground: hsl(199 89% 48%);
-  --success: hsl(149 80% 90%);
-  --success-foreground: hsl(160 84% 39%);
-  --warning: hsl(48 96% 89%);
-  --warning-foreground: hsl(25 95% 53%);
-  --error: hsl(0 93% 94%);
-  --error-foreground: hsl(0 84% 60%);
-
-  --ring: hsl(240 4.9% 83.9%);
-
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+  color-scheme: dark;
+  --background: hsl(215 28% 10%);
+  --foreground: hsl(210 40% 98%);
+  --muted: hsl(215 25% 16%);
+  --muted-foreground: hsl(215 20% 65%);
+  --popover: hsl(215 28% 12%);
+  --popover-foreground: hsl(210 40% 98%);
+  --border: hsl(215 22% 24%);
+  --input: hsl(215 22% 28%);
+  --card: hsl(215 25% 13%);
+  --card-foreground: hsl(210 40% 98%);
+  --primary: hsl(199 90% 58%);
+  --primary-foreground: hsl(215 28% 10%);
+  --secondary: hsl(215 25% 16%);
+  --secondary-foreground: hsl(210 40% 98%);
+  --accent: hsl(215 25% 16%);
+  --accent-foreground: hsl(210 40% 98%);
+  --destructive: hsl(0 62% 38%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --info: hsl(204 50% 25%);
+  --info-foreground: hsl(204 90% 80%);
+  --success: hsl(149 45% 22%);
+  --success-foreground: hsl(149 70% 75%);
+  --warning: hsl(40 55% 25%);
+  --warning-foreground: hsl(48 95% 75%);
+  --error: hsl(0 50% 25%);
+  --error-foreground: hsl(0 85% 80%);
+  --ring: hsl(199 90% 58%);
+  --sidebar: hsl(215 30% 12%);
+  --sidebar-foreground: hsl(210 40% 98%);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 @theme {
@@ -234,7 +211,7 @@
    */
 
   ::-webkit-scrollbar {
-    width: 16px;
+    width: 10px;
   }
 
   ::-webkit-scrollbar-thumb {
@@ -247,25 +224,6 @@
   ::-webkit-scrollbar-corner {
     display: none;
   }
-}
-
-/* Customization below. Above from https://github.com/stefan-karger/solid-ui/issues/166#issuecomment-2819024081 */
-
-@theme {
-  /* Generated accent color palettes for "Ocean AA". */
-  --color-accent-200: #92d1fe;
-  --color-accent-600: #0073aa;
-  --color-accent-900: #003653;
-  --color-accent-950: #00273d;
-  /* Generated gray color palettes "Ocean AA". */
-  --color-gray-100: #f3f7f9;
-  --color-gray-200: #e7eff2;
-  --color-gray-300: #bac4c8;
-  --color-gray-400: #7b8f96;
-  --color-gray-500: #495c62;
-  --color-gray-700: #2a3b41;
-  --color-gray-800: #182a2f;
-  --color-gray-900: #121a1c;
 }
 
 @layer base {
@@ -284,7 +242,17 @@
   }
 
   body {
-    font-family: "Inter", sans-serif;
+    font-family:
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 25%, transparent);
   }
 }
 
