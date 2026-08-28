@@ -688,7 +688,8 @@ mod test_utils {
 
   pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
     let _ = env_logger::try_init_from_env(
-      env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,log::span=warn"),
+      env_logger::Env::new()
+        .default_filter_or("info,trailbase_refinery=warn,log::span=warn,tracing::span=warn"),
     );
 
     let temp_dir = temp_dir::TempDir::new()?;
@@ -716,40 +717,46 @@ mod test_utils {
           .start()?,
       )));
 
-      let handle = tokio::runtime::Handle::current();
-      let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-
-      // NOTE: During CI, we have random tests occasionally time out. This is an attempt
-      // to get ahead of it.
+      // Drop handle to detach watchdog thread. Should only be stopped by its parent test-process
+      // terminating.
       let _ = std::thread::spawn({
+        // NOTE: During CI, we have random tests occasionally time out. This is an attempt
+        // to get ahead of CI's own timeout of 6h.
+        let handle = tokio::runtime::Handle::current();
         let db = Arc::downgrade(&db);
+
+        #[allow(unreachable_code)]
         move || {
-          let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_time()
-            .build()
-            .unwrap();
+          use std::time::{Duration, SystemTime};
+          let started = SystemTime::now();
 
-          rt.block_on(async move {
-            use tokio::time::*;
-            let started = std::time::SystemTime::now();
+          debug!("WATCHDOG: started");
 
-            loop {
-              sleep(Duration::from_mins(2)).await;
+          let mut i = 0;
+          loop {
+            let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+            // NOTE: For some reason iterating the intervals terminates the tests?
+            if i > 0 {
+              info!("WATCHDOG {i}: metrics = {:?}", runtime_monitor.intervals());
+            } else {
+              warn!("WATCHDOG {i}: metrics = {:?}", runtime_monitor.intervals());
+            }
+            i += 1;
 
-              let metrics = runtime_monitor.intervals();
-
-              let now = std::time::SystemTime::now();
-              if now.duration_since(started).unwrap_or_default() > Duration::from_mins(20) {
-                println!("Test expired. Metrics = {metrics:?}");
-                if let Some(db) = db.upgrade().and_then(|arc| arc.lock().take()) {
-                  db.shutdown().unwrap();
-                }
-                panic!("test expired");
+            let now = SystemTime::now();
+            if now.duration_since(started).unwrap_or_default() > Duration::from_mins(15) {
+              if let Some(db) = db.upgrade().and_then(|arc| arc.lock().take()) {
+                db.shutdown().unwrap();
               }
 
-              println!("metrics = {metrics:?}");
+              error!("WATCHDOG: expired");
+              std::process::exit(1);
             }
-          });
+
+            std::thread::sleep(Duration::from_mins(1));
+          }
+
+          unreachable!("WATCHDOG: terminated");
         }
       });
 

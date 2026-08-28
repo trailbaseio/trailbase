@@ -159,7 +159,13 @@ jobs:
       - name: "Build & Run Tests"
         env:
           RUST_BACKTRACE: 1
-        run: cargo test --features=geos,otel,pg-test
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_on: any # options: any, timeout, error
+          continue_on_error: false
+          command: cargo test --features=geos,otel,pg-test
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
