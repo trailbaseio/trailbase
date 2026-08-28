@@ -1,5 +1,5 @@
 name: "Release Component"
-description: "Builds and releases a WASM component"
+description: "Builds and packages a WASM component"
 
 # RUST_TARGET: wasm32-wasip2
 # BINARY_PATH: target/$RUST_TARGET/release/trailbase_auth_ui_component.wasm
@@ -26,20 +26,17 @@ runs:
       run: |
         sudo apt-get update && \
           sudo apt-get install -y --no-install-recommends curl libssl-dev pkg-config libclang-dev protobuf-compiler libprotobuf-dev zip
-    - uses: actions/setup-node@v6
-      with:
-        node-version: 22
-    - uses: pnpm/action-setup@v4
-      with:
-        version: 10
-    - name: PNPM install
-      shell: bash
-      run: pnpm install
-    - uses: actions-rs/toolchain@v1
+
+    - uses: ./.github/actions/setup_pnpm
+
+    - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ inputs.toolchain-version }}
         target: ${{ inputs.rust-target }}
-        default: true
+
+    - uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: release-wasm-${{ inputs.package-name }}
 
     - name: Rust Build
       shell: bash
@@ -50,8 +47,3 @@ runs:
       shell: bash
       run: |
         zip -r -j ${{ inputs.archive-name }} ${{ inputs.binary-path }} CHANGELOG.md LICENSE
-    - name: Release binaries
-      uses: softprops/action-gh-release@v2
-      with:
-        fail_on_unmatched_files: true
-        files: ${{ inputs.archive-name }}

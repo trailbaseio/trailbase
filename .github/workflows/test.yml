@@ -7,15 +7,29 @@ on:
       - main
       - dev
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
 
-  build-all:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      matrix:
+        include:
+          - name: all-features
+            cargo_args: --all-features
+          - name: no-default-features
+            cargo_args: --all-targets --no-default-features
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
           fetch-depth: 0
 
       - id: free_disk
@@ -23,35 +37,13 @@ jobs:
 
       - id: setup_build
         uses: ./.github/actions/setup_build
-
-      - name: "Build with All Features"
-        env:
-          RUST_BACKTRACE: 1
-        run: cargo build --all-features
-
-      # Just to monitor the runner's disk consumption.
-      - name: Monitor Disk Space (End)
-        run: df -h
-
-  build-minimal:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
         with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
+          cache-key-suffix: build-${{ matrix.name }}
 
-      - id: free_disk
-        uses: ./.github/actions/free_disk
-
-      - id: setup_build
-        uses: ./.github/actions/setup_build
-
-      - name: "Build with Minimal Features"
+      - name: "Build with ${{ matrix.cargo_args }}"
         env:
           RUST_BACKTRACE: 1
-        run: cargo build --all-targets --no-default-features
+        run: cargo build ${{ matrix.cargo_args }}
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
@@ -59,26 +51,23 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
           # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
           fetch-depth: 0
 
-      - uses: MinoruSekine/setup-scoop@v4.0.1
+      - uses: MinoruSekine/setup-scoop@v5.0.1
         with:
           buckets: extras
-          apps: nodejs pnpm protobuf zip
-      - name: PNPM install
-        shell: bash
-        run: pnpm install
-      - uses: actions-rs/toolchain@v1
+          apps: nodejs protobuf zip
+      - uses: ./.github/actions/setup_pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
         with:
-          profile: minimal
-          toolchain: 1.95.0
-          components: rustfmt, clippy
-          default: true
+          shared-key: build-windows
 
       - name: "Build with Release Features"
         env:
@@ -87,11 +76,11 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
           fetch-depth: 0
 
       - id: free_disk
@@ -99,15 +88,18 @@ jobs:
 
       - id: setup_build
         uses: ./.github/actions/setup_build
+        with:
+          cache-key-suffix: test
+
       - id: setup_clients
         uses: ./.github/actions/setup_clients
 
       - name: "Build & Run Tests"
-        uses: pre-commit/action@v3.0.1
+        uses: j178/prek-action@v3.0.0
         env:
           RUST_BACKTRACE: 1
         with:
-          extra_args: "--all-files --verbose"
+          extra-args: "--all-files"
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
@@ -115,11 +107,11 @@ jobs:
 
   test-websocket:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
           fetch-depth: 0
 
       - id: free_disk
@@ -127,6 +119,8 @@ jobs:
 
       - id: setup_build
         uses: ./.github/actions/setup_build
+        with:
+          cache-key-suffix: test-websocket
 
       - name: "Test Rust Client"
         env:
@@ -143,11 +137,11 @@ jobs:
 
   test-pg:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
           fetch-depth: 0
 
       - id: free_disk
@@ -155,6 +149,8 @@ jobs:
 
       - id: setup_build
         uses: ./.github/actions/setup_build
+        with:
+          cache-key-suffix: test-pg
 
       - name: "Build & Run Tests"
         env:

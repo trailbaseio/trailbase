@@ -6,313 +6,212 @@ on:
       - "v*.*.*"
 
 env:
-  TOOLCHAIN_VERSION: 1.95.0
+  TOOLCHAIN_VERSION: stable
   CARGO_PROFILE_RELEASE_LTO: "fat"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
   PNPM_OFFLINE: "TRUE"
+  ARCHIVE_PREFIX: trailbase_${{  github.ref_name }}
+
+permissions:
+  contents: read
 
 jobs:
-  changelog:
-    runs-on: ubuntu-latest
+  # NOTE: We use Docker. Otherwise getting compatible versions for
+  # musl-gcc, g++ (GEOS is C++) and rustc is borderline impossible.
+  release-linux:
+    strategy:
+      matrix:
+        include:
+          - ARCH: x86_64
+            RUNS_ON: ubuntu-latest
+          - ARCH: aarch64
+            RUNS_ON: ubuntu-24.04-arm
+    runs-on: ${{ matrix.RUNS_ON }}
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - uses: ./.github/actions/setup_pnpm
+      - name: Build a Builder Image
+        run: |
+          docker build -f Dockerfile.ci \
+            --build-arg BASE_IMAGE_TAG=${{ matrix.ARCH }}-musl \
+            --build-arg RUST_TARGET=${{ matrix.ARCH }}-unknown-linux-musl \
+            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
+            -t builder:latest .
+
+      - name: Rust Build using the Builder
+        run: |
+          env && \
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
+            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
+            -e PNPM_OFFLINE=FALSE \
+            builder:latest \
+              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ matrix.ARCH }}-unknown-linux-musl --release --features=geos-static --bin=trail"
+
+      - name: Check Binary Version
+        run: target/${{ matrix.ARCH }}-unknown-linux-musl/release/trail --version
+      - name: Package Artifacts
+        run: |
+          zip -r -j ${{ env.ARCHIVE_PREFIX }}_${{ matrix.ARCH }}_linux.zip \
+            target/${{ matrix.ARCH }}-unknown-linux-musl/release/trail CHANGELOG.md LICENSE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-linux-${{ matrix.ARCH }}
+          path: ${{ env.ARCHIVE_PREFIX }}_${{ matrix.ARCH }}_linux.zip
+
+  release-macos:
+    strategy:
+      matrix:
+        include:
+          - ARCH: aarch64
+          - ARCH: x86_64
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - name: Install Dependencies
+        run: brew update && brew install protobuf
+      - uses: ./.github/actions/setup_pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ matrix.ARCH }}-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-macos-${{ matrix.ARCH }}
+      - name: Rust Build
+        run: |
+          env && \
+          cargo build --target ${{ matrix.ARCH }}-apple-darwin --release --features=geos-static --bin=trail
+
+      - name: Check Binary Version
+        run: target/${{ matrix.ARCH }}-apple-darwin/release/trail --version
+      - name: Package Artifacts
+        run: |
+          zip -r -j ${{ env.ARCHIVE_PREFIX }}_${{ matrix.ARCH }}_apple_darwin.zip \
+            target/${{ matrix.ARCH }}-apple-darwin/release/trail CHANGELOG.md LICENSE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-macos-${{ matrix.ARCH }}
+          path: ${{ env.ARCHIVE_PREFIX }}_${{ matrix.ARCH }}_apple_darwin.zip
+
+  release-windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RUST_TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+      - uses: MinoruSekine/setup-scoop@v5.0.1
+        with:
+          buckets: extras
+          apps: nodejs protobuf zip
+      - uses: ./.github/actions/setup_pnpm
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-windows
+      - name: Rust Build
+        shell: bash
+        run: |
+          env && \
+          cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
+
+      - name: Check Binary Version
+        shell: bash
+        run: target/${{ env.RUST_TARGET }}/release/trail.exe --version
+      - name: Package Artifacts
+        shell: bash
+        run: |
+          zip -r -j ${{ env.ARCHIVE_PREFIX }}_x86_64_windows.zip \
+            target/${{ env.RUST_TARGET }}/release/trail.exe CHANGELOG.md LICENSE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-windows-x86_64
+          path: ${{ env.ARCHIVE_PREFIX }}_x86_64_windows.zip
+
+  release-wasm-components:
+    strategy:
+      matrix:
+        include:
+          - name: auth_ui
+            package-name: trailbase-auth-ui-component
+          - name: tetris
+            package-name: trailbase-tetris-component
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RUST_TARGET: wasm32-wasip2
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+      - name: Inspect Checkout
+        run: git describe --tags
+
+      - id: release_component
+        uses: ./.github/actions/release_component
+        with:
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
+          rust-target: ${{ env.RUST_TARGET }}
+          binary-path: target/${{ env.RUST_TARGET }}/release/trailbase_${{ matrix.name }}_component.wasm
+          package-name: ${{ matrix.package-name }}
+          archive-name: ${{ env.ARCHIVE_PREFIX }}_wasm_${{ matrix.name }}.zip
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-wasm-${{ matrix.name }}
+          path: ${{ env.ARCHIVE_PREFIX }}_wasm_${{ matrix.name }}.zip
+
+  publish-release:
+    needs:
+      - release-linux
+      - release-macos
+      - release-windows
+      - release-wasm-components
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
       - name: Get release notes from changelog
-        id: release_notes
         run: |
           export VERSION=$(echo ${{  github.ref_name }} | sed 's/^v//')
           echo "VERSION = ${VERSION}"
           awk "/## v${VERSION}.*/{include=1; next} /## v.*/{include=0} include && NF" CHANGELOG.md > ./CHANGELOG-release.md
           cat ./CHANGELOG-release.md
-
-      - name: Release Changelog
-        uses: softprops/action-gh-release@v2
+      - uses: actions/download-artifact@v4
         with:
+          pattern: "release-*"
+          path: ./release-artifacts
+          merge-multiple: true
+      - name: Release
+        uses: softprops/action-gh-release@v3
+        with:
+          fail_on_unmatched_files: true
           generate_release_notes: true
           body_path: ./CHANGELOG-release.md
-
-  # NOTE: We use Docker. Otherwise getting compatible versions for
-  # musl-gcc, g++ (GEOS is C++) and rustc is borderline impossible.
-  release-x86_64-linux-musl:
-    needs: changelog
-    runs-on: ubuntu-latest
-    env:
-      RUST_TARGET: x86_64-unknown-linux-musl
-      BINARY_PATH: target/$RUST_TARGET/release/trail
-      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_linux.zip
-      DOCKER_WORKSPACE: /workspace
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - name: PNPM install
-        run: pnpm install
-      - name: Build a Builder Image
-        run: |
-          docker build -f Dockerfile.ci \
-            --build-arg BASE_IMAGE_TAG=x86_64-musl \
-            --build-arg RUST_TARGET=${{ env.RUST_TARGET }} \
-            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
-            --build-arg WORKSPACE=${{ env.DOCKER_WORKSPACE }} \
-            -t builder:latest .
-
-      - name: Rust Build using the Builder
-        run: |
-          env && \
-          docker run --rm \
-            -v ${{ github.workspace }}:${{ env.DOCKER_WORKSPACE }} \
-            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
-            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
-            -e PNPM_OFFLINE=FALSE \
-            builder:latest \
-              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail"
-
-      - name: Package Artifacts
-        run: |
-          ${{ env.BINARY_PATH }} --version && \
-          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: ${{ env.ARCHIVE_NAME }}
-
-  release-aarch64-linux-musl:
-    needs: changelog
-    runs-on: ubuntu-24.04-arm
-    env:
-      RUST_TARGET: aarch64-unknown-linux-musl
-      BINARY_PATH: target/$RUST_TARGET/release/trail
-      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_arm64_linux.zip
-      DOCKER_WORKSPACE: /workspace
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - name: PNPM install
-        run: pnpm install
-      - name: Build a Builder Image
-        run: |
-          docker build -f Dockerfile.ci \
-            --build-arg BASE_IMAGE_TAG=aarch64-musl \
-            --build-arg RUST_TARGET=${{ env.RUST_TARGET }} \
-            --build-arg RUST_TOOLCHAIN_VERSION=${{ env.TOOLCHAIN_VERSION }} \
-            --build-arg WORKSPACE=${{ env.DOCKER_WORKSPACE }} \
-            -t builder:latest .
-
-      - name: Rust Build using the Builder
-        run: |
-          env && \
-          docker run --rm \
-            -v ${{ github.workspace }}:${{ env.DOCKER_WORKSPACE }} \
-            -e CARGO_PROFILE_RELEASE_LTO=${{ env.CARGO_PROFILE_RELEASE_LTO }} \
-            -e CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }} \
-            -e PNPM_OFFLINE=FALSE \
-            builder:latest \
-              sh -c "git describe --tags && /root/.cargo/bin/cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail"
-
-      - name: Package Artifacts
-        run: |
-          ${{ env.BINARY_PATH }} --version && \
-          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: ${{ env.ARCHIVE_NAME }}
-
-  release-aarch64-apple-darwin:
-    needs: changelog
-    runs-on: macos-15
-    env:
-      RUST_TARGET: aarch64-apple-darwin
-      BINARY_PATH: target/$RUST_TARGET/release/trail
-      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_arm64_apple_darwin.zip
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-      - name: Install Dependencies
-        run: brew update && brew install protobuf pnpm
-      - name: PNPM install
-        run: pnpm install
-      # CMake v4 is too new: https://github.com/georust/geos/issues/194
-      - name: Downgrade CMake
-        run: pipx install --force cmake==3.31.10
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.TOOLCHAIN_VERSION }}
-          target: ${{ env.RUST_TARGET }}
-          default: true
-      - name: Rust Build
-        run: |
-          env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
-
-      - name: Package Artifacts
-        run: |
-          ${{ env.BINARY_PATH }} --version && \
-          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: ${{ env.ARCHIVE_NAME }}
-
-  release-x86_64-apple-darwin:
-    needs: changelog
-    runs-on: macos-15
-    env:
-      RUST_TARGET: x86_64-apple-darwin
-      BINARY_PATH: target/$RUST_TARGET/release/trail
-      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_apple_darwin.zip
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-      - name: Install Dependencies
-        run: brew update && brew install protobuf pnpm
-      - name: PNPM install
-        run: pnpm install
-      # CMake v4 is too new: https://github.com/georust/geos/issues/194
-      - name: Downgrade CMake
-        run: pipx install --force cmake==3.31.10
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.TOOLCHAIN_VERSION }}
-          target: ${{ env.RUST_TARGET }}
-          default: true
-      - name: Rust Build
-        run: |
-          env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
-
-      - name: Package Artifacts
-        run: |
-          ${{ env.BINARY_PATH }} --version && \
-          zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: ${{ env.ARCHIVE_NAME }}
-
-  release-x86_64-windows:
-    needs: changelog
-    runs-on: windows-latest
-    env:
-      RUST_TARGET: x86_64-pc-windows-msvc
-      BINARY_PATH: target/x86_64-pc-windows-msvc/release/trail.exe
-      ARCHIVE_NAME: trailbase_${{  github.ref_name }}_x86_64_windows.zip
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-      - uses: MinoruSekine/setup-scoop@v4.0.1
-        with:
-          buckets: extras
-          apps: nodejs pnpm protobuf zip
-      - name: PNPM install
-        shell: bash
-        run: pnpm install
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.TOOLCHAIN_VERSION }}
-          target: ${{ env.RUST_TARGET }}
-          default: true
-      - name: Rust Build
-        shell: bash
-        run: |
-          env && \
-            cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
-
-      - name: Package Artifacts
-        run: |
-          ${{ env.BINARY_PATH }} --version &&
-            zip -r -j ${{ env.ARCHIVE_NAME }} ${{ env.BINARY_PATH }} CHANGELOG.md LICENSE
-      - name: Release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          fail_on_unmatched_files: true
-          files: ${{ env.ARCHIVE_NAME }}
-
-  release-wasm-auth-ui:
-    needs: changelog
-    runs-on: ubuntu-latest
-    env:
-      RUST_TARGET: wasm32-wasip2
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-
-      - id: release_component
-        uses: ./.github/actions/release_component
-        with:
-          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
-          rust-target: ${{ env.RUST_TARGET }}
-          binary-path: target/${{ env.RUST_TARGET }}/release/trailbase_auth_ui_component.wasm
-          package-name: trailbase-auth-ui-component
-          archive-name: trailbase_${{  github.ref_name }}_wasm_auth_ui.zip
-
-  release-tetris:
-    needs: changelog
-    runs-on: ubuntu-latest
-    env:
-      RUST_TARGET: wasm32-wasip2
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: 'recursive'
-          # No shallow checkout, i.e. fetch all tags (used for versioning the binary).
-          fetch-depth: 0
-      - name: Inspect Checkout
-        run: git describe --tags
-
-      - id: release_component
-        uses: ./.github/actions/release_component
-        with:
-          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
-          rust-target: ${{ env.RUST_TARGET }}
-          binary-path: target/${{ env.RUST_TARGET }}/release/trailbase_tetris_component.wasm
-          package-name: trailbase-tetris-component
-          archive-name: trailbase_${{  github.ref_name }}_wasm_tetris.zip
+          files: ./release-artifacts/*

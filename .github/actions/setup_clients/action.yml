@@ -4,24 +4,38 @@ description: 'Sets up the client build/test environment on Ubuntu'
 runs:
   using: "composite"
   steps:
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
-        python-version: '3.13'
-    - name: Install Poetry and Python Dependencies
+        python-version: '3.14'
+        check-latest: true
+    - name: Install Poetry
       shell: bash
       run: |
-        pipx install --python python3.13 "poetry==2.1.3" && poetry -C client/python install
+        pipx install --python python3.14 "poetry==2.4.1"
+        poetry -C client/python config virtualenvs.in-project true
+
+    - uses: actions/cache@v6
+      with:
+        path: client/python/.venv
+        key: poetry-${{ runner.os }}-py3.14-${{ hashFiles('client/python/poetry.lock') }}
+        restore-keys: |
+          poetry-${{ runner.os }}-py3.14-
+
+    - name: Install Python Dependencies
+      shell: bash
+      run: poetry -C client/python install
 
     - name: Set up Flutter
       uses: subosito/flutter-action@v2
       with:
         channel: stable
-        flutter-version: 3.35.4
+        cache: true
 
     - name: Setup .NET SDK
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '9.x'
+          dotnet-version: latest
+          dotnet-channel: LTS
 
     # - name: Setup Go
     #   uses: actions/setup-go@v5
