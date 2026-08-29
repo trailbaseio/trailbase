@@ -92,6 +92,20 @@ import type { UserJson } from "@bindings/UserJson";
 
 afterEach(cleanup);
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  Object.assign(pageState.params, {
+    search: "ada",
+    filter: "admin = TRUE",
+    advanced: "false",
+    pageSize: "25",
+    pageIndex: "2",
+  });
+  pageState.queryError = false;
+  pageState.queryLoading = false;
+  pageState.queryData = undefined;
+});
+
 const account = {
   id: "account-1",
   email: "ada@example.com",
@@ -271,18 +285,21 @@ describe("AccountsPage integration", () => {
     await fireEvent.blur(email);
     await fireEvent.change(password, { target: { value: "password" } });
     await fireEvent.blur(password);
-    const add = screen.getByRole("button", { name: "Add" });
+    const add = screen.getByRole("button", { name: "Add user" });
     await waitFor(() => expect(add).not.toBeDisabled());
     await fireEvent.click(add);
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to create account. Please try again.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
       "email already exists",
     );
     expect(screen.getByRole("heading", { name: "Add new user" })).toBeVisible();
     expect(
       screen.getByText("Create a new user account and configure its access."),
     ).toBeVisible();
-    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+    expect(pageState.invalidateQueries).not.toHaveBeenCalledWith({
       queryKey: ["users"],
     });
   });
@@ -295,13 +312,16 @@ describe("AccountsPage integration", () => {
       .getAllByRole("row")
       .find((candidate) => candidate.textContent?.includes("ada@example.com"));
     await fireEvent.keyDown(row!, { key: "Enter" });
-    await fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "update rejected",
+      "Unable to update account. Please try again.",
     );
-    expect(screen.getByText("Edit User")).toBeVisible();
-    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+    expect(screen.getByText("Edit account")).toBeVisible();
+    expect(screen.getByText("Identity")).toBeVisible();
+    expect(screen.getAllByText("ada@example.com")[1]).toBeVisible();
+    expect(screen.getByText("Danger zone")).toBeVisible();
+    expect(pageState.invalidateQueries).not.toHaveBeenCalledWith({
       queryKey: ["users"],
     });
   });
@@ -318,7 +338,10 @@ describe("AccountsPage integration", () => {
       screen.getByRole("button", { name: "Copy login tokens" }),
     );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("token failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to copy login tokens. Please try again.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("token failed");
   });
 
   it("reports clipboard failures in the edit sheet", async () => {
@@ -337,8 +360,9 @@ describe("AccountsPage integration", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "clipboard failed",
+      "Unable to copy login tokens. Please try again.",
     );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("clipboard failed");
   });
 
   it("guards deletion in flight and clears failures when reopened", async () => {
@@ -354,19 +378,24 @@ describe("AccountsPage integration", () => {
       .getAllByRole("row")
       .find((candidate) => candidate.textContent?.includes("ada@example.com"));
     await fireEvent.keyDown(row!, { key: "Enter" });
-    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    await fireEvent.click(deleteButtons[0]);
+    const dangerZone = screen.getByRole("region", { name: "Danger zone" });
+    await fireEvent.click(
+      within(dangerZone).getByRole("button", { name: "Delete" }),
+    );
     const confirm = within(
       screen.getByRole("dialog", { name: "Confirmation" }),
-    ).getByRole("button", { name: "Delete" });
+    ).getByRole("button", { name: "Delete account" });
     await fireEvent.click(confirm);
     expect(confirm).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deleting…" })).toBeDisabled();
     rejectDelete(new Error("delete failed"));
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("delete failed"),
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "Unable to delete account. Please try again.",
+      ),
     );
-    await fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("alert")).not.toHaveTextContent("delete failed");
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -386,7 +415,7 @@ describe("AccountsPage integration", () => {
     expect(await screen.findByText("Pending Changes")).toBeVisible();
     await fireEvent.click(screen.getByRole("button", { name: "Proceed" }));
     await waitFor(() =>
-      expect(screen.queryByText("Edit User")).not.toBeInTheDocument(),
+      expect(screen.queryByText("Edit account")).not.toBeInTheDocument(),
     );
   });
 
@@ -398,12 +427,12 @@ describe("AccountsPage integration", () => {
       .find((candidate) => candidate.textContent?.includes("ada@example.com"));
     expect(row).toBeDefined();
     await fireEvent.keyDown(row!, { key: "Enter" });
-    expect(await screen.findByText("Edit User")).toBeVisible();
+    expect(await screen.findByText("Edit account")).toBeVisible();
 
     pageState.queryData = { users: [] };
     pageState.setDataVersion?.();
     await waitFor(() =>
-      expect(screen.queryByText("Edit User")).not.toBeInTheDocument(),
+      expect(screen.queryByText("Edit account")).not.toBeInTheDocument(),
     );
   });
 

@@ -420,16 +420,40 @@ function EditSheetContent(props: {
       >
         <div class="flex flex-col items-center gap-4 py-4">
           <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>Identity</FixedWidthLabel>
+            <div class="min-w-0">
+              <div class="font-medium">
+                {accountIdentity(props.user).primary}
+              </div>
+              <Show when={accountIdentity(props.user).secondary}>
+                <div class="text-muted-foreground text-sm">
+                  {accountIdentity(props.user).secondary}
+                </div>
+              </Show>
+            </div>
+          </div>
+          <div class="flex w-full items-center justify-start gap-2">
             <FixedWidthLabel>Account ID</FixedWidthLabel>
-            <code class="text-muted-foreground min-w-0 break-all text-sm">{props.user.id}</code>
-            <Button type="button" variant="outline" size="sm" onClick={() => copyToClipboard(props.user.id, true)}>
+            <code class="text-muted-foreground min-w-0 text-sm break-all">
+              {props.user.id}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => copyToClipboard(props.user.id, true)}
+            >
               Copy ID
             </Button>
           </div>
           <div class="flex w-full items-center justify-start gap-2">
             <FixedWidthLabel>Status</FixedWidthLabel>
             <div class="flex flex-wrap gap-1">
-              <For each={accountStatuses(props.user)}>{(status) => <Badge variant={status.variant}>{status.label}</Badge>}</For>
+              <For each={accountStatuses(props.user)}>
+                {(status) => (
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                )}
+              </For>
             </div>
           </div>
           <div class="flex w-full items-center justify-start gap-2">
@@ -474,16 +498,7 @@ function EditSheetContent(props: {
               })}
               children={(state) => {
                 return (
-                  <div class="flex w-full justify-between gap-2 py-4">
-                    <DeleteUserButton
-                      userId={props.user.id}
-                      name={accountIdentity(props.user).primary}
-                      onDelete={() => {
-                        props.close();
-                        props.refetch();
-                      }}
-                    />
-
+                  <div class="flex w-full justify-end gap-2 py-4">
                     <div class="flex gap-2">
                       <Show
                         when={!props.user.admin && !props.user.unverified_email}
@@ -508,11 +523,9 @@ function EditSheetContent(props: {
                                   false,
                                   "Copied tokens to clipboard",
                                 );
-                              } catch (error) {
+                              } catch (_error) {
                                 setTokenError(
-                                  error instanceof Error
-                                    ? error.message
-                                    : String(error),
+                                  "Unable to copy login tokens. Please try again.",
                                 );
                               }
                             })();
@@ -534,6 +547,26 @@ function EditSheetContent(props: {
                 );
               }}
             />
+
+            <section
+              class="border-destructive/30 mt-2 border-t pt-3"
+              aria-labelledby="danger-zone-title"
+            >
+              <h3 id="danger-zone-title" class="text-destructive font-medium">
+                Danger zone
+              </h3>
+              <p class="text-muted-foreground mb-2 text-sm">
+                Permanently delete this account.
+              </p>
+              <DeleteUserButton
+                userId={props.user.id}
+                name={accountIdentity(props.user).primary}
+                onDelete={() => {
+                  props.close();
+                  props.refetch();
+                }}
+              />
+            </section>
 
             <Callout class="text-sm">
               The admin status can only be toggled using the CLI to prevent
