@@ -9,7 +9,7 @@ import {
 } from "solid-js";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
-import { Graph, NodeMetadata, EdgeMetadata } from "@antv/x6";
+import { NodeMetadata, EdgeMetadata } from "@antv/x6";
 import { PortMetadata } from "@antv/x6/lib/model/port";
 import {
   TbOutlinePlus,
@@ -25,6 +25,7 @@ import { Header } from "@/components/Header";
 import {
   ErdGraph,
   nodeName,
+  type ErdGraphHandle,
   NODE_WIDTH,
   LINE_HEIGHT,
 } from "@/components/erd/ErdGraph";
@@ -257,7 +258,7 @@ function buildErNode(
       group: "list",
       attrs: {
         portNameLabel: {
-          text: column.name,
+          text: `${getUnique(column.options)?.is_primary ? "PK · " : getForeignKey(column.options) ? "FK · " : ""}${column.name}`,
         },
         portTypeLabel: {
           text: notNull ? `${column.data_type}` : `${column.data_type}?`,
@@ -299,7 +300,10 @@ function buildErNode(
   const node: NodeMetadata = {
     id: name,
     shape: nodeName(theme),
-    label: `${name} [${tableType(tableOrView)}]`,
+    label: name,
+    attrs: {
+      typeLabel: { text: tableType(tableOrView).toUpperCase() },
+    },
     width: NODE_WIDTH,
     height: LINE_HEIGHT,
     ports,
@@ -487,9 +491,13 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
   const model = createMemo(() =>
     buildErdModel(props.schema, visibility(), theme()),
   );
-  let graph: Graph | undefined;
-  const fit = () => graph?.zoomToFit({ padding: 20 });
-  const reset = () => graph?.centerContent();
+  let graph: ErdGraphHandle | undefined;
+  const [status, setStatus] = createSignal("");
+  const select = (id?: string) => {
+    setSelectedId(id);
+    setStatus(id ? `${id} selected. Showing direct relationships.` : "Selection cleared.");
+    graph?.focus(id);
+  };
   return (
     <div class="flex size-full flex-col">
       <ErdToolbar
@@ -503,17 +511,22 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
         onShowViewsChange={(value) =>
           setVisibility((current) => ({ ...current, views: value }))
         }
-        onSelect={setSelectedId}
-        onZoomIn={() => graph?.zoomTo(graph.zoom() * 2)}
-        onZoomOut={() => graph?.zoomTo(graph.zoom() / 2)}
-        onFit={fit}
-        onReset={reset}
+        onSelect={select}
+        onZoomIn={() => graph?.zoomIn()}
+        onZoomOut={() => graph?.zoomOut()}
+        onFit={() => graph?.fit()}
+        onReset={() => { graph?.reset(); select(undefined); }}
       />
       <div class="min-h-0 flex-1">
         <ErdGraph
           nodes={model().nodes}
           edges={model().edges}
+          relations={model().relations}
+          selectedId={selectedId()}
+          onSelect={select}
           onMount={(g) => (graph = g)}
+        />
+        <p class="sr-only" aria-live="polite">{status()}</p>
         />
       </div>
     </div>

@@ -13,6 +13,7 @@ import {
   relatedEntityIds,
   searchErdEntities,
 } from "@/components/erd/ErdPage";
+import { layoutErdNodes } from "@/components/erd/ErdGraph";
 import type { Column } from "@bindings/Column";
 import type { ColumnOption } from "@bindings/ColumnOption";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -29,7 +30,11 @@ function column(name: string, options: ColumnOption[] = []): Column {
   };
 }
 
-function table(name: string, columns: Column[], databaseSchema = "main"): Table {
+function table(
+  name: string,
+  columns: Column[],
+  databaseSchema = "main",
+): Table {
   return {
     name: { name, database_schema: databaseSchema },
     strict: true,
@@ -60,13 +65,36 @@ function view(name: string, columns: Column[], databaseSchema = "main"): View {
 }
 
 function schema(tables: Table[], views: View[] = []): ListSchemasResponse {
-  return { tables: tables.map((table) => [table, ""]), views: views.map((view) => [view, ""]), indexes: [], triggers: [] };
+  return {
+    tables: tables.map((table) => [table, ""]),
+    views: views.map((view) => [view, ""]),
+    indexes: [],
+    triggers: [],
+  };
 }
 
 describe("ERD workspace model", () => {
+  it("lays out nodes immutably and safely when empty", () => {
+    const nodes = [
+      { id: "a", width: 10 },
+      { id: "b", width: 10 },
+    ];
+    expect(layoutErdNodes(nodes).map((node) => node.position)).toEqual([
+      { x: 0, y: 0 },
+      { x: 270, y: 0 },
+    ]);
+    expect(nodes).toEqual([
+      { id: "a", width: 10 },
+      { id: "b", width: 10 },
+    ]);
+    expect(layoutErdNodes([])).toEqual([]);
+  });
   it("returns table and view entities with visible counts", () => {
     const model = buildErdModel(
-      schema([table("posts", [column("id")])], [view("post_summary", [column("id")])]),
+      schema(
+        [table("posts", [column("id")])],
+        [view("post_summary", [column("id")])],
+      ),
       { tables: true, views: true },
     );
 
@@ -81,7 +109,11 @@ describe("ERD workspace model", () => {
 
   it("excludes hidden internals but keeps main._user", () => {
     const model = buildErdModel(
-      schema([table("_internal", []), table("sqlite_stat1", []), table("_user", [])]),
+      schema([
+        table("_internal", []),
+        table("sqlite_stat1", []),
+        table("_user", []),
+      ]),
       { tables: true, views: true },
     );
 
@@ -129,7 +161,10 @@ describe("ERD workspace model", () => {
       ]),
     ]);
 
-    const model = buildErdModel(schema([posts, users]), { tables: true, views: true });
+    const model = buildErdModel(schema([posts, users]), {
+      tables: true,
+      views: true,
+    });
 
     expect(model.relations).toEqual([{ sourceId: "posts", targetId: "users" }]);
     expect(model.edges).toHaveLength(1);
@@ -151,7 +186,11 @@ describe("ERD workspace model", () => {
   it("searches qualified names case-insensitively and returns all for an empty query", () => {
     const entities = [
       { id: "main.posts", name: "main.posts", type: "table" as const },
-      { id: "analytics.PostSummary", name: "analytics.PostSummary", type: "view" as const },
+      {
+        id: "analytics.PostSummary",
+        name: "analytics.PostSummary",
+        type: "view" as const,
+      },
     ];
 
     expect(searchErdEntities(entities, "POSTSUMMARY")).toEqual([entities[1]]);
