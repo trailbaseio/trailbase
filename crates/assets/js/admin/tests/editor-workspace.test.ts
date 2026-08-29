@@ -60,6 +60,7 @@ describe("SQL editor workspace", () => {
     };
 
     expect(resultPresentation(undefined, false).label).toBe("No result");
+    expect(resultPresentation(success, false, true).label).toBe("Running…");
     expect(resultPresentation(success, true).label).toBe("Cached result");
     expect(resultPresentation(success, false).label).toBe("Success");
     expect(resultPresentation(empty, false).label).toBe("No rows");

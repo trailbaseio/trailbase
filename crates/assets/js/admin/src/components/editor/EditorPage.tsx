@@ -117,7 +117,9 @@ export function paginateResultRows<T>(
 export function resultPresentation(
   result: ExecutionResult | undefined,
   cached: boolean,
+  running = false,
 ): { label: string } {
+  if (running) return { label: "Running…" };
   if (!result) return { label: "No result" };
   if (result.error) return { label: "Error" };
   if (cached) return { label: "Cached result" };
@@ -172,22 +174,27 @@ export function buildCsv(response: QueryResponse): string {
 function ResultsHeader(props: {
   data: QueryResponse | undefined;
   timestamp: number | undefined;
+  status: string;
 }) {
   return (
-    <div class="flex items-center justify-between text-sm">
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={props.data === undefined}
-        onClick={() => {
-          const data = props.data;
-          if (data !== undefined) {
-            copyToClipboard(buildCsv(data));
-          }
-        }}
-      >
-        <TbOutlineCopy />
-      </Button>
+    <div class="flex items-center justify-between gap-2 text-sm">
+      <div class="flex items-center gap-2">
+        <span class="font-medium">{props.status}</span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Copy results as CSV"
+          disabled={props.data === undefined}
+          onClick={() => {
+            const data = props.data;
+            if (data !== undefined) {
+              copyToClipboard(buildCsv(data));
+            }
+          }}
+        >
+          <TbOutlineCopy />
+        </Button>
+      </div>
 
       <ExecutionTime timestamp={props.timestamp} />
     </div>
@@ -197,9 +204,12 @@ function ResultsHeader(props: {
 function ResultView(props: {
   script: Script;
   response: ExecutionResult | undefined;
+  running: boolean;
 }) {
   const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
+  const status = () =>
+    resultPresentation(response(), isCached(), props.running).label;
 
   return (
     <Switch>
@@ -208,6 +218,7 @@ function ResultView(props: {
           <ResultsHeader
             data={response()?.data}
             timestamp={response()?.timestamp}
+            status={status()}
           />
           Error: {response()?.error?.message}
         </div>
@@ -218,6 +229,7 @@ function ResultView(props: {
           <ResultsHeader
             data={response()?.data}
             timestamp={response()?.timestamp}
+            status={status()}
           />
           No data
         </div>
@@ -228,6 +240,7 @@ function ResultView(props: {
           data={response()!.data!}
           timestamp={response()?.timestamp}
           isCached={isCached()}
+          status={status()}
         />
       </Match>
     </Switch>
@@ -237,6 +250,7 @@ function ResultView(props: {
 function ResultViewImpl(props: {
   data: QueryResponse;
   isCached: boolean;
+  status: string;
   timestamp?: number;
 }) {
   const [columnPinningState, setColumnPinningState] = createSignal({});
@@ -283,7 +297,11 @@ function ResultViewImpl(props: {
       }}
     >
       <div class="flex flex-col gap-2 p-4">
-        <ResultsHeader data={props.data} timestamp={props.timestamp} />
+        <ResultsHeader
+          data={props.data}
+          timestamp={props.timestamp}
+          status={props.status}
+        />
 
         <Table table={dataTable()} loading={false} />
       </div>
@@ -753,6 +771,7 @@ function EditorPanel(props: {
   });
 
   const execute = () => {
+    if (executionResult.isFetching) return;
     const query = editor?.state.doc.toString();
     if (query !== undefined) {
       setQueryString(query);
@@ -768,7 +787,7 @@ function EditorPanel(props: {
       });
     }
     setDirty(false);
-    showToast({ title: "saved" });
+    showToast({ title: "Query saved" });
   };
 
   return (
@@ -886,6 +905,7 @@ function EditorPanel(props: {
         <ResultView
           script={props.script}
           response={executionResult.data ?? undefined}
+          running={executionResult.isFetching}
         />
       </div>
     </Dialog>
