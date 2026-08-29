@@ -118,6 +118,20 @@ export function Navbar() {
             TrailBase
           </span>
         </a>
+        <Button
+          variant="ghost"
+          class="w-full justify-start px-2 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          aria-label={sidebarActionLabel()}
+          title={sidebarActionLabel()}
+          onClick={toggleSidebar}
+        >
+          <TbOutlineLayoutSidebarLeftCollapse
+            class={`transition-transform ${state() === "collapsed" ? "rotate-180" : ""}`}
+          />
+          <span class="group-data-[collapsible=icon]:hidden">
+            {sidebarActionLabel()}
+          </span>
+        </Button>
       </SidebarHeader>
       <SidebarContent>
         <For each={groups}>
@@ -152,20 +166,6 @@ export function Navbar() {
       </SidebarContent>
       <SidebarFooter>
         <div class="flex min-w-0 flex-col gap-1 group-data-[collapsible=icon]:items-center">
-          <Button
-            variant="ghost"
-            class="w-full justify-start px-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
-            aria-label={sidebarActionLabel()}
-            title={sidebarActionLabel()}
-            onClick={toggleSidebar}
-          >
-            <TbOutlineLayoutSidebarLeftCollapse
-              class={`transition-transform ${state() === "collapsed" ? "rotate-180" : ""}`}
-            />
-            <span class="group-data-[collapsible=icon]:hidden">
-              {sidebarActionLabel()}
-            </span>
-          </Button>
           <div class="flex min-w-0 items-center gap-2 group-data-[collapsible=icon]:flex-col">
             <SwitchThemeButton horizontal={false} />
             <AuthButton iconSize={22} />
