@@ -3,6 +3,7 @@ import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ExecutionResult } from "@/lib/api/execute";
 import {
   buildCsv,
+  DARK_SQL_COLORS,
   filterSavedQueries,
   nextEditorTabAfterExecution,
   paginateResultRows,
@@ -35,7 +36,34 @@ const result = (data?: QueryResponse): ExecutionResult => ({
   data,
 });
 
+function relativeLuminance(hex: string): number {
+  const [r, g, b] = hex
+    .match(/[a-f\d]{2}/gi)!
+    .map((value) => Number.parseInt(value, 16) / 255)
+    .map((value) =>
+      value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+    );
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const lighter = Math.max(
+    relativeLuminance(foreground),
+    relativeLuminance(background),
+  );
+  const darker = Math.min(
+    relativeLuminance(foreground),
+    relativeLuminance(background),
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 describe("SQL editor workspace", () => {
+  it("uses accessible dark syntax colors", () => {
+    for (const color of Object.values(DARK_SQL_COLORS)) {
+      expect(contrastRatio(color, "#000000")).toBeGreaterThanOrEqual(4.5);
+    }
+  });
   it("filters saved queries case-insensitively", () => {
     expect(filterSavedQueries(scripts, "USER")).toEqual([scripts[0]]);
   });

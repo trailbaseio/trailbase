@@ -27,7 +27,9 @@ import {
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { EditorState } from "@codemirror/state";
 import { minimalSetup } from "codemirror";
 import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
@@ -95,6 +97,49 @@ import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
+
+export const DARK_SQL_COLORS = {
+  keyword: "#7dd3fc",
+  string: "#86efac",
+  number: "#fde68a",
+  comment: "#a1a1aa",
+  name: "#e4e4e7",
+  operator: "#f9a8d4",
+  punctuation: "#cbd5e1",
+  invalid: "#fca5a5",
+} as const;
+
+const darkSqlSyntaxHighlighting = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.keyword, color: DARK_SQL_COLORS.keyword, fontWeight: "600" },
+    {
+      tag: [tags.string, tags.special(tags.string)],
+      color: DARK_SQL_COLORS.string,
+    },
+    {
+      tag: [tags.number, tags.bool, tags.atom],
+      color: DARK_SQL_COLORS.number,
+    },
+    {
+      tag: [tags.comment, tags.lineComment, tags.blockComment],
+      color: DARK_SQL_COLORS.comment,
+      fontStyle: "italic",
+    },
+    {
+      tag: [tags.variableName, tags.propertyName, tags.typeName],
+      color: DARK_SQL_COLORS.name,
+    },
+    {
+      tag: [tags.operator, tags.compareOperator],
+      color: DARK_SQL_COLORS.operator,
+    },
+    {
+      tag: [tags.punctuation, tags.separator],
+      color: DARK_SQL_COLORS.punctuation,
+    },
+    { tag: tags.invalid, color: DARK_SQL_COLORS.invalid },
+  ]),
+);
 
 export type EditorWorkspaceTab = "editor" | "results";
 
@@ -829,6 +874,7 @@ function EditorPanel(props: {
         doc: contents,
         extensions: [
           editorTheme(currentTheme() === "dark"),
+          currentTheme() === "dark" ? darkSqlSyntaxHighlighting : [],
           customKeymap,
           lineNumbers(),
           // Let's you define your own custom CSS style for the line number gutter.
