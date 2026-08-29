@@ -458,7 +458,7 @@ function EditSheetContent(props: {
           </div>
           <div class="flex w-full items-center justify-start gap-2">
             <FixedWidthLabel>Provider</FixedWidthLabel>
-            <span>{accountProviderLabel(props.user.provider_id)}</span>
+            <Badge>{accountProviderLabel(props.user.provider_id)}</Badge>
           </div>
 
           <form.Field name={"email"}>
@@ -504,8 +504,8 @@ function EditSheetContent(props: {
                         when={!props.user.admin && !props.user.unverified_email}
                       >
                         <Button
+                          type="button"
                           variant="outline"
-                          size="icon"
                           aria-label="Copy login tokens"
                           title="Copy login tokens"
                           onClick={(e) => {
@@ -532,6 +532,7 @@ function EditSheetContent(props: {
                           }}
                         >
                           <TbOutlineCookie />
+                          Copy login tokens
                         </Button>
                       </Show>
 

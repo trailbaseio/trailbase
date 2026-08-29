@@ -285,7 +285,10 @@ describe("AccountsPage integration", () => {
     await fireEvent.blur(email);
     await fireEvent.change(password, { target: { value: "password" } });
     await fireEvent.blur(password);
-    const add = screen.getByRole("button", { name: "Add user" });
+    const add = screen
+      .getAllByRole("button", { name: "Add account" })
+      .find((button) => button.getAttribute("type") === "submit");
+    if (!add) throw new Error("Add account submit button not found");
     await waitFor(() => expect(add).not.toBeDisabled());
     await fireEvent.click(add);
 
@@ -320,6 +323,19 @@ describe("AccountsPage integration", () => {
     expect(screen.getByText("Edit account")).toBeVisible();
     expect(screen.getByText("Identity")).toBeVisible();
     expect(screen.getAllByText("ada@example.com")[1]).toBeVisible();
+    expect(
+      screen.getAllByText("Password").some((element) =>
+        element.classList.contains("inline-flex"),
+      ),
+    ).toBe(true);
+    expect(
+      screen.getAllByText("Verified").some((element) =>
+        element.classList.contains("inline-flex"),
+      ),
+    ).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Copy login tokens" }),
+    ).toHaveTextContent("Copy login tokens");
     expect(screen.getByText("Danger zone")).toBeVisible();
     expect(pageState.invalidateQueries).not.toHaveBeenCalledWith({
       queryKey: ["users"],

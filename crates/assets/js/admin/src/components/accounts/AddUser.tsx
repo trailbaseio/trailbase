@@ -119,7 +119,7 @@ export function AddUser(props: {
                   disabled={!state().canSubmit}
                   variant="default"
                 >
-                  {state().isSubmitting ? "Creating…" : "Add user"}
+                  {state().isSubmitting ? "Creating…" : "Add account"}
                 </Button>
               );
             }}
