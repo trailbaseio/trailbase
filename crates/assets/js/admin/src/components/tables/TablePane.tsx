@@ -997,6 +997,12 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   );
 }
 
+export type WorkspaceTab = "data" | "structure" | "api";
+
+export function normalizeWorkspaceTab(value: string | undefined): WorkspaceTab {
+  return value === "structure" || value === "api" ? value : "data";
+}
+
 type SearchParams = {
   filter?: string;
   pageSize?: string;

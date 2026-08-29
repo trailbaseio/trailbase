@@ -21,8 +21,12 @@ import {
   useSidebar,
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInput,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
@@ -50,6 +54,40 @@ import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import { QualifiedName } from "@bindings/QualifiedName";
+
+export function resourceSchemaName(resource: Table | View): string {
+  return resource.name.database_schema || "main";
+}
+
+export function filterExplorerResources<T extends Table | View>(
+  resources: T[],
+  query: string,
+): T[] {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return resources;
+
+  return resources.filter((resource) =>
+    prettyFormatQualifiedName(resource.name)
+      .toLocaleLowerCase()
+      .includes(normalized),
+  );
+}
+
+export function groupExplorerResources<T extends Table | View>(
+  resources: T[],
+): [string, T[]][] {
+  const groups = new Map<string, T[]>();
+  for (const resource of resources) {
+    const schema = resourceSchemaName(resource);
+    const group = groups.get(schema);
+    if (group) {
+      group.push(resource);
+    } else {
+      groups.set(schema, [resource]);
+    }
+  }
+  return [...groups];
+}
 
 function pickInitiallySelectedTable(
   tables: ([Table, string] | [View, string])[],
@@ -94,9 +132,7 @@ function tableCompare(
 
 function TablePickerSidebar(props: {
   tablesAndViews: (Table | View)[];
-  allTables: Table[];
   selectedTable: Table | View | undefined;
-  schemaRefetch: () => Promise<void>;
   openCreateTableDialog: () => void;
   postgres: boolean;
 }) {
@@ -105,113 +141,200 @@ function TablePickerSidebar(props: {
   const showHidden = () => settings().showHidden ?? false;
   const selectedTable = () => props.selectedTable;
   const navigate = useNavigate();
+  const [search, setSearch] = createSignal("");
+  const filteredResources = createMemo(() =>
+    filterExplorerResources(props.tablesAndViews, search()),
+  );
+  const groupedResources = createMemo(() =>
+    groupExplorerResources(filteredResources()),
+  );
+
+  const toggleHiddenResources = () => {
+    const nextShowHidden = !showHidden();
+    const current = selectedTable();
+
+    if (!nextShowHidden && current && hiddenTable(current)) {
+      navigateToTable(navigate, undefined);
+    }
+
+    $explorerSettings.set({
+      ...$explorerSettings.get(),
+      showHidden: nextShowHidden,
+    });
+  };
 
   return (
-    <div class="p-2">
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {/* Add table & show hidden tables buttons */}
-          <div class="flex w-full justify-between gap-2">
-            <Button
-              class="min-w-[100px] grow gap-2"
-              variant="secondary"
-              disabled={props.postgres}
-              onClick={() => {
-                setOpenMobile(false);
-                props.openCreateTableDialog();
-              }}
+    <>
+      <SidebarHeader class="border-sidebar-border gap-3 border-b p-3">
+        <div class="flex items-center gap-2">
+          <div class="min-w-0 flex-1">
+            <h2 class="text-sm font-semibold">Tables</h2>
+            <p
+              class="text-muted-foreground text-xs tabular-nums"
+              aria-live="polite"
             >
-              <TbOutlineTablePlus />
-              Add Table
-            </Button>
-
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  onClick={() => {
-                    const nextShowHidden = !(settings().showHidden ?? false);
-                    const currentHidden = () => {
-                      const current = selectedTable();
-                      if (current !== undefined) {
-                        return hiddenTable(current);
-                      }
-                      return false;
-                    };
-
-                    if (!nextShowHidden && currentHidden()) {
-                      navigateToTable(navigate, undefined);
-                    }
-
-                    $explorerSettings.set({
-                      ...$explorerSettings.get(),
-                      showHidden: nextShowHidden,
-                    });
-                  }}
-                >
-                  <Show when={showHidden()} fallback={<TbOutlineLock />}>
-                    <TbOutlineLockOpen />
-                  </Show>
-                </Button>
-              </TooltipTrigger>
-
-              <TooltipContent>
-                Toggle visibility of hidden tables.
-              </TooltipContent>
-            </Tooltip>
+              {filteredResources().length} visible
+            </p>
           </div>
 
-          <For each={props.tablesAndViews}>
-            {(item: Table | View) => {
-              const hidden = hiddenTable(item);
-              const type = tableType(item);
-              const selected = () => {
-                const s = selectedTable();
-                if (s !== undefined) {
-                  return equalQualifiedNames(item.name, s.name);
-                }
-                return false;
-              };
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="Add table"
+                disabled={props.postgres}
+                onClick={() => {
+                  setOpenMobile(false);
+                  props.openCreateTableDialog();
+                }}
+              >
+                <TbOutlineTablePlus />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {props.postgres
+                ? "Table creation is unavailable for PostgreSQL"
+                : "Add table"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
 
-              const name = prettyFormatQualifiedName(item.name);
+        <SidebarInput
+          type="search"
+          aria-label="Search tables and views"
+          placeholder="Search tables and views"
+          value={search()}
+          onInput={(event) => setSearch(event.currentTarget.value)}
+        />
+      </SidebarHeader>
 
-              return (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={selected()}
-                    tooltip={prettyFormatQualifiedName(item.name)}
-                    variant="default"
-                    size="md"
-                    onClick={() => {
-                      setOpenMobile(false);
-                      navigateToTable(navigate, item);
-                    }}
-                  >
-                    <Switch>
-                      <Match when={type === "view"}>
-                        <TbOutlineEye />
-                      </Match>
+      <SidebarContent class="py-2">
+        <Show
+          when={filteredResources().length > 0}
+          fallback={
+            <div class="text-muted-foreground flex flex-col items-start gap-2 px-4 py-6 text-sm">
+              <p>
+                {search().trim()
+                  ? "No tables or views match your search."
+                  : "No tables or views available."}
+              </p>
+              <Show when={search().trim()}>
+                <Button
+                  class="h-auto p-0"
+                  variant="link"
+                  onClick={() => setSearch("")}
+                >
+                  Clear search
+                </Button>
+              </Show>
+            </div>
+          }
+        >
+          <For each={groupedResources()}>
+            {([schema, resources]) => (
+              <SidebarGroup class="px-2 py-1">
+                <SidebarGroupLabel class="px-2">
+                  <span class="truncate" title={schema}>
+                    {schema}
+                  </span>
+                  <span class="ml-auto tabular-nums">{resources.length}</span>
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    <For each={resources}>
+                      {(item) => {
+                        const hidden = hiddenTable(item);
+                        const type = tableType(item);
+                        const selected = () => {
+                          const current = selectedTable();
+                          return (
+                            current !== undefined &&
+                            equalQualifiedNames(item.name, current.name)
+                          );
+                        };
+                        const name = item.name.name;
+                        const qualifiedName = prettyFormatQualifiedName(
+                          item.name,
+                        );
 
-                      <Match when={type === "virtualTable"}>
-                        <TbOutlineWand />
-                      </Match>
-
-                      <Match when={type === "table"}>
-                        <TbOutlineTable />
-                      </Match>
-                    </Switch>
-
-                    <span class="truncate">{name}</span>
-                    {hidden && <TbOutlineLock />}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            }}
+                        return (
+                          <SidebarMenuItem>
+                            <Tooltip placement="right">
+                              <TooltipTrigger as="div" class="w-full">
+                                <SidebarMenuButton
+                                  class={
+                                    hidden ? "text-muted-foreground" : undefined
+                                  }
+                                  isActive={selected()}
+                                  variant="default"
+                                  size="default"
+                                  onClick={() => {
+                                    setOpenMobile(false);
+                                    navigateToTable(navigate, item);
+                                  }}
+                                >
+                                  <Switch>
+                                    <Match when={type === "view"}>
+                                      <TbOutlineEye />
+                                    </Match>
+                                    <Match when={type === "virtualTable"}>
+                                      <TbOutlineWand />
+                                    </Match>
+                                    <Match when={type === "table"}>
+                                      <TbOutlineTable />
+                                    </Match>
+                                  </Switch>
+                                  <span class="min-w-0 flex-1 truncate">
+                                    {name}
+                                  </span>
+                                  <Show when={hidden}>
+                                    <TbOutlineLock class="ml-auto" />
+                                  </Show>
+                                </SidebarMenuButton>
+                              </TooltipTrigger>
+                              <TooltipContent>{qualifiedName}</TooltipContent>
+                            </Tooltip>
+                          </SidebarMenuItem>
+                        );
+                      }}
+                    </For>
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
           </For>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </div>
+        </Show>
+      </SidebarContent>
+
+      <SidebarFooter class="border-sidebar-border border-t p-2">
+        <Tooltip>
+          <TooltipTrigger as="div" class="w-full">
+            <Button
+              class="w-full justify-start"
+              variant={showHidden() ? "secondary" : "ghost"}
+              aria-label={
+                showHidden()
+                  ? "Hide hidden tables and views"
+                  : "Show hidden tables and views"
+              }
+              aria-pressed={showHidden()}
+              onClick={toggleHiddenResources}
+            >
+              <Show when={showHidden()} fallback={<TbOutlineLock />}>
+                <TbOutlineLockOpen />
+              </Show>
+              {showHidden() ? "Hide hidden resources" : "Show hidden resources"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {showHidden()
+              ? "Hide internal tables and views"
+              : "Show internal tables and views"}
+          </TooltipContent>
+        </Tooltip>
+      </SidebarFooter>
+    </>
   );
 }
 
@@ -291,31 +414,22 @@ function TableSplitView(props: {
               />
             </SheetContent>
 
-            <SidebarProvider>
+            <SidebarProvider
+              cookieName="table-explorer:state"
+              style={{ "--sidebar-width": "16rem" }}
+            >
               <Sidebar
                 class="absolute"
                 variant="sidebar"
                 side="left"
                 collapsible="offcanvas"
               >
-                <SidebarContent>
-                  {/* <SidebarHeader /> */}
-
-                  <SidebarGroup>
-                    <TablePickerSidebar
-                      tablesAndViews={filteredTablesAndViews().map(
-                        ([t, _]) => t,
-                      )}
-                      allTables={allTables()}
-                      selectedTable={selectedTable()?.[0]}
-                      schemaRefetch={props.schemaRefetch}
-                      openCreateTableDialog={() => setCreateTableDialog(true)}
-                      postgres={isPostgres()}
-                    />
-                  </SidebarGroup>
-
-                  {/* <SidebarFooter /> */}
-                </SidebarContent>
+                <TablePickerSidebar
+                  tablesAndViews={filteredTablesAndViews().map(([t, _]) => t)}
+                  selectedTable={selectedTable()?.[0]}
+                  openCreateTableDialog={() => setCreateTableDialog(true)}
+                  postgres={isPostgres()}
+                />
 
                 <SidebarRail />
               </Sidebar>
