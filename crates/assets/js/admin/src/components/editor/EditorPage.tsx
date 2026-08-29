@@ -52,7 +52,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   useSidebar,
@@ -790,6 +789,38 @@ export function QueryActionBar(props: {
   );
 }
 
+export function AttachedDatabaseSelect(props: {
+  options: string[];
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  return (
+    <Select<string>
+      multiple
+      options={props.options}
+      value={props.value}
+      itemComponent={(itemProps) => (
+        <SelectItem item={itemProps.item}>{itemProps.item.rawValue}</SelectItem>
+      )}
+      onChange={props.onChange}
+    >
+      <SelectTrigger class="w-auto" aria-label="Attached databases">
+        <span class="max-w-44 text-ellipsis">
+          Attached databases · {props.value.length}
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        <div class="border-b px-3 py-2">
+          <div class="text-sm font-medium">Attached databases</div>
+          <div class="text-muted-foreground text-xs">
+            main.db is always connected
+          </div>
+        </div>
+      </SelectContent>
+    </Select>
+  );
+}
+
 type DirtyDialogState = {
   nextSelected: number;
 };
@@ -821,9 +852,15 @@ function EditorPanel(props: {
       .map((db) => db.name)
       .filter((n) => n !== undefined);
 
-  const [attachedDbs, setAttachedDbs] = createSignal<string[]>(
-    databases()?.slice(0, 124) ?? [],
-  );
+  const [attachedDbs, setAttachedDbs] = createSignal<string[]>([]);
+  let attachedDbsInitialized = false;
+  createEffect(() => {
+    const available = databases();
+    if (!attachedDbsInitialized && available !== undefined) {
+      setAttachedDbs(available.slice(0, 124));
+      attachedDbsInitialized = true;
+    }
+  });
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
       // Reset queryString to null whenever we switch scripts. If we read query
@@ -1004,27 +1041,11 @@ function EditorPanel(props: {
           </div>
 
           <div class="flex min-w-0 items-center gap-2">
-            <Select<string>
-              multiple={true}
+            <AttachedDatabaseSelect
               options={[...(databases() ?? [])]}
               value={attachedDbs()}
-              itemComponent={(props) => (
-                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-              )}
-              onChange={(value: string[]) => setAttachedDbs(value)}
-            >
-              <SelectTrigger aria-label="Attached databases">
-                <SelectValue class="max-w-40 min-w-16 text-ellipsis">
-                  {(state) => {
-                    const selected = state.selectedOptions();
-                    return selected.length === 0
-                      ? "No databases"
-                      : selected.join(", ");
-                  }}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent />
-            </Select>
+              onChange={setAttachedDbs}
+            />
 
             <HelpDialog />
           </div>

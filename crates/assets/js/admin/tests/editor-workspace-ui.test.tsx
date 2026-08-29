@@ -1,7 +1,42 @@
 import { fireEvent, render } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EditorSidebar, QueryActionBar } from "@/components/editor/EditorPage";
+import {
+  AttachedDatabaseSelect,
+  EditorSidebar,
+  QueryActionBar,
+} from "@/components/editor/EditorPage";
 import { SidebarProvider } from "@/components/ui/sidebar";
+
+describe("attached database selector", () => {
+  it("shows the selected database count", () => {
+    const result = render(() => (
+      <AttachedDatabaseSelect
+        options={["other"]}
+        value={["other"]}
+        onChange={vi.fn()}
+      />
+    ));
+
+    const trigger = result.getByRole("button", {
+      name: /Attached databases/,
+    });
+    expect(trigger).toHaveTextContent("Attached databases · 1");
+
+    result.unmount();
+
+    const empty = render(() => (
+      <AttachedDatabaseSelect
+        options={["other"]}
+        value={[]}
+        onChange={vi.fn()}
+      />
+    ));
+    expect(empty.getByRole("button")).toHaveTextContent(
+      "Attached databases · 0",
+    );
+    empty.unmount();
+  });
+});
 
 describe("query actions", () => {
   it("exposes clear save and execute actions", async () => {

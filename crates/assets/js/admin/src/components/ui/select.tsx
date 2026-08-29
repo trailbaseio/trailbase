@@ -49,7 +49,10 @@ const SelectTrigger = <T extends ValidComponent = "button">(
 }
 
 type SelectContentProps<T extends ValidComponent = "div"> =
-  SelectPrimitive.SelectContentProps<T> & { class?: string | undefined }
+  SelectPrimitive.SelectContentProps<T> & {
+    class?: string | undefined
+    children?: JSX.Element
+  }
 
 // Prevent overflow
 const customStyles = "overflow-y-auto max-h-[50dvh]"
@@ -57,7 +60,7 @@ const customStyles = "overflow-y-auto max-h-[50dvh]"
 const SelectContent = <T extends ValidComponent = "div">(
   props: PolymorphicProps<T, SelectContentProps<T>>
 ) => {
-  const [local, others] = splitProps(props as SelectContentProps, ["class"])
+  const [local, others] = splitProps(props as SelectContentProps, ["class", "children"])
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -68,6 +71,7 @@ const SelectContent = <T extends ValidComponent = "div">(
         )}
         {...others}
       >
+        {local.children}
         <SelectPrimitive.Listbox class="m-0 p-1" />
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
