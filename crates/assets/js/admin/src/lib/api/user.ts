@@ -1,6 +1,23 @@
 import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
 
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function appendAccountSearchParams(
+  params: URLSearchParams,
+  search: string,
+) {
+  const value = search.trim();
+  if (!value) return params;
+  if (UUID.test(value)) params.append("filter[id][$eq]", value);
+  else {
+    params.append("filter[$or][0][email][$like]", `%${value}%`);
+    params.append("filter[$or][1][username][$like]", `%${value}%`);
+  }
+  return params;
+}
+
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { CreateUserRequest } from "@bindings/CreateUserRequest";
 import type { ListUsersResponse } from "@bindings/ListUsersResponse";
@@ -32,6 +49,7 @@ export async function fetchUsers(
   pageSize: number,
   pageIndex: number,
   order?: string,
+  search?: string,
 ): Promise<ListUsersResponse> {
   const params = buildListSearchParams({
     filter,
@@ -41,6 +59,7 @@ export async function fetchUsers(
     cursor: undefined,
     order,
   });
+  if (search !== undefined) appendAccountSearchParams(params, search);
 
   const response = await adminFetch(`/user?${params}`);
   return await response.json();

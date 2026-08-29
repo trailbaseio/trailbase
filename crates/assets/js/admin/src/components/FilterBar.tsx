@@ -16,6 +16,7 @@ export function FilterBar(props: {
   onSubmit: (filter: string) => void;
   example?: JSX.Element;
   placeholder?: string;
+  label?: string;
 }) {
   let input: HTMLInputElement | undefined;
   const [value, setValue] = createSignal(props.initial ?? "");
@@ -69,7 +70,7 @@ export function FilterBar(props: {
             value={value()}
             onInput={(event) => setValue(event.currentTarget.value)}
             type="text"
-            aria-label="Filter rows"
+            aria-label={props.label ?? "Filter rows"}
             placeholder={props.placeholder ?? "Filter rows…"}
           />
         </TextField>

@@ -501,9 +501,37 @@ function EditSheetContent(props: {
   );
 }
 
+export function AccountToolbar(props: {
+  advanced: boolean;
+  onModeChange: (advanced: boolean) => void;
+  children: JSX.Element;
+}) {
+  return (
+    <div class="w-full space-y-2">
+      <div class="flex gap-2">
+        <Button
+          variant={props.advanced ? "ghost" : "outline"}
+          onClick={() => props.onModeChange(false)}
+        >
+          Search accounts
+        </Button>
+        <Button
+          variant={props.advanced ? "outline" : "ghost"}
+          onClick={() => props.onModeChange(true)}
+        >
+          Advanced account filter
+        </Button>
+      </div>
+      {props.children}
+    </div>
+  );
+}
+
 export function AccountsPage() {
   const [searchParams, setSearchParams] = useSearchParams<{
+    search?: string;
     filter?: string;
+    advanced?: string;
     pageSize?: string;
     pageIndex?: string;
   }>();
@@ -514,14 +542,10 @@ export function AccountsPage() {
     };
   };
 
-  const setFilter = (filter: string | undefined) => {
-    setSearchParams({
-      ...searchParams,
-      filter,
-      // Reset
-      pageIndex: "0",
-    });
-  };
+  const setFilter = (filter: string | undefined) =>
+    setSearchParams({ ...searchParams, filter, pageIndex: "0" });
+  const setSearch = (search: string | undefined) =>
+    setSearchParams({ ...searchParams, search, pageIndex: "0" });
 
   const [sorting, setSorting] = createSignal<SortingState>([]);
 
@@ -531,6 +555,8 @@ export function AccountsPage() {
     queryKey: [
       "users",
       searchParams.filter,
+      searchParams.search,
+      searchParams.advanced,
       pagination().pageSize,
       pagination().pageIndex,
       sorting(),
@@ -540,10 +566,11 @@ export function AccountsPage() {
       const s = sorting();
 
       const response = await fetchUsers(
-        searchParams.filter,
+        searchParams.advanced === "true" ? searchParams.filter : undefined,
         p.pageSize,
         p.pageIndex,
         formatSortingAsOrder(s),
+        searchParams.advanced === "true" ? undefined : searchParams.search,
       );
 
       return response;
@@ -599,17 +626,49 @@ export function AccountsPage() {
       />
 
       <div class="flex flex-col items-end gap-4 p-4">
-        <FilterBar
-          initial={searchParams.filter}
-          onSubmit={(value: string) => {
-            if (value === searchParams.filter) {
-              refetch();
-            } else {
-              setFilter(value);
+        <AccountToolbar
+          advanced={searchParams.advanced === "true"}
+          onModeChange={(advanced) =>
+            setSearchParams({
+              ...searchParams,
+              advanced: advanced ? "true" : "false",
+            })
+          }
+        >
+          <FilterBar
+            label={
+              searchParams.advanced === "true"
+                ? "Advanced account filter"
+                : "Search accounts"
             }
-          }}
-          placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
-        />
+            initial={
+              searchParams.advanced === "true"
+                ? searchParams.filter
+                : searchParams.search
+            }
+            onSubmit={(value) => {
+              const current =
+                searchParams.advanced === "true"
+                  ? searchParams.filter
+                  : searchParams.search;
+              if (value === current) refetch();
+              else if (searchParams.advanced === "true") setFilter(value);
+              else setSearch(value);
+            }}
+            placeholder={
+              searchParams.advanced === "true"
+                ? `Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`
+                : "Search accounts…"
+            }
+            example={
+              searchParams.advanced === "true" ? (
+                <>
+                  Use raw expressions such as <code>email ~ "admin@%"</code>.
+                </>
+              ) : undefined
+            }
+          />
+        </AccountToolbar>
 
         <Suspense fallback={<div>Loading...</div>}>
           <Switch>
