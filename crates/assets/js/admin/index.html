@@ -5,7 +5,12 @@
     <meta charset="utf-8" />
     <meta name="description" content="Trailbase Admin Dashboard" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#f3f7f9" />
+    <meta name="theme-color" content="#f0f4f7" />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#151c28"
+    />
 
     <link rel="icon" type="image/svg+xml" href="/src/assets/favicon.svg" />
 
@@ -15,10 +20,20 @@
         try {
           const stored = localStorage.getItem("theme:selected");
           const theme = stored ? JSON.parse(stored) : undefined;
-          const resolved = theme ??
-            (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-          if (resolved === "dark") document.documentElement.classList.add("dark");
+          const resolved =
+            theme ??
+            (matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light");
+          if (resolved === "dark")
+            document.documentElement.classList.add("dark");
           document.documentElement.setAttribute("data-kb-theme", resolved);
+          document
+            .querySelector('meta[name="theme-color"]:not([media])')
+            ?.setAttribute(
+              "content",
+              resolved === "dark" ? "#151c28" : "#f0f4f7",
+            );
         } catch (_) {}
       })();
     </script>

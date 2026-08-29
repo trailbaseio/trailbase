@@ -8,6 +8,12 @@ export function applyResolvedTheme(theme: ResolvedTheme) {
   const root = document.documentElement;
 
   root.classList.toggle("dark", theme === "dark");
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute(
+      "content",
+      theme === "dark" ? "hsl(215 30% 12%)" : "hsl(210 30% 96%)",
+    );
   root.setAttribute("data-kb-theme", theme);
 }
 

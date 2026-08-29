@@ -26,11 +26,11 @@ const queryClient = new QueryClient();
 function LeftNav(props: RouteSectionProps) {
   return (
     <>
-      <div class="hide-scrollbars sticky h-dvh w-[58px] overflow-hidden">
+      <div class="hide-scrollbars sticky h-dvh w-[15rem] overflow-hidden">
         <VerticalNavbar location={props.location} />
       </div>
 
-      <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100vw-58px)] overflow-x-hidden overflow-y-auto">
+      <main class="absolute inset-0 left-[15rem] h-dvh w-[calc(100vw-15rem)] overflow-x-hidden overflow-y-auto">
         <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </>

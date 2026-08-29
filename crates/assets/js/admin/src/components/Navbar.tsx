@@ -49,15 +49,25 @@ import {
 import logo from "@/assets/logo_104.webp";
 
 const BASE = import.meta.env.BASE_URL;
-const options = [
-  [`${BASE}/table/`, TbOutlineDatabase, "Table & View Browser"],
-  [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
-  [`${BASE}/erd`, TbOutlineChartDots3, "Entity Relationship Diagram"],
-  [`${BASE}/auth`, TbOutlineUsers, "User Accounts"],
-  [`${BASE}/wasm/`, TbOutlinePackage, "WASM Components"],
-  [`${BASE}/logs`, TbOutlineTimeline, "Logs & Metrics"],
-  [`${BASE}/openapi`, TbOutlineApi, "OpenApi"],
-  [`${BASE}/settings/`, TbOutlineSettings, "Settings"],
+const groups = [
+  [
+    "Data",
+    [
+      [`${BASE}/table/`, TbOutlineDatabase, "Tables"],
+      [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
+      [`${BASE}/erd`, TbOutlineChartDots3, "ERD"],
+    ],
+  ],
+  [
+    "Operate",
+    [
+      [`${BASE}/auth`, TbOutlineUsers, "Accounts"],
+      [`${BASE}/wasm/`, TbOutlinePackage, "WASM"],
+      [`${BASE}/logs`, TbOutlineTimeline, "Logs"],
+      [`${BASE}/openapi`, TbOutlineApi, "OpenAPI"],
+    ],
+  ],
+  ["System", [[`${BASE}/settings/`, TbOutlineSettings, "Settings"]]],
 ] as const;
 
 type NavbarContextT = {
@@ -125,26 +135,42 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
         <img src={logo} width={props.horizontal ? "34" : "42"} alt="Logo" />
       </a>
 
-      <For each={options}>
-        {([pathname, Icon, tooltip]) => {
-          const active = () => props.location.pathname === pathname;
-          const style = () =>
-            active() ? navbarIconActiveStyle : navbarIconStyle;
+      <For each={groups}>
+        {([label, items]) => (
+          <section class="w-full">
+            <Show when={!props.horizontal}>
+              <h2 class="text-muted-foreground px-3 py-1 text-xs font-semibold">
+                {label}
+              </h2>
+            </Show>
+            <For each={items}>
+              {([pathname, Icon, tooltip]) => {
+                const active = () => props.location.pathname === pathname;
+                const style = () =>
+                  active() ? navbarIconActiveStyle : navbarIconStyle;
 
-          return (
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <a href={pathname} onClick={(e) => onClick(e, pathname)}>
-                  <div class={style()}>
-                    <Icon size={iconSize(props.horizontal)} />
-                  </div>
-                </a>
-              </TooltipTrigger>
+                return (
+                  <Tooltip>
+                    <TooltipTrigger as="div">
+                      <a href={pathname} onClick={(e) => onClick(e, pathname)}>
+                        <div
+                          class={`${style()} flex items-center gap-2 ${props.horizontal ? "" : "w-full justify-start"}`}
+                        >
+                          <Icon size={iconSize(props.horizontal)} />
+                          <Show when={!props.horizontal}>
+                            <span>{tooltip}</span>
+                          </Show>
+                        </div>
+                      </a>
+                    </TooltipTrigger>
 
-              <TooltipContent>{tooltip}</TooltipContent>
-            </Tooltip>
-          );
-        }}
+                    <TooltipContent>{tooltip}</TooltipContent>
+                  </Tooltip>
+                );
+              }}
+            </For>
+          </section>
+        )}
       </For>
     </Dialog>
   );
@@ -299,6 +325,6 @@ function iconSize(horizontal: boolean) {
 }
 
 export const navbarIconStyle =
-  "rounded-full p-2 transition-all hover:bg-accent hover:text-accent-foreground active:scale-90";
+  "rounded-full p-2 transition-all hover:bg-accent hover:text-accent-foreground";
 const navbarIconActiveStyle =
-  "rounded-full bg-primary p-2 text-primary-foreground transition-all active:scale-90";
+  "rounded-full bg-primary p-2 text-primary-foreground transition-all";
