@@ -79,6 +79,144 @@ function findTargetPortName(
   return foreignKey.foreign_table;
 }
 
+export type ErdEntityType = "table" | "view";
+
+export type ErdEntity = {
+  id: string;
+  name: string;
+  type: ErdEntityType;
+};
+
+export type ErdRelation = {
+  sourceId: string;
+  targetId: string;
+};
+
+export type ErdModel = {
+  entities: ErdEntity[];
+  nodes: NodeMetadata[];
+  edges: EdgeMetadata[];
+  relations: ErdRelation[];
+  tableCount: number;
+  viewCount: number;
+};
+
+export type ErdVisibility = {
+  tables: boolean;
+  views: boolean;
+};
+
+export function searchErdEntities(
+  entities: ErdEntity[],
+  query: string,
+): ErdEntity[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (normalizedQuery.length === 0) {
+    return entities;
+  }
+
+  return entities.filter((entity) =>
+    entity.name.toLocaleLowerCase().includes(normalizedQuery),
+  );
+}
+
+export function relatedEntityIds(
+  relations: ErdRelation[],
+  selectedId?: string,
+): Set<string> {
+  const related = new Set<string>();
+  if (selectedId === undefined) {
+    return related;
+  }
+
+  related.add(selectedId);
+  for (const relation of relations) {
+    if (relation.sourceId === selectedId) {
+      related.add(relation.targetId);
+    }
+    if (relation.targetId === selectedId) {
+      related.add(relation.sourceId);
+    }
+  }
+  return related;
+}
+
+function edgeCellId(endpoint: EdgeMetadata["source"]): string | undefined {
+  if (typeof endpoint === "string") {
+    return endpoint;
+  }
+  if (endpoint !== undefined && endpoint !== null && "cell" in endpoint) {
+    return typeof endpoint.cell === "string" ? endpoint.cell : undefined;
+  }
+  return undefined;
+}
+
+export function buildErdModel(
+  schema: ListSchemasResponse,
+  visibility: ErdVisibility,
+  theme?: ResolvedTheme,
+): ErdModel {
+  const allTablesAndViews = [
+    ...schema.tables.map(([table]) => table),
+    ...schema.views.map(([view]) => view),
+  ];
+  const visibleTablesAndViews = allTablesAndViews.filter((tableOrView) => {
+    const type = tableType(tableOrView);
+    const visibleByType = type === "view" ? visibility.views : visibility.tables;
+    return (
+      visibleByType &&
+      (!hiddenTable(tableOrView) || isUserTable(tableOrView.name))
+    );
+  });
+  const entities: ErdEntity[] = visibleTablesAndViews.map((tableOrView) => ({
+    id: prettyFormatQualifiedName(tableOrView.name),
+    name: prettyFormatQualifiedName(tableOrView.name),
+    type: tableType(tableOrView) === "view" ? "view" : "table",
+  }));
+  const visibleIds = new Set(entities.map((entity) => entity.id));
+  const nodes: NodeMetadata[] = [];
+  const edges: EdgeMetadata[] = [];
+  const resolvedTheme = theme ?? "light";
+
+  for (const tableOrView of visibleTablesAndViews) {
+    const [node, nodeEdges] = buildErNode(
+      resolvedTheme,
+      allTablesAndViews,
+      tableOrView,
+    );
+    nodes.push(node);
+    edges.push(
+      ...nodeEdges.filter((edge) => {
+        const sourceId = edgeCellId(edge.source);
+        const targetId = edgeCellId(edge.target);
+        return (
+          sourceId !== undefined &&
+          targetId !== undefined &&
+          visibleIds.has(sourceId) &&
+          visibleIds.has(targetId)
+        );
+      }),
+    );
+  }
+
+  const relations = edges.flatMap((edge) => {
+    const sourceId = edgeCellId(edge.source);
+    const targetId = edgeCellId(edge.target);
+    return sourceId !== undefined && targetId !== undefined
+      ? [{ sourceId, targetId }]
+      : [];
+  });
+
+  return {
+    entities,
+    nodes,
+    edges,
+    relations,
+    tableCount: entities.filter((entity) => entity.type === "table").length,
+    viewCount: entities.filter((entity) => entity.type === "view").length,
+  };
+}
+
 function buildErNode(
   theme: ResolvedTheme,
   allTablesAndViews: (Table | View)[],
@@ -158,35 +296,9 @@ function buildErNode(
 function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
   const theme = createTheme();
 
-  const nodesAndEdges = createMemo(() => {
-    const nodes: NodeMetadata[] = [];
-    const edges: EdgeMetadata[] = [];
-
-    const allTablesAndViews = [
-      ...props.schema.tables.map(([t, _]) => t),
-      ...props.schema.views.map(([v, _]) => v),
-    ];
-
-    for (const tableOrView of allTablesAndViews) {
-      if (hiddenTable(tableOrView) && !isUserTable(tableOrView.name)) {
-        console.debug(
-          `skipping '${prettyFormatQualifiedName(tableOrView.name)}'`,
-          tableOrView,
-        );
-        continue;
-      }
-
-      const [n, e] = buildErNode(theme(), allTablesAndViews, tableOrView);
-      nodes.push(n);
-      edges.push(...e);
-    }
-
-    // console.debug(
-    //   `ErdGraph: ${allTablesAndViews}, nodes: ${nodes}, edges: ${edges}`,
-    // );
-
-    return { nodes, edges };
-  });
+  const model = createMemo(() =>
+    buildErdModel(props.schema, { tables: true, views: true }, theme()),
+  );
 
   let graph: Graph | undefined;
 
@@ -226,8 +338,8 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
       </div>
 
       <ErdGraph
-        nodes={nodesAndEdges().nodes}
-        edges={nodesAndEdges().edges}
+        nodes={model().nodes}
+        edges={model().edges}
         onMount={(g) => (graph = g)}
       />
     </div>
