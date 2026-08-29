@@ -63,9 +63,9 @@ describe("Accounts workspace presentation", () => {
     );
   });
 
-  it("uses the requested locale for sub-minute relative times", () => {
+  it("uses a stable label for sub-minute relative times", () => {
     expect(formatAccountTime(1_700_000_030n, 1_700_000_000_000, "fr")).toBe(
-      "dans 30 secondes",
+      "just now",
     );
   });
 

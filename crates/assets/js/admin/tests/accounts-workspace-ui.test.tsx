@@ -324,14 +324,14 @@ describe("AccountsPage integration", () => {
     expect(screen.getByText("Identity")).toBeVisible();
     expect(screen.getAllByText("ada@example.com")[1]).toBeVisible();
     expect(
-      screen.getAllByText("Password").some((element) =>
-        element.classList.contains("inline-flex"),
-      ),
+      screen
+        .getAllByText("Password")
+        .some((element) => element.classList.contains("inline-flex")),
     ).toBe(true);
     expect(
-      screen.getAllByText("Verified").some((element) =>
-        element.classList.contains("inline-flex"),
-      ),
+      screen
+        .getAllByText("Verified")
+        .some((element) => element.classList.contains("inline-flex")),
     ).toBe(true);
     expect(
       screen.getByRole("button", { name: "Copy login tokens" }),

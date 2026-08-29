@@ -126,18 +126,7 @@ export function formatAccountTime(
   const absoluteSeconds = Math.abs(differenceSeconds);
 
   if (absoluteSeconds < 60) {
-    // Keep sub-minute values from displaying misleading 0 or 60 seconds.
-    const truncated = Math.trunc(differenceSeconds);
-    const seconds =
-      truncated === 0 && differenceSeconds !== 0
-        ? differenceSeconds > 0
-          ? 1
-          : -1
-        : Math.max(-59, Math.min(59, truncated));
-    return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(
-      seconds,
-      "second",
-    );
+    return "just now";
   }
 
   const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
