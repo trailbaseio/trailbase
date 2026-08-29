@@ -22,6 +22,7 @@ import {
   TbOutlinePencilPlus,
   TbOutlineX,
   TbOutlineCopy,
+  TbOutlineDotsVertical,
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
@@ -33,7 +34,7 @@ import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 import { IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
 import { Callout } from "@/components/ui/callout";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +71,13 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { showToast } from "@/components/ui/toast";
 import { Table, buildTable } from "@/components/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
@@ -295,76 +303,119 @@ function ExecutionTime(props: { timestamp: number | undefined }) {
   return <div class="text-sm">{`Executed: ${time().toLocaleString()}`}</div>;
 }
 
-function EditorSidebar(props: {
+export function EditorSidebar(props: {
   selected: number;
   setSelected: (idx: number) => void;
   dirty: boolean;
-  horizontal: boolean;
   deleteScriptByIdx: (idx: number) => void;
 }) {
   const { setOpenMobile } = useSidebar();
   const scripts = useStore($scripts);
+  const [search, setSearch] = createSignal("");
+  const filteredScripts = createMemo(() =>
+    filterSavedQueries(scripts(), search()),
+  );
 
-  const addNewScript = () => props.setSelected(createNewScript());
+  const addNewScript = () => {
+    setOpenMobile(false);
+    props.setSelected(createNewScript());
+  };
 
   return (
-    <div class="p-2">
-      <SidebarGroupContent>
+    <div class="flex h-full min-h-0 flex-col gap-3 p-2">
+      <div class="flex items-start justify-between gap-2 px-1 pt-1">
+        <div>
+          <h2 class="text-sm font-semibold">Saved queries</h2>
+          <p class="text-muted-foreground text-xs">
+            {search().trim()
+              ? `${filteredScripts().length} of ${scripts().length}`
+              : `${scripts().length} saved`}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="size-8"
+          aria-label="Create query"
+          onClick={addNewScript}
+        >
+          <TbOutlinePencilPlus />
+        </Button>
+      </div>
+
+      <TextField>
+        <TextFieldInput
+          type="search"
+          aria-label="Search saved queries"
+          placeholder="Search saved queries"
+          value={search()}
+          onInput={(event) => setSearch(event.currentTarget.value)}
+        />
+      </TextField>
+
+      <SidebarGroupContent class="min-h-0 overflow-y-auto">
         <SidebarMenu>
-          <Button
-            class="flex gap-2"
-            variant="secondary"
-            onClick={() => {
-              setOpenMobile(false);
-              addNewScript();
-            }}
+          <Show
+            when={scripts().length > 0}
+            fallback={
+              <div class="text-muted-foreground flex flex-col items-center gap-3 px-3 py-8 text-center text-sm">
+                <p>No saved queries yet</p>
+                <Button variant="secondary" onClick={addNewScript}>
+                  Create query
+                </Button>
+              </div>
+            }
           >
-            <TbOutlinePencilPlus /> New
-          </Button>
+            <Show
+              when={filteredScripts().length > 0}
+              fallback={
+                <div class="text-muted-foreground flex flex-col items-center gap-3 px-3 py-8 text-center text-sm">
+                  <p>No saved queries match</p>
+                  <Button variant="ghost" onClick={() => setSearch("")}>
+                    Clear search
+                  </Button>
+                </div>
+              }
+            >
+              <For each={filteredScripts()}>
+                {(script: Script) => {
+                  const index = () => scripts().indexOf(script);
+                  const selected = () => props.selected === index();
+                  const dirty = () => selected() && props.dirty;
 
-          <For each={scripts()}>
-            {(script: Script, i: Accessor<number>) => {
-              const scriptName = () => scripts()[i()].name;
-              const showStar = () => props.selected === i() && props.dirty;
+                  return (
+                    <SidebarMenuItem class="flex items-center gap-1">
+                      <SidebarMenuButton
+                        isActive={selected()}
+                        tooltip={script.name}
+                        class="min-w-0 flex-1"
+                        variant="default"
+                        size="md"
+                        onClick={() => {
+                          setOpenMobile(false);
+                          props.setSelected(index());
+                        }}
+                      >
+                        <span class="truncate">{script.name}</span>
+                        <Show when={dirty()}>
+                          <span class="text-primary ml-auto" aria-hidden="true">
+                            •
+                          </span>
+                          <span class="sr-only">Unsaved changes</span>
+                        </Show>
+                      </SidebarMenuButton>
 
-              return (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={props.selected === i()}
-                    tooltip={scriptName()}
-                    class="pr-0"
-                    variant="default"
-                    size="md"
-                    onClick={() => {
-                      setOpenMobile(false);
-                      props.setSelected(i());
-                    }}
-                  >
-                    <div class="flex w-full items-center justify-between">
-                      <span class="truncate">
-                        {`${scriptName()}${showStar() ? "*" : ""}`}
-                      </span>
-
-                      <div class="flex">
-                        <RenameDialog selected={i()} script={script} />
-
-                        <IconButton
-                          class="hover:bg-border"
-                          tooltip="Delete this script"
-                          onClick={(e) => {
-                            props.deleteScriptByIdx(i());
-                            e.stopPropagation();
-                          }}
-                        >
-                          <TbOutlineTrash />
-                        </IconButton>
-                      </div>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            }}
-          </For>
+                      <QueryActions
+                        selected={index()}
+                        script={script}
+                        deleteScript={() => props.deleteScriptByIdx(index())}
+                      />
+                    </SidebarMenuItem>
+                  );
+                }}
+              </For>
+            </Show>
+          </Show>
         </SidebarMenu>
       </SidebarGroupContent>
     </div>
@@ -408,26 +459,92 @@ function HelpDialog() {
   );
 }
 
-function RenameDialog(props: { selected: number; script: Script }) {
-  const [open, setOpen] = createSignal(false);
+function QueryActions(props: {
+  selected: number;
+  script: Script;
+  deleteScript: () => void;
+}) {
+  const [renameOpen, setRenameOpen] = createSignal(false);
+  const [deleteOpen, setDeleteOpen] = createSignal(false);
 
+  return (
+    <>
+      <DropdownMenu placement="bottom-end">
+        <DropdownMenuTrigger
+          class={buttonVariants({ variant: "ghost", size: "icon" })}
+          aria-label={`Actions for ${props.script.name}`}
+        >
+          <TbOutlineDotsVertical />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+            <TbOutlineEdit />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            class="text-destructive ui-highlighted:text-destructive"
+            onSelect={() => setDeleteOpen(true)}
+          >
+            <TbOutlineTrash />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <RenameDialog
+        open={renameOpen()}
+        onOpenChange={setRenameOpen}
+        selected={props.selected}
+        script={props.script}
+      />
+
+      <Dialog open={deleteOpen()} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete query?</DialogTitle>
+          </DialogHeader>
+          <p class="text-muted-foreground text-sm">
+            “{props.script.name}” and its cached result will be removed from
+            this browser.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                props.deleteScript();
+                setDeleteOpen(false);
+              }}
+            >
+              Delete query
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function RenameDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selected: number;
+  script: Script;
+}) {
   let ref: HTMLInputElement | undefined;
 
   return (
-    <Dialog id="script-rename-dialog" open={open()} onOpenChange={setOpen}>
-      <DialogTrigger
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <IconButton tooltip="Rename script" class="hover:bg-border">
-          <TbOutlineEdit />
-        </IconButton>
-      </DialogTrigger>
-
+    <Dialog
+      id="script-rename-dialog"
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename</DialogTitle>
+          <DialogTitle>Rename query</DialogTitle>
         </DialogHeader>
 
         <form
@@ -436,19 +553,20 @@ function RenameDialog(props: { selected: number; script: Script }) {
           onSubmit={(e: SubmitEvent) => {
             e.preventDefault();
 
-            const name = ref?.value;
-            if (name !== undefined) {
+            const name = ref?.value.trim();
+            if (name) {
               updateExistingScript(props.selected, {
                 ...props.script,
                 name,
               });
-              setOpen(false);
+              props.onOpenChange(false);
             }
           }}
         >
           <TextField>
             <TextFieldInput
               ref={ref}
+              aria-label="Query name"
               required={true}
               pattern=".+"
               value={props.script.name}
@@ -457,7 +575,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
           </TextField>
 
           <DialogFooter>
-            <Button type="submit">Save</Button>
+            <Button type="submit">Rename query</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -806,7 +924,10 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      cookieName="sql-explorer:state"
+      style={{ "--sidebar-width": "15rem" }}
+    >
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -819,7 +940,6 @@ export function EditorPage() {
               selected={selected()}
               setSelected={switchToScript}
               dirty={dirty()}
-              horizontal={true}
               deleteScriptByIdx={deleteScriptByIdx}
             />
           </SidebarGroup>
