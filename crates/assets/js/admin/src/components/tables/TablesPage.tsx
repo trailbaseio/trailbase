@@ -48,8 +48,6 @@ import {
   prettyFormatQualifiedName,
   equalQualifiedNames,
 } from "@/lib/schema";
-import { createIsMobile } from "@/lib/signals";
-
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
@@ -358,7 +356,6 @@ function TableSplitView(props: {
   schemaRefetch: () => Promise<void>;
 }) {
   const navigate = useNavigate();
-  const isMobile = createIsMobile();
   const settings = useStore($explorerSettings);
   const showHidden = () => settings().showHidden ?? false;
   const [createTableDialog, setCreateTableDialog] = createSignal(false);
@@ -416,6 +413,7 @@ function TableSplitView(props: {
             </SheetContent>
 
             <SidebarProvider
+              class="h-full min-h-0"
               cookieName="table-explorer:state"
               style={{ "--sidebar-width": "16rem" }}
             >
@@ -435,32 +433,22 @@ function TableSplitView(props: {
                 <SidebarRail />
               </Sidebar>
 
-              <SidebarInset>
-                <Switch>
-                  <Match when={selectedTable() !== undefined && isMobile()}>
-                    <TablePane
-                      selectedTable={selectedTable()!}
-                      schemas={props.schemas}
-                      schemaRefetch={props.schemaRefetch}
-                      postgres={isPostgres()}
-                    />
-                  </Match>
-
-                  <Match when={selectedTable() !== undefined && !isMobile()}>
-                    <div class="h-dvh overflow-y-auto">
+              <SidebarInset class="min-h-0 overflow-hidden">
+                <Show
+                  when={selectedTable()}
+                  fallback={<div class="p-4">No table selected</div>}
+                >
+                  {(selected) => (
+                    <div class="min-h-0 flex-1 overflow-y-auto">
                       <TablePane
-                        selectedTable={selectedTable()!}
+                        selectedTable={selected()}
                         schemas={props.schemas}
                         schemaRefetch={props.schemaRefetch}
                         postgres={isPostgres()}
                       />
                     </div>
-                  </Match>
-
-                  <Match when={true}>
-                    <div class="p-4">No table selected</div>
-                  </Match>
-                </Switch>
+                  )}
+                </Show>
               </SidebarInset>
             </SidebarProvider>
           </>

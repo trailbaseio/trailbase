@@ -493,14 +493,14 @@ function TableHeader(props: {
 
   return (
     <header class="bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm">
-      <div class="flex min-h-14 items-center justify-between gap-3 px-4">
+      <div class="flex min-h-14 items-center justify-between gap-2 px-3 sm:px-4">
         <div class="flex min-w-0 items-center gap-2">
           <SidebarTrigger aria-label="Toggle table explorer" />
           <div class="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
-            <span>Tables</span>
-            <TbOutlineChevronRight class="size-3.5" />
-            <span>{schemaName()}</span>
-            <TbOutlineChevronRight class="size-3.5" />
+            <span class="hidden sm:inline">Tables</span>
+            <TbOutlineChevronRight class="hidden size-3.5 sm:block" />
+            <span class="hidden sm:inline">{schemaName()}</span>
+            <TbOutlineChevronRight class="hidden size-3.5 sm:block" />
             <span class="text-foreground truncate font-semibold">
               {resourceName()}
             </span>
