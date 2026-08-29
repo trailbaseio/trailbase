@@ -1,7 +1,67 @@
-import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@solidjs/testing-library";
+import * as Solid from "solid-js";
+import { createEffect } from "solid-js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AccountToolbar } from "@/components/accounts/AccountsPage";
+const pageState = vi.hoisted(() => ({
+  params: {
+    search: "ada",
+    filter: "admin = TRUE",
+    advanced: "false",
+    pageSize: "25",
+    pageIndex: "2",
+  } as Record<string, string | undefined>,
+  setSearchParams: vi.fn(),
+  fetchUsers: vi.fn(),
+  invalidateQueries: vi.fn(),
+}));
+
+vi.mock("@solidjs/router", () => ({
+  useSearchParams: () => {
+    const [version, setVersion] = Solid.createSignal(0);
+    const proxy = new Proxy(pageState.params, {
+      get: (_target, key: string) => {
+        version();
+        return pageState.params[key];
+      },
+    });
+    pageState.setSearchParams.mockImplementation((next) => {
+      Object.assign(pageState.params, next);
+      setVersion((value) => value + 1);
+    });
+    return [proxy, pageState.setSearchParams];
+  },
+}));
+vi.mock("@tanstack/solid-query", () => ({
+  useQuery: (options: () => { queryFn: () => Promise<unknown> }) => {
+    createEffect(() => void options().queryFn());
+    return { isLoading: false, isError: false, data: undefined };
+  },
+  useQueryClient: () => ({ invalidateQueries: pageState.invalidateQueries }),
+}));
+vi.mock("@/lib/api/user", () => ({
+  fetchUsers: pageState.fetchUsers,
+  deleteUser: vi.fn(),
+  updateUser: vi.fn(),
+}));
+vi.mock("@/components/Table", () => ({
+  buildTable: () => ({}),
+  Table: () => null,
+}));
+vi.mock("@/components/accounts/AddUser", () => ({
+  AddUser: () => null,
+}));
+
+import {
+  AccountsPage,
+  AccountToolbar,
+} from "@/components/accounts/AccountsPage";
 import { FilterBar } from "@/components/FilterBar";
 
 afterEach(cleanup);
@@ -70,5 +130,90 @@ describe("AccountToolbar", () => {
     expect(onSubmit).toHaveBeenNthCalledWith(2, "");
     expect(onSubmit).toHaveBeenNthCalledWith(3, "refresh");
     expect(onSubmit).toHaveBeenNthCalledWith(4, "add");
+  });
+});
+
+describe("AccountsPage integration", () => {
+  beforeEach(() => {
+    Object.assign(pageState.params, {
+      search: "ada",
+      filter: "admin = TRUE",
+      advanced: "false",
+      pageSize: "25",
+      pageIndex: "2",
+    });
+    pageState.setSearchParams.mockReset();
+    pageState.fetchUsers.mockReset().mockResolvedValue({ users: [] });
+    pageState.invalidateQueries.mockReset();
+  });
+
+  it("queries simple and advanced state with URL pagination", async () => {
+    render(() => <AccountsPage />);
+    await waitFor(() => expect(pageState.fetchUsers).toHaveBeenCalled());
+    expect(pageState.fetchUsers).toHaveBeenLastCalledWith(
+      undefined,
+      25,
+      2,
+      undefined,
+      "ada",
+    );
+
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Advanced account filter" }),
+    );
+    await waitFor(() =>
+      expect(pageState.fetchUsers).toHaveBeenLastCalledWith(
+        "admin = TRUE",
+        25,
+        2,
+        undefined,
+        undefined,
+      ),
+    );
+
+    expect(pageState.params.search).toBe("ada");
+    expect(pageState.params.filter).toBe("admin = TRUE");
+    expect(pageState.params.pageSize).toBe("25");
+    expect(pageState.params.pageIndex).toBe("2");
+  });
+
+  it("resets page on apply, preserves values while switching modes, and refreshes", async () => {
+    render(() => <AccountsPage />);
+    const filter = screen.getByRole("textbox", { name: "Search accounts" });
+    await fireEvent.input(filter, { target: { value: "grace" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+    expect(pageState.params.search).toBe("grace");
+    expect(pageState.params.pageIndex).toBe("0");
+
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Advanced account filter" }),
+    );
+    const advanced = screen.getByRole("textbox", {
+      name: "Advanced account filter",
+    });
+    expect(advanced).toHaveValue("admin = TRUE");
+    await fireEvent.input(advanced, { target: { value: "email ~ %" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+    expect(pageState.params.filter).toBe("email ~ %");
+    expect(pageState.params.pageIndex).toBe("0");
+
+    const callsBeforeRefresh = pageState.setSearchParams.mock.calls.length;
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Refresh accounts" }),
+    );
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
+    expect(pageState.setSearchParams).toHaveBeenCalledTimes(callsBeforeRefresh);
+
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Search accounts" }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Search accounts" }),
+    ).toHaveValue("grace");
+    expect(pageState.params.filter).toBe("email ~ %");
+    await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
   });
 });
