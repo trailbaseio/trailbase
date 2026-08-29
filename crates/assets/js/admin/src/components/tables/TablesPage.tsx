@@ -267,6 +267,7 @@ function TablePickerSidebar(props: {
                                     hidden ? "text-muted-foreground" : undefined
                                   }
                                   isActive={selected()}
+                                  aria-label={qualifiedName}
                                   variant="default"
                                   size="default"
                                   onClick={() => {
