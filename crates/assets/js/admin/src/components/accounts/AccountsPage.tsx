@@ -15,7 +15,6 @@ import {
   TbOutlineClipboardCopy,
   TbOutlineCookie,
 } from "solid-icons/tb";
-import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import type {
@@ -38,7 +37,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 
 import { Callout } from "@/components/ui/callout";
@@ -665,9 +663,9 @@ export function AccountsPage() {
       <Header
         title="Accounts"
         description={
-          users.isLoading
-            ? "Manage authentication identities and access"
-            : `${users.data?.total_row_count ?? 0} accounts`
+          users.data
+            ? `${users.data.total_row_count ?? 0} accounts`
+            : "Manage authentication identities and access"
         }
         left={
           <IconButton
@@ -679,7 +677,9 @@ export function AccountsPage() {
           </IconButton>
         }
         right={
-          <Button onClick={() => setAddUserOpen(true)}>Add account</Button>
+          <Button data-add-account onClick={() => setAddUserOpen(true)}>
+            Add account
+          </Button>
         }
       />
       <div class="min-h-0 flex-1 overflow-auto p-4">
@@ -746,18 +746,9 @@ export function AccountsPage() {
         <SafeSheet
           open={[addUserOpen, setAddUserOpen]}
           children={(sheet) => (
-            <>
-              <SheetContent class={sheetMaxWidth}>
-                <AddUser userRefetch={refetch} {...sheet} />
-              </SheetContent>
-              <SheetTrigger
-                as={(props: DialogTriggerProps) => (
-                  <Button class="mt-4" data-add-account {...props}>
-                    Add account
-                  </Button>
-                )}
-              />
-            </>
+            <SheetContent class={sheetMaxWidth}>
+              <AddUser userRefetch={refetch} {...sheet} />
+            </SheetContent>
           )}
         />
         <SafeSheet

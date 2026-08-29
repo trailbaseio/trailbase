@@ -22,9 +22,10 @@ const pageState = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   queryError: false,
   queryLoading: false,
-  queryData: { users: [] as Array<{ id: string; email?: string }> },
+  queryData: undefined as
+    | { users: Array<{ id: string; email?: string }>; total_row_count?: bigint }
+    | undefined,
   setDataVersion: undefined as (() => void) | undefined,
-  showEmptyState: false,
 }));
 
 vi.mock("@solidjs/router", () => ({
@@ -78,7 +79,7 @@ vi.mock("@/components/Table", () => ({
     paginationPosition?: string;
   }) => (
     <>
-      {pageState.showEmptyState
+      {props.table.rows.length === 0
         ? props.emptyState
         : props.table.rows.map((row, index) => (
             <button onClick={() => props.onRowClick?.(index, row)}>
@@ -211,9 +212,8 @@ describe("AccountsPage integration", () => {
     pageState.invalidateQueries.mockReset();
     pageState.queryError = false;
     pageState.queryLoading = false;
-    pageState.queryData = { users: [] };
+    pageState.queryData = { users: [], total_row_count: 0n };
     pageState.setDataVersion = undefined;
-    pageState.showEmptyState = false;
   });
 
   it("renders the page shell with a persistent toolbar and add action", async () => {
@@ -226,18 +226,26 @@ describe("AccountsPage integration", () => {
       "flex-col",
     );
     expect(screen.getByRole("heading", { name: "Accounts" })).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Add account" })[0]).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toBeVisible();
   });
 
-  it("distinguishes no matches from no accounts using the active mode", async () => {
-    pageState.showEmptyState = true;
+  it("distinguishes no matches from no accounts using response data and the active mode", async () => {
     render(() => <AccountsPage />);
     expect(
       screen.getByText("No accounts match the current search or filter."),
     ).toBeVisible();
+    await waitFor(() =>
+      expect(pageState.fetchUsers).toHaveBeenLastCalledWith(
+        undefined,
+        25,
+        2,
+        undefined,
+        "ada",
+      ),
+    );
 
     cleanup();
     pageState.params.search = undefined;
@@ -246,12 +254,25 @@ describe("AccountsPage integration", () => {
     expect(screen.getByText("No accounts yet.")).toBeVisible();
   });
 
-  it("uses the management description while loading and passes dense bottom pagination", () => {
+  it("keeps the toolbar and add action mounted while loading", () => {
     pageState.queryLoading = true;
+    pageState.queryData = undefined;
     render(() => <AccountsPage />);
-    expect(screen.getByText("Manage authentication identities and access")).toBeVisible();
-    expect(screen.getByTestId("table-props")).toHaveAttribute("data-dense", "true");
-    expect(screen.getByTestId("table-props")).toHaveAttribute("data-pagination-position", "bottom");
+    expect(
+      screen.getByText("Manage authentication identities and access"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: "Search accounts" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
+    expect(screen.getByTestId("table-props")).toHaveAttribute(
+      "data-dense",
+      "true",
+    );
+    expect(screen.getByTestId("table-props")).toHaveAttribute(
+      "data-pagination-position",
+      "bottom",
+    );
   });
 
   it("opens the account sheet on row activation and clears stale selection", async () => {
@@ -262,16 +283,23 @@ describe("AccountsPage integration", () => {
 
     pageState.queryData = { users: [] };
     pageState.setDataVersion?.();
-    await waitFor(() => expect(screen.queryByText("Edit User")).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText("Edit User")).not.toBeInTheDocument(),
+    );
   });
 
-  it("shows a safe retry state when loading accounts fails", async () => {
+  it("shows a safe retry state with persistent workspace actions", async () => {
     pageState.queryError = true;
+    pageState.queryData = undefined;
     render(() => <AccountsPage />);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Unable to load accounts.",
     );
     expect(screen.getByRole("alert")).not.toHaveTextContent("backend boom");
+    expect(
+      screen.getByRole("textbox", { name: "Search accounts" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
     await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(pageState.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["users"],
@@ -350,7 +378,7 @@ describe("AccountsPage integration", () => {
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toHaveValue("grace");
     expect(pageState.params.filter).toBe("email ~ %");
-    await fireEvent.click(screen.getAllByRole("button", { name: "Add account" })[0]);
+    await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
     expect(
       await screen.findByRole("heading", { name: "Add new user" }),
     ).toBeVisible();
