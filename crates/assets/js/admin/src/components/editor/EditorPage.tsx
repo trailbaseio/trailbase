@@ -7,12 +7,13 @@ import {
   createMemo,
   createEffect,
   createSignal,
+  on,
   onCleanup,
 } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
-import type { ColumnDef } from "@tanstack/solid-table";
+import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import {
@@ -33,6 +34,7 @@ import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
 import { IconButton } from "@/components/IconButton";
 import { Spinner } from "@/components/Spinner";
+import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -110,8 +112,12 @@ export function paginateResultRows<T>(
   pageIndex: number,
   pageSize: number,
 ): T[] {
-  const start = pageIndex * pageSize;
-  return rows.slice(start, start + pageSize);
+  if (rows.length === 0) return [];
+  const size = Math.max(1, pageSize);
+  const lastPage = Math.ceil(rows.length / size) - 1;
+  const page = Math.min(lastPage, Math.max(0, pageIndex));
+  const start = page * size;
+  return rows.slice(start, start + size);
 }
 
 export function resultPresentation(
@@ -176,18 +182,31 @@ function ResultsHeader(props: {
   timestamp: number | undefined;
   status: string;
 }) {
+  const variant = (): "error" | "warning" | "success" | "secondary" => {
+    if (props.status === "Error") return "error";
+    if (props.status === "Running…") return "warning";
+    if (props.status === "Success") return "success";
+    return "secondary";
+  };
+
   return (
-    <div class="flex items-center justify-between gap-2 text-sm">
+    <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
       <div class="flex items-center gap-2">
-        <span class="font-medium">{props.status}</span>
+        <Badge variant={variant()}>{props.status}</Badge>
+        <Show when={props.data?.columns !== null && props.data !== undefined}>
+          <span class="text-muted-foreground">
+            {props.data!.rows.length}{" "}
+            {props.data!.rows.length === 1 ? "row" : "rows"}
+          </span>
+        </Show>
         <Button
           variant="ghost"
           size="icon"
           aria-label="Copy results as CSV"
-          disabled={props.data === undefined}
+          disabled={props.data?.columns == null}
           onClick={() => {
             const data = props.data;
-            if (data !== undefined) {
+            if (data?.columns !== null && data !== undefined) {
               copyToClipboard(buildCsv(data));
             }
           }}
@@ -213,6 +232,19 @@ function ResultView(props: {
 
   return (
     <Switch>
+      <Match when={!response()}>
+        <div class="flex min-h-40 flex-col gap-4 p-4">
+          <ResultsHeader
+            data={undefined}
+            timestamp={undefined}
+            status={status()}
+          />
+          <div class="text-muted-foreground flex flex-1 items-center justify-center text-sm">
+            Execute the query to see results.
+          </div>
+        </div>
+      </Match>
+
       <Match when={response()?.error}>
         <div class="flex flex-col gap-2 p-4">
           <ResultsHeader
@@ -224,14 +256,16 @@ function ResultView(props: {
         </div>
       </Match>
 
-      <Match when={response()?.data === undefined}>
-        <div class="flex flex-col gap-2 p-4">
+      <Match when={response()?.data?.columns === null}>
+        <div class="flex min-h-40 flex-col gap-4 p-4">
           <ResultsHeader
             data={response()?.data}
             timestamp={response()?.timestamp}
             status={status()}
           />
-          No data
+          <div class="text-muted-foreground flex flex-1 items-center justify-center text-sm">
+            Statement executed without tabular results.
+          </div>
         </div>
       </Match>
 
@@ -254,6 +288,18 @@ function ResultViewImpl(props: {
   timestamp?: number;
 }) {
   const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [pagination, setPagination] = createSignal<PaginationState>({
+    pageIndex: 0,
+    pageSize: 20,
+  });
+
+  createEffect(
+    on(
+      () => props.data,
+      () => setPagination((state) => ({ ...state, pageIndex: 0 })),
+      { defer: true },
+    ),
+  );
 
   function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
@@ -269,15 +315,21 @@ function ResultViewImpl(props: {
     });
   }
 
-  const dataTable = createMemo(() => {
-    // TODO: Enable pagination
-    return buildTable({
+  const dataTable = createMemo(() =>
+    buildTable({
       columns: columnDefs(props.data),
-      data: props.data.rows,
+      data: paginateResultRows(
+        props.data.rows,
+        pagination().pageIndex,
+        pagination().pageSize,
+      ),
+      rowCount: props.data.rows.length,
+      pagination: pagination(),
+      onPaginationChange: setPagination,
       columnPinning: columnPinningState,
       onColumnPinningChange: setColumnPinningState,
-    });
-  });
+    }),
+  );
 
   return (
     <ErrorBoundary
@@ -303,16 +355,30 @@ function ResultViewImpl(props: {
           status={props.status}
         />
 
-        <Table table={dataTable()} loading={false} />
+        <Table
+          table={dataTable()}
+          loading={false}
+          dense
+          paginationPosition="bottom"
+          emptyState={
+            <div class="text-muted-foreground py-8 text-center">
+              No rows returned.
+            </div>
+          }
+        />
       </div>
     </ErrorBoundary>
   );
 }
 
 function ExecutionTime(props: { timestamp: number | undefined }) {
-  const time = () => new Date(props.timestamp ?? 0);
-
-  return <div class="text-sm">{`Executed: ${time().toLocaleString()}`}</div>;
+  return (
+    <Show when={props.timestamp !== undefined}>
+      <div class="text-muted-foreground text-xs">
+        {`Executed ${new Date(props.timestamp!).toLocaleString()}`}
+      </div>
+    </Show>
+  );
 }
 
 export function EditorSidebar(props: {

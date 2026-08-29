@@ -70,5 +70,8 @@ describe("SQL editor workspace", () => {
 
   it("slices result rows for client-side pagination", () => {
     expect(paginateResultRows([0, 1, 2, 3], 1, 2)).toEqual([2, 3]);
+    expect(paginateResultRows([0, 1, 2], 99, 2)).toEqual([2]);
+    expect(paginateResultRows([0, 1, 2], -1, 2)).toEqual([0, 1]);
+    expect(paginateResultRows([0, 1, 2], 0, 3)).toEqual([0, 1, 2]);
   });
 });
