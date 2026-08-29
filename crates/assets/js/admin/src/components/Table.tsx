@@ -589,6 +589,7 @@ function PaginationControl<TData>(props: {
         <div class="flex items-center space-x-2">
           <Button
             aria-label="Go to first page"
+            title="Go to first page"
             variant="outline"
             class="hidden size-8 p-0 sm:flex"
             onClick={() => table().setPageIndex(0)}
@@ -613,6 +614,7 @@ function PaginationControl<TData>(props: {
 
           <Button
             aria-label="Go to previous page"
+            title="Go to previous page"
             variant="outline"
             size="icon"
             class="size-8"
@@ -638,6 +640,7 @@ function PaginationControl<TData>(props: {
 
           <Button
             aria-label="Go to next page"
+            title="Go to next page"
             variant="outline"
             size="icon"
             class="size-8"
@@ -663,6 +666,7 @@ function PaginationControl<TData>(props: {
 
           <Button
             aria-label="Go to last page"
+            title="Go to last page"
             variant="outline"
             class="hidden size-8 p-0 sm:flex"
             onClick={() => table().setPageIndex(table().getPageCount() - 1)}

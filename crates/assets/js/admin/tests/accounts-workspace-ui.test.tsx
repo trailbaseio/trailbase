@@ -29,7 +29,10 @@ const pageState = vi.hoisted(() => ({
   queryError: false,
   queryLoading: false,
   queryData: undefined as
-    | { users: Array<{ id: string; email?: string }>; total_row_count?: bigint }
+    | {
+        users: Array<Record<string, unknown> & { id: string; email?: string }>;
+        total_row_count?: bigint;
+      }
     | undefined,
   setDataVersion: undefined as (() => void) | undefined,
 }));
@@ -230,7 +233,15 @@ describe("AccountsPage integration", () => {
       "flex-col",
     );
     expect(screen.getByRole("heading", { name: "Accounts" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "0 accounts · Manage authentication identities and access",
+      ),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Go to first page" }),
+    ).toHaveAttribute("title", "Go to first page");
     expect(
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toBeVisible();
@@ -307,6 +318,57 @@ describe("AccountsPage integration", () => {
     });
   });
 
+  it("shows add progress, then closes and refetches after success", async () => {
+    let resolveCreate!: () => void;
+    pageState.createUser.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveCreate = resolve;
+      }),
+    );
+    render(() => <AccountsPage />);
+    await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    const email = screen.getByRole("textbox", { name: "Email" });
+    const password = screen.getByLabelText("Password");
+    await fireEvent.change(email, { target: { value: "ada@example.com" } });
+    await fireEvent.blur(email);
+    await fireEvent.change(password, { target: { value: "password" } });
+    await fireEvent.blur(password);
+    const add = screen
+      .getAllByRole("button", { name: "Add account" })
+      .find((button) => button.getAttribute("type") === "submit");
+    if (!add) throw new Error("Add account submit button not found");
+    await waitFor(() => expect(add).not.toBeDisabled());
+    await fireEvent.click(add);
+    expect(screen.getByRole("button", { name: "Creating…" })).toBeDisabled();
+    resolveCreate();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Add new user" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
+  });
+
+  it("protects dirty add values and clears the guard after reverting", async () => {
+    render(() => <AccountsPage />);
+    await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    const email = screen.getByRole("textbox", { name: "Email" });
+    await fireEvent.change(email, { target: { value: "changed@example.com" } });
+    await fireEvent.keyDown(document, { key: "Escape" });
+    expect(await screen.findByText("Pending Changes")).toBeVisible();
+    await fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await fireEvent.change(email, { target: { value: "" } });
+    await fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Add new user" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Pending Changes")).not.toBeInTheDocument();
+  });
+
   it("reports edit failures while keeping the sheet open and refetching", async () => {
     pageState.queryData = { users: [account] };
     pageState.updateUser.mockRejectedValueOnce(new Error("update rejected"));
@@ -338,6 +400,30 @@ describe("AccountsPage integration", () => {
     ).toHaveTextContent("Copy login tokens");
     expect(screen.getByText("Danger zone")).toBeVisible();
     expect(pageState.invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
+  });
+
+  it("shows edit progress, then closes and refetches after success", async () => {
+    pageState.queryData = { users: [account] };
+    let resolveUpdate!: () => void;
+    pageState.updateUser.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveUpdate = resolve;
+      }),
+    );
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    resolveUpdate();
+    await waitFor(() =>
+      expect(screen.queryByText("Edit account")).not.toBeInTheDocument(),
+    );
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["users"],
     });
   });
@@ -379,6 +465,78 @@ describe("AccountsPage integration", () => {
       "Unable to copy login tokens. Please try again.",
     );
     expect(screen.getByRole("alert")).not.toHaveTextContent("clipboard failed");
+  });
+
+  it("reports account ID clipboard failures without exposing details", async () => {
+    pageState.queryData = { users: [account] };
+    pageState.copyToClipboard.mockRejectedValueOnce(
+      new Error("clipboard internals"),
+    );
+    render(() => <AccountsPage />);
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy account ID" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to copy account ID. Please try again.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "clipboard internals",
+    );
+  });
+
+  it("reports edit-sheet account ID clipboard failures", async () => {
+    pageState.queryData = { users: [account] };
+    pageState.copyToClipboard.mockRejectedValueOnce(new Error("clipboard"));
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(screen.getByRole("button", { name: "Copy ID" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Unable to copy account ID. Please try again.",
+    );
+  });
+
+  it("copies login tokens and hides the action for ineligible accounts", async () => {
+    pageState.queryData = { users: [account] };
+    pageState.mintTokens.mockResolvedValueOnce({ access_token: "token" });
+    pageState.copyToClipboard.mockResolvedValueOnce(undefined);
+    render(() => <AccountsPage />);
+    let row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy login tokens" }),
+    );
+    await waitFor(() => expect(pageState.copyToClipboard).toHaveBeenCalled());
+    expect(pageState.mintTokens).toHaveBeenCalledWith({ user: account.id });
+    expect(screen.queryByText("token")).not.toBeInTheDocument();
+
+    cleanup();
+    pageState.queryData = { users: [{ ...account, admin: true }] };
+    render(() => <AccountsPage />);
+    row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    expect(
+      screen.queryByRole("button", { name: "Copy login tokens" }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    pageState.queryData = {
+      users: [{ ...account, unverified_email: "pending@example.com" }],
+    };
+    render(() => <AccountsPage />);
+    row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    expect(
+      screen.queryByRole("button", { name: "Copy login tokens" }),
+    ).not.toBeInTheDocument();
   });
 
   it("does not submit edits when opening delete confirmation", async () => {
@@ -455,6 +613,45 @@ describe("AccountsPage integration", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("cancels deletion without mutating and closes/refetches on success", async () => {
+    pageState.queryData = { users: [account] };
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    const dangerZone = screen.getByRole("region", { name: "Danger zone" });
+    await fireEvent.click(
+      within(dangerZone).getByRole("button", { name: "Delete" }),
+    );
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(pageState.deleteUser).not.toHaveBeenCalled();
+
+    let resolveDelete!: () => void;
+    pageState.deleteUser.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        resolveDelete = resolve;
+      }),
+    );
+    await fireEvent.click(
+      within(dangerZone).getByRole("button", { name: "Delete" }),
+    );
+    await fireEvent.click(
+      within(screen.getByRole("dialog", { name: "Confirmation" })).getByRole(
+        "button",
+        { name: "Delete account" },
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Deleting…" })).toBeDisabled();
+    resolveDelete();
+    await waitFor(() =>
+      expect(screen.queryByText("Edit account")).not.toBeInTheDocument(),
+    );
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
+  });
+
   it("protects dirty edits with the controlled close confirmation", async () => {
     pageState.queryData = { users: [account] };
     render(() => <AccountsPage />);
@@ -494,6 +691,23 @@ describe("AccountsPage integration", () => {
       expect(screen.queryByText("Edit account")).not.toBeInTheDocument(),
     );
     expect(screen.queryByText("Pending Changes")).not.toBeInTheDocument();
+  });
+
+  it("preserves dirty edits when refreshed data drops the selected account", async () => {
+    pageState.queryData = { users: [account] };
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.change(screen.getByRole("textbox", { name: "Email" }), {
+      target: { value: "changed@example.com" },
+    });
+    pageState.queryData = { users: [] };
+    pageState.setDataVersion?.();
+    expect(screen.getByText("Edit account")).toBeVisible();
+    await fireEvent.keyDown(document, { key: "Escape" });
+    expect(await screen.findByText("Pending Changes")).toBeVisible();
   });
 
   it("opens the account sheet on row activation and clears stale selection", async () => {
@@ -550,7 +764,7 @@ describe("AccountsPage integration", () => {
       expect(pageState.fetchUsers).toHaveBeenLastCalledWith(
         "admin = TRUE",
         25,
-        2,
+        0,
         undefined,
         undefined,
       ),
@@ -560,7 +774,7 @@ describe("AccountsPage integration", () => {
     expect(pageState.params.advanced).toBe("true");
     expect(pageState.params.filter).toBe("admin = TRUE");
     expect(pageState.params.pageSize).toBe("25");
-    expect(pageState.params.pageIndex).toBe("2");
+    expect(pageState.params.pageIndex).toBe("0");
   });
 
   it("resets page on apply, preserves values while switching modes, and refreshes", async () => {

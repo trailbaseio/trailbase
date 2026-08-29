@@ -18,11 +18,19 @@ describe("appendAccountSearchParams", () => {
     ]);
   });
 
-  test("uses an exact id filter for canonical UUIDs", () => {
+  test("adds an exact id branch for canonical UUIDs", () => {
     const params = new URLSearchParams();
     appendAccountSearchParams(params, "550e8400-e29b-41d4-a716-446655440000");
     expect([...params]).toEqual([
-      ["filter[id][$eq]", "550e8400-e29b-41d4-a716-446655440000"],
+      [
+        "filter[$or][0][email][$like]",
+        "%550e8400-e29b-41d4-a716-446655440000%",
+      ],
+      [
+        "filter[$or][1][username][$like]",
+        "%550e8400-e29b-41d4-a716-446655440000%",
+      ],
+      ["filter[$or][2][id][$eq]", "550e8400-e29b-41d4-a716-446655440000"],
     ]);
   });
 

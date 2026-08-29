@@ -10,10 +10,10 @@ export function appendAccountSearchParams(
 ) {
   const value = search.trim();
   if (!value) return params;
-  if (UUID.test(value)) params.append("filter[id][$eq]", value);
-  else {
-    params.append("filter[$or][0][email][$like]", `%${value}%`);
-    params.append("filter[$or][1][username][$like]", `%${value}%`);
+  params.append("filter[$or][0][email][$like]", `%${value}%`);
+  params.append("filter[$or][1][username][$like]", `%${value}%`);
+  if (UUID.test(value)) {
+    params.append("filter[$or][2][id][$eq]", value);
   }
   return params;
 }

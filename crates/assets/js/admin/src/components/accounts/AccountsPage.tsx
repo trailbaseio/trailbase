@@ -157,7 +157,10 @@ export function shortAccountId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
-export function buildColumns(): ColumnDef<UserJson>[] {
+export function buildColumns(
+  copyAccountId: (id: string) => Promise<void> = (id) =>
+    copyToClipboard(id, true),
+): ColumnDef<UserJson>[] {
   return [
     {
       header: "Account",
@@ -186,7 +189,7 @@ export function buildColumns(): ColumnDef<UserJson>[] {
                   title="Copy account ID"
                   onClick={(e) => {
                     e.stopPropagation();
-                    copyToClipboard(id, true);
+                    void copyAccountId(id);
                   }}
                 >
                   <TbOutlineClipboardCopy size={14} />
@@ -352,6 +355,7 @@ function EditSheetContent(props: {
   refetch: () => void;
 }) {
   const [error, setError] = createSignal<string>();
+  const [copyError, setCopyError] = createSignal<string>();
   const [tokenError, setTokenError] = createSignal<string>();
   const [copyingTokens, setCopyingTokens] = createSignal(false);
   const defaultValues = untrack((): UpdateUserRequest => ({
@@ -401,6 +405,12 @@ function EditSheetContent(props: {
           Change a user's properties. Be careful
         </SheetDescription>
 
+        <Show when={copyError()}>
+          <p class="text-destructive" role="alert">
+            {copyError()}
+          </p>
+        </Show>
+
         <Show when={tokenError()}>
           <p class="text-destructive" role="alert">
             {tokenError()}
@@ -439,7 +449,12 @@ function EditSheetContent(props: {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => copyToClipboard(props.user.id, true)}
+              onClick={() => {
+                setCopyError(undefined);
+                void copyToClipboard(props.user.id, true).catch(() => {
+                  setCopyError("Unable to copy account ID. Please try again.");
+                });
+              }}
             >
               Copy ID
             </Button>
@@ -669,7 +684,9 @@ export function AccountsPage() {
   };
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
+  const [editDirty, setEditDirty] = createSignal(false);
   const [addUserOpen, setAddUserOpen] = createSignal(false);
+  const [copyError, setCopyError] = createSignal<string>();
 
   createEffect(() => {
     const selected = editUser();
@@ -677,16 +694,26 @@ export function AccountsPage() {
     if (
       selected &&
       loadedUsers &&
-      !loadedUsers.users.some((user) => user.id === selected.id)
+      !loadedUsers.users.some((user) => user.id === selected.id) &&
+      !editDirty()
     ) {
       setEditUser(undefined);
     }
   });
 
+  const copyAccountId = async (id: string) => {
+    setCopyError(undefined);
+    try {
+      await copyToClipboard(id, true);
+    } catch {
+      setCopyError("Unable to copy account ID. Please try again.");
+    }
+  };
+
   const accountsTable = createMemo(() => {
     return buildTable(
       {
-        columns: buildColumns(),
+        columns: buildColumns(copyAccountId),
         data: users.data?.users ?? [],
         rowCount: Number(users.data?.total_row_count ?? -1),
         pagination: pagination(),
@@ -739,7 +766,7 @@ export function AccountsPage() {
         title="Accounts"
         description={
           users.data
-            ? `${users.data.total_row_count ?? 0} accounts`
+            ? `${users.data.total_row_count ?? 0} accounts · Manage authentication identities and access`
             : "Manage authentication identities and access"
         }
         left={
@@ -764,6 +791,7 @@ export function AccountsPage() {
             setSearchParams({
               ...searchParams,
               advanced: advanced ? "true" : "false",
+              pageIndex: "0",
             })
           }
         >
@@ -794,6 +822,11 @@ export function AccountsPage() {
             }
           />
         </AccountToolbar>
+        <Show when={copyError()}>
+          <Callout variant="error" role="alert" class="mt-4">
+            {copyError()}
+          </Callout>
+        </Show>
         <Suspense fallback={<div>Loading accounts…</div>}>
           <Switch>
             <Match when={users.isError}>
@@ -812,7 +845,10 @@ export function AccountsPage() {
                   dense={true}
                   paginationPosition="bottom"
                   emptyState={emptyState()}
-                  onRowClick={(_idx, row) => setEditUser(row)}
+                  onRowClick={(_idx, row) => {
+                    setEditDirty(false);
+                    setEditUser(row);
+                  }}
                 />
               </div>
             </Match>
@@ -830,7 +866,10 @@ export function AccountsPage() {
           open={[
             () => editUser() !== undefined,
             (isOpen: boolean | ((value: boolean) => boolean)) => {
-              if (!isOpen) setEditUser(undefined);
+              if (!isOpen) {
+                setEditDirty(false);
+                setEditUser(undefined);
+              }
             },
           ]}
           children={(sheet) => (
@@ -839,7 +878,11 @@ export function AccountsPage() {
                 <EditSheetContent
                   user={editUser()!}
                   refetch={refetch}
-                  {...sheet}
+                  close={sheet.close}
+                  markDirty={(dirty) => {
+                    setEditDirty(dirty ?? true);
+                    sheet.markDirty(dirty);
+                  }}
                 />
               </Show>
             </SheetContent>
