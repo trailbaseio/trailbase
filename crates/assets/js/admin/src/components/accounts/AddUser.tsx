@@ -36,6 +36,12 @@ export function AddUser(props: {
     },
   }));
 
+  form.useStore((state) => {
+    if (state.isDirty && !state.isSubmitted) {
+      props.markDirty();
+    }
+  });
+
   return (
     <div class="overflow-x-hidden overflow-y-auto pr-1">
       <SheetHeader>

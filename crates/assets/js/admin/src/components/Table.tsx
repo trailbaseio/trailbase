@@ -399,6 +399,20 @@ function TableHeaderRow<TData>(props: {
             props.dense && "h-8 pl-3 text-xs",
           )}
           onClick={toggleSorting()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleSorting()?.();
+            }
+          }}
+          tabIndex={toggleSorting() ? 0 : undefined}
+          aria-sort={
+            props.header.column.getIsSorted() === "asc"
+              ? "ascending"
+              : props.header.column.getIsSorted() === "desc"
+                ? "descending"
+                : undefined
+          }
         >
           <HeadContents />
 

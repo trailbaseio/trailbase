@@ -127,8 +127,16 @@ export function formatAccountTime(
   const absoluteSeconds = Math.abs(differenceSeconds);
 
   if (absoluteSeconds < 60) {
+    // Keep sub-minute values from displaying misleading 0 or 60 seconds.
+    const truncated = Math.trunc(differenceSeconds);
+    const seconds =
+      truncated === 0 && differenceSeconds !== 0
+        ? differenceSeconds > 0
+          ? 1
+          : -1
+        : Math.max(-59, Math.min(59, truncated));
     return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(
-      Math.round(differenceSeconds),
+      seconds,
       "second",
     );
   }
@@ -277,6 +285,7 @@ function DeleteUserButton(props: {
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [error, setError] = createSignal<string>();
 
   return (
     <Dialog
@@ -293,6 +302,12 @@ function DeleteUserButton(props: {
           <span class="font-bold">{props.email ?? props.username}</span>?
         </p>
 
+        <Show when={error()}>
+          <p class="text-destructive" role="alert">
+            {error()}
+          </p>
+        </Show>
+
         <DialogFooter>
           <div class="flex w-full justify-between">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
@@ -305,12 +320,14 @@ function DeleteUserButton(props: {
                 (async () => {
                   try {
                     await deleteUser({ id: props.userId });
-                  } finally {
                     props.onDelete();
+                    setDialogOpen(false);
+                  } catch (error) {
+                    setError(
+                      error instanceof Error ? error.message : String(error),
+                    );
                   }
                 })();
-
-                setDialogOpen(false);
               }}
             >
               Delete
@@ -352,6 +369,12 @@ function EditSheetContent(props: {
       }
     },
   }));
+
+  form.useStore((state) => {
+    if (state.isDirty && !state.isSubmitted) {
+      props.markDirty();
+    }
+  });
 
   return (
     <SheetContainer>
@@ -432,6 +455,8 @@ function EditSheetContent(props: {
                         <Button
                           variant="outline"
                           size="icon"
+                          aria-label="Copy login tokens"
+                          title="Copy login tokens"
                           onClick={(e) => {
                             e.stopPropagation();
 
@@ -442,7 +467,7 @@ function EditSheetContent(props: {
 
                               copyToClipboard(
                                 btoa(JSON.stringify(loginResponse)),
-                                true,
+                                false,
                                 "Copied tokens to clipboard",
                               );
                             })();
@@ -563,7 +588,11 @@ export function AccountsPage() {
       <Header
         title="Accounts"
         left={
-          <IconButton onClick={refetch}>
+          <IconButton
+            onClick={refetch}
+            aria-label="Refresh accounts"
+            title="Refresh accounts"
+          >
             <TbOutlineRefresh />
           </IconButton>
         }
