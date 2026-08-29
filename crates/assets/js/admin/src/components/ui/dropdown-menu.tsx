@@ -6,6 +6,7 @@ import * as DropdownMenuPrimitive from "@kobalte/core/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
+const DropdownMenuGroup = DropdownMenuPrimitive.Group;
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 
 type DropdownMenuContentProps<T extends ValidComponent = "div"> =
@@ -48,6 +49,23 @@ const DropdownMenuItem = <T extends ValidComponent = "div">(
   );
 };
 
+type DropdownMenuLabelProps<T extends ValidComponent = "div"> =
+  DropdownMenuPrimitive.DropdownMenuGroupLabelProps<T> & { class?: string };
+
+const DropdownMenuLabel = <T extends ValidComponent = "div">(
+  props: PolymorphicProps<T, DropdownMenuLabelProps<T>>,
+) => {
+  const [local, others] = splitProps(props as DropdownMenuLabelProps, [
+    "class",
+  ]);
+  return (
+    <DropdownMenuPrimitive.GroupLabel
+      class={cn("px-2 py-1.5 text-xs font-medium text-muted-foreground", local.class)}
+      {...others}
+    />
+  );
+};
+
 type DropdownMenuSeparatorProps<T extends ValidComponent = "hr"> =
   DropdownMenuPrimitive.DropdownMenuSeparatorProps<T> & { class?: string };
 
@@ -68,7 +86,9 @@ const DropdownMenuSeparator = <T extends ValidComponent = "hr">(
 export {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 };

@@ -4,6 +4,10 @@ import type { ExecutionResult } from "@/lib/api/execute";
 import { tryFormatUuidBlob } from "@/lib/value";
 import {
   buildCsv,
+  buildJson,
+  buildJsonl,
+  buildTsv,
+  resultExportFilename,
   DARK_SQL_COLORS,
   detectUuidColumnVersion,
   filterSavedQueries,
@@ -125,6 +129,98 @@ describe("SQL editor workspace", () => {
     expect(buildCsv(response([[{ Text: 'Ada "Lovelace"' }]]))).toBe(
       '"full,name"\n"Ada ""Lovelace"""',
     );
+  });
+
+  it("exports TSV, JSON, and JSONL without losing SQL values", () => {
+    const data = {
+      columns: [
+        {
+          name: "id",
+          type_name: "INTEGER",
+          data_type: "Integer",
+          affinity_type: "Integer",
+          options: [],
+        },
+        {
+          name: "name",
+          type_name: "TEXT",
+          data_type: "Text",
+          affinity_type: "Text",
+          options: [],
+        },
+      ],
+      rows: [
+        [{ Integer: 1n }, { Text: "Ada\tLovelace" }],
+        [{ Integer: 9007199254740993n }, "Null"],
+      ],
+    } as QueryResponse;
+
+    expect(buildTsv(data)).toBe(
+      '"id"\t"name"\n"1"\t"Ada\tLovelace"\n"9007199254740993"\t"NULL"',
+    );
+    expect(JSON.parse(buildJson(data))).toEqual([
+      { id: 1, name: "Ada\tLovelace" },
+      { id: "9007199254740993", name: null },
+    ]);
+    expect(
+      buildJsonl(data)
+        .split("\n")
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      { id: 1, name: "Ada\tLovelace" },
+      { id: "9007199254740993", name: null },
+    ]);
+  });
+
+  it("exports detected UUID blobs as canonical UUIDs", () => {
+    const data = {
+      columns: [
+        {
+          name: "id",
+          type_name: "BLOB",
+          data_type: "Blob",
+          affinity_type: "Blob",
+          options: [],
+        },
+      ],
+      rows: [[{ Blob: { Base64UrlSafe: "KWSkzswTSBOWPcZNDV24yQ==" } }]],
+    } as QueryResponse;
+
+    expect(buildCsv(data)).toBe('"id"\n"2964a4ce-cc13-4813-963d-c64d0d5db8c9"');
+    expect(JSON.parse(buildJson(data))).toEqual([
+      { id: "2964a4ce-cc13-4813-963d-c64d0d5db8c9" },
+    ]);
+  });
+
+  it("preserves duplicate columns in object exports", () => {
+    const data = {
+      columns: [
+        {
+          name: "id",
+          type_name: "INTEGER",
+          data_type: "Integer",
+          affinity_type: "Integer",
+          options: [],
+        },
+        {
+          name: "id",
+          type_name: "INTEGER",
+          data_type: "Integer",
+          affinity_type: "Integer",
+          options: [],
+        },
+      ],
+      rows: [[{ Integer: 1n }, { Integer: 2n }]],
+    } as QueryResponse;
+
+    expect(JSON.parse(buildJson(data))).toEqual([{ id: 1, id_2: 2 }]);
+  });
+
+  it("builds safe export filenames", () => {
+    expect(resultExportFilename(" Select Users ", "csv")).toBe(
+      "select-users.csv",
+    );
+    expect(resultExportFilename("***", "jsonl")).toBe("query-results.jsonl");
   });
 
   it("describes query result states", () => {

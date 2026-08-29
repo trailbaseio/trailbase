@@ -23,6 +23,7 @@ import {
   TbOutlinePencilPlus,
   TbOutlineX,
   TbOutlineCopy,
+  TbOutlineChevronDown,
   TbOutlineDotsVertical,
 } from "solid-icons/tb";
 
@@ -72,7 +73,9 @@ import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -89,7 +92,11 @@ import { currentTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
-import { copyToClipboard } from "@/lib/utils";
+import {
+  copyToClipboard,
+  showSaveFileDialog,
+  stringToReadableStream,
+} from "@/lib/utils";
 import { sqlValueToString, tryFormatUuidBlob } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
@@ -233,27 +240,209 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
-export function buildCsv(response: QueryResponse): string {
-  function escapeCsv(v: string): string {
-    return `"${v.replaceAll('"', '""')}"`;
-  }
+function resultUuidVersions(response: QueryResponse): (4 | 7 | undefined)[] {
+  return (response.columns ?? []).map((_, index) =>
+    detectUuidColumnVersion(response, index),
+  );
+}
 
+function resultValueToString(
+  value: SqlValue,
+  uuidVersion: 4 | 7 | undefined,
+): string {
+  if (uuidVersion && value !== "Null" && "Blob" in value) {
+    return tryFormatUuidBlob(value.Blob)?.value ?? sqlValueToString(value);
+  }
+  return sqlValueToString(value);
+}
+
+function buildDelimited(response: QueryResponse, delimiter: string): string {
+  const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const lines: string[] = [];
+  const uuidVersions = resultUuidVersions(response);
 
-  const columns = response.columns;
-  if (columns !== null) {
-    lines.push(columns.map((c) => escapeCsv(c.name)).join(", "));
+  if (response.columns !== null) {
+    lines.push(
+      response.columns.map((column) => escape(column.name)).join(delimiter),
+    );
   }
-
   for (const row of response.rows) {
-    lines.push(row.map((v) => escapeCsv(sqlValueToString(v))).join(", "));
+    lines.push(
+      row
+        .map((value, index) =>
+          escape(resultValueToString(value, uuidVersions[index])),
+        )
+        .join(delimiter),
+    );
   }
-
   return lines.join("\n");
+}
+
+export function buildCsv(response: QueryResponse): string {
+  return buildDelimited(response, ", ");
+}
+
+export function buildTsv(response: QueryResponse): string {
+  return buildDelimited(response, "\t");
+}
+
+function sqlValueToJson(
+  value: SqlValue,
+  uuidVersion: 4 | 7 | undefined,
+): null | number | string {
+  if (value === "Null") return null;
+  if ("Integer" in value) {
+    const number = Number(value.Integer);
+    return Number.isSafeInteger(number) ? number : value.Integer.toString();
+  }
+  if ("Real" in value) return value.Real;
+  if ("Blob" in value) return resultValueToString(value, uuidVersion);
+  return value.Text;
+}
+
+function resultObjects(response: QueryResponse): Record<string, unknown>[] {
+  const used = new Set<string>();
+  const uuidVersions = resultUuidVersions(response);
+  const names = (response.columns ?? []).map((column) => {
+    let name = column.name;
+    for (let suffix = 2; used.has(name); suffix++)
+      name = `${column.name}_${suffix}`;
+    used.add(name);
+    return name;
+  });
+
+  return response.rows.map((row) =>
+    Object.fromEntries(
+      names.map((name, index) => [
+        name,
+        sqlValueToJson(row[index], uuidVersions[index]),
+      ]),
+    ),
+  );
+}
+
+export function buildJson(response: QueryResponse): string {
+  return JSON.stringify(resultObjects(response), null, 2);
+}
+
+export function buildJsonl(response: QueryResponse): string {
+  return resultObjects(response)
+    .map((row) => JSON.stringify(row))
+    .join("\n");
+}
+
+export type ResultExportFormat = "csv" | "tsv" | "json" | "jsonl";
+
+export function buildResultExport(
+  response: QueryResponse,
+  format: ResultExportFormat,
+): string {
+  switch (format) {
+    case "csv":
+      return buildCsv(response);
+    case "tsv":
+      return buildTsv(response);
+    case "json":
+      return buildJson(response);
+    case "jsonl":
+      return buildJsonl(response);
+  }
+}
+
+export function resultExportFilename(
+  scriptName: string,
+  format: ResultExportFormat,
+): string {
+  const name = scriptName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${name || "query-results"}.${format}`;
+}
+
+const RESULT_EXPORT_FORMATS = ["csv", "tsv", "json", "jsonl"] as const;
+const RESULT_EXPORT_MIME_TYPES: Record<ResultExportFormat, string> = {
+  csv: "text/csv;charset=utf-8",
+  tsv: "text/tab-separated-values;charset=utf-8",
+  json: "application/json;charset=utf-8",
+  jsonl: "application/x-ndjson;charset=utf-8",
+};
+
+function ResultsExportMenu(props: {
+  data: QueryResponse | undefined;
+  scriptName: string;
+}) {
+  const copy = (format: ResultExportFormat) => {
+    if (props.data?.columns !== null && props.data !== undefined) {
+      copyToClipboard(
+        buildResultExport(props.data, format),
+        false,
+        `Copied ${format.toUpperCase()}`,
+      );
+    }
+  };
+
+  const save = async (format: ResultExportFormat) => {
+    if (props.data?.columns === null || props.data === undefined) return;
+
+    try {
+      await showSaveFileDialog({
+        contents: async () =>
+          stringToReadableStream(buildResultExport(props.data!, format)),
+        filename: resultExportFilename(props.scriptName, format),
+        mimeType: RESULT_EXPORT_MIME_TYPES[format],
+      });
+    } catch (error) {
+      showToast({
+        title: "Could not save results",
+        description: error instanceof Error ? error.message : `${error}`,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <DropdownMenu placement="bottom-start">
+      <DropdownMenuTrigger
+        class={buttonVariants({ variant: "ghost", size: "sm" })}
+        aria-label="Export results"
+        disabled={props.data?.columns == null}
+      >
+        <TbOutlineCopy />
+        Export
+        <TbOutlineChevronDown />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Copy to clipboard</DropdownMenuLabel>
+          <For each={RESULT_EXPORT_FORMATS}>
+            {(format) => (
+              <DropdownMenuItem onSelect={() => copy(format)}>
+                {format.toUpperCase()}
+              </DropdownMenuItem>
+            )}
+          </For>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Save to file</DropdownMenuLabel>
+          <For each={RESULT_EXPORT_FORMATS}>
+            {(format) => (
+              <DropdownMenuItem onSelect={() => void save(format)}>
+                {format.toUpperCase()}
+              </DropdownMenuItem>
+            )}
+          </For>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function ResultsHeader(props: {
   data: QueryResponse | undefined;
+  scriptName: string;
   timestamp: number | undefined;
   status: string;
 }) {
@@ -274,20 +463,7 @@ function ResultsHeader(props: {
             {props.data!.rows.length === 1 ? "row" : "rows"}
           </span>
         </Show>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Copy results as CSV"
-          disabled={props.data?.columns == null}
-          onClick={() => {
-            const data = props.data;
-            if (data?.columns !== null && data !== undefined) {
-              copyToClipboard(buildCsv(data));
-            }
-          }}
-        >
-          <TbOutlineCopy />
-        </Button>
+        <ResultsExportMenu data={props.data} scriptName={props.scriptName} />
       </div>
 
       <ExecutionTime timestamp={props.timestamp} />
@@ -311,6 +487,7 @@ function ResultView(props: {
         <div class="flex min-h-40 flex-col gap-4 p-4">
           <ResultsHeader
             data={undefined}
+            scriptName={props.script.name}
             timestamp={undefined}
             status={status()}
           />
@@ -324,6 +501,7 @@ function ResultView(props: {
         <div class="flex flex-col gap-2 p-4">
           <ResultsHeader
             data={response()?.data}
+            scriptName={props.script.name}
             timestamp={response()?.timestamp}
             status={status()}
           />
@@ -335,6 +513,7 @@ function ResultView(props: {
         <div class="flex min-h-40 flex-col gap-4 p-4">
           <ResultsHeader
             data={undefined}
+            scriptName={props.script.name}
             timestamp={response()?.timestamp}
             status={status()}
           />
@@ -348,6 +527,7 @@ function ResultView(props: {
         <div class="flex min-h-40 flex-col gap-4 p-4">
           <ResultsHeader
             data={response()?.data}
+            scriptName={props.script.name}
             timestamp={response()?.timestamp}
             status={status()}
           />
@@ -360,6 +540,7 @@ function ResultView(props: {
       <Match when={response()?.data !== undefined}>
         <ResultViewImpl
           data={response()!.data!}
+          scriptName={props.script.name}
           timestamp={response()?.timestamp}
           isCached={props.cached}
           status={status()}
@@ -371,6 +552,7 @@ function ResultView(props: {
 
 function ResultViewImpl(props: {
   data: QueryResponse;
+  scriptName: string;
   isCached: boolean;
   status: string;
   timestamp?: number;
@@ -447,6 +629,7 @@ function ResultViewImpl(props: {
       <div class="flex flex-col gap-2 p-4">
         <ResultsHeader
           data={props.data}
+          scriptName={props.scriptName}
           timestamp={props.timestamp}
           status={props.status}
         />
