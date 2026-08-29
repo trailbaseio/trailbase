@@ -19,7 +19,6 @@ import { client, hostAddress } from "@/lib/client";
 import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
-import { getSpareHeaderStyle } from "@/lib/header";
 import { cn } from "@/lib/utils";
 
 function SandboxedIframe(props: { component: WasmComponent }) {
@@ -273,7 +272,7 @@ export function WasmComponentDetails(props: {
           }
         />
 
-        <div class={getSpareHeaderStyle(isMobile())}>
+        <div class="h-full w-full">
           <Switch>
             <Match when={!sandboxed()}>
               <YoloIframe component={props.component} />

@@ -17,50 +17,6 @@ import type { SqlValue } from "@/lib/value";
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
 
-function ColorPalette() {
-  return (
-    <div class="my-4 grid max-w-[400px] grid-cols-2 text-sm">
-      <div class="bg-background">Background</div>
-      <div class="bg-foreground text-white">Foreground</div>
-
-      <div class="bg-muted">Muted</div>
-      <div class="bg-muted-foreground text-white">Muted FG</div>
-
-      <div class="bg-border">Border</div>
-      <div>N/A</div>
-
-      <div class="bg-card">Card</div>
-      <div class="bg-card-foreground text-white">Card FG</div>
-
-      <div class="bg-primary text-white">Primary</div>
-      <div class="bg-primary-foreground">Primary FG</div>
-
-      <div class="bg-secondary">Secondary</div>
-      <div class="bg-secondary-foreground text-white">Secondary FG</div>
-
-      <div class="bg-accent">Accent</div>
-      <div class="bg-accent-foreground text-white">Accent FG</div>
-
-      <div class="bg-destructive">Destructive</div>
-      <div class="bg-destructive-foreground">Destructive FG</div>
-
-      <div class="bg-info">info</div>
-      <div class="bg-info-foreground text-white">info FG</div>
-
-      <div class="bg-success">success</div>
-      <div class="bg-success-foreground text-white">success FG</div>
-
-      <div class="bg-warning">warning</div>
-      <div class="bg-warning-foreground text-white">warning FG</div>
-
-      <div class="bg-error">error</div>
-      <div class="bg-error-foreground text-white">error FG</div>
-
-      <div class="bg-ring text-white">Ring</div>
-    </div>
-  );
-}
-
 type Element = {
   icon: IconTypes;
   content: string;
@@ -92,7 +48,7 @@ const elements = [
   {
     icon: TbOutlinePackage,
     content: "Loaded WASM modules",
-    href: `${BASE}/wasm-modules`,
+    href: `${BASE}/wasm`,
   },
   {
     icon: TbOutlineTimeline,
@@ -242,8 +198,6 @@ export function IndexPage() {
             </For>
           </CardContent>
         </Card>
-
-        {import.meta.env.DEV && <ColorPalette />}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator";
 
 export function Header(props: {
   title: string;
+  description?: JSX.Element;
   titleSelect?: JSX.Element;
   left?: JSX.Element;
   right?: JSX.Element;
@@ -21,14 +22,21 @@ export function Header(props: {
         </Show>
 
         <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
-          <h1 class="m-0">
-            <span class="text-primary">{props.title}</span>
+          <div class="min-w-0">
+            <h1 class="m-0 truncate text-base font-semibold sm:text-lg">
+              <span class="text-primary">{props.title}</span>
 
-            <Show when={props.titleSelect}>
-              <span class="text-muted-foreground mx-2">‣</span>
-              <span class="font-normal">{props.titleSelect}</span>
+              <Show when={props.titleSelect}>
+                <span class="text-muted-foreground mx-2">‣</span>
+                <span class="font-normal">{props.titleSelect}</span>
+              </Show>
+            </h1>
+            <Show when={props.description}>
+              <p class="text-muted-foreground m-0 hidden text-xs sm:block">
+                {props.description}
+              </p>
             </Show>
-          </h1>
+          </div>
 
           {/* left */}
           <Show when={props.left !== undefined}>{props.left}</Show>
@@ -36,7 +44,9 @@ export function Header(props: {
 
         {/* right */}
         <Show when={props.right !== undefined}>
-          <div class="flex max-h-[40px] grow justify-end">{props.right}</div>
+          <div class="flex w-full grow justify-end sm:w-auto">
+            {props.right}
+          </div>
         </Show>
       </header>
 

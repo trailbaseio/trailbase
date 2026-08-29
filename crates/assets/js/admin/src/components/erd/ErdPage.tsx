@@ -30,7 +30,6 @@ import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import { QualifiedName } from "@bindings/QualifiedName";
-import { getSpareHeaderStyle } from "@/lib/header";
 
 function namesMatch(a: QualifiedName, b: QualifiedName): boolean {
   if (a.name === b.name) {
@@ -194,7 +193,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
   let graph: Graph | undefined;
 
   return (
-    <div class={getSpareHeaderStyle(isMobile())}>
+    <div class="h-full w-full">
       {/* UI overlay */}
       <div class="absolute right-0 z-10">
         <div class="m-2 flex flex-col gap-2">
@@ -240,7 +239,7 @@ export function ErdPage() {
 
   return (
     <div class="flex h-full flex-col">
-      <Header title="Schema" class="h-[65px]" />
+      <Header title="Schema" />
 
       <Switch>
         <Match when={schemaFetch.isError}>
