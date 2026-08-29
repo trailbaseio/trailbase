@@ -1,15 +1,23 @@
+import { fireEvent, render, screen } from "@solidjs/testing-library";
+import { createComponent } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("@antv/x6", () => ({ Graph: class {} }));
-vi.mock("@/components/erd/ErdGraph", () => ({
-  ErdGraph: () => null,
-  nodeName: () => "rect",
-  NODE_WIDTH: 320,
-  LINE_HEIGHT: 24,
+vi.mock("@antv/x6", () => ({
+  Graph: class {
+    static registerPortLayout() {}
+    static registerNode() {}
+  },
 }));
+vi.mock("@/components/erd/ErdGraph", async () => {
+  const actual = await vi.importActual<typeof import("@/components/erd/ErdGraph")>(
+    "@/components/erd/ErdGraph",
+  );
+  return { ...actual, ErdGraph: () => null };
+});
 
 import {
   buildErdModel,
+  ErdToolbar,
   relatedEntityIds,
   searchErdEntities,
 } from "@/components/erd/ErdPage";
@@ -89,6 +97,15 @@ describe("ERD workspace model", () => {
     ]);
     expect(layoutErdNodes([])).toEqual([]);
   });
+  it("preserves explicit positions while laying out new nodes", () => {
+    expect(
+      layoutErdNodes([
+        { id: "a", position: { x: 12, y: 34 } },
+        { id: "b" },
+      ]).map((node) => node.position),
+    ).toEqual([{ x: 12, y: 34 }, { x: 270, y: 0 }]);
+  });
+
   it("returns table and view entities with visible counts", () => {
     const model = buildErdModel(
       schema(
@@ -181,6 +198,32 @@ describe("ERD workspace model", () => {
         "posts",
       ),
     ).toEqual(new Set(["posts", "users", "comments"]));
+  });
+
+  it("wires search selection and toolbar actions", async () => {
+    const onSelect = vi.fn();
+    const onReset = vi.fn();
+    render(() =>
+      createComponent(ErdToolbar, {
+        entities: [{ id: "posts", name: "posts", type: "table" }],
+        showTables: true,
+        showViews: false,
+        onShowTablesChange: vi.fn(),
+        onShowViewsChange: vi.fn(),
+        onSelect,
+        onZoomIn: vi.fn(),
+        onZoomOut: vi.fn(),
+        onFit: vi.fn(),
+        onReset,
+      }),
+    );
+    await fireEvent.input(screen.getByRole("combobox"), {
+      target: { value: "post" },
+    });
+    await fireEvent.click(screen.getByRole("option", { name: /posts/ }));
+    expect(onSelect).toHaveBeenCalledWith("posts");
+    await fireEvent.click(screen.getByRole("button", { name: "Reset layout" }));
+    expect(onReset).toHaveBeenCalledOnce();
   });
 
   it("searches qualified names case-insensitively and returns all for an empty query", () => {

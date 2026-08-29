@@ -527,7 +527,6 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
           onMount={(g) => (graph = g)}
         />
         <p class="sr-only" aria-live="polite">{status()}</p>
-        />
       </div>
     </div>
   );
