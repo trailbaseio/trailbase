@@ -1,4 +1,5 @@
 import {
+  createEffect,
   createMemo,
   createSignal,
   For,
@@ -587,6 +588,16 @@ export function AccountsPage() {
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
 
+  createEffect(() => {
+    const selected = editUser();
+    if (
+      selected &&
+      !users.data?.users.some((user) => user.id === selected.id)
+    ) {
+      setEditUser(undefined);
+    }
+  });
+
   const accountsTable = createMemo(() => {
     return buildTable(
       {
@@ -612,10 +623,42 @@ export function AccountsPage() {
     );
   });
 
+  const loadedUsers = () => users.data?.users ?? [];
+  const hasQuery = Boolean(searchParams.search || searchParams.filter);
+  const emptyState = () =>
+    hasQuery ? (
+      <div class="p-4 text-center">
+        <p>No accounts match the current search or filter.</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setSearch(undefined);
+            setFilter(undefined);
+          }}
+        >
+          Clear search/filter
+        </Button>
+      </div>
+    ) : (
+      <div class="p-4 text-center">
+        <p>No accounts yet.</p>
+        <Button
+          onClick={() =>
+            document
+              .querySelector<HTMLButtonElement>("[data-add-account]")
+              ?.click()
+          }
+        >
+          Add account
+        </Button>
+      </div>
+    );
+
   return (
-    <div>
+    <div class="flex h-full min-h-0 flex-col">
       <Header
         title="Accounts"
+        description={`${users.data?.total_row_count ?? 0} accounts`}
         left={
           <IconButton
             onClick={refetch}
@@ -625,9 +668,28 @@ export function AccountsPage() {
             <TbOutlineRefresh />
           </IconButton>
         }
+        right={
+          <div>
+            <SafeSheet
+              children={(sheet) => (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <AddUser userRefetch={refetch} {...sheet} />
+                  </SheetContent>
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button data-add-account {...props}>
+                        Add account
+                      </Button>
+                    )}
+                  />
+                </>
+              )}
+            />
+          </div>
+        }
       />
-
-      <div class="flex flex-col items-end gap-4 p-4">
+      <div class="min-h-0 flex-1 overflow-auto p-4">
         <AccountToolbar
           advanced={searchParams.advanced === "true"}
           onModeChange={(advanced) =>
@@ -662,85 +724,51 @@ export function AccountsPage() {
                 ? `Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`
                 : "Search accounts…"
             }
-            example={
-              searchParams.advanced === "true" ? (
-                <>
-                  Use raw expressions such as <code>email ~ "admin@%"</code>.
-                </>
-              ) : undefined
-            }
           />
         </AccountToolbar>
-
-        <Suspense fallback={<div>Loading...</div>}>
+        <Suspense fallback={<div>Loading accounts…</div>}>
           <Switch>
             <Match when={users.isError}>
-              <span>Error: {users.error?.toString()}</span>
+              <Callout variant="destructive" role="alert">
+                Unable to load accounts.
+                <Button variant="outline" onClick={refetch}>
+                  Retry
+                </Button>
+              </Callout>
             </Match>
-
             <Match when={true}>
-              <div class="w-full space-y-2.5">
+              <div class="mt-4">
                 <Table
                   table={accountsTable()}
                   loading={users.isLoading}
-                  onRowClick={(_idx: number, row: UserJson) => {
-                    setEditUser(row);
-                  }}
+                  dense={true}
+                  paginationPosition="bottom"
+                  emptyState={emptyState()}
+                  onRowClick={(_idx, row) => setEditUser(row)}
                 />
               </div>
             </Match>
           </Switch>
-
-          <SafeSheet
-            children={(sheet) => {
-              return (
-                <>
-                  <SheetContent class={sheetMaxWidth}>
-                    <AddUser userRefetch={refetch} {...sheet} />
-                  </SheetContent>
-
-                  <SheetTrigger
-                    as={(props: DialogTriggerProps) => (
-                      <Button
-                        variant="outline"
-                        class="flex gap-2"
-                        onClick={() => {}}
-                        {...props}
-                      >
-                        Add account
-                      </Button>
-                    )}
-                  />
-                </>
-              );
-            }}
-          />
-
-          {/* WARN: This might open multiple sheets or at least scrims for each row */}
-          <SafeSheet
-            open={[
-              () => editUser() !== undefined,
-              (isOpen: boolean | ((value: boolean) => boolean)) => {
-                if (!isOpen) {
-                  setEditUser(undefined);
-                }
-              },
-            ]}
-            children={(sheet) => {
-              return (
-                <SheetContent class={sheetMaxWidth}>
-                  <Show when={editUser()}>
-                    <EditSheetContent
-                      user={editUser()!}
-                      refetch={refetch}
-                      {...sheet}
-                    />
-                  </Show>
-                </SheetContent>
-              );
-            }}
-          />
         </Suspense>
+        <SafeSheet
+          open={[
+            () => editUser() !== undefined,
+            (isOpen: boolean | ((value: boolean) => boolean)) => {
+              if (!isOpen) setEditUser(undefined);
+            },
+          ]}
+          children={(sheet) => (
+            <SheetContent class={sheetMaxWidth}>
+              <Show when={editUser()}>
+                <EditSheetContent
+                  user={editUser()!}
+                  refetch={refetch}
+                  {...sheet}
+                />
+              </Show>
+            </SheetContent>
+          )}
+        />
       </div>
     </div>
   );
