@@ -587,12 +587,15 @@ export function AccountsPage() {
   };
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
+  const [addUserOpen, setAddUserOpen] = createSignal(false);
 
   createEffect(() => {
     const selected = editUser();
+    const loadedUsers = users.data;
     if (
       selected &&
-      !users.data?.users.some((user) => user.id === selected.id)
+      loadedUsers &&
+      !loadedUsers.users.some((user) => user.id === selected.id)
     ) {
       setEditUser(undefined);
     }
@@ -623,8 +626,11 @@ export function AccountsPage() {
     );
   });
 
-  const loadedUsers = () => users.data?.users ?? [];
-  const hasQuery = Boolean(searchParams.search || searchParams.filter);
+  const hasQuery = Boolean(
+    searchParams.advanced === "true"
+      ? searchParams.filter
+      : searchParams.search,
+  );
   const emptyState = () =>
     hasQuery ? (
       <div class="p-4 text-center">
@@ -669,24 +675,7 @@ export function AccountsPage() {
           </IconButton>
         }
         right={
-          <div>
-            <SafeSheet
-              children={(sheet) => (
-                <>
-                  <SheetContent class={sheetMaxWidth}>
-                    <AddUser userRefetch={refetch} {...sheet} />
-                  </SheetContent>
-                  <SheetTrigger
-                    as={(props: DialogTriggerProps) => (
-                      <Button data-add-account {...props}>
-                        Add account
-                      </Button>
-                    )}
-                  />
-                </>
-              )}
-            />
-          </div>
+          <Button onClick={() => setAddUserOpen(true)}>Add account</Button>
         }
       />
       <div class="min-h-0 flex-1 overflow-auto p-4">
@@ -729,7 +718,7 @@ export function AccountsPage() {
         <Suspense fallback={<div>Loading accounts…</div>}>
           <Switch>
             <Match when={users.isError}>
-              <Callout variant="destructive" role="alert">
+              <Callout variant="error" role="alert">
                 Unable to load accounts.
                 <Button variant="outline" onClick={refetch}>
                   Retry
@@ -750,6 +739,28 @@ export function AccountsPage() {
             </Match>
           </Switch>
         </Suspense>
+        <SafeSheet
+          open={[addUserOpen, setAddUserOpen]}
+          children={(sheet) => (
+            <>
+              <SheetContent class={sheetMaxWidth}>
+                <AddUser userRefetch={refetch} {...sheet} />
+              </SheetContent>
+              <SheetTrigger
+                as={(props: DialogTriggerProps) => (
+                  <Button
+                    class="hidden"
+                    data-add-account
+                    aria-hidden="true"
+                    {...props}
+                  >
+                    Add account
+                  </Button>
+                )}
+              />
+            </>
+          )}
+        />
         <SafeSheet
           open={[
             () => editUser() !== undefined,

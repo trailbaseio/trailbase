@@ -20,6 +20,8 @@ const pageState = vi.hoisted(() => ({
   setSearchParams: vi.fn(),
   fetchUsers: vi.fn(),
   invalidateQueries: vi.fn(),
+  queryError: false,
+  showEmptyState: false,
 }));
 
 vi.mock("@solidjs/router", () => ({
@@ -41,7 +43,13 @@ vi.mock("@solidjs/router", () => ({
 vi.mock("@tanstack/solid-query", () => ({
   useQuery: (options: () => { queryFn: () => Promise<unknown> }) => {
     createEffect(() => void options().queryFn());
-    return { isLoading: false, isError: false, data: undefined };
+    return {
+      isLoading: false,
+      get isError() {
+        return pageState.queryError;
+      },
+      data: { users: [] },
+    };
   },
   useQueryClient: () => ({ invalidateQueries: pageState.invalidateQueries }),
 }));
@@ -52,7 +60,9 @@ vi.mock("@/lib/api/user", () => ({
 }));
 vi.mock("@/components/Table", () => ({
   buildTable: () => ({}),
-  Table: () => null,
+  // eslint-disable-next-line solid/reactivity
+  Table: (props: { emptyState: unknown }) =>
+    pageState.showEmptyState ? props.emptyState : null,
 }));
 vi.mock("@/components/accounts/AddUser", () => ({
   AddUser: () => <h2>Add new user</h2>,
@@ -157,6 +167,50 @@ describe("AccountsPage integration", () => {
     pageState.setSearchParams.mockReset();
     pageState.fetchUsers.mockReset().mockResolvedValue({ users: [] });
     pageState.invalidateQueries.mockReset();
+    pageState.queryError = false;
+    pageState.showEmptyState = false;
+  });
+
+  it("renders the page shell with a persistent toolbar and add action", async () => {
+    const { container } = render(() => <AccountsPage />);
+
+    expect(container.firstElementChild).toHaveClass(
+      "flex",
+      "h-full",
+      "min-h-0",
+      "flex-col",
+    );
+    expect(screen.getByRole("heading", { name: "Accounts" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: "Search accounts" }),
+    ).toBeVisible();
+  });
+
+  it("distinguishes no matches from no accounts using the active mode", async () => {
+    pageState.showEmptyState = true;
+    render(() => <AccountsPage />);
+    expect(
+      screen.getByText("No accounts match the current search or filter."),
+    ).toBeVisible();
+
+    cleanup();
+    pageState.params.search = undefined;
+    pageState.params.filter = undefined;
+    render(() => <AccountsPage />);
+    expect(screen.getByText("No accounts yet.")).toBeVisible();
+  });
+
+  it("shows a safe retry state when loading accounts fails", async () => {
+    pageState.queryError = true;
+    render(() => <AccountsPage />);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Unable to load accounts.",
+    );
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
   });
 
   it("queries simple and advanced state with URL pagination", async () => {
