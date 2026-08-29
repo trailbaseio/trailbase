@@ -222,8 +222,8 @@ export function ErdGraph(props: {
     g.on("node:click", ({ node }) => props.onSelect(node.id));
     g.on("blank:click", () => props.onSelect(undefined));
     const handle: ErdGraphHandle = {
-      zoomIn: () => g.zoom(0.2),
-      zoomOut: () => g.zoom(-0.2),
+      zoomIn: () => g.zoomTo(g.zoom() * 2),
+      zoomOut: () => g.zoomTo(g.zoom() / 2),
       fit: () => g.zoomToFit({ padding: 20 }),
       reset: () => {
         layoutErdNodes(nodes).forEach((node, index) => {
