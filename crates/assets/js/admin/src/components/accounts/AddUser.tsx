@@ -22,7 +22,7 @@ import type { CreateUserRequest } from "@bindings/CreateUserRequest";
 
 export function AddUser(props: {
   close: () => void;
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   userRefetch: () => void;
 }) {
   const [error, setError] = createSignal<string>();
@@ -37,6 +37,7 @@ export function AddUser(props: {
       setError(undefined);
       try {
         await createUser(value);
+        props.markDirty(false);
         props.userRefetch();
         props.close();
       } catch {
@@ -46,7 +47,7 @@ export function AddUser(props: {
   }));
 
   form.useStore((state) => {
-    if (state.isDirty && !state.isSubmitted) {
+    if (state.isDirty) {
       props.markDirty();
     }
   });

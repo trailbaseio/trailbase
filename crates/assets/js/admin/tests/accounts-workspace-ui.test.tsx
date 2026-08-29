@@ -381,6 +381,45 @@ describe("AccountsPage integration", () => {
     expect(screen.getByRole("alert")).not.toHaveTextContent("clipboard failed");
   });
 
+  it("does not submit edits when opening delete confirmation", async () => {
+    pageState.queryData = { users: [account] };
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(
+      within(screen.getByRole("region", { name: "Danger zone" })).getByRole(
+        "button",
+        { name: "Delete" },
+      ),
+    );
+    expect(pageState.updateUser).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Confirmation" })).toBeVisible();
+  });
+
+  it("guards duplicate login token requests while pending", async () => {
+    pageState.queryData = { users: [account] };
+    let resolveMint!: (value: object) => void;
+    pageState.mintTokens.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveMint = resolve;
+      }),
+    );
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    const copy = screen.getByRole("button", { name: "Copy login tokens" });
+    await fireEvent.click(copy);
+    await fireEvent.click(copy);
+    expect(pageState.mintTokens).toHaveBeenCalledTimes(1);
+    expect(copy).toBeDisabled();
+    resolveMint({ access_token: "token" });
+    await waitFor(() => expect(copy).not.toBeDisabled());
+  });
+
   it("guards deletion in flight and clears failures when reopened", async () => {
     pageState.queryData = { users: [account] };
     let rejectDelete!: (reason: Error) => void;

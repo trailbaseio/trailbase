@@ -331,6 +331,7 @@ function DeleteUserButton(props: {
       </DialogContent>
 
       <Button
+        type="button"
         class="bg-destructive text-destructive-foreground"
         onClick={() => {
           setError(undefined);
@@ -346,11 +347,12 @@ function DeleteUserButton(props: {
 function EditSheetContent(props: {
   user: UserJson;
   close: () => void;
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   refetch: () => void;
 }) {
   const [error, setError] = createSignal<string>();
   const [tokenError, setTokenError] = createSignal<string>();
+  const [copyingTokens, setCopyingTokens] = createSignal(false);
   const form = createForm(() => ({
     defaultValues: {
       id: props.user.id,
@@ -363,6 +365,7 @@ function EditSheetContent(props: {
       setError(undefined);
       try {
         await updateUser(value);
+        props.markDirty(false);
         props.refetch();
         props.close();
       } catch {
@@ -372,7 +375,7 @@ function EditSheetContent(props: {
   }));
 
   form.useStore((state) => {
-    if (state.isDirty && !state.isSubmitted) {
+    if (state.isDirty) {
       props.markDirty();
     }
   });
@@ -497,9 +500,12 @@ function EditSheetContent(props: {
                           variant="outline"
                           aria-label="Copy login tokens"
                           title="Copy login tokens"
+                          disabled={copyingTokens()}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (copyingTokens()) return;
 
+                            setCopyingTokens(true);
                             setTokenError(undefined);
                             (async () => {
                               try {
@@ -516,6 +522,8 @@ function EditSheetContent(props: {
                                 setTokenError(
                                   "Unable to copy login tokens. Please try again.",
                                 );
+                              } finally {
+                                setCopyingTokens(false);
                               }
                             })();
                           }}
@@ -552,6 +560,7 @@ function EditSheetContent(props: {
                 userId={props.user.id}
                 name={accountIdentity(props.user).primary}
                 onDelete={() => {
+                  props.markDirty(false);
                   props.close();
                   props.refetch();
                 }}
