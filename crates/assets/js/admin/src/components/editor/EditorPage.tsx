@@ -66,6 +66,7 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import {
   DropdownMenu,
@@ -94,6 +95,15 @@ import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
+
+export type EditorWorkspaceTab = "editor" | "results";
+
+export function nextEditorTabAfterExecution(
+  mobile: boolean,
+  current: EditorWorkspaceTab,
+): EditorWorkspaceTab {
+  return mobile ? "results" : current;
+}
 
 export function filterSavedQueries(
   scripts: Script[],
@@ -717,6 +727,7 @@ function EditorPanel(props: {
 
   const isMobile = createIsMobile();
   const { state: explorerState } = useSidebar();
+  const [activeTab, setActiveTab] = createSignal<EditorWorkspaceTab>("editor");
 
   const databases = () =>
     config.data?.config?.databases
@@ -769,6 +780,7 @@ function EditorPanel(props: {
           ...props.script,
           result: response,
         });
+        setActiveTab(nextEditorTabAfterExecution(isMobile(), activeTab()));
 
         return response;
       },
@@ -933,47 +945,67 @@ function EditorPanel(props: {
         </div>
       </header>
 
-      <div class="flex flex-col gap-3 p-3 sm:p-4">
-        {(uiState().showMigrationWarning ?? true) && (
-          <Callout class="flex items-start justify-between gap-3 text-sm">
-            <p class="leading-relaxed">{migrationWarning}</p>
-            <Button
-              variant="ghost"
-              size="icon"
-              class="size-7 shrink-0"
-              aria-label="Dismiss migration warning"
-              onClick={() => {
-                $uiState.set({
-                  ...uiState(),
-                  showMigrationWarning: false,
-                });
-              }}
-            >
-              <TbOutlineX />
-            </Button>
-          </Callout>
-        )}
+      <Tabs
+        value={activeTab()}
+        onChange={(value) => setActiveTab(value as EditorWorkspaceTab)}
+      >
+        <TabsList class="mx-3 mt-3 grid w-[calc(100%-1.5rem)] grid-cols-2 md:hidden">
+          <TabsTrigger value="editor">Editor</TabsTrigger>
+          <TabsTrigger value="results">Results</TabsTrigger>
+        </TabsList>
 
-        <div
-          class="min-h-64 overflow-hidden rounded-md border [&_.cm-editor]:min-h-64"
-          ref={ref}
-        />
+        <TabsContent
+          value="editor"
+          forceMount
+          class="ui-selected:block m-0 hidden md:block"
+        >
+          <div class="flex flex-col gap-3 p-3 sm:p-4">
+            {(uiState().showMigrationWarning ?? true) && (
+              <Callout class="flex items-start justify-between gap-3 text-sm">
+                <p class="leading-relaxed">{migrationWarning}</p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-7 shrink-0"
+                  aria-label="Dismiss migration warning"
+                  onClick={() => {
+                    $uiState.set({
+                      ...uiState(),
+                      showMigrationWarning: false,
+                    });
+                  }}
+                >
+                  <TbOutlineX />
+                </Button>
+              </Callout>
+            )}
 
-        <QueryActionBar
-          busy={executionResult.isFetching}
-          mobile={isMobile()}
-          onSave={saveScript}
-          onExecute={execute}
-        />
-      </div>
+            <div
+              class="min-h-64 overflow-hidden rounded-md border [&_.cm-editor]:min-h-64"
+              ref={ref}
+            />
 
-      <div class="border-t">
-        <ResultView
-          script={props.script}
-          response={executionResult.data ?? undefined}
-          running={executionResult.isFetching}
-        />
-      </div>
+            <QueryActionBar
+              busy={executionResult.isFetching}
+              mobile={isMobile()}
+              onSave={saveScript}
+              onExecute={execute}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent
+          value="results"
+          forceMount
+          class="ui-selected:block m-0 hidden md:block md:border-t"
+        >
+          <ResultView
+            script={props.script}
+            response={executionResult.data ?? undefined}
+            running={executionResult.isFetching}
+          />
+        </TabsContent>
+      </Tabs>
     </Dialog>
   );
 }
@@ -1096,19 +1128,13 @@ function editorTheme(dark: boolean) {
   return EditorView.theme(
     {
       ".cm-gutters": {
-        backgroundColor: dark ? "#000" : "#f3f7f9",
-        color: dark ? "#FFFFFF" : "#000",
+        backgroundColor: "transparent",
+        color: dark ? "#a1a1aa" : "#52525b",
         border: "none",
-        borderRadius: "8px 0px 0px 8px",
       },
       "&.cm-editor": {
-        outline: "1px solid #e4e4e7",
-        borderRadius: "8px",
+        height: "100%",
       },
-      // "&.cm-editor.cm-focused": {
-      //   outline: "1px solid gray",
-      //   borderRadius: "8px",
-      // },
     },
     { dark },
   );

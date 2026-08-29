@@ -4,6 +4,7 @@ import type { ExecutionResult } from "@/lib/api/execute";
 import {
   buildCsv,
   filterSavedQueries,
+  nextEditorTabAfterExecution,
   paginateResultRows,
   resultPresentation,
   type Script,
@@ -66,6 +67,11 @@ describe("SQL editor workspace", () => {
     expect(resultPresentation(empty, false).label).toBe("No rows");
     expect(resultPresentation(noData, false).label).toBe("No data");
     expect(resultPresentation(failure, false).label).toBe("Error");
+  });
+
+  it("opens results after mobile execution only", () => {
+    expect(nextEditorTabAfterExecution(true, "editor")).toBe("results");
+    expect(nextEditorTabAfterExecution(false, "editor")).toBe("editor");
   });
 
   it("slices result rows for client-side pagination", () => {
