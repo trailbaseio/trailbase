@@ -474,6 +474,28 @@ describe("AccountsPage integration", () => {
     );
   });
 
+  it("clears dirty state when an edit is reverted", async () => {
+    pageState.queryData = { users: [account] };
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    const email = screen.getByRole("textbox", { name: "Email" });
+    await fireEvent.change(email, {
+      target: { value: "changed@example.com" },
+    });
+    await fireEvent.change(email, {
+      target: { value: account.email },
+    });
+    await fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() =>
+      expect(screen.queryByText("Edit account")).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Pending Changes")).not.toBeInTheDocument();
+  });
+
   it("opens the account sheet on row activation and clears stale selection", async () => {
     pageState.queryData = { users: [account] };
     render(() => <AccountsPage />);

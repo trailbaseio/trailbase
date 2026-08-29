@@ -8,6 +8,7 @@ import {
   Show,
   Switch,
   Suspense,
+  untrack,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import {
@@ -353,14 +354,15 @@ function EditSheetContent(props: {
   const [error, setError] = createSignal<string>();
   const [tokenError, setTokenError] = createSignal<string>();
   const [copyingTokens, setCopyingTokens] = createSignal(false);
+  const defaultValues = untrack((): UpdateUserRequest => ({
+    id: props.user.id,
+    email: props.user.email,
+    unverified_email: props.user.unverified_email,
+    username: props.user.username,
+    password: null,
+  }));
   const form = createForm(() => ({
-    defaultValues: {
-      id: props.user.id,
-      email: props.user.email,
-      unverified_email: props.user.unverified_email,
-      username: props.user.username,
-      password: null,
-    } as UpdateUserRequest,
+    defaultValues,
     onSubmit: async ({ value }) => {
       setError(undefined);
       try {
@@ -375,9 +377,13 @@ function EditSheetContent(props: {
   }));
 
   form.useStore((state) => {
-    if (state.isDirty) {
-      props.markDirty();
-    }
+    const values = state.values;
+    props.markDirty(
+      values.email !== defaultValues.email ||
+        values.unverified_email !== defaultValues.unverified_email ||
+        values.username !== defaultValues.username ||
+        values.password !== defaultValues.password,
+    );
   });
 
   return (

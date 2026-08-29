@@ -26,13 +26,14 @@ export function AddUser(props: {
   userRefetch: () => void;
 }) {
   const [error, setError] = createSignal<string>();
+  const defaultValues: CreateUserRequest = {
+    email: "",
+    password: "",
+    verified: true,
+    admin: false,
+  };
   const form = createForm(() => ({
-    defaultValues: {
-      email: "",
-      password: "",
-      verified: true,
-      admin: false,
-    } as CreateUserRequest,
+    defaultValues,
     onSubmit: async ({ value }) => {
       setError(undefined);
       try {
@@ -47,9 +48,13 @@ export function AddUser(props: {
   }));
 
   form.useStore((state) => {
-    if (state.isDirty) {
-      props.markDirty();
-    }
+    const values = state.values;
+    props.markDirty(
+      values.email !== defaultValues.email ||
+        values.password !== defaultValues.password ||
+        values.verified !== defaultValues.verified ||
+        values.admin !== defaultValues.admin,
+    );
   });
 
   return (
