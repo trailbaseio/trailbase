@@ -1,7 +1,12 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+
+const { adminFetch } = vi.hoisted(() => ({
+  adminFetch: vi.fn().mockResolvedValue({ json: async () => ({ users: [] }) }),
+}));
+vi.mock("@/lib/fetch", () => ({ adminFetch }));
 
 import { formatAccountTime } from "@/components/accounts/AccountsPage";
-import { appendAccountSearchParams } from "@/lib/api/user";
+import { appendAccountSearchParams, fetchUsers } from "@/lib/api/user";
 
 describe("appendAccountSearchParams", () => {
   test("trims and appends email and username like filters", () => {
@@ -25,6 +30,18 @@ describe("appendAccountSearchParams", () => {
     const params = new URLSearchParams("existing=value");
     appendAccountSearchParams(params, "  ");
     expect(params.toString()).toBe("existing=value");
+  });
+});
+
+describe("fetchUsers", () => {
+  test("serializes pagination and account search into the admin request URL", async () => {
+    adminFetch.mockClear();
+
+    await fetchUsers(undefined, 25, 2, "+email", "ada smith");
+
+    expect(adminFetch).toHaveBeenCalledWith(
+      "/user?offset=50&limit=25&order=%2Bemail&filter%5B%24or%5D%5B0%5D%5Bemail%5D%5B%24like%5D=%25ada+smith%25&filter%5B%24or%5D%5B1%5D%5Busername%5D%5B%24like%5D=%25ada+smith%25",
+    );
   });
 });
 

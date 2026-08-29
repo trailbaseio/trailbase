@@ -511,12 +511,14 @@ export function AccountToolbar(props: {
       <div class="flex gap-2">
         <Button
           variant={props.advanced ? "ghost" : "outline"}
+          aria-pressed={!props.advanced}
           onClick={() => props.onModeChange(false)}
         >
           Search accounts
         </Button>
         <Button
           variant={props.advanced ? "outline" : "ghost"}
+          aria-pressed={props.advanced}
           onClick={() => props.onModeChange(true)}
         >
           Advanced account filter

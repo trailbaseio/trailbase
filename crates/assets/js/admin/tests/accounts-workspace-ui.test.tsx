@@ -78,6 +78,8 @@ describe("AccountToolbar", () => {
     expect(
       screen.getByRole("button", { name: "Search accounts" }),
     ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Search accounts" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Advanced account filter" })).toHaveAttribute("aria-pressed", "false");
     expect(
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toBeVisible();
@@ -94,6 +96,8 @@ describe("AccountToolbar", () => {
         <input aria-label="Advanced account filter" />
       </AccountToolbar>
     ));
+    expect(screen.getByRole("button", { name: "Advanced account filter" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Search accounts" })).toHaveAttribute("aria-pressed", "false");
     await fireEvent.click(
       screen.getByRole("button", { name: "Search accounts" }),
     );

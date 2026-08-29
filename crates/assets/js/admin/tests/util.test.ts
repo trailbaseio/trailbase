@@ -1,7 +1,7 @@
 import { test, describe } from "vitest";
 import { urlSafeBase64Encode } from "trailbase";
 
-import { parseFilter } from "@/lib/list";
+import { buildListSearchParams, parseFilter } from "@/lib/list";
 import { urlSafeBase64EncodeStream } from "@/lib/base64";
 import { intPattern, uintPattern, floatPattern } from "@/components/FormFields";
 
@@ -9,6 +9,7 @@ describe("filterParser", () => {
   test("basic", ({ expect }) => {
     expect(() => parseFilter("x = 3)")).toThrow();
     expect(() => parseFilter("(x = 3 && x = 5 || x = 7)")).toThrow();
+    expect(() => buildListSearchParams({ filter: "x = 3)" })).toThrow();
 
     expect(parseFilter("")).toEqual([]);
 
