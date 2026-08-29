@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AccountToolbar } from "@/components/accounts/AccountsPage";
+import { FilterBar } from "@/components/FilterBar";
 
 afterEach(cleanup);
 
@@ -44,18 +45,7 @@ describe("AccountToolbar", () => {
     const onSubmit = vi.fn();
     render(() => (
       <AccountToolbar advanced={false} onModeChange={onModeChange}>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit();
-          }}
-        >
-          <input aria-label="Search accounts" />
-          <button type="button" onClick={() => onSubmit("")}>
-            Clear filter
-          </button>
-          <button type="submit">Apply filter</button>
-        </form>
+        <FilterBar initial="ada" label="Search accounts" onSubmit={onSubmit} />
         <button
           aria-label="Refresh accounts"
           onClick={() => onSubmit("refresh")}
@@ -76,7 +66,7 @@ describe("AccountToolbar", () => {
       screen.getByRole("button", { name: "Refresh accounts" }),
     );
     await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
-    expect(onSubmit).toHaveBeenNthCalledWith(1);
+    expect(onSubmit).toHaveBeenNthCalledWith(1, "ada");
     expect(onSubmit).toHaveBeenNthCalledWith(2, "");
     expect(onSubmit).toHaveBeenNthCalledWith(3, "refresh");
     expect(onSubmit).toHaveBeenNthCalledWith(4, "add");
