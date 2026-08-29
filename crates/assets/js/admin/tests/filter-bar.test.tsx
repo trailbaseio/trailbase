@@ -33,6 +33,14 @@ describe("FilterBar", () => {
     expect(result.queryByRole("button", { name: "Clear filter" })).toBeNull();
   });
 
+  it("supports a custom accessible label", () => {
+    const result = render(() => (
+      <FilterBar label="Search accounts" onSubmit={() => undefined} />
+    ));
+
+    expect(result.getByRole("textbox", { name: "Search accounts" })).toBeInTheDocument();
+  });
+
   it("does not show clear when the filter is empty", () => {
     const result = render(() => <FilterBar onSubmit={() => undefined} />);
 

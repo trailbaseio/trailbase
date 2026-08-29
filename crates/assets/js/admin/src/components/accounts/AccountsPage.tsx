@@ -705,7 +705,7 @@ export function AccountsPage() {
                         onClick={() => {}}
                         {...props}
                       >
-                        Add User
+                        Add account
                       </Button>
                     )}
                   />
