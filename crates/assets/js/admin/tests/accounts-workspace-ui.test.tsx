@@ -55,7 +55,7 @@ vi.mock("@/components/Table", () => ({
   Table: () => null,
 }));
 vi.mock("@/components/accounts/AddUser", () => ({
-  AddUser: () => null,
+  AddUser: () => <h2>Add new user</h2>,
 }));
 
 import {
@@ -158,6 +158,7 @@ describe("AccountsPage integration", () => {
       "ada",
     );
 
+    expect(pageState.params.advanced).toBe("false");
     await fireEvent.click(
       screen.getByRole("button", { name: "Advanced account filter" }),
     );
@@ -172,6 +173,7 @@ describe("AccountsPage integration", () => {
     );
 
     expect(pageState.params.search).toBe("ada");
+    expect(pageState.params.advanced).toBe("true");
     expect(pageState.params.filter).toBe("admin = TRUE");
     expect(pageState.params.pageSize).toBe("25");
     expect(pageState.params.pageIndex).toBe("2");
@@ -188,6 +190,9 @@ describe("AccountsPage integration", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Advanced account filter" }),
     );
+    expect(pageState.params.advanced).toBe("true");
+    expect(pageState.params.search).toBe("grace");
+    expect(pageState.params.filter).toBe("admin = TRUE");
     const advanced = screen.getByRole("textbox", {
       name: "Advanced account filter",
     });
@@ -209,11 +214,14 @@ describe("AccountsPage integration", () => {
     await fireEvent.click(
       screen.getByRole("button", { name: "Search accounts" }),
     );
+    expect(pageState.params.advanced).toBe("false");
     expect(
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toHaveValue("grace");
     expect(pageState.params.filter).toBe("email ~ %");
     await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
-    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
+    expect(
+      await screen.findByRole("heading", { name: "Add new user" }),
+    ).toBeVisible();
   });
 });
