@@ -40,6 +40,22 @@ describe("sidebar shell", () => {
     result.unmount();
   });
 
+  it("shows the sidebar direction in its trigger", async () => {
+    const result = render(() => (
+      <SidebarProvider defaultOpen cookieName="test-offcanvas:state">
+        <SidebarTrigger />
+      </SidebarProvider>
+    ));
+    const collapse = result.getByRole("button", { name: "Collapse sidebar" });
+
+    expect(collapse.querySelector("svg")).not.toHaveClass("rotate-180");
+    await fireEvent.click(collapse);
+
+    const expand = result.getByRole("button", { name: "Expand sidebar" });
+    expect(expand.querySelector("svg")).toHaveClass("rotate-180");
+    result.unmount();
+  });
+
   it("fully hides collapsed offcanvas content", async () => {
     const result = render(() => (
       <SidebarProvider defaultOpen={false} cookieName="test-offcanvas:state">

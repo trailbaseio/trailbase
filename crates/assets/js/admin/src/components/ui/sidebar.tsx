@@ -17,6 +17,7 @@ import type { PolymorphicProps } from "@kobalte/core"
 import { Polymorphic } from "@kobalte/core"
 import type { VariantProps } from "class-variance-authority"
 import { cva } from "class-variance-authority"
+import { TbOutlineLayoutSidebarLeftCollapse } from "solid-icons/tb"
 
 import { cn } from "@/lib/utils"
 import type { ButtonProps } from "@/components/ui/button"
@@ -296,7 +297,9 @@ type SidebarTriggerProps<T extends ValidComponent = "button"> = ButtonProps<T> &
 
 const SidebarTrigger = <T extends ValidComponent = "button">(props: SidebarTriggerProps<T>) => {
   const [local, others] = splitProps(props as SidebarTriggerProps, ["class", "onClick"])
-  const { toggleSidebar } = useSidebar()
+  const { isMobile, openMobile, state, toggleSidebar } = useSidebar()
+  const expanded = () => isMobile() ? openMobile() : state() === "expanded"
+  const actionLabel = () => expanded() ? "Collapse sidebar" : "Expand sidebar"
 
   return (
     <Button
@@ -310,19 +313,10 @@ const SidebarTrigger = <T extends ValidComponent = "button">(props: SidebarTrigg
       }}
       {...others}
     >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="size-4"
-      >
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="M9 3v18" />
-      </svg>
-      <span class="sr-only">Toggle Sidebar</span>
+      <TbOutlineLayoutSidebarLeftCollapse
+        class={`size-4 transition-transform ${expanded() ? "" : "rotate-180"}`}
+      />
+      <span class="sr-only">{actionLabel()}</span>
     </Button>
   )
 }

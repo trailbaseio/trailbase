@@ -16,7 +16,6 @@ import {
   TbOutlineChevronRight,
   TbOutlineCopy,
   TbOutlineDotsVertical,
-  TbOutlineLayoutSidebarLeftCollapse,
 } from "solid-icons/tb";
 import { A, useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
@@ -52,7 +51,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSidebar } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
@@ -452,7 +451,7 @@ function TableHeader(props: {
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
   const selectedSchema = () => props.table[0];
-  const { state: explorerState, toggleSidebar } = useSidebar();
+  const { state: explorerState } = useSidebar();
   const [sqlOpen, setSqlOpen] = createSignal(false);
   const [deleteOpen, setDeleteOpen] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
@@ -497,26 +496,13 @@ function TableHeader(props: {
     <header class="bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm">
       <div class="flex min-h-14 items-center justify-between gap-2 px-3 sm:px-4">
         <div class="flex min-w-0 items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            class="size-7"
+          <SidebarTrigger
             aria-label={
               explorerState() === "collapsed"
                 ? "Show table explorer"
                 : "Hide table explorer"
             }
-            title={
-              explorerState() === "collapsed"
-                ? "Show table explorer"
-                : "Hide table explorer"
-            }
-            onClick={toggleSidebar}
-          >
-            <TbOutlineLayoutSidebarLeftCollapse
-              class={`transition-transform ${explorerState() === "collapsed" ? "rotate-180" : ""}`}
-            />
-          </Button>
+          />
           <div class="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
             <span class="hidden sm:inline">Tables</span>
             <TbOutlineChevronRight class="hidden size-3.5 sm:block" />
