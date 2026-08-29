@@ -313,7 +313,7 @@ function DeleteUserButton(props: {
         <DialogFooter>
           <div class="flex w-full justify-between">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Back
+              Cancel
             </Button>
 
             <Button
@@ -327,17 +327,15 @@ function DeleteUserButton(props: {
                     await deleteUser({ id: props.userId });
                     props.onDelete();
                     setDialogOpen(false);
-                  } catch (error) {
-                    setError(
-                      error instanceof Error ? error.message : String(error),
-                    );
+                  } catch (_error) {
+                    setError("Unable to delete account. Please try again.");
                   } finally {
                     setDeleting(false);
                   }
                 })();
               }}
             >
-              {deleting() ? "Deleting..." : "Delete"}
+              {deleting() ? "Deleting…" : "Delete account"}
             </Button>
           </div>
         </DialogFooter>
@@ -376,11 +374,10 @@ function EditSheetContent(props: {
       setError(undefined);
       try {
         await updateUser(value);
-        props.close();
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : String(reason));
-      } finally {
         props.refetch();
+        props.close();
+      } catch (_reason) {
+        setError("Unable to update account. Please try again.");
       }
     },
   }));
@@ -394,7 +391,7 @@ function EditSheetContent(props: {
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>Edit User</SheetTitle>
+        <SheetTitle>Edit account</SheetTitle>
 
         <Show when={error()}>
           <p class="text-destructive" role="alert">
@@ -423,8 +420,21 @@ function EditSheetContent(props: {
       >
         <div class="flex flex-col items-center gap-4 py-4">
           <div class="flex w-full items-center justify-start gap-2">
-            <FixedWidthLabel>id</FixedWidthLabel>
-            <span class="text-muted-foreground text-sm">{props.user.id}</span>
+            <FixedWidthLabel>Account ID</FixedWidthLabel>
+            <code class="text-muted-foreground min-w-0 break-all text-sm">{props.user.id}</code>
+            <Button type="button" variant="outline" size="sm" onClick={() => copyToClipboard(props.user.id, true)}>
+              Copy ID
+            </Button>
+          </div>
+          <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>Status</FixedWidthLabel>
+            <div class="flex flex-wrap gap-1">
+              <For each={accountStatuses(props.user)}>{(status) => <Badge variant={status.variant}>{status.label}</Badge>}</For>
+            </div>
+          </div>
+          <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>Provider</FixedWidthLabel>
+            <span>{accountProviderLabel(props.user.provider_id)}</span>
           </div>
 
           <form.Field name={"email"}>
@@ -517,7 +527,7 @@ function EditSheetContent(props: {
                         disabled={!state().canSubmit}
                         variant="default"
                       >
-                        {state().isSubmitting ? "..." : "Submit"}
+                        {state().isSubmitting ? "Saving…" : "Save changes"}
                       </Button>
                     </div>
                   </div>

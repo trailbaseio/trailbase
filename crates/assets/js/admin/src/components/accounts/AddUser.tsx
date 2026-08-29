@@ -37,11 +37,10 @@ export function AddUser(props: {
       setError(undefined);
       try {
         await createUser(value);
-        props.close();
-      } catch (reason) {
-        setError(reason instanceof Error ? reason.message : String(reason));
-      } finally {
         props.userRefetch();
+        props.close();
+      } catch (_reason) {
+        setError("Unable to create account. Please try again.");
       }
     },
   }));
@@ -120,7 +119,7 @@ export function AddUser(props: {
                   disabled={!state().canSubmit}
                   variant="default"
                 >
-                  {state().isSubmitting ? "..." : "Add"}
+                  {state().isSubmitting ? "Creating…" : "Add user"}
                 </Button>
               );
             }}
