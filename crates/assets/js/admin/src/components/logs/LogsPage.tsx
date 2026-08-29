@@ -608,9 +608,9 @@ function MapOverlay(props: {
       {/* request scale */}
       <div class="bg-background/70 absolute top-2 left-2 w-[100px] rounded-sm p-1 text-sm">
         <div class="flex h-[20px] w-full">
-          <div class="h-full w-px bg-gray-600" />
-          <div class="to-primary flex h-full grow justify-center bg-linear-to-r from-emerald-100" />
-          <div class="h-full w-px bg-gray-600" />
+          <div class="bg-muted-foreground h-full w-px" />
+          <div class="from-success to-primary flex h-full grow justify-center bg-linear-to-r" />
+          <div class="bg-muted-foreground h-full w-px" />
         </div>
 
         <div class="relative h-4">
@@ -626,7 +626,7 @@ function MapOverlay(props: {
 
         <Show when={false}>
           <div class="bg-background">
-            <div class="h-[20px] w-[20] bg-emerald-100" />
+            <div class="bg-success h-[20px] w-[20]" />
             <div class="bg-primary h-[20px] w-[20]" />
           </div>
         </Show>

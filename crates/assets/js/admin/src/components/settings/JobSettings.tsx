@@ -245,7 +245,7 @@ function JobSettingsImpl(props: {
                           return (
                             <div
                               classList={{
-                                "text-red-600": error !== null,
+                                "text-error-foreground": error !== null,
                               }}
                             >
                               <Tooltip>

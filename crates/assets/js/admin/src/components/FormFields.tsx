@@ -523,7 +523,7 @@ export function FieldInfo<T>(props: { field: FieldApiT<T> }) {
   return (
     <Switch>
       <Match when={meta().errors.length > 0}>
-        <em class="text-sm text-red-700">{meta().errors}</em>
+        <em class="text-error-foreground text-sm">{meta().errors}</em>
       </Match>
 
       <Match when={meta().isValidating}>Validating...</Match>

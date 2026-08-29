@@ -136,6 +136,7 @@ function YoloIframe(props: { component: WasmComponent }) {
   return (
     <iframe
       src={source()}
+      title="WASM component dashboard"
       style={{
         width: "100%",
         height: "100%",

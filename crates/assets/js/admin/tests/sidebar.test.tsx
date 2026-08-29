@@ -39,9 +39,15 @@ describe("sidebar shell", () => {
     expect(SIDEBAR_WIDTH_ICON).toBe("4rem");
   });
 
-  it("reads the persisted cookie state", () => {
+  it("reads only valid persisted cookie state", () => {
     expect(readSidebarCookie("sidebar:state=false")).toBe(false);
     expect(readSidebarCookie("sidebar:state=true; other=value")).toBe(true);
+    expect(readSidebarCookie("not-sidebar:state=true")).toBeUndefined();
     expect(readSidebarCookie("other=value")).toBeUndefined();
+  });
+
+  it("ignores malformed persisted values", () => {
+    expect(() => readSidebarCookie("sidebar:state=%")).not.toThrow();
+    expect(readSidebarCookie("sidebar:state=%")).toBeUndefined();
   });
 });

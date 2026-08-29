@@ -32,13 +32,10 @@ function WrapWithNav(props: RouteSectionProps) {
         <SidebarInset>
           <header class="flex h-12 items-center border-b px-4">
             <SidebarTrigger />
-            <a
-              href={`${import.meta.env.BASE_URL}/`}
-              class="text-foreground ml-2 flex min-w-0 items-center gap-2 text-sm font-semibold"
-            >
-              <img src={logo} width="24" height="24" alt="TrailBase logo" />
+            <div class="text-foreground ml-2 flex min-w-0 items-center gap-2 text-sm font-semibold">
+              <img src={logo} width="24" height="24" alt="" />
               <span class="truncate">TrailBase</span>
-            </a>
+            </div>
           </header>
           <main class="min-h-0 flex-1 overflow-auto">
             <ErrorBoundary>{props.children}</ErrorBoundary>

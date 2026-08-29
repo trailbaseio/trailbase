@@ -38,7 +38,12 @@ export function readSidebarCookie(cookie: string): boolean | undefined {
     .find((part) => part.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
     ?.slice(SIDEBAR_COOKIE_NAME.length + 1)
   if (value === undefined) return undefined
-  return decodeURIComponent(value) === "true"
+  try {
+    const decoded = decodeURIComponent(value)
+    return decoded === "true" ? true : decoded === "false" ? false : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export const SIDEBAR_WIDTH = "15rem"
@@ -522,14 +527,13 @@ const SidebarMenuButton = <T extends ValidComponent = "button">(
     "tooltip",
     "variant",
     "size",
-    "class",
-    "as"
+    "class"
   ])
   const { isMobile, state } = useSidebar()
 
   const button = (
     <Polymorphic<SidebarMenuButtonProps>
-      as={local.as ?? "button"}
+      as="button"
       data-sidebar="menu-button"
       data-size={local.size}
       data-active={local.isActive}

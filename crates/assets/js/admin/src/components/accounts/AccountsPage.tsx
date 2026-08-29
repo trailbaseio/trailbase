@@ -222,7 +222,7 @@ function DeleteUserButton(props: {
       </DialogContent>
 
       <Button
-        class="bg-destructive text-white"
+        class="bg-destructive text-destructive-foreground"
         onClick={() => setDialogOpen(true)}
       >
         Delete

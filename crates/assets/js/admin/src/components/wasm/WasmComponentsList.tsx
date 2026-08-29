@@ -71,7 +71,7 @@ function ComponentCardContent(props: {
   const skew = () => props.component.loaded != props.component.installed;
 
   return (
-    <CardContent class={cn("flex p-4", skew() && "bg-red-200")}>
+    <CardContent class={cn("flex p-4", skew() && "bg-error")}>
       <div class="text-muted-foreground size-10 shrink-0 content-center">
         <ComponentIcon icon={props.component.icon ?? undefined} />
       </div>
