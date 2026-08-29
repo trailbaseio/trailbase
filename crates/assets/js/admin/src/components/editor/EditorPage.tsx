@@ -91,6 +91,39 @@ import type { ArrayRecord } from "@/lib/record";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
 
+export function filterSavedQueries(
+  scripts: Script[],
+  search: string,
+): Script[] {
+  const query = search.trim().toLocaleLowerCase();
+  return query
+    ? scripts.filter((script) =>
+        script.name.toLocaleLowerCase().includes(query),
+      )
+    : scripts;
+}
+
+export function paginateResultRows<T>(
+  rows: T[],
+  pageIndex: number,
+  pageSize: number,
+): T[] {
+  const start = pageIndex * pageSize;
+  return rows.slice(start, start + pageSize);
+}
+
+export function resultPresentation(
+  result: ExecutionResult | undefined,
+  cached: boolean,
+): { label: string } {
+  if (!result) return { label: "No result" };
+  if (result.error) return { label: "Error" };
+  if (cached) return { label: "Cached result" };
+  if (result.data?.columns === null) return { label: "No data" };
+  if (result.data?.rows.length === 0) return { label: "No rows" };
+  return { label: "Success" };
+}
+
 function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   const schema: {
     [name: string]: SQLNamespace;
@@ -115,7 +148,7 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
-function buildCsv(response: QueryResponse): string {
+export function buildCsv(response: QueryResponse): string {
   function escapeCsv(v: string): string {
     return `"${v.replaceAll('"', '""')}"`;
   }
@@ -854,7 +887,7 @@ function editorTheme(dark: boolean) {
   );
 }
 
-type Script = {
+export type Script = {
   name: string;
   contents: string;
 
