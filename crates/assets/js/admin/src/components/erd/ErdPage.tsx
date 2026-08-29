@@ -23,7 +23,6 @@ import {
   getColumns,
   ForeignKey,
 } from "@/lib/schema";
-import { createIsMobile } from "@/lib/signals";
 import { createTheme, type ResolvedTheme } from "@/lib/theme";
 
 import type { Table } from "@bindings/Table";
@@ -157,7 +156,6 @@ function buildErNode(
 }
 
 function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
-  const isMobile = createIsMobile();
   const theme = createTheme();
 
   const nodesAndEdges = createMemo(() => {
@@ -193,7 +191,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
   let graph: Graph | undefined;
 
   return (
-    <div class="h-full w-full">
+    <div class="size-full">
       {/* UI overlay */}
       <div class="absolute right-0 z-10">
         <div class="m-2 flex flex-col gap-2">
@@ -201,6 +199,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
             size="icon"
             variant="outline"
             class="bg-card"
+            aria-label="Zoom in"
             onClick={() => {
               if (graph !== undefined) {
                 graph.zoomTo(graph.zoom() * 2);
@@ -214,6 +213,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
             size="icon"
             variant="outline"
             class="bg-card"
+            aria-label="Zoom out"
             onClick={() => {
               if (graph !== undefined) {
                 graph.zoomTo(graph.zoom() / 2);

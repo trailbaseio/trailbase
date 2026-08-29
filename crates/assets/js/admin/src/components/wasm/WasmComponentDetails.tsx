@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/switch";
 
 import { client, hostAddress } from "@/lib/client";
-import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -246,7 +245,6 @@ export function WasmComponentDetails(props: {
   component: WasmComponent;
   sandboxed: boolean;
 }) {
-  const isMobile = createIsMobile();
   const [sandboxed, setSandboxed] = createWritableMemo<boolean>(
     () => props.sandboxed,
   );
@@ -272,7 +270,7 @@ export function WasmComponentDetails(props: {
           }
         />
 
-        <div class="h-full w-full">
+        <div class="size-full">
           <Switch>
             <Match when={!sandboxed()}>
               <YoloIframe component={props.component} />

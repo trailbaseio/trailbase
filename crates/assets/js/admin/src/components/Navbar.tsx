@@ -72,6 +72,17 @@ export function useNavbar() {
   return useContext(NavbarContext) ?? undefined;
 }
 
+/** Match a route exactly or beneath it, ignoring trailing slashes. */
+export function isPathActive(current: string, target: string): boolean {
+  const normalize = (path: string) => path.replace(/\/+$/, "") || "/";
+  const currentPath = normalize(current);
+  const targetPath = normalize(target);
+  return (
+    currentPath === targetPath ||
+    (targetPath !== "/" && currentPath.startsWith(`${targetPath}/`))
+  );
+}
+
 export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -90,7 +101,10 @@ export function Navbar() {
           href={`${BASE}/`}
           onClick={(e: MouseEvent) => onClick(e, `${BASE}/`)}
         >
-          <img src={logo} width="42" alt="Logo" />
+          <img src={logo} width="42" alt="TrailBase logo" />
+          <span class="truncate text-base font-semibold group-data-[collapsible=icon]:hidden">
+            TrailBase
+          </span>
         </a>
       </SidebarHeader>
       <SidebarContent>
@@ -102,10 +116,7 @@ export function Navbar() {
                 <For each={items}>
                   {([pathname, Icon, text]) => {
                     const active = () =>
-                      location.pathname === pathname ||
-                      location.pathname.startsWith(
-                        pathname.replace(/\/$/, "") + "/",
-                      );
+                      isPathActive(location.pathname, pathname);
                     return (
                       <SidebarMenuItem>
                         <SidebarMenuButton
@@ -128,12 +139,14 @@ export function Navbar() {
         </For>
       </SidebarContent>
       <SidebarFooter>
-        <div class="flex items-center gap-2">
-          <SwitchThemeButton horizontal={false} />
-          <AuthButton iconSize={22} />
-        </div>
-        <div class="text-[9px]">
-          <Version info={createSystemInfoQuery().data} />
+        <div class="flex min-w-0 flex-col gap-1 group-data-[collapsible=icon]:items-center">
+          <div class="flex min-w-0 items-center gap-2 group-data-[collapsible=icon]:flex-col">
+            <SwitchThemeButton horizontal={false} />
+            <AuthButton iconSize={22} />
+          </div>
+          <div class="truncate text-[9px] group-data-[collapsible=icon]:hidden">
+            <Version info={createSystemInfoQuery().data} />
+          </div>
         </div>
       </SidebarFooter>
       <Dialog

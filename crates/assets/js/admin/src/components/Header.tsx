@@ -24,7 +24,7 @@ export function Header(props: {
         <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <div class="min-w-0">
             <h1 class="m-0 truncate text-base font-semibold sm:text-lg">
-              <span class="text-primary">{props.title}</span>
+              <span class="text-foreground">{props.title}</span>
 
               <Show when={props.titleSelect}>
                 <span class="text-muted-foreground mx-2">‣</span>

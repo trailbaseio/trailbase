@@ -8,6 +8,7 @@ import {
   TbOutlineUsers,
   TbOutlinePackage,
   TbOutlineTimeline,
+  TbOutlineApi,
   TbOutlineSettings,
 } from "solid-icons/tb";
 
@@ -54,6 +55,11 @@ const elements = [
     icon: TbOutlineTimeline,
     content: "Access logs for your application",
     href: `${BASE}/logs`,
+  },
+  {
+    icon: TbOutlineApi,
+    content: "OpenAPI documentation",
+    href: `${BASE}/openapi`,
   },
   {
     icon: TbOutlineSettings,
@@ -136,7 +142,15 @@ export function IndexPage() {
       <Header title="TrailBase" />
 
       <div class="prose dark:prose-invert flex grow flex-col gap-4 p-4">
-        {dashboardFetch.data && (
+        {dashboardFetch.isLoading ? (
+          <div class="text-muted-foreground text-sm" role="status">
+            Loading dashboard metrics…
+          </div>
+        ) : dashboardFetch.error ? (
+          <div class="text-destructive text-sm" role="alert">
+            Unable to load dashboard metrics.
+          </div>
+        ) : dashboardFetch.data ? (
           <div class="flex shrink gap-4">
             <FactCard
               title="Users"
@@ -152,6 +166,10 @@ export function IndexPage() {
               title="Size"
               content={formatBytes(Number(dashboardFetch?.data.dbSize ?? 0))}
             />
+          </div>
+        ) : (
+          <div class="text-muted-foreground text-sm">
+            No dashboard metrics available.
           </div>
         )}
 
