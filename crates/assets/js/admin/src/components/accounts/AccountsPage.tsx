@@ -664,7 +664,11 @@ export function AccountsPage() {
     <div class="flex h-full min-h-0 flex-col">
       <Header
         title="Accounts"
-        description={`${users.data?.total_row_count ?? 0} accounts`}
+        description={
+          users.isLoading
+            ? "Manage authentication identities and access"
+            : `${users.data?.total_row_count ?? 0} accounts`
+        }
         left={
           <IconButton
             onClick={refetch}
@@ -748,12 +752,7 @@ export function AccountsPage() {
               </SheetContent>
               <SheetTrigger
                 as={(props: DialogTriggerProps) => (
-                  <Button
-                    class="hidden"
-                    data-add-account
-                    aria-hidden="true"
-                    {...props}
-                  >
+                  <Button class="mt-4" data-add-account {...props}>
                     Add account
                   </Button>
                 )}

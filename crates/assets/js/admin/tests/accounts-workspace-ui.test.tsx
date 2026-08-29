@@ -21,6 +21,9 @@ const pageState = vi.hoisted(() => ({
   fetchUsers: vi.fn(),
   invalidateQueries: vi.fn(),
   queryError: false,
+  queryLoading: false,
+  queryData: { users: [] as Array<{ id: string; email?: string }> },
+  setDataVersion: undefined as (() => void) | undefined,
   showEmptyState: false,
 }));
 
@@ -42,13 +45,20 @@ vi.mock("@solidjs/router", () => ({
 }));
 vi.mock("@tanstack/solid-query", () => ({
   useQuery: (options: () => { queryFn: () => Promise<unknown> }) => {
+    const [dataVersion, setDataVersion] = Solid.createSignal(0);
+    pageState.setDataVersion = () => setDataVersion((value) => value + 1);
     createEffect(() => void options().queryFn());
     return {
-      isLoading: false,
+      get isLoading() {
+        return pageState.queryLoading;
+      },
       get isError() {
         return pageState.queryError;
       },
-      data: { users: [] },
+      get data() {
+        dataVersion();
+        return pageState.queryData;
+      },
     };
   },
   useQueryClient: () => ({ invalidateQueries: pageState.invalidateQueries }),
@@ -59,10 +69,29 @@ vi.mock("@/lib/api/user", () => ({
   updateUser: vi.fn(),
 }));
 vi.mock("@/components/Table", () => ({
-  buildTable: () => ({}),
-  // eslint-disable-next-line solid/reactivity
-  Table: (props: { emptyState: unknown }) =>
-    pageState.showEmptyState ? props.emptyState : null,
+  buildTable: (options: { data: unknown[] }) => ({ rows: options.data }),
+  Table: (props: {
+    table: { rows: Array<{ id: string }> };
+    emptyState: unknown;
+    onRowClick?: (index: number, row: { id: string }) => void;
+    dense?: boolean;
+    paginationPosition?: string;
+  }) => (
+    <>
+      {pageState.showEmptyState
+        ? props.emptyState
+        : props.table.rows.map((row, index) => (
+            <button onClick={() => props.onRowClick?.(index, row)}>
+              {row.id}
+            </button>
+          ))}
+      <span
+        data-testid="table-props"
+        data-dense={String(props.dense)}
+        data-pagination-position={props.paginationPosition}
+      />
+    </>
+  ),
 }));
 vi.mock("@/components/accounts/AddUser", () => ({
   AddUser: () => <h2>Add new user</h2>,
@@ -73,8 +102,21 @@ import {
   AccountToolbar,
 } from "@/components/accounts/AccountsPage";
 import { FilterBar } from "@/components/FilterBar";
+import type { UserJson } from "@bindings/UserJson";
 
 afterEach(cleanup);
+
+const account = {
+  id: "account-1",
+  email: "ada@example.com",
+  username: "ada",
+  unverified_email: null,
+  admin: false,
+  provider_id: 0n,
+  provider_user_id: null,
+  created: 1_700_000_000n,
+  updated: 1_700_000_000n,
+} satisfies UserJson;
 
 describe("AccountToolbar", () => {
   it("switches between simple and advanced account filters", async () => {
@@ -168,6 +210,9 @@ describe("AccountsPage integration", () => {
     pageState.fetchUsers.mockReset().mockResolvedValue({ users: [] });
     pageState.invalidateQueries.mockReset();
     pageState.queryError = false;
+    pageState.queryLoading = false;
+    pageState.queryData = { users: [] };
+    pageState.setDataVersion = undefined;
     pageState.showEmptyState = false;
   });
 
@@ -181,7 +226,7 @@ describe("AccountsPage integration", () => {
       "flex-col",
     );
     expect(screen.getByRole("heading", { name: "Accounts" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Add account" })[0]).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toBeVisible();
@@ -201,12 +246,32 @@ describe("AccountsPage integration", () => {
     expect(screen.getByText("No accounts yet.")).toBeVisible();
   });
 
+  it("uses the management description while loading and passes dense bottom pagination", () => {
+    pageState.queryLoading = true;
+    render(() => <AccountsPage />);
+    expect(screen.getByText("Manage authentication identities and access")).toBeVisible();
+    expect(screen.getByTestId("table-props")).toHaveAttribute("data-dense", "true");
+    expect(screen.getByTestId("table-props")).toHaveAttribute("data-pagination-position", "bottom");
+  });
+
+  it("opens the account sheet on row activation and clears stale selection", async () => {
+    pageState.queryData = { users: [account] };
+    render(() => <AccountsPage />);
+    await fireEvent.click(screen.getByRole("button", { name: account.id }));
+    expect(await screen.findByText("Edit User")).toBeVisible();
+
+    pageState.queryData = { users: [] };
+    pageState.setDataVersion?.();
+    await waitFor(() => expect(screen.queryByText("Edit User")).not.toBeInTheDocument());
+  });
+
   it("shows a safe retry state when loading accounts fails", async () => {
     pageState.queryError = true;
     render(() => <AccountsPage />);
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Unable to load accounts.",
     );
+    expect(screen.getByRole("alert")).not.toHaveTextContent("backend boom");
     await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(pageState.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["users"],
@@ -285,7 +350,7 @@ describe("AccountsPage integration", () => {
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toHaveValue("grace");
     expect(pageState.params.filter).toBe("email ~ %");
-    await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    await fireEvent.click(screen.getAllByRole("button", { name: "Add account" })[0]);
     expect(
       await screen.findByRole("heading", { name: "Add new user" }),
     ).toBeVisible();
