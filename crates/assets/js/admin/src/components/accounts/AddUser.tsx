@@ -39,7 +39,7 @@ export function AddUser(props: {
         await createUser(value);
         props.userRefetch();
         props.close();
-      } catch (_reason) {
+      } catch {
         setError("Unable to create account. Please try again.");
       }
     },

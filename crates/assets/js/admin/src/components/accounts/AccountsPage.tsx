@@ -327,7 +327,7 @@ function DeleteUserButton(props: {
                     await deleteUser({ id: props.userId });
                     props.onDelete();
                     setDialogOpen(false);
-                  } catch (_error) {
+                  } catch {
                     setError("Unable to delete account. Please try again.");
                   } finally {
                     setDeleting(false);
@@ -376,7 +376,7 @@ function EditSheetContent(props: {
         await updateUser(value);
         props.refetch();
         props.close();
-      } catch (_reason) {
+      } catch {
         setError("Unable to update account. Please try again.");
       }
     },
@@ -523,7 +523,7 @@ function EditSheetContent(props: {
                                   false,
                                   "Copied tokens to clipboard",
                                 );
-                              } catch (_error) {
+                              } catch {
                                 setTokenError(
                                   "Unable to copy login tokens. Please try again.",
                                 );
