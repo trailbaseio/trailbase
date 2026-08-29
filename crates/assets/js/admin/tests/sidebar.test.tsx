@@ -2,6 +2,9 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 import {
   Sidebar,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
@@ -37,6 +40,25 @@ describe("sidebar shell", () => {
       result.getByRole("button", { name: "Toggle sidebar" }),
     );
     expect(document.cookie).toContain("admin-sidebar:state=false");
+    result.unmount();
+  });
+
+  it("centers menu buttons in the collapsed icon rail", () => {
+    const result = render(() => (
+      <SidebarProvider defaultOpen={false} cookieName="test-offcanvas:state">
+        <Sidebar collapsible="icon">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton>Centered item</SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </Sidebar>
+      </SidebarProvider>
+    ));
+
+    expect(result.getByRole("button", { name: "Centered item" })).toHaveClass(
+      "group-data-[collapsible=icon]:mx-auto",
+    );
     result.unmount();
   });
 
