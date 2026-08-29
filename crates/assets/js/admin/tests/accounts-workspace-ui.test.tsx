@@ -252,6 +252,7 @@ describe("AccountsPage integration", () => {
     pageState.params.filter = undefined;
     render(() => <AccountsPage />);
     expect(screen.getByText("No accounts yet.")).toBeVisible();
+    expect(screen.getAllByText("Add account")).toHaveLength(1);
   });
 
   it("keeps the toolbar and add action mounted while loading", () => {

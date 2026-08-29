@@ -646,15 +646,6 @@ export function AccountsPage() {
     ) : (
       <div class="p-4 text-center">
         <p>No accounts yet.</p>
-        <Button
-          onClick={() =>
-            document
-              .querySelector<HTMLButtonElement>("[data-add-account]")
-              ?.click()
-          }
-        >
-          Add account
-        </Button>
       </div>
     );
 
