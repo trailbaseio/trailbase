@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  Sidebar,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import {
   SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_ICON,
@@ -11,6 +15,7 @@ describe("sidebar shell", () => {
   beforeEach(() => {
     document.cookie = "sidebar:state=; Max-Age=0";
     document.cookie = "admin-sidebar:state=; Max-Age=0";
+    document.cookie = "test-offcanvas:state=; Max-Age=0";
     if (!window.matchMedia) {
       window.matchMedia = () =>
         ({
@@ -32,6 +37,34 @@ describe("sidebar shell", () => {
       result.getByRole("button", { name: "Toggle sidebar" }),
     );
     expect(document.cookie).toContain("admin-sidebar:state=false");
+    result.unmount();
+  });
+
+  it("fully hides collapsed offcanvas content", async () => {
+    const result = render(() => (
+      <SidebarProvider defaultOpen={false} cookieName="test-offcanvas:state">
+        <Sidebar collapsible="offcanvas">
+          <button>Explorer item</button>
+        </Sidebar>
+        <SidebarTrigger aria-label="Toggle explorer" />
+      </SidebarProvider>
+    ));
+    const content = result.container.querySelector(
+      '[data-sidebar="sidebar"] button',
+    );
+    const container = content?.closest(
+      '[data-sidebar="sidebar"]',
+    )?.parentElement;
+
+    expect(container).toHaveAttribute("aria-hidden", "true");
+    expect(container).toHaveClass(
+      "group-data-[collapsible=offcanvas]:invisible",
+    );
+
+    await fireEvent.click(
+      result.getByRole("button", { name: "Toggle explorer" }),
+    );
+    expect(container).not.toHaveAttribute("aria-hidden", "true");
     result.unmount();
   });
 

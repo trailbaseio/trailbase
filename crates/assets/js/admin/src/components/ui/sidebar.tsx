@@ -259,6 +259,7 @@ const Sidebar: Component<SidebarProps> = (rawProps) => {
           <div
             class={cn(
               "w-(--sidebar-width) fixed inset-y-0 z-10 hidden h-svh transition-[left,right,width] duration-200 ease-linear md:flex",
+              "group-data-[collapsible=offcanvas]:invisible",
               local.side === "left"
                 ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
                 : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -269,6 +270,12 @@ const Sidebar: Component<SidebarProps> = (rawProps) => {
               local.class
             )}
             {...others}
+            aria-hidden={
+              state() === "collapsed" && local.collapsible === "offcanvas"
+                ? "true"
+                : undefined
+            }
+            inert={state() === "collapsed" && local.collapsible === "offcanvas"}
           >
             <div
               data-sidebar="sidebar"
