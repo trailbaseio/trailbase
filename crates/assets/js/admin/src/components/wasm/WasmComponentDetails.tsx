@@ -121,6 +121,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
             height: "100%",
             display: "block",
           }}
+          title="WASM component preview"
           sandbox="allow-scripts allow-modals"
           csp={iframeCsp}
         />
@@ -195,6 +196,7 @@ function YoloWithExtraStepsIframe(props: { component: WasmComponent }) {
             height: "100%",
             display: "block",
           }}
+          title={`WASM component: ${props.component.name}`}
           sandbox={undefined}
           csp={undefined}
         />

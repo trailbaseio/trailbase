@@ -32,8 +32,13 @@ const SIDEBAR_COOKIE_NAME = "sidebar:state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
 export function readSidebarCookie(cookie: string): boolean | undefined {
-  const value = cookie.match(new RegExp(`${SIDEBAR_COOKIE_NAME}=([^;]+)`))?.[1]
-  return value === undefined ? undefined : value === "true"
+  const value = cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    ?.slice(SIDEBAR_COOKIE_NAME.length + 1)
+  if (value === undefined) return undefined
+  return decodeURIComponent(value) === "true"
 }
 
 export const SIDEBAR_WIDTH = "15rem"
@@ -517,13 +522,14 @@ const SidebarMenuButton = <T extends ValidComponent = "button">(
     "tooltip",
     "variant",
     "size",
-    "class"
+    "class",
+    "as"
   ])
   const { isMobile, state } = useSidebar()
 
   const button = (
     <Polymorphic<SidebarMenuButtonProps>
-      as="button"
+      as={local.as ?? "button"}
       data-sidebar="menu-button"
       data-size={local.size}
       data-active={local.isActive}
@@ -538,7 +544,7 @@ const SidebarMenuButton = <T extends ValidComponent = "button">(
   return (
     <Show when={local.tooltip} fallback={button}>
       <Tooltip placement="right">
-        <TooltipTrigger class="w-full">{button}</TooltipTrigger>
+        <TooltipTrigger as="div" class="w-full">{button}</TooltipTrigger>
         <TooltipContent hidden={state() !== "collapsed" || isMobile()}>
           {local.tooltip}
         </TooltipContent>

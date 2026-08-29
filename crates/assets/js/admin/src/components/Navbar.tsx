@@ -39,6 +39,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import logo from "@/assets/logo_104.webp";
 
@@ -87,11 +88,14 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const navbar = useNavbar();
+  const { setOpenMobile } = useSidebar();
   const [dirtyDialog, setDirtyDialog] = createSignal<string | null>(null);
   const onClick = (e: MouseEvent, next: string) => {
     if (navbar?.dirty()) {
       e.preventDefault();
       setDirtyDialog(next);
+    } else {
+      setOpenMobile(false);
     }
   };
   return (
@@ -156,6 +160,7 @@ export function Navbar() {
         <DirtyDialog
           proceed={() => {
             navigate(dirtyDialog() ?? "", { resolve: false });
+            setOpenMobile(false);
             navbar?.setDirty(false);
             setDirtyDialog(null);
           }}
