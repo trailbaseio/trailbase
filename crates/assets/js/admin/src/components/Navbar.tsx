@@ -12,6 +12,7 @@ import {
   TbOutlineApi,
   TbOutlineMoon,
   TbOutlineSun,
+  TbOutlineLayoutSidebarLeftCollapse,
 } from "solid-icons/tb";
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,13 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const navbar = useNavbar();
-  const { setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile, state, toggleSidebar } = useSidebar();
+  const sidebarActionLabel = () =>
+    isMobile()
+      ? "Close navigation"
+      : state() === "collapsed"
+        ? "Expand sidebar"
+        : "Collapse sidebar";
   const [dirtyDialog, setDirtyDialog] = createSignal<string | null>(null);
   const onClick = (e: MouseEvent, next: string) => {
     if (navbar?.dirty()) {
@@ -144,6 +151,20 @@ export function Navbar() {
       </SidebarContent>
       <SidebarFooter>
         <div class="flex min-w-0 flex-col gap-1 group-data-[collapsible=icon]:items-center">
+          <Button
+            variant="ghost"
+            class="w-full justify-start px-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+            aria-label={sidebarActionLabel()}
+            title={sidebarActionLabel()}
+            onClick={toggleSidebar}
+          >
+            <TbOutlineLayoutSidebarLeftCollapse
+              class={`transition-transform ${state() === "collapsed" ? "rotate-180" : ""}`}
+            />
+            <span class="group-data-[collapsible=icon]:hidden">
+              {sidebarActionLabel()}
+            </span>
+          </Button>
           <div class="flex min-w-0 items-center gap-2 group-data-[collapsible=icon]:flex-col">
             <SwitchThemeButton horizontal={false} />
             <AuthButton iconSize={22} />

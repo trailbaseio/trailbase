@@ -16,6 +16,7 @@ import {
   SidebarProvider,
   Sidebar,
   SidebarInset,
+  SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { $user } from "@/lib/client";
@@ -28,10 +29,11 @@ function WrapWithNav(props: RouteSectionProps) {
       <SidebarProvider>
         <Sidebar collapsible="icon">
           <Navbar />
+          <SidebarRail />
         </Sidebar>
         <SidebarInset>
           <header class="flex h-12 items-center border-b px-4">
-            <SidebarTrigger />
+            <SidebarTrigger class="md:hidden" />
             <div class="text-foreground ml-2 flex min-w-0 items-center gap-2 text-sm font-semibold">
               <img src={logo} width="24" height="24" alt="" />
               <span class="truncate">TrailBase</span>
