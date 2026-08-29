@@ -26,7 +26,7 @@ function WrapWithNav(props: RouteSectionProps) {
   const [dirty, setDirty] = createSignal(false);
   return (
     <NavbarContext.Provider value={{ dirty, setDirty }}>
-      <SidebarProvider>
+      <SidebarProvider cookieName="admin-sidebar:state">
         <Sidebar collapsible="icon">
           <Navbar />
           <SidebarRail />

@@ -31,12 +31,15 @@ export const MOBILE_BREAKPOINT = 768
 const SIDEBAR_COOKIE_NAME = "sidebar:state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 
-export function readSidebarCookie(cookie: string): boolean | undefined {
+export function readSidebarCookie(
+  cookie: string,
+  cookieName = SIDEBAR_COOKIE_NAME,
+): boolean | undefined {
   const value = cookie
     .split(";")
     .map((part) => part.trim())
-    .find((part) => part.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
-    ?.slice(SIDEBAR_COOKIE_NAME.length + 1)
+    .find((part) => part.startsWith(`${cookieName}=`))
+    ?.slice(cookieName.length + 1)
   if (value === undefined) return undefined
   try {
     const decoded = decodeURIComponent(value)
@@ -89,6 +92,7 @@ export function useIsMobile(fallback = false) {
 }
 
 type SidebarProviderProps = Omit<ComponentProps<"div">, "style"> & {
+  cookieName?: string
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -96,8 +100,12 @@ type SidebarProviderProps = Omit<ComponentProps<"div">, "style"> & {
 }
 
 const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
-  const props = mergeProps({ defaultOpen: true }, rawProps)
+  const props = mergeProps(
+    { cookieName: SIDEBAR_COOKIE_NAME, defaultOpen: true },
+    rawProps,
+  )
   const [local, others] = splitProps(props, [
+    "cookieName",
     "defaultOpen",
     "open",
     "onOpenChange",
@@ -112,7 +120,7 @@ const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
   // This is the internal state of the sidebar.
   // We use open and onOpenChange for control from outside the component.
   const cookieState = typeof document !== "undefined"
-    ? readSidebarCookie(document.cookie)
+    ? readSidebarCookie(document.cookie, local.cookieName)
     : undefined
   const [_open, _setOpen] = createSignal(
     cookieState === undefined ? local.defaultOpen : cookieState,
@@ -125,7 +133,7 @@ const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
     _setOpen(value)
 
     // This sets the cookie to keep the sidebar state.
-    document.cookie = `${SIDEBAR_COOKIE_NAME}=${open()}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+    document.cookie = `${local.cookieName}=${open()}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
   }
 
   // Helper to toggle the sidebar.

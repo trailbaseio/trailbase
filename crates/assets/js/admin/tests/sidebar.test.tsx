@@ -10,6 +10,7 @@ import {
 describe("sidebar shell", () => {
   beforeEach(() => {
     document.cookie = "sidebar:state=; Max-Age=0";
+    document.cookie = "admin-sidebar:state=; Max-Age=0";
     if (!window.matchMedia) {
       window.matchMedia = () =>
         ({
@@ -22,7 +23,7 @@ describe("sidebar shell", () => {
 
   it("persists the state when the trigger is clicked", async () => {
     const result = render(() => (
-      <SidebarProvider defaultOpen>
+      <SidebarProvider defaultOpen cookieName="admin-sidebar:state">
         <SidebarTrigger aria-label="Toggle sidebar" />
       </SidebarProvider>
     ));
@@ -30,7 +31,7 @@ describe("sidebar shell", () => {
     await fireEvent.click(
       result.getByRole("button", { name: "Toggle sidebar" }),
     );
-    expect(document.cookie).toContain("sidebar:state=false");
+    expect(document.cookie).toContain("admin-sidebar:state=false");
     result.unmount();
   });
 
@@ -44,6 +45,12 @@ describe("sidebar shell", () => {
     expect(readSidebarCookie("sidebar:state=true; other=value")).toBe(true);
     expect(readSidebarCookie("not-sidebar:state=true")).toBeUndefined();
     expect(readSidebarCookie("other=value")).toBeUndefined();
+    expect(
+      readSidebarCookie(
+        "sidebar:state=false; admin-sidebar:state=true",
+        "admin-sidebar:state",
+      ),
+    ).toBe(true);
   });
 
   it("ignores malformed persisted values", () => {
