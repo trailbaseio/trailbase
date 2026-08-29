@@ -67,6 +67,7 @@ vi.mock("@tanstack/solid-query", () => ({
       },
       get data() {
         dataVersion();
+        if (pageState.queryError) throw new Error("backend boom");
         return pageState.queryData;
       },
     };
@@ -268,6 +269,24 @@ describe("AccountsPage integration", () => {
     render(() => <AccountsPage />);
     expect(screen.getByText("No accounts yet.")).toBeVisible();
     expect(screen.getAllByText("Add account")).toHaveLength(1);
+  });
+
+  it("reactively changes the empty state after applying a search", async () => {
+    pageState.params.search = undefined;
+    pageState.params.filter = undefined;
+    render(() => <AccountsPage />);
+    expect(screen.getByText("No accounts yet.")).toBeVisible();
+
+    const search = screen.getByRole("textbox", { name: "Search accounts" });
+    await fireEvent.input(search, { target: { value: "missing" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+
+    expect(
+      screen.getByText("No accounts match the current search or filter."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Clear search/filter" }),
+    ).toBeVisible();
   });
 
   it("keeps the toolbar and add action mounted while loading", () => {

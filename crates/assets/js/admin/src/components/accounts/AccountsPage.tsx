@@ -109,8 +109,8 @@ const providerLabels = new Map<number, string>([
   [OAuthProviderId.GITHUB, "GitHub"],
 ]);
 
-export function accountProviderLabel(providerId: bigint): string {
-  if (providerId === 0n) {
+export function accountProviderLabel(providerId: bigint | number): string {
+  if (Number(providerId) === 0) {
     return "Password";
   }
 
@@ -683,6 +683,8 @@ export function AccountsPage() {
     });
   };
 
+  const usersData = () => (users.isError ? undefined : users.data);
+
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
   const [editDirty, setEditDirty] = createSignal(false);
   const [addUserOpen, setAddUserOpen] = createSignal(false);
@@ -690,7 +692,7 @@ export function AccountsPage() {
 
   createEffect(() => {
     const selected = editUser();
-    const loadedUsers = users.data;
+    const loadedUsers = usersData();
     if (
       selected &&
       loadedUsers &&
@@ -714,8 +716,8 @@ export function AccountsPage() {
     return buildTable(
       {
         columns: buildColumns(copyAccountId),
-        data: users.data?.users ?? [],
-        rowCount: Number(users.data?.total_row_count ?? -1),
+        data: usersData()?.users ?? [],
+        rowCount: Number(usersData()?.total_row_count ?? -1),
         pagination: pagination(),
         onPaginationChange: (s: PaginationState) => {
           setSearchParams({
@@ -735,13 +737,14 @@ export function AccountsPage() {
     );
   });
 
-  const hasQuery = Boolean(
-    searchParams.advanced === "true"
-      ? searchParams.filter
-      : searchParams.search,
-  );
+  const hasQuery = () =>
+    Boolean(
+      searchParams.advanced === "true"
+        ? searchParams.filter
+        : searchParams.search,
+    );
   const emptyState = () =>
-    hasQuery ? (
+    hasQuery() ? (
       <div class="p-4 text-center">
         <p>No accounts match the current search or filter.</p>
         <Button
@@ -765,8 +768,8 @@ export function AccountsPage() {
       <Header
         title="Accounts"
         description={
-          users.data
-            ? `${users.data.total_row_count ?? 0} accounts · Manage authentication identities and access`
+          usersData()
+            ? `${usersData()!.total_row_count ?? 0} accounts · Manage authentication identities and access`
             : "Manage authentication identities and access"
         }
         left={

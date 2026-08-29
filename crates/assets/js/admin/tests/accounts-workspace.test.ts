@@ -53,6 +53,7 @@ describe("Accounts workspace presentation", () => {
 
   it("labels password and OAuth providers", () => {
     expect(accountProviderLabel(0n)).toBe("Password");
+    expect(accountProviderLabel(0)).toBe("Password");
     expect(accountProviderLabel(12n)).toBe("Google");
     expect(accountProviderLabel(99n)).toBe("OAuth 99");
   });
