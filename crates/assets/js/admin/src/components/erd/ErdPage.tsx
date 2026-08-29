@@ -1,4 +1,12 @@
-import { Switch, Match, For, Show, createMemo, createSignal } from "solid-js";
+import {
+  Switch,
+  Match,
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+} from "solid-js";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { Graph, NodeMetadata, EdgeMetadata } from "@antv/x6";
@@ -303,15 +311,16 @@ function buildErNode(
 
 export type ErdToolbarProps = {
   entities: ErdEntity[];
-  tables: boolean;
-  views: boolean;
+  showTables: boolean;
+  showViews: boolean;
   selectedId?: string;
-  onChange: (visibility: ErdVisibility) => void;
+  onShowTablesChange: (value: boolean) => void;
+  onShowViewsChange: (value: boolean) => void;
   onSelect: (id?: string) => void;
-  onZoomIn?: () => void;
-  onZoomOut?: () => void;
-  onFit?: () => void;
-  onReset?: () => void;
+  onZoomIn: () => void;
+  onZoomOut: () => void;
+  onFit: () => void;
+  onReset: () => void;
 };
 
 export function ErdToolbar(props: ErdToolbarProps) {
@@ -319,6 +328,10 @@ export function ErdToolbar(props: ErdToolbarProps) {
   const [open, setOpen] = createSignal(false);
   const [activeIndex, setActiveIndex] = createSignal(-1);
   const results = createMemo(() => searchErdEntities(props.entities, query()));
+  createEffect(() => {
+    const length = results().length;
+    setActiveIndex(length === 0 ? -1 : Math.min(activeIndex(), length - 1));
+  });
   const choose = (entity: ErdEntity) => {
     props.onSelect(entity.id);
     setQuery(entity.name);
@@ -334,12 +347,11 @@ export function ErdToolbar(props: ErdToolbarProps) {
     <div class="bg-card flex flex-wrap items-center gap-2 border-b p-2">
       <div class="flex items-center gap-1">
         <Toggle
-          pressed={props.tables}
+          pressed={props.showTables}
+          title="Toggle tables"
           size="sm"
           aria-label="Tables"
-          onChange={(pressed) =>
-            props.onChange({ tables: pressed, views: props.views })
-          }
+          onChange={(pressed) => props.onShowTablesChange(pressed)}
         >
           Tables{" "}
           <Badge round>
@@ -347,12 +359,11 @@ export function ErdToolbar(props: ErdToolbarProps) {
           </Badge>
         </Toggle>
         <Toggle
-          pressed={props.views}
+          pressed={props.showViews}
+          title="Toggle views"
           size="sm"
           aria-label="Views"
-          onChange={(pressed) =>
-            props.onChange({ tables: props.tables, views: pressed })
-          }
+          onChange={(pressed) => props.onShowViewsChange(pressed)}
         >
           Views{" "}
           <Badge round>
@@ -369,6 +380,11 @@ export function ErdToolbar(props: ErdToolbarProps) {
           aria-autocomplete="list"
           aria-expanded={open()}
           aria-controls="erd-search-results"
+          aria-activedescendant={
+            activeIndex() >= 0
+              ? `erd-search-option-${results()[activeIndex()]?.id}`
+              : undefined
+          }
           value={query()}
           onInput={(event) => {
             setQuery(event.currentTarget.value);
@@ -404,9 +420,10 @@ export function ErdToolbar(props: ErdToolbarProps) {
             <For each={results()}>
               {(entity, index) => (
                 <button
+                  id={`erd-search-option-${entity.id}`}
                   type="button"
                   role="option"
-                  aria-selected={props.selectedId === entity.id}
+                  aria-selected={activeIndex() === index()}
                   class="hover:bg-accent flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm"
                   onClick={() => choose(entity)}
                 >
@@ -423,6 +440,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
           size="icon"
           variant="outline"
           aria-label="Zoom in"
+          title="Zoom in"
           onClick={props.onZoomIn}
         >
           <TbOutlinePlus />
@@ -431,6 +449,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
           size="icon"
           variant="outline"
           aria-label="Zoom out"
+          title="Zoom out"
           onClick={props.onZoomOut}
         >
           <TbOutlineMinus />
@@ -439,6 +458,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
           size="sm"
           variant="outline"
           aria-label="Fit view"
+          title="Fit view"
           onClick={props.onFit}
         >
           <TbOutlineMaximize /> <span class="hidden md:inline">Fit</span>
@@ -447,6 +467,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
           size="sm"
           variant="outline"
           aria-label="Reset layout"
+          title="Reset layout"
           onClick={props.onReset}
         >
           <TbOutlineRefresh /> <span class="hidden md:inline">Reset</span>
@@ -473,10 +494,15 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
     <div class="flex size-full flex-col">
       <ErdToolbar
         entities={model().entities}
-        tables={visibility().tables}
-        views={visibility().views}
+        showTables={visibility().tables}
+        showViews={visibility().views}
         selectedId={selectedId()}
-        onChange={setVisibility}
+        onShowTablesChange={(value) =>
+          setVisibility((current) => ({ ...current, tables: value }))
+        }
+        onShowViewsChange={(value) =>
+          setVisibility((current) => ({ ...current, views: value }))
+        }
         onSelect={setSelectedId}
         onZoomIn={() => graph?.zoomTo(graph.zoom() * 2)}
         onZoomOut={() => graph?.zoomTo(graph.zoom() / 2)}

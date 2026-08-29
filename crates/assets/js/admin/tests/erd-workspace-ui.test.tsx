@@ -25,11 +25,16 @@ describe("ERD toolbar", () => {
     render(() => (
       <ErdToolbar
         entities={entities}
-        tables={true}
-        views={true}
+        showTables={true}
+        showViews={true}
         selectedId={undefined}
-        onChange={vi.fn()}
+        onShowTablesChange={vi.fn()}
+        onShowViewsChange={vi.fn()}
         onSelect={onSelect}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onFit={vi.fn()}
+        onReset={vi.fn()}
       />
     ));
     const search = screen.getByRole("combobox", { name: /search entities/i });
@@ -41,8 +46,37 @@ describe("ERD toolbar", () => {
       screen.queryByRole("option", { name: /main\.users.*table/i }),
     ).not.toBeInTheDocument();
     await fireEvent.keyDown(search, { key: "ArrowDown" });
+    const activeOption = screen.getByRole("option", {
+      name: /main\.posts.*table/i,
+    });
+    expect(activeOption).toHaveAttribute("aria-selected", "true");
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      "erd-search-option-main.posts",
+    );
     await fireEvent.keyDown(search, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledWith("main.posts");
+  });
+
+  it("clears active descendant when there are no matches", async () => {
+    render(() => (
+      <ErdToolbar
+        entities={entities}
+        showTables={true}
+        showViews={true}
+        onShowTablesChange={vi.fn()}
+        onShowViewsChange={vi.fn()}
+        onSelect={vi.fn()}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onFit={vi.fn()}
+        onReset={vi.fn()}
+      />
+    ));
+    const search = screen.getByRole("combobox", { name: /search entities/i });
+    await fireEvent.input(search, { target: { value: "missing" } });
+    expect(search).not.toHaveAttribute("aria-activedescendant");
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
 
   it("closes search and clears selection on Escape", async () => {
@@ -50,11 +84,16 @@ describe("ERD toolbar", () => {
     render(() => (
       <ErdToolbar
         entities={entities}
-        tables={true}
-        views={true}
+        showTables={true}
+        showViews={true}
         selectedId="main.posts"
-        onChange={vi.fn()}
+        onShowTablesChange={vi.fn()}
+        onShowViewsChange={vi.fn()}
         onSelect={onSelect}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onFit={vi.fn()}
+        onReset={vi.fn()}
       />
     ));
     const search = screen.getByRole("combobox", { name: /search entities/i });
@@ -66,7 +105,8 @@ describe("ERD toolbar", () => {
 
   it("supports visibility toggles and graph actions", async () => {
     const callbacks = {
-      onChange: vi.fn(),
+      onShowTablesChange: vi.fn(),
+      onShowViewsChange: vi.fn(),
       onSelect: vi.fn(),
       onZoomIn: vi.fn(),
       onZoomOut: vi.fn(),
@@ -76,8 +116,8 @@ describe("ERD toolbar", () => {
     render(() => (
       <ErdToolbar
         entities={entities}
-        tables={true}
-        views={false}
+        showTables={true}
+        showViews={false}
         selectedId={undefined}
         {...callbacks}
       />
@@ -92,14 +132,8 @@ describe("ERD toolbar", () => {
     );
     await fireEvent.click(screen.getByRole("button", { name: "Tables" }));
     await fireEvent.click(screen.getByRole("button", { name: "Views" }));
-    expect(callbacks.onChange).toHaveBeenNthCalledWith(1, {
-      tables: false,
-      views: false,
-    });
-    expect(callbacks.onChange).toHaveBeenNthCalledWith(2, {
-      tables: true,
-      views: true,
-    });
+    expect(callbacks.onShowTablesChange).toHaveBeenCalledWith(false);
+    expect(callbacks.onShowViewsChange).toHaveBeenCalledWith(true);
     await fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     await fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     await fireEvent.click(screen.getByRole("button", { name: "Fit view" }));
