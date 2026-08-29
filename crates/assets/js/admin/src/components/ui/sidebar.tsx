@@ -30,6 +30,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export const MOBILE_BREAKPOINT = 768
 const SIDEBAR_COOKIE_NAME = "sidebar:state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
+
+export function readSidebarCookie(cookie: string): boolean | undefined {
+  const value = cookie.match(new RegExp(`${SIDEBAR_COOKIE_NAME}=([^;]+)`))?.[1]
+  return value === undefined ? undefined : value === "true"
+}
+
 export const SIDEBAR_WIDTH = "15rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 export const SIDEBAR_WIDTH_ICON = "4rem"
@@ -96,10 +102,10 @@ const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
   // This is the internal state of the sidebar.
   // We use open and onOpenChange for control from outside the component.
   const cookieState = typeof document !== "undefined"
-    ? document.cookie.match(new RegExp(`${SIDEBAR_COOKIE_NAME}=([^;]+)`))?.[1]
+    ? readSidebarCookie(document.cookie)
     : undefined
   const [_open, _setOpen] = createSignal(
-    cookieState === undefined ? local.defaultOpen : cookieState === "true",
+    cookieState === undefined ? local.defaultOpen : cookieState,
   )
   const open = () => local.open ?? _open()
   const setOpen = (value: boolean | ((value: boolean) => boolean)) => {

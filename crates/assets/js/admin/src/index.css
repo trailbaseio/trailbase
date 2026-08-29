@@ -14,8 +14,8 @@
   --muted-foreground: hsl(215 16% 42%);
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(215 28% 17%);
-  --border: hsl(214 24% 86%);
-  --input: hsl(214 24% 82%);
+  --border: hsl(214 24% 65%);
+  --input: hsl(214 24% 58%);
   --card: hsl(0 0% 100%);
   --card-foreground: hsl(215 28% 17%);
   --primary: hsl(199 100% 33%);
@@ -53,8 +53,8 @@
   --muted-foreground: hsl(215 20% 65%);
   --popover: hsl(215 28% 12%);
   --popover-foreground: hsl(210 40% 98%);
-  --border: hsl(215 22% 24%);
-  --input: hsl(215 22% 28%);
+  --border: hsl(215 22% 42%);
+  --input: hsl(215 22% 50%);
   --card: hsl(215 25% 13%);
   --card-foreground: hsl(210 40% 98%);
   --primary: hsl(199 90% 58%);

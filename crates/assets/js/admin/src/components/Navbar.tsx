@@ -20,6 +20,7 @@ import {
   TbOutlineSun,
   TbOutlinePackage,
   TbOutlineApi,
+  TbOutlineMenu2,
 } from "solid-icons/tb";
 
 import { AuthButton } from "@/components/auth/AuthButton";
@@ -37,6 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Version } from "@/components/Version";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 import { createSystemInfoQuery } from "@/lib/api/info";
 import {
@@ -145,7 +147,9 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
             </Show>
             <For each={items}>
               {([pathname, Icon, tooltip]) => {
-                const active = () => props.location.pathname === pathname;
+                const active = () =>
+                  props.location.pathname === pathname ||
+                  props.location.pathname.startsWith(pathname.replace(/\/$/, "" ) + "/");
                 const style = () =>
                   active() ? navbarIconActiveStyle : navbarIconStyle;
 
@@ -211,13 +215,22 @@ export function HorizontalNavbar(props: {
   return (
     <nav
       style={{ height: `${props.height}px` }}
-      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between gap-2 overflow-x-auto overflow-y-hidden border-b p-2"
+      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between border-b p-2"
     >
-      <NavbarItems location={props.location} horizontal={true} />
-
-      <div class="flex items-center gap-2">
-        <NavFooterItems horizontal={true} />
-      </div>
+      <Sheet>
+        <SheetTrigger as={Button} variant="ghost" aria-label="Open navigation">
+          <TbOutlineMenu2 size={22} />
+        </SheetTrigger>
+        <SheetContent position="left" class="w-[15rem] p-2">
+          <div class="flex h-full flex-col justify-between gap-4">
+            <div class="flex flex-col items-center gap-4">
+              <NavbarItems location={props.location} horizontal={false} />
+            </div>
+            <div class="flex flex-col items-center"><NavFooterItems horizontal={false} /></div>
+          </div>
+        </SheetContent>
+      </Sheet>
+      <div class="flex items-center gap-2"><NavFooterItems horizontal={true} /></div>
     </nav>
   );
 }
