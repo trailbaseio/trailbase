@@ -1,3 +1,4 @@
+import { createSignal, Show } from "solid-js";
 import type { JSXElement } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
@@ -19,6 +20,7 @@ export function AddUser(props: {
   markDirty: () => void;
   userRefetch: () => void;
 }) {
+  const [error, setError] = createSignal<string>();
   const form = createForm(() => ({
     defaultValues: {
       email: "",
@@ -27,9 +29,12 @@ export function AddUser(props: {
       admin: false,
     } as CreateUserRequest,
     onSubmit: async ({ value }) => {
+      setError(undefined);
       try {
         await createUser(value);
         props.close();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
       } finally {
         props.userRefetch();
       }
@@ -56,6 +61,12 @@ export function AddUser(props: {
           form.handleSubmit();
         }}
       >
+        <Show when={error()}>
+          <p class="text-destructive" role="alert">
+            {error()}
+          </p>
+        </Show>
+
         <div class="flex flex-col items-start gap-4 py-4">
           <form.Field name="email" validators={notEmptyValidator()}>
             {buildTextFormField({ label: () => <L>Email</L>, type: "email" })}

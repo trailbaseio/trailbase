@@ -279,8 +279,7 @@ export function buildColumns(): ColumnDef<UserJson>[] {
 
 function DeleteUserButton(props: {
   userId: string;
-  email: string | null;
-  username: string | null;
+  name: string;
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
@@ -298,7 +297,7 @@ function DeleteUserButton(props: {
 
         <p>
           Are you sure you want to permanently delete{" "}
-          <span class="font-bold">{props.email ?? props.username}</span>?
+          <span class="font-bold">{props.name}</span>?
         </p>
 
         <Show when={error()}>
@@ -351,6 +350,7 @@ function EditSheetContent(props: {
   markDirty: () => void;
   refetch: () => void;
 }) {
+  const [error, setError] = createSignal<string>();
   const form = createForm(() => ({
     defaultValues: {
       id: props.user.id,
@@ -360,9 +360,12 @@ function EditSheetContent(props: {
       password: null,
     } as UpdateUserRequest,
     onSubmit: async ({ value }) => {
+      setError(undefined);
       try {
         await updateUser(value);
         props.close();
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason));
       } finally {
         props.refetch();
       }
@@ -379,6 +382,12 @@ function EditSheetContent(props: {
     <SheetContainer>
       <SheetHeader>
         <SheetTitle>Edit User</SheetTitle>
+
+        <Show when={error()}>
+          <p class="text-destructive" role="alert">
+            {error()}
+          </p>
+        </Show>
 
         <SheetDescription>
           Change a user's properties. Be careful
@@ -439,8 +448,7 @@ function EditSheetContent(props: {
                   <div class="flex w-full justify-between gap-2 py-4">
                     <DeleteUserButton
                       userId={props.user.id}
-                      email={props.user.email}
-                      username={props.user.username}
+                      name={accountIdentity(props.user).primary}
                       onDelete={() => {
                         props.close();
                         props.refetch();

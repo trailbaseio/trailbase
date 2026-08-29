@@ -19,6 +19,8 @@ const pageState = vi.hoisted(() => ({
   } as Record<string, string | undefined>,
   setSearchParams: vi.fn(),
   fetchUsers: vi.fn(),
+  createUser: vi.fn(),
+  updateUser: vi.fn(),
   invalidateQueries: vi.fn(),
   queryError: false,
   queryLoading: false,
@@ -66,38 +68,10 @@ vi.mock("@tanstack/solid-query", () => ({
 }));
 vi.mock("@/lib/api/user", () => ({
   fetchUsers: pageState.fetchUsers,
+  createUser: pageState.createUser,
   deleteUser: vi.fn(),
-  updateUser: vi.fn(),
+  updateUser: pageState.updateUser,
 }));
-vi.mock("@/components/Table", () => ({
-  buildTable: (options: { data: unknown[] }) => ({ rows: options.data }),
-  Table: (props: {
-    table: { rows: Array<{ id: string }> };
-    emptyState: unknown;
-    onRowClick?: (index: number, row: { id: string }) => void;
-    dense?: boolean;
-    paginationPosition?: string;
-  }) => (
-    <>
-      {props.table.rows.length === 0
-        ? props.emptyState
-        : props.table.rows.map((row, index) => (
-            <button onClick={() => props.onRowClick?.(index, row)}>
-              {row.id}
-            </button>
-          ))}
-      <span
-        data-testid="table-props"
-        data-dense={String(props.dense)}
-        data-pagination-position={props.paginationPosition}
-      />
-    </>
-  ),
-}));
-vi.mock("@/components/accounts/AddUser", () => ({
-  AddUser: () => <h2>Add new user</h2>,
-}));
-
 import {
   AccountsPage,
   AccountToolbar,
@@ -209,6 +183,8 @@ describe("AccountsPage integration", () => {
     });
     pageState.setSearchParams.mockReset();
     pageState.fetchUsers.mockReset().mockResolvedValue({ users: [] });
+    pageState.createUser.mockReset();
+    pageState.updateUser.mockReset();
     pageState.invalidateQueries.mockReset();
     pageState.queryError = false;
     pageState.queryLoading = false;
@@ -266,20 +242,80 @@ describe("AccountsPage integration", () => {
       screen.getByRole("textbox", { name: "Search accounts" }),
     ).toBeVisible();
     expect(screen.getByRole("button", { name: "Add account" })).toBeVisible();
-    expect(screen.getByTestId("table-props")).toHaveAttribute(
-      "data-dense",
-      "true",
+    expect(screen.getByRole("table")).toBeVisible();
+  });
+
+  it("reports add failures while keeping the sheet open and refetching", async () => {
+    pageState.createUser.mockRejectedValueOnce(
+      new Error("email already exists"),
     );
-    expect(screen.getByTestId("table-props")).toHaveAttribute(
-      "data-pagination-position",
-      "bottom",
+    render(() => <AccountsPage />);
+    await fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    const email = screen.getByRole("textbox", { name: "Email" });
+    const password = screen.getByLabelText("Password");
+    await fireEvent.change(email, { target: { value: "ada@example.com" } });
+    await fireEvent.blur(email);
+    await fireEvent.change(password, { target: { value: "password" } });
+    await fireEvent.blur(password);
+    const add = screen.getByRole("button", { name: "Add" });
+    await waitFor(() => expect(add).not.toBeDisabled());
+    await fireEvent.click(add);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "email already exists",
+    );
+    expect(screen.getByRole("heading", { name: "Add new user" })).toBeVisible();
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
+  });
+
+  it("reports edit failures while keeping the sheet open and refetching", async () => {
+    pageState.queryData = { users: [account] };
+    pageState.updateUser.mockRejectedValueOnce(new Error("update rejected"));
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "update rejected",
+    );
+    expect(screen.getByText("Edit User")).toBeVisible();
+    expect(pageState.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ["users"],
+    });
+  });
+
+  it("protects dirty edits with the controlled close confirmation", async () => {
+    pageState.queryData = { users: [account] };
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.change(screen.getByRole("textbox", { name: "Email" }), {
+      target: { value: "changed@example.com" },
+    });
+    await fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(await screen.findByText("Pending Changes")).toBeVisible();
+    await fireEvent.click(screen.getByRole("button", { name: "Proceed" }));
+    await waitFor(() =>
+      expect(screen.queryByText("Edit User")).not.toBeInTheDocument(),
     );
   });
 
   it("opens the account sheet on row activation and clears stale selection", async () => {
     pageState.queryData = { users: [account] };
     render(() => <AccountsPage />);
-    await fireEvent.click(screen.getByRole("button", { name: account.id }));
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    expect(row).toBeDefined();
+    await fireEvent.keyDown(row!, { key: "Enter" });
     expect(await screen.findByText("Edit User")).toBeVisible();
 
     pageState.queryData = { users: [] };
