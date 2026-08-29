@@ -657,6 +657,7 @@ function RecordTable(props: {
 }) {
   const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
   const [editRow, setEditRow] = createSignal<Record | undefined>();
+  const [insertOpen, setInsertOpen] = createSignal(false);
   const [selectedRows, setSelectedRows] = createSignal(
     new Map<string, SqlValue>(),
   );
@@ -826,7 +827,7 @@ function RecordTable(props: {
                     </Show>
 
                     <Show when={mutable()}>
-                      <SafeSheet>
+                      <SafeSheet open={[insertOpen, setInsertOpen]}>
                         {(sheet) => (
                           <>
                             <SheetContent class={sheetMaxWidth}>
@@ -852,6 +853,39 @@ function RecordTable(props: {
                   <TableComponent
                     table={table()}
                     loading={props.records === undefined}
+                    dense
+                    paginationPosition="bottom"
+                    emptyState={
+                      <div class="flex flex-col items-center gap-2 py-8 text-center">
+                        <p class="font-medium">
+                          {props.filter[0]()
+                            ? "No rows match this filter"
+                            : "No rows yet"}
+                        </p>
+                        <p class="text-muted-foreground text-sm">
+                          {props.filter[0]()
+                            ? "Try a different expression or clear the filter."
+                            : "Insert the first record to get started."}
+                        </p>
+                        <Show
+                          when={props.filter[0]()}
+                          fallback={
+                            <Show when={mutable()}>
+                              <Button onClick={() => setInsertOpen(true)}>
+                                Insert first row
+                              </Button>
+                            </Show>
+                          }
+                        >
+                          <Button
+                            variant="outline"
+                            onClick={() => props.filter[1](undefined)}
+                          >
+                            Clear filter
+                          </Button>
+                        </Show>
+                      </div>
+                    }
                     onRowClick={
                       mutable()
                         ? (_idx: number, row: ArrayRecord) => {

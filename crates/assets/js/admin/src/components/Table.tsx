@@ -1,5 +1,5 @@
 import { Index, For, Match, Show, Switch } from "solid-js";
-import type { Accessor } from "solid-js";
+import type { Accessor, JSX } from "solid-js";
 import {
   flexRender,
   createSolidTable,
@@ -43,6 +43,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createIsMobile } from "@/lib/signals";
+import { cn } from "@/lib/utils";
 
 export type { Updater } from "@tanstack/solid-table";
 
@@ -217,6 +218,9 @@ export function Table<TData>(props: {
   table: SolidTable<TData>;
   loading: boolean;
   onRowClick?: (idx: number, row: TData) => void;
+  emptyState?: JSX.Element;
+  paginationPosition?: "top" | "bottom";
+  dense?: boolean;
 }) {
   const paginationEnabled = () => props.table.options.manualPagination ?? false;
   const paginationState = () => props.table.getState().pagination;
@@ -227,7 +231,7 @@ export function Table<TData>(props: {
 
   return (
     <div>
-      <Show when={paginationEnabled()}>
+      <Show when={paginationEnabled() && props.paginationPosition !== "bottom"}>
         <PaginationControl
           table={props.table}
           rowCount={props.table.options.rowCount}
@@ -250,6 +254,7 @@ export function Table<TData>(props: {
                         updateSorting={
                           enableSorting() ? props.table.setSorting : undefined
                         }
+                        dense={props.dense}
                       />
                     )}
                   </For>
@@ -292,7 +297,11 @@ export function Table<TData>(props: {
               <Match when={numRows() > 0}>
                 <For each={props.table.getRowModel().rows}>
                   {(row) => (
-                    <TableDataRow row={row} onRowClick={props.onRowClick} />
+                    <TableDataRow
+                      row={row}
+                      onRowClick={props.onRowClick}
+                      dense={props.dense}
+                    />
                   )}
                 </For>
               </Match>
@@ -300,7 +309,7 @@ export function Table<TData>(props: {
               <Match when={true}>
                 <TableRow>
                   <TableCell colSpan={columns().length}>
-                    <span>Empty</span>
+                    {props.emptyState ?? <span>Empty</span>}
                   </TableCell>
                 </TableRow>
               </Match>
@@ -308,6 +317,13 @@ export function Table<TData>(props: {
           </TableBody>
         </ShadcnTable>
       </div>
+
+      <Show when={paginationEnabled() && props.paginationPosition === "bottom"}>
+        <PaginationControl
+          table={props.table}
+          rowCount={props.table.options.rowCount}
+        />
+      </Show>
     </div>
   );
 }
@@ -316,6 +332,7 @@ function TableHeaderRow<TData>(props: {
   header: Header<TData, unknown>;
   enabledColumnPinning: boolean;
   updateSorting?: (updater: Updater<SortingState>) => void;
+  dense?: boolean;
 }) {
   const toggleSorting = () => {
     /* eslint-disable solid/reactivity */
@@ -376,7 +393,13 @@ function TableHeaderRow<TData>(props: {
       </Match>
 
       <Match when={true}>
-        <TableHead class="relative pr-5 pl-4" onClick={toggleSorting()}>
+        <TableHead
+          class={cn(
+            "group relative pr-5 pl-4",
+            props.dense && "h-8 pl-3 text-xs",
+          )}
+          onClick={toggleSorting()}
+        >
           <HeadContents />
 
           {/* Sorting arrow */}
@@ -398,7 +421,11 @@ function TableHeaderRow<TData>(props: {
           <Show when={props.enabledColumnPinning}>
             <div class="absolute top-1 right-1 z-1">
               <Button
-                class="size-4 bg-transparent"
+                class={cn(
+                  "size-4 bg-transparent transition-opacity",
+                  !props.header.column.getIsPinned() &&
+                    "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100",
+                )}
                 size="icon"
                 variant="ghost"
                 onClick={(ev) => {
@@ -428,6 +455,7 @@ function TableHeaderRow<TData>(props: {
 function TableDataRow<TData>(props: {
   row: Row<TData>;
   onRowClick?: (idx: number, row: TData) => void;
+  dense?: boolean;
 }) {
   const onClick = () => {
     // Don't trigger on text selection.
@@ -443,10 +471,24 @@ function TableDataRow<TData>(props: {
     handler(props.row.index, props.row.original);
   };
 
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <TableRow
+      class={cn(
+        props.onRowClick &&
+          "focus-visible:ring-ring cursor-pointer focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset",
+        props.dense && "h-9",
+      )}
       data-state={props.row.getIsSelected() && "selected"}
+      tabIndex={props.onRowClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={props.onRowClick ? onKeyDown : undefined}
     >
       <For each={props.row.getVisibleCells()}>
         {(cell) => {
@@ -455,12 +497,15 @@ function TableDataRow<TData>(props: {
           const style =
             cell.column.id == "__select__"
               ? selectStyle
-              : "max-h-[80px] max-w-[50dvw] overflow-x-hidden overflow-y-auto break-words";
+              : props.dense
+                ? "max-w-[50dvw] truncate whitespace-nowrap"
+                : "max-h-[80px] max-w-[50dvw] overflow-x-hidden overflow-y-auto wrap-break-word";
+          const cellClass = cn(style, props.dense && "px-3 py-1.5");
 
           return (
             <Switch>
               <Match when={width !== undefined}>
-                <TableCell>
+                <TableCell class={props.dense ? "px-3 py-1.5" : undefined}>
                   <div class={style} style={{ width }}>
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </div>
@@ -468,7 +513,7 @@ function TableDataRow<TData>(props: {
               </Match>
 
               <Match when={width === undefined}>
-                <TableCell class={style}>
+                <TableCell class={cellClass}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </TableCell>
               </Match>
