@@ -1,5 +1,12 @@
-import { JSX } from "solid-js";
-import { TbOutlineSearch } from "solid-icons/tb";
+import {
+  Show,
+  createEffect,
+  createSignal,
+  onCleanup,
+  onMount,
+  type JSX,
+} from "solid-js";
+import { TbOutlineSearch, TbOutlineX } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
@@ -10,44 +17,86 @@ export function FilterBar(props: {
   example?: JSX.Element;
   placeholder?: string;
 }) {
-  let ref: HTMLInputElement | undefined;
-  const onSubmit = (ev: SubmitEvent) => {
-    ev.preventDefault();
+  let input: HTMLInputElement | undefined;
+  const [value, setValue] = createSignal(props.initial ?? "");
 
-    const value = ref?.value;
-    console.debug("set filter: ", value);
-    if (value !== undefined) {
-      props.onSubmit(value);
-    }
+  createEffect(() => setValue(props.initial ?? ""));
+
+  onMount(() => {
+    const focusFilter = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        event.key !== "/" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      input?.focus();
+    };
+
+    document.addEventListener("keydown", focusFilter);
+    onCleanup(() => document.removeEventListener("keydown", focusFilter));
+  });
+
+  const onSubmit = (event: SubmitEvent) => {
+    event.preventDefault();
+    props.onSubmit(value());
+  };
+
+  const clear = () => {
+    setValue("");
+    props.onSubmit("");
+    input?.focus();
   };
 
   return (
-    <div class="flex w-full flex-col">
+    <div class="flex w-full min-w-0 flex-col">
       <form
-        class="flex w-full items-center gap-1.5"
+        class="flex w-full min-w-0 items-center gap-1.5"
         method="dialog"
         onSubmit={onSubmit}
       >
-        <TextField class="w-full">
+        <TextField class="min-w-0 flex-1">
           <TextFieldInput
-            ref={ref}
-            value={props.initial}
+            ref={(element) => (input = element)}
+            value={value()}
+            onInput={(event) => setValue(event.currentTarget.value)}
             type="text"
-            placeholder={props.placeholder ?? "Filter"}
+            aria-label="Filter rows"
+            placeholder={props.placeholder ?? "Filter rows…"}
           />
         </TextField>
 
-        <Button
-          size="icon"
-          variant="outline"
-          type="submit"
-          aria-label="Apply filter"
-        >
+        <Show when={value()}>
+          <Button
+            size="icon"
+            variant="ghost"
+            type="button"
+            aria-label="Clear filter"
+            onClick={clear}
+          >
+            <TbOutlineX />
+          </Button>
+        </Show>
+
+        <Button variant="outline" type="submit" aria-label="Apply filter">
           <TbOutlineSearch />
+          <span class="hidden sm:inline">Apply</span>
         </Button>
       </form>
 
-      {props.example && <span class="mt-1 ml-2 text-sm">{props.example}</span>}
+      {props.example && (
+        <span class="text-muted-foreground mt-1 ml-2 text-sm">
+          {props.example}
+        </span>
+      )}
     </div>
   );
 }

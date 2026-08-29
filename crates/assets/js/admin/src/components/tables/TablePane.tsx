@@ -41,7 +41,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Select,
@@ -661,6 +660,7 @@ function RecordTable(props: {
   const [selectedRows, setSelectedRows] = createSignal(
     new Map<string, SqlValue>(),
   );
+  const [deletingRows, setDeletingRows] = createSignal(false);
 
   const selectedSchema = () => props.selectedSchema;
   const mutable = () =>
@@ -725,6 +725,29 @@ function RecordTable(props: {
     );
   });
 
+  const deleteSelectedRows = async () => {
+    const ids = [...selectedRows().values()];
+    if (ids.length === 0) return;
+
+    setDeletingRows(true);
+    try {
+      await deleteRows(prettyFormatQualifiedName(selectedSchema().name), {
+        primary_key_column: columns()?.[pkColumnIndex()].name ?? "??",
+        values: ids,
+      });
+      setSelectedRows(new Map<string, SqlValue>());
+    } catch (err) {
+      showToast({
+        title: "Deletion Error",
+        description: `${err}`,
+        variant: "error",
+      });
+    } finally {
+      setDeletingRows(false);
+      rowsRefetch();
+    }
+  };
+
   return (
     <div id="data">
       <SafeSheet
@@ -748,133 +771,127 @@ function RecordTable(props: {
                 />
               </SheetContent>
 
-              <FilterBar
-                initial={props.filter[0]()}
-                onSubmit={(value: string) => {
-                  if (value === props.filter[0]()) {
-                    rowsRefetch();
-                  } else {
-                    props.filter[1](value);
-                  }
-                }}
-                placeholder={`Filter, e.g.: '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
-              />
+              <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-2 lg:flex-row lg:items-start">
+                  <FilterBar
+                    initial={props.filter[0]()}
+                    onSubmit={(value: string) => {
+                      const next = value || undefined;
+                      if (next === props.filter[0]()) {
+                        rowsRefetch();
+                      } else {
+                        props.filter[1](next);
+                      }
+                    }}
+                    placeholder="Filter rows with an expression…"
+                    example={
+                      <span>
+                        Press{" "}
+                        <kbd class="rounded-sm border px-1 font-mono">/</kbd> to
+                        focus. Example: <code>status = "active"</code>
+                      </span>
+                    }
+                  />
 
-              <div class="overflow-x-auto pt-4">
-                <TableComponent
-                  table={table()}
-                  loading={props.records === undefined}
-                  onRowClick={
-                    mutable()
-                      ? (_idx: number, row: ArrayRecord) => {
-                          setEditRow(rowDataToRow(columns() ?? [], row));
-                        }
-                      : undefined
-                  }
-                />
+                  <div class="flex shrink-0 flex-wrap items-center gap-2">
+                    <span class="text-muted-foreground text-sm whitespace-nowrap">
+                      {props.records === undefined
+                        ? "Loading rows…"
+                        : `${totalRowCount()} rows`}
+                    </span>
+
+                    <Select
+                      multiple={false}
+                      options={[...blobEncodings]}
+                      value={blobEncoding()}
+                      itemComponent={(props) => (
+                        <SelectItem item={props.item}>
+                          {props.item.rawValue}
+                        </SelectItem>
+                      )}
+                      onChange={(encoding: BlobEncoding | null) => {
+                        if (encoding !== null) setBlobEncoding(encoding);
+                      }}
+                    >
+                      <SelectTrigger class="w-32" aria-label="Blob format">
+                        <SelectValue<string>>
+                          {(state) => `Blobs: ${state.selectedOption()}`}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent />
+                    </Select>
+
+                    <Show when={import.meta.env.DEV}>
+                      <DebugDialogButton title="Schema" data={data() ?? []} />
+                    </Show>
+
+                    <Show when={mutable()}>
+                      <SafeSheet>
+                        {(sheet) => (
+                          <>
+                            <SheetContent class={sheetMaxWidth}>
+                              <InsertUpdateRowForm
+                                schema={selectedSchema() as Table}
+                                rowsRefetch={rowsRefetch}
+                                {...sheet}
+                              />
+                            </SheetContent>
+                            <SheetTrigger
+                              as={(triggerProps: DialogTriggerProps) => (
+                                <Button {...triggerProps}>Insert row</Button>
+                              )}
+                            />
+                          </>
+                        )}
+                      </SafeSheet>
+                    </Show>
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <TableComponent
+                    table={table()}
+                    loading={props.records === undefined}
+                    onRowClick={
+                      mutable()
+                        ? (_idx: number, row: ArrayRecord) => {
+                            setEditRow(rowDataToRow(columns() ?? [], row));
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
               </div>
             </>
           );
         }}
       />
 
-      <div class="my-2 flex flex-wrap justify-between gap-2">
-        {mutable() && (
-          <div class="flex gap-2">
-            {/* Insert Rows */}
-            <SafeSheet
-              children={(sheet) => {
-                return (
-                  <>
-                    <SheetContent class={sheetMaxWidth}>
-                      <InsertUpdateRowForm
-                        schema={selectedSchema() as Table}
-                        rowsRefetch={rowsRefetch}
-                        {...sheet}
-                      />
-                    </SheetContent>
-
-                    <SheetTrigger
-                      as={(props: DialogTriggerProps) => (
-                        <Button variant="default" {...props}>
-                          Insert Row
-                        </Button>
-                      )}
-                    />
-                  </>
-                );
-              }}
-            />
-
-            {/* Delete rows */}
+      <Show when={selectedRows().size > 0}>
+        <div class="border-primary/30 bg-primary/5 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2">
+          <span class="text-sm font-medium">
+            {selectedRows().size} {selectedRows().size === 1 ? "row" : "rows"}{" "}
+            selected
+          </span>
+          <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedRows(new Map<string, SqlValue>())}
+            >
+              Clear selection
+            </Button>
             <Button
               variant="destructive"
-              disabled={selectedRows().size === 0}
-              onClick={() => {
-                const ids = [...selectedRows().values()];
-                if (ids.length === 0) {
-                  return;
-                }
-
-                (async () => {
-                  try {
-                    await deleteRows(
-                      prettyFormatQualifiedName(selectedSchema().name),
-                      {
-                        primary_key_column:
-                          columns()?.[pkColumnIndex()].name ?? "??",
-                        values: ids,
-                      },
-                    );
-
-                    setSelectedRows(new Map<string, SqlValue>());
-                  } catch (err) {
-                    showToast({
-                      title: "Deletion Error",
-                      description: `${err}`,
-                      variant: "error",
-                    });
-                  } finally {
-                    rowsRefetch();
-                  }
-                })();
-              }}
+              size="sm"
+              disabled={deletingRows()}
+              onClick={deleteSelectedRows}
             >
-              Delete rows
+              {deletingRows() ? "Deleting…" : "Delete selected"}
             </Button>
           </div>
-        )}
-
-        <div class="flex items-center gap-2">
-          <Label>Blobs:</Label>
-
-          <Select
-            multiple={false}
-            options={[...blobEncodings]}
-            value={blobEncoding()}
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-            )}
-            onChange={(encoding: BlobEncoding | null) => {
-              if (encoding !== null) {
-                setBlobEncoding(encoding);
-              }
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue<string>>
-                {(state) => state.selectedOption()}
-              </SelectValue>
-            </SelectTrigger>
-
-            <SelectContent />
-          </Select>
-
-          <Show when={import.meta.env.DEV}>
-            <DebugDialogButton title="Schema" data={data() ?? []} />
-          </Show>
         </div>
-      </div>
+      </Show>
     </div>
   );
 }
