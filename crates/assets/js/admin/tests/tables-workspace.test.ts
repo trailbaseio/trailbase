@@ -5,7 +5,10 @@ import {
   groupExplorerResources,
   resourceSchemaName,
 } from "@/components/tables/TablesPage";
-import { normalizeWorkspaceTab } from "@/components/tables/TablePane";
+import {
+  normalizeWorkspaceTab,
+  workspaceTabSearchParams,
+} from "@/components/tables/TablePane";
 
 import type { Table } from "@bindings/Table";
 
@@ -29,6 +32,20 @@ describe("Tables workspace", () => {
     expect(normalizeWorkspaceTab("structure")).toBe("structure");
     expect(normalizeWorkspaceTab("api")).toBe("api");
     expect(normalizeWorkspaceTab("unknown")).toBe("data");
+  });
+
+  it("updates the workspace tab without dropping query state", () => {
+    expect(
+      workspaceTabSearchParams(
+        { filter: "id > 2", pageSize: "50", tab: "structure" },
+        "api",
+      ),
+    ).toEqual({ filter: "id > 2", pageSize: "50", tab: "api" });
+
+    expect(workspaceTabSearchParams({ filter: "x" }, "data")).toEqual({
+      filter: "x",
+      tab: undefined,
+    });
   });
 
   it("filters resources case-insensitively by qualified name", () => {

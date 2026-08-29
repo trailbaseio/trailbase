@@ -13,6 +13,8 @@ import {
   TbOutlineTable,
   TbOutlineTrash,
   TbOutlineColumns,
+  TbOutlineChevronRight,
+  TbOutlineDotsVertical,
 } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
@@ -29,15 +31,15 @@ import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { urlSafeBase64Decode } from "trailbase";
 
-import { Header } from "@/components/Header";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -49,6 +51,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { showToast } from "@/components/ui/toast";
 
 import { DebugDialogButton } from "@/components/tables/SchemaDownload";
@@ -57,8 +67,6 @@ import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
 import { Table as TableComponent, buildTable } from "@/components/Table";
 import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
-import { DestructiveActionButton } from "@/components/DestructiveActionButton";
-import { IconButton } from "@/components/IconButton";
 import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
 import {
   RecordApiSettingsForm,
@@ -292,6 +300,7 @@ function TableHeaderRightHandButtons(props: {
   allTables: Table[];
   schemaRefetch: () => Promise<void>;
   postgres: boolean;
+  activeTab: WorkspaceTab;
 }) {
   const selectedSchema = () => props.table;
   const hidden = () => hiddenTable(selectedSchema());
@@ -307,118 +316,98 @@ function TableHeaderRightHandButtons(props: {
 
   return (
     <div class="flex items-center justify-end gap-2">
-      {/* Delete table button */}
-      {!hidden() && !props.postgres && (
-        <DestructiveActionButton
-          size="sm"
-          action={() => {
-            return (async () => {
-              try {
-                await dropTable({
-                  name: prettyFormatQualifiedName(selectedSchema().name),
-                  dry_run: null,
-                });
-              } finally {
-                await config.refetch();
-                await props.schemaRefetch();
-              }
-            })();
-          }}
-          msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
-        >
-          <div class="flex items-center gap-2">
-            Delete <TbOutlineTrash />
-          </div>
-        </DestructiveActionButton>
-      )}
-
       {/* Record API settings*/}
-      {(type() === "table" || type() === "view") && !hidden() && (
-        <SafeSheet
-          children={(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <RecordApiSettingsForm schema={props.table} {...sheet} />
-                </SheetContent>
+      {props.activeTab === "api" &&
+        (type() === "table" || type() === "view") &&
+        !hidden() && (
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <RecordApiSettingsForm schema={props.table} {...sheet} />
+                  </SheetContent>
 
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Tooltip>
-                      <TooltipTrigger as="div">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          class="flex items-center"
-                          disabled={!satisfiesRecordApi()}
-                          {...props}
-                        >
-                          API
-                          <Checkbox
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Tooltip>
+                        <TooltipTrigger as="div">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            class="flex items-center"
                             disabled={!satisfiesRecordApi()}
-                            checked={hasRecordApi()}
-                          />
-                        </Button>
-                      </TooltipTrigger>
-
-                      <TooltipContent>
-                        <Switch>
-                          <Match when={!satisfiesRecordApi()}>
-                            <UnsatisfiedApiRequirementsTooltip
-                              type={type()}
-                              errors={validateRecordApi()}
+                            {...props}
+                          >
+                            API
+                            <Checkbox
+                              disabled={!satisfiesRecordApi()}
+                              checked={hasRecordApi()}
                             />
-                          </Match>
+                          </Button>
+                        </TooltipTrigger>
 
-                          <Match when={true}>
-                            <p>
-                              Expose an API for this{" "}
-                              {type().toLocaleUpperCase()}.
-                            </p>
-                          </Match>
-                        </Switch>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                />
-              </>
-            );
-          }}
-        />
-      )}
+                        <TooltipContent>
+                          <Switch>
+                            <Match when={!satisfiesRecordApi()}>
+                              <UnsatisfiedApiRequirementsTooltip
+                                type={type()}
+                                errors={validateRecordApi()}
+                              />
+                            </Match>
+
+                            <Match when={true}>
+                              <p>
+                                Expose an API for this{" "}
+                                {type().toLocaleUpperCase()}.
+                              </p>
+                            </Match>
+                          </Switch>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+        )}
 
       {/* Alter table schema */}
-      {type() === "table" && !hidden() && !props.postgres && (
-        <SafeSheet
-          children={(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <CreateAlterTableForm
-                    schemaRefetch={props.schemaRefetch}
-                    allTables={props.allTables}
-                    setSelected={() => {
-                      /* No selection change needed for AlterTable */
-                    }}
-                    schema={props.table as Table}
-                    {...sheet}
-                  />
-                </SheetContent>
+      {props.activeTab === "structure" &&
+        type() === "table" &&
+        !hidden() &&
+        !props.postgres && (
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <CreateAlterTableForm
+                      schemaRefetch={props.schemaRefetch}
+                      allTables={props.allTables}
+                      setSelected={() => {
+                        /* No selection change needed for AlterTable */
+                      }}
+                      schema={props.table as Table}
+                      {...sheet}
+                    />
+                  </SheetContent>
 
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Button variant="default" size="sm" {...props}>
-                      <div class="flex items-center gap-2">
-                        Alter <TbOutlineTable />
-                      </div>
-                    </Button>
-                  )}
-                />
-              </>
-            );
-          }}
-        />
-      )}
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button variant="default" size="sm" {...props}>
+                        <div class="flex items-center gap-2">
+                          Alter <TbOutlineTable />
+                        </div>
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+        )}
     </div>
   );
 }
@@ -429,9 +418,14 @@ function TableHeader(props: {
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => void;
   postgres: boolean;
+  activeTab: WorkspaceTab;
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
   const selectedSchema = () => props.table[0];
+  const [sqlOpen, setSqlOpen] = createSignal(false);
+  const [deleteOpen, setDeleteOpen] = createSignal(false);
+  const [deleting, setDeleting] = createSignal(false);
+  const config = createConfigQuery();
 
   const headerTitle = () => {
     switch (tableType(selectedSchema())) {
@@ -443,46 +437,132 @@ function TableHeader(props: {
         return "Table";
     }
   };
+  const schemaName = () => selectedSchema().name.database_schema || "main";
+  const resourceName = () => selectedSchema().name.name;
+  const canDelete = () => !hiddenTable(selectedSchema()) && !props.postgres;
+
+  const deleteTable = async () => {
+    setDeleting(true);
+    try {
+      await dropTable({
+        name: prettyFormatQualifiedName(selectedSchema().name),
+        dry_run: null,
+      });
+      await config.refetch();
+      await props.schemaRefetch();
+      setDeleteOpen(false);
+    } catch (err) {
+      showToast({
+        title: "Deletion Error",
+        description: `${err}`,
+        variant: "error",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
-    <Header
-      leading={<SidebarTrigger />}
-      title={headerTitle()}
-      titleSelect={prettyFormatQualifiedName(selectedSchema().name)}
-      left={
-        <div class="flex items-center">
-          <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
-            <TbOutlineRefresh />
-          </IconButton>
-
-          <Dialog id="sql-schema">
-            <DialogTrigger>
-              <IconButton tooltip="SQL Schema">
-                <TbOutlineColumns />
-              </IconButton>
-            </DialogTrigger>
-
-            <DialogContent class="max-w-[80dvw]">
-              <DialogHeader>
-                <DialogTitle>SQL Schema</DialogTitle>
-              </DialogHeader>
-
-              <span class="font-mono text-sm whitespace-pre-wrap">
-                {props.table[1]}
-              </span>
-            </DialogContent>
-          </Dialog>
+    <header class="bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm">
+      <div class="flex min-h-14 items-center justify-between gap-3 px-4">
+        <div class="flex min-w-0 items-center gap-2">
+          <SidebarTrigger aria-label="Toggle table explorer" />
+          <div class="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
+            <span>Tables</span>
+            <TbOutlineChevronRight class="size-3.5" />
+            <span>{schemaName()}</span>
+            <TbOutlineChevronRight class="size-3.5" />
+            <span class="text-foreground truncate font-semibold">
+              {resourceName()}
+            </span>
+          </div>
+          <Badge variant="outline" class="hidden sm:inline-flex">
+            {headerTitle()}
+          </Badge>
         </div>
-      }
-      right={
-        <TableHeaderRightHandButtons
-          table={selectedSchema()}
-          allTables={allTables()}
-          schemaRefetch={props.schemaRefetch}
-          postgres={props.postgres}
-        />
-      }
-    />
+
+        <div class="flex shrink-0 items-center gap-2">
+          <Show when={props.activeTab === "data"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Refresh rows"
+              title="Refresh rows"
+              onClick={props.rowsRefetch}
+            >
+              <TbOutlineRefresh />
+            </Button>
+          </Show>
+
+          <TableHeaderRightHandButtons
+            table={selectedSchema()}
+            allTables={allTables()}
+            schemaRefetch={props.schemaRefetch}
+            postgres={props.postgres}
+            activeTab={props.activeTab}
+          />
+
+          <DropdownMenu placement="bottom-end">
+            <DropdownMenuTrigger
+              class={buttonVariants({ variant: "outline", size: "icon" })}
+              aria-label="More table actions"
+            >
+              <TbOutlineDotsVertical />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onSelect={() => setSqlOpen(true)}>
+                <TbOutlineColumns />
+                SQL schema
+              </DropdownMenuItem>
+              <Show when={canDelete()}>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  class="text-destructive ui-highlighted:text-destructive"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <TbOutlineTrash />
+                  Delete table
+                </DropdownMenuItem>
+              </Show>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <Dialog open={sqlOpen()} onOpenChange={setSqlOpen}>
+        <DialogContent class="max-w-[80dvw]">
+          <DialogHeader>
+            <DialogTitle>SQL Schema</DialogTitle>
+          </DialogHeader>
+          <pre class="bg-muted max-h-[70dvh] overflow-auto rounded-md p-4 font-mono text-sm whitespace-pre-wrap">
+            {props.table[1]}
+          </pre>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen()} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {resourceName()}?</DialogTitle>
+          </DialogHeader>
+          <p class="text-muted-foreground text-sm">
+            Deleting this table will irreversibly delete all data it contains.
+          </p>
+          <DialogFooter class="gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting()}
+              onClick={deleteTable}
+            >
+              {deleting() ? "Deleting…" : "Delete table"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </header>
   );
 }
 
@@ -1007,7 +1087,18 @@ type SearchParams = {
   filter?: string;
   pageSize?: string;
   pageIndex?: string;
+  tab?: string;
 };
+
+export function workspaceTabSearchParams<T extends object>(
+  searchParams: T,
+  tab: WorkspaceTab,
+): T & { tab: WorkspaceTab | undefined } {
+  return {
+    ...searchParams,
+    tab: tab === "data" ? undefined : tab,
+  };
+}
 
 export function TablePane(props: {
   selectedTable: [Table, string] | [View, string];
@@ -1039,6 +1130,7 @@ export function TablePane(props: {
   const setFilter = (filter: string | undefined) => {
     // Reset pagination.
     setSearchParams({
+      ...searchParams,
       pageIndex: undefined,
       pageSize: undefined,
       filter,
@@ -1102,6 +1194,7 @@ export function TablePane(props: {
       } catch (err) {
         // Reset.
         setSearchParams({
+          ...searchParams,
           filter: undefined,
           pageSize: undefined,
           pageIndex: undefined,
@@ -1120,57 +1213,110 @@ export function TablePane(props: {
   };
 
   const [columnPinningState, setColumnPinningState] = createSignal({});
+  const activeTab = () => normalizeWorkspaceTab(searchParams.tab);
 
   return (
-    <>
+    <div class="flex min-h-0 flex-1 flex-col">
       <TableHeader
         table={props.selectedTable}
         allTables={props.schemas.tables}
         schemaRefetch={schemaRefetch}
         rowsRefetch={rowsRefetch}
         postgres={props.postgres}
+        activeTab={activeTab()}
       />
 
-      <div class="flex flex-col gap-8 p-4">
-        <Switch>
-          <Match when={records.isError}>
-            <div class="my-2 flex flex-col gap-4">
-              Failed to fetch rows: {`${records.error}`}
-              <div>
-                <Button onClick={() => window.location.reload()}>Reload</Button>
+      <Tabs
+        class="flex min-h-0 flex-1 flex-col"
+        value={activeTab()}
+        onChange={(tab) =>
+          setSearchParams(
+            workspaceTabSearchParams(searchParams, normalizeWorkspaceTab(tab)),
+          )
+        }
+      >
+        <div class="overflow-x-auto border-b px-4">
+          <TabsList class="h-10 rounded-none bg-transparent p-0">
+            <TabsTrigger
+              value="data"
+              class="ui-selected:border-primary ui-selected:bg-transparent ui-selected:shadow-none h-10 rounded-none border-b-2 border-transparent px-4"
+            >
+              Data
+            </TabsTrigger>
+            <TabsTrigger
+              value="structure"
+              class="ui-selected:border-primary ui-selected:bg-transparent ui-selected:shadow-none h-10 rounded-none border-b-2 border-transparent px-4"
+            >
+              Structure
+            </TabsTrigger>
+            <TabsTrigger
+              value="api"
+              class="ui-selected:border-primary ui-selected:bg-transparent ui-selected:shadow-none h-10 rounded-none border-b-2 border-transparent px-4"
+            >
+              API
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="data" class="m-0 min-h-0 flex-1 p-4">
+          <Switch>
+            <Match when={records.isError}>
+              <div class="border-destructive/30 bg-destructive/5 rounded-md border p-4">
+                <p class="font-medium">Failed to fetch rows</p>
+                <p class="text-muted-foreground mt-1 text-sm">
+                  {`${records.error}`}
+                </p>
+                <Button class="mt-3" onClick={() => records.refetch()}>
+                  Retry
+                </Button>
               </div>
-            </div>
-          </Match>
+            </Match>
 
-          <Match when={true}>
-            <RecordTable
-              selectedSchema={selectedSchema()}
-              records={records.isSuccess ? records.data : undefined}
-              pagination={[pagination, setPagination]}
-              filter={[filter, setFilter]}
-              columnPinningState={[columnPinningState, setColumnPinningState]}
-              sorting={[sorting, setSorting]}
-              rowsRefetch={rowsRefetch}
+            <Match when={true}>
+              <RecordTable
+                selectedSchema={selectedSchema()}
+                records={records.isSuccess ? records.data : undefined}
+                pagination={[pagination, setPagination]}
+                filter={[filter, setFilter]}
+                columnPinningState={[columnPinningState, setColumnPinningState]}
+                sorting={[sorting, setSorting]}
+                rowsRefetch={rowsRefetch}
+              />
+            </Match>
+          </Switch>
+        </TabsContent>
+
+        <TabsContent value="structure" class="m-0 flex flex-col gap-8 p-4">
+          <Show
+            when={isTable()}
+            fallback={
+              <div class="text-muted-foreground rounded-md border p-4 text-sm">
+                Structure editing is unavailable for this resource type.
+              </div>
+            }
+          >
+            <IndexTable
+              table={selectedSchema() as Table}
+              schemas={props.schemas}
+              schemaRefetch={props.schemaRefetch}
             />
-          </Match>
-        </Switch>
+            <TriggerTable
+              table={selectedSchema() as Table}
+              schemas={props.schemas}
+            />
+          </Show>
+        </TabsContent>
 
-        <Show when={isTable()}>
-          <IndexTable
-            table={selectedSchema() as Table}
-            schemas={props.schemas}
-            schemaRefetch={props.schemaRefetch}
-          />
-        </Show>
-
-        <Show when={isTable()}>
-          <TriggerTable
-            table={selectedSchema() as Table}
-            schemas={props.schemas}
-          />
-        </Show>
-      </div>
-    </>
+        <TabsContent value="api" class="m-0 p-4">
+          <div class="rounded-md border p-4">
+            <h2 class="text-base font-semibold">Record API</h2>
+            <p class="text-muted-foreground mt-1 text-sm">
+              Review and configure the APIs exposed for this resource.
+            </p>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 
