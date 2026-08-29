@@ -326,7 +326,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
   };
   const move = (delta: number) => {
     setActiveIndex(
-      Math.max(0, Math.min(results().length - 1, activeIndex() + delta)),
+      Math.max(-1, Math.min(results().length - 1, activeIndex() + delta)),
     );
   };
 

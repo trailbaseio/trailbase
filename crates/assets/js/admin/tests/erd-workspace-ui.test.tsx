@@ -16,6 +16,7 @@ afterEach(cleanup);
 const entities = [
   { id: "main.posts", name: "main.posts", type: "table" as const },
   { id: "main.post_summary", name: "main.post_summary", type: "view" as const },
+  { id: "main.users", name: "main.users", type: "table" as const },
 ];
 
 describe("ERD toolbar", () => {
@@ -36,6 +37,9 @@ describe("ERD toolbar", () => {
     expect(
       screen.getByRole("option", { name: /main\.posts.*table/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /main\.users.*table/i }),
+    ).not.toBeInTheDocument();
     await fireEvent.keyDown(search, { key: "ArrowDown" });
     await fireEvent.keyDown(search, { key: "Enter" });
     expect(onSelect).toHaveBeenCalledWith("main.posts");
@@ -86,6 +90,16 @@ describe("ERD toolbar", () => {
       "aria-pressed",
       "false",
     );
+    await fireEvent.click(screen.getByRole("button", { name: "Tables" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    expect(callbacks.onChange).toHaveBeenNthCalledWith(1, {
+      tables: false,
+      views: false,
+    });
+    expect(callbacks.onChange).toHaveBeenNthCalledWith(2, {
+      tables: true,
+      views: true,
+    });
     await fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
     await fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
     await fireEvent.click(screen.getByRole("button", { name: "Fit view" }));
