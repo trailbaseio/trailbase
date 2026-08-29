@@ -241,8 +241,6 @@ export function ErdGraph(props: {
     };
     props.onMount?.(handle);
     if (g.getCells().length) g.zoomToFit({ padding: 20 });
-    // Apply the current selection to every newly constructed graph.
-    applySelection();
     onCleanup(() => g.dispose());
   });
   createEffect(applySelection);

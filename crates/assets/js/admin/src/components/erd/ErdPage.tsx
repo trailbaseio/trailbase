@@ -157,6 +157,17 @@ export function relatedEntityIds(
   return related;
 }
 
+export function selectionStatus(
+  entities: ErdEntity[],
+  relations: ErdRelation[],
+  selectedId?: string,
+): string {
+  if (selectedId === undefined) return "No entity focused";
+  const name =
+    entities.find((entity) => entity.id === selectedId)?.name ?? selectedId;
+  return `${name} focused, ${relatedEntityIds(relations, selectedId).size - 1} direct relationships`;
+}
+
 function edgeCellId(endpoint: EdgeMetadata["source"]): string | undefined {
   if (typeof endpoint === "string") {
     return endpoint;
@@ -495,7 +506,7 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
   const [status, setStatus] = createSignal("");
   const select = (id?: string) => {
     setSelectedId(id);
-    setStatus(id ? `${id} selected. Showing direct relationships.` : "Selection cleared.");
+    setStatus(selectionStatus(model().entities, model().relations, id));
     graph?.focus(id);
   };
   return (
@@ -515,7 +526,10 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
         onZoomIn={() => graph?.zoomIn()}
         onZoomOut={() => graph?.zoomOut()}
         onFit={() => graph?.fit()}
-        onReset={() => { graph?.reset(); select(undefined); }}
+        onReset={() => {
+          graph?.reset();
+          select(undefined);
+        }}
       />
       <div class="min-h-0 flex-1">
         <ErdGraph
@@ -526,7 +540,9 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
           onSelect={select}
           onMount={(g) => (graph = g)}
         />
-        <p class="sr-only" aria-live="polite">{status()}</p>
+        <p class="sr-only" aria-live="polite">
+          {status()}
+        </p>
       </div>
     </div>
   );

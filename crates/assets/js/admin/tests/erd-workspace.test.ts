@@ -9,9 +9,9 @@ vi.mock("@antv/x6", () => ({
   },
 }));
 vi.mock("@/components/erd/ErdGraph", async () => {
-  const actual = await vi.importActual<typeof import("@/components/erd/ErdGraph")>(
-    "@/components/erd/ErdGraph",
-  );
+  const actual = await vi.importActual<
+    typeof import("@/components/erd/ErdGraph")
+  >("@/components/erd/ErdGraph");
   return { ...actual, ErdGraph: () => null };
 });
 
@@ -20,6 +20,7 @@ import {
   ErdToolbar,
   relatedEntityIds,
   searchErdEntities,
+  selectionStatus,
 } from "@/components/erd/ErdPage";
 import { layoutErdNodes } from "@/components/erd/ErdGraph";
 import type { Column } from "@bindings/Column";
@@ -103,7 +104,10 @@ describe("ERD workspace model", () => {
         { id: "a", position: { x: 12, y: 34 } },
         { id: "b" },
       ]).map((node) => node.position),
-    ).toEqual([{ x: 12, y: 34 }, { x: 270, y: 0 }]);
+    ).toEqual([
+      { x: 12, y: 34 },
+      { x: 270, y: 0 },
+    ]);
   });
 
   it("returns table and view entities with visible counts", () => {
@@ -198,6 +202,16 @@ describe("ERD workspace model", () => {
         "posts",
       ),
     ).toEqual(new Set(["posts", "users", "comments"]));
+  });
+
+  it("formats the polite focus status", () => {
+    const entities = [{ id: "posts", name: "posts", type: "table" as const }];
+    const relations = [{ sourceId: "posts", targetId: "users" }];
+
+    expect(selectionStatus(entities, relations)).toBe("No entity focused");
+    expect(selectionStatus(entities, relations, "posts")).toBe(
+      "posts focused, 1 direct relationships",
+    );
   });
 
   it("wires search selection and toolbar actions", async () => {
