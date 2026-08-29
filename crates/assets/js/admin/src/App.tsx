@@ -1,107 +1,67 @@
-import { createSignal, lazy, Match, onMount, Show, Switch } from "solid-js";
+import { lazy, onMount, Show, createSignal } from "solid-js";
 import type { Component } from "solid-js";
 import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
-
 import { TablePage } from "@/components/tables/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
 import { WasmPage } from "@/components/wasm/WasmPage";
 import { LoginPage } from "@/components/auth/LoginPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { IndexPage } from "@/components/IndexPage";
-import {
-  VerticalNavbar,
-  HorizontalNavbar,
-  NavbarContext,
-} from "@/components/Navbar";
+import { Navbar, NavbarContext } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { $user } from "@/lib/client";
-import { createIsMobile } from "@/lib/signals";
 import { initializeTheme } from "@/lib/theme";
-
 const queryClient = new QueryClient();
-
-function LeftNav(props: RouteSectionProps) {
-  return (
-    <>
-      <div class="hide-scrollbars sticky h-dvh w-[15rem] overflow-hidden">
-        <VerticalNavbar location={props.location} />
-      </div>
-
-      <main class="absolute inset-0 left-[15rem] h-dvh w-[calc(100vw-15rem)] overflow-x-hidden overflow-y-auto">
-        <ErrorBoundary>{props.children}</ErrorBoundary>
-      </main>
-    </>
-  );
-}
-
-function TopNav(props: RouteSectionProps) {
-  return (
-    <>
-      <HorizontalNavbar height={48} location={props.location} />
-
-      <main class="max-h-[calc(100vh-48px)] w-screen overflow-y-auto">
-        <ErrorBoundary>{props.children}</ErrorBoundary>
-      </main>
-    </>
-  );
-}
-
 function WrapWithNav(props: RouteSectionProps) {
-  const isMobile = createIsMobile();
   const [dirty, setDirty] = createSignal(false);
-
-  const contextValue = {
-    dirty,
-    setDirty,
-  };
-
   return (
-    <NavbarContext.Provider value={contextValue}>
-      <Switch>
-        <Match when={isMobile()}>
-          <TopNav {...props} />
-        </Match>
-
-        <Match when={!isMobile()}>
-          <LeftNav {...props} />
-        </Match>
-      </Switch>
+    <NavbarContext.Provider value={{ dirty, setDirty }}>
+      <SidebarProvider>
+        <Sidebar collapsible="icon">
+          <Navbar />
+        </Sidebar>
+        <SidebarInset>
+          <header class="flex h-12 items-center border-b px-4">
+            <SidebarTrigger />
+          </header>
+          <main class="min-h-0 flex-1 overflow-auto">
+            <ErrorBoundary>{props.children}</ErrorBoundary>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
     </NavbarContext.Provider>
   );
 }
-
 function NotFoundPage() {
   return <h1>Not Found</h1>;
 }
-
 const LazyEditorPage = lazy(() => import("@/components/editor/EditorPage"));
 const LazyLogsPage = lazy(() => import("@/components/logs/LogsPage"));
 const LazyErdPage = lazy(() => import("@/components/erd/ErdPage"));
 const LazyOpenApiPage = lazy(() => import("@/components/openapi/OpenApiPage"));
-
 const App: Component = () => {
   const user = useStore($user);
-
   onMount(() => initializeTheme());
-
-  const Login = () => (
-    <ErrorBoundary>
-      <LoginPage />
-    </ErrorBoundary>
-  );
-
-  function isAdmin() {
-    const u = user();
-    return u !== undefined && u.admin === true;
-  }
-
+  const isAdmin = () => user()?.admin === true;
   return (
     <QueryClientProvider client={queryClient}>
-      <Show when={isAdmin()} fallback={<Login />}>
-        <Router base={"/_/admin"} root={WrapWithNav}>
+      <Show
+        when={isAdmin()}
+        fallback={
+          <ErrorBoundary>
+            <LoginPage />
+          </ErrorBoundary>
+        }
+      >
+        <Router base="/_/admin" root={WrapWithNav}>
           <Route path="/" component={IndexPage} />
           <Route path="/table/:table?" component={TablePage} />
           <Route path="/auth" component={AccountsPage} />
@@ -111,13 +71,10 @@ const App: Component = () => {
           <Route path="/logs" component={LazyLogsPage} />
           <Route path="/openapi" component={LazyOpenApiPage} />
           <Route path="/settings/:group?" component={SettingsPage} />
-
-          {/* fallback: */}
           <Route path="*" component={NotFoundPage} />
         </Router>
       </Show>
     </QueryClientProvider>
   );
 };
-
 export default App;
