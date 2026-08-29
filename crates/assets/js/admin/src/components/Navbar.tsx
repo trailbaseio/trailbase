@@ -42,7 +42,7 @@ import {
   SidebarMenuButton,
   useSidebar,
 } from "@/components/ui/sidebar";
-import logo from "@/assets/logo_104.webp";
+import logo from "@/assets/favicon.svg";
 
 const BASE = import.meta.env.BASE_URL;
 const groups = [
@@ -109,10 +109,11 @@ export function Navbar() {
     <>
       <SidebarHeader>
         <a
+          class="flex h-9 items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
           href={`${BASE}/`}
           onClick={(e: MouseEvent) => onClick(e, `${BASE}/`)}
         >
-          <img src={logo} width="42" alt="TrailBase logo" />
+          <img class="size-7 shrink-0" src={logo} alt="" />
           <span class="truncate text-base font-semibold group-data-[collapsible=icon]:hidden">
             TrailBase
           </span>
