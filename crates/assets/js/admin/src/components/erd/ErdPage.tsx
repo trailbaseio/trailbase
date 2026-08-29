@@ -1,11 +1,18 @@
-import { Switch, Match, createMemo } from "solid-js";
+import { Switch, Match, For, Show, createMemo, createSignal } from "solid-js";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { Graph, NodeMetadata, EdgeMetadata } from "@antv/x6";
 import { PortMetadata } from "@antv/x6/lib/model/port";
-import { TbOutlinePlus, TbOutlineMinus } from "solid-icons/tb";
+import {
+  TbOutlinePlus,
+  TbOutlineMinus,
+  TbOutlineMaximize,
+  TbOutlineRefresh,
+} from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
+import { Badge } from "@/components/ui/badge";
 import { Header } from "@/components/Header";
 import {
   ErdGraph,
@@ -162,7 +169,8 @@ export function buildErdModel(
   ];
   const visibleTablesAndViews = allTablesAndViews.filter((tableOrView) => {
     const type = tableType(tableOrView);
-    const visibleByType = type === "view" ? visibility.views : visibility.tables;
+    const visibleByType =
+      type === "view" ? visibility.views : visibility.tables;
     return (
       visibleByType &&
       (!hiddenTable(tableOrView) || isUserTable(tableOrView.name))
@@ -293,55 +301,195 @@ function buildErNode(
   return [node, edges];
 }
 
-function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
-  const theme = createTheme();
+export type ErdToolbarProps = {
+  entities: ErdEntity[];
+  tables: boolean;
+  views: boolean;
+  selectedId?: string;
+  onChange: (visibility: ErdVisibility) => void;
+  onSelect: (id?: string) => void;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  onFit?: () => void;
+  onReset?: () => void;
+};
 
-  const model = createMemo(() =>
-    buildErdModel(props.schema, { tables: true, views: true }, theme()),
-  );
-
-  let graph: Graph | undefined;
+export function ErdToolbar(props: ErdToolbarProps) {
+  const [query, setQuery] = createSignal("");
+  const [open, setOpen] = createSignal(false);
+  const [activeIndex, setActiveIndex] = createSignal(-1);
+  const results = createMemo(() => searchErdEntities(props.entities, query()));
+  const choose = (entity: ErdEntity) => {
+    props.onSelect(entity.id);
+    setQuery(entity.name);
+    setOpen(false);
+  };
+  const move = (delta: number) => {
+    setActiveIndex(
+      Math.max(0, Math.min(results().length - 1, activeIndex() + delta)),
+    );
+  };
 
   return (
-    <div class="size-full">
-      {/* UI overlay */}
-      <div class="absolute right-0 z-10">
-        <div class="m-2 flex flex-col gap-2">
-          <Button
-            size="icon"
-            variant="outline"
-            class="bg-card"
-            aria-label="Zoom in"
-            onClick={() => {
-              if (graph !== undefined) {
-                graph.zoomTo(graph.zoom() * 2);
-              }
-            }}
-          >
-            <TbOutlinePlus />
-          </Button>
-
-          <Button
-            size="icon"
-            variant="outline"
-            class="bg-card"
-            aria-label="Zoom out"
-            onClick={() => {
-              if (graph !== undefined) {
-                graph.zoomTo(graph.zoom() / 2);
-              }
-            }}
-          >
-            <TbOutlineMinus />
-          </Button>
-        </div>
+    <div class="bg-card flex flex-wrap items-center gap-2 border-b p-2">
+      <div class="flex items-center gap-1">
+        <Toggle
+          pressed={props.tables}
+          size="sm"
+          aria-label="Tables"
+          onChange={(pressed) =>
+            props.onChange({ tables: pressed, views: props.views })
+          }
+        >
+          Tables{" "}
+          <Badge round>
+            {props.entities.filter((e) => e.type === "table").length}
+          </Badge>
+        </Toggle>
+        <Toggle
+          pressed={props.views}
+          size="sm"
+          aria-label="Views"
+          onChange={(pressed) =>
+            props.onChange({ tables: props.tables, views: pressed })
+          }
+        >
+          Views{" "}
+          <Badge round>
+            {props.entities.filter((e) => e.type === "view").length}
+          </Badge>
+        </Toggle>
       </div>
+      <div class="relative order-last w-full sm:order-none sm:min-w-64 sm:flex-1">
+        <input
+          class="bg-background h-9 w-full rounded-md border px-3 text-sm"
+          type="search"
+          role="combobox"
+          aria-label="Search entities"
+          aria-autocomplete="list"
+          aria-expanded={open()}
+          aria-controls="erd-search-results"
+          value={query()}
+          onInput={(event) => {
+            setQuery(event.currentTarget.value);
+            setOpen(true);
+            setActiveIndex(-1);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              move(1);
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              move(-1);
+            } else if (
+              event.key === "Enter" &&
+              open() &&
+              results()[activeIndex()]
+            )
+              choose(results()[activeIndex()]);
+            else if (event.key === "Escape") {
+              setOpen(false);
+              props.onSelect(undefined);
+            }
+          }}
+        />
+        <Show when={open() && results().length > 0}>
+          <div
+            id="erd-search-results"
+            role="listbox"
+            class="bg-card absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border p-1 shadow-md"
+          >
+            <For each={results()}>
+              {(entity, index) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={props.selectedId === entity.id}
+                  class="hover:bg-accent flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm"
+                  onClick={() => choose(entity)}
+                >
+                  <span>{entity.name}</span>
+                  <Badge variant="outline">{entity.type}</Badge>
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+      </div>
+      <div class="ml-auto flex gap-1">
+        <Button
+          size="icon"
+          variant="outline"
+          aria-label="Zoom in"
+          onClick={props.onZoomIn}
+        >
+          <TbOutlinePlus />
+        </Button>
+        <Button
+          size="icon"
+          variant="outline"
+          aria-label="Zoom out"
+          onClick={props.onZoomOut}
+        >
+          <TbOutlineMinus />
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label="Fit view"
+          onClick={props.onFit}
+        >
+          <TbOutlineMaximize /> <span class="hidden md:inline">Fit</span>
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          aria-label="Reset layout"
+          onClick={props.onReset}
+        >
+          <TbOutlineRefresh /> <span class="hidden md:inline">Reset</span>
+        </Button>
+      </div>
+    </div>
+  );
+}
 
-      <ErdGraph
-        nodes={model().nodes}
-        edges={model().edges}
-        onMount={(g) => (graph = g)}
+function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
+  const theme = createTheme();
+  const [visibility, setVisibility] = createSignal<ErdVisibility>({
+    tables: true,
+    views: true,
+  });
+  const [selectedId, setSelectedId] = createSignal<string>();
+  const model = createMemo(() =>
+    buildErdModel(props.schema, visibility(), theme()),
+  );
+  let graph: Graph | undefined;
+  const fit = () => graph?.zoomToFit({ padding: 20 });
+  const reset = () => graph?.centerContent();
+  return (
+    <div class="flex size-full flex-col">
+      <ErdToolbar
+        entities={model().entities}
+        tables={visibility().tables}
+        views={visibility().views}
+        selectedId={selectedId()}
+        onChange={setVisibility}
+        onSelect={setSelectedId}
+        onZoomIn={() => graph?.zoomTo(graph.zoom() * 2)}
+        onZoomOut={() => graph?.zoomTo(graph.zoom() / 2)}
+        onFit={fit}
+        onReset={reset}
       />
+      <div class="min-h-0 flex-1">
+        <ErdGraph
+          nodes={model().nodes}
+          edges={model().edges}
+          onMount={(g) => (graph = g)}
+        />
+      </div>
     </div>
   );
 }
