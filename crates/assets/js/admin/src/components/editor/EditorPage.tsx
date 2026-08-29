@@ -234,11 +234,11 @@ function ResultView(props: {
   script: Script;
   response: ExecutionResult | undefined;
   running: boolean;
+  cached: boolean;
 }) {
-  const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
   const status = () =>
-    resultPresentation(response(), isCached(), props.running).label;
+    resultPresentation(response(), props.cached, props.running).label;
 
   return (
     <Switch>
@@ -266,6 +266,19 @@ function ResultView(props: {
         </div>
       </Match>
 
+      <Match when={response()?.data === undefined}>
+        <div class="flex min-h-40 flex-col gap-4 p-4">
+          <ResultsHeader
+            data={undefined}
+            timestamp={response()?.timestamp}
+            status={status()}
+          />
+          <div class="text-muted-foreground flex flex-1 items-center justify-center text-sm">
+            No tabular result was returned.
+          </div>
+        </div>
+      </Match>
+
       <Match when={response()?.data?.columns === null}>
         <div class="flex min-h-40 flex-col gap-4 p-4">
           <ResultsHeader
@@ -283,7 +296,7 @@ function ResultView(props: {
         <ResultViewImpl
           data={response()!.data!}
           timestamp={response()?.timestamp}
-          isCached={isCached()}
+          isCached={props.cached}
           status={status()}
         />
       </Match>
@@ -910,9 +923,7 @@ function EditorPanel(props: {
               <span class="text-muted-foreground hidden sm:inline">›</span>
               <span class="truncate font-semibold">{props.script.name}</span>
               <Show when={dirty()}>
-                <span class="bg-warning/15 text-warning-foreground rounded-full px-2 py-0.5 text-xs">
-                  Unsaved
-                </span>
+                <Badge variant="warning">Unsaved</Badge>
               </Show>
             </div>
           </div>
@@ -1003,6 +1014,7 @@ function EditorPanel(props: {
             script={props.script}
             response={executionResult.data ?? undefined}
             running={executionResult.isFetching}
+            cached={queryString() === null}
           />
         </TabsContent>
       </Tabs>
