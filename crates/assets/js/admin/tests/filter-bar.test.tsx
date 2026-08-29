@@ -38,7 +38,17 @@ describe("FilterBar", () => {
       <FilterBar label="Search accounts" onSubmit={() => undefined} />
     ));
 
-    expect(result.getByRole("textbox", { name: "Search accounts" })).toBeInTheDocument();
+    expect(
+      result.getByRole("textbox", { name: "Search accounts" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps Filter rows as the default accessible label", () => {
+    const result = render(() => <FilterBar onSubmit={() => undefined} />);
+
+    expect(
+      result.getByRole("textbox", { name: "Filter rows" }),
+    ).toBeInTheDocument();
   });
 
   it("does not show clear when the filter is empty", () => {
