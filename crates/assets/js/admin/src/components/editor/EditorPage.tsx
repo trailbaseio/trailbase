@@ -91,7 +91,7 @@ import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
 import { copyToClipboard } from "@/lib/utils";
-import { sqlValueToString } from "@/lib/value";
+import { sqlValueToString, tryFormatUuidBlob } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
@@ -173,6 +173,27 @@ export function paginateResultRows<T>(
   const page = Math.min(lastPage, Math.max(0, pageIndex));
   const start = page * size;
   return rows.slice(start, start + size);
+}
+
+export function detectUuidColumnVersion(
+  data: QueryResponse,
+  columnIndex: number,
+): 4 | 7 | undefined {
+  if (data.columns?.[columnIndex]?.data_type !== "Blob") return undefined;
+
+  let detected: 4 | 7 | undefined;
+  for (const row of data.rows) {
+    const value = row[columnIndex];
+    if (value === "Null") continue;
+    if (value === undefined || !("Blob" in value)) return undefined;
+
+    const uuid = tryFormatUuidBlob(value.Blob);
+    if (!uuid || (detected !== undefined && detected !== uuid.version)) {
+      return undefined;
+    }
+    detected = uuid.version;
+  }
+  return detected;
 }
 
 export function resultPresentation(
@@ -372,11 +393,19 @@ function ResultViewImpl(props: {
   function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
+      const uuidVersion = detectUuidColumnVersion(data, idx);
+      const type = uuidVersion ? `UUIDv${uuidVersion}` : col.data_type;
 
-      const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
+      const header = `${col.name} [${type}${notNull ? "" : "?"}]`;
       return {
         accessorFn: (row: ArrayRecord) => {
-          return sqlValueToString(row[idx]);
+          const value = row[idx];
+          if (uuidVersion && value !== "Null" && "Blob" in value) {
+            return (
+              tryFormatUuidBlob(value.Blob)?.value ?? sqlValueToString(value)
+            );
+          }
+          return sqlValueToString(value);
         },
         header,
       };
