@@ -1,6 +1,7 @@
 import {
   createMemo,
   createSignal,
+  For,
   JSX,
   Match,
   Show,
@@ -10,10 +11,8 @@ import {
 import { useSearchParams } from "@solidjs/router";
 import {
   TbOutlineRefresh,
-  TbOutlineCrown,
   TbOutlineClipboardCopy,
   TbOutlineCookie,
-  TbOutlineQuestionMark,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
@@ -46,6 +45,7 @@ import { Header } from "@/components/Header";
 import { Table, buildTable } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { AddUser } from "@/components/accounts/AddUser";
 import {
   buildTextFormField,
@@ -53,6 +53,7 @@ import {
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 import { assets } from "@/components/settings/AuthSettings";
+import { OAuthProviderId } from "@proto/config";
 
 import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
@@ -62,111 +63,205 @@ import { formatSortingAsOrder } from "@/lib/list";
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 
+type AccountIdentity = { primary: string; secondary?: string };
+
+type AccountStatus = {
+  label: string;
+  variant: "default" | "success" | "warning";
+};
+
+export function accountIdentity(user: UserJson): AccountIdentity {
+  const identities = [user.email, user.username, user.unverified_email].filter(
+    (value): value is string => value !== null && value !== "",
+  );
+  const primary = identities[0] ?? "Unnamed account";
+  const secondary = identities.find((value) => value !== primary);
+
+  return { primary, secondary };
+}
+
+export function accountStatuses(user: UserJson): AccountStatus[] {
+  const statuses: AccountStatus[] = [];
+
+  if (user.admin) {
+    statuses.push({ label: "Admin", variant: "default" });
+  }
+  statuses.push(
+    user.unverified_email
+      ? { label: "Pending verification", variant: "warning" }
+      : { label: "Verified", variant: "success" },
+  );
+
+  return statuses;
+}
+
+const providerLabels = new Map<number, string>([
+  [OAuthProviderId.TEST, "Test"],
+  [OAuthProviderId.OIDC0, "OIDC"],
+  [OAuthProviderId.APPLE, "Apple"],
+  [OAuthProviderId.DISCORD, "Discord"],
+  [OAuthProviderId.GITLAB, "GitLab"],
+  [OAuthProviderId.GOOGLE, "Google"],
+  [OAuthProviderId.FACEBOOK, "Facebook"],
+  [OAuthProviderId.MICROSOFT, "Microsoft"],
+  [OAuthProviderId.TWITCH, "Twitch"],
+  [OAuthProviderId.YANDEX, "Yandex"],
+  [OAuthProviderId.GITHUB, "GitHub"],
+]);
+
+export function accountProviderLabel(providerId: bigint): string {
+  if (providerId === 0n) {
+    return "Password";
+  }
+
+  return providerLabels.get(Number(providerId)) ?? `OAuth ${providerId}`;
+}
+
+export function formatAccountTime(
+  timestampSeconds: bigint,
+  nowMs: number,
+  locale?: string,
+): string {
+  const differenceMs = Number(timestampSeconds) * 1000 - nowMs;
+  const differenceSeconds = differenceMs / 1000;
+  const absoluteSeconds = Math.abs(differenceSeconds);
+
+  if (absoluteSeconds < 60) {
+    return "just now";
+  }
+
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["minute", 60],
+    ["hour", 60 * 60],
+    ["day", 60 * 60 * 24],
+    ["month", 60 * 60 * 24 * 30],
+    ["year", 60 * 60 * 24 * 365],
+  ];
+  let unit: Intl.RelativeTimeFormatUnit = "minute";
+  let unitSeconds = 60;
+
+  for (const [candidate, seconds] of units) {
+    if (absoluteSeconds >= seconds) {
+      unit = candidate;
+      unitSeconds = seconds;
+    }
+  }
+
+  return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(
+    Math.round(differenceSeconds / unitSeconds),
+    unit,
+  );
+}
+
+export function shortAccountId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+}
+
 function buildColumns(): ColumnDef<UserJson>[] {
-  // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
-      header: () => {
-        return <div class="ml-3">id</div>;
-      },
-      accessorKey: "id",
-      size: 350,
+      header: "Account",
+      accessorKey: "account",
+      minSize: 260,
       cell: (ctx) => {
         const { id } = ctx.row.original;
-        return (
-          <div class="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                copyToClipboard(id, true);
-              }}
-            >
-              <TbOutlineClipboardCopy />
-            </Button>
+        const identity = accountIdentity(ctx.row.original);
 
-            <span>{id}</span>
+        return (
+          <div class="flex min-w-0 items-center gap-2">
+            <div class="min-w-0">
+              <div class="truncate font-medium">{identity.primary}</div>
+              <Show when={identity.secondary}>
+                <div class="text-muted-foreground truncate text-sm">
+                  {identity.secondary}
+                </div>
+              </Show>
+              <div class="text-muted-foreground flex items-center gap-1 font-mono text-xs">
+                <span>{shortAccountId(id)}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-6"
+                  aria-label="Copy account ID"
+                  title="Copy account ID"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(id, true);
+                  }}
+                >
+                  <TbOutlineClipboardCopy size={14} />
+                </Button>
+              </div>
+            </div>
           </div>
         );
       },
     },
     {
-      accessorKey: "username",
-      minSize: 180,
-      cell: (ctx) => {
-        return (
-          <span class="w-full text-wrap">
-            {ctx.row.original.username ?? "NULL"}
-          </span>
-        );
-      },
-    },
-    {
-      header: "email (? = unverified)",
-      accessorKey: "email",
-      minSize: 260,
-      cell: (ctx) => {
-        const { email, unverified_email } = ctx.row.original;
-
-        return (
-          <Switch>
-            <Match when={unverified_email}>
-              <div class="flex w-full items-center gap-2">
-                <TbOutlineQuestionMark />
-
-                <span class="text-muted-foreground w-[calc(100%-24px)] text-wrap">
-                  {unverified_email}
-                </span>
-              </div>
-            </Match>
-
-            <Match when={true}>{email}</Match>
-          </Switch>
-        );
-      },
-    },
-    {
-      accessorKey: "admin",
-      size: 60,
+      header: "Status",
+      accessorKey: "status",
+      enableSorting: false,
       cell: (ctx) => (
-        <div class="px-2">
-          {ctx.row.original.admin ? <TbOutlineCrown size={18} /> : null}
+        <div class="flex flex-wrap gap-1">
+          <For each={accountStatuses(ctx.row.original)}>
+            {(status) => <Badge variant={status.variant}>{status.label}</Badge>}
+          </For>
         </div>
       ),
     },
     {
-      header: "OAuth",
-      size: 60,
+      header: "Provider",
+      accessorKey: "provider",
       enableSorting: false,
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
+        const providerLabel = accountProviderLabel(providerId);
         const oauthAsset =
           providerId > 0n ? assets.get(Number(providerId)) : undefined;
 
         return (
-          <Switch>
-            <Match when={oauthAsset !== undefined}>
-              <div class="px-2">
-                <img class="size-[20px]" src={oauthAsset!} />
-              </div>
-            </Match>
-
-            <Match when={providerId > 0n}>{`${providerId}`}</Match>
-          </Switch>
+          <div class="flex items-center gap-2">
+            <Show when={oauthAsset}>
+              <img
+                class="size-5"
+                src={oauthAsset}
+                alt={providerLabel}
+                title={providerLabel}
+              />
+            </Show>
+            <span>{providerLabel}</span>
+          </div>
         );
       },
     },
     {
-      header: "updated",
+      header: "Created",
+      accessorKey: "created",
       cell: (ctx) => {
-        return new Date(Number(ctx.row.original.updated) * 1000).toUTCString();
+        const timestamp = ctx.row.original.created;
+        return (
+          <time
+            dateTime={new Date(Number(timestamp) * 1000).toISOString()}
+            title={new Date(Number(timestamp) * 1000).toUTCString()}
+          >
+            {formatAccountTime(timestamp, Date.now())}
+          </time>
+        );
       },
     },
     {
-      header: "created",
+      header: "Last updated",
+      accessorKey: "updated",
       cell: (ctx) => {
-        return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
+        const timestamp = ctx.row.original.updated;
+        return (
+          <time
+            dateTime={new Date(Number(timestamp) * 1000).toISOString()}
+            title={new Date(Number(timestamp) * 1000).toUTCString()}
+          >
+            {formatAccountTime(timestamp, Date.now())}
+          </time>
+        );
       },
     },
   ];
