@@ -45,6 +45,9 @@ describe("Table presentation", () => {
     ));
     const grid = result.container.querySelector("table");
     const pagination = result.getByText(/page 1 of 1/).closest("div.flex");
+    expect(
+      result.getByRole("button", { name: "Go to last page" }),
+    ).toBeInTheDocument();
 
     expect(grid).not.toBeNull();
     expect(

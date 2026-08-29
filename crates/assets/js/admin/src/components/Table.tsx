@@ -576,7 +576,7 @@ function PaginationControl<TData>(props: {
           <Button
             aria-label="Go to first page"
             variant="outline"
-            class="flex size-8 p-0"
+            class="hidden size-8 p-0 sm:flex"
             onClick={() => table().setPageIndex(0)}
             disabled={!table().getCanPreviousPage()}
           >
@@ -643,6 +643,30 @@ function PaginationControl<TData>(props: {
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="m9 6l6 6l-6 6"
+              />
+            </svg>
+          </Button>
+
+          <Button
+            aria-label="Go to last page"
+            variant="outline"
+            class="hidden size-8 p-0 sm:flex"
+            onClick={() => table().setPageIndex(table().getPageCount() - 1)}
+            disabled={!table().getCanNextPage()}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="size-4"
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+            >
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="m13 7l5 5l-5 5M7 7l5 5l-5 5"
               />
             </svg>
           </Button>

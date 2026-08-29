@@ -368,7 +368,7 @@ function TableHeaderRightHandButtons(props: {
                             disabled={!satisfiesRecordApi()}
                             {...props}
                           >
-                            API
+                            <span class="hidden sm:inline">Configure </span>API
                             <Checkbox
                               disabled={!satisfiesRecordApi()}
                               checked={hasRecordApi()}
