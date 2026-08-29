@@ -7,12 +7,14 @@ import {
 } from "@/components/tables/TablesPage";
 import {
   normalizeWorkspaceTab,
+  tableApiSummary,
   tableStructureCounts,
   workspaceTabSearchParams,
 } from "@/components/tables/TablePane";
 
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { Table } from "@bindings/Table";
+import { Config } from "@proto/config";
 
 function table(name: string, databaseSchema?: string | null): Table {
   return {
@@ -108,6 +110,48 @@ describe("Tables workspace", () => {
       columns: 1,
       indexes: 1,
       triggers: 1,
+    });
+  });
+
+  it("summarizes Record API support and configured names", () => {
+    const users = table("users", "auth");
+    users.strict = true;
+    users.columns = [
+      {
+        name: "id",
+        type_name: "INTEGER",
+        data_type: "Integer",
+        affinity_type: "Integer",
+        options: [
+          {
+            Unique: { is_primary: true, conflict_clause: null },
+          },
+        ],
+      },
+    ];
+
+    expect(tableApiSummary(users, [users], undefined)).toMatchObject({
+      supported: true,
+      enabled: false,
+      names: [],
+      errors: [],
+    });
+
+    const config = Config.fromPartial({
+      recordApis: [{ name: "users", tableName: "auth.users" }],
+    });
+    expect(tableApiSummary(users, [users], config)).toMatchObject({
+      supported: true,
+      enabled: true,
+      names: ["users"],
+    });
+
+    const virtual = table("search_index");
+    virtual.virtual_table = true;
+    expect(tableApiSummary(virtual, [virtual], undefined)).toMatchObject({
+      supported: false,
+      enabled: false,
+      errors: ["Virtual tables are not supported"],
     });
   });
 

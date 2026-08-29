@@ -14,6 +14,7 @@ import {
   TbOutlineTrash,
   TbOutlineColumns,
   TbOutlineChevronRight,
+  TbOutlineCopy,
   TbOutlineDotsVertical,
 } from "solid-icons/tb";
 import { A, useSearchParams } from "@solidjs/router";
@@ -33,6 +34,7 @@ import { urlSafeBase64Decode } from "trailbase";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -69,6 +71,7 @@ import { FilterBar } from "@/components/FilterBar";
 import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
 import {
   RecordApiSettingsForm,
+  getRecordApis,
   hasRecordApis,
 } from "@/components/tables/RecordApiSettings";
 import { SafeSheet } from "@/components/SafeSheet";
@@ -122,6 +125,7 @@ import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
+import type { Config } from "@proto/config";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
@@ -295,6 +299,29 @@ function validateTableOrViewRecordApiRequirements(
     case "view":
       return validateViewRecordApiRequirements(table as View, allTables);
   }
+}
+
+export function tableApiSummary(
+  table: Table | View,
+  allTables: Table[],
+  config: Config | undefined,
+): {
+  supported: boolean;
+  enabled: boolean;
+  names: string[];
+  errors: string[];
+} {
+  const errors = validateTableOrViewRecordApiRequirements(table, allTables);
+  const names = getRecordApis(config, table.name)
+    .map((api) => api.name)
+    .filter((name): name is string => Boolean(name));
+
+  return {
+    supported: errors.length === 0,
+    enabled: names.length > 0,
+    names,
+    errors,
+  };
 }
 
 function TableHeaderRightHandButtons(props: {
@@ -1291,6 +1318,120 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   );
 }
 
+function ApiTab(props: { table: Table | View; allTables: Table[] }) {
+  const config = createConfigQuery();
+  const summary = createMemo(() =>
+    tableApiSummary(props.table, props.allTables, config.data?.config),
+  );
+
+  const copyEndpoint = async (endpoint: string) => {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      showToast({
+        title: "Copied",
+        description: endpoint,
+        variant: "success",
+      });
+    } catch (err) {
+      showToast({
+        title: "Copy failed",
+        description: `${err}`,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <div class="flex max-w-5xl flex-col gap-4">
+      <section class="bg-card rounded-md border p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-semibold">Record API</h2>
+              <Badge variant={summary().enabled ? "success" : "outline"}>
+                {summary().enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <p class="text-muted-foreground mt-1 text-sm">
+              Expose typed CRUD endpoints for this database resource.
+            </p>
+          </div>
+          <span class="text-muted-foreground font-mono text-xs">
+            {prettyFormatQualifiedName(props.table.name)}
+          </span>
+        </div>
+      </section>
+
+      <Show
+        when={summary().supported}
+        fallback={
+          <Callout variant="warning">
+            <CalloutTitle>Record API unavailable</CalloutTitle>
+            <CalloutContent>
+              <ul class="list-inside list-disc text-sm">
+                <For each={summary().errors}>{(error) => <li>{error}</li>}</For>
+              </ul>
+            </CalloutContent>
+          </Callout>
+        }
+      >
+        <Show
+          when={summary().names.length > 0}
+          fallback={
+            <div class="rounded-md border border-dashed p-8 text-center">
+              <p class="font-medium">No Record API configured</p>
+              <p class="text-muted-foreground mt-1 text-sm">
+                Use Configure API above to choose permissions and access rules.
+              </p>
+            </div>
+          }
+        >
+          <section aria-labelledby="api-endpoints" class="rounded-md border">
+            <div class="border-b px-4 py-3">
+              <h3 id="api-endpoints" class="font-medium">
+                Configured endpoints
+              </h3>
+              <p class="text-muted-foreground mt-1 text-sm">
+                Base paths for APIs backed by this resource.
+              </p>
+            </div>
+            <div class="divide-y">
+              <For each={summary().names}>
+                {(name) => {
+                  const endpoint = `/api/records/v1/${name}`;
+                  return (
+                    <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline">GET</Badge>
+                          <Badge variant="outline">POST</Badge>
+                          <Badge variant="outline">PATCH</Badge>
+                          <Badge variant="outline">DELETE</Badge>
+                        </div>
+                        <code class="mt-2 block truncate text-sm">
+                          {endpoint}
+                        </code>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyEndpoint(endpoint)}
+                      >
+                        <TbOutlineCopy />
+                        Copy path
+                      </Button>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </section>
+        </Show>
+      </Show>
+    </div>
+  );
+}
+
 export type WorkspaceTab = "data" | "structure" | "api";
 
 export function normalizeWorkspaceTab(value: string | undefined): WorkspaceTab {
@@ -1518,12 +1659,10 @@ export function TablePane(props: {
         </TabsContent>
 
         <TabsContent value="api" class="m-0 p-4">
-          <div class="rounded-md border p-4">
-            <h2 class="text-base font-semibold">Record API</h2>
-            <p class="text-muted-foreground mt-1 text-sm">
-              Review and configure the APIs exposed for this resource.
-            </p>
-          </div>
+          <ApiTab
+            table={selectedSchema()}
+            allTables={props.schemas.tables.map(([table]) => table)}
+          />
         </TabsContent>
       </Tabs>
     </div>
