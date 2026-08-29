@@ -118,7 +118,7 @@ const labelVariants = cva(
       variant: {
         label: "data-[invalid]:text-destructive",
         description: "font-normal text-muted-foreground",
-        error: "text-xs text-destructive"
+        error: "text-xs text-error-foreground"
       }
     },
     defaultVariants: {

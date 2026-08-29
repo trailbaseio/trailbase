@@ -9,7 +9,6 @@ export function applyResolvedTheme(theme: ResolvedTheme) {
 
   root.classList.toggle("dark", theme === "dark");
   root.setAttribute("data-kb-theme", theme);
-  $themePreference.set(theme);
 }
 
 export function currentTheme(): ResolvedTheme {
@@ -27,7 +26,8 @@ export function initializeTheme() {
 
   // Set theme based on stored preference (i.e. user selected it before) or
   // system-wide preference.
-  applyResolvedTheme($themePreference.get() ?? systemsPreferredTheme());
+  const preference = $themePreference.get();
+  applyResolvedTheme(preference ?? systemsPreferredTheme());
 }
 
 export function createTheme(): Accessor<ResolvedTheme> {

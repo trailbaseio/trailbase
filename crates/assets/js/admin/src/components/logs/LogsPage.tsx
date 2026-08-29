@@ -167,7 +167,7 @@ const columns: ColumnDef<LogJson>[] = [
       return (
         <Show when={userId()}>
           <div
-            class="hover:text-gray-600"
+            class="hover:text-muted-foreground"
             onClick={() => copyToClipboard(userId() ?? "")}
           >
             {userId()}
@@ -640,7 +640,9 @@ function MapOverlay(props: {
           </Match>
 
           <Match when={true}>
-            <p class="min-h-4 text-wrap text-gray-600">{"hover country"}</p>
+            <p class="text-muted-foreground min-h-4 text-wrap">
+              {"hover country"}
+            </p>
           </Match>
         </Switch>
       </div>

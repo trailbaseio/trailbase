@@ -39,7 +39,12 @@ import {
 import { Version } from "@/components/Version";
 
 import { createSystemInfoQuery } from "@/lib/api/info";
-import { createTheme, currentTheme, applyResolvedTheme } from "@/lib/theme";
+import {
+  createTheme,
+  currentTheme,
+  applyResolvedTheme,
+  $themePreference,
+} from "@/lib/theme";
 
 import logo from "@/assets/logo_104.webp";
 
@@ -268,7 +273,9 @@ export function SwitchThemeButton(props: { horizontal: boolean }) {
       type="button"
       class={navbarIconStyle}
       onClick={() => {
-        applyResolvedTheme(currentTheme() === "dark" ? "light" : "dark");
+        const nextTheme = currentTheme() === "dark" ? "light" : "dark";
+        applyResolvedTheme(nextTheme);
+        $themePreference.set(nextTheme);
       }}
       aria-label={
         theme() === "dark" ? "Switch to light mode" : "Switch to dark mode"

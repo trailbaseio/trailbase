@@ -22,6 +22,11 @@ describe("theme", () => {
     expect(document.documentElement.dataset.kbTheme).toBe("dark");
   });
 
+  it("does not persist the system preference", () => {
+    initializeTheme();
+    expect($themePreference.get()).toBeUndefined();
+  });
+
   it("uses the saved preference before the system preference", () => {
     $themePreference.set("light");
     initializeTheme();
