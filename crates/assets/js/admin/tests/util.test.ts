@@ -1,9 +1,21 @@
-import { test, describe } from "vitest";
+import { afterEach, test, describe, expect, vi } from "vitest";
 import { urlSafeBase64Encode } from "trailbase";
 
 import { buildListSearchParams, parseFilter } from "@/lib/list";
 import { urlSafeBase64EncodeStream } from "@/lib/base64";
 import { intPattern, uintPattern, floatPattern } from "@/components/FormFields";
+import { copyToClipboard } from "@/lib/utils";
+
+describe("clipboard", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("surfaces clipboard write failures", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard failed"));
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+    await expect(copyToClipboard("secret")).rejects.toThrow("clipboard failed");
+  });
+});
 
 describe("filterParser", () => {
   test("basic", ({ expect }) => {

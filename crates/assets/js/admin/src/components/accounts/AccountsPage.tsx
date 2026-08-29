@@ -345,7 +345,10 @@ function DeleteUserButton(props: {
 
       <Button
         class="bg-destructive text-destructive-foreground"
-        onClick={() => setDialogOpen(true)}
+        onClick={() => {
+          setError(undefined);
+          setDialogOpen(true);
+        }}
       >
         Delete
       </Button>

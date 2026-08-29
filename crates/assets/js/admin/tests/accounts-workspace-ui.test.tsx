@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@solidjs/testing-library";
 import * as Solid from "solid-js";
 import { createEffect } from "solid-js";
@@ -355,7 +356,9 @@ describe("AccountsPage integration", () => {
     await fireEvent.keyDown(row!, { key: "Enter" });
     const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
     await fireEvent.click(deleteButtons[0]);
-    const confirm = screen.getByRole("button", { name: "Delete" });
+    const confirm = within(
+      screen.getByRole("dialog", { name: "Confirmation" }),
+    ).getByRole("button", { name: "Delete" });
     await fireEvent.click(confirm);
     expect(confirm).toBeDisabled();
     expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled();
