@@ -11,7 +11,7 @@
   --background: hsl(210 40% 98%);
   --foreground: hsl(215 28% 17%);
   --muted: hsl(214 32% 94%);
-  --muted-foreground: hsl(215 16% 47%);
+  --muted-foreground: hsl(215 16% 42%);
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(215 28% 17%);
   --border: hsl(214 24% 86%);
@@ -27,9 +27,9 @@
   --destructive: hsl(0 72% 51%);
   --destructive-foreground: hsl(0 0% 100%);
   --info: hsl(204 94% 94%);
-  --info-foreground: hsl(199 89% 35%);
+  --info-foreground: hsl(199 89% 30%);
   --success: hsl(149 60% 91%);
-  --success-foreground: hsl(160 70% 30%);
+  --success-foreground: hsl(160 70% 25%);
   --warning: hsl(48 96% 89%);
   --warning-foreground: hsl(25 80% 35%);
   --error: hsl(0 80% 94%);

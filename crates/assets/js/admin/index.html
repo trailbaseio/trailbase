@@ -10,6 +10,18 @@
     <link rel="icon" type="image/svg+xml" href="/src/assets/favicon.svg" />
 
     <title>TrailBase Admin</title>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem("theme:selected");
+          const theme = stored ? JSON.parse(stored) : undefined;
+          const resolved = theme ??
+            (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+          if (resolved === "dark") document.documentElement.classList.add("dark");
+          document.documentElement.setAttribute("data-kb-theme", resolved);
+        } catch (_) {}
+      })();
+    </script>
   </head>
 
   <body>
