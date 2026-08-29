@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, cleanup } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@antv/x6", () => ({ Graph: class {} }));
@@ -77,6 +78,43 @@ describe("ERD toolbar", () => {
     await fireEvent.input(search, { target: { value: "missing" } });
     expect(search).not.toHaveAttribute("aria-activedescendant");
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
+  });
+
+  it("clamps the active option when reactive results shrink or change", async () => {
+    const [currentEntities, setEntities] = createSignal(entities);
+    render(() => (
+      <ErdToolbar
+        entities={currentEntities()}
+        showTables={true}
+        showViews={true}
+        onShowTablesChange={vi.fn()}
+        onShowViewsChange={vi.fn()}
+        onSelect={vi.fn()}
+        onZoomIn={vi.fn()}
+        onZoomOut={vi.fn()}
+        onFit={vi.fn()}
+        onReset={vi.fn()}
+      />
+    ));
+    const search = screen.getByRole("combobox", { name: /search entities/i });
+    await fireEvent.input(search, { target: { value: "main" } });
+    await fireEvent.keyDown(search, { key: "ArrowDown" });
+    await fireEvent.keyDown(search, { key: "ArrowDown" });
+    await fireEvent.keyDown(search, { key: "ArrowDown" });
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      "erd-search-option-main.users",
+    );
+
+    setEntities([entities[0]]);
+    expect(search).toHaveAttribute(
+      "aria-activedescendant",
+      "erd-search-option-main.posts",
+    );
+    expect(screen.getByRole("option")).toHaveAttribute("aria-selected", "true");
+
+    setEntities([]);
+    expect(search).not.toHaveAttribute("aria-activedescendant");
   });
 
   it("closes search and clears selection on Escape", async () => {
