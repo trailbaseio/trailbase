@@ -127,7 +127,10 @@ export function formatAccountTime(
   const absoluteSeconds = Math.abs(differenceSeconds);
 
   if (absoluteSeconds < 60) {
-    return "just now";
+    return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(
+      Math.round(differenceSeconds),
+      "second",
+    );
   }
 
   const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
@@ -157,11 +160,11 @@ export function shortAccountId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
-function buildColumns(): ColumnDef<UserJson>[] {
+export function buildColumns(): ColumnDef<UserJson>[] {
   return [
     {
       header: "Account",
-      accessorKey: "account",
+      accessorKey: "id",
       minSize: 260,
       cell: (ctx) => {
         const { id } = ctx.row.original;

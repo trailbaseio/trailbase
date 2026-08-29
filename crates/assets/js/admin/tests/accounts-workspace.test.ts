@@ -4,6 +4,7 @@ import {
   accountIdentity,
   accountProviderLabel,
   accountStatuses,
+  buildColumns,
   formatAccountTime,
   shortAccountId,
 } from "@/components/accounts/AccountsPage";
@@ -60,5 +61,18 @@ describe("Accounts workspace presentation", () => {
     expect(formatAccountTime(1_700_000_000n, 1_700_003_600_000, "en")).toBe(
       "1 hour ago",
     );
+  });
+
+  it("uses the requested locale for sub-minute relative times", () => {
+    expect(formatAccountTime(1_700_000_030n, 1_700_000_000_000, "fr")).toBe(
+      "dans 30 secondes",
+    );
+  });
+
+  it("sorts the derived account column by the real user ID field", () => {
+    expect(buildColumns()[0]).toMatchObject({
+      header: "Account",
+      accessorKey: "id",
+    });
   });
 });
