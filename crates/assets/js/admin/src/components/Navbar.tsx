@@ -86,7 +86,10 @@ export function Navbar() {
   return (
     <>
       <SidebarHeader>
-        <a href={`${BASE}/`} onClick={(e) => onClick(e, `${BASE}/`)}>
+        <a
+          href={`${BASE}/`}
+          onClick={(e: MouseEvent) => onClick(e, `${BASE}/`)}
+        >
           <img src={logo} width="42" alt="Logo" />
         </a>
       </SidebarHeader>
@@ -110,7 +113,7 @@ export function Navbar() {
                           href={pathname}
                           isActive={active()}
                           tooltip={text}
-                          onClick={(e) => onClick(e, pathname)}
+                          onClick={(e: MouseEvent) => onClick(e, pathname)}
                         >
                           <Icon />
                           <span>{text}</span>
@@ -191,7 +194,7 @@ export function DirtyDialog(props: {
   );
 }
 
-export function SwitchThemeButton(props: { horizontal: boolean }) {
+export function SwitchThemeButton(_props: { horizontal: boolean }) {
   const theme = createTheme();
   return (
     <button

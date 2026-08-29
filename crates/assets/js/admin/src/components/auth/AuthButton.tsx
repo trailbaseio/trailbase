@@ -16,7 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { navbarIconStyle } from "@/components/Navbar";
 import { Avatar, Profile } from "@/components/auth/Profile";
 import { TotpToggleButton } from "@/components/auth/Totp";
 
@@ -32,7 +31,10 @@ export function AuthButton(props: { iconSize: number }) {
 
   return (
     <Dialog id="auth-dialog" open={open()} onOpenChange={setOpen}>
-      <button class={navbarIconStyle} onClick={() => setOpen(true)}>
+      <button
+        class="hover:bg-accent rounded-full p-2"
+        onClick={() => setOpen(true)}
+      >
         <Avatar user={user()} size={props.iconSize} />
       </button>
 
