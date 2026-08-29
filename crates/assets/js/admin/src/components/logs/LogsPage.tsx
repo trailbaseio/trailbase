@@ -606,7 +606,7 @@ function MapOverlay(props: {
   return (
     <>
       {/* request scale */}
-      <div class="absolute top-2 left-2 w-[100px] rounded-sm bg-white/70 p-1 text-sm dark:bg-transparent">
+      <div class="absolute top-2 left-2 w-[100px] rounded-sm bg-background/70 p-1 text-sm">
         <div class="flex h-[20px] w-full">
           <div class="h-full w-px bg-gray-600" />
           <div class="to-primary flex h-full grow justify-center bg-linear-to-r from-emerald-100" />
@@ -625,7 +625,7 @@ function MapOverlay(props: {
         </div>
 
         <Show when={false}>
-          <div class="bg-white">
+          <div class="bg-background">
             <div class="h-[20px] w-[20] bg-emerald-100" />
             <div class="bg-primary h-[20px] w-[20]" />
           </div>
@@ -633,7 +633,7 @@ function MapOverlay(props: {
       </div>
 
       {/* hover label */}
-      <div class="absolute bottom-2 left-2 min-w-[120px] shrink rounded-sm bg-white/70 p-1 text-center text-sm dark:bg-transparent">
+      <div class="absolute bottom-2 left-2 min-w-[120px] shrink rounded-sm bg-background/70 p-1 text-center text-sm">
         <Switch>
           <Match when={props.mapDialog !== undefined}>
             <p class="min-h-4 text-wrap">{props.mapDialog}</p>

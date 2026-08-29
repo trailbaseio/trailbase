@@ -21,7 +21,7 @@ export function Header(props: {
           </div>
         </Show>
 
-        <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
+        <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
           <div class="min-w-0">
             <h1 class="m-0 truncate text-base font-semibold sm:text-lg">
               <span class="text-primary">{props.title}</span>
@@ -32,7 +32,7 @@ export function Header(props: {
               </Show>
             </h1>
             <Show when={props.description}>
-              <p class="text-muted-foreground m-0 hidden text-xs sm:block">
+              <p class="text-muted-foreground m-0 text-xs">
                 {props.description}
               </p>
             </Show>
@@ -44,7 +44,7 @@ export function Header(props: {
 
         {/* right */}
         <Show when={props.right !== undefined}>
-          <div class="flex w-full grow justify-end sm:w-auto">
+          <div class="flex w-full grow flex-wrap justify-end gap-2 sm:w-auto">
             {props.right}
           </div>
         </Show>
