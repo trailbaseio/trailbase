@@ -1,7 +1,47 @@
 import { fireEvent, render } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EditorSidebar } from "@/components/editor/EditorPage";
+import { EditorSidebar, QueryActionBar } from "@/components/editor/EditorPage";
 import { SidebarProvider } from "@/components/ui/sidebar";
+
+describe("query actions", () => {
+  it("exposes clear save and execute actions", async () => {
+    const save = vi.fn();
+    const execute = vi.fn();
+    const result = render(() => (
+      <QueryActionBar
+        busy={false}
+        mobile={false}
+        onSave={save}
+        onExecute={execute}
+      />
+    ));
+
+    await fireEvent.click(result.getByRole("button", { name: "Save query" }));
+    await fireEvent.click(
+      result.getByRole("button", { name: "Execute query" }),
+    );
+    expect(save).toHaveBeenCalledOnce();
+    expect(execute).toHaveBeenCalledOnce();
+    result.unmount();
+  });
+
+  it("prevents duplicate execution while running", () => {
+    const result = render(() => (
+      <QueryActionBar
+        busy
+        mobile={false}
+        onSave={vi.fn()}
+        onExecute={vi.fn()}
+      />
+    ));
+
+    expect(
+      result.getByRole("button", { name: "Execute query" }),
+    ).toBeDisabled();
+    expect(result.getByText("Running…")).toBeInTheDocument();
+    result.unmount();
+  });
+});
 
 describe("saved query explorer", () => {
   beforeEach(() => {

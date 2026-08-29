@@ -32,7 +32,7 @@ import { minimalSetup } from "codemirror";
 import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
 import { IconButton } from "@/components/IconButton";
-import { Header } from "@/components/Header";
+import { Spinner } from "@/components/Spinner";
 import { Callout } from "@/components/ui/callout";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -50,7 +50,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   useSidebar,
   Sidebar,
@@ -66,11 +65,6 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -426,7 +420,7 @@ function HelpDialog() {
   return (
     <Dialog id="edit-help">
       <DialogTrigger>
-        <IconButton>
+        <IconButton tooltip="SQL editor help">
           <TbOutlineHelp />
         </IconButton>
       </DialogTrigger>
@@ -583,6 +577,38 @@ function RenameDialog(props: {
   );
 }
 
+export function QueryActionBar(props: {
+  busy: boolean;
+  mobile: boolean;
+  onSave: () => void;
+  onExecute: () => void;
+}) {
+  return (
+    <div class="flex items-center justify-end gap-2">
+      <Button variant="outline" aria-label="Save query" onClick={props.onSave}>
+        {props.mobile ? "Save" : "Save (Ctrl/⌘+S)"}
+      </Button>
+      <Button
+        aria-label="Execute query"
+        disabled={props.busy}
+        onClick={props.onExecute}
+      >
+        <Show
+          when={!props.busy}
+          fallback={
+            <>
+              <Spinner class="size-4" size={16} />
+              Running…
+            </>
+          }
+        >
+          {props.mobile ? "Execute" : "Execute (Ctrl/⌘+Enter)"}
+        </Show>
+      </Button>
+    </div>
+  );
+}
+
 type DirtyDialogState = {
   nextSelected: number;
 };
@@ -606,6 +632,7 @@ function EditorPanel(props: {
   const config = createConfigQuery();
 
   const isMobile = createIsMobile();
+  const { state: explorerState } = useSidebar();
 
   const databases = () =>
     config.data?.config?.databases
@@ -672,7 +699,7 @@ function EditorPanel(props: {
     const newEditorState = (contents: string) => {
       const customKeymap = keymap.of([
         {
-          key: "Ctrl-Enter",
+          key: "Mod-Enter",
           run: () => {
             execute();
             return true;
@@ -680,7 +707,7 @@ function EditorPanel(props: {
           preventDefault: true,
         },
         {
-          key: "Ctrl-s",
+          key: "Mod-s",
           run: () => {
             saveScript();
             return true;
@@ -769,12 +796,31 @@ function EditorPanel(props: {
         save={saveScript}
       />
 
-      <Header
-        title="Editor"
-        leading={<SidebarTrigger />}
-        titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-        right={
-          <div class="flex items-center">
+      <header class="bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm">
+        <div class="flex min-h-14 flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
+          <div class="flex min-w-0 items-center gap-2">
+            <SidebarTrigger
+              aria-label={
+                explorerState() === "collapsed"
+                  ? "Show saved queries"
+                  : "Hide saved queries"
+              }
+            />
+            <div class="flex min-w-0 items-center gap-2 text-sm">
+              <span class="text-muted-foreground hidden sm:inline">
+                SQL Editor
+              </span>
+              <span class="text-muted-foreground hidden sm:inline">›</span>
+              <span class="truncate font-semibold">{props.script.name}</span>
+              <Show when={dirty()}>
+                <span class="bg-warning/15 text-warning-foreground rounded-full px-2 py-0.5 text-xs">
+                  Unsaved
+                </span>
+              </Show>
+            </div>
+          </div>
+
+          <div class="flex min-w-0 items-center gap-2">
             <Select<string>
               multiple={true}
               options={[...(databases() ?? [])]}
@@ -784,89 +830,64 @@ function EditorPanel(props: {
               )}
               onChange={(value: string[]) => setAttachedDbs(value)}
             >
-              <div class="flex items-center gap-2">
-                Attached
-                <SelectTrigger>
-                  <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
-                    {(state) => {
-                      const selected = state.selectedOptions();
-                      if (selected.length === 0) {
-                        // FIXME: state callback never gets called when empty.
-                        return "none";
-                      }
-                      return selected.join(", ");
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-              </div>
-
+              <SelectTrigger aria-label="Attached databases">
+                <SelectValue class="max-w-40 min-w-16 text-ellipsis">
+                  {(state) => {
+                    const selected = state.selectedOptions();
+                    return selected.length === 0
+                      ? "No databases"
+                      : selected.join(", ");
+                  }}
+                </SelectValue>
+              </SelectTrigger>
               <SelectContent />
             </Select>
 
             <HelpDialog />
           </div>
-        }
-      />
+        </div>
+      </header>
 
-      <div class="mx-4 my-2 flex flex-col gap-2">
+      <div class="flex flex-col gap-3 p-3 sm:p-4">
         {(uiState().showMigrationWarning ?? true) && (
-          <Callout
-            class="flex items-center text-sm hover:opacity-80"
-            onClick={() => {
-              $uiState.set({
-                ...uiState(),
-                showMigrationWarning: false,
-              });
-            }}
-          >
-            <p>{migrationWarning}</p>
-
-            <div class="p-2">
-              <TbOutlineX size={20} />
-            </div>
+          <Callout class="flex items-start justify-between gap-3 text-sm">
+            <p class="leading-relaxed">{migrationWarning}</p>
+            <Button
+              variant="ghost"
+              size="icon"
+              class="size-7 shrink-0"
+              aria-label="Dismiss migration warning"
+              onClick={() => {
+                $uiState.set({
+                  ...uiState(),
+                  showMigrationWarning: false,
+                });
+              }}
+            >
+              <TbOutlineX />
+            </Button>
           </Callout>
         )}
 
-        {/* Editor */}
-        <div class="min-h-24 shrink" ref={ref} />
+        <div
+          class="min-h-64 overflow-hidden rounded-md border [&_.cm-editor]:min-h-64"
+          ref={ref}
+        />
 
-        <div class="flex items-center justify-between">
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button variant="secondary" onClick={() => saveScript()}>
-                <Show when={!isMobile()} fallback="Save">
-                  Save (Ctrl+S)
-                </Show>
-              </Button>
-            </TooltipTrigger>
-
-            <TooltipContent>
-              Save script to browser local storage.
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button variant="destructive" onClick={execute}>
-                <Show when={!isMobile()} fallback="Execute">
-                  Execute (Ctrl+Enter)
-                </Show>
-              </Button>
-            </TooltipTrigger>
-
-            <TooltipContent>
-              Execute script on the server. No turning back.
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <QueryActionBar
+          busy={executionResult.isFetching}
+          mobile={isMobile()}
+          onSave={saveScript}
+          onExecute={execute}
+        />
       </div>
 
-      <Separator />
-
-      <ResultView
-        script={props.script}
-        response={executionResult.data ?? undefined}
-      />
+      <div class="border-t">
+        <ResultView
+          script={props.script}
+          response={executionResult.data ?? undefined}
+        />
+      </div>
     </Dialog>
   );
 }
