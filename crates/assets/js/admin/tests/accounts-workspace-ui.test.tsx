@@ -21,6 +21,9 @@ const pageState = vi.hoisted(() => ({
   fetchUsers: vi.fn(),
   createUser: vi.fn(),
   updateUser: vi.fn(),
+  deleteUser: vi.fn(),
+  mintTokens: vi.fn(),
+  copyToClipboard: vi.fn(),
   invalidateQueries: vi.fn(),
   queryError: false,
   queryLoading: false,
@@ -69,9 +72,16 @@ vi.mock("@tanstack/solid-query", () => ({
 vi.mock("@/lib/api/user", () => ({
   fetchUsers: pageState.fetchUsers,
   createUser: pageState.createUser,
-  deleteUser: vi.fn(),
+  deleteUser: pageState.deleteUser,
   updateUser: pageState.updateUser,
 }));
+vi.mock("@/lib/api/mint", () => ({
+  mintTokens: pageState.mintTokens,
+}));
+vi.mock("@/lib/utils", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/utils")>();
+  return { ...actual, copyToClipboard: pageState.copyToClipboard };
+});
 import {
   AccountsPage,
   AccountToolbar,
@@ -185,6 +195,9 @@ describe("AccountsPage integration", () => {
     pageState.fetchUsers.mockReset().mockResolvedValue({ users: [] });
     pageState.createUser.mockReset();
     pageState.updateUser.mockReset();
+    pageState.deleteUser.mockReset();
+    pageState.mintTokens.mockReset();
+    pageState.copyToClipboard.mockReset();
     pageState.invalidateQueries.mockReset();
     pageState.queryError = false;
     pageState.queryLoading = false;
@@ -265,6 +278,9 @@ describe("AccountsPage integration", () => {
       "email already exists",
     );
     expect(screen.getByRole("heading", { name: "Add new user" })).toBeVisible();
+    expect(
+      screen.getByText("Create a new user account and configure its access."),
+    ).toBeVisible();
     expect(pageState.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["users"],
     });
@@ -287,6 +303,69 @@ describe("AccountsPage integration", () => {
     expect(pageState.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ["users"],
     });
+  });
+
+  it("reports login token copy failures in the edit sheet", async () => {
+    pageState.queryData = { users: [account] };
+    pageState.mintTokens.mockRejectedValueOnce(new Error("token failed"));
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy login tokens" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("token failed");
+  });
+
+  it("reports clipboard failures in the edit sheet", async () => {
+    pageState.queryData = { users: [account] };
+    pageState.mintTokens.mockResolvedValueOnce({ access_token: "token" });
+    pageState.copyToClipboard.mockRejectedValueOnce(
+      new Error("clipboard failed"),
+    );
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Copy login tokens" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "clipboard failed",
+    );
+  });
+
+  it("guards deletion in flight and clears failures when reopened", async () => {
+    pageState.queryData = { users: [account] };
+    let rejectDelete!: (reason: Error) => void;
+    pageState.deleteUser.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectDelete = reject;
+      }),
+    );
+    render(() => <AccountsPage />);
+    const row = screen
+      .getAllByRole("row")
+      .find((candidate) => candidate.textContent?.includes("ada@example.com"));
+    await fireEvent.keyDown(row!, { key: "Enter" });
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    await fireEvent.click(deleteButtons[0]);
+    const confirm = screen.getByRole("button", { name: "Delete" });
+    await fireEvent.click(confirm);
+    expect(confirm).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deleting..." })).toBeDisabled();
+    rejectDelete(new Error("delete failed"));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("delete failed"),
+    );
+    await fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("protects dirty edits with the controlled close confirmation", async () => {

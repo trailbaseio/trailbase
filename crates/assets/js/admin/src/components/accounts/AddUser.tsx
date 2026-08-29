@@ -3,7 +3,12 @@ import type { JSXElement } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
 import { Button } from "@/components/ui/button";
-import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import {
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import {
   buildBoolFormField,
   buildTextFormField,
@@ -51,6 +56,9 @@ export function AddUser(props: {
     <div class="overflow-x-hidden overflow-y-auto pr-1">
       <SheetHeader>
         <SheetTitle>{"Add new user"}</SheetTitle>
+        <SheetDescription>
+          Create a new user account and configure its access.
+        </SheetDescription>
       </SheetHeader>
 
       <form

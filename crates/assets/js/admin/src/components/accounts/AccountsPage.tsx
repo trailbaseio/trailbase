@@ -283,6 +283,7 @@ function DeleteUserButton(props: {
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [deleting, setDeleting] = createSignal(false);
   const [error, setError] = createSignal<string>();
 
   return (
@@ -290,7 +291,10 @@ function DeleteUserButton(props: {
       id="confirm"
       modal={true}
       open={dialogOpen()}
-      onOpenChange={setDialogOpen}
+      onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (open) setError(undefined);
+      }}
     >
       <DialogContent>
         <DialogTitle>Confirmation</DialogTitle>
@@ -314,7 +318,10 @@ function DeleteUserButton(props: {
 
             <Button
               variant="destructive"
+              disabled={deleting()}
               onClick={() => {
+                if (deleting()) return;
+                setDeleting(true);
                 (async () => {
                   try {
                     await deleteUser({ id: props.userId });
@@ -324,11 +331,13 @@ function DeleteUserButton(props: {
                     setError(
                       error instanceof Error ? error.message : String(error),
                     );
+                  } finally {
+                    setDeleting(false);
                   }
                 })();
               }}
             >
-              Delete
+              {deleting() ? "Deleting..." : "Delete"}
             </Button>
           </div>
         </DialogFooter>
@@ -351,6 +360,7 @@ function EditSheetContent(props: {
   refetch: () => void;
 }) {
   const [error, setError] = createSignal<string>();
+  const [tokenError, setTokenError] = createSignal<string>();
   const form = createForm(() => ({
     defaultValues: {
       id: props.user.id,
@@ -392,6 +402,12 @@ function EditSheetContent(props: {
         <SheetDescription>
           Change a user's properties. Be careful
         </SheetDescription>
+
+        <Show when={tokenError()}>
+          <p class="text-destructive" role="alert">
+            {tokenError()}
+          </p>
+        </Show>
       </SheetHeader>
 
       <form
@@ -467,16 +483,25 @@ function EditSheetContent(props: {
                           onClick={(e) => {
                             e.stopPropagation();
 
+                            setTokenError(undefined);
                             (async () => {
-                              const loginResponse = await mintTokens({
-                                user: props.user.id,
-                              });
+                              try {
+                                const loginResponse = await mintTokens({
+                                  user: props.user.id,
+                                });
 
-                              copyToClipboard(
-                                btoa(JSON.stringify(loginResponse)),
-                                false,
-                                "Copied tokens to clipboard",
-                              );
+                                await copyToClipboard(
+                                  btoa(JSON.stringify(loginResponse)),
+                                  false,
+                                  "Copied tokens to clipboard",
+                                );
+                              } catch (error) {
+                                setTokenError(
+                                  error instanceof Error
+                                    ? error.message
+                                    : String(error),
+                                );
+                              }
                             })();
                           }}
                         >
