@@ -21,7 +21,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 import { Header } from "@/components/Header";
+import { Spinner } from "@/components/Spinner";
 import {
   ErdGraph,
   nodeName,
@@ -41,6 +43,7 @@ import {
 } from "@/lib/schema";
 import { createTheme, type ResolvedTheme } from "@/lib/theme";
 
+import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -126,13 +129,13 @@ export function searchErdEntities(
   entities: ErdEntity[],
   query: string,
 ): ErdEntity[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) {
     return entities;
   }
 
   return entities.filter((entity) =>
-    entity.name.toLocaleLowerCase().includes(normalizedQuery),
+    entity.name.toLowerCase().includes(normalizedQuery),
   );
 }
 
@@ -260,12 +263,13 @@ function buildErNode(
   const columns = getColumns(tableOrView) ?? [];
 
   const view = tableType(tableOrView) === "view";
-  const ports: PortMetadata[] = columns.map((column) => {
+  const portId = (column: Column, index: number) =>
+    `${name}-${column.name}${view ? `-${index}` : ""}`;
+  const ports: PortMetadata[] = columns.map((column, index) => {
     const notNull = isNotNull(column.options);
     return {
-      // View's can have possibly duplicated column names, so we avoid
-      // collisions.
-      id: view ? undefined : `${name}-${column.name}`,
+      // Views can have duplicate column names, so include the stable index.
+      id: portId(column, index),
       group: "list",
       attrs: {
         portNameLabel: {
@@ -281,13 +285,13 @@ function buildErNode(
   });
 
   const edges: EdgeMetadata[] = columns
-    .map((column) => {
+    .map((column, index) => {
       const foreignKey = getForeignKey(column.options);
       if (foreignKey !== undefined) {
         return {
           source: {
             cell: name,
-            port: `${name}-${column.name}`,
+            port: portId(column, index),
           },
           // FIXME: lookup pk if referred columns are not provided. Otherwise can
           // we just point at the node rather than a specific port?
@@ -343,6 +347,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
   const [open, setOpen] = createSignal(false);
   const [activeIndex, setActiveIndex] = createSignal(-1);
   const results = createMemo(() => searchErdEntities(props.entities, query()));
+  const popupOpen = () => open() && results().length > 0;
   createEffect(() => {
     const length = results().length;
     setActiveIndex(length === 0 ? -1 : Math.min(activeIndex(), length - 1));
@@ -365,10 +370,11 @@ export function ErdToolbar(props: ErdToolbarProps) {
           pressed={props.showTables}
           title="Toggle tables"
           size="sm"
+          class="gap-1.5"
           aria-label="Tables"
           onChange={(pressed) => props.onShowTablesChange(pressed)}
         >
-          Tables{" "}
+          Tables
           <Badge round>
             {props.entities.filter((e) => e.type === "table").length}
           </Badge>
@@ -377,30 +383,32 @@ export function ErdToolbar(props: ErdToolbarProps) {
           pressed={props.showViews}
           title="Toggle views"
           size="sm"
+          class="gap-1.5"
           aria-label="Views"
           onChange={(pressed) => props.onShowViewsChange(pressed)}
         >
-          Views{" "}
+          Views
           <Badge round>
             {props.entities.filter((e) => e.type === "view").length}
           </Badge>
         </Toggle>
       </div>
-      <div class="relative order-last w-full sm:order-none sm:min-w-64 sm:flex-1">
+      <div class="relative order-first w-full sm:order-0 sm:min-w-64 sm:flex-1">
         <input
           class="bg-background h-9 w-full rounded-md border px-3 text-sm"
           type="search"
           role="combobox"
           aria-label="Search entities"
           aria-autocomplete="list"
-          aria-expanded={open()}
-          aria-controls="erd-search-results"
+          aria-expanded={popupOpen()}
+          aria-controls={popupOpen() ? "erd-search-results" : undefined}
           aria-activedescendant={
-            activeIndex() >= 0
+            popupOpen() && activeIndex() >= 0
               ? `erd-search-option-${results()[activeIndex()]?.id}`
               : undefined
           }
           value={query()}
+          placeholder="Search entities…"
           onInput={(event) => {
             setQuery(event.currentTarget.value);
             setOpen(true);
@@ -416,17 +424,17 @@ export function ErdToolbar(props: ErdToolbarProps) {
               move(-1);
             } else if (
               event.key === "Enter" &&
-              open() &&
+              popupOpen() &&
               results()[activeIndex()]
             )
               choose(results()[activeIndex()]);
             else if (event.key === "Escape") {
-              setOpen(false);
-              props.onSelect(undefined);
+              if (popupOpen()) setOpen(false);
+              else props.onSelect(undefined);
             }
           }}
         />
-        <Show when={open() && results().length > 0}>
+        <Show when={popupOpen()}>
           <div
             id="erd-search-results"
             role="listbox"
@@ -439,7 +447,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
                   type="button"
                   role="option"
                   aria-selected={activeIndex() === index()}
-                  class="hover:bg-accent flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm"
+                  class="hover:bg-accent flex w-full items-center justify-between rounded-sm px-2 py-1 text-left text-sm"
                   onClick={() => choose(entity)}
                 >
                   <span>{entity.name}</span>
@@ -492,25 +500,64 @@ export function ErdToolbar(props: ErdToolbarProps) {
   );
 }
 
-function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
+function emptyErdModel(): ErdModel {
+  return {
+    entities: [],
+    nodes: [],
+    edges: [],
+    relations: [],
+    tableCount: 0,
+    viewCount: 0,
+  };
+}
+
+function countLabel(count: number, singular: string): string {
+  return `${count} ${count === 1 ? singular : `${singular}s`}`;
+}
+
+export function ErdPage() {
+  const schemaFetch = createTableSchemaQuery();
   const theme = createTheme();
   const [visibility, setVisibility] = createSignal<ErdVisibility>({
     tables: true,
     views: true,
   });
   const [selectedId, setSelectedId] = createSignal<string>();
-  const model = createMemo(() =>
-    buildErdModel(props.schema, visibility(), theme()),
+  const allModel = createMemo(() =>
+    schemaFetch.data
+      ? buildErdModel(schemaFetch.data, { tables: true, views: true }, theme())
+      : emptyErdModel(),
   );
+  const model = createMemo(() =>
+    schemaFetch.data
+      ? buildErdModel(schemaFetch.data, visibility(), theme())
+      : emptyErdModel(),
+  );
+  const description = createMemo(() => {
+    if (!schemaFetch.data) return "Explore tables, views, and relationships";
+    const current = allModel();
+    return [
+      countLabel(current.tableCount, "table"),
+      countLabel(current.viewCount, "view"),
+      countLabel(current.relations.length, "relationship"),
+    ].join(" · ");
+  });
   let graph: ErdGraphHandle | undefined;
-  const [status, setStatus] = createSignal("");
   const select = (id?: string) => {
     setSelectedId(id);
-    setStatus(selectionStatus(model().entities, model().relations, id));
     graph?.focus(id);
   };
+
+  createEffect(() => {
+    const id = selectedId();
+    if (id && !model().entities.some((entity) => entity.id === id)) {
+      select(undefined);
+    }
+  });
+
   return (
-    <div class="flex size-full flex-col">
+    <div class="flex h-full min-h-0 flex-col">
+      <Header title="ERD" description={description()} />
       <ErdToolbar
         entities={model().entities}
         showTables={visibility().tables}
@@ -531,39 +578,82 @@ function SchemaErdGraph(props: { schema: ListSchemasResponse }) {
           select(undefined);
         }}
       />
-      <div class="min-h-0 flex-1">
-        <ErdGraph
-          nodes={model().nodes}
-          edges={model().edges}
-          relations={model().relations}
-          selectedId={selectedId()}
-          onSelect={select}
-          onMount={(g) => (graph = g)}
-        />
+
+      <div class="relative min-h-0 flex-1">
+        <Switch>
+          <Match when={schemaFetch.isError}>
+            <Callout
+              variant="error"
+              role="alert"
+              class="absolute inset-x-4 top-4"
+            >
+              <CalloutTitle>Unable to load schema</CalloutTitle>
+              <CalloutContent class="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <span>TrailBase couldn't load the database schema.</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => schemaFetch.refetch()}
+                >
+                  Retry
+                </Button>
+              </CalloutContent>
+            </Callout>
+          </Match>
+
+          <Match when={schemaFetch.isPending}>
+            <div class="text-muted-foreground flex size-full items-center justify-center gap-3 text-sm">
+              <Spinner size={20} />
+              <span>Loading schema</span>
+            </div>
+          </Match>
+
+          <Match when={schemaFetch.data && allModel().entities.length === 0}>
+            <div class="flex size-full flex-col items-center justify-center gap-1 p-6 text-center">
+              <h2 class="text-sm font-medium">No schema entities</h2>
+              <p class="text-muted-foreground max-w-sm text-xs">
+                Create a table or view to start exploring relationships.
+              </p>
+            </div>
+          </Match>
+
+          <Match when={schemaFetch.data && model().entities.length === 0}>
+            <div class="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+              <div>
+                <h2 class="text-sm font-medium">
+                  No entities match these filters
+                </h2>
+                <p class="text-muted-foreground mt-1 text-xs">
+                  Enable tables or views to restore the diagram.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setVisibility({ tables: true, views: true })}
+              >
+                Show all entities
+              </Button>
+            </div>
+          </Match>
+
+          <Match when={schemaFetch.data}>
+            <ErdGraph
+              class="size-full"
+              nodes={model().nodes}
+              edges={model().edges}
+              relations={model().relations}
+              selectedId={selectedId()}
+              onSelect={select}
+              onMount={(handle) => (graph = handle)}
+            />
+          </Match>
+        </Switch>
+
         <p class="sr-only" aria-live="polite">
-          {status()}
+          {selectionStatus(model().entities, model().relations, selectedId())}
         </p>
       </div>
-    </div>
-  );
-}
-
-export function ErdPage() {
-  const schemaFetch = createTableSchemaQuery();
-
-  return (
-    <div class="flex h-full flex-col">
-      <Header title="Schema" />
-
-      <Switch>
-        <Match when={schemaFetch.isError}>
-          <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
-        </Match>
-
-        <Match when={schemaFetch.data}>
-          <SchemaErdGraph schema={schemaFetch.data!} />
-        </Match>
-      </Switch>
     </div>
   );
 }

@@ -1,7 +1,19 @@
 import { render, screen, fireEvent, cleanup } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 
+const queryState = vi.hoisted(() => ({
+  isPending: false,
+  isError: false,
+  error: undefined as unknown,
+  data: undefined as ListSchemasResponse | undefined,
+  refetch: vi.fn(),
+}));
+
+vi.mock("@/lib/api/table", () => ({
+  createTableSchemaQuery: () => queryState,
+}));
 vi.mock("@antv/x6", () => ({ Graph: class {} }));
 vi.mock("@/components/erd/ErdGraph", () => ({
   ErdGraph: () => null,
@@ -10,7 +22,15 @@ vi.mock("@/components/erd/ErdGraph", () => ({
   LINE_HEIGHT: 24,
 }));
 
-import { ErdToolbar } from "@/components/erd/ErdPage";
+import { ErdPage, ErdToolbar } from "@/components/erd/ErdPage";
+
+beforeEach(() => {
+  queryState.isPending = false;
+  queryState.isError = false;
+  queryState.error = undefined;
+  queryState.data = undefined;
+  queryState.refetch.mockReset();
+});
 
 afterEach(cleanup);
 
@@ -76,6 +96,8 @@ describe("ERD toolbar", () => {
     ));
     const search = screen.getByRole("combobox", { name: /search entities/i });
     await fireEvent.input(search, { target: { value: "missing" } });
+    expect(search).toHaveAttribute("aria-expanded", "false");
+    expect(search).not.toHaveAttribute("aria-controls");
     expect(search).not.toHaveAttribute("aria-activedescendant");
     expect(screen.queryByRole("option")).not.toBeInTheDocument();
   });
@@ -117,7 +139,7 @@ describe("ERD toolbar", () => {
     expect(search).not.toHaveAttribute("aria-activedescendant");
   });
 
-  it("closes search and clears selection on Escape", async () => {
+  it("closes search before clearing selection on Escape", async () => {
     const onSelect = vi.fn();
     render(() => (
       <ErdToolbar
@@ -138,6 +160,9 @@ describe("ERD toolbar", () => {
     await fireEvent.focus(search);
     await fireEvent.keyDown(search, { key: "Escape" });
     expect(search).toHaveAttribute("aria-expanded", "false");
+    expect(onSelect).not.toHaveBeenCalled();
+
+    await fireEvent.keyDown(search, { key: "Escape" });
     expect(onSelect).toHaveBeenCalledWith(undefined);
   });
 
@@ -180,5 +205,128 @@ describe("ERD toolbar", () => {
     expect(callbacks.onZoomOut).toHaveBeenCalled();
     expect(callbacks.onFit).toHaveBeenCalled();
     expect(callbacks.onReset).toHaveBeenCalled();
+  });
+});
+
+const emptySchema: ListSchemasResponse = {
+  tables: [],
+  views: [],
+  indexes: [],
+  triggers: [],
+};
+
+const populatedSchema: ListSchemasResponse = {
+  tables: [
+    [
+      {
+        name: { name: "users", database_schema: "main" },
+        strict: true,
+        columns: [],
+        foreign_keys: [],
+        unique: [],
+        checks: [],
+        virtual_table: false,
+        temporary: false,
+      },
+      "",
+    ],
+    [
+      {
+        name: { name: "posts", database_schema: "main" },
+        strict: true,
+        columns: [
+          {
+            name: "author_id",
+            type_name: "BLOB",
+            data_type: "Blob",
+            affinity_type: "Blob",
+            options: [
+              {
+                ForeignKey: {
+                  foreign_table: "users",
+                  referred_columns: ["id"],
+                  on_delete: null,
+                  on_update: null,
+                },
+              },
+            ],
+          },
+        ],
+        foreign_keys: [],
+        unique: [],
+        checks: [],
+        virtual_table: false,
+        temporary: false,
+      },
+      "",
+    ],
+  ],
+  views: [
+    [
+      {
+        name: { name: "post_summary", database_schema: "main" },
+        column_mapping: null,
+        query: "SELECT * FROM posts",
+        temporary: false,
+      },
+      "",
+    ],
+  ],
+  indexes: [],
+  triggers: [],
+};
+
+describe("ERD page states", () => {
+  it("keeps the workspace visible while loading", () => {
+    queryState.isPending = true;
+    render(() => <ErdPage />);
+
+    expect(screen.getByRole("heading", { name: "ERD" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Search entities" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Loading schema")).toBeInTheDocument();
+  });
+
+  it("shows a retryable schema error", async () => {
+    queryState.isError = true;
+    queryState.error = new Error("offline");
+    render(() => <ErdPage />);
+
+    expect(screen.getByText("Unable to load schema")).toBeInTheDocument();
+    expect(
+      screen.getByText("TrailBase couldn't load the database schema."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Error: offline")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(queryState.refetch).toHaveBeenCalledOnce();
+  });
+
+  it("shows an empty schema state", () => {
+    queryState.data = emptySchema;
+    render(() => <ErdPage />);
+
+    expect(screen.getByText("No schema entities")).toBeInTheDocument();
+  });
+
+  it("shows counts and recovers when filters hide every entity", async () => {
+    queryState.data = populatedSchema;
+    render(() => <ErdPage />);
+
+    expect(
+      screen.getByText("2 tables · 1 view · 1 relationship"),
+    ).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Tables" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Views" }));
+    expect(
+      screen.getByText("No entities match these filters"),
+    ).toBeInTheDocument();
+
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Show all entities" }),
+    );
+    expect(
+      screen.queryByText("No entities match these filters"),
+    ).not.toBeInTheDocument();
   });
 });

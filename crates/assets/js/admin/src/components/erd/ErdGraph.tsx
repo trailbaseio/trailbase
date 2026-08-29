@@ -1,4 +1,4 @@
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, onCleanup, untrack } from "solid-js";
 import { Graph, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 import { cn } from "@/lib/utils";
 import type { ResolvedTheme } from "@/lib/theme";
@@ -108,7 +108,12 @@ function setupGraph() {
 }
 setupGraph();
 
-export function layoutErdNodes(nodes: NodeMetadata[]): NodeMetadata[] {
+export function layoutErdNodes(
+  nodes: NodeMetadata[],
+  aspect: number,
+): NodeMetadata[] {
+  if (nodes.length === 0) return [];
+
   const width = NODE_WIDTH + 20;
   const height = Math.max(
     34,
@@ -119,7 +124,12 @@ export function layoutErdNodes(nodes: NodeMetadata[]): NodeMetadata[] {
         10,
     ),
   );
-  const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, nodes.length))));
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const columns = Math.max(
+    1,
+    Math.ceil(Math.sqrt((safeAspect * nodes.length * height) / width)),
+  );
+
   return nodes.map((node, index) => ({
     ...node,
     position: node.position ?? {
@@ -127,6 +137,45 @@ export function layoutErdNodes(nodes: NodeMetadata[]): NodeMetadata[] {
       y: Math.floor(index / columns) * height,
     },
   }));
+}
+
+export function focusedErdIds(
+  relations: { sourceId: string; targetId: string }[],
+  selectedId?: string,
+): Set<string> {
+  const focused = new Set<string>();
+  if (!selectedId) return focused;
+
+  focused.add(selectedId);
+  for (const relation of relations) {
+    if (relation.sourceId === selectedId) focused.add(relation.targetId);
+    if (relation.targetId === selectedId) focused.add(relation.sourceId);
+  }
+  return focused;
+}
+
+type ErdOpacityNode = {
+  attr: (attributes: Record<string, { opacity: number }>) => unknown;
+  getPorts: () => { id?: string }[];
+  setPortProp: (id: string, value: Record<string, unknown>) => unknown;
+};
+
+export function setErdNodeOpacity(node: ErdOpacityNode, opacity: number): void {
+  node.attr({
+    body: { opacity },
+    label: { opacity },
+    typeLabel: { opacity },
+  });
+  for (const port of node.getPorts()) {
+    if (!port.id) continue;
+    node.setPortProp(port.id, {
+      attrs: {
+        portBody: { opacity },
+        portNameLabel: { opacity },
+        portTypeLabel: { opacity },
+      },
+    });
+  }
 }
 
 export type ErdGraphHandle = {
@@ -139,7 +188,9 @@ export type ErdGraphHandle = {
 
 function createEdge(): Edge {
   return new Shape.Edge({
-    attrs: { line: { stroke: EDGE_COLOR, strokeWidth: 1 } },
+    attrs: {
+      line: { stroke: EDGE_COLOR, strokeWidth: 1.5, opacity: 0.65 },
+    },
   });
 }
 
@@ -150,32 +201,28 @@ export function ErdGraph(props: {
   relations: { sourceId: string; targetId: string }[];
   selectedId?: string;
   onSelect: (id?: string) => void;
-  onMount?: (handle: ErdGraphHandle) => void;
+  onMount?: (handle?: ErdGraphHandle) => void;
 }) {
   let ref: HTMLDivElement | undefined;
   let graph: Graph | undefined;
+  const graphAspect = () => {
+    const width = ref?.clientWidth || window.innerWidth;
+    const height = ref?.clientHeight || window.innerHeight;
+    return width > 0 && height > 0 ? width / height : 1;
+  };
   const applySelection = () => {
     if (!graph) return;
-    const related = new Set<string>(props.selectedId ? [props.selectedId] : []);
-    if (props.selectedId)
-      for (const relation of props.relations) {
-        if (relation.sourceId === props.selectedId)
-          related.add(relation.targetId);
-        if (relation.targetId === props.selectedId)
-          related.add(relation.sourceId);
-      }
-    graph
-      .getNodes()
-      .forEach((node) =>
-        node.attr(
-          "body/stroke",
-          props.selectedId && !related.has(node.id)
-            ? "var(--muted)"
-            : node.id === props.selectedId
-              ? "var(--primary)"
-              : "var(--border)",
-        ),
+
+    const focused = focusedErdIds(props.relations, props.selectedId);
+    const hasSelection = props.selectedId !== undefined;
+    graph.getNodes().forEach((node) => {
+      const opacity = hasSelection && !focused.has(node.id) ? 0.28 : 1;
+      setErdNodeOpacity(node, opacity);
+      node.attr(
+        "body/stroke",
+        node.id === props.selectedId ? "var(--primary)" : "var(--border)",
       );
+    });
     graph.getEdges().forEach((edge) => {
       const source =
         typeof edge.getSourceCellId === "function"
@@ -186,25 +233,26 @@ export function ErdGraph(props: {
           ? edge.getTargetCellId()
           : undefined;
       const connected =
-        !!props.selectedId &&
+        hasSelection &&
         (source === props.selectedId || target === props.selectedId);
-      edge.attr(
-        "line/stroke",
-        props.selectedId && !connected
-          ? "var(--muted)"
-          : connected
-            ? RELATED_EDGE_COLOR
-            : EDGE_COLOR,
-      );
-      edge.attr("line/strokeWidth", connected ? 2 : 1);
+      edge.attr({
+        line: {
+          opacity: hasSelection ? (connected ? 1 : 0.12) : 0.65,
+          stroke: connected ? RELATED_EDGE_COLOR : EDGE_COLOR,
+          strokeWidth: connected ? 2 : 1.5,
+        },
+      });
     });
   };
   createEffect(() => {
     const nodes = props.nodes,
-      edges = props.edges;
+      edges = props.edges,
+      onSelect = props.onSelect,
+      onMount = props.onMount;
     graph?.dispose();
     const g = (graph = new Graph({
       container: ref,
+      grid: { visible: true },
       autoResize: true,
       interacting: { edgeLabelMovable: false, magnetConnectable: false },
       connecting: {
@@ -216,17 +264,18 @@ export function ErdGraph(props: {
       mousewheel: { enabled: true, minScale: 0.5, maxScale: 2 },
     }));
     g.resetCells([
-      ...layoutErdNodes(nodes).map((node) => g.createNode(node)),
+      ...layoutErdNodes(nodes, graphAspect()).map((node) => g.createNode(node)),
       ...edges.map((edge) => g.createEdge(edge)),
     ]);
-    g.on("node:click", ({ node }) => props.onSelect(node.id));
-    g.on("blank:click", () => props.onSelect(undefined));
+    untrack(applySelection);
+    g.on("node:click", ({ node }) => onSelect(node.id));
+    g.on("blank:click", () => onSelect(undefined));
     const handle: ErdGraphHandle = {
       zoomIn: () => g.zoomTo(g.zoom() * 2),
       zoomOut: () => g.zoomTo(g.zoom() / 2),
       fit: () => g.zoomToFit({ padding: 20 }),
       reset: () => {
-        layoutErdNodes(nodes).forEach((node, index) => {
+        layoutErdNodes(nodes, graphAspect()).forEach((node, index) => {
           const position = node.position;
           if (position) g.getNodes()[index]?.position(position.x, position.y);
         });
@@ -235,13 +284,20 @@ export function ErdGraph(props: {
       focus: (id) => {
         if (id) {
           const cell = g.getCellById(id);
-          if (cell) g.centerCell(cell);
+          if (cell) {
+            g.zoomTo(1);
+            g.centerCell(cell);
+          }
         }
       },
     };
-    props.onMount?.(handle);
+    onMount?.(handle);
     if (g.getCells().length) g.zoomToFit({ padding: 20 });
-    onCleanup(() => g.dispose());
+    onCleanup(() => {
+      if (graph === g) graph = undefined;
+      onMount?.(undefined);
+      g.dispose();
+    });
   });
   createEffect(applySelection);
   return <div ref={ref} class={cn(props.class, "overflow-clip")} />;
