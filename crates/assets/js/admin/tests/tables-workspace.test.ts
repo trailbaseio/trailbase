@@ -7,9 +7,11 @@ import {
 } from "@/components/tables/TablesPage";
 import {
   normalizeWorkspaceTab,
+  tableStructureCounts,
   workspaceTabSearchParams,
 } from "@/components/tables/TablePane";
 
+import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { Table } from "@bindings/Table";
 
 function table(name: string, databaseSchema?: string | null): Table {
@@ -45,6 +47,67 @@ describe("Tables workspace", () => {
     expect(workspaceTabSearchParams({ filter: "x" }, "data")).toEqual({
       filter: "x",
       tab: undefined,
+    });
+  });
+
+  it("counts structure objects by qualified table name", () => {
+    const authUsers = table("users", "auth");
+    authUsers.columns = [
+      {
+        name: "id",
+        type_name: "INTEGER",
+        data_type: "Integer",
+        affinity_type: "Integer",
+        options: [],
+      },
+    ];
+    const schemas: ListSchemasResponse = {
+      tables: [[authUsers, ""]],
+      views: [],
+      indexes: [
+        [
+          {
+            name: { name: "users_idx", database_schema: "auth" },
+            table_name: "users",
+            columns: [],
+            unique: false,
+            predicate: null,
+          },
+          "",
+        ],
+        [
+          {
+            name: { name: "users_idx", database_schema: "main" },
+            table_name: "users",
+            columns: [],
+            unique: false,
+            predicate: null,
+          },
+          "",
+        ],
+      ],
+      triggers: [
+        [
+          {
+            name: { name: "users_trigger", database_schema: "auth" },
+            table_name: "users",
+          },
+          "CREATE TRIGGER users_trigger",
+        ],
+        [
+          {
+            name: { name: "users_trigger", database_schema: "main" },
+            table_name: "users",
+          },
+          "CREATE TRIGGER users_trigger",
+        ],
+      ],
+    };
+
+    expect(tableStructureCounts(authUsers, schemas)).toEqual({
+      columns: 1,
+      indexes: 1,
+      triggers: 1,
     });
   });
 

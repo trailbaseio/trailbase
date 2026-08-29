@@ -16,7 +16,7 @@ import {
   TbOutlineChevronRight,
   TbOutlineDotsVertical,
 } from "solid-icons/tb";
-import { useSearchParams } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
 import type {
@@ -95,7 +95,10 @@ import { deleteRows, fetchRows } from "@/lib/api/row";
 import { formatSortingAsOrder } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
+  getDefaultValue,
   getForeignKey,
+  getUnique,
+  isPrimaryKeyColumn,
   isFileUploadColumn,
   isGeometryColumn,
   isFileUploadsColumn,
@@ -930,6 +933,153 @@ function RecordTable(props: {
   );
 }
 
+export function tableStructureCounts(
+  table: Table,
+  schemas: ListSchemasResponse,
+): { columns: number; indexes: number; triggers: number } {
+  const matchesTable = (tableName: string, databaseSchema: string | null) =>
+    equalQualifiedNames(table.name, {
+      name: tableName,
+      database_schema: databaseSchema,
+    });
+
+  return {
+    columns: table.columns.length,
+    indexes: schemas.indexes.filter(([index]) =>
+      matchesTable(index.table_name, index.name.database_schema),
+    ).length,
+    triggers: schemas.triggers.filter(([trigger]) =>
+      matchesTable(trigger.table_name, trigger.name.database_schema),
+    ).length,
+  };
+}
+
+function StructureTab(props: {
+  table: Table;
+  schemas: ListSchemasResponse;
+  schemaRefetch: () => Promise<void>;
+}) {
+  const counts = () => tableStructureCounts(props.table, props.schemas);
+  const primaryKey = () =>
+    props.table.columns.find(isPrimaryKeyColumn)?.name ?? "None";
+
+  return (
+    <div class="flex flex-col gap-6">
+      <section aria-labelledby="structure-overview">
+        <h2 id="structure-overview" class="text-base font-semibold">
+          Overview
+        </h2>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Resource
+            </p>
+            <p class="mt-1 truncate font-mono text-sm">
+              {prettyFormatQualifiedName(props.table.name)}
+            </p>
+          </div>
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Primary key
+            </p>
+            <p class="mt-1 truncate font-mono text-sm">{primaryKey()}</p>
+          </div>
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Columns
+            </p>
+            <p class="mt-1 text-lg font-semibold">{counts().columns}</p>
+          </div>
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Schema objects
+            </p>
+            <p class="mt-1 text-sm">
+              {counts().indexes} indexes · {counts().triggers} triggers
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="columns-heading">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 id="columns-heading" class="text-base font-semibold">
+            Columns
+          </h2>
+          <span class="text-muted-foreground text-sm">
+            {counts().columns} total
+          </span>
+        </div>
+        <div class="overflow-x-auto rounded-md border">
+          <div class="bg-muted/40 text-muted-foreground grid min-w-[720px] grid-cols-[minmax(180px,1fr)_160px_minmax(260px,1.4fr)_minmax(180px,1fr)] border-b px-3 py-2 text-xs font-medium tracking-wide uppercase">
+            <span>Name</span>
+            <span>Type</span>
+            <span>Constraints</span>
+            <span>Default</span>
+          </div>
+          <For each={props.table.columns}>
+            {(column) => {
+              const unique = () => getUnique(column.options);
+              const foreignKey = () => getForeignKey(column.options);
+              const defaultValue = () => getDefaultValue(column.options);
+              return (
+                <div class="grid min-w-[720px] grid-cols-[minmax(180px,1fr)_160px_minmax(260px,1.4fr)_minmax(180px,1fr)] items-center border-b px-3 py-2.5 text-sm last:border-b-0">
+                  <code class="text-foreground truncate font-medium">
+                    {column.name}
+                  </code>
+                  <span class="text-muted-foreground truncate font-mono">
+                    {column.type_name || column.data_type}
+                  </span>
+                  <div class="flex flex-wrap gap-1.5">
+                    <Show when={unique()?.is_primary}>
+                      <Badge variant="secondary">Primary key</Badge>
+                    </Show>
+                    <Show when={unique() && !unique()?.is_primary}>
+                      <Badge variant="outline">Unique</Badge>
+                    </Show>
+                    <Show when={isNotNull(column.options)}>
+                      <Badge variant="outline">Not null</Badge>
+                    </Show>
+                    <Show when={foreignKey()}>
+                      {(foreignKey) => (
+                        <Badge variant="outline">
+                          <A
+                            class="hover:underline"
+                            href={`/table/${encodeURIComponent(foreignKey().foreign_table)}`}
+                          >
+                            → {foreignKey().foreign_table}
+                          </A>
+                        </Badge>
+                      )}
+                    </Show>
+                    <Show
+                      when={
+                        !unique() && !isNotNull(column.options) && !foreignKey()
+                      }
+                    >
+                      <span class="text-muted-foreground">—</span>
+                    </Show>
+                  </div>
+                  <code class="text-muted-foreground truncate text-xs">
+                    {defaultValue() ?? "—"}
+                  </code>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </section>
+
+      <IndexTable
+        table={props.table}
+        schemas={props.schemas}
+        schemaRefetch={props.schemaRefetch}
+      />
+      <TriggerTable table={props.table} schemas={props.schemas} />
+    </div>
+  );
+}
+
 function IndexTable(props: {
   table: Table;
   schemas: ListSchemasResponse;
@@ -974,8 +1124,8 @@ function IndexTable(props: {
   });
 
   return (
-    <div id="indexes">
-      <h2>
+    <section id="indexes" class="bg-card rounded-md border p-4">
+      <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
         Indexes
         <Show when={import.meta.env.DEV}>
           <DebugDialogButton title="Indexes" data={indexes()} />
@@ -1008,6 +1158,11 @@ function IndexTable(props: {
                 <TableComponent
                   table={indexesTable()}
                   loading={false}
+                  emptyState={
+                    <span class="text-muted-foreground">
+                      No indexes configured
+                    </span>
+                  }
                   onRowClick={
                     hidden()
                       ? undefined
@@ -1038,8 +1193,8 @@ function IndexTable(props: {
 
                   <SheetTrigger
                     as={(props: DialogTriggerProps) => (
-                      <Button variant="default" {...props}>
-                        Add Index
+                      <Button variant="default" size="sm" {...props}>
+                        Add index
                       </Button>
                     )}
                   />
@@ -1050,6 +1205,7 @@ function IndexTable(props: {
 
           <Button
             variant="destructive"
+            size="sm"
             disabled={selectedIndexes().size == 0}
             onClick={() => {
               const names = Array.from(selectedIndexes());
@@ -1080,7 +1236,7 @@ function IndexTable(props: {
           </Button>
         </div>
       </Show>
-    </div>
+    </section>
   );
 }
 
@@ -1105,26 +1261,33 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   });
 
   return (
-    <div id="triggers">
-      <h2>
+    <section id="triggers" class="bg-card rounded-md border p-4">
+      <h2 class="flex items-center gap-2 text-base font-semibold">
         Triggers
         <Show when={import.meta.env.DEV}>
           <DebugDialogButton title="Triggers" data={triggers()} />
         </Show>
       </h2>
 
-      <p class="text-sm">
-        The admin dashboard currently does not support modifying triggers.
-        Please use the editor to{" "}
-        <a href="https://www.sqlite.org/lang_createtrigger.html">create</a> new
-        triggers or <a href="https://sqlite.org/lang_droptrigger.html">drop</a>{" "}
-        existing ones.
-      </p>
-
-      <div class="mt-4">
-        <TableComponent loading={false} table={triggersTable()} />
+      <div class="border-border bg-muted/30 mt-3 flex flex-col gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-muted-foreground">
+          Trigger changes are currently managed through SQL.
+        </p>
+        <Button as={A} href="/editor" variant="outline" size="sm">
+          Open SQL Editor
+        </Button>
       </div>
-    </div>
+
+      <div class="mt-4 overflow-x-auto">
+        <TableComponent
+          loading={false}
+          table={triggersTable()}
+          emptyState={
+            <span class="text-muted-foreground">No triggers configured</span>
+          }
+        />
+      </div>
+    </section>
   );
 }
 
@@ -1346,14 +1509,10 @@ export function TablePane(props: {
               </div>
             }
           >
-            <IndexTable
+            <StructureTab
               table={selectedSchema() as Table}
               schemas={props.schemas}
               schemaRefetch={props.schemaRefetch}
-            />
-            <TriggerTable
-              table={selectedSchema() as Table}
-              schemas={props.schemas}
             />
           </Show>
         </TabsContent>
