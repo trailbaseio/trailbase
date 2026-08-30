@@ -35,6 +35,7 @@ function buildMap(opts: {
   setMapDialog: (value: string | undefined) => void;
   maxScale: number;
   container: HTMLDivElement;
+  isActive: () => boolean;
 }): maplibregl.Map {
   const primary =
     getComputedStyle(document.documentElement)
@@ -67,12 +68,14 @@ function buildMap(opts: {
   });
 
   map.on("style.load", () => {
+    if (!opts.isActive()) return;
     map.setProjection({
       type: "globe",
     });
   });
 
   map.on("load", () => {
+    if (!opts.isActive()) return;
     map.addSource(sourceId, {
       type: "geojson",
       data: {
@@ -124,10 +127,12 @@ function buildMap(opts: {
     let hoveredStateId: string | number | undefined;
 
     map.on("mouseenter", layerId, (_e) => {
+      if (!opts.isActive()) return;
       map.getCanvas().style.cursor = "pointer";
     });
 
     map.on("mousemove", layerId, (e) => {
+      if (!opts.isActive()) return;
       const first = e.features?.[0];
       if (hoveredStateId) {
         map.setFeatureState(
@@ -149,6 +154,7 @@ function buildMap(opts: {
     });
 
     map.on("mouseleave", layerId, () => {
+      if (!opts.isActive()) return;
       map.getCanvas().style.cursor = "";
 
       if (hoveredStateId) {
@@ -252,7 +258,9 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
   );
   let map: maplibregl.Map | undefined;
   let container!: HTMLDivElement;
+  let generation = 0;
   createEffect(() => {
+    const currentGeneration = ++generation;
     map?.remove();
     map = undefined;
     try {
@@ -261,12 +269,14 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
         setMapDialog,
         maxScale: maxScale(),
         container,
+        isActive: () => generation === currentGeneration,
       });
     } catch (error) {
       console.error("Unable to render map", error);
     }
   });
   onCleanup(() => {
+    generation++;
     map?.remove();
     map = undefined;
   });

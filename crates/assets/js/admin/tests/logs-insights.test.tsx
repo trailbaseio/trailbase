@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => {
   const mapInstances: Array<{
     remove: ReturnType<typeof vi.fn>;
     handlers: Map<string, (...args: never[]) => void>;
+    setProjection: ReturnType<typeof vi.fn>;
+    addSource: ReturnType<typeof vi.fn>;
+    addLayer: ReturnType<typeof vi.fn>;
   }> = [];
   const mapConfigs: unknown[] = [];
   const events: string[] = [];
@@ -234,6 +237,35 @@ describe("LogsInsights", () => {
     const second = mocks.chartInstances[1];
     view.unmount();
     expect(second.destroy).toHaveBeenCalledOnce();
+  });
+
+  it("ignores stale MapLibre callbacks after replacement and cleanup", () => {
+    const [countries, setCountries] = createSignal<Record<string, number>>({
+      US: 12,
+    });
+    const view = render(() => (
+      <LogsInsights rates={rates} countryCodes={countries()} />
+    ));
+    const first = mocks.mapInstances[0];
+    const staleStyleLoad = first.handlers.get("style.load")!;
+    const staleLoad = first.handlers.get("load")!;
+    setCountries({ DE: 4 });
+    expect(() => {
+      staleStyleLoad();
+      staleLoad();
+    }).not.toThrow();
+    expect(first.setProjection).not.toHaveBeenCalled();
+    expect(first.addSource).not.toHaveBeenCalled();
+    expect(first.addLayer).not.toHaveBeenCalled();
+
+    view.unmount();
+    expect(() => {
+      staleStyleLoad();
+      staleLoad();
+    }).not.toThrow();
+    expect(first.setProjection).not.toHaveBeenCalled();
+    expect(first.addSource).not.toHaveBeenCalled();
+    expect(first.addLayer).not.toHaveBeenCalled();
   });
 
   it("removes the Map before reactive replacement and on cleanup", () => {
