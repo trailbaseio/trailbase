@@ -2,7 +2,6 @@ import { createMemo, Match, Switch } from "solid-js";
 import { useParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import { listWasmComponents } from "@/lib/api/wasm-components";
-import { Spinner } from "@/components/Spinner";
 import { WasmComponentDetails } from "@/components/wasm/WasmComponentDetails";
 import { WasmComponentsList } from "@/components/wasm/WasmComponentsList";
 
@@ -18,11 +17,6 @@ export function WasmPage() {
   );
   return (
     <Switch>
-      <Match when={query.isLoading}>
-        <div class="flex h-64 items-center justify-center">
-          <Spinner size={32} class="text-muted-foreground" />
-        </div>
-      </Match>
       <Match when={params.name !== undefined && findComponent() !== undefined}>
         <WasmComponentDetails component={findComponent()!} sandboxed={true} />
       </Match>

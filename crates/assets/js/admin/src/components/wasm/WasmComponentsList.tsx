@@ -7,7 +7,8 @@ import {
   TbOutlineArrowRight,
 } from "solid-icons/tb";
 import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
+import { Badge } from "@/components/ui/badge";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
 import {
@@ -69,11 +70,11 @@ function Icon(props: { value?: string }) {
   const value = () => props.value?.trim();
   return (
     <Switch>
-      <Match when={value()?.startsWith("<svg")}>
-        {(v) => <div class="size-6 [&>svg]:size-6">{template(v()!)()}</div>}
+      <Match when={value()?.startsWith("<svg") === true}>
+        <div class="size-6 [&>svg]:size-6">{template(value()!)()}</div>
       </Match>
-      <Match when={value()?.startsWith("data:")}>
-        {(v) => <img src={v()!} alt="" class="size-6" />}
+      <Match when={value()?.startsWith("data:") === true}>
+        <img src={value()!} alt="" class="size-6" />
       </Match>
       <Match when={true}>
         <TbOutlinePuzzle size={24} />
@@ -108,12 +109,22 @@ export function WasmComponentsList(props: {
         }
       />
       <div class="min-w-0 overflow-x-auto p-4">
-        <Callout title="Restart required" class="mb-3 text-sm">
-          Installing or removing a WASM component requires restarting the
-          server. You can also run this while the server is off:
-          <pre class="my-2 ml-4 whitespace-pre-wrap">
-            trail [--depot=..] components add trailbase/auth_ui
-          </pre>
+        <Callout
+          variant={
+            components().some((c) => c.loaded !== c.installed)
+              ? "warning"
+              : "default"
+          }
+          class="mb-3 text-sm"
+        >
+          <CalloutTitle>Restart required</CalloutTitle>
+          <CalloutContent>
+            Installing or removing a WASM component requires restarting the
+            server. You can also run this while the server is off:
+            <pre class="my-2 ml-4 whitespace-pre-wrap">
+              trail [--depot=..] components add trailbase/auth_ui
+            </pre>
+          </CalloutContent>
         </Callout>
         <Switch>
           <Match when={props.isLoading}>
@@ -122,8 +133,14 @@ export function WasmComponentsList(props: {
             </div>
           </Match>
           <Match when={props.isError}>
-            <Callout variant="error" title="Unable to load WASM components">
-              <Button onClick={() => props.refetch()}>Retry</Button>
+            <Callout variant="error">
+              <CalloutTitle>Unable to load WASM components</CalloutTitle>
+              <CalloutContent>
+                WASM components could not be loaded. Please try again.
+                <div class="mt-2">
+                  <Button onClick={() => props.refetch()}>Retry</Button>
+                </div>
+              </CalloutContent>
             </Callout>
           </Match>
           <Match when={!components().length}>
@@ -169,7 +186,9 @@ export function WasmComponentsList(props: {
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{status.label}</TableCell>
+                        <TableCell>
+                          <Badge variant={status.variant}>{status.label}</Badge>
+                        </TableCell>
                         <TableCell>
                           {c.guest_runtime ?? "—"} / {c.version ?? "—"}
                         </TableCell>
