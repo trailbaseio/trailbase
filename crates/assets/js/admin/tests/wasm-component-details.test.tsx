@@ -14,9 +14,24 @@ const queryState = vi.hoisted(() => ({
     | undefined,
   setData: undefined as ((value: string) => void) | undefined,
 }));
-const tokenState = vi.hoisted(() => ({
-  subscribe: vi.fn(() => vi.fn()),
-}));
+const tokenState = vi.hoisted(() => {
+  const listeners: Array<(tokens: { accent: string }) => void> = [];
+  const current = { accent: "blue" };
+  return {
+    subscribe: vi.fn((callback: (tokens: { accent: string }) => void) => {
+      listeners.push(callback);
+      callback(current);
+      return vi.fn(() => {
+        const index = listeners.indexOf(callback);
+        if (index >= 0) listeners.splice(index, 1);
+      });
+    }),
+    emit(tokens: { accent: string }) {
+      listeners.slice().forEach((callback) => callback(tokens));
+    },
+    current,
+  };
+});
 
 vi.mock("@solidjs/router", () => ({
   A: (props: {
@@ -93,7 +108,7 @@ beforeEach(() => {
   queryState.refetch.mockReset();
   queryState.queryFn = undefined;
   queryState.setData = undefined;
-  tokenState.subscribe.mockReset().mockImplementation(() => vi.fn());
+  tokenState.subscribe.mockClear();
 });
 
 describe("CSP injection", () => {
@@ -127,6 +142,33 @@ describe("WASM component details", () => {
     );
   });
 
+  it("posts current tokens and stops posting after the second load", () => {
+    render(() => (
+      <WasmComponentDetails component={component} sandboxed={true} />
+    ));
+    const iframe = screen.getByTitle("WASM component preview");
+    const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
+
+    iframe.dispatchEvent(new Event("load"));
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: "setup",
+        value: {
+          tokens: { accent: "blue" },
+          url: "http://localhost",
+          theme: "light",
+        },
+      },
+      "*",
+    );
+    const unsubscribe = tokenState.subscribe.mock.results[0]?.value;
+    iframe.dispatchEvent(new Event("load"));
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    const count = postMessage.mock.calls.length;
+    tokenState.emit({ accent: "green" });
+    expect(postMessage).toHaveBeenCalledTimes(count);
+  });
+
   it("removes old iframe load handlers and token subscriptions on reruns", () => {
     render(() => (
       <WasmComponentDetails component={component} sandboxed={true} />
@@ -150,7 +192,12 @@ describe("WASM component details", () => {
   it("rejects non-OK dashboard responses without exposing response content", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(new Response("backend secret", { status: 500 }));
+      .mockResolvedValue(
+        new Response("backend secret", {
+          status: 500,
+          headers: { "content-type": "text/html" },
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
     render(() => (
       <WasmComponentDetails component={component} sandboxed={true} />

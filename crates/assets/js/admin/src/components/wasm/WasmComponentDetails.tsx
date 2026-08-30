@@ -24,6 +24,14 @@ import { cn } from "@/lib/utils";
 
 function SandboxedIframe(props: { component: WasmComponent }) {
   const source = () => getAdminUiPath(props.component);
+  const dashboardOrigin = () => {
+    const src = source();
+    return src ? new URL(src, window.location.origin).origin : undefined;
+  };
+  const dashboardCsp = () => {
+    const origin = dashboardOrigin();
+    return origin ? iframeCsp(origin) : undefined;
+  };
   const dashboardPage = useQuery(() => ({
     queryKey: ["wasm-dash", source()],
     queryFn: async ({ queryKey: _ }) => {
@@ -36,8 +44,11 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       if (!response.ok) {
         throw new Error("dashboard request failed");
       }
-      const expectedOrigin = new URL(src, window.location.origin).origin;
-      if (new URL(response.url, expectedOrigin).origin !== expectedOrigin) {
+      const expectedOrigin = dashboardOrigin();
+      if (
+        expectedOrigin === undefined ||
+        new URL(response.url, expectedOrigin).origin !== expectedOrigin
+      ) {
         throw new Error("dashboard origin rejected");
       }
       return await response.text();
@@ -54,12 +65,11 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         return;
       }
 
-      const src = source();
-      if (!src) {
+      const origin = dashboardOrigin();
+      if (!origin) {
         return;
       }
-      const dashboardOrigin = new URL(src, window.location.origin).origin;
-      const metaCsp = iframeCsp(dashboardOrigin);
+      const metaCsp = iframeCsp(origin);
       body = injectCspMeta(body, metaCsp);
 
       if (import.meta.env.DEV) {
@@ -135,7 +145,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         }}
         title="WASM component preview"
         sandbox="allow-scripts allow-modals"
-        csp={src ? iframeCsp(new URL(src, window.location.origin).origin) : undefined}
+        csp={dashboardCsp()}
       />
 
       <Show when={dashboardPage.isLoading || dashboardPage.isError}>
