@@ -1,13 +1,4 @@
-import {
-  Match,
-  Switch,
-  Show,
-  createSignal,
-  onCleanup,
-  createMemo,
-  createEffect,
-} from "solid-js";
-import type { Setter } from "solid-js";
+import { Match, Switch, Show, createSignal, createMemo } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import type {
   ColumnDef,
@@ -15,30 +6,8 @@ import type {
   SortingState,
 } from "@tanstack/solid-table";
 import { useQuery } from "@tanstack/solid-query";
-import { Chart } from "chart.js/auto";
-import type {
-  ChartData,
-  ScriptableLineSegmentContext,
-  TooltipItem,
-} from "chart.js/auto";
-import {
-  TbOutlineRefresh,
-  TbOutlineWorld,
-  TbOutlineCaretUp,
-} from "solid-icons/tb";
-import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
-import type { FeatureCollection } from "geojson";
+import { TbOutlineRefresh } from "solid-icons/tb";
 
-import "maplibre-gl/dist/maplibre-gl.css";
-import * as maplibregl from "maplibre-gl";
-import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-
-import { Button } from "@/components/ui/button";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-} from "@/components/ui/accordion";
 import { Header } from "@/components/Header";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -46,12 +15,6 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { Table, buildTable } from "@/components/Table";
 import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
@@ -59,16 +22,9 @@ import { FilterBar } from "@/components/FilterBar";
 import { fetchLogs, fetchStats } from "@/lib/api/logs";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
-import { cn } from "@/lib/utils";
 import { LogsInsights } from "./LogsInsights";
 
-import countriesGeoJSON from "@/assets/countries-110m.json";
-
 import type { LogJson } from "@bindings/LogJson";
-import type { StatsResponse } from "@bindings/StatsResponse";
-
-// Needed for bundlers like vite: https://github.com/maplibre/maplibre-gl-js/blob/main/docs/index.md#installation
-maplibregl.setWorkerUrl(workerUrl);
 
 const columns: ColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
@@ -352,3 +308,6 @@ function LogsPage() {
     </div>
   );
 }
+
+// Needed for dynamic load.
+export default LogsPage;

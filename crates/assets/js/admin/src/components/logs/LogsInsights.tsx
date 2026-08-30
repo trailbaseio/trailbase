@@ -7,9 +7,10 @@ import {
   onCleanup,
   createMemo,
   createEffect,
+  createUniqueId,
 } from "solid-js";
 import { Chart } from "chart.js/auto";
-import type { ChartData, TooltipItem } from "chart.js/auto";
+import type { TooltipItem } from "chart.js/auto";
 import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
 import type { FeatureCollection } from "geojson";
 import * as maplibregl from "maplibre-gl";
@@ -19,22 +20,6 @@ import type { StatsResponse } from "@bindings/StatsResponse";
 import { createIsMobile } from "@/lib/signals";
 import "maplibre-gl/dist/maplibre-gl.css";
 maplibregl.setWorkerUrl(workerUrl);
-
-/// Function that hides lines for very disconnected scatter points.
-function _changeDistantPointLineColorToTransparent(
-  ctx: ScriptableLineSegmentContext,
-) {
-  const t0 = ctx.p0.parsed.x;
-  const t1 = ctx.p1.parsed.x;
-
-  if (t0 !== null && t1 !== null) {
-    const secondsApart = Math.abs(t0 - t1) / 1000;
-    if (secondsApart > 1200) {
-      return "transparent";
-    }
-  }
-  return undefined;
-}
 
 type CountryCodes = Exclude<StatsResponse["country_codes"], null>;
 export type LogsInsightsProps = {
@@ -252,7 +237,11 @@ function MapOverlay(props: {
 
 function WorldMap(props: { countryCodes: CountryCodes }) {
   const [mapDialog, setMapDialog] = createSignal<string>();
-  const codes = createMemo(() => props.countryCodes ?? {});
+  const codes = createMemo(() =>
+    import.meta.env.DEV
+      ? appendDevData(props.countryCodes)
+      : props.countryCodes,
+  );
   const maxScale = createMemo(() =>
     Math.max(
       1000,
@@ -265,6 +254,7 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
   let container!: HTMLDivElement;
   createEffect(() => {
     map?.remove();
+    map = undefined;
     try {
       map = buildMap({
         countryCodes: codes(),
@@ -287,10 +277,19 @@ function WorldMap(props: { countryCodes: CountryCodes }) {
       </div>
       <div
         ref={container}
-        aria-label={`Geographic summary: ${Object.entries(codes()).filter(([c]) => c !== "unattributed").length} countries`}
+        aria-label="Request geography map"
         role="img"
         class="z-0 h-[180px] w-full rounded-sm"
       />
+      <ul class="sr-only" aria-label="Requests by country">
+        <For each={Object.entries(props.countryCodes)}>
+          {([code, requests]) => (
+            <li>
+              {code}: {requests} requests
+            </li>
+          )}
+        </For>
+      </ul>
     </div>
   );
 }
@@ -309,11 +308,12 @@ function LogsGraph(props: { rates: StatsResponse["rates"] }) {
         .trim() || "currentColor";
     try {
       chart = new Chart(canvas, {
-        type: "bar",
+        type: "scatter",
         data: {
           labels: rates.map(([ts]) => Number(ts) * 1000),
           datasets: [
             {
+              type: "bar",
               label: "Request rate",
               data: rates.map(([, v]) => v),
               backgroundColor: primary,
@@ -322,12 +322,27 @@ function LogsGraph(props: { rates: StatsResponse["rates"] }) {
         },
         options: {
           maintainAspectRatio: false,
-          scales: { y: { beginAtZero: true } },
+          scales: {
+            y: { beginAtZero: true },
+            x: {
+              ticks: {
+                callback: (value: number | string) =>
+                  new Date(value as number).toLocaleTimeString(undefined, {
+                    hourCycle: "h24",
+                  }),
+              },
+            },
+          },
+          borderColor: primary,
           plugins: {
             legend: { display: false },
             tooltip: {
               callbacks: {
-                label: (item: TooltipItem<"bar">) =>
+                title: (items: TooltipItem<"scatter">[]) =>
+                  items.map((item) =>
+                    new Date(item.parsed.x ?? 0).toUTCString(),
+                  ),
+                label: (item: TooltipItem<"scatter">) =>
                   `rate: ${(item.parsed.y ?? 0).toPrecision(2)}/s`,
               },
             },
@@ -344,6 +359,10 @@ function LogsGraph(props: { rates: StatsResponse["rates"] }) {
   });
   return (
     <div class="h-[180px]">
+      <p class="sr-only">
+        Request rate: {props.rates.length} samples; latest{" "}
+        {props.rates.at(-1)?.[1] ?? 0}/s.
+      </p>
       <canvas ref={canvas} aria-label="Request rate over time" role="img" />
     </div>
   );
@@ -352,47 +371,53 @@ function LogsGraph(props: { rates: StatsResponse["rates"] }) {
 export function LogsInsights(props: LogsInsightsProps) {
   const isMobile = createIsMobile();
   const [expanded, setExpanded] = createSignal(!isMobile());
+  const contentId = createUniqueId();
+
   return (
     <section aria-label="Activity" class="w-full">
       <button
         type="button"
         aria-expanded={expanded()}
+        aria-controls={contentId}
         onClick={() => setExpanded((v) => !v)}
         class="w-full text-left font-medium"
       >
         Activity
       </button>
       <Show when={expanded()}>
-        <div class="mt-2 flex flex-col gap-2 md:flex-row">
-          {" "}
-          <Show when={props.error}>
-            <div role="alert">
-              Unable to load activity.{" "}
-              <button type="button" onClick={props.onRetry}>
-                Retry
-              </button>
-            </div>
-          </Show>
-          <Show when={!props.error}>
-            <Show
-              when={props.countryCodes}
-              fallback={
-                <p>
-                  Geography unavailable. Place{" "}
-                  <code>&lt;traildepot&gt;/GeoLite2-Country.mmdb</code> to
-                  enable geographic insights.
-                </p>
-              }
-            >
-              <div class="md:w-1/2">
-                <WorldMap countryCodes={props.countryCodes!} />
+        <div id={contentId} class="mt-2 flex flex-col gap-2 md:flex-row">
+          <Switch>
+            <Match when={props.error}>
+              <div role="alert">
+                Unable to load activity.{" "}
+                <button type="button" onClick={() => props.onRetry?.()}>
+                  Retry
+                </button>
               </div>
-            </Show>
-            <div class="md:w-1/2">
-              <p class="sr-only">Labeled request-rate chart</p>
-              <LogsGraph rates={props.rates ?? []} />
-            </div>
-          </Show>
+            </Match>
+            <Match when={props.loading}>
+              <p role="status">Loading activity…</p>
+            </Match>
+            <Match when={true}>
+              <Show
+                when={props.countryCodes}
+                fallback={
+                  <p>
+                    Geography unavailable. Place{" "}
+                    <code>&lt;traildepot&gt;/GeoLite2-Country.mmdb</code> to
+                    enable geographic insights.
+                  </p>
+                }
+              >
+                <div class="md:w-1/2">
+                  <WorldMap countryCodes={props.countryCodes!} />
+                </div>
+              </Show>
+              <div class="md:w-1/2">
+                <LogsGraph rates={props.rates ?? []} />
+              </div>
+            </Match>
+          </Switch>
         </div>
       </Show>
     </section>
@@ -404,5 +429,12 @@ const layerId = "countriesLayer" as const;
 
 const emerald100 = "#d0fae5" as const;
 
-// Needed for dynamic load.
-export default LogsPage;
+function appendDevData(countryCodes: CountryCodes): CountryCodes {
+  const copy = { ...countryCodes };
+
+  for (const code of Object.keys(getAlpha2Codes())) {
+    copy[code] = (copy[code] ?? 0) + Math.round(Math.random() * 2000);
+  }
+
+  return copy;
+}
