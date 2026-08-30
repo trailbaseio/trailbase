@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WasmComponent } from "@bindings/WasmComponent";
 
 vi.mock("@solidjs/router", () => ({
-  A: (props: { href: string; children: unknown }) => (
+  A: (props: { href: string; children: import("solid-js").JSX.Element }) => (
     <a href={props.href}>{props.children}</a>
   ),
 }));
@@ -76,6 +76,20 @@ describe("WASM workspace UI", () => {
     expect(
       screen.getByRole("heading", { name: "Restart required" }).parentElement,
     ).toHaveClass("bg-warning");
+  });
+
+  it("does not show prominent restart guidance when registries are synchronized", () => {
+    renderList([
+      component(),
+      component({ name: "available", loaded: false, installed: false }),
+    ]);
+    expect(screen.queryByText("Restart required")).not.toBeInTheDocument();
+  });
+
+  it("always renders the internal component name field", () => {
+    renderList([component({ display_name: undefined })]);
+    expect(screen.getByText(/Internal name:/)).toBeInTheDocument();
+    expect(screen.getByText("trailbase/auth_ui")).toBeInTheDocument();
   });
 
   it("renders accessible safe error copy and retry", () => {

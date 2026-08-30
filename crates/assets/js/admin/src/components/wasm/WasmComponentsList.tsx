@@ -92,6 +92,9 @@ export function WasmComponentsList(props: {
   const running = createMemo(
     () => components().filter((c) => c.loaded && c.installed).length,
   );
+  const hasPendingChanges = createMemo(() =>
+    components().some((c) => c.loaded !== c.installed),
+  );
   return (
     <div>
       <Header
@@ -110,14 +113,12 @@ export function WasmComponentsList(props: {
       />
       <div class="min-w-0 overflow-x-auto p-4">
         <Callout
-          variant={
-            components().some((c) => c.loaded !== c.installed)
-              ? "warning"
-              : "default"
-          }
+          variant={hasPendingChanges() ? "warning" : "default"}
           class="mb-3 text-sm"
         >
-          <CalloutTitle>Restart required</CalloutTitle>
+          <Show when={hasPendingChanges()}>
+            <CalloutTitle>Restart required</CalloutTitle>
+          </Show>
           <CalloutContent>
             Installing or removing a WASM component requires restarting the
             server. You can also run this while the server is off:
@@ -173,11 +174,9 @@ export function WasmComponentsList(props: {
                               <div class="font-medium">
                                 {c.display_name ?? c.name}
                               </div>
-                              <Show when={c.display_name}>
-                                <div class="text-muted-foreground text-xs">
-                                  {c.name}
-                                </div>
-                              </Show>
+                              <div class="text-muted-foreground text-xs">
+                                Internal name: {c.name}
+                              </div>
                               <Show when={c.description}>
                                 <div class="text-muted-foreground text-xs">
                                   {c.description}
