@@ -133,13 +133,12 @@ function LogsPage() {
       setSearchParams({ order: undefined });
     }
   });
-  const [cursors, setCursors] = createSignal(new Map<number, string>());
-  let cursorKey = "";
-  const resetCursors = () => {
-    const key = `${pageSize()}|${filter() ?? ""}|${order()}`;
-    if (key !== cursorKey) {
-      cursorKey = key;
-      setCursors(new Map());
+  const cursors = new Map<number, string>();
+  let cursorGeneration = "";
+  const resetCursors = (generation: string) => {
+    if (generation !== cursorGeneration) {
+      cursorGeneration = generation;
+      cursors.clear();
     }
   };
   const pagination = (): PaginationState => ({
@@ -154,7 +153,7 @@ function LogsPage() {
       order: undefined,
     });
   const setFilter = (value: string | undefined) => {
-    setCursors(new Map());
+    cursors.clear();
     setSearchParams({
       filter: value || undefined,
       pageIndex: undefined,
@@ -165,7 +164,7 @@ function LogsPage() {
   const setSorting = (value: Updater<SortingState>) => {
     const next = typeof value === "function" ? value(sorting()) : value;
     setSortingImpl(next);
-    setCursors(new Map());
+    cursors.clear();
     setSearchParams({
       filter: filter(),
       pageIndex: undefined,
@@ -175,11 +174,13 @@ function LogsPage() {
   };
 
   const logsFetch = useQuery(() => {
-    resetCursors();
     const size = pageSize();
     const index = pageIndex();
     const currentFilter = filter() ?? "";
     const currentOrder = order();
+    const generation = `${size}|${currentFilter}|${currentOrder}`;
+    resetCursors(generation);
+    const cursor = cursors.get(index - 1);
     return {
       queryKey: ["logs", size, index, currentFilter, currentOrder],
       queryFn: async () => {
@@ -187,11 +188,12 @@ function LogsPage() {
           size,
           index,
           currentFilter || undefined,
-          cursors().get(index - 1),
+          cursor,
           currentOrder || undefined,
         );
-        if (response.cursor)
-          setCursors((old) => new Map(old).set(index, response.cursor!));
+        if (response.cursor && cursorGeneration === generation) {
+          cursors.set(index, response.cursor);
+        }
         return response;
       },
     };

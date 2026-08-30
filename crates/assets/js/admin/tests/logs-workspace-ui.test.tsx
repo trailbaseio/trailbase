@@ -200,6 +200,16 @@ vi.mock("@/components/logs/LogsInsights", () => ({
 
 import LogsPage from "@/components/logs/LogsPage";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 const response = (
   entries: LogJson[] = [log],
   totalRowCount: bigint = BigInt(entries.length),
@@ -337,6 +347,38 @@ describe("LogsPage query state", () => {
     );
     expect(state.params).toMatchObject({ filter: "status >= 400" });
     expect(state.params.order).toBeUndefined();
+  });
+
+  it("ignores stale cursors from an older generation", async () => {
+    const oldRequest = deferred<ListLogsResponse>();
+    const currentRequest = deferred<ListLogsResponse>();
+    state.fetchLogs
+      .mockReturnValueOnce(oldRequest.promise)
+      .mockReturnValueOnce(currentRequest.promise)
+      .mockResolvedValue(response([secondLog]));
+    await setup();
+
+    const input = screen.getByRole("textbox", { name: "Filter rows" });
+    await fireEvent.input(input, { target: { value: "status >= 400" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
+    await waitFor(() => expect(state.fetchLogs).toHaveBeenCalledTimes(2));
+
+    oldRequest.resolve(response([log], 1n, "stale-cursor"));
+    await currentRequest.resolve(response([secondLog], 1n, "current-cursor"));
+    await waitFor(() =>
+      expect(screen.getByText("/api/items/2")).toBeInTheDocument(),
+    );
+
+    state.setParams({ filter: "status >= 400", pageIndex: "1" });
+    await waitFor(() => expect(state.fetchLogs).toHaveBeenCalledTimes(3));
+    expect(state.fetchLogs.mock.calls[2]).toEqual([
+      20,
+      1,
+      "status >= 400",
+      "current-cursor",
+      undefined,
+    ]);
+    expect(state.fetchLogs.mock.calls[2][3]).not.toBe("stale-cursor");
   });
 
   it("passes cursors to the next page and resets them when the query changes", async () => {
