@@ -230,20 +230,33 @@ describe("WASM component details", () => {
     ).toHaveAttribute("href", "/wasm");
   });
 
-  it("rejects an unsafe dashboard path into a safe state", () => {
-    render(() => (
-      <WasmComponentDetails
-        component={{ ...component, admin_ui_path: "https://evil.example/" }}
-        sandboxed={true}
-      />
-    ));
+  it.each([
+    "https://evil.example/",
+    "//evil.example/",
+    "///evil.example/",
+    "/\\\\evil.example",
+  ])(
+    "rejects unsafe dashboard path %s before fetch or navigation",
+    (admin_ui_path) => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
 
-    expect(screen.getByText(/rejected for safety/i)).toBeInTheDocument();
-    expect(
-      screen.queryByTitle("WASM component preview"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTitle("WASM component dashboard"),
-    ).not.toBeInTheDocument();
-  });
+      render(() => (
+        <WasmComponentDetails
+          component={{ ...component, admin_ui_path }}
+          sandboxed={true}
+        />
+      ));
+
+      expect(screen.getByText(/rejected for safety/i)).toBeInTheDocument();
+      expect(
+        screen.queryByTitle("WASM component preview"),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByTitle("WASM component dashboard"),
+      ).not.toBeInTheDocument();
+      expect(fetchMock).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    },
+  );
 });

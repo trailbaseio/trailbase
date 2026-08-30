@@ -298,7 +298,13 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
   // still true, i.e. a local path can forward credentials.
   //
   // Even with a stricter CSP, this defence in depth.
-  if (URL.parse(path)) {
+  let resolved: URL;
+  try {
+    resolved = new URL(path, window.location.origin);
+  } catch {
+    return;
+  }
+  if (!path.startsWith("/") || resolved.origin !== window.location.origin) {
     return;
   }
 
