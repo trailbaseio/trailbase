@@ -7,9 +7,7 @@ import {
   wasmComponentStatus,
 } from "@/components/wasm/WasmComponentsList";
 
-function component(
-  overrides: Partial<WasmComponent> = {},
-): WasmComponent {
+function component(overrides: Partial<WasmComponent> = {}): WasmComponent {
   return {
     name: "component",
     path: "wasm/component.wasm",
@@ -21,25 +19,33 @@ function component(
 
 describe("WASM component state model", () => {
   it("maps every loaded and installed combination", () => {
-    expect(wasmComponentStatus(component({ loaded: true, installed: true }))).toEqual({
+    expect(
+      wasmComponentStatus(component({ loaded: true, installed: true })),
+    ).toEqual({
       key: "running",
       label: "Running",
       priority: 1,
       variant: "success",
     });
-    expect(wasmComponentStatus(component({ loaded: false, installed: false }))).toEqual({
+    expect(
+      wasmComponentStatus(component({ loaded: false, installed: false })),
+    ).toEqual({
       key: "available",
       label: "Available",
       priority: 2,
       variant: "secondary",
     });
-    expect(wasmComponentStatus(component({ loaded: false, installed: true }))).toEqual({
+    expect(
+      wasmComponentStatus(component({ loaded: false, installed: true })),
+    ).toEqual({
       key: "install-pending",
       label: "Install pending restart",
       priority: 0,
       variant: "warning",
     });
-    expect(wasmComponentStatus(component({ loaded: true, installed: false }))).toEqual({
+    expect(
+      wasmComponentStatus(component({ loaded: true, installed: false })),
+    ).toEqual({
       key: "removal-pending",
       label: "Removal pending restart",
       priority: 0,
@@ -74,9 +80,9 @@ describe("WASM component state model", () => {
   });
 
   it("uses the repository ID or local path as the source", () => {
-    expect(wasmComponentSource(component({ repo_id: "trailbase/auth_ui" }))).toBe(
-      "trailbase/auth_ui",
-    );
+    expect(
+      wasmComponentSource(component({ repo_id: "trailbase/auth_ui" })),
+    ).toBe("trailbase/auth_ui");
     expect(wasmComponentSource(component())).toBe("wasm/component.wasm");
   });
 });

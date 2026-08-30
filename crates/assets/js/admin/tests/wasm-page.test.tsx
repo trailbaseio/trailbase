@@ -52,7 +52,11 @@ vi.mock("@/components/wasm/WasmComponentsList", () => ({
     });
     return (
       <div>
-        {props.isLoading ? "LIST LOADING" : props.isError ? "LIST ERROR" : "LIST"}
+        {props.isLoading
+          ? "LIST LOADING"
+          : props.isError
+            ? "LIST ERROR"
+            : "LIST"}
       </div>
     );
   },
