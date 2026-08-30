@@ -148,64 +148,6 @@ function YoloIframe(props: { component: WasmComponent }) {
   );
 }
 
-// FIXME: This one is broken because assets cannot be loaded, since origin is `blob:...`.
-function YoloWithExtraStepsIframe(props: { component: WasmComponent }) {
-  const source = () => getAdminUiPath(props.component);
-  const dashboardPage = useQuery(() => ({
-    queryKey: ["wasm-dash", source()],
-    queryFn: async ({ queryKey: _ }) => {
-      const src = source();
-      if (!src) {
-        return;
-      }
-
-      const response = await fetch(src, { headers: client.headers() });
-      return await response.blob();
-    },
-  }));
-
-  let iframe: HTMLIFrameElement | undefined;
-
-  createEffect(() => {
-    const blob: Blob | undefined = dashboardPage.data;
-    if (blob !== undefined) {
-      if (iframe === undefined) {
-        console.error("iframe not bound");
-        return;
-      }
-
-      const html = new Blob([blob], { type: "text/html" });
-      const url = URL.createObjectURL(html);
-
-      iframe.src = url;
-      iframe.style.width = "100%";
-      iframe.style.height = "400px";
-
-      iframe.addEventListener("load", () => URL.revokeObjectURL(url));
-    }
-  });
-
-  return (
-    <Switch>
-      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
-
-      <Match when={true}>
-        <iframe
-          ref={iframe}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-          }}
-          title={`WASM component: ${props.component.name}`}
-          sandbox={undefined}
-          csp={undefined}
-        />
-      </Match>
-    </Switch>
-  );
-}
-
 function BackButton() {
   return (
     <A

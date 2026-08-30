@@ -1,5 +1,4 @@
 import { createMemo, For, Match, Show, Switch } from "solid-js";
-import { template } from "solid-js/web";
 import { A } from "@solidjs/router";
 import {
   TbOutlinePuzzle,
@@ -68,18 +67,17 @@ export function wasmComponentSource(c: WasmComponent) {
 }
 function Icon(props: { value?: string }) {
   const value = () => props.value?.trim();
+  const image = () => {
+    const icon = value();
+    if (icon?.startsWith("<svg")) {
+      return `data:image/svg+xml,${encodeURIComponent(icon)}`;
+    }
+    return icon?.match(/^data:image\//i) ? icon : undefined;
+  };
   return (
-    <Switch>
-      <Match when={value()?.startsWith("<svg") === true}>
-        <div class="size-6 [&>svg]:size-6">{template(value()!)()}</div>
-      </Match>
-      <Match when={value()?.startsWith("data:") === true}>
-        <img src={value()!} alt="" class="size-6" />
-      </Match>
-      <Match when={true}>
-        <TbOutlinePuzzle size={24} />
-      </Match>
-    </Switch>
+    <Show when={image()} fallback={<TbOutlinePuzzle size={24} />}>
+      <img src={image()} alt="" class="size-6" />
+    </Show>
   );
 }
 export function WasmComponentsList(props: {
@@ -104,6 +102,7 @@ export function WasmComponentsList(props: {
           <Button
             variant="outline"
             onClick={() => props.refetch()}
+            disabled={props.isLoading}
             title="Refresh WASM components"
             aria-label="Refresh WASM components"
           >

@@ -134,12 +134,26 @@ describe("WASM workspace UI", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not render boolean text before SVG icons", () => {
-    renderList([
-      component({ icon: '<svg aria-label="component icon"></svg>' }),
+  it("renders manifest SVG icons as inert images", () => {
+    const { container } = renderList([
+      component({
+        icon: '<svg aria-label="component icon" onload="alert(1)"></svg>',
+      }),
     ]);
     expect(screen.queryByText("true")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("component icon")).toBeInTheDocument();
+    expect(screen.queryByLabelText("component icon")).not.toBeInTheDocument();
+    const icon = container.querySelector("img");
+    expect(icon).toHaveAttribute("src", expect.stringContaining("data:image/svg+xml"));
+    expect(icon).not.toHaveAttribute("onload");
+  });
+
+  it("disables refresh while loading", () => {
+    const refetch = vi.fn();
+    renderList([], { isLoading: true, refetch });
+    const refresh = screen.getByRole("button", { name: /refresh wasm components/i });
+    expect(refresh).toBeDisabled();
+    refresh.click();
+    expect(refetch).not.toHaveBeenCalled();
   });
 
   it("renders states as accessible badges", () => {
