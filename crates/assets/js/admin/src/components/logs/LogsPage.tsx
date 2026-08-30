@@ -31,7 +31,6 @@ type SearchParams = {
   filter?: string;
   pageSize?: string;
   pageIndex?: string;
-  order?: string;
 };
 
 const columns: ColumnDef<LogJson>[] = [
@@ -120,8 +119,8 @@ function LogsPage() {
   const filter = createMemo(() => searchParams.filter);
   const pageSize = createMemo(() => safeParseInt(searchParams.pageSize) ?? 20);
   const pageIndex = createMemo(() => safeParseInt(searchParams.pageIndex) ?? 0);
-  const order = createMemo(() => searchParams.order ?? "");
   const [sorting, setSortingImpl] = createSignal<SortingState>([]);
+  const order = createMemo(() => formatSortingAsOrder(sorting()) ?? "");
   const [cursors, setCursors] = createSignal(new Map<number, string>());
   let cursorKey = "";
   const resetCursors = () => {
@@ -140,7 +139,6 @@ function LogsPage() {
       pageIndex: p.pageIndex || undefined,
       pageSize: p.pageSize === 20 ? undefined : p.pageSize,
       filter: filter(),
-      order: order() || undefined,
     });
   const setFilter = (value: string | undefined) => {
     setCursors(new Map());
@@ -148,7 +146,6 @@ function LogsPage() {
       filter: value || undefined,
       pageIndex: undefined,
       pageSize: undefined,
-      order: order() || undefined,
     });
   };
   const setSorting = (value: Updater<SortingState>) => {
@@ -159,7 +156,6 @@ function LogsPage() {
       filter: filter(),
       pageIndex: undefined,
       pageSize: undefined,
-      order: formatSortingAsOrder(next) || undefined,
     });
   };
 
@@ -253,8 +249,8 @@ function LogsPage() {
       <Header
         title="Logs"
         description={
-          <Show when={filter()}>
-            <span>{String(logsData()?.total_row_count ?? 0)} requests</span>
+          <Show when={() => logsData()?.total_row_count !== undefined}>
+            <span>{String(logsData()!.total_row_count)} requests</span>
           </Show>
         }
         right={
@@ -292,7 +288,7 @@ function LogsPage() {
           </summary>
           <p class="text-muted-foreground mt-2 text-sm">
             Examples: <code>status &gt;= 400</code>, <code>method = "GET"</code>
-            , <code>latency &gt; 2</code>, <code>url contains "/api"</code>,{" "}
+            , <code>latency &gt; 2</code>, <code>url ~ "/api/%"</code>,{" "}
             <code>client_ip = "127.0.0.1"</code>,{" "}
             <code>user_id = "user_123"</code>.
           </p>
