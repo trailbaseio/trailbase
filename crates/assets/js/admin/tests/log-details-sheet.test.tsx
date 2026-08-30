@@ -1,5 +1,5 @@
-import { fireEvent, render } from "@solidjs/testing-library";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { LogJson } from "@bindings/LogJson";
 import { LogDetailsSheet } from "@/components/logs/LogDetailsSheet";
@@ -27,16 +27,19 @@ const log: LogJson = {
 };
 
 describe("LogDetailsSheet", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
   it("shows complete request details and copies exact values without leaking them", async () => {
     const onClose = vi.fn();
-    const result = render(() => (
-      <LogDetailsSheet log={log} onClose={onClose} />
-    ));
+    render(() => <LogDetailsSheet log={log} onClose={onClose} />);
 
     expect(
-      result.getByRole("heading", { name: "POST /api/widgets" }),
+      screen.getByRole("heading", { name: "POST /api/widgets" }),
     ).toBeInTheDocument();
-    expect(result.getByText("Request details")).toBeInTheDocument();
+    expect(screen.getByText("Request details")).toBeInTheDocument();
     for (const heading of [
       "Request",
       "Timing",
@@ -45,12 +48,12 @@ describe("LogDetailsSheet", () => {
       "Metadata",
     ]) {
       expect(
-        result.getByRole("heading", { name: heading }),
+        screen.getByRole("heading", { name: heading }),
       ).toBeInTheDocument();
     }
     for (const value of [
       "42",
-      "2023-11-14",
+      "2023-11-14T22:13:20.000Z",
       "201",
       "POST",
       "/api/widgets",
@@ -62,26 +65,24 @@ describe("LogDetailsSheet", () => {
       "TestAgent/1.0",
       "user-7",
     ]) {
-      expect(result.getByText(value)).toBeInTheDocument();
+      expect(screen.getByText(value)).toBeInTheDocument();
     }
 
-    await fireEvent.click(result.getByRole("button", { name: "Copy url" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Copy url" }));
     expect(copyToClipboard).toHaveBeenCalledWith(
       "/api/widgets",
       false,
       "url copied",
     );
-    expect(result.container.textContent).not.toContain("Copied: /api/widgets");
+    expect(document.body.textContent).not.toContain("Copied: /api/widgets");
 
-    await fireEvent.keyDown(result.getByRole("button", { name: "Close" }), {
-      key: "Enter",
-    });
+    await fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onClose).toHaveBeenCalled();
   });
 
   it("uses an em dash for absent optional values and closes through onOpenChange", async () => {
     const onClose = vi.fn();
-    const result = render(() => (
+    render(() => (
       <LogDetailsSheet
         log={{
           ...log,
@@ -94,8 +95,8 @@ describe("LogDetailsSheet", () => {
         onClose={onClose}
       />
     ));
-    expect(result.getAllByText("—").length).toBeGreaterThanOrEqual(5);
-    await fireEvent.click(result.getByRole("button", { name: "Close" }));
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(5);
+    await fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onClose).toHaveBeenCalled();
   });
 });
