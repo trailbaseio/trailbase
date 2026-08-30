@@ -2,7 +2,11 @@ import type { LogJson } from "@bindings/LogJson";
 
 export type LogStatusTone = "success" | "muted" | "warning" | "destructive";
 
-export function formatLogTimestamp(created: number) {
+export function formatLogTimestamp(created: number): {
+  date: string;
+  time: string;
+  iso: string;
+} {
   const iso = new Date(created * 1000).toISOString();
   return { date: iso.slice(0, 10), time: iso.slice(11, 23), iso };
 }

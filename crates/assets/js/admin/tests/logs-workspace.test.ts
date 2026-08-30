@@ -43,9 +43,16 @@ describe("log presentation helpers", () => {
 
   test("maps HTTP status classes to tones", () => {
     expect(logStatusTone(199)).toBe("muted");
+    expect(logStatusTone(200)).toBe("success");
     expect(logStatusTone(204)).toBe("success");
+    expect(logStatusTone(299)).toBe("success");
+    expect(logStatusTone(300)).toBe("muted");
     expect(logStatusTone(302)).toBe("muted");
+    expect(logStatusTone(399)).toBe("muted");
+    expect(logStatusTone(400)).toBe("warning");
     expect(logStatusTone(404)).toBe("warning");
+    expect(logStatusTone(499)).toBe("warning");
+    expect(logStatusTone(500)).toBe("destructive");
     expect(logStatusTone(503)).toBe("destructive");
   });
 
@@ -57,6 +64,7 @@ describe("log presentation helpers", () => {
     ).toBe("Paris, FR");
     expect(logClientLabel(log({ client_geoip_cc: "DE" }))).toBe("DE");
     expect(logClientLabel(log())).toBe("192.0.2.1");
+    expect(logClientLabel(log({ user_id: null }))).toBe("192.0.2.1");
     expect(
       logClientLabel(
         log({ client_geoip_city: { name: null, country_code: null } }),
