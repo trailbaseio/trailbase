@@ -44,11 +44,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       if (!response.ok) {
         throw new Error("dashboard request failed");
       }
-      const expectedOrigin = dashboardOrigin();
-      if (
-        expectedOrigin === undefined ||
-        new URL(response.url, expectedOrigin).origin !== expectedOrigin
-      ) {
+      if (!isDashboardResponseOriginAllowed(src, response.url)) {
         throw new Error("dashboard origin rejected");
       }
       return await response.text();
@@ -180,11 +176,10 @@ function SandboxedIframe(props: { component: WasmComponent }) {
 
 function YoloIframe(props: { component: WasmComponent }) {
   const source = () => getAdminUiPath(props.component);
-  const src = source();
 
   return (
     <iframe
-      src={src}
+      src={source()}
       title="WASM component dashboard"
       style={{
         width: "100%",
@@ -336,6 +331,18 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
     : path;
 }
 
+export function isDashboardResponseOriginAllowed(
+  source: string,
+  responseUrl: string,
+): boolean {
+  try {
+    const expectedOrigin = new URL(source, window.location.origin).origin;
+    return new URL(responseUrl, expectedOrigin).origin === expectedOrigin;
+  } catch {
+    return false;
+  }
+}
+
 export function injectCspMeta(body: string, csp: string): string {
   const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
   if (/<head(?:\s[^>]*)?>/i.test(body)) {
@@ -350,6 +357,4 @@ export function injectCspMeta(body: string, csp: string): string {
 // NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
 //   https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
 const iframeCsp = (origin: string) =>
-  import.meta.env.DEV
-    ? ""
-    : `default-src 'self' ${origin}; style-src 'self' ${origin} 'unsafe-inline'; script-src 'self' ${origin} 'unsafe-inline'; img-src 'self' ${origin} data:; connect-src ${origin}`;
+  `default-src 'self' ${origin}; style-src 'self' ${origin} 'unsafe-inline'; script-src 'self' ${origin} 'unsafe-inline'; img-src 'self' ${origin} data:; connect-src ${origin}`;

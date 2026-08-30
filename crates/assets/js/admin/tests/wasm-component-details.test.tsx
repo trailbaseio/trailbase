@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WasmComponent } from "@bindings/WasmComponent";
+import type { Tokens } from "trailbase";
 
 const queryState = vi.hoisted(() => ({
   data: "<html><body>dashboard</body></html>" as string | undefined,
@@ -15,10 +16,14 @@ const queryState = vi.hoisted(() => ({
   setData: undefined as ((value: string) => void) | undefined,
 }));
 const tokenState = vi.hoisted(() => {
-  const listeners: Array<(tokens: { accent: string }) => void> = [];
-  const current = { accent: "blue" };
+  const listeners: Array<(tokens: Tokens | null) => void> = [];
+  const current: Tokens = {
+    auth_token: "auth-token",
+    refresh_token: "refresh-token",
+    csrf_token: "csrf-token",
+  };
   return {
-    subscribe: vi.fn((callback: (tokens: { accent: string }) => void) => {
+    subscribe: vi.fn((callback: (tokens: Tokens | null) => void) => {
       listeners.push(callback);
       callback(current);
       return vi.fn(() => {
@@ -26,8 +31,11 @@ const tokenState = vi.hoisted(() => {
         if (index >= 0) listeners.splice(index, 1);
       });
     }),
-    emit(tokens: { accent: string }) {
+    emit(tokens: Tokens | null) {
       listeners.slice().forEach((callback) => callback(tokens));
+    },
+    reset() {
+      listeners.splice(0);
     },
     current,
   };
@@ -88,6 +96,7 @@ vi.mock("@/lib/theme", () => ({
 
 import {
   injectCspMeta,
+  isDashboardResponseOriginAllowed,
   WasmComponentDetails,
 } from "@/components/wasm/WasmComponentDetails";
 
@@ -108,6 +117,7 @@ beforeEach(() => {
   queryState.refetch.mockReset();
   queryState.queryFn = undefined;
   queryState.setData = undefined;
+  tokenState.reset();
   tokenState.subscribe.mockClear();
 });
 
@@ -117,9 +127,30 @@ describe("CSP injection", () => {
     ["html without head", "<html><body>x</body></html>"],
     ["fragment", "<div>x</div>"],
   ])("adds a CSP meta to %s without duplicate heads", (_name, body) => {
-    const result = injectCspMeta(body, "default-src 'self' https://example.test");
+    const result = injectCspMeta(
+      body,
+      "default-src 'self' https://example.test",
+    );
     expect(result.match(/<head\b/gi)).toHaveLength(1);
     expect(result).toContain('http-equiv="Content-Security-Policy"');
+    expect(result).toContain("default-src 'self' https://example.test");
+  });
+});
+
+describe("dashboard response origin validation", () => {
+  it("accepts local production redirects and rejects cross-origin redirects", () => {
+    expect(
+      isDashboardResponseOriginAllowed(
+        "https://admin.example/dashboard",
+        "https://admin.example/redirected",
+      ),
+    ).toBe(true);
+    expect(
+      isDashboardResponseOriginAllowed(
+        "https://admin.example/dashboard",
+        "https://evil.example/dashboard",
+      ),
+    ).toBe(false);
   });
 });
 
@@ -146,7 +177,9 @@ describe("WASM component details", () => {
     render(() => (
       <WasmComponentDetails component={component} sandboxed={true} />
     ));
-    const iframe = screen.getByTitle("WASM component preview");
+    const iframe = screen.getByTitle(
+      "WASM component preview",
+    ) as HTMLIFrameElement;
     const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
 
     iframe.dispatchEvent(new Event("load"));
@@ -154,7 +187,7 @@ describe("WASM component details", () => {
       {
         type: "setup",
         value: {
-          tokens: { accent: "blue" },
+          tokens: tokenState.current,
           url: "http://localhost",
           theme: "light",
         },
@@ -165,8 +198,91 @@ describe("WASM component details", () => {
     iframe.dispatchEvent(new Event("load"));
     expect(unsubscribe).toHaveBeenCalledOnce();
     const count = postMessage.mock.calls.length;
-    tokenState.emit({ accent: "green" });
+    tokenState.emit({
+      auth_token: "new-auth-token",
+      refresh_token: "new-refresh-token",
+      csrf_token: "new-csrf-token",
+    });
     expect(postMessage).toHaveBeenCalledTimes(count);
+  });
+
+  it("stops token delivery and removes the load listener on unmount", () => {
+    const view = render(() => (
+      <WasmComponentDetails component={component} sandboxed={true} />
+    ));
+    const iframe = screen.getByTitle(
+      "WASM component preview",
+    ) as HTMLIFrameElement;
+    const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
+    const removeEventListener = vi.spyOn(iframe, "removeEventListener");
+
+    iframe.dispatchEvent(new Event("load"));
+    expect(postMessage).toHaveBeenCalledOnce();
+    const unsubscribe = tokenState.subscribe.mock.results[0]?.value;
+
+    view.unmount();
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "load",
+      expect.any(Function),
+    );
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    tokenState.emit({
+      auth_token: "later-auth-token",
+      refresh_token: null,
+      csrf_token: null,
+    });
+    expect(postMessage).toHaveBeenCalledOnce();
+  });
+
+  it("uses an exact-origin CSP on the iframe and injected srcdoc", () => {
+    render(() => (
+      <WasmComponentDetails component={component} sandboxed={true} />
+    ));
+    const iframe = screen.getByTitle(
+      "WASM component preview",
+    ) as HTMLIFrameElement;
+
+    expect(iframe).toHaveAttribute("sandbox", "allow-scripts allow-modals");
+    expect(iframe.getAttribute("csp")).toContain(
+      "connect-src http://localhost:4000",
+    );
+    expect(iframe.getAttribute("csp")).not.toContain("connect-src *");
+    expect(iframe.srcdoc).toContain('http-equiv="Content-Security-Policy"');
+    expect(iframe.srcdoc).toContain("connect-src http://localhost:4000");
+  });
+
+  it("accepts a same-origin response and rejects a cross-origin final URL before token delivery", async () => {
+    queryState.data = undefined;
+    const text = vi.fn().mockResolvedValue("<html><body>safe</body></html>");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        url: "http://localhost:4000/redirected",
+        text,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        url: "https://evil.example/dashboard",
+        text,
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    render(() => (
+      <WasmComponentDetails component={component} sandboxed={true} />
+    ));
+
+    await expect(queryState.queryFn?.({ queryKey: [] })).resolves.toBe(
+      "<html><body>safe</body></html>",
+    );
+    await expect(queryState.queryFn?.({ queryKey: [] })).rejects.toThrow(
+      "dashboard origin rejected",
+    );
+    expect(text).toHaveBeenCalledOnce();
+    expect(tokenState.subscribe).not.toHaveBeenCalled();
+    expect(
+      (screen.getByTitle("WASM component preview") as HTMLIFrameElement).srcdoc,
+    ).toBe("");
+    vi.unstubAllGlobals();
   });
 
   it("removes old iframe load handlers and token subscriptions on reruns", () => {
@@ -190,14 +306,12 @@ describe("WASM component details", () => {
   });
 
   it("rejects non-OK dashboard responses without exposing response content", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        new Response("backend secret", {
-          status: 500,
-          headers: { "content-type": "text/html" },
-        }),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("backend secret", {
+        status: 500,
+        headers: { "content-type": "text/html" },
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     render(() => (
       <WasmComponentDetails component={component} sandboxed={true} />
