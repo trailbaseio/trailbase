@@ -35,6 +35,55 @@ import {
 import type { WasmComponent } from "@bindings/WasmComponent";
 import { cn } from "@/lib/utils";
 
+export type WasmComponentStatus = {
+  key: "running" | "available" | "install-pending" | "removal-pending";
+  label: string;
+  priority: number;
+  variant: "success" | "secondary" | "warning";
+};
+
+export function wasmComponentStatus(
+  component: WasmComponent,
+): WasmComponentStatus {
+  if (component.loaded && component.installed) {
+    return { key: "running", label: "Running", priority: 1, variant: "success" };
+  }
+  if (!component.loaded && component.installed) {
+    return {
+      key: "install-pending",
+      label: "Install pending restart",
+      priority: 0,
+      variant: "warning",
+    };
+  }
+  if (component.loaded && !component.installed) {
+    return {
+      key: "removal-pending",
+      label: "Removal pending restart",
+      priority: 0,
+      variant: "warning",
+    };
+  }
+  return {
+    key: "available",
+    label: "Available",
+    priority: 2,
+    variant: "secondary",
+  };
+}
+
+export function sortWasmComponents(components: WasmComponent[]): WasmComponent[] {
+  return [...components].sort((a, b) => {
+    const priority =
+      wasmComponentStatus(a).priority - wasmComponentStatus(b).priority;
+    return priority || (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name);
+  });
+}
+
+export function wasmComponentSource(component: WasmComponent): string {
+  return component.repo_id ?? component.path;
+}
+
 function ComponentIcon(props: { icon?: string }) {
   const icon = createMemo(() => props.icon?.trim());
 
