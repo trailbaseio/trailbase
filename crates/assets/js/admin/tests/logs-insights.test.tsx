@@ -196,7 +196,9 @@ describe("LogsInsights", () => {
     ));
 
     expect(screen.getByRole("status")).toHaveTextContent("Loading activity");
-    expect(screen.queryByText(/geography unavailable/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/geography unavailable/i),
+    ).not.toBeInTheDocument();
   });
 
   it("contains a stats error and exposes Retry without blocking siblings", async () => {

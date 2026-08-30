@@ -135,11 +135,17 @@ function LogsPage() {
   });
   const cursors = new Map<number, string>();
   let cursorGeneration = "";
+  let cursorGenerationToken = 0;
   const resetCursors = (generation: string) => {
     if (generation !== cursorGeneration) {
       cursorGeneration = generation;
+      cursorGenerationToken += 1;
       cursors.clear();
     }
+  };
+  const invalidateCursors = () => {
+    cursorGenerationToken += 1;
+    cursors.clear();
   };
   const pagination = (): PaginationState => ({
     pageIndex: pageIndex(),
@@ -153,7 +159,7 @@ function LogsPage() {
       order: undefined,
     });
   const setFilter = (value: string | undefined) => {
-    cursors.clear();
+    invalidateCursors();
     setSearchParams({
       filter: value || undefined,
       pageIndex: undefined,
@@ -164,7 +170,7 @@ function LogsPage() {
   const setSorting = (value: Updater<SortingState>) => {
     const next = typeof value === "function" ? value(sorting()) : value;
     setSortingImpl(next);
-    cursors.clear();
+    invalidateCursors();
     setSearchParams({
       filter: filter(),
       pageIndex: undefined,
@@ -180,6 +186,7 @@ function LogsPage() {
     const currentOrder = order();
     const generation = `${size}|${currentFilter}|${currentOrder}`;
     resetCursors(generation);
+    const generationToken = cursorGenerationToken;
     const cursor = cursors.get(index - 1);
     return {
       queryKey: ["logs", size, index, currentFilter, currentOrder],
@@ -191,7 +198,11 @@ function LogsPage() {
           cursor,
           currentOrder || undefined,
         );
-        if (response.cursor && cursorGeneration === generation) {
+        if (
+          response.cursor &&
+          cursorGeneration === generation &&
+          cursorGenerationToken === generationToken
+        ) {
           cursors.set(index, response.cursor);
         }
         return response;

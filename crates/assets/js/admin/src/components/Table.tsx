@@ -217,11 +217,7 @@ function omit<T, K extends keyof T>(object: T, key: K): Omit<T, K> {
 export function Table<TData>(props: {
   table: SolidTable<TData>;
   loading: boolean;
-  onRowClick?: (
-    idx: number,
-    row: TData,
-    trigger: HTMLTableRowElement,
-  ) => void;
+  onRowClick?: (idx: number, row: TData, trigger: HTMLTableRowElement) => void;
   emptyState?: JSX.Element;
   paginationPosition?: "top" | "bottom";
   dense?: boolean;
@@ -472,11 +468,7 @@ function TableHeaderRow<TData>(props: {
 
 function TableDataRow<TData>(props: {
   row: Row<TData>;
-  onRowClick?: (
-    idx: number,
-    row: TData,
-    trigger: HTMLTableRowElement,
-  ) => void;
+  onRowClick?: (idx: number, row: TData, trigger: HTMLTableRowElement) => void;
   dense?: boolean;
 }) {
   const onClick = (event: MouseEvent | KeyboardEvent) => {

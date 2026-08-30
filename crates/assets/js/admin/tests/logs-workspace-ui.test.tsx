@@ -349,12 +349,14 @@ describe("LogsPage query state", () => {
     expect(state.params.order).toBeUndefined();
   });
 
-  it("ignores stale cursors from an older generation", async () => {
-    const oldRequest = deferred<ListLogsResponse>();
-    const currentRequest = deferred<ListLogsResponse>();
+  it("ignores stale cursors across an A-B-A generation transition", async () => {
+    const oldA = deferred<ListLogsResponse>();
+    const requestB = deferred<ListLogsResponse>();
+    const currentA = deferred<ListLogsResponse>();
     state.fetchLogs
-      .mockReturnValueOnce(oldRequest.promise)
-      .mockReturnValueOnce(currentRequest.promise)
+      .mockReturnValueOnce(oldA.promise)
+      .mockReturnValueOnce(requestB.promise)
+      .mockReturnValueOnce(currentA.promise)
       .mockResolvedValue(response([secondLog]));
     await setup();
 
@@ -363,22 +365,30 @@ describe("LogsPage query state", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
     await waitFor(() => expect(state.fetchLogs).toHaveBeenCalledTimes(2));
 
-    oldRequest.resolve(response([log], 1n, "stale-cursor"));
-    await currentRequest.resolve(response([secondLog], 1n, "current-cursor"));
-    await waitFor(() =>
-      expect(screen.getByText("/api/items/2")).toBeInTheDocument(),
-    );
-
-    state.setParams({ filter: "status >= 400", pageIndex: "1" });
+    state.setParams({
+      filter: undefined,
+      pageIndex: undefined,
+      pageSize: undefined,
+    });
     await waitFor(() => expect(state.fetchLogs).toHaveBeenCalledTimes(3));
-    expect(state.fetchLogs.mock.calls[2]).toEqual([
+
+    currentA.resolve(response([log], 1n, "current-cursor"));
+    await waitFor(() =>
+      expect(screen.getByText("/api/items")).toBeInTheDocument(),
+    );
+    oldA.resolve(response([secondLog], 1n, "stale-cursor"));
+    await Promise.resolve();
+
+    state.setParams({ filter: undefined, pageIndex: "1", pageSize: undefined });
+    await waitFor(() => expect(state.fetchLogs).toHaveBeenCalledTimes(4));
+    expect(state.fetchLogs.mock.calls[3]).toEqual([
       20,
       1,
-      "status >= 400",
+      undefined,
       "current-cursor",
       undefined,
     ]);
-    expect(state.fetchLogs.mock.calls[2][3]).not.toBe("stale-cursor");
+    expect(state.fetchLogs.mock.calls[3][3]).not.toBe("stale-cursor");
   });
 
   it("passes cursors to the next page and resets them when the query changes", async () => {
