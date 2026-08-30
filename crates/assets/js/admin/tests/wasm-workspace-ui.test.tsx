@@ -43,7 +43,10 @@ const renderList = (components: WasmComponent[], options = {}) =>
     />
   ));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("WASM workspace UI", () => {
   it("keeps the workspace header and refresh action visible while loading", () => {
@@ -210,7 +213,7 @@ describe("WASM workspace UI", () => {
       screen.getByRole("heading", { name: "Install available" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/requires a server restart/i)).toBeInTheDocument();
-    screen.getByRole("button", { name: "Install", exact: true }).click();
+    screen.getByRole("button", { name: /^Install$/ }).click();
     await waitFor(() =>
       expect(installWasmComponent).toHaveBeenCalledWith({ RepoId: "repo/id" }),
     );
@@ -218,6 +221,47 @@ describe("WASM workspace UI", () => {
     expect(
       screen.queryByRole("heading", { name: "Install available" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("awaits uninstall and refetch before closing the removal dialog", async () => {
+    let resolveUninstall!: () => void;
+    const uninstall = new Promise<void>((resolve) => {
+      resolveUninstall = resolve;
+    });
+    let resolveRefetch!: () => void;
+    const refetch = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRefetch = resolve;
+        }),
+    );
+    vi.mocked(uninstallWasmComponent).mockImplementationOnce(() => uninstall);
+
+    renderList([component({ name: "loaded-component" })], { refetch });
+    screen.getByRole("button", { name: "Remove loaded-component" }).click();
+    screen.getByRole("button", { name: /^Remove$/ }).click();
+
+    expect(screen.getByRole("button", { name: "Working…" })).toBeInTheDocument();
+    expect(uninstallWasmComponent).toHaveBeenCalledWith({
+      Path: "components/auth_ui.wasm",
+    });
+    expect(refetch).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("heading", { name: "Remove loaded-component" }),
+    ).toBeInTheDocument();
+
+    resolveUninstall();
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+    expect(
+      screen.getByRole("heading", { name: "Remove loaded-component" }),
+    ).toBeInTheDocument();
+
+    resolveRefetch();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Remove loaded-component" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("offers removal copy for loaded instances", () => {
