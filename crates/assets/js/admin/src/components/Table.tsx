@@ -217,7 +217,11 @@ function omit<T, K extends keyof T>(object: T, key: K): Omit<T, K> {
 export function Table<TData>(props: {
   table: SolidTable<TData>;
   loading: boolean;
-  onRowClick?: (idx: number, row: TData) => void;
+  onRowClick?: (
+    idx: number,
+    row: TData,
+    trigger: HTMLTableRowElement,
+  ) => void;
   emptyState?: JSX.Element;
   paginationPosition?: "top" | "bottom";
   dense?: boolean;
@@ -468,10 +472,14 @@ function TableHeaderRow<TData>(props: {
 
 function TableDataRow<TData>(props: {
   row: Row<TData>;
-  onRowClick?: (idx: number, row: TData) => void;
+  onRowClick?: (
+    idx: number,
+    row: TData,
+    trigger: HTMLTableRowElement,
+  ) => void;
   dense?: boolean;
 }) {
-  const onClick = () => {
+  const onClick = (event: MouseEvent | KeyboardEvent) => {
     // Don't trigger on text selection.
     const selection = window.getSelection();
     if (selection?.toString()) {
@@ -482,13 +490,17 @@ function TableDataRow<TData>(props: {
     if (!handler) {
       return;
     }
-    handler(props.row.index, props.row.original);
+    handler(
+      props.row.index,
+      props.row.original,
+      event.currentTarget as HTMLTableRowElement,
+    );
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onClick();
+      onClick(event);
     }
   };
 

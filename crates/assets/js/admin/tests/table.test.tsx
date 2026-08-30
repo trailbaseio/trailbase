@@ -70,6 +70,12 @@ describe("Table presentation", () => {
 
     expect(row).toHaveAttribute("tabindex", "0");
     await fireEvent.keyDown(row, { key: "Enter" });
-    expect(onRowClick).toHaveBeenCalledWith(0, { name: "Ada" });
+    expect(onRowClick).toHaveBeenCalledWith(0, { name: "Ada" }, row);
+
+    await fireEvent.click(row);
+    await fireEvent.keyDown(row, { key: " " });
+    expect(onRowClick).toHaveBeenCalledTimes(3);
+    expect(onRowClick.mock.calls[1][2]).toBe(row);
+    expect(onRowClick.mock.calls[2][2]).toBe(row);
   });
 });
