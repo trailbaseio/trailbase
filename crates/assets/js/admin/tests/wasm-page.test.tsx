@@ -21,6 +21,9 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("@solidjs/router", () => ({
+  A: (props: { href: string; children: import("solid-js").JSX.Element }) => (
+    <a href={props.href}>{props.children}</a>
+  ),
   useParams: () => state,
 }));
 vi.mock("@tanstack/solid-query", () => ({
@@ -75,9 +78,39 @@ afterEach(() => {
 
 describe("WasmPage detail routing", () => {
   it("keeps a detail route in loading state until components resolve", () => {
+    state.data = {
+      components: [
+        {
+          name: "trailbase/auth_ui",
+          path: "components/auth_ui.wasm",
+          loaded: true,
+          installed: true,
+        },
+      ],
+    };
     render(() => <WasmPage />);
     expect(screen.getByText("LIST LOADING")).toBeInTheDocument();
+    expect(screen.queryByText("DETAILS")).not.toBeInTheDocument();
     expect(screen.queryByText(/not installed/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps a detail route in error state when a refresh fails", () => {
+    state.loading = false;
+    state.error = true;
+    state.data = {
+      components: [
+        {
+          name: "trailbase/auth_ui",
+          path: "components/auth_ui.wasm",
+          loaded: true,
+          installed: true,
+        },
+      ],
+    };
+    render(() => <WasmPage />);
+
+    expect(screen.getByText("LIST ERROR")).toBeInTheDocument();
+    expect(screen.queryByText("DETAILS")).not.toBeInTheDocument();
   });
 
   it("normalizes refresh failures into a rejecting Promise<void>", async () => {
@@ -93,5 +126,26 @@ describe("WasmPage detail routing", () => {
 
     await expect(state.refetchCallback?.()).rejects.toBe(failure);
     expect(state.refetch).toHaveBeenCalledWith({ throwOnError: true });
+  });
+
+  it("shows a component-specific unknown state with a return action", () => {
+    state.name = "missing";
+    state.loading = false;
+    state.data = {
+      components: [
+        {
+          name: "installed",
+          path: "components/installed.wasm",
+          loaded: true,
+          installed: true,
+        },
+      ],
+    };
+    render(() => <WasmPage />);
+
+    expect(screen.getByText(/not installed/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /back to wasm components/i }),
+    ).toHaveAttribute("href", "/wasm");
   });
 });

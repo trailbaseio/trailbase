@@ -18,6 +18,8 @@ import {
 import { client, hostAddress } from "@/lib/client";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/Spinner";
 import { cn } from "@/lib/utils";
 
 function SandboxedIframe(props: { component: WasmComponent }) {
@@ -31,6 +33,9 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       }
 
       const response = await fetch(src, { headers: client.headers() });
+      if (!response.ok) {
+        throw new Error("dashboard request failed");
+      }
       return await response.text();
     },
   }));
@@ -106,11 +111,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
   });
 
   return (
-    <Switch>
-      <Match when={dashboardPage.isError}>
-        Unable to load the component dashboard. Please try again.
-      </Match>
-
+    <div class="relative size-full">
       {/*
          Sandbox options:
          https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
@@ -118,20 +119,41 @@ function SandboxedIframe(props: { component: WasmComponent }) {
          WARN: An iframe which has both allow-scripts and allow-same-origin for its
          sandbox attribute can remove its sandboxing.
       */}
-      <Match when={true}>
-        <iframe
-          ref={iframe}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-          }}
-          title="WASM component preview"
-          sandbox="allow-scripts allow-modals"
-          csp={iframeCsp}
-        />
-      </Match>
-    </Switch>
+      <iframe
+        ref={iframe}
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "block",
+        }}
+        title="WASM component preview"
+        sandbox="allow-scripts allow-modals"
+        csp={iframeCsp}
+      />
+
+      <Show when={dashboardPage.isLoading || dashboardPage.isError}>
+        <div class="bg-background/90 absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+          <Show
+            when={dashboardPage.isError}
+            fallback={
+              <>
+                <Spinner size={28} />
+                <p class="m-0">Loading component dashboard...</p>
+              </>
+            }
+          >
+            <p class="m-0">Unable to load the component dashboard.</p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => dashboardPage.refetch()}
+            >
+              Retry
+            </Button>
+          </Show>
+        </div>
+      </Show>
+    </div>
   );
 }
 
@@ -173,13 +195,13 @@ function SandboxButton(props: {
   return (
     <ToggleSwitch
       class="flex items-center space-x-2"
-      defaultChecked={props.sandboxed}
+      checked={props.sandboxed}
       onChange={(v) => {
         console.debug("sandbox enabled:", v);
         props.setSandboxed(v);
       }}
     >
-      <SwitchControl class="bg-destructive data-[checked]:bg-input">
+      <SwitchControl class="bg-destructive ui-checked:bg-input">
         <SwitchThumb />
       </SwitchControl>
 
@@ -199,16 +221,30 @@ export function WasmComponentDetails(props: {
   const [sandboxed, setSandboxed] = createWritableMemo<boolean>(
     () => props.sandboxed,
   );
+  const dashboardPath = () => getAdminUiPath(props.component);
 
   return (
     <Switch>
-      <Match when={!props.component.admin_ui_path}>
-        {`The '${props.component.name}' component has no dashboard.`}
+      <Match when={!dashboardPath()}>
+        <div class="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+          <h2 class="text-lg font-semibold">
+            {props.component.admin_ui_path
+              ? "Dashboard unavailable"
+              : "No dashboard available"}
+          </h2>
+          <p class="text-muted-foreground m-0">
+            {props.component.admin_ui_path
+              ? "The dashboard path was rejected for safety."
+              : `The '${props.component.name}' component has no dashboard.`}
+          </p>
+          <BackButton />
+        </div>
       </Match>
 
       <Match when={true}>
         <Header
           title={props.component.display_name ?? props.component.name}
+          description={`Internal name: ${props.component.name}`}
           leading={BackButton()}
           left={props.component.version && `@${props.component.version}`}
           right={
@@ -263,7 +299,7 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
   //
   // Even with a stricter CSP, this defence in depth.
   if (URL.parse(path)) {
-    throw Error(`only paths allowed for safety, got: ${path}`);
+    return;
   }
 
   // Fix up for separate dev server.
