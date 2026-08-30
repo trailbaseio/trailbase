@@ -12,6 +12,9 @@ export function WasmPage() {
     queryFn: listWasmComponents,
   }));
   const components = createMemo(() => query.data?.components ?? []);
+  const refetch = async (): Promise<void> => {
+    await query.refetch({ throwOnError: true });
+  };
   const findComponent = createMemo(() =>
     components().find((c) => c.name === params.name),
   );
@@ -35,7 +38,7 @@ export function WasmPage() {
           components={components()}
           isLoading={query.isLoading}
           isError={query.isError}
-          refetch={query.refetch}
+          refetch={refetch}
         />
       </Match>
     </Switch>

@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@solidjs/testing-library";
+import { onMount } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -16,6 +17,7 @@ const state = vi.hoisted(() => ({
       }
     | undefined,
   refetch: vi.fn(),
+  refetchCallback: undefined as (() => Promise<void>) | undefined,
 }));
 
 vi.mock("@solidjs/router", () => ({
@@ -40,11 +42,20 @@ vi.mock("@/components/wasm/WasmComponentDetails", () => ({
   WasmComponentDetails: () => <div>DETAILS</div>,
 }));
 vi.mock("@/components/wasm/WasmComponentsList", () => ({
-  WasmComponentsList: (props: { isLoading: boolean; isError: boolean }) => (
-    <div>
-      {props.isLoading ? "LIST LOADING" : props.isError ? "LIST ERROR" : "LIST"}
-    </div>
-  ),
+  WasmComponentsList: (props: {
+    isLoading: boolean;
+    isError: boolean;
+    refetch: () => Promise<void>;
+  }) => {
+    onMount(() => {
+      state.refetchCallback = props.refetch;
+    });
+    return (
+      <div>
+        {props.isLoading ? "LIST LOADING" : props.isError ? "LIST ERROR" : "LIST"}
+      </div>
+    );
+  },
 }));
 
 import { WasmPage } from "@/components/wasm/WasmPage";
@@ -55,6 +66,7 @@ afterEach(() => {
   state.loading = true;
   state.error = false;
   state.data = undefined;
+  state.refetchCallback = undefined;
 });
 
 describe("WasmPage detail routing", () => {
@@ -62,5 +74,20 @@ describe("WasmPage detail routing", () => {
     render(() => <WasmPage />);
     expect(screen.getByText("LIST LOADING")).toBeInTheDocument();
     expect(screen.queryByText(/not installed/i)).not.toBeInTheDocument();
+  });
+
+  it("normalizes refresh failures into a rejecting Promise<void>", async () => {
+    state.name = undefined;
+    state.loading = false;
+    const failure = new Error("refresh failed");
+    state.refetch.mockImplementation((options?: { throwOnError?: boolean }) =>
+      options?.throwOnError
+        ? Promise.reject(failure)
+        : Promise.resolve({ isError: true }),
+    );
+    render(() => <WasmPage />);
+
+    await expect(state.refetchCallback?.()).rejects.toBe(failure);
+    expect(state.refetch).toHaveBeenCalledWith({ throwOnError: true });
   });
 });
