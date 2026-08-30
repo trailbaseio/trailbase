@@ -249,7 +249,7 @@ function LogsPage() {
       <Header
         title="Logs"
         description={
-          <Show when={() => logsData()?.total_row_count !== undefined}>
+          <Show when={logsData()?.total_row_count !== undefined}>
             <span>{String(logsData()!.total_row_count)} requests</span>
           </Show>
         }
