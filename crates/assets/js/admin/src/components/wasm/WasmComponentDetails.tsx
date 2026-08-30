@@ -54,12 +54,13 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         return;
       }
 
-      const dashboardOrigin = new URL(source(), window.location.origin).origin;
-      const metaCsp = `default-src 'self' ${dashboardOrigin}; style-src 'self' ${dashboardOrigin} 'unsafe-inline'; script-src 'self' ${dashboardOrigin} 'unsafe-inline'; img-src 'self' ${dashboardOrigin} data:; connect-src ${dashboardOrigin}`;
-      body = body.replace(
-        /<head([^>]*)>/i,
-        `<head$1><meta http-equiv="Content-Security-Policy" content="${metaCsp}">`,
-      );
+      const src = source();
+      if (!src) {
+        return;
+      }
+      const dashboardOrigin = new URL(src, window.location.origin).origin;
+      const metaCsp = iframeCsp(dashboardOrigin);
+      body = injectCspMeta(body, metaCsp);
 
       if (import.meta.env.DEV) {
         // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
@@ -134,7 +135,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         }}
         title="WASM component preview"
         sandbox="allow-scripts allow-modals"
-        csp={iframeCsp(new URL(source(), window.location.origin).origin)}
+        csp={src ? iframeCsp(new URL(src, window.location.origin).origin) : undefined}
       />
 
       <Show when={dashboardPage.isLoading || dashboardPage.isError}>
@@ -169,10 +170,11 @@ function SandboxedIframe(props: { component: WasmComponent }) {
 
 function YoloIframe(props: { component: WasmComponent }) {
   const source = () => getAdminUiPath(props.component);
+  const src = source();
 
   return (
     <iframe
-      src={source()}
+      src={src}
       title="WASM component dashboard"
       style={{
         width: "100%",
@@ -322,6 +324,17 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
   return import.meta.env.DEV
     ? `http://${window.location.hostname}:4000${path}`
     : path;
+}
+
+export function injectCspMeta(body: string, csp: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+  if (/<head(?:\s[^>]*)?>/i.test(body)) {
+    return body.replace(/(<head(?:\s[^>]*)?>)/i, `$1${meta}`);
+  }
+  if (/<html(?:\s[^>]*)?>/i.test(body)) {
+    return body.replace(/(<html(?:\s[^>]*)?>)/i, `$1<head>${meta}</head>`);
+  }
+  return `<head>${meta}</head>${body}`;
 }
 
 // NOTE: The `csp` attribute is not yet supported by Firefox & Safari:

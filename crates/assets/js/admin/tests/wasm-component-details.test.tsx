@@ -71,7 +71,10 @@ vi.mock("@/lib/theme", () => ({
   currentTheme: () => "light",
 }));
 
-import { WasmComponentDetails } from "@/components/wasm/WasmComponentDetails";
+import {
+  injectCspMeta,
+  WasmComponentDetails,
+} from "@/components/wasm/WasmComponentDetails";
 
 const component = {
   name: "trailbase/auth_ui",
@@ -91,6 +94,18 @@ beforeEach(() => {
   queryState.queryFn = undefined;
   queryState.setData = undefined;
   tokenState.subscribe.mockReset().mockImplementation(() => vi.fn());
+});
+
+describe("CSP injection", () => {
+  it.each([
+    ["normal head", "<html><head><title>x</title></head><body>x</body></html>"],
+    ["html without head", "<html><body>x</body></html>"],
+    ["fragment", "<div>x</div>"],
+  ])("adds a CSP meta to %s without duplicate heads", (_name, body) => {
+    const result = injectCspMeta(body, "default-src 'self' https://example.test");
+    expect(result.match(/<head\b/gi)).toHaveLength(1);
+    expect(result).toContain('http-equiv="Content-Security-Policy"');
+  });
 });
 
 describe("WASM component details", () => {
