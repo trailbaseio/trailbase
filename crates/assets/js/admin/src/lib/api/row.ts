@@ -1,5 +1,6 @@
 import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
+import { parseJSON } from "@/lib/json";
 import {
   findPrimaryKeyColumnIndex,
   prettyFormatQualifiedName,
@@ -83,24 +84,6 @@ export async function deleteRows(
     body: JSON.stringify(request),
   });
   return await response.text();
-}
-
-/// Flavor that parses `i64` correctly.
-function parseJSON(text: string) {
-  function reviver(_key: string, value: unknown, context: { source: string }) {
-    if (
-      typeof value === "number" &&
-      Number.isInteger(value) &&
-      !Number.isSafeInteger(value)
-    ) {
-      // Ignore the value because it has already lost precision
-      return BigInt(context.source);
-    }
-    return value;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return JSON.parse(text, reviver as any);
 }
 
 export async function fetchRows(

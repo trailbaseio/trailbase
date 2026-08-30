@@ -391,6 +391,33 @@ describe("LogsPage query state", () => {
     expect(state.fetchLogs.mock.calls[3][3]).not.toBe("stale-cursor");
   });
 
+  it("keeps the newest same-generation request cursor", async () => {
+    await setup();
+    const older = deferred<ListLogsResponse>();
+    const newer = deferred<ListLogsResponse>();
+    state.fetchLogs
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(newer.promise);
+    const query = state.listOptions.at(-1)!;
+    const olderRun = query.queryFn();
+    const newerRun = query.queryFn();
+    newer.resolve(response([log], 1n, "current-cursor"));
+    await newerRun;
+    older.resolve(response([secondLog], 1n, "stale-cursor"));
+    await olderRun;
+
+    state.setParams({ pageIndex: "1" });
+    await waitFor(() =>
+      expect(state.fetchLogs).toHaveBeenLastCalledWith(
+        20,
+        1,
+        undefined,
+        "current-cursor",
+        undefined,
+      ),
+    );
+  });
+
   it("passes cursors to the next page and resets them when the query changes", async () => {
     state.fetchLogs
       .mockResolvedValueOnce(response([log], 2n, "cursor-0"))

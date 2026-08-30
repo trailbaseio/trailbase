@@ -137,7 +137,7 @@ export function LogDetailsSheet(props: {
     >
       <SheetContent class="w-full sm:max-w-[520px]">
         <SheetHeader>
-          <SheetTitle>
+          <SheetTitle class="pr-8 break-all">
             {log() ? `${log()!.method} ${log()!.url}` : "Request details"}
           </SheetTitle>
           <SheetDescription>Request details</SheetDescription>

@@ -80,6 +80,20 @@ describe("LogDetailsSheet", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("wraps long unbroken request titles while retaining an accessible name", () => {
+    const title = "POST " + "https://example.test/" + "x".repeat(180);
+    render(() => (
+      <LogDetailsSheet
+        log={{ ...log, method: "POST", url: title.slice(5) }}
+        onClose={vi.fn()}
+      />
+    ));
+    expect(screen.getByRole("heading", { name: title })).toHaveClass(
+      "break-all",
+      "pr-8",
+    );
+  });
+
   it("uses an em dash for absent optional values and closes through onOpenChange", async () => {
     const onClose = vi.fn();
     render(() => (

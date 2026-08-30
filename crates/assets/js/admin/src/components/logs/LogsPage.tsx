@@ -136,15 +136,19 @@ function LogsPage() {
   const cursors = new Map<number, string>();
   let cursorGeneration = "";
   let cursorGenerationToken = 0;
+  let cursorRequestSequence = 0;
+  const latestCursorRequestByPage = new Map<number, number>();
   const resetCursors = (generation: string) => {
     if (generation !== cursorGeneration) {
       cursorGeneration = generation;
       cursorGenerationToken += 1;
+      latestCursorRequestByPage.clear();
       cursors.clear();
     }
   };
   const invalidateCursors = () => {
     cursorGenerationToken += 1;
+    latestCursorRequestByPage.clear();
     cursors.clear();
   };
   const pagination = (): PaginationState => ({
@@ -191,6 +195,10 @@ function LogsPage() {
     return {
       queryKey: ["logs", size, index, currentFilter, currentOrder],
       queryFn: async () => {
+        const requestId = ++cursorRequestSequence;
+        if (cursorGenerationToken === generationToken) {
+          latestCursorRequestByPage.set(index, requestId);
+        }
         const response = await fetchLogs(
           size,
           index,
@@ -201,7 +209,8 @@ function LogsPage() {
         if (
           response.cursor &&
           cursorGeneration === generation &&
-          cursorGenerationToken === generationToken
+          cursorGenerationToken === generationToken &&
+          latestCursorRequestByPage.get(index) === requestId
         ) {
           cursors.set(index, response.cursor);
         }
