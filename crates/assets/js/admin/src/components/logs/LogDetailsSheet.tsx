@@ -1,3 +1,4 @@
+import { For } from "solid-js";
 import type { JSX } from "solid-js";
 
 import type { LogJson } from "@bindings/LogJson";
@@ -27,32 +28,34 @@ function DetailList(props: {
     <section class="space-y-2">
       <h3 class="text-sm font-semibold">{props.heading}</h3>
       <dl class="divide-y rounded-md border text-sm">
-        {props.details.map((detail) => (
-          <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2">
-            <dt class="text-muted-foreground">{detail.name}</dt>
-            <dd class="flex min-w-0 items-center gap-2 text-right">
-              <span class="max-w-[330px] wrap-break-word">
-                {detail.display ?? detail.value}
-              </span>
-              {detail.value !== "" && (
-                <button
-                  type="button"
-                  class="text-muted-foreground text-xs underline underline-offset-2"
-                  aria-label={`Copy ${detail.name}`}
-                  onClick={() => {
-                    void copyToClipboard(
-                      detail.value,
-                      false,
-                      `${detail.name} copied`,
-                    );
-                  }}
-                >
-                  Copy
-                </button>
-              )}
-            </dd>
-          </div>
-        ))}
+        <For each={props.details}>
+          {(detail) => (
+            <div class="grid grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2">
+              <dt class="text-muted-foreground">{detail.name}</dt>
+              <dd class="flex min-w-0 items-center gap-2 text-right">
+                <span class="max-w-[330px] wrap-break-word">
+                  {detail.display ?? detail.value}
+                </span>
+                {detail.value !== "" && (
+                  <button
+                    type="button"
+                    class="text-muted-foreground text-xs underline underline-offset-2"
+                    aria-label={`Copy ${detail.name}`}
+                    onClick={() => {
+                      void copyToClipboard(
+                        detail.value,
+                        false,
+                        `${detail.name} copied`,
+                      );
+                    }}
+                  >
+                    Copy
+                  </button>
+                )}
+              </dd>
+            </div>
+          )}
+        </For>
       </dl>
     </section>
   );
@@ -140,9 +143,11 @@ export function LogDetailsSheet(props: {
           <SheetDescription>Request details</SheetDescription>
         </SheetHeader>
         <div class="mt-6 space-y-6">
-          {details().map((group) => (
-            <DetailList heading={group.heading} details={group.details} />
-          ))}
+          <For each={details()}>
+            {(group) => (
+              <DetailList heading={group.heading} details={group.details} />
+            )}
+          </For>
         </div>
       </SheetContent>
     </Sheet>
