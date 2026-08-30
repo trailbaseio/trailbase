@@ -36,6 +36,10 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       if (!response.ok) {
         throw new Error("dashboard request failed");
       }
+      const expectedOrigin = new URL(src, window.location.origin).origin;
+      if (new URL(response.url, expectedOrigin).origin !== expectedOrigin) {
+        throw new Error("dashboard origin rejected");
+      }
       return await response.text();
     },
   }));
@@ -49,6 +53,13 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         console.error("iframe not bound");
         return;
       }
+
+      const dashboardOrigin = new URL(source(), window.location.origin).origin;
+      const metaCsp = `default-src 'self' ${dashboardOrigin}; style-src 'self' ${dashboardOrigin} 'unsafe-inline'; script-src 'self' ${dashboardOrigin} 'unsafe-inline'; img-src 'self' ${dashboardOrigin} data:; connect-src ${dashboardOrigin}`;
+      body = body.replace(
+        /<head([^>]*)>/i,
+        `<head$1><meta http-equiv="Content-Security-Policy" content="${metaCsp}">`,
+      );
 
       if (import.meta.env.DEV) {
         // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
@@ -65,18 +76,15 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       }
 
       let cleanup: (() => void) | undefined;
+      let loaded = false;
       const onLoad = (_ev: HTMLElementEventMap["load"]) => {
-        // Will be called after `srcdoc` was set (below), then parsed and built.
-        console.debug("iframe loaded");
-
-        // Focus the iframe so it can receive keyboard events.
+        if (loaded) {
+          cleanup?.();
+          cleanup = undefined;
+          return;
+        }
+        loaded = true;
         iframe.focus();
-
-        // NOTE: with the iframe sandbox, we cannot access `iframe.contentDocument`
-        // directly to interact with globals in the child. It would be rejected as
-        // a cross-origin request. We thus need postMessage.
-        // NOTE: the `*` target is critical for sandboxed (different-origin)
-        // iframes to avoid messages being rejected.
         cleanup = $tokens.subscribe((tokens) => {
           iframe.contentWindow?.postMessage(
             {
@@ -90,8 +98,6 @@ function SandboxedIframe(props: { component: WasmComponent }) {
             "*",
           );
         });
-
-        // TODO: Subscribe to theme changes and send a dedicated "theme" message.
       };
 
       iframe.addEventListener("load", onLoad);
@@ -128,11 +134,15 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         }}
         title="WASM component preview"
         sandbox="allow-scripts allow-modals"
-        csp={iframeCsp}
+        csp={iframeCsp(new URL(source(), window.location.origin).origin)}
       />
 
       <Show when={dashboardPage.isLoading || dashboardPage.isError}>
-        <div class="bg-background/90 absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+        <div
+          class="bg-background/90 absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center"
+          role={dashboardPage.isError ? "alert" : "status"}
+          aria-live="polite"
+        >
           <Show
             when={dashboardPage.isError}
             fallback={
@@ -316,18 +326,7 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
 
 // NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
 //   https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
-const iframeCsp = import.meta.env.DEV
-  ? ""
-  : [
-      "default-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      // NOTE: the "*" is critical here because the sandboxed srcdoc iframe's
-      // origin is "null", i.e. 'self' is null and we need to allow fetches from
-      // the server. We also had '*' to the admin UI's CSP because Firefox/Safari
-      // ignore this property.
-      "connect-src * 'self' 'unsafe-inline'",
-      // NOTE: For some reason `script-src` and `script-src-elem` seem to be ignored
-      // even by Chrome and instead the parent CSP is maintained.
-      // "script-src 'self' 'unsafe-inline'",
-      // "img-src *",
-    ].join("; ");
+const iframeCsp = (origin: string) =>
+  import.meta.env.DEV
+    ? ""
+    : `default-src 'self' ${origin}; style-src 'self' ${origin} 'unsafe-inline'; script-src 'self' ${origin} 'unsafe-inline'; img-src 'self' ${origin} data:; connect-src ${origin}`;

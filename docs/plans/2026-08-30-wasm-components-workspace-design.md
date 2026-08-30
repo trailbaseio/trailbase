@@ -116,7 +116,7 @@ The embedded dashboard fills the available workspace on desktop and mobile.
 
 ## Security
 
-The refresh does not broaden component dashboard permissions.
+Installed component dashboards are trusted extensions: they receive admin-context credentials through the existing setup message. Only install components you trust. The refresh does not broaden component dashboard permissions.
 
 Preserve:
 

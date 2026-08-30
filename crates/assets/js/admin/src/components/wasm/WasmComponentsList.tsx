@@ -334,7 +334,7 @@ export function WasmComponentsList(props: {
           </DialogTitle>
           <DialogDescription>
             {dialog()?.action === "install"
-              ? `Install ${dialog()?.component.name}? This change requires a server restart.`
+              ? `Install ${dialog()?.component.name}? Installed dashboards are trusted extensions and receive admin-context credentials. Only install components you trust. This change requires a server restart.`
               : `Remove ${dialog()?.component.name}? This change requires a server restart. The loaded instance continues until restart.`}
           </DialogDescription>
           <Show when={error() === "mutation"}>

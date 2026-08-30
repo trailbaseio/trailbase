@@ -10,6 +10,10 @@
 
 ---
 
+## Trust boundary
+
+Installed component dashboards are trusted extensions and receive admin-context credentials. Only install trusted components.
+
 ## Guardrails
 
 - Work in the existing `feat/admin-ui-refresh` checkout.
