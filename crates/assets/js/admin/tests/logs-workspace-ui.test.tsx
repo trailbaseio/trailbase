@@ -1,124 +1,32 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import * as Solid from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LogJson } from "@bindings/LogJson";
 
 const state = vi.hoisted(() => ({
-  params: {} as Record<string, string | undefined>,
-  setParams: vi.fn(),
-  fetchLogs: vi.fn(),
-  fetchStats: vi.fn(),
-  refetch: vi.fn().mockResolvedValue(undefined),
+  params: {} as Record<string, string | undefined>, setParams: vi.fn(), version: null as (() => void) | null,
+  list: { data: undefined as any, error: undefined as any, loading: false, fetching: false, refetch: vi.fn() },
+  stats: { data: undefined as any, error: undefined as any, loading: false, fetching: false, refetch: vi.fn() },
+  listOptions: [] as any[], statsOptions: [] as any[], fetchLogs: vi.fn(), fetchStats: vi.fn(), insights: {} as any,
 }));
-vi.mock("@solidjs/router", () => ({
-  useSearchParams: () => {
-    const [version, setVersion] = Solid.createSignal(0);
-    const params = new Proxy(state.params, {
-      get: (target, key: string) => {
-        version();
-        return target[key];
-      },
-    });
-    state.setParams.mockImplementation((next) => {
-      Object.assign(state.params, next);
-      setVersion((n) => n + 1);
-    });
-    return [params, state.setParams];
-  },
-}));
-vi.mock("@tanstack/solid-query", () => ({
-  useQuery: (factory: () => { queryFn: () => Promise<unknown> }) => {
-    const [version, setVersion] = Solid.createSignal(0);
-    Solid.createEffect(() => {
-      const options = factory();
-      void options.queryFn().then(() => setVersion((n) => n + 1));
-    });
-    return {
-      get data() {
-        version();
-        return undefined;
-      },
-      get error() {
-        return undefined;
-      },
-      get isLoading() {
-        return false;
-      },
-      get isFetching() {
-        return false;
-      },
-      get isRefetching() {
-        return false;
-      },
-      refetch: state.refetch,
-    };
-  },
-}));
-vi.mock("@/lib/api/logs", () => ({
-  fetchLogs: state.fetchLogs,
-  fetchStats: state.fetchStats,
-}));
-vi.mock("@/components/logs/LogsInsights", () => ({
-  LogsInsights: () => <div>Insights</div>,
-}));
+vi.mock("@solidjs/router", () => ({ useSearchParams: () => { const [, bump] = Solid.createSignal(0); state.version = () => bump(n => n + 1); const p = new Proxy(state.params, { get: (t, k: string) => (state.version?.(), t[k]) }); state.setParams.mockImplementation((next: any) => { Object.assign(state.params, next); state.version?.(); }); return [p, state.setParams]; } }));
+vi.mock("@tanstack/solid-query", () => ({ useQuery: (factory: any) => { const kind = factory().queryKey[0] === "logs" ? "list" : "stats"; const box = state[kind]; const [data, setData] = Solid.createSignal(box.data); const [error, setError] = Solid.createSignal(box.error); const [v, bump] = Solid.createSignal(0); Solid.createEffect(() => { const opts = factory(); (kind === "list" ? state.listOptions : state.statsOptions).push(opts); void opts.queryFn().then((d: any) => { box.data = d; box.error = undefined; setData(d); setError(undefined); bump(n => n + 1); }, (e: any) => { box.error = e; setError(e); bump(n => n + 1); }); }); return { get data() { v(); return data(); }, get error() { v(); return error(); }, get isLoading() { v(); return box.loading; }, get isFetching() { v(); return box.fetching; }, get isRefetching() { v(); return box.fetching; }, refetch: (...a: any[]) => { box.refetch(...a); const opts = kind === "list" ? state.listOptions.at(-1) : state.statsOptions.at(-1); return opts.queryFn().then((d: any) => { box.data = d; setData(d); bump(n => n + 1); }); } }; } }));
+vi.mock("@/lib/api/logs", () => ({ fetchLogs: state.fetchLogs, fetchStats: state.fetchStats }));
+vi.mock("@/components/logs/LogsInsights", () => ({ LogsInsights: (p: any) => { state.insights = p; return <div data-testid="insights">Insights {p.loading ? "loading" : ""}{p.error ? "error" : ""}<button onClick={p.onRetry}>Retry insights</button></div>; } }));
 import LogsPage from "@/components/logs/LogsPage";
 
+const fixture: LogJson = { id: 1n, created: 1700000000, status: 200, method: "GET", url: "/api/items", latency_ms: 12.5, client_ip: "192.0.2.1", client_geoip_cc: "FR", client_geoip_city: { name: "Paris", country_code: "FR" }, referer: "", user_agent: "", user_id: null };
+const response = (entries = [fixture], total_row_count: bigint = BigInt(entries.length), cursor?: string) => ({ entries, total_row_count, cursor });
+beforeEach(() => { vi.clearAllMocks(); state.params = {}; state.listOptions = []; state.statsOptions = []; state.list.data = response(); state.stats.data = { rates: [], country_codes: null }; state.list.error = state.stats.error = undefined; state.list.fetching = state.stats.fetching = false; state.fetchLogs.mockResolvedValue(response()); state.fetchStats.mockResolvedValue({ rates: [], country_codes: null }); });
 afterEach(cleanup);
-beforeEach(() => {
-  vi.clearAllMocks();
-  state.params = {};
-  state.fetchLogs.mockResolvedValue({ entries: [], total_row_count: 0 });
-  state.fetchStats.mockResolvedValue({ rates: [], country_codes: null });
-});
+const setup = async () => { render(() => <LogsPage />); await waitFor(() => expect(state.fetchLogs).toHaveBeenCalled()); };
 
-describe("LogsPage request workspace", () => {
-  it("uses explicit list and stats query keys and presents the dense workspace", async () => {
-    render(() => <LogsPage />);
-    await waitFor(() =>
-      expect(state.fetchLogs).toHaveBeenCalledWith(
-        20,
-        0,
-        undefined,
-        undefined,
-        undefined,
-      ),
-    );
-    expect(screen.getByRole("heading", { name: "Logs" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Refresh logs" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Filter syntax")).toBeInTheDocument();
-    expect(screen.getByText(/url ~ "\/api\/%"/)).toBeInTheDocument();
-    expect(screen.queryByText(/contains/)).not.toBeInTheDocument();
-    expect(state.params.order).toBeUndefined();
-    for (const heading of [
-      "Time",
-      "Status",
-      "Method",
-      "Request",
-      "Latency",
-      "Client",
-      "User",
-    ])
-      expect(screen.getByText(heading)).toBeInTheDocument();
-  });
-
-  it("applies and clears filters without resetting on query errors", async () => {
-    render(() => <LogsPage />);
-    const input = screen.getByRole("textbox", { name: "Filter rows" });
-    await fireEvent.input(input, { target: { value: "status >= 500" } });
-    await fireEvent.click(screen.getByRole("button", { name: "Apply filter" }));
-    expect(state.setParams).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filter: "status >= 500",
-        pageIndex: undefined,
-        pageSize: undefined,
-      }),
-    );
-  });
-});
+ describe("LogsPage integration", () => {
+  it("uses exact independent keys and fetches", async () => { await setup(); expect(state.listOptions[0].queryKey).toEqual(["logs", 20, 0, "", ""]); expect(state.statsOptions[0].queryKey).toEqual(["log-stats", ""]); expect(state.fetchLogs).toHaveBeenCalledWith(20, 0, undefined, undefined, undefined); });
+  it("applies, clears, and resubmits filters through both queries", async () => { await setup(); const input = screen.getByRole("textbox", { name: "Filter rows" }); await fireEvent.input(input, { target: { value: "status >= 500" } }); await fireEvent.click(screen.getByRole("button", { name: "Apply filter" })); expect(state.params.filter).toBe("status >= 500"); expect(state.params.pageIndex).toBeUndefined(); await waitFor(() => expect(state.params.filter).toBe("status >= 500")); const a=state.list.refetch.mock.calls.length,b=state.stats.refetch.mock.calls.length; await fireEvent.click(screen.getByRole("button", { name: "Apply filter" })); expect(state.list.refetch.mock.calls.length).toBeGreaterThan(a); expect(state.stats.refetch.mock.calls.length).toBeGreaterThan(b); });
+  it("renders seven independent headers and row values", async () => { await setup(); expect(screen.getAllByRole("columnheader").map(x=>x.textContent)).toEqual(["Time","Status","Method","Request","Latency","Client","User"]); expect(screen.getByText("/api/items")).toBeInTheDocument(); expect(screen.getByText("12.5 ms")).toBeInTheDocument(); expect(screen.getByText("Paris, FR")).toBeInTheDocument(); expect(screen.getByText("—")).toBeInTheDocument(); expect(screen.getByText("200")).toBeInTheDocument(); });
+  it("keeps controls and skeleton while initially loading", async () => { state.list.loading=true; state.stats.loading=true; render(()=><LogsPage/>); expect(screen.getByText("Filter syntax")).toBeInTheDocument(); expect(screen.getByTestId("insights")).toBeInTheDocument(); });
+  it("shows empty states and clear filter", async () => { state.fetchLogs.mockResolvedValue(response([],0n)); await setup(); await waitFor(() => expect(screen.getByText("0 requests")).toBeInTheDocument()); const i=screen.getByRole("textbox",{name:"Filter rows"}); await fireEvent.input(i,{target:{value:"url ~ '%'"}}); await fireEvent.click(screen.getByRole("button",{name:"Apply filter"})); state.fetchLogs.mockResolvedValue(response([],0n)); await waitFor(()=>expect(screen.getByText("No requests match")).toBeInTheDocument()); await fireEvent.click(screen.getByRole("button",{name:"Clear filter"})); expect(state.params.filter).toBeUndefined(); });
+  it("exposes valid filter syntax without contains", async () => { await setup(); expect(screen.getByText("Filter syntax").parentElement?.textContent).toMatch(/status.*method.*latency.*url/s); expect(screen.getByText(/client_ip/)).toBeInTheDocument(); expect(screen.getByText(/user_id/)).toBeInTheDocument(); expect(screen.queryByText(/contains/)).not.toBeInTheDocument(); });
+  it("opens the real detail sheet from row and restores focus", async () => { await setup(); const row=(await screen.findByText("/api/items")).closest("tr")!; await fireEvent.click(row); await waitFor(()=>expect(screen.getByRole("dialog")).toBeInTheDocument()); const close=screen.getByRole("button",{name:/close/i}); await fireEvent.click(close); await waitFor(()=>expect(document.activeElement).toBe(row)); });
+ });
