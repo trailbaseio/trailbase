@@ -93,6 +93,9 @@ describe("LogsPage request workspace", () => {
       screen.getByRole("button", { name: "Refresh logs" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Filter syntax")).toBeInTheDocument();
+    expect(screen.getByText(/url ~ "\/api\/%"/)).toBeInTheDocument();
+    expect(screen.queryByText(/contains/)).not.toBeInTheDocument();
+    expect(state.params.order).toBeUndefined();
     for (const heading of [
       "Time",
       "Status",
