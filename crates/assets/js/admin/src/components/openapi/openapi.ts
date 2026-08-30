@@ -63,12 +63,17 @@ export function withCollapsedOpenApiTags(spec: unknown): OpenApiDocument {
 }
 
 export function parseImpersonationTokens(input: string): RequestTokens | null {
-  if (input === "") return null;
+  const encoded = input.trim();
+  if (encoded === "") return null;
 
   try {
-    const decoded: unknown = JSON.parse(atob(input));
+    const decoded: unknown = JSON.parse(atob(encoded));
+    const keys = isRecord(decoded) ? Object.keys(decoded) : [];
+    const expectedKeys = ["auth_token", "refresh_token", "csrf_token"];
     if (
       !isRecord(decoded) ||
+      keys.length !== expectedKeys.length ||
+      expectedKeys.some((key) => !keys.includes(key)) ||
       typeof decoded.auth_token !== "string" ||
       typeof decoded.refresh_token !== "string" ||
       typeof decoded.csrf_token !== "string"
