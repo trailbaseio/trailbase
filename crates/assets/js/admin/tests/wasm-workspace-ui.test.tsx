@@ -1,4 +1,10 @@
-import { cleanup, render, screen, within } from "@solidjs/testing-library";
+import {
+  cleanup,
+  render,
+  screen,
+  within,
+  waitFor,
+} from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WasmComponent } from "@bindings/WasmComponent";
 
@@ -7,8 +13,16 @@ vi.mock("@solidjs/router", () => ({
     <a href={props.href}>{props.children}</a>
   ),
 }));
+vi.mock("@/lib/api/wasm-components", () => ({
+  installWasmComponent: vi.fn().mockResolvedValue(undefined),
+  uninstallWasmComponent: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { WasmComponentsList } from "@/components/wasm/WasmComponentsList";
+import {
+  installWasmComponent,
+  uninstallWasmComponent,
+} from "@/lib/api/wasm-components";
 
 const component = (overrides: Partial<WasmComponent> = {}): WasmComponent => ({
   name: "trailbase/auth_ui",
@@ -143,17 +157,79 @@ describe("WASM workspace UI", () => {
     expect(screen.queryByText("true")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("component icon")).not.toBeInTheDocument();
     const icon = container.querySelector("img");
-    expect(icon).toHaveAttribute("src", expect.stringContaining("data:image/svg+xml"));
+    expect(icon).toHaveAttribute(
+      "src",
+      expect.stringContaining("data:image/svg+xml"),
+    );
     expect(icon).not.toHaveAttribute("onload");
   });
 
   it("disables refresh while loading", () => {
     const refetch = vi.fn();
     renderList([], { isLoading: true, refetch });
-    const refresh = screen.getByRole("button", { name: /refresh wasm components/i });
+    const refresh = screen.getByRole("button", {
+      name: /refresh wasm components/i,
+    });
     expect(refresh).toBeDisabled();
     refresh.click();
     expect(refetch).not.toHaveBeenCalled();
+  });
+
+  it("offers eligible actions with exact names and awaits refresh", async () => {
+    const refetch = vi.fn().mockResolvedValue(undefined);
+    renderList(
+      [
+        component({
+          name: "available",
+          loaded: false,
+          installed: false,
+          repo_id: "repo/id",
+        }),
+        component({
+          name: "no-repo",
+          loaded: false,
+          installed: false,
+          repo_id: undefined,
+        }),
+        component({ name: "installed", installed: true }),
+      ],
+      { refetch },
+    );
+    expect(
+      screen.getByRole("button", { name: "Install available" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Install no-repo" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Remove installed" }),
+    ).toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Install available" }).click();
+    expect(
+      screen.getByRole("heading", { name: "Install available" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/requires a server restart/i)).toBeInTheDocument();
+    screen.getByRole("button", { name: "Install", exact: true }).click();
+    await waitFor(() =>
+      expect(installWasmComponent).toHaveBeenCalledWith({ RepoId: "repo/id" }),
+    );
+    await waitFor(() => expect(refetch).toHaveBeenCalledOnce());
+    expect(
+      screen.queryByRole("heading", { name: "Install available" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers removal copy for loaded instances", () => {
+    renderList([component({ name: "loaded-component", installed: true })]);
+    screen.getByRole("button", { name: "Remove loaded-component" }).click();
+    expect(
+      screen.getByRole("heading", { name: "Remove loaded-component" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/loaded instance continues until restart/i),
+    ).toBeInTheDocument();
+    expect(uninstallWasmComponent).not.toHaveBeenCalled();
   });
 
   it("renders states as accessible badges", () => {

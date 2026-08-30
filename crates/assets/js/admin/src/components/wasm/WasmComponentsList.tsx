@@ -1,4 +1,4 @@
-import { createMemo, For, Match, Show, Switch } from "solid-js";
+import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
 import { A } from "@solidjs/router";
 import {
   TbOutlinePuzzle,
@@ -10,6 +10,17 @@ import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 import { Badge } from "@/components/ui/badge";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  installWasmComponent,
+  uninstallWasmComponent,
+} from "@/lib/api/wasm-components";
 import {
   Table,
   TableBody,
@@ -84,9 +95,35 @@ export function WasmComponentsList(props: {
   components: WasmComponent[];
   isLoading: boolean;
   isError: boolean;
-  refetch: () => void;
+  refetch: () => void | Promise<unknown>;
 }) {
   const components = createMemo(() => sortWasmComponents(props.components));
+  const [dialog, setDialog] = createSignal<{
+    component: WasmComponent;
+    action: "install" | "remove";
+  }>();
+  const [pending, setPending] = createSignal(false);
+  const [error, setError] = createSignal(false);
+
+  const runAction = async () => {
+    const current = dialog();
+    if (!current || pending()) return;
+    setPending(true);
+    setError(false);
+    try {
+      const request = current.component.repo_id
+        ? { RepoId: current.component.repo_id }
+        : { Path: current.component.path };
+      if (current.action === "install") await installWasmComponent(request);
+      else await uninstallWasmComponent(request);
+      await props.refetch();
+      setDialog(undefined);
+    } catch {
+      setError(true);
+    } finally {
+      setPending(false);
+    }
+  };
   const running = createMemo(
     () => components().filter((c) => c.loaded && c.installed).length,
   );
@@ -199,14 +236,55 @@ export function WasmComponentsList(props: {
                             </code>
                           </TableCell>
                           <TableCell>
-                            <Show when={c.admin_ui_path}>
-                              <A
-                                href={`/wasm/${c.name}`}
-                                class="inline-flex items-center gap-1 underline"
+                            <div class="flex flex-wrap gap-2">
+                              <Show when={c.admin_ui_path}>
+                                <A
+                                  href={`/wasm/${c.name}`}
+                                  class="inline-flex items-center gap-1 underline"
+                                >
+                                  Open dashboard <TbOutlineArrowRight />
+                                </A>
+                              </Show>
+                              <Show when={c.installed}>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  title={`Remove ${c.name}`}
+                                  aria-label={`Remove ${c.name}`}
+                                  disabled={pending()}
+                                  onClick={() => {
+                                    setError(false);
+                                    setDialog({
+                                      component: c,
+                                      action: "remove",
+                                    });
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              </Show>
+                              <Show
+                                when={!c.loaded && !c.installed && !!c.repo_id}
                               >
-                                Open dashboard <TbOutlineArrowRight />
-                              </A>
-                            </Show>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  title={`Install ${c.name}`}
+                                  aria-label={`Install ${c.name}`}
+                                  disabled={pending()}
+                                  onClick={() => {
+                                    setError(false);
+                                    setDialog({
+                                      component: c,
+                                      action: "install",
+                                    });
+                                  }}
+                                >
+                                  Install
+                                </Button>
+                              </Show>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -218,6 +296,57 @@ export function WasmComponentsList(props: {
           </Match>
         </Switch>
       </div>
+      <Dialog
+        open={dialog() !== undefined}
+        onOpenChange={(open) => {
+          if (!pending() && !open) setDialog(undefined);
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>
+            {dialog()?.action === "install" ? "Install" : "Remove"}{" "}
+            {dialog()?.component.name}
+          </DialogTitle>
+          <DialogDescription>
+            {dialog()?.action === "install"
+              ? `Install ${dialog()?.component.name}? This change requires a server restart.`
+              : `Remove ${dialog()?.component.name}? This change requires a server restart. The loaded instance continues until restart.`}
+          </DialogDescription>
+          <Show when={error()}>
+            <Callout variant="error">
+              <CalloutTitle>Action failed</CalloutTitle>
+              <CalloutContent>
+                The component could not be changed. Check the server and try
+                again.
+              </CalloutContent>
+            </Callout>
+          </Show>
+          <DialogFooter class="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending()}
+              onClick={() => setDialog(undefined)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={
+                dialog()?.action === "remove" ? "destructive" : "default"
+              }
+              disabled={pending()}
+              onClick={runAction}
+            >
+              {pending()
+                ? "Working…"
+                : dialog()?.action === "install"
+                  ? "Install"
+                  : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
