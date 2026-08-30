@@ -151,67 +151,71 @@ export function WasmComponentsList(props: {
             </div>
           </Match>
           <Match when={true}>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Component</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Runtime / Version</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <For each={components()}>
-                  {(c) => {
-                    const status = wasmComponentStatus(c);
-                    return (
-                      <TableRow>
-                        <TableCell>
-                          <div class="flex items-start gap-2">
-                            <Icon value={c.icon} />
-                            <div>
-                              <div class="font-medium">
-                                {c.display_name ?? c.name}
-                              </div>
-                              <div class="text-muted-foreground text-xs">
-                                Internal name: {c.name}
-                              </div>
-                              <Show when={c.description}>
-                                <div class="text-muted-foreground text-xs">
-                                  {c.description}
+            <div class="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Runtime / Version</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <For each={components()}>
+                    {(c) => {
+                      const status = wasmComponentStatus(c);
+                      return (
+                        <TableRow>
+                          <TableCell>
+                            <div class="flex items-start gap-2">
+                              <Icon value={c.icon} />
+                              <div>
+                                <div class="font-medium">
+                                  {c.display_name ?? c.name}
                                 </div>
-                              </Show>
+                                <div class="text-muted-foreground text-xs">
+                                  Internal name: {c.name}
+                                </div>
+                                <Show when={c.description}>
+                                  <div class="text-muted-foreground text-xs">
+                                    {c.description}
+                                  </div>
+                                </Show>
+                              </div>
                             </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {c.guest_runtime ?? "—"} / {c.version ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <code class="select-text">
-                            {wasmComponentSource(c)}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          <Show when={c.admin_ui_path}>
-                            <A
-                              href={`/wasm/${c.name}`}
-                              class="inline-flex items-center gap-1 underline"
-                            >
-                              Open dashboard <TbOutlineArrowRight />
-                            </A>
-                          </Show>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }}
-                </For>
-              </TableBody>
-            </Table>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={status.variant}>
+                              {status.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {c.guest_runtime ?? "—"} / {c.version ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            <code class="select-text">
+                              {wasmComponentSource(c)}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <Show when={c.admin_ui_path}>
+                              <A
+                                href={`/wasm/${c.name}`}
+                                class="inline-flex items-center gap-1 underline"
+                              >
+                                Open dashboard <TbOutlineArrowRight />
+                              </A>
+                            </Show>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }}
+                  </For>
+                </TableBody>
+              </Table>
+            </div>
           </Match>
         </Switch>
       </div>

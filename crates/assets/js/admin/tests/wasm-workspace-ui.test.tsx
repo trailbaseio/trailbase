@@ -102,7 +102,14 @@ describe("WASM workspace UI", () => {
     expect(
       screen.getByRole("link", { name: /open dashboard/i }),
     ).toHaveAttribute("href", "/wasm/trailbase/auth_ui");
-    const tableWrapper = screen.getByRole("table").parentElement?.parentElement;
+    const table = screen.getByRole("table");
+    const tableContainer = table.parentElement?.parentElement;
+    expect(tableContainer).toHaveClass(
+      "border",
+      "rounded-md",
+      "overflow-x-auto",
+    );
+    const tableWrapper = tableContainer?.parentElement;
     expect(tableWrapper).toHaveClass("min-w-0", "overflow-x-auto");
     const firstRow = screen.getAllByRole("row")[1];
     expect(within(firstRow).getByText("Pending UI")).toBeInTheDocument();
