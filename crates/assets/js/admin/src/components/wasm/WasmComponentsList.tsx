@@ -192,7 +192,9 @@ export function WasmComponentsList(props: {
                           {c.guest_runtime ?? "—"} / {c.version ?? "—"}
                         </TableCell>
                         <TableCell>
-                          <code>{wasmComponentSource(c)}</code>
+                          <code class="select-text">
+                            {wasmComponentSource(c)}
+                          </code>
                         </TableCell>
                         <TableCell>
                           <Show when={c.admin_ui_path}>

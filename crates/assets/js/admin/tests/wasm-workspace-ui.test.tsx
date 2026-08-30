@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@solidjs/testing-library";
+import { cleanup, render, screen, within } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WasmComponent } from "@bindings/WasmComponent";
 
@@ -41,6 +41,90 @@ describe("WASM workspace UI", () => {
       screen.getByRole("button", { name: /refresh wasm components/i }),
     ).toBeInTheDocument();
     expect(screen.getByTitle("Loading")).toBeInTheDocument();
+  });
+
+  it("renders counts, semantic columns, and responsive source details", () => {
+    const refetch = vi.fn();
+    const rows = [
+      component({
+        display_name: "Auth UI",
+        description: "Authentication dashboard",
+        guest_runtime: "wasi",
+        version: "1.2.3",
+        repo_id: "github.com/trailbase/auth_ui",
+        admin_ui_path: "/dashboard",
+      }),
+      component({
+        name: "pending",
+        loaded: false,
+        installed: true,
+        display_name: "Pending UI",
+      }),
+    ];
+    render(() => (
+      <WasmComponentsList
+        components={rows}
+        isLoading={false}
+        isError={false}
+        refetch={refetch}
+      />
+    ));
+    expect(screen.getByText("2 total · 1 running")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /refresh wasm components/i }),
+    ).toBeInTheDocument();
+    screen.getByRole("button", { name: /refresh wasm components/i }).click();
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("columnheader", { name: "Component" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "State" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Runtime / Version" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Source" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Actions" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Auth UI")).toBeInTheDocument();
+    expect(
+      screen.getByText("Internal name: trailbase/auth_ui"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Authentication dashboard")).toBeInTheDocument();
+    expect(screen.getByText("wasi / 1.2.3")).toBeInTheDocument();
+    expect(screen.getByText("github.com/trailbase/auth_ui")).toHaveClass(
+      "select-text",
+    );
+    expect(
+      screen.getByRole("link", { name: /open dashboard/i }),
+    ).toHaveAttribute("href", "/wasm/trailbase/auth_ui");
+    const tableWrapper = screen.getByRole("table").parentElement?.parentElement;
+    expect(tableWrapper).toHaveClass("min-w-0", "overflow-x-auto");
+    const firstRow = screen.getAllByRole("row")[1];
+    expect(within(firstRow).getByText("Pending UI")).toBeInTheDocument();
+  });
+
+  it("keeps CLI guidance stable for pending and empty states", () => {
+    const { unmount } = renderList([
+      component({ loaded: false, installed: true }),
+    ]);
+    expect(
+      screen.getByText(
+        /trail \[--depot=\.\.\] components add trailbase\/auth_ui/,
+      ),
+    ).toBeInTheDocument();
+    unmount();
+    renderList([]);
+    expect(
+      screen.getByText("No WASM components installed."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("trail components add trailbase/auth_ui"),
+    ).toBeInTheDocument();
   });
 
   it("does not render boolean text before SVG icons", () => {

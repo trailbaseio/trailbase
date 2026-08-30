@@ -21,7 +21,12 @@ export function WasmPage() {
         <WasmComponentDetails component={findComponent()!} sandboxed={true} />
       </Match>
       <Match
-        when={params.name !== undefined && !findComponent() && !query.isError}
+        when={
+          params.name !== undefined &&
+          !findComponent() &&
+          !query.isLoading &&
+          !query.isError
+        }
       >
         A component with name "{params.name}" is not installed.
       </Match>
