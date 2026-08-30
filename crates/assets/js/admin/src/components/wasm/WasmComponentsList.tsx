@@ -104,6 +104,12 @@ export function WasmComponentsList(props: {
   }>();
   const [pending, setPending] = createSignal(false);
   const [error, setError] = createSignal<"mutation" | "refresh">();
+  let actionTrigger: HTMLButtonElement | undefined;
+
+  const closeDialog = () => {
+    setDialog(undefined);
+    queueMicrotask(() => actionTrigger?.focus());
+  };
 
   const retryRefresh = async () => {
     if (pending()) return;
@@ -111,7 +117,7 @@ export function WasmComponentsList(props: {
     setError(undefined);
     try {
       await props.refetch();
-      setDialog(undefined);
+      closeDialog();
     } catch {
       setError("refresh");
     } finally {
@@ -142,7 +148,7 @@ export function WasmComponentsList(props: {
 
     try {
       await props.refetch();
-      setDialog(undefined);
+      closeDialog();
     } catch {
       setError("refresh");
     } finally {
@@ -278,7 +284,8 @@ export function WasmComponentsList(props: {
                                   title={`Remove ${c.name}`}
                                   aria-label={`Remove ${c.name}`}
                                   disabled={pending()}
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    actionTrigger = event.currentTarget;
                                     setError(undefined);
                                     setDialog({
                                       component: c,
@@ -298,7 +305,8 @@ export function WasmComponentsList(props: {
                                   title={`Install ${c.name}`}
                                   aria-label={`Install ${c.name}`}
                                   disabled={pending()}
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    actionTrigger = event.currentTarget;
                                     setError(undefined);
                                     setDialog({
                                       component: c,
@@ -324,7 +332,7 @@ export function WasmComponentsList(props: {
       <Dialog
         open={dialog() !== undefined}
         onOpenChange={(open) => {
-          if (!pending() && !open) setDialog(undefined);
+          if (!pending() && !open) closeDialog();
         }}
       >
         <DialogContent>
@@ -365,7 +373,7 @@ export function WasmComponentsList(props: {
               type="button"
               variant="outline"
               disabled={pending()}
-              onClick={() => setDialog(undefined)}
+              onClick={closeDialog}
             >
               Cancel
             </Button>

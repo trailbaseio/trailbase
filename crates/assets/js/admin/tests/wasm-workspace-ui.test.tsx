@@ -223,6 +223,26 @@ describe("WASM workspace UI", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("returns focus to the row action after confirmation is cancelled", async () => {
+    renderList([
+      component({
+        name: "available",
+        loaded: false,
+        installed: false,
+        repo_id: "repo/id",
+      }),
+    ]);
+    const install = screen.getByRole("button", { name: "Install available" });
+    install.focus();
+    install.click();
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+    cancel.click();
+
+    await waitFor(() => expect(document.activeElement).toBe(install));
+  });
+
   it("awaits uninstall and refetch before closing the removal dialog", async () => {
     let resolveUninstall!: () => void;
     const uninstall = new Promise<void>((resolve) => {
