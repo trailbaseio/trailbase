@@ -246,6 +246,14 @@ beforeEach(resetState);
 afterEach(cleanup);
 
 describe("LogsPage query state", () => {
+  it("removes legacy order state on initial mount", async () => {
+    state.params = { order: "-status" };
+    await setup();
+
+    expect(state.setParams).toHaveBeenCalledWith({ order: undefined });
+    expect(state.params.order).toBeUndefined();
+  });
+
   it("uses primitive query keys and initial fetch arguments", async () => {
     await setup();
 

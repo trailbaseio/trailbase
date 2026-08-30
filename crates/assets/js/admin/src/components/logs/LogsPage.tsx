@@ -1,4 +1,10 @@
-import { Show, createMemo, createSignal, onCleanup } from "solid-js";
+import {
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import type {
   ColumnDef,
@@ -31,6 +37,7 @@ type SearchParams = {
   filter?: string;
   pageSize?: string;
   pageIndex?: string;
+  order?: string;
 };
 
 const columns: ColumnDef<LogJson>[] = [
@@ -121,6 +128,11 @@ function LogsPage() {
   const pageIndex = createMemo(() => safeParseInt(searchParams.pageIndex) ?? 0);
   const [sorting, setSortingImpl] = createSignal<SortingState>([]);
   const order = createMemo(() => formatSortingAsOrder(sorting()) ?? "");
+  createEffect(() => {
+    if (searchParams.order !== undefined) {
+      setSearchParams({ order: undefined });
+    }
+  });
   const [cursors, setCursors] = createSignal(new Map<number, string>());
   let cursorKey = "";
   const resetCursors = () => {
@@ -139,6 +151,7 @@ function LogsPage() {
       pageIndex: p.pageIndex || undefined,
       pageSize: p.pageSize === 20 ? undefined : p.pageSize,
       filter: filter(),
+      order: undefined,
     });
   const setFilter = (value: string | undefined) => {
     setCursors(new Map());
@@ -146,6 +159,7 @@ function LogsPage() {
       filter: value || undefined,
       pageIndex: undefined,
       pageSize: undefined,
+      order: undefined,
     });
   };
   const setSorting = (value: Updater<SortingState>) => {
@@ -156,6 +170,7 @@ function LogsPage() {
       filter: filter(),
       pageIndex: undefined,
       pageSize: undefined,
+      order: undefined,
     });
   };
 
