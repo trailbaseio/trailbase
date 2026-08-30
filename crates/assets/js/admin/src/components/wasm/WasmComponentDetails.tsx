@@ -90,7 +90,10 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       };
 
       iframe.addEventListener("load", onLoad);
-      onCleanup(() => cleanup?.());
+      onCleanup(() => {
+        iframe?.removeEventListener("load", onLoad);
+        cleanup?.();
+      });
 
       // Set the actual body.
       //
@@ -104,7 +107,9 @@ function SandboxedIframe(props: { component: WasmComponent }) {
 
   return (
     <Switch>
-      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
+      <Match when={dashboardPage.isError}>
+        Unable to load the component dashboard. Please try again.
+      </Match>
 
       {/*
          Sandbox options:
@@ -154,6 +159,7 @@ function BackButton() {
       href="/wasm"
       class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
       title="Back to the list of WASM components"
+      aria-label="Back to the list of WASM components"
     >
       <TbOutlineArrowLeft size={20} />
     </A>

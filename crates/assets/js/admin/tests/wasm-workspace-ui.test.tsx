@@ -241,7 +241,9 @@ describe("WASM workspace UI", () => {
     screen.getByRole("button", { name: "Remove loaded-component" }).click();
     screen.getByRole("button", { name: /^Remove$/ }).click();
 
-    expect(screen.getByRole("button", { name: "Working…" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Working…" }),
+    ).toBeInTheDocument();
     expect(uninstallWasmComponent).toHaveBeenCalledWith({
       Path: "components/auth_ui.wasm",
     });
@@ -262,6 +264,67 @@ describe("WASM workspace UI", () => {
         screen.queryByRole("heading", { name: "Remove loaded-component" }),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("retries only the refresh when a completed action cannot refresh the list", async () => {
+    const refetch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("refresh secret"))
+      .mockResolvedValueOnce(undefined);
+    vi.mocked(installWasmComponent).mockResolvedValueOnce(undefined);
+
+    renderList(
+      [
+        component({
+          name: "available",
+          loaded: false,
+          installed: false,
+          repo_id: "repo/id",
+        }),
+      ],
+      { refetch },
+    );
+    screen.getByRole("button", { name: "Install available" }).click();
+    screen.getByRole("button", { name: /^Install$/ }).click();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/changed, but the list could not be refreshed/i),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("refresh secret")).not.toBeInTheDocument();
+    expect(installWasmComponent).toHaveBeenCalledOnce();
+    expect(refetch).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Retry refresh" }),
+    ).toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Retry refresh" }).click();
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("heading", { name: "Install available" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(installWasmComponent).toHaveBeenCalledOnce();
+  });
+
+  it("reports mutation failures without exposing backend details or retrying the action", async () => {
+    vi.mocked(uninstallWasmComponent).mockRejectedValueOnce(
+      new Error("mutation secret"),
+    );
+    renderList([component({ name: "installed" })]);
+    screen.getByRole("button", { name: "Remove installed" }).click();
+    screen.getByRole("button", { name: /^Remove$/ }).click();
+
+    await waitFor(() =>
+      expect(screen.getByText(/could not be removed/i)).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("mutation secret")).not.toBeInTheDocument();
+    expect(uninstallWasmComponent).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Retry refresh" }),
+    ).not.toBeInTheDocument();
   });
 
   it("offers removal copy for loaded instances", () => {

@@ -103,23 +103,48 @@ export function WasmComponentsList(props: {
     action: "install" | "remove";
   }>();
   const [pending, setPending] = createSignal(false);
-  const [error, setError] = createSignal(false);
+  const [error, setError] = createSignal<"mutation" | "refresh">();
+
+  const retryRefresh = async () => {
+    if (pending()) return;
+    setPending(true);
+    setError(undefined);
+    try {
+      await props.refetch();
+      setDialog(undefined);
+    } catch {
+      setError("refresh");
+    } finally {
+      setPending(false);
+    }
+  };
 
   const runAction = async () => {
     const current = dialog();
     if (!current || pending()) return;
+    if (error() === "refresh") {
+      await retryRefresh();
+      return;
+    }
     setPending(true);
-    setError(false);
+    setError(undefined);
     try {
       const request = current.component.repo_id
         ? { RepoId: current.component.repo_id }
         : { Path: current.component.path };
       if (current.action === "install") await installWasmComponent(request);
       else await uninstallWasmComponent(request);
+    } catch {
+      setError("mutation");
+      setPending(false);
+      return;
+    }
+
+    try {
       await props.refetch();
       setDialog(undefined);
     } catch {
-      setError(true);
+      setError("refresh");
     } finally {
       setPending(false);
     }
@@ -254,7 +279,7 @@ export function WasmComponentsList(props: {
                                   aria-label={`Remove ${c.name}`}
                                   disabled={pending()}
                                   onClick={() => {
-                                    setError(false);
+                                    setError(undefined);
                                     setDialog({
                                       component: c,
                                       action: "remove",
@@ -274,7 +299,7 @@ export function WasmComponentsList(props: {
                                   aria-label={`Install ${c.name}`}
                                   disabled={pending()}
                                   onClick={() => {
-                                    setError(false);
+                                    setError(undefined);
                                     setDialog({
                                       component: c,
                                       action: "install",
@@ -312,12 +337,26 @@ export function WasmComponentsList(props: {
               ? `Install ${dialog()?.component.name}? This change requires a server restart.`
               : `Remove ${dialog()?.component.name}? This change requires a server restart. The loaded instance continues until restart.`}
           </DialogDescription>
-          <Show when={error()}>
+          <Show when={error() === "mutation"}>
             <Callout variant="error">
-              <CalloutTitle>Action failed</CalloutTitle>
+              <CalloutTitle>
+                Unable to{" "}
+                {dialog()?.action === "install" ? "install" : "remove"}{" "}
+                component
+              </CalloutTitle>
               <CalloutContent>
-                The component could not be changed. Check the server and try
-                again.
+                The component could not be{" "}
+                {dialog()?.action === "install" ? "installed" : "removed"}. No
+                changes were made. Check the server and try again.
+              </CalloutContent>
+            </Callout>
+          </Show>
+          <Show when={error() === "refresh"}>
+            <Callout variant="error">
+              <CalloutTitle>Component changed, refresh failed</CalloutTitle>
+              <CalloutContent>
+                The component was changed, but the list could not be refreshed.
+                Retry refresh before trying this action again.
               </CalloutContent>
             </Callout>
           </Show>
@@ -340,9 +379,11 @@ export function WasmComponentsList(props: {
             >
               {pending()
                 ? "Working…"
-                : dialog()?.action === "install"
-                  ? "Install"
-                  : "Remove"}
+                : error() === "refresh"
+                  ? "Retry refresh"
+                  : dialog()?.action === "install"
+                    ? "Install"
+                    : "Remove"}
             </Button>
           </DialogFooter>
         </DialogContent>
