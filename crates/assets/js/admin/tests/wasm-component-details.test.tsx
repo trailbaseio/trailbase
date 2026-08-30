@@ -155,6 +155,16 @@ describe("dashboard response origin validation", () => {
 });
 
 describe("WASM component details", () => {
+  it("uses component-specific iframe titles", () => {
+    render(() => (
+      <WasmComponentDetails component={component} sandboxed={true} />
+    ));
+
+    expect(
+      screen.getByTitle("WASM component preview: trailbase/auth_ui"),
+    ).toBeInTheDocument();
+  });
+
   it("gives the Back link a matching accessible name and title", () => {
     render(() => (
       <WasmComponentDetails component={component} sandboxed={false} />
@@ -178,7 +188,7 @@ describe("WASM component details", () => {
       <WasmComponentDetails component={component} sandboxed={true} />
     ));
     const iframe = screen.getByTitle(
-      "WASM component preview",
+      "WASM component preview: trailbase/auth_ui",
     ) as HTMLIFrameElement;
     const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
 
@@ -211,7 +221,7 @@ describe("WASM component details", () => {
       <WasmComponentDetails component={component} sandboxed={true} />
     ));
     const iframe = screen.getByTitle(
-      "WASM component preview",
+      "WASM component preview: trailbase/auth_ui",
     ) as HTMLIFrameElement;
     const postMessage = vi.spyOn(iframe.contentWindow!, "postMessage");
     const removeEventListener = vi.spyOn(iframe, "removeEventListener");
@@ -239,7 +249,7 @@ describe("WASM component details", () => {
       <WasmComponentDetails component={component} sandboxed={true} />
     ));
     const iframe = screen.getByTitle(
-      "WASM component preview",
+      "WASM component preview: trailbase/auth_ui",
     ) as HTMLIFrameElement;
 
     expect(iframe).toHaveAttribute("sandbox", "allow-scripts allow-modals");
@@ -280,7 +290,11 @@ describe("WASM component details", () => {
     expect(text).toHaveBeenCalledOnce();
     expect(tokenState.subscribe).not.toHaveBeenCalled();
     expect(
-      (screen.getByTitle("WASM component preview") as HTMLIFrameElement).srcdoc,
+      (
+        screen.getByTitle(
+          "WASM component preview: trailbase/auth_ui",
+        ) as HTMLIFrameElement
+      ).srcdoc,
     ).toBe("");
     vi.unstubAllGlobals();
   });
@@ -289,7 +303,9 @@ describe("WASM component details", () => {
     render(() => (
       <WasmComponentDetails component={component} sandboxed={true} />
     ));
-    const iframe = screen.getByTitle("WASM component preview");
+    const iframe = screen.getByTitle(
+      "WASM component preview: trailbase/auth_ui",
+    );
     const removeEventListener = vi.spyOn(iframe, "removeEventListener");
 
     iframe.dispatchEvent(new Event("load"));
@@ -349,7 +365,9 @@ describe("WASM component details", () => {
       <WasmComponentDetails component={component} sandboxed={true} />
     ));
 
-    expect(screen.getByTitle("WASM component preview")).toBeInTheDocument();
+    expect(
+      screen.getByTitle("WASM component preview: trailbase/auth_ui"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/loading component dashboard/i),
     ).toBeInTheDocument();
@@ -364,12 +382,11 @@ describe("WASM component details", () => {
     expect(toggle).toHaveAttribute("aria-checked", "true");
     toggle.click();
     expect(toggle).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByTitle("WASM component dashboard")).toHaveAttribute(
-      "src",
-      "http://localhost:4000/dashboard",
-    );
     expect(
-      screen.queryByTitle("WASM component preview"),
+      screen.getByTitle("WASM component dashboard: trailbase/auth_ui"),
+    ).toHaveAttribute("src", "http://localhost:4000/dashboard");
+    expect(
+      screen.queryByTitle("WASM component preview: trailbase/auth_ui"),
     ).not.toBeInTheDocument();
   });
 
@@ -426,10 +443,10 @@ describe("WASM component details", () => {
 
       expect(screen.getByText(/rejected for safety/i)).toBeInTheDocument();
       expect(
-        screen.queryByTitle("WASM component preview"),
+        screen.queryByTitle("WASM component preview: trailbase/auth_ui"),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByTitle("WASM component dashboard"),
+        screen.queryByTitle("WASM component dashboard: trailbase/auth_ui"),
       ).not.toBeInTheDocument();
       expect(fetchMock).not.toHaveBeenCalled();
       vi.unstubAllGlobals();

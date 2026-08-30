@@ -139,7 +139,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
           height: "100%",
           display: "block",
         }}
-        title="WASM component preview"
+        title={`WASM component preview: ${props.component.name}`}
         sandbox="allow-scripts allow-modals"
         csp={dashboardCsp()}
       />
@@ -180,7 +180,7 @@ function YoloIframe(props: { component: WasmComponent }) {
   return (
     <iframe
       src={source()}
-      title="WASM component dashboard"
+      title={`WASM component dashboard: ${props.component.name}`}
       style={{
         width: "100%",
         height: "100%",
