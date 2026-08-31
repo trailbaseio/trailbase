@@ -193,12 +193,31 @@ describe("authentication settings proxy", () => {
   });
 
   it("does not submit incomplete credentials", () => {
+    for (const state of [
+      { clientId: "only-id" },
+      { clientSecret: "only-secret" },
+      { clientId: "  ", clientSecret: "  " },
+    ]) {
+      const proxy = configToProxy([provider], AuthConfig.create());
+      proxy.namedOAuthProviders[0].state = OAuthProviderConfig.fromPartial({
+        providerId: provider.id,
+        ...state,
+      });
+      expect(proxyToConfig(proxy).oauthProviders).toEqual({});
+    }
+  });
+
+  it("normalizes complete trimmed credentials", () => {
     const proxy = configToProxy([provider], AuthConfig.create());
     proxy.namedOAuthProviders[0].state = OAuthProviderConfig.fromPartial({
       providerId: provider.id,
-      clientId: "only-id",
+      clientId: "  id  ",
+      clientSecret: " secret ",
     });
-    expect(proxyToConfig(proxy).oauthProviders).toEqual({});
+    expect(proxyToConfig(proxy).oauthProviders.github).toMatchObject({
+      clientId: "id",
+      clientSecret: "secret",
+    });
   });
 
   it("preserves absent auth as an empty config", () => {
@@ -636,11 +655,17 @@ describe("AuthSettings UI and lifecycle", () => {
   it("uses configured and origin callback URLs and safe provider links", () => {
     renderSettings();
     openProvider("Discord");
-    expect(
-      screen.getByText(
-        "https://initial.test/api/auth/v1/oauth/discord/callback",
-      ),
-    ).toBeVisible();
+    const callback = screen.getByText(
+      "https://initial.test/api/auth/v1/oauth/discord/callback",
+    );
+    expect(callback).toBeVisible();
+    const copy = screen.getByRole("button", { name: "Copy Redirect URI" });
+    copy.focus();
+    fireEvent.keyDown(copy, { key: "Enter" });
+    fireEvent.click(copy);
+    expect(state.copyToClipboard).toHaveBeenCalledWith(
+      "https://initial.test/api/auth/v1/oauth/discord/callback",
+    );
     const link = screen.getByRole("link", { name: "Discord" });
     expect(link).toHaveAttribute(
       "href",
@@ -648,6 +673,16 @@ describe("AuthSettings UI and lifecycle", () => {
     );
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer noopener");
+
+    cleanup();
+    state.config = initialConfig("not a valid url");
+    renderSettings();
+    openProvider("Discord");
+    expect(
+      screen.getByText(
+        `${window.location.origin}/api/auth/v1/oauth/discord/callback`,
+      ),
+    ).toBeVisible();
 
     cleanup();
     state.config = initialConfig();
@@ -715,6 +750,9 @@ describe("AuthSettings UI and lifecycle", () => {
       within(github).getByRole("button", { name: "Remove GitHub" }),
     );
     expect(clientId).toHaveValue("");
+    expect(
+      within(github).getByRole("button", { name: "Remove GitHub" }),
+    ).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(clientId).toHaveValue("initial-id");
   });
@@ -898,6 +936,18 @@ describe("AuthSettings UI and lifecycle", () => {
     expect(saved.databases).toEqual([
       expect.objectContaining({ name: "refreshed-db" }),
     ]);
+  });
+
+  it("propagates public-key contents failure without leaking details", async () => {
+    const secret = "private-key-fetch-error";
+    state.adminFetch.mockRejectedValueOnce(new Error(secret));
+    renderSettings();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Download public key" }),
+    );
+    const options = state.showSaveFileDialog.mock.calls[0][0];
+    await expect(options.contents()).rejects.toThrow(secret);
+    expect(document.body.textContent).not.toContain(secret);
   });
 
   it("downloads the public key without rendering it", async () => {

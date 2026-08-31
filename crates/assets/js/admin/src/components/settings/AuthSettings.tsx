@@ -147,14 +147,15 @@ export function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
     const p = entry.provider;
 
     // Only add complete providers back to config, i.e. once that have both a provider id and client secret.
-    const clientId = entry.state?.clientId?.trim();
-    const clientSecret = entry.state?.clientSecret?.trim();
+    const clientId = nonEmpty(entry.state?.clientId);
+    const clientSecret = nonEmpty(entry.state?.clientSecret);
 
     if (clientId && clientSecret) {
       config.oauthProviders[p.name] = OAuthProviderConfig.fromPartial({
         providerId: p.id,
-
         ...entry.state,
+        clientId,
+        clientSecret,
       });
     }
   }
@@ -162,7 +163,8 @@ export function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
 }
 
 function nonEmpty(v: string | undefined): string | undefined {
-  return v && v !== "" ? v : undefined;
+  const trimmed = v?.trim();
+  return trimmed || undefined;
 }
 
 export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> {
@@ -196,7 +198,12 @@ function ProviderSettingsSubForm(props: {
         <TbOutlineCirclePlus aria-label="Unsaved changes" color="orange" />
       </Match>
 
-      <Match when={current()?.clientId !== undefined}>
+      <Match
+        when={
+          nonEmpty(current()?.clientId) !== undefined &&
+          nonEmpty(current()?.clientSecret) !== undefined
+        }
+      >
         <TbOutlineCircleCheck aria-label="Configured" color="green" />
       </Match>
     </Switch>
@@ -299,7 +306,10 @@ function ProviderSettingsSubForm(props: {
           <Button
             variant={"outline"}
             aria-label={`Remove ${props.provider.display_name}`}
-            disabled={current()?.clientId === undefined}
+            disabled={
+              nonEmpty(current()?.clientId) === undefined ||
+              nonEmpty(current()?.clientSecret) === undefined
+            }
             onClick={() => {
               props.form.setFieldValue(
                 `namedOAuthProviders[${props.index}].state`,
@@ -505,16 +515,17 @@ function createAuthSettingsForm(opts: {
             continue;
           }
 
-          if (
-            state.clientId !== undefined &&
-            state.clientSecret === undefined
-          ) {
+          const clientId = nonEmpty(state.clientId);
+          const clientSecret = nonEmpty(state.clientSecret);
+          if ((clientId === undefined) !== (clientSecret === undefined)) {
+            const missing =
+              clientId === undefined ? "clientId" : "clientSecret";
             return {
               form: "invalid data",
               fields: Object.fromEntries([
                 [
-                  `namedOAuthProviders[${i}].state.clientSecret`,
-                  `Missing client secret for ${provider.provider.display_name}`,
+                  `namedOAuthProviders[${i}].state.${missing}`,
+                  `Missing ${missing === "clientId" ? "client ID" : "client secret"} for ${provider.provider.display_name}`,
                 ],
               ]),
             };
@@ -942,11 +953,17 @@ function OAuthCallbackAddressInfo(props: {
   siteUrl: string | undefined;
 }) {
   const address = () => {
-    const url = new URL(
-      `/api/auth/v1/oauth/${props.provider.name}/callback`,
-      props.siteUrl ?? window.location.origin,
-    );
-    return url.toString();
+    try {
+      return new URL(
+        `/api/auth/v1/oauth/${props.provider.name}/callback`,
+        props.siteUrl ?? window.location.origin,
+      ).toString();
+    } catch {
+      return new URL(
+        `/api/auth/v1/oauth/${props.provider.name}/callback`,
+        window.location.origin,
+      ).toString();
+    }
   };
 
   const ProviderName = () => {
@@ -972,9 +989,12 @@ function OAuthCallbackAddressInfo(props: {
       To use this provider, register your application with <ProviderName />{" "}
       using your instance's{" "}
       <Tooltip>
-        <TooltipTrigger as="span" onClick={() => copyToClipboard(address())}>
-          <span class="underline">Redirect URI</span>{" "}
-          <TbOutlineInfoCircle class="inline-block" />
+        <TooltipTrigger
+          class="underline"
+          aria-label="Copy Redirect URI"
+          onClick={() => copyToClipboard(address())}
+        >
+          Redirect URI <TbOutlineInfoCircle class="inline-block" />
         </TooltipTrigger>
 
         <TooltipContent>
