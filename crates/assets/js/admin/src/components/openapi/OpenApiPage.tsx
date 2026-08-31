@@ -173,8 +173,9 @@ export default function Page() {
       return;
     }
     if (!navOpen()) return;
+    const element = rapidoc();
     queueMicrotask(() => {
-      const root = rapidoc()?.shadowRoot;
+      const root = element?.shadowRoot;
       const control = root?.querySelector<HTMLInputElement>(
         'input[type="search"], input[type="text"], button, [tabindex]:not([tabindex="-1"]), a[href]',
       );

@@ -87,6 +87,14 @@ vi.mock("@tanstack/solid-query", () => ({
 }));
 class TestRapiDoc extends HTMLElement {
   loadSpec = vi.fn();
+
+  constructor() {
+    super();
+    const input = document.createElement("input");
+    input.type = "search";
+    input.setAttribute("aria-label", "Search endpoints");
+    this.attachShadow({ mode: "open" }).append(input);
+  }
   addEventListener(type: string, listener: EventListener) {
     if (type === "before-try") state.listeners.push(listener);
     state.added.push([type, listener]);
@@ -337,7 +345,7 @@ describe("OpenAPI Explorer workspace", () => {
     expect(node.loadSpec).toHaveBeenCalledTimes(loads);
   });
 
-  it("toggles mobile endpoint navigation without replacing RapiDoc", () => {
+  it("toggles mobile endpoint navigation without replacing RapiDoc", async () => {
     ready();
     const node = document.querySelector("rapi-doc") as TestRapiDoc;
     const loads = node.loadSpec.mock.calls.length;
@@ -348,8 +356,13 @@ describe("OpenAPI Explorer workspace", () => {
     state.bumpMobile?.();
     const browse = screen.getByRole("button", { name: "Browse endpoints" });
     expect(browse).toHaveAttribute("aria-expanded", "false");
+    expect(browse).toHaveAttribute("aria-controls", "openapi-endpoint-browser");
     fireEvent.click(browse);
     expect(browse).toHaveAttribute("aria-expanded", "true");
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    expect(node.shadowRoot?.activeElement).toBe(
+      node.shadowRoot?.querySelector('input[type="search"]'),
+    );
     expect(node).toHaveClass("openapi-nav-open");
     expect(document.querySelector("rapi-doc")).toBe(node);
     expect(node.loadSpec).toHaveBeenCalledTimes(loads);
@@ -357,6 +370,11 @@ describe("OpenAPI Explorer workspace", () => {
     expect(browse).toHaveAttribute("aria-expanded", "false");
     expect(node).not.toHaveClass("openapi-nav-open");
     fireEvent.click(browse);
+    await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(browse).toHaveAttribute("aria-expanded", "false");
+    expect(node).not.toHaveClass("openapi-nav-open");
+    expect(document.activeElement).toBe(browse);
     state.mobile = false;
     state.bumpMobile?.();
     expect(
