@@ -1,6 +1,7 @@
 import {
   Match,
   Switch,
+  Show,
   Index,
   createEffect,
   createSignal,
@@ -31,7 +32,7 @@ import { showToast } from "@/components/ui/toast";
 import type { Job } from "@bindings/Job";
 
 const cronRegex =
-  /^(@(yearly|monthly|weekly|daily|hourly))|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})$/;
+  /^(?:@(yearly|monthly|weekly|daily|hourly)|(((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})))$/;
 function isValidCronSpec() {
   return {
     onChange: ({ value }: { value: string }) =>
@@ -109,7 +110,7 @@ function configSignature(config: Config) {
 function jobsConfigSignature(config: JobsConfig) {
   return Array.from(JobsConfig.encode(config).finish()).join(",");
 }
-function mergeJobs(
+export function mergeJobs(
   submitted: JobsConfig,
   baseline: JobsConfig,
   latest: JobsConfig,
@@ -179,7 +180,9 @@ function JobSettingsImpl(props: {
       };
       const submittedJobs = extractConfig(submitted),
         configAtSubmit = cloneConfig(latestConfig),
-        baselineAtSubmit = extractConfig(baseline),
+        baselineAtSubmit = {
+          systemJobs: baseline.jobs.map((entry) => ({ ...entry.config })),
+        },
         configRevisionAtSubmit = configSignature(latestConfig),
         jobsRevisionAtSubmit = jobsSignature(latestJobs);
       try {
@@ -324,6 +327,12 @@ function JobSettingsImpl(props: {
             background. This may include default system jobs, such as session
             cleanup, as well as jobs registered by WASM components.
           </p>
+          <p class="text-muted-foreground text-sm">
+            Schedules use six or seven components in this order: second, minute,
+            hour, day of month, month, day of week, and optional year. Supported
+            aliases are exactly <code>@yearly</code>, <code>@monthly</code>,
+            <code>@weekly</code>, <code>@daily</code>, and <code>@hourly</code>.
+          </p>
           {submitError() && (
             <div role="alert">Unable to save job settings.</div>
           )}
@@ -331,12 +340,14 @@ function JobSettingsImpl(props: {
           <div class="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
-                <TableHead>Name</TableHead>
-                <TableHead>Schedule</TableHead>
-                <TableHead>Next Run</TableHead>
-                <TableHead>Last Run</TableHead>
-                <TableHead>Enabled</TableHead>
-                <TableHead>Action</TableHead>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Schedule</TableHead>
+                  <TableHead>Next Run</TableHead>
+                  <TableHead>Last Run</TableHead>
+                  <TableHead>Enabled</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
               </TableHeader>
               <TableBody>
                 <form.Field name="jobs" mode="array">
@@ -369,20 +380,20 @@ function JobSettingsImpl(props: {
                           </TableCell>
                           <TableCell>{time(proxy().job?.next)}</TableCell>
                           <TableCell>
-                            {(() => {
-                              const l = proxy().job?.latest;
-                              return l ? (
+                            <Show when={proxy().job?.latest} fallback="—">
+                              {(latest) => (
                                 <span
-                                  class={l[2] ? "text-error-foreground" : ""}
-                                  title={l[2] ? "Job error" : undefined}
+                                  class={
+                                    latest()[2] ? "text-error-foreground" : ""
+                                  }
+                                  title={latest()[2] ? "Job error" : undefined}
                                 >
-                                  {time(l[0])} ({Number(l[1]) / 1000}s)
-                                  {l[2] ? " — error" : ""}
+                                  {time(latest()[0])} (
+                                  {Number(latest()[1]) / 1000}s)
+                                  {latest()[2] ? " — error" : ""}
                                 </span>
-                              ) : (
-                                "—"
-                              );
-                            })()}
+                              )}
+                            </Show>
                           </TableCell>
                           <TableCell>
                             <form.Field name={`jobs[${i}].config.disabled`}>

@@ -88,6 +88,7 @@ import {
   buildFormProxy,
   equal,
   extractConfig,
+  mergeJobs,
   JobSettings,
 } from "@/components/settings/JobSettings";
 
@@ -202,6 +203,9 @@ describe("JobSettings loading and presentation", () => {
     expect(screen.getByLabelText("Run Cleanup now")).toBeInTheDocument();
     expect(screen.getByText(/1\.25s/)).toBeInTheDocument();
     expect(screen.queryByText(/raw execution detail/i)).toBeNull();
+    expect(document.querySelectorAll("thead > tr")).toHaveLength(1);
+    expect(screen.getByText(/six or seven components/i)).toBeInTheDocument();
+    expect(screen.getByText("@yearly")).toBeInTheDocument();
   });
 });
 
@@ -263,9 +267,12 @@ describe("JobSettings editing and saving", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(state.setConfig).toHaveBeenCalled());
     expect(order).toEqual(["setConfig", "invalidate"]);
+    expect(state.setConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ throw: true, client: expect.anything() }),
+    );
     refreshed.resolve(undefined);
-    await waitFor(() => expect(state.invalidateQueries).toHaveBeenCalled());
-    await waitFor(() => expect(v.postSubmit).toHaveBeenCalled());
+    await waitFor(() => expect(v.postSubmit).toHaveBeenCalledWith(false));
+    expect(v.setDirty).toHaveBeenLastCalledWith(false);
     expect(order).toEqual(["setConfig", "invalidate"]);
   });
   it("preserves local edits during incoming remote refresh and rebases clean forms", async () => {
@@ -367,6 +374,28 @@ describe("JobSettings Run now", () => {
 });
 
 describe("JobSettings protobuf helpers", () => {
+  it("overlays edited default leaves onto concurrent remote jobs", () => {
+    const baseline = JobsConfig.fromPartial({
+      systemJobs: [
+        SystemJob.fromPartial({ id: 1, schedule: "@daily", disabled: false }),
+      ],
+    });
+    const submitted = JobsConfig.fromPartial({
+      systemJobs: [
+        SystemJob.fromPartial({ id: 1, schedule: "@hourly", disabled: false }),
+      ],
+    });
+    const latest = JobsConfig.fromPartial({
+      systemJobs: [
+        SystemJob.fromPartial({ id: 1, schedule: "@weekly", disabled: true }),
+        SystemJob.fromPartial({ id: 2, schedule: "@daily", disabled: false }),
+      ],
+    });
+    expect(mergeJobs(submitted, baseline, latest).systemJobs).toEqual([
+      SystemJob.fromPartial({ id: 1, schedule: "@hourly", disabled: true }),
+      SystemJob.fromPartial({ id: 2, schedule: "@daily", disabled: false }),
+    ]);
+  });
   it("keeps configured jobs and emits changed defaults", () => {
     const configured = SystemJob.fromPartial({ id: 1, schedule: "@daily" });
     const proxy = buildFormProxy(
