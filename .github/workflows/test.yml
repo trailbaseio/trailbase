@@ -7,6 +7,9 @@ on:
       - main
       - dev
 
+env:
+  TOOLCHAIN_VERSION: 1.98.0
+
 permissions:
   contents: read
 
@@ -18,7 +21,6 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     strategy:
       matrix:
         include:
@@ -39,6 +41,7 @@ jobs:
         uses: ./.github/actions/setup_build
         with:
           cache-key-suffix: build-${{ matrix.name }}
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
 
       - name: "Build with ${{ matrix.cargo_args }}"
         env:
@@ -51,7 +54,6 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -65,6 +67,8 @@ jobs:
           apps: nodejs protobuf zip
       - uses: ./.github/actions/setup_pnpm
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.TOOLCHAIN_VERSION }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: build-windows
@@ -76,7 +80,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -90,6 +93,7 @@ jobs:
         uses: ./.github/actions/setup_build
         with:
           cache-key-suffix: test
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
 
       - id: setup_clients
         uses: ./.github/actions/setup_clients
@@ -107,7 +111,6 @@ jobs:
 
   test-websocket:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -121,6 +124,7 @@ jobs:
         uses: ./.github/actions/setup_build
         with:
           cache-key-suffix: test-websocket
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
 
       - name: "Test Rust Client"
         env:
@@ -137,7 +141,6 @@ jobs:
 
   test-pg:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
         with:
@@ -151,6 +154,7 @@ jobs:
         uses: ./.github/actions/setup_build
         with:
           cache-key-suffix: test-pg
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
 
       - name: "Build & Run Tests"
         env:

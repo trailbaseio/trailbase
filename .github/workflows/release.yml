@@ -6,7 +6,7 @@ on:
       - "v*.*.*"
 
 env:
-  TOOLCHAIN_VERSION: stable
+  TOOLCHAIN_VERSION: 1.98.0
   CARGO_PROFILE_RELEASE_LTO: "fat"
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
   PNPM_OFFLINE: "TRUE"
@@ -27,7 +27,6 @@ jobs:
           - ARCH: aarch64
             RUNS_ON: ubuntu-24.04-arm
     runs-on: ${{ matrix.RUNS_ON }}
-    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
@@ -74,7 +73,6 @@ jobs:
           - ARCH: aarch64
           - ARCH: x86_64
     runs-on: macos-15
-    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
         with:
@@ -94,7 +92,7 @@ jobs:
           shared-key: release-macos-${{ matrix.ARCH }}
       - name: Rust Build
         run: |
-          env && \
+          env
           cargo build --target ${{ matrix.ARCH }}-apple-darwin --release --features=geos-static --bin=trail
 
       - name: Check Binary Version
@@ -110,7 +108,6 @@ jobs:
 
   release-windows:
     runs-on: windows-latest
-    timeout-minutes: 60
     env:
       RUST_TARGET: x86_64-pc-windows-msvc
     steps:
@@ -126,16 +123,17 @@ jobs:
           buckets: extras
           apps: nodejs protobuf zip
       - uses: ./.github/actions/setup_pnpm
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.TOOLCHAIN_VERSION }}
+          target: ${{ env.RUST_TARGET }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: release-windows
       - name: Rust Build
         shell: bash
         run: |
-          env && \
+          env
           cargo build --target ${{ env.RUST_TARGET }} --release --features=geos-static --bin=trail
 
       - name: Check Binary Version
@@ -160,7 +158,6 @@ jobs:
           - name: tetris
             package-name: trailbase-tetris-component
     runs-on: ubuntu-latest
-    timeout-minutes: 60
     env:
       RUST_TARGET: wasm32-wasip2
 
@@ -192,7 +189,6 @@ jobs:
       - release-windows
       - release-wasm-components
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     permissions:
       contents: write
     steps:

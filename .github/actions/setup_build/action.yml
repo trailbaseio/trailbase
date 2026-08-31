@@ -3,7 +3,10 @@ description: 'Sets up the build/test environment on Ubuntu'
 
 inputs:
   cache-key-suffix:
-    description: "Scopes the Rust cache to the calling job (jobs build with different feature flags and must not share a target/ cache)"
+    description: "Scopes the Rust cache to the calling job (jobs built with different feature flags must not share a cached `target/`)"
+    required: true
+  toolchain-version:
+    description: "Rust toolchain version to use."
     required: true
 
 runs:
@@ -23,6 +26,7 @@ runs:
 
     - uses: dtolnay/rust-toolchain@stable
       with:
+        toolchain: ${{ inputs.toolchain-version }}
         components: rustfmt, clippy
 
     - uses: Swatinem/rust-cache@v2

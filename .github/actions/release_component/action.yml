@@ -29,7 +29,7 @@ runs:
 
     - uses: ./.github/actions/setup_pnpm
 
-    - uses: dtolnay/rust-toolchain@master
+    - uses: dtolnay/rust-toolchain@stable
       with:
         toolchain: ${{ inputs.toolchain-version }}
         target: ${{ inputs.rust-target }}
@@ -41,7 +41,8 @@ runs:
     - name: Rust Build
       shell: bash
       run: |
-        env && cargo build -p ${{ inputs.package-name }} --target ${{ inputs.rust-target }} --release
+        env
+        cargo build -p ${{ inputs.package-name }} --target ${{ inputs.rust-target }} --release
 
     - name: Package Artifacts
       shell: bash
