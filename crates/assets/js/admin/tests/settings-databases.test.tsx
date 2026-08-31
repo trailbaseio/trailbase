@@ -261,13 +261,16 @@ describe("database settings states", () => {
 });
 
 describe("database link lifecycle", () => {
-  it("opens a labelled dialog and cancels without mutation", () => {
+  it("opens a labelled dialog, cancels, and restores trigger focus", async () => {
     setup();
+    const trigger = linkButton();
+    trigger.focus();
     const dialog = openLink();
     expect(dialog).toHaveTextContent("Link Database");
     expect(screen.getByLabelText("Name")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(trigger).toHaveFocus());
     expect(state.setConfig).not.toHaveBeenCalled();
   });
   it.each([
@@ -396,16 +399,19 @@ describe("database link lifecycle", () => {
 });
 
 describe("database unlink lifecycle", () => {
-  it("requires selection and confirmation listing selected names", () => {
+  it("requires selection, confirms names, and restores trigger focus", async () => {
     setup(baseConfig(["analytics", "events"]));
     expect(unlinkButton()).toBeDisabled();
     selectDatabase("analytics");
     selectDatabase("events");
     expect(unlinkButton()).not.toBeDisabled();
-    fireEvent.click(unlinkButton());
+    const trigger = unlinkButton();
+    trigger.focus();
+    fireEvent.click(trigger);
     expect(screen.getByRole("dialog")).toHaveTextContent("analytics, events");
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(unlinkButton()).not.toBeDisabled();
+    await waitFor(() => expect(trigger).toHaveFocus());
     expect(state.setConfig).not.toHaveBeenCalled();
   });
   it("keeps unlink dialog and selection on failure without raw details", async () => {

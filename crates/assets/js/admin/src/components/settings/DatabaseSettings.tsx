@@ -115,6 +115,8 @@ function DatabaseSettingsForm(props: {
   const [pending, setPending] = createSignal(false);
   const [error, setError] = createSignal<string>();
   let active = true;
+  let linkButton: HTMLButtonElement | undefined;
+  let unlinkButton: HTMLButtonElement | undefined;
   onCleanup(() => {
     active = false;
   });
@@ -131,13 +133,21 @@ function DatabaseSettingsForm(props: {
     );
     if (retained.size !== selectedRows().size) setSelectedRows(retained);
     if (unlinkOpen() && retained.size === 0 && !pending()) {
-      setUnlinkOpen(false);
+      closeUnlink();
       setError();
     }
   });
   const allSelected = () =>
     namedDatabases().length > 0 &&
     selected().length === namedDatabases().length;
+  const closeLink = () => {
+    setLinkOpen(false);
+    queueMicrotask(() => active && linkButton?.focus());
+  };
+  const closeUnlink = () => {
+    setUnlinkOpen(false);
+    queueMicrotask(() => active && unlinkButton?.focus());
+  };
 
   const link = async () => {
     const message = validation();
@@ -149,7 +159,7 @@ function DatabaseSettingsForm(props: {
       config.databases = [...config.databases, { name: name().trim() }];
       await setConfig({ client: queryClient, config, throw: true });
       if (!active) return;
-      setLinkOpen(false);
+      closeLink();
       setName("");
       props.postSubmit();
     } catch {
@@ -168,7 +178,7 @@ function DatabaseSettingsForm(props: {
       config.databases = config.databases.filter((db) => !remove.has(db.name));
       await setConfig({ client: queryClient, config, throw: true });
       if (!active) return;
-      setUnlinkOpen(false);
+      closeUnlink();
       setSelectedRows(new Set<string>());
       props.postSubmit();
     } catch {
@@ -181,7 +191,11 @@ function DatabaseSettingsForm(props: {
     <>
       <Dialog
         open={linkOpen()}
-        onOpenChange={(open) => !pending() && setLinkOpen(open)}
+        onOpenChange={(open) => {
+          if (pending()) return;
+          if (open) setLinkOpen(true);
+          else closeLink();
+        }}
       >
         <DialogContent closeDisabled={pending()}>
           <DialogHeader>
@@ -218,7 +232,7 @@ function DatabaseSettingsForm(props: {
               type="button"
               variant="outline"
               disabled={pending()}
-              onClick={() => setLinkOpen(false)}
+              onClick={closeLink}
             >
               Cancel
             </Button>
@@ -234,7 +248,11 @@ function DatabaseSettingsForm(props: {
       </Dialog>
       <Dialog
         open={unlinkOpen()}
-        onOpenChange={(open) => !pending() && setUnlinkOpen(open)}
+        onOpenChange={(open) => {
+          if (pending()) return;
+          if (open) setUnlinkOpen(true);
+          else closeUnlink();
+        }}
       >
         <DialogContent closeDisabled={pending()}>
           <DialogHeader>
@@ -255,7 +273,7 @@ function DatabaseSettingsForm(props: {
               type="button"
               variant="outline"
               disabled={pending()}
-              onClick={() => setUnlinkOpen(false)}
+              onClick={closeUnlink}
             >
               Cancel
             </Button>
@@ -350,6 +368,7 @@ function DatabaseSettingsForm(props: {
           <CardFooter>
             <div class="flex w-full justify-between gap-2">
               <Button
+                ref={(element) => (linkButton = element)}
                 variant="outline"
                 type="button"
                 disabled={pending()}
@@ -362,6 +381,7 @@ function DatabaseSettingsForm(props: {
                 <TbOutlineLink /> Link
               </Button>
               <Button
+                ref={(element) => (unlinkButton = element)}
                 variant="destructive"
                 type="button"
                 disabled={selected().length === 0 || pending()}
