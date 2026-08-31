@@ -35,8 +35,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+export function formatBackupTimestamp(timestamp: bigint): string {
+  const milliseconds = timestamp * 1000n;
+  const maxMilliseconds = 8640000000000000n;
+  if (milliseconds > maxMilliseconds || milliseconds < -maxMilliseconds) {
+    return "Unknown date";
+  }
+  const date = new Date(Number(milliseconds));
+  return Number.isNaN(date.getTime()) ? "Unknown date" : date.toLocaleString();
+}
+
 function Timestamp(props: { timestamp: bigint }) {
-  return <div>{new Date(Number(props.timestamp)).toLocaleString()}</div>;
+  return <div>{formatBackupTimestamp(props.timestamp)}</div>;
 }
 
 export function BackupSettings(_props: {
@@ -60,10 +70,9 @@ export function BackupSettings(_props: {
     mounted = false;
   });
 
-  const timestampText = (timestamp: bigint) =>
-    new Date(Number(timestamp)).toLocaleString();
+  const timestampText = formatBackupTimestamp;
   const refetchAfterSuccess = async () => {
-    if (mounted) await backupsList.refetch();
+    if (mounted) await backupsList.refetch({ throwOnError: true });
   };
   const runOperation = async (
     action: "delete" | "restore",
@@ -159,7 +168,7 @@ export function BackupSettings(_props: {
               when={(backupsList.data?.backups ?? []).length > 0}
               fallback={<p>No backups available.</p>}
             >
-              <div class="rounded-md border">
+              <div class="overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
                     <TableRow>

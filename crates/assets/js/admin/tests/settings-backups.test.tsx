@@ -51,9 +51,12 @@ vi.mock("@/components/ui/toast", () => ({
   showToast: (x: unknown) => state.toast(x),
 }));
 
-import { BackupSettings } from "@/components/settings/BackupSettings";
+import {
+  BackupSettings,
+  formatBackupTimestamp,
+} from "@/components/settings/BackupSettings";
 
-const timestamp = 1_700_000_000_000n;
+const timestamp = 1_700_000_000n;
 const renderBackups = () =>
   render(() => <BackupSettings setDirty={vi.fn()} postSubmit={vi.fn()} />);
 
@@ -89,7 +92,7 @@ describe("BackupSettings", () => {
     renderBackups();
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(
-      screen.getByText(new Date(Number(timestamp)).toLocaleString()),
+      screen.getByText(new Date(Number(timestamp) * 1000).toLocaleString()),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /delete backup from/i }),
@@ -121,6 +124,12 @@ describe("BackupSettings", () => {
   it("shows the empty state", () => {
     renderBackups();
     expect(screen.getByText("No backups available.")).toBeInTheDocument();
+  });
+
+  it("uses a neutral fallback for out-of-range timestamps", () => {
+    expect(formatBackupTimestamp(9_000_000_000_000_000_000n)).toBe(
+      "Unknown date",
+    );
   });
 
   it("renders semantic headers and rolling-window fallback", () => {
@@ -202,6 +211,7 @@ describe("BackupSettings", () => {
     await waitFor(() => expect(state.toast).toHaveBeenCalled());
     expect(state.del).toHaveBeenCalledWith([timestamp]);
     expect(state.refetch).toHaveBeenCalledOnce();
+    expect(state.refetch).toHaveBeenCalledWith({ throwOnError: true });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -213,7 +223,7 @@ describe("BackupSettings", () => {
     );
     expect(screen.getByRole("dialog")).toHaveTextContent(/restore backup/i);
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      new Date(Number(timestamp)).toLocaleString(),
+      new Date(Number(timestamp) * 1000).toLocaleString(),
     );
   });
 
