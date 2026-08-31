@@ -440,6 +440,23 @@ describe("database unlink lifecycle", () => {
     const saved = state.setConfig.mock.calls[0][0].config as Config;
     expect(saved.databases.map((db) => db.name)).toEqual(["events", "remote"]);
   });
+  it("does not mutate an already-sent unlink after a later refresh", async () => {
+    let resolve!: () => void;
+    state.setConfig.mockReturnValue(new Promise<void>((r) => (resolve = r)));
+    setup(baseConfig(["analytics", "events"]));
+    selectDatabase("analytics");
+    fireEvent.click(unlinkButton());
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() => expect(state.setConfig).toHaveBeenCalledOnce());
+    const sent = state.setConfig.mock.calls[0][0].config as Config;
+    expect(sent.databases.map((db) => db.name)).toEqual(["events"]);
+    state.updateConfig?.(baseConfig(["analytics", "events", "remote"]));
+    expect(state.setConfig).toHaveBeenCalledOnce();
+    expect(sent.databases.map((db) => db.name)).toEqual(["events"]);
+    resolve();
+    await Promise.resolve();
+  });
+
   it("does not callback after unlink unmount", async () => {
     let resolve!: () => void;
     state.setConfig.mockReturnValue(new Promise<void>((r) => (resolve = r)));
