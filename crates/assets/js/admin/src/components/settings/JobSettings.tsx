@@ -1,9 +1,15 @@
-import { Switch, Match, Index } from "solid-js";
+import {
+  Match,
+  Switch,
+  Index,
+  createEffect,
+  createSignal,
+  onCleanup,
+  untrack,
+} from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient, useQuery } from "@tanstack/solid-query";
-import { TbOutlinePlayerPlay, TbOutlineInfoCircle } from "solid-icons/tb";
-
-import { Button } from "@/components/ui/button";
+import { TbOutlinePlayerPlay } from "solid-icons/tb";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { IconButton } from "@/components/IconButton";
@@ -16,148 +22,222 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
-import { type FieldApiT, FieldInfo } from "@/components/FormFields";
+import { FieldInfo, type FieldApiT } from "@/components/FormFields";
+import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
 import { Config, JobsConfig, SystemJob } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { listJobs, runJob } from "@/lib/api/jobs";
+import { showToast } from "@/components/ui/toast";
 import type { Job } from "@bindings/Job";
 
 const cronRegex =
-  /^(@(yearly|monthly|weekly|daily|hourly|))|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})$/;
-
+  /^(@(yearly|monthly|weekly|daily|hourly))|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})$/;
 function isValidCronSpec() {
   return {
-    onChange: ({ value }: { value: string }): string | undefined => {
-      const matches = cronRegex.test(value);
-      if (!matches) {
-        return `Not a valid cron spec`;
-      }
-    },
+    onChange: ({ value }: { value: string }) =>
+      cronRegex.test(value) ? undefined : "Not a valid cron spec",
   };
 }
 
 type JobProxy = {
-  /// Set to false if the loaded config contained the job.
   default: boolean;
   initialConfig: SystemJob;
   config: SystemJob;
   job?: Job;
 };
-
-type FormProxy = {
-  jobs: JobProxy[];
-};
-
-// function trimDuplicateWhitespaces(s: string) : string {
-//   return s.trim().replace(/\s+/g, " ");
-// }
-
-function equal(a: SystemJob, b: SystemJob): boolean {
+type FormProxy = { jobs: JobProxy[] };
+export function equal(a: SystemJob, b: SystemJob) {
   return (
-    a.disabled === b.disabled && a.schedule === b.schedule && a.id === b.id
+    a.id === b.id && a.schedule === b.schedule && a.disabled === b.disabled
   );
 }
-
-function buildFormProxy(
+export function buildFormProxy(
   config: JobsConfig | undefined,
   jobs: Job[],
 ): FormProxy {
   const result = new Map<number, JobProxy>();
-  if (config) {
-    for (const job of config.systemJobs) {
-      const id = job.id;
-      if (id) {
-        result.set(id, {
-          default: false,
-          initialConfig: job,
-          config: { ...job },
-        });
-      }
-    }
-  }
-
+  for (const job of config?.systemJobs ?? [])
+    if (job.id)
+      result.set(job.id, {
+        default: false,
+        initialConfig: job,
+        config: { ...job },
+      });
   for (const job of jobs) {
-    const d: SystemJob = {
-      id: job.id,
-      schedule: job.schedule,
-      disabled: !job.enabled,
-    };
-
+    const d = { id: job.id, schedule: job.schedule, disabled: !job.enabled };
     const entry: JobProxy = result.get(job.id) ?? {
       default: true,
       initialConfig: d,
       config: { ...d },
     };
-
     entry.job = job;
     result.set(job.id, entry);
   }
-
-  const compare = (a: JobProxy, b: JobProxy) =>
-    (a.config.id ?? 0) - (b.config.id ?? 0);
-
-  return { jobs: [...result.values()].sort(compare) };
-}
-
-function extractConfig(proxy: FormProxy): JobsConfig {
-  const systemJobs: SystemJob[] = [];
-
-  for (const entry of proxy.jobs) {
-    // Only add entries that were part of the original config or have changed from the initial default.
-    if (entry.default === false) {
-      systemJobs.push(entry.config);
-    } else if (!equal(entry.initialConfig, entry.config)) {
-      systemJobs.push(entry.config);
-    }
-  }
-
   return {
-    systemJobs,
+    jobs: [...result.values()].sort(
+      (a, b) => (a.config.id ?? 0) - (b.config.id ?? 0),
+    ),
   };
+}
+export function extractConfig(proxy: FormProxy): JobsConfig {
+  return {
+    systemJobs: proxy.jobs
+      .filter((e) => !e.default || !equal(e.initialConfig, e.config))
+      .map((e) => e.config),
+  };
+}
+const cloneConfig = (c: Config) => Config.decode(Config.encode(c).finish());
+const cloneJobs = (j: Job[]) => j.map((x) => ({ ...x }));
+function leafChanged(a: SystemJob, b: SystemJob) {
+  return (
+    a.id !== b.id || a.schedule !== b.schedule || a.disabled !== b.disabled
+  );
+}
+function mergeJobs(
+  submitted: JobsConfig,
+  baseline: JobsConfig,
+  latest: JobsConfig,
+): JobsConfig {
+  const local = new Map(submitted.systemJobs.map((x) => [x.id, x]));
+  const base = new Map(baseline.systemJobs.map((x) => [x.id, x]));
+  const merged = latest.systemJobs.map((remote) => {
+    const mine = local.get(remote.id),
+      old = base.get(remote.id);
+    if (!mine || !old) return remote;
+    return {
+      ...remote,
+      ...(mine.schedule !== old.schedule ? { schedule: mine.schedule } : {}),
+      ...(mine.disabled !== old.disabled ? { disabled: mine.disabled } : {}),
+    };
+  });
+  for (const x of submitted.systemJobs)
+    if (!latest.systemJobs.some((r) => r.id === x.id)) merged.push(x);
+  return { systemJobs: merged };
+}
+function safeDate(value: unknown) {
+  try {
+    const s = typeof value === "bigint" ? value.toString() : String(value);
+    const t = Number(s);
+    if (!Number.isSafeInteger(t) || t <= 0) return null;
+    const d = new Date(t * 1000);
+    return Number.isNaN(d.getTime()) ? null : d;
+  } catch {
+    return null;
+  }
+}
+function time(value: unknown) {
+  return safeDate(value)?.toUTCString() ?? "—";
 }
 
 function JobSettingsImpl(props: {
   setDirty: (dirty: boolean) => void;
-  postSubmit: () => void;
+  postSubmit: (dirty?: boolean) => void;
   config: Config;
   jobs: Job[];
-  refetchJobs: () => void;
+  refetchJobs: () => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
+  let baseline = buildFormProxy(props.config.jobs, props.jobs);
+  let latestConfig = cloneConfig(props.config),
+    latestJobs = cloneJobs(props.jobs),
+    lastConfig = Config.encode(props.config).finish(),
+    active = true;
+  const [submitError, setSubmitError] = createSignal(false),
+    [runError, setRunError] = createSignal(false),
+    [pendingRun, setPendingRun] = createSignal<number>();
+  onCleanup(() => {
+    active = false;
+  });
   const form = createForm(() => ({
-    defaultValues: buildFormProxy(props.config.jobs, props.jobs),
+    defaultValues: baseline,
     onSubmit: async ({ value }: { value: FormProxy }) => {
-      const jobs = extractConfig(value);
-      const newConfig = {
-        ...props.config,
-        jobs,
-      } satisfies Config;
-
-      await setConfig({
-        client: queryClient,
-        config: newConfig,
-        throw: true,
-      });
-
-      props.refetchJobs();
-      props.postSubmit();
+      const submitted = {
+        jobs: value.jobs.map((e) => ({
+          ...e,
+          config: { ...e.config },
+          initialConfig: { ...e.initialConfig },
+        })),
+      };
+      const submittedJobs = extractConfig(submitted),
+        configAtSubmit = cloneConfig(latestConfig),
+        baselineAtSubmit = extractConfig(baseline);
+      try {
+        const merged = mergeJobs(
+          submittedJobs,
+          baselineAtSubmit,
+          latestConfig.jobs ?? JobsConfig.create(),
+        );
+        const save = cloneConfig(configAtSubmit);
+        save.jobs = merged;
+        await setConfig({ client: queryClient, config: save, throw: true });
+        await props.refetchJobs();
+        if (!active) return;
+        latestConfig = save;
+        baseline = buildFormProxy(merged, latestJobs);
+        const stillEdited =
+          extractConfig(form.state.values) !== undefined &&
+          JSON.stringify(extractConfig(form.state.values)) !==
+            JSON.stringify(submittedJobs);
+        if (!stillEdited) form.reset(baseline);
+        setSubmitError(false);
+        props.postSubmit(stillEdited);
+      } catch {
+        if (active) setSubmitError(true);
+      }
     },
   }));
-
-  form.useStore((state) => {
-    props.setDirty(state.isDirty && !state.isSubmitted);
+  const dirty = () =>
+    JSON.stringify(extractConfig(form.state.values)) !==
+    JSON.stringify(extractConfig(baseline));
+  form.useStore(() => props.setDirty(dirty()));
+  createEffect(() => {
+    const incoming = props.config,
+      encoded = Config.encode(incoming).finish();
+    const changed =
+      encoded.length !== lastConfig.length ||
+      encoded.some((x, i) => x !== lastConfig[i]) ||
+      props.jobs !== latestJobs;
+    if (!changed) return;
+    const wasDirty = untrack(dirty);
+    lastConfig = encoded;
+    latestConfig = cloneConfig(incoming);
+    latestJobs = cloneJobs(props.jobs);
+    if (!wasDirty) {
+      baseline = buildFormProxy(incoming.jobs, props.jobs);
+      form.reset(baseline);
+    }
   });
-
+  const reset = () => {
+    form.reset(baseline);
+    setSubmitError(false);
+    setRunError(false);
+  };
+  const run = async (id: number) => {
+    if (pendingRun() !== undefined) return;
+    setPendingRun(id);
+    setRunError(false);
+    try {
+      const result = await runJob({ id });
+      if (result.error) throw new Error("job failed");
+      await props.refetchJobs();
+      if (active) showToast({ title: "Job started", variant: "success" });
+    } catch {
+      if (active) {
+        setRunError(true);
+        showToast({
+          title: "Job failed",
+          description: "The job could not be started.",
+          variant: "error",
+        });
+      }
+    } finally {
+      if (active) setPendingRun(undefined);
+    }
+  };
   return (
     <form
       method="dialog"
-      onSubmit={(e: SubmitEvent) => {
+      onSubmit={(e) => {
         e.preventDefault();
         form.handleSubmit();
       }}
@@ -166,263 +246,151 @@ function JobSettingsImpl(props: {
         <CardHeader>
           <h2>Periodic Jobs</h2>
         </CardHeader>
-
         <CardContent class="flex flex-col gap-4">
           <p class="text-sm">
             The following jobs, when enabled, execute periodically in the
             background. This may include default system jobs, such as session
             cleanup, as well as jobs registered by WASM components.
           </p>
-
-          <div class="rounded-md border">
+          {submitError() && (
+            <div role="alert">Unable to save job settings.</div>
+          )}
+          {runError() && <div role="alert">Unable to run job.</div>}
+          <div class="overflow-x-auto rounded-md border">
             <Table>
               <TableHeader>
-                {/*
-              <TableHead>Id</TableHead>
-              */}
                 <TableHead>Name</TableHead>
-                <TableHead>
-                  <Tooltip>
-                    <TooltipTrigger as="div">
-                      <div class="flex items-center gap-2">
-                        Schedule <TbOutlineInfoCircle />
-                      </div>
-                    </TooltipTrigger>
-
-                    <TooltipContent>
-                      <p>6/7-component cron spec:</p>
-                      <p class="font-bold break-keep">
-                        second minute hour day-of-month month day-of-week [year]
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TableHead>
+                <TableHead>Schedule</TableHead>
                 <TableHead>Next Run</TableHead>
                 <TableHead>Last Run</TableHead>
                 <TableHead>Enabled</TableHead>
                 <TableHead>Action</TableHead>
               </TableHeader>
-
               <TableBody>
                 <form.Field name="jobs" mode="array">
                   {(field) => (
                     <Index each={field().state.value}>
-                      {(proxy: () => JobProxy, i: number) => {
-                        const next = () => {
-                          const timestamp = proxy().job?.next;
-                          if (!timestamp) return null;
-
-                          const t = new Date(Number(timestamp) * 1000);
-
-                          return (
-                            <Tooltip>
-                              <TooltipTrigger as="div">
-                                <div class="flex items-center gap-2">
-                                  <TbOutlineInfoCircle />
-                                  <div class="w-[128px] text-sm">
-                                    {t.toUTCString()}
-                                  </div>
-                                </div>
-                              </TooltipTrigger>
-
-                              <TooltipContent>
-                                {t.toLocaleString()} (Local)
-                              </TooltipContent>
-                            </Tooltip>
-                          );
-                        };
-
-                        const latest = () => {
-                          const latest = proxy().job?.latest;
-                          if (!latest) return null;
-
-                          const [startTimestamp, durationMillis, error] =
-                            latest;
-                          const t = new Date(Number(startTimestamp) * 1000);
-
-                          return (
-                            <div
-                              classList={{
-                                "text-error-foreground": error !== null,
-                              }}
+                      {(proxy, i) => (
+                        <TableRow>
+                          <TableCell>
+                            {proxy().job?.name ?? `Job ${proxy().config.id}`}
+                          </TableCell>
+                          <TableCell>
+                            <form.Field
+                              name={`jobs[${i}].config.schedule`}
+                              validators={isValidCronSpec()}
                             >
-                              <Tooltip>
-                                <TooltipTrigger as="div">
-                                  <div class="flex items-center gap-2">
-                                    <TbOutlineInfoCircle />
-                                    <div class="w-[128px] text-sm">
-                                      {" "}
-                                      {t.toUTCString()}{" "}
-                                    </div>
-                                  </div>
-                                </TooltipTrigger>
-
-                                <TooltipContent>
-                                  <p>Start: {t.toLocaleString()} (Local)</p>
-                                  <p>
-                                    Duration: {Number(durationMillis) / 1000}s
-                                  </p>
-                                  <p>Error: {error ?? "none"}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </div>
-                          );
-                        };
-
-                        return (
-                          <TableRow>
-                            {/*
-                          <TableCell>{proxy().config.id}</TableCell>
-                          */}
-
-                            <TableCell>{proxy().job?.name}</TableCell>
-
-                            <TableCell>
-                              <form.Field
-                                name={`jobs[${i}].config.schedule`}
-                                validators={isValidCronSpec()}
-                              >
-                                {(
-                                  field: () => FieldApiT<string | undefined>,
-                                ) => {
-                                  return (
-                                    <>
-                                      <TextField>
-                                        <TextFieldInput
-                                          type="text"
-                                          value={field().state.value}
-                                          onBlur={field().handleBlur}
-                                          autocomplete="off"
-                                          onChange={(e: Event) => {
-                                            field().handleChange(
-                                              (e.target as HTMLInputElement)
-                                                .value,
-                                            );
-                                          }}
-                                        />
-                                      </TextField>
-
-                                      <FieldInfo field={field()} />
-                                    </>
-                                  );
-                                }}
-                              </form.Field>
-                            </TableCell>
-
-                            <TableCell>{next()}</TableCell>
-
-                            <TableCell>{latest()}</TableCell>
-
-                            <TableCell>
-                              <form.Field name={`jobs[${i}].config.disabled`}>
-                                {(field: () => FieldApiT<boolean>) => {
-                                  const enabled = () =>
-                                    !(field().state.value ?? false);
-                                  return (
-                                    <div class="flex items-center justify-center">
-                                      <Checkbox
-                                        checked={enabled()}
-                                        onBlur={field().handleBlur}
-                                        onChange={(enabled: boolean) =>
-                                          field().handleChange(!enabled)
-                                        }
-                                      />
-                                    </div>
-                                  );
-                                }}
-                              </form.Field>
-                            </TableCell>
-
-                            <TableCell>
-                              <div class="flex h-full items-center">
-                                <IconButton
-                                  tooltip="Run now"
-                                  type="button"
-                                  onClick={() => {
-                                    const id = proxy().job?.id;
-                                    if (id) {
-                                      (async () => {
-                                        try {
-                                          const result = await runJob({ id });
-                                          console.info(
-                                            "execution result: ",
-                                            result.error,
-                                          );
-                                        } finally {
-                                          props.refetchJobs();
-                                        }
-                                      })();
-                                    }
-                                  }}
+                              {(f: () => FieldApiT<string | undefined>) => (
+                                <>
+                                  <TextField>
+                                    <TextFieldInput
+                                      type="text"
+                                      aria-label={`Schedule for ${proxy().job?.name ?? proxy().config.id}`}
+                                      value={f().state.value}
+                                      onBlur={f().handleBlur}
+                                      onChange={(e) =>
+                                        f().handleChange(
+                                          (e.target as HTMLInputElement).value,
+                                        )
+                                      }
+                                    />
+                                  </TextField>
+                                  <FieldInfo field={f()} />
+                                </>
+                              )}
+                            </form.Field>
+                          </TableCell>
+                          <TableCell>{time(proxy().job?.next)}</TableCell>
+                          <TableCell>
+                            {(() => {
+                              const l = proxy().job?.latest;
+                              return l ? (
+                                <span
+                                  class={l[2] ? "text-error-foreground" : ""}
+                                  title={l[2] ? "Job error" : undefined}
                                 >
-                                  <TbOutlinePlayerPlay />
-                                </IconButton>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }}
+                                  {time(l[0])} ({Number(l[1]) / 1000}s)
+                                  {l[2] ? " — error" : ""}
+                                </span>
+                              ) : (
+                                "—"
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            <form.Field name={`jobs[${i}].config.disabled`}>
+                              {(f: () => FieldApiT<boolean>) => (
+                                <Checkbox
+                                  aria-label={`Enabled for ${proxy().job?.name ?? proxy().config.id}`}
+                                  checked={!f().state.value}
+                                  onChange={(v) => f().handleChange(!v)}
+                                />
+                              )}
+                            </form.Field>
+                          </TableCell>
+                          <TableCell>
+                            <IconButton
+                              aria-label={`Run ${proxy().job?.name ?? proxy().config.id} now`}
+                              tooltip="Run now"
+                              type="button"
+                              disabled={pendingRun() !== undefined}
+                              onClick={() => run(proxy().job?.id ?? 0)}
+                            >
+                              {pendingRun() === proxy().job?.id ? (
+                                "Running…"
+                              ) : (
+                                <TbOutlinePlayerPlay />
+                              )}
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      )}
                     </Index>
                   )}
                 </form.Field>
               </TableBody>
             </Table>
           </div>
+          <Switch fallback={null}>
+            <Match when={!props.jobs.length}>
+              <p>No jobs configured.</p>
+            </Match>
+          </Switch>
         </CardContent>
       </Card>
-
-      <div class="flex justify-end pt-4">
-        <form.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {(state) => {
-            return (
-              <Button
-                type="submit"
-                disabled={!state().canSubmit}
-                variant="default"
-              >
-                {state().isSubmitting ? "..." : "Submit"}
-              </Button>
-            );
-          }}
-        </form.Subscribe>
-      </div>
+      <SettingsFormActions
+        dirty={dirty()}
+        canSubmit={form.state.canSubmit}
+        isSubmitting={form.state.isSubmitting}
+        onReset={reset}
+      />
     </form>
   );
 }
-
 const listJobsKey = ["admin", "jobs"];
-
 export function JobSettings(props: {
   setDirty: (dirty: boolean) => void;
-  postSubmit: () => void;
+  postSubmit: (dirty?: boolean) => void;
 }) {
-  const queryClient = useQueryClient();
-  const config = createConfigQuery();
-  const jobList = useQuery(() => ({
-    queryKey: listJobsKey,
-    queryFn: listJobs,
-  }));
-
+  const queryClient = useQueryClient(),
+    config = createConfigQuery(),
+    jobList = useQuery(() => ({ queryKey: listJobsKey, queryFn: listJobs }));
   return (
-    <Switch fallback="Loading...">
-      <Match when={jobList.isError}>{jobList.error?.toString()}</Match>
-      <Match when={config.error}>{JSON.stringify(config.error)}</Match>
-
+    <Switch fallback="Loading…">
+      <Match when={jobList.isError}>
+        <div role="alert">Unable to load jobs.</div>
+      </Match>
+      <Match when={config.error}>
+        <div role="alert">Unable to load configuration.</div>
+      </Match>
       <Match when={jobList.isSuccess && config.data?.config}>
         <JobSettingsImpl
           {...props}
           config={config.data!.config!}
           jobs={jobList.data?.jobs ?? []}
-          refetchJobs={() => {
-            queryClient.invalidateQueries({
-              queryKey: listJobsKey,
-            });
-          }}
+          refetchJobs={() =>
+            queryClient.invalidateQueries({ queryKey: listJobsKey })
+          }
         />
       </Match>
     </Switch>
