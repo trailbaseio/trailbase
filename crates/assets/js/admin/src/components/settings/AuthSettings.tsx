@@ -180,8 +180,9 @@ function ProviderSettingsSubForm(props: {
   baseline: () => OAuthProviderConfig | undefined;
 }) {
   const current = createMemo(() =>
-    props.form.useStore((state: (typeof props.form)["state"]) =>
-      state.values.namedOAuthProviders[props.index].state,
+    props.form.useStore(
+      (state: (typeof props.form)["state"]) =>
+        state.values.namedOAuthProviders[props.index].state,
     )(),
   );
 
@@ -332,56 +333,103 @@ const cloneAuth = (value: AuthConfig) =>
   AuthConfig.decode(AuthConfig.encode(value).finish());
 
 function sameBytes(left: Uint8Array, right: Uint8Array) {
-  return left.length === right.length && left.every((value, i) => value === right[i]);
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
+}
+
+function sameArray<T>(left: T[], right: T[]) {
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
 }
 
 function sameAuth(left: AuthConfig, right: AuthConfig) {
-  return sameBytes(AuthConfig.encode(left).finish(), AuthConfig.encode(right).finish());
+  return sameBytes(
+    AuthConfig.encode(left).finish(),
+    AuthConfig.encode(right).finish(),
+  );
 }
 
-function mergeAuthLeaves(
+export function mergeAuthLeaves(
   submitted: AuthConfigProxy,
   baseline: AuthConfigProxy,
   remote: AuthConfig,
-  _providers: OAuthProviderEntry[],
 ): AuthConfig {
   const local = proxyToConfig(submitted);
   const original = proxyToConfig(baseline);
   const merged = cloneAuth(remote);
   for (const field of authScalarFields) {
-    if (local[field] !== original[field])
-      (merged as any)[field] = (local as any)[field];
+    if (local[field] !== original[field]) {
+      (merged as AuthConfig)[field] = local[field];
+    }
   }
-  if (local.customUriSchemes.join() !== original.customUriSchemes.join())
+  if (!sameArray(local.customUriSchemes, original.customUriSchemes)) {
     merged.customUriSchemes = [...local.customUriSchemes];
-  if (
-    local.redirectUriAllowlist.join() !== original.redirectUriAllowlist.join()
-  )
+  }
+  if (!sameArray(local.redirectUriAllowlist, original.redirectUriAllowlist)) {
     merged.redirectUriAllowlist = [...local.redirectUriAllowlist];
+  }
   const names = new Set([
     ...Object.keys(merged.oauthProviders),
+    ...baseline.namedOAuthProviders.map((entry) => entry.provider.name),
     ...submitted.namedOAuthProviders.map((entry) => entry.provider.name),
   ]);
+  const providerFields = [
+    "providerId",
+    "clientId",
+    "clientSecret",
+    "displayName",
+    "authUrl",
+    "tokenUrl",
+    "userApiUrl",
+    "scopes",
+  ] as const;
   for (const name of names) {
-    const after = submitted.namedOAuthProviders.find((p) => p.provider.name === name)?.state;
-    const before = baseline.namedOAuthProviders.find((p) => p.provider.name === name)?.state;
-    if (after === undefined) {
-      if (before !== undefined) delete merged.oauthProviders[name];
+    const after = submitted.namedOAuthProviders.find(
+      (p) => p.provider.name === name,
+    )?.state;
+    const before = baseline.namedOAuthProviders.find(
+      (p) => p.provider.name === name,
+    )?.state;
+    const changed = providerFields.some((field) => {
+      const left = after?.[field];
+      const right = before?.[field];
+      return Array.isArray(left) && Array.isArray(right)
+        ? !sameArray(left, right)
+        : left !== right;
+    });
+    if (!changed) continue;
+    if (!after?.clientId?.trim() || !after.clientSecret?.trim()) {
+      delete merged.oauthProviders[name];
       continue;
     }
-    const result = OAuthProviderConfig.fromPartial(merged.oauthProviders[name] ?? after);
-    const fields = ["providerId", "clientId", "clientSecret", "displayName", "authUrl", "tokenUrl", "userApiUrl", "scopes"] as const;
-    for (const field of fields) {
-      const local = after[field];
-      const base = before?.[field];
-      const equal = Array.isArray(local) && Array.isArray(base)
-        ? local.length === base.length && local.every((v, i) => v === base[i])
-        : local === base;
-      if (!equal) (result as any)[field] = Array.isArray(local) ? [...local] : local;
+    const result = OAuthProviderConfig.fromPartial(merged.oauthProviders[name]);
+    for (const field of providerFields) {
+      const value = after[field];
+      if (Array.isArray(value)) (result[field] as string[]) = [...value];
+      else (result[field] as never) = value as never;
     }
-    if (result.clientId?.trim() && result.clientSecret?.trim()) merged.oauthProviders[name] = result;
+    merged.oauthProviders[name] = result;
   }
   return merged;
+}
+
+function cloneAuthProxy(value: AuthConfigProxy): AuthConfigProxy {
+  return {
+    ...value,
+    customUriSchemes: [...value.customUriSchemes],
+    redirectUriAllowlist: [...value.redirectUriAllowlist],
+    namedOAuthProviders: value.namedOAuthProviders.map((entry) => ({
+      provider: entry.provider,
+      state: entry.state
+        ? OAuthProviderConfig.fromPartial({
+            ...entry.state,
+            scopes: [...entry.state.scopes],
+          })
+        : undefined,
+    })),
+  };
 }
 
 function sameAuthProxy(left: AuthConfigProxy, right: AuthConfigProxy) {
@@ -404,32 +452,38 @@ function createAuthSettingsForm(opts: {
   values: () => AuthConfigProxy;
   latest: () => AuthConfig;
   baseline: () => AuthConfigProxy;
-  providers: OAuthProviderEntry[];
-  postSubmit: (submitted: AuthConfigProxy) => void;
+  postSubmit: (saved: AuthConfig, submitted: AuthConfigProxy) => void;
   onError: () => void;
+  revision: () => number;
 }) {
   const queryClient = useQueryClient();
 
   return createForm(() => ({
     defaultValues: opts.values(),
     onSubmit: async ({ value }) => {
-      const submitted = value;
+      const submitted = cloneAuthProxy(value);
+      const baselineAtSubmit = cloneAuthProxy(opts.baseline());
+      const latestAtSubmit = cloneAuth(opts.latest());
+      const revisionAtSubmit = opts.revision();
       const merged = mergeAuthLeaves(
         submitted,
-        opts.baseline(),
-        opts.latest(),
-        opts.providers,
+        baselineAtSubmit,
+        latestAtSubmit,
       );
-      const base = opts.config();
-      const newConfig = Config.decode(Config.encode(base).finish());
-      newConfig.auth = merged;
+      const base = Config.decode(Config.encode(opts.config()).finish());
+      base.auth = merged;
       try {
         await setConfig({
           client: queryClient,
-          config: newConfig,
+          config: base,
           throw: true,
         });
-        opts.postSubmit(submitted);
+        opts.postSubmit(
+          opts.revision() === revisionAtSubmit
+            ? merged
+            : mergeAuthLeaves(submitted, baselineAtSubmit, opts.latest()),
+          submitted,
+        );
       } catch {
         opts.onError();
       }
@@ -479,6 +533,7 @@ function AuthSettingsForm(props: {
   let latestRemote = cloneAuth(props.config.auth ?? AuthConfig.create());
   let editBaseline = initial;
   let lastIncoming = cloneAuth(latestRemote);
+  let remoteRevision = 0;
   let active = true;
   const [submitError, setSubmitError] = createSignal(false);
   onCleanup(() => {
@@ -490,15 +545,8 @@ function AuthSettingsForm(props: {
     values,
     latest: () => latestRemote,
     baseline: () => editBaseline,
-    providers: props.providers.providers,
-    postSubmit: (submitted) => {
+    postSubmit: (saved, submitted) => {
       if (!active) return;
-      const saved = mergeAuthLeaves(
-        submitted,
-        editBaseline,
-        latestRemote,
-        props.providers.providers,
-      );
       latestRemote = cloneAuth(saved);
       const current = formValues();
       const editedAfterSubmit = !sameAuthProxy(current, submitted);
@@ -508,6 +556,7 @@ function AuthSettingsForm(props: {
       props.postSubmit(editedAfterSubmit);
     },
     onError: () => active && setSubmitError(true),
+    revision: () => remoteRevision,
   });
   const formValues = form.useSelector((state) => state.values);
   const modified = () => !sameAuthProxy(formValues(), editBaseline);
@@ -519,6 +568,7 @@ function AuthSettingsForm(props: {
     const dirty = untrack(modified);
     lastIncoming = next;
     latestRemote = next;
+    remoteRevision += 1;
     if (!dirty) {
       editBaseline = configToProxy(props.providers.providers, next);
       form.reset(editBaseline);
@@ -775,7 +825,9 @@ function AuthSettingsForm(props: {
                             index={index()}
                             provider={provider.provider}
                             siteUrl={props.config.server?.siteUrl}
-                            baseline={() => editBaseline.namedOAuthProviders[index()]?.state}
+                            baseline={() =>
+                              editBaseline.namedOAuthProviders[index()]?.state
+                            }
                           />
                         );
                       }}
