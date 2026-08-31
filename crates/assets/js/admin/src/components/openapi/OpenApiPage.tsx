@@ -176,9 +176,11 @@ export default function Page() {
     const element = rapidoc();
     queueMicrotask(() => {
       const root = element?.shadowRoot;
-      const control = root?.querySelector<HTMLInputElement>(
-        'input, button, [tabindex]:not([tabindex="-1"]), a[href]',
-      );
+      const control =
+        root?.querySelector<HTMLInputElement>('input[placeholder="Filter"]') ??
+        root?.querySelector<HTMLInputElement>(
+          'input, button, [tabindex]:not([tabindex="-1"]), a[href]',
+        );
       control?.focus();
     });
   });
