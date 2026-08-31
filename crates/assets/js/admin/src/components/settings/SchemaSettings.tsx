@@ -30,6 +30,7 @@ const MAX_SCHEMA_SOURCE_LENGTH = 50_000;
 const MAX_SCHEMA_DEPTH = 100;
 const MAX_FORMATTED_SCHEMA_LENGTH = MAX_SCHEMA_SOURCE_LENGTH;
 const MAX_SCHEMA_NAME_LENGTH = 256;
+const MAX_SCHEMA_COUNT = 250;
 
 function hasControlCharacters(value: string): boolean {
   return [...value].some((character) => {
@@ -96,7 +97,9 @@ export function SchemaSettings(props: {
   const filtered = createMemo(() => {
     const needle = search().trim().toLocaleLowerCase();
     const payload: unknown = schemas.data?.schemas;
-    const entries = Array.isArray(payload) ? payload : [];
+    const entries = Array.isArray(payload)
+      ? payload.slice(0, MAX_SCHEMA_COUNT)
+      : [];
     return entries
       .filter(
         (schema): schema is JsonSchema & { name: string; schema: string } =>

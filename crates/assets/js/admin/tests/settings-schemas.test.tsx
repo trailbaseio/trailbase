@@ -219,6 +219,22 @@ describe("SchemaSettings", () => {
     expect(formatSchemaSource(compact).length).toBeLessThanOrEqual(50_000);
   });
 
+  it("caps schema entries before sorting and rendering", () => {
+    setup();
+    state.setSchemas?.(
+      Array.from({ length: 300 }, (_, index) => ({
+        name: `schema-${String(index).padStart(3, "0")}`,
+        schema: "{}",
+        builtin: false,
+      })),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("250 schemas shown");
+    expect(screen.getAllByRole("button", { name: /^schema-/ })).toHaveLength(
+      250,
+    );
+    expect(screen.queryByText("schema-250")).toBeNull();
+  });
+
   it("handles malformed top-level payloads and unsafe names", () => {
     setup();
     state.setSchemas?.({});
