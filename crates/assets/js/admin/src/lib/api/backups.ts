@@ -12,6 +12,12 @@ export async function listBackups(): Promise<ListBackupsResponse> {
 }
 
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+type DeleteBackupsJson = Omit<DeleteBackupsRequest, "timestamps"> & {
+  timestamps: number[];
+};
+type RestoreBackupJson = Omit<RestoreBackupRequest, "timestamp"> & {
+  timestamp: number;
+};
 
 function safeJsonNumber(value: bigint): number {
   if (value > MAX_SAFE_BIGINT || value < -MAX_SAFE_BIGINT) {
@@ -21,7 +27,7 @@ function safeJsonNumber(value: bigint): number {
 }
 
 export async function deleteBackups(timestamps: bigint[]): Promise<void> {
-  const payload: DeleteBackupsRequest = {
+  const payload: DeleteBackupsJson = {
     timestamps: timestamps.map(safeJsonNumber),
   };
   await adminFetch("/backups/delete", {
@@ -37,7 +43,7 @@ export async function triggerBackup(): Promise<void> {
 }
 
 export async function restoreBackup(timestamp: bigint): Promise<void> {
-  const payload: RestoreBackupRequest = {
+  const payload: RestoreBackupJson = {
     timestamp: safeJsonNumber(timestamp),
   };
   await adminFetch("/backups/restore", {
