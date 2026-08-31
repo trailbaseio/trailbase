@@ -25,11 +25,50 @@ async function listSchemas(): Promise<ListJsonSchemasResponse> {
   return response.json();
 }
 
-export function formatSchemaSource(source: string): string {
+const MAX_SCHEMA_SOURCE_LENGTH = 50_000;
+const MAX_SCHEMA_DEPTH = 100;
+const MAX_FORMATTED_SCHEMA_LENGTH = 100_000;
+
+function boundedSource(source: string): string {
+  return source.length > MAX_SCHEMA_SOURCE_LENGTH
+    ? `${source.slice(0, MAX_SCHEMA_SOURCE_LENGTH)}… truncated`
+    : source;
+}
+
+function exceedsJsonDepth(source: string): boolean {
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (const character of source) {
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') quoted = false;
+      continue;
+    }
+    if (character === '"') quoted = true;
+    else if (character === "{" || character === "[") {
+      depth += 1;
+      if (depth > MAX_SCHEMA_DEPTH) return true;
+    } else if (character === "}" || character === "]") {
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  return false;
+}
+
+export function formatSchemaSource(source: unknown): string {
+  const text = typeof source === "string" ? source : String(source ?? "");
+  if (text.length > MAX_SCHEMA_SOURCE_LENGTH || exceedsJsonDepth(text)) {
+    return boundedSource(text);
+  }
   try {
-    return JSON.stringify(JSON.parse(source), null, 2);
+    const formatted = JSON.stringify(JSON.parse(text), null, 2);
+    return formatted.length > MAX_FORMATTED_SCHEMA_LENGTH
+      ? boundedSource(text)
+      : formatted;
   } catch {
-    return source;
+    return boundedSource(text);
   }
 }
 
@@ -48,8 +87,14 @@ export function SchemaSettings(props: {
   const filtered = createMemo(() => {
     const needle = search().trim().toLocaleLowerCase();
     return [...(schemas.data?.schemas ?? [])]
+      .filter(
+        (schema): schema is typeof schema & { name: string; schema: string } =>
+          typeof schema?.name === "string" &&
+          schema.name.length > 0 &&
+          typeof schema?.schema === "string",
+      )
       .sort((a, b) => a.name.localeCompare(b.name))
-      .filter((schema) => !isPostgres() || schema.builtin)
+      .filter((schema) => !isPostgres() || schema.builtin === true)
       .filter((schema) => schema.name.toLocaleLowerCase().includes(needle));
   });
 
@@ -102,20 +147,18 @@ export function SchemaSettings(props: {
               onInput={(event) => setSearch(event.currentTarget.value)}
               class="h-9 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
             />
-            <Show
-              when={filtered().length > 0}
-              fallback={
-                <p>
-                  {search().trim()
-                    ? "No schemas match your search."
-                    : "No schemas available."}
-                </p>
-              }
-            >
+            <p aria-live="polite" role="status">
+              {filtered().length > 0
+                ? `${filtered().length} schema${filtered().length === 1 ? "" : "s"} shown`
+                : search().trim()
+                  ? "No schemas match your search."
+                  : "No schemas available."}
+            </p>
+            <Show when={filtered().length > 0}>
               <Accordion multiple={false} collapsible class="w-full">
                 <For each={filtered()}>
-                  {(schema, index) => (
-                    <AccordionItem value={`${schema.name}-${index()}`}>
+                  {(schema) => (
+                    <AccordionItem value={schema.name}>
                       <AccordionTrigger>
                         <span class="flex gap-2">
                           {schema.name}
