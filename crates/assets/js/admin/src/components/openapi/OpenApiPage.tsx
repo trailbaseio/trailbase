@@ -116,15 +116,41 @@ export default function Page() {
     return resolveOpenApiServer(candidate, import.meta.env.DEV);
   };
   const [rapidoc, setRapidoc] = createSignal<RapiDoc>();
+  let loadedElement: RapiDoc | undefined;
   let loadedSpec: OpenApiDocument | undefined;
+  createEffect(() => {
+    const element = rapidoc();
+    if (!element) return;
+    const beforeTry = (event: Event) => {
+      const detail = (event as BeforeTryEvent).detail;
+      if (
+        !requestHasCredentialOrigin(detail.request.url, import.meta.env.DEV) ||
+        tokenError()
+      )
+        return;
+      const tokens = overrideTokens() ?? usableRequestTokens($tokens.get());
+      if (tokens) applyRequestTokens(detail.request, tokens);
+    };
+    const specLoaded = () => {
+      const info = element.shadowRoot?.getElementById("api-info");
+      if (info) info.style.marginLeft = "0";
+    };
+    element.addEventListener("before-try", beforeTry);
+    element.addEventListener("spec-loaded", specLoaded);
+    onCleanup(() => {
+      element.removeEventListener("before-try", beforeTry);
+      element.removeEventListener("spec-loaded", specLoaded);
+    });
+  });
   createEffect(() => {
     const element = rapidoc();
     const spec = query.data;
     if (element && spec) {
       element.setAttribute("server-url", server());
       element.setAttribute("default-api-server", server());
-      if (spec !== loadedSpec) {
+      if (element !== loadedElement || spec !== loadedSpec) {
         element.loadSpec?.(withCollapsedOpenApiTags(spec));
+        loadedElement = element;
         loadedSpec = spec;
       }
     }
@@ -259,31 +285,7 @@ export default function Page() {
           </Button>
         </Show>
         <rapi-doc
-          ref={(element) => {
-            const r = element as RapiDoc;
-            const beforeTry = (event: Event) => {
-              const detail = (event as BeforeTryEvent).detail;
-              if (
-                !requestHasCredentialOrigin(
-                  detail.request.url,
-                  import.meta.env.DEV,
-                ) ||
-                tokenError()
-              )
-                return;
-              const tokens =
-                overrideTokens() ?? usableRequestTokens($tokens.get());
-              if (tokens) applyRequestTokens(detail.request, tokens);
-            };
-            const specLoaded = () => {};
-            r.addEventListener("before-try", beforeTry);
-            r.addEventListener("spec-loaded", specLoaded);
-            setRapidoc(r);
-            onCleanup(() => {
-              r.removeEventListener("before-try", beforeTry);
-              r.removeEventListener("spec-loaded", specLoaded);
-            });
-          }}
+          ref={(element) => setRapidoc(element as RapiDoc)}
           load-fonts="false"
           sort-tags="true"
           theme={theme()}
