@@ -314,6 +314,9 @@ describe("OpenAPI Explorer workspace", () => {
     const summary = screen.getByText("Advanced authentication");
     const details = summary.parentElement!;
     expect(details).not.toHaveAttribute("open");
+    expect(details.closest("header")).toBeTruthy();
+    expect(details).toHaveClass("relative");
+    expect(details.querySelector("div")).toHaveClass("absolute");
     fireEvent.click(summary);
     const input = screen.getByLabelText("Login tokens");
     expect(input).toHaveAttribute("type", "password");

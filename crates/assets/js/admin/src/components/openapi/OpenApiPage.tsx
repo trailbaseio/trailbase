@@ -178,15 +178,61 @@ export default function Page() {
         title="OpenAPI Explorer"
         description={<span>Explore and try {metadata().title}.</span>}
         right={
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={refresh}
-            disabled={query.isFetching}
-          >
-            <TbOutlineRefresh />
-            {query.isFetching ? "Refreshing…" : "Refresh"}
-          </Button>
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={refresh}
+              disabled={query.isFetching}
+            >
+              <TbOutlineRefresh />
+              {query.isFetching ? "Refreshing…" : "Refresh"}
+            </Button>
+            <Show when={query.data}>
+              <details class="relative">
+                <summary class="border-input hover:bg-accent focus-visible:ring-ring inline-flex cursor-pointer list-none items-center rounded-md border px-3 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none">
+                  Advanced authentication
+                </summary>
+                <div class="bg-popover text-popover-foreground border-border absolute right-0 z-50 mt-2 w-[min(28rem,calc(100vw-2rem))] rounded-md border p-4 shadow-md">
+                  <label for="openapi-tokens" class="text-sm font-medium">
+                    Login tokens
+                  </label>
+                  <p
+                    id="openapi-tokens-description"
+                    class="text-muted-foreground text-xs"
+                  >
+                    Paste copied Accounts login tokens. Stored locally only and
+                    never persisted.
+                  </p>
+                  <input
+                    id="openapi-tokens"
+                    aria-describedby="openapi-tokens-description openapi-tokens-error"
+                    aria-invalid={tokenError()}
+                    type="password"
+                    autocomplete="new-password"
+                    value={tokensInput()}
+                    onInput={(e) => handleTokens(e.currentTarget.value)}
+                    class="border-input mt-1 w-full rounded-md border px-3 py-2"
+                  />
+                  <Show when={tokenError()}>
+                    <p
+                      id="openapi-tokens-error"
+                      class="text-destructive text-xs"
+                    >
+                      Invalid login tokens
+                    </p>
+                  </Show>
+                  <Show when={!tokenError()}>
+                    <p class="text-muted-foreground text-xs">
+                      {tokensInput().trim()
+                        ? "Using impersonation tokens"
+                        : "Using current admin session"}
+                    </p>
+                  </Show>
+                </div>
+              </details>
+            </Show>
+          </>
         }
       />
       <div class="text-muted-foreground flex flex-wrap gap-2 px-4 py-2 text-xs">
@@ -237,45 +283,6 @@ export default function Page() {
         </Callout>
       </Show>
       <Show when={query.data}>
-        <details class="mx-4 mb-2">
-          <summary class="cursor-pointer text-sm font-medium">
-            Advanced authentication
-          </summary>
-          <div class="mt-2 max-w-xl">
-            <label for="openapi-tokens" class="text-sm font-medium">
-              Login tokens
-            </label>
-            <p
-              id="openapi-tokens-description"
-              class="text-muted-foreground text-xs"
-            >
-              Paste copied Accounts login tokens. Stored locally only and never
-              persisted.
-            </p>
-            <input
-              id="openapi-tokens"
-              aria-describedby="openapi-tokens-description openapi-tokens-error"
-              aria-invalid={tokenError()}
-              type="password"
-              autocomplete="new-password"
-              value={tokensInput()}
-              onInput={(e) => handleTokens(e.currentTarget.value)}
-              class="border-input mt-1 w-full rounded-md border px-3 py-2"
-            />
-            <Show when={tokenError()}>
-              <p id="openapi-tokens-error" class="text-destructive text-xs">
-                Invalid login tokens
-              </p>
-            </Show>
-            <Show when={!tokenError()}>
-              <p class="text-muted-foreground text-xs">
-                {tokensInput().trim()
-                  ? "Using impersonation tokens"
-                  : "Using current admin session"}
-              </p>
-            </Show>
-          </div>
-        </details>
         <Show when={isMobile()}>
           <Button
             class="mx-4 mb-2"
