@@ -88,7 +88,9 @@ import {
   buildFormProxy,
   equal,
   extractConfig,
+  formatDurationMillis,
   mergeJobs,
+  validCron,
   JobSettings,
 } from "@/components/settings/JobSettings";
 
@@ -374,6 +376,24 @@ describe("JobSettings Run now", () => {
 });
 
 describe("JobSettings protobuf helpers", () => {
+  it("accepts scheduler-compatible cron shapes and rejects malformed counts", () => {
+    expect(validCron("  */40 * * * * *  ")).toBe(true);
+    expect(validCron("0 30 9,12,15 1,15 May-Aug Mon,Wed,Fri 2018/2")).toBe(
+      true,
+    );
+    expect(validCron("@dailyx")).toBe(false);
+    expect(validCron("@daily garbage")).toBe(false);
+    expect(validCron("@")).toBe(false);
+    expect(validCron("* * * * *")).toBe(false);
+    expect(validCron("* * * * * * * *")).toBe(false);
+  });
+  it("formats bigint durations without precision loss", () => {
+    expect(formatDurationMillis(1_234n)).toBe("1.234s");
+    expect(formatDurationMillis(9_007_199_254_740_993n)).toBe(
+      "9007199254740.993s",
+    );
+    expect(formatDurationMillis(-1_250n)).toBe("-1.25s");
+  });
   it("overlays edited default leaves onto concurrent remote jobs", () => {
     const baseline = JobsConfig.fromPartial({
       systemJobs: [
@@ -395,6 +415,15 @@ describe("JobSettings protobuf helpers", () => {
       SystemJob.fromPartial({ id: 1, schedule: "@hourly", disabled: true }),
       SystemJob.fromPartial({ id: 2, schedule: "@daily", disabled: false }),
     ]);
+  });
+  it("keeps configured job id zero in the proxy", () => {
+    const configured = SystemJob.fromPartial({ id: 0, schedule: "@daily" });
+    const proxy = buildFormProxy(
+      JobsConfig.fromPartial({ systemJobs: [configured] }),
+      [],
+    );
+    expect(proxy.jobs).toHaveLength(1);
+    expect(extractConfig(proxy).systemJobs).toEqual([configured]);
   });
   it("keeps configured jobs and emits changed defaults", () => {
     const configured = SystemJob.fromPartial({ id: 1, schedule: "@daily" });

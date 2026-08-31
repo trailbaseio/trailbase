@@ -31,12 +31,26 @@ import { listJobs, runJob } from "@/lib/api/jobs";
 import { showToast } from "@/components/ui/toast";
 import type { Job } from "@bindings/Job";
 
-const cronRegex =
-  /^(?:@(yearly|monthly|weekly|daily|hourly)|(((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})))$/;
+const cronAliases = new Set([
+  "@yearly",
+  "@monthly",
+  "@weekly",
+  "@daily",
+  "@hourly",
+]);
+export function validCron(value: string) {
+  const normalized = value.trim();
+  if (cronAliases.has(normalized)) return true;
+  const fields = normalized.split(/\s+/);
+  return (
+    (fields.length === 6 || fields.length === 7) &&
+    fields.every((field) => /^[A-Za-z0-9*?,/-]+$/.test(field))
+  );
+}
 function isValidCronSpec() {
   return {
     onChange: ({ value }: { value: string }) =>
-      cronRegex.test(value) ? undefined : "Not a valid cron spec",
+      validCron(value) ? undefined : "Not a valid cron spec",
   };
 }
 
@@ -58,7 +72,7 @@ export function buildFormProxy(
 ): FormProxy {
   const result = new Map<number, JobProxy>();
   for (const job of config?.systemJobs ?? [])
-    if (job.id)
+    if (job.id !== undefined)
       result.set(job.id, {
         default: false,
         initialConfig: job,
@@ -127,8 +141,11 @@ export function mergeJobs(
       ...(mine.disabled !== old.disabled ? { disabled: mine.disabled } : {}),
     };
   });
-  for (const x of submitted.systemJobs)
-    if (!latest.systemJobs.some((r) => r.id === x.id)) merged.push(x);
+  for (const x of submitted.systemJobs) {
+    if (latest.systemJobs.some((r) => r.id === x.id)) continue;
+    const old = base.get(x.id);
+    if (!old || !equal(x, old)) merged.push(x);
+  }
   return { systemJobs: merged };
 }
 function safeDate(value: unknown) {
@@ -137,12 +154,22 @@ function safeDate(value: unknown) {
     const millis = seconds * 1000n;
     const min = BigInt(-8_640_000_000_000_000);
     const max = BigInt(8_640_000_000_000_000);
-    if (seconds <= 0n || millis < min || millis > max) return null;
+    if (millis < min || millis > max) return null;
     const d = new Date(Number(millis));
     return Number.isNaN(d.getTime()) ? null : d;
   } catch {
     return null;
   }
+}
+export function formatDurationMillis(value: bigint) {
+  const sign = value < 0n ? "-" : "";
+  const absolute = value < 0n ? -value : value;
+  const seconds = absolute / 1000n;
+  const millis = (absolute % 1000n)
+    .toString()
+    .padStart(3, "0")
+    .replace(/0+$/, "");
+  return `${sign}${seconds}${millis ? `.${millis}` : ""}s`;
 }
 function time(value: unknown) {
   return safeDate(value)?.toUTCString() ?? "—";
@@ -371,6 +398,7 @@ function JobSettingsImpl(props: {
                                       aria-label={`Schedule for ${proxy().job?.name ?? proxy().config.id}`}
                                       value={f().state.value}
                                       onBlur={f().handleBlur}
+                                      autocomplete="off"
                                     />
                                   </TextField>
                                   <FieldInfo field={f()} />
@@ -389,7 +417,7 @@ function JobSettingsImpl(props: {
                                   title={latest()[2] ? "Job error" : undefined}
                                 >
                                   {time(latest()[0])} (
-                                  {Number(latest()[1]) / 1000}s)
+                                  {formatDurationMillis(latest()[1])})
                                   {latest()[2] ? " — error" : ""}
                                 </span>
                               )}
@@ -441,7 +469,7 @@ function JobSettingsImpl(props: {
         canSubmit={
           form.state.canSubmit &&
           formValues().jobs.every((entry) =>
-            cronRegex.test(entry.config.schedule ?? ""),
+            validCron(entry.config.schedule ?? ""),
           )
         }
         isSubmitting={form.state.isSubmitting}
