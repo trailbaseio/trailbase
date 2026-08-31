@@ -34,7 +34,7 @@ function Timestamp(props: { timestamp: bigint }) {
 }
 
 export function BackupSettings(_props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const backupsList = useQuery(() => ({

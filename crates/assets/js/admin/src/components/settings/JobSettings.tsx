@@ -123,7 +123,7 @@ function extractConfig(proxy: FormProxy): JobsConfig {
 }
 
 function JobSettingsImpl(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
   config: Config;
   jobs: Job[];
@@ -152,7 +152,7 @@ function JobSettingsImpl(props: {
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+      props.setDirty(true);
     }
   });
 
@@ -400,7 +400,7 @@ function JobSettingsImpl(props: {
 const listJobsKey = ["admin", "jobs"];
 
 export function JobSettings(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const queryClient = useQueryClient();

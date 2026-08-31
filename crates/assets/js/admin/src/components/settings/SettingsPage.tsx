@@ -65,6 +65,7 @@ import { JobSettings } from "@/components/settings/JobSettings";
 import { BackupSettings } from "@/components/settings/BackupSettings";
 import { IconButton } from "@/components/IconButton";
 import { Version } from "@/components/Version";
+import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
 
 import {
   createConfigQuery,
@@ -171,7 +172,7 @@ function ServerSettingsForm(
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+      props.setDirty(true);
     }
   });
 
@@ -241,26 +242,21 @@ function ServerSettingsForm(
           </CardContent>
         </Card>
 
-        <div class="flex justify-end gap-4">
-          <form.Subscribe
+        <form.Subscribe
             selector={(state) => ({
               canSubmit: state.canSubmit,
               isSubmitting: state.isSubmitting,
             })}
           >
-            {(state) => {
-              return (
-                <Button
-                  type="submit"
-                  disabled={!state().canSubmit}
-                  variant="default"
-                >
-                  {state().isSubmitting ? "..." : "Submit"}
-                </Button>
-              );
-            }}
+            {(state) => (
+              <SettingsFormActions
+                dirty={form.state.isDirty}
+                canSubmit={state().canSubmit}
+                isSubmitting={state().isSubmitting}
+                onReset={() => { form.reset(); props.setDirty(false); }}
+              />
+            )}
           </form.Subscribe>
-        </div>
       </div>
     </form>
   );
@@ -415,7 +411,7 @@ function SettingsSidebar(props: {
 }
 
 interface CommonProps {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }
 
@@ -429,7 +425,7 @@ interface Site {
 const sites = [
   {
     route: "host",
-    label: "Host",
+    label: "General",
     child: ServerSettings,
     icon: TbOutlineServer,
   },
@@ -441,7 +437,7 @@ const sites = [
   },
   {
     route: "auth",
-    label: "Auth",
+    label: "Authentication",
     child: AuthSettings,
     icon: TbOutlineUser,
   },
@@ -509,7 +505,7 @@ export function SettingsPage() {
 
   const p = () =>
     ({
-      markDirty: () => setDirty(true),
+      setDirty,
       postSubmit: () => {
         setDirty(false);
         showToast({
@@ -548,12 +544,12 @@ export function SettingsPage() {
         leading={<SidebarTrigger />}
         left={
           <IconButton onClick={() => invalidateConfig(queryClient)}>
-            <TbOutlineRefresh />
+            <TbOutlineRefresh aria-label="Refresh settings" />
           </IconButton>
         }
       />
 
-      <div class="m-4">{activeSite().child(p())}</div>
+      <div class="m-4 max-w-5xl overflow-y-auto">{activeSite().child(p())}</div>
     </Dialog>
   );
 

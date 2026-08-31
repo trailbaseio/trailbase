@@ -27,7 +27,7 @@ import { Config, DatabaseConfig } from "@proto/config";
 import { createSystemInfoQuery } from "@/lib/api/info";
 
 export function DatabaseSettings(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const config = createConfigQuery();
@@ -63,7 +63,7 @@ export function DatabaseSettings(props: {
 
 function DatabaseSettingsForm(props: {
   config: Config;
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const queryClient = useQueryClient();

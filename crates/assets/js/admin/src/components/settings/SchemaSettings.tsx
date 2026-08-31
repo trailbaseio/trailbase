@@ -29,7 +29,7 @@ function toSorted(schemas: JsonSchema[]): JsonSchema[] {
 
 // TODO: Make this editable. Right now this doesn't even need to be a form.
 function SchemaSettingsForm(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
   schemas: JsonSchema[];
 }) {
@@ -45,7 +45,7 @@ function SchemaSettingsForm(props: {
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+      props.setDirty(true);
     }
   });
 
@@ -101,7 +101,7 @@ function SchemaSettingsForm(props: {
 }
 
 export function SchemaSettings(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const schemas = useQuery(() => ({
@@ -156,7 +156,7 @@ export function SchemaSettings(props: {
               <div class="h-4" />
 
               <SchemaSettingsForm
-                markDirty={props.markDirty}
+                setDirty={props.setDirty}
                 postSubmit={props.postSubmit}
                 schemas={schemas.data?.schemas ?? []}
               />

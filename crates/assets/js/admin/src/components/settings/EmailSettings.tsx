@@ -134,7 +134,7 @@ function EmailTemplate(props: {
 }
 
 export function EmailSettings(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -166,7 +166,7 @@ export function EmailSettings(props: {
 
     form.useStore((state) => {
       if (state.isDirty && !state.isSubmitted) {
-        props.markDirty();
+        props.setDirty(true);
       }
     });
 

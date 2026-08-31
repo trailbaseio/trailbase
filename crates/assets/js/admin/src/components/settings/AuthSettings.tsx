@@ -373,7 +373,7 @@ function createAuthSettingsForm(opts: {
 function AuthSettingsForm(props: {
   config: Config;
   providers: OAuthProviderResponse;
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const values = createMemo(() =>
@@ -391,7 +391,7 @@ function AuthSettingsForm(props: {
 
   form.useStore((state) => {
     if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+      props.setDirty(true);
     }
   });
 
@@ -773,7 +773,7 @@ function OAuthCallbackAddressInfo(props: {
 }
 
 export function AuthSettings(props: {
-  markDirty: () => void;
+  setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
   const providers = useQuery(() => ({
@@ -805,7 +805,7 @@ export function AuthSettings(props: {
 
         <Match when={config.data && providers.data}>
           <AuthSettingsForm
-            markDirty={props.markDirty}
+            setDirty={props.setDirty}
             postSubmit={props.postSubmit}
             providers={providers.data!}
             config={protoConfig()}
