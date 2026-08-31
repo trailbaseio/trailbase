@@ -54,6 +54,7 @@ declare module "solid-js" {
         "nav-hover-text-color"?: string;
         "nav-accent-color"?: string;
         "nav-accent-text-color"?: string;
+        "primary-color"?: string;
       };
     }
   }
@@ -297,7 +298,7 @@ export default function Page() {
           nav-hover-text-color={palette().hoverText}
           nav-accent-color={palette().accent}
           nav-accent-text-color={palette().accentText}
-          primary-color={palette().accent}
+          attr:primary-color={palette().accent}
           render-style="focused"
           layout="row"
           schema-style="table"

@@ -65,7 +65,8 @@ export function withCollapsedOpenApiTags(spec: unknown): OpenApiDocument {
   for (const path of Object.values(paths)) {
     if (!isRecord(path)) continue;
     for (const [method, operation] of Object.entries(path)) {
-      if (!OPERATIONS.has(method.toLowerCase()) || !isRecord(operation)) continue;
+      if (!OPERATIONS.has(method.toLowerCase()) || !isRecord(operation))
+        continue;
       if (!Array.isArray(operation.tags)) continue;
       for (const tag of operation.tags) {
         if (typeof tag === "string" && tag.length > 0 && !names.has(tag)) {
