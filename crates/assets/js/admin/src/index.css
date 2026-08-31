@@ -304,6 +304,8 @@
     position: fixed;
     top: 4rem;
     left: 0;
+    width: min(330px, 100vw);
+    box-sizing: border-box;
     max-width: 100vw;
     max-height: calc(100vh - 4rem);
     overflow-y: auto;
