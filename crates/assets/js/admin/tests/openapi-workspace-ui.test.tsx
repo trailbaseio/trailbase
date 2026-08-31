@@ -101,9 +101,10 @@ describe("OpenAPI Explorer workspace", () => {
   it("captures stable query and fetches JSON", async () => {
     render(() => <Page />);
     expect(state.queryOptions?.queryKey).toEqual(["openapi"]);
-    await state.queryOptions?.queryFn();
+    const parsed = { info: { title: "Fetched" }, paths: {} };
+    state.fetch.mockResolvedValueOnce({ json: () => Promise.resolve(parsed) });
+    await expect(state.queryOptions?.queryFn()).resolves.toEqual(parsed);
     expect(state.fetch).toHaveBeenCalledWith("/openapi.json");
-    expect(state.fetch.mock.results[0].value).toBeDefined();
   });
   it("renders loading and success metadata with one initial load", () => {
     render(() => <Page />);
@@ -111,16 +112,20 @@ describe("OpenAPI Explorer workspace", () => {
       screen.getByRole("status", { name: /loading api specification/i }),
     ).toBeTruthy();
     state.loading = false;
-    state.data = spec();
+    state.data = spec(1, "1");
     state.bumpQuery?.();
     expect(screen.getByText("OpenAPI Explorer")).toBeTruthy();
     expect(screen.getByText("Explore and try Things.")).toBeTruthy();
     expect(screen.getByText("v1")).toBeTruthy();
     expect(screen.getByText("1 operation")).toBeTruthy();
     expect(screen.getByText("http://localhost:4000")).toBeTruthy();
-    expect(document.querySelector("rapi-doc")?.loadSpec).toHaveBeenCalledTimes(
-      1,
-    );
+    const node = document.querySelector("rapi-doc") as TestRapiDoc;
+    expect(node.loadSpec).toHaveBeenCalledTimes(1);
+    const next = spec(1, "2");
+    state.data = next;
+    state.bumpQuery?.();
+    expect(node.loadSpec).toHaveBeenCalledTimes(2);
+    expect(node.loadSpec).toHaveBeenLastCalledWith(next);
   });
   it("handles plural and absent versions", () => {
     ready(spec(2));
@@ -156,12 +161,15 @@ describe("OpenAPI Explorer workspace", () => {
     const node = document.querySelector("rapi-doc");
     fireEvent.click(screen.getByText("Advanced authentication"));
     const input = screen.getByLabelText("Login tokens");
-    fireEvent.input(input, { target: { value: " " } });
+    const retained = btoa(
+      JSON.stringify({ auth_token: "a", refresh_token: "r", csrf_token: "c" }),
+    );
+    fireEvent.input(input, { target: { value: retained } });
     state.error = new Error("x");
     state.fetching = true;
     state.bumpQuery?.();
     expect(document.querySelector("rapi-doc")).toBe(node);
-    expect(screen.getByDisplayValue(" ")).toBeTruthy();
+    expect((input as HTMLInputElement).value).toBe(retained);
     expect(screen.getByText(/Unable to refresh/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /refreshing/i })).toBeDisabled();
   });
@@ -172,7 +180,7 @@ describe("OpenAPI Explorer workspace", () => {
     const tokens = { auth_token: "a", refresh_token: "r", csrf_token: "c" };
     fireEvent.input(input, { target: { value: btoa(JSON.stringify(tokens)) } });
     expect(screen.getByText("Using impersonation tokens")).toBeTruthy();
-    const request = new Request("/");
+    const request = new Request("https://example.test/api");
     state.listeners[0](new CustomEvent("before-try", { detail: { request } }));
     expect(request.headers.get("Authorization")).toBe("Bearer a");
     fireEvent.input(input, { target: { value: "bad-secret" } });
@@ -182,12 +190,21 @@ describe("OpenAPI Explorer workspace", () => {
     fireEvent.input(input, { target: { value: "" } });
     expect(screen.getByText("Using current admin session")).toBeTruthy();
   });
-  it("keeps details closed and does not persist", () => {
+  it("keeps details closed, labels password tokens, and does not persist", () => {
+    const localSet = vi.spyOn(localStorage, "setItem");
+    const sessionSet = vi.spyOn(sessionStorage, "setItem");
     ready();
-    expect(
-      screen.getByText("Advanced authentication").parentElement,
-    ).not.toHaveAttribute("open");
-    const setItem = vi.spyOn(Storage.prototype, "setItem");
-    expect(setItem).not.toHaveBeenCalled();
+    const summary = screen.getByText("Advanced authentication");
+    const details = summary.parentElement!;
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(summary);
+    const input = screen.getByLabelText("Login tokens");
+    expect(input).toHaveAttribute("type", "password");
+    expect(screen.getByText(/copied Accounts login tokens/)).toBeTruthy();
+    expect(details).toHaveAttribute("open");
+    expect(localSet).not.toHaveBeenCalled();
+    expect(sessionSet).not.toHaveBeenCalled();
+    localSet.mockRestore();
+    sessionSet.mockRestore();
   });
 });
