@@ -393,5 +393,21 @@ describe("General settings integration", () => {
       title: "submitted",
       variant: "success",
     });
+
+    fireEvent.input(appName, { target: { value: "Changed Again" } });
+    expect(
+      screen.getByRole("button", { name: "Save changes" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Email"));
+    expect(state.navigate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(appName).toHaveValue("Changed");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+    });
   });
 });

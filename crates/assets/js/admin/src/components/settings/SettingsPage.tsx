@@ -152,6 +152,10 @@ function ServerSettings(props: CommonProps) {
   );
 }
 
+function cloneServerConfig(config: ServerConfig) {
+  return ServerConfig.decode(ServerConfig.encode(config).finish());
+}
+
 function sameServerConfig(left: ServerConfig, right: ServerConfig) {
   const leftBytes = ServerConfig.encode(left).finish();
   const rightBytes = ServerConfig.encode(right).finish();
@@ -171,15 +175,15 @@ function ServerSettingsForm(
   function serverConfig(config: Config) {
     const server = config.server;
     // "deep-copy" & fallback
-    return server
-      ? ServerConfig.decode(ServerConfig.encode(server).finish())
-      : ServerConfig.fromJSON({});
+    return server ? cloneServerConfig(server) : ServerConfig.fromJSON({});
   }
 
-  const initialValues = serverConfig(props.config);
+  const [savedValues, setSavedValues] = createSignal(
+    serverConfig(props.config),
+  );
   const [submitError, setSubmitError] = createSignal(false);
   const form = createForm(() => ({
-    defaultValues: initialValues,
+    defaultValues: cloneServerConfig(savedValues()),
     onSubmit: async ({ value }: { value: ServerConfig }) => {
       setSubmitError(false);
       const newConfig = Config.fromPartial(props.config);
@@ -190,6 +194,9 @@ function ServerSettingsForm(
           config: newConfig,
           throw: true,
         });
+        const saved = cloneServerConfig(value);
+        setSavedValues(saved);
+        form.reset(cloneServerConfig(saved));
         props.postSubmit?.();
       } catch {
         setSubmitError(true);
@@ -197,13 +204,8 @@ function ServerSettingsForm(
     },
   }));
 
-  const formState = form.useSelector((state) => ({
-    values: state.values,
-    isSubmitted: state.isSubmitted,
-  }));
-  const modified = () =>
-    !sameServerConfig(initialValues, formState().values) &&
-    (!formState().isSubmitted || submitError());
+  const formValues = form.useSelector((state) => state.values);
+  const modified = () => !sameServerConfig(savedValues(), formValues());
 
   createEffect(() => props.setDirty(modified()));
 
@@ -297,7 +299,7 @@ function ServerSettingsForm(
                 isSubmitting={state().isSubmitting}
                 onReset={() => {
                   setSubmitError(false);
-                  form.reset();
+                  form.reset(cloneServerConfig(savedValues()));
                 }}
               />
             </>
