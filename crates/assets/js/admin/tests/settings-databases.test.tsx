@@ -321,8 +321,8 @@ describe("database link lifecycle", () => {
   });
 
   it("re-enables link dialog close after failure", async () => {
-    state.setConfig.mockRejectedValue(new Error("secret"));
     setup();
+    state.setConfig.mockRejectedValue(new Error("secret"));
     openLink();
     fireEvent.input(screen.getByLabelText("Name"), {
       target: { value: "metrics" },
