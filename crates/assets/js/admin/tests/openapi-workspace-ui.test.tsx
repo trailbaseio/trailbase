@@ -91,7 +91,6 @@ class TestRapiDoc extends HTMLElement {
   constructor() {
     super();
     const input = document.createElement("input");
-    input.type = "search";
     input.setAttribute("aria-label", "Search endpoints");
     this.attachShadow({ mode: "open" }).append(input);
   }
@@ -361,7 +360,7 @@ describe("OpenAPI Explorer workspace", () => {
     expect(browse).toHaveAttribute("aria-expanded", "true");
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
     expect(node.shadowRoot?.activeElement).toBe(
-      node.shadowRoot?.querySelector('input[type="search"]'),
+      node.shadowRoot?.querySelector("input"),
     );
     expect(node).toHaveClass("openapi-nav-open");
     expect(document.querySelector("rapi-doc")).toBe(node);
