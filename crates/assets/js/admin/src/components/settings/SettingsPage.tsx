@@ -26,7 +26,6 @@ import {
 import { IconProps } from "solid-icons";
 import { useQueryClient } from "@tanstack/solid-query";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { showToast } from "@/components/ui/toast";
@@ -123,32 +122,6 @@ function ServerSettings(props: CommonProps) {
           <ServerSettingsForm config={config.data!.config!} {...props} />
         </Match>
       </Switch>
-
-      <Show when={import.meta.env.DEV}>
-        <div class="flex justify-end gap-4">
-          <Button
-            variant={"destructive"}
-            type="button"
-            onClick={() => {
-              throw new Error("test sync exception");
-            }}
-          >
-            DEV: Throw
-          </Button>
-
-          <Button
-            variant={"destructive"}
-            type="button"
-            onClick={() => {
-              (async () => {
-                throw new Error("test async exception");
-              })();
-            }}
-          >
-            DEV: Async Throw
-          </Button>
-        </div>
-      </Show>
     </div>
   );
 }
