@@ -1,4 +1,4 @@
-import { Switch, Match, For } from "solid-js";
+import { Switch, Match, For, Show, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import {
   listBackups,
@@ -26,11 +26,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function Timestamp(props: { timestamp: bigint }) {
-  const time = (): Date => new Date(Number(props.timestamp));
-
-  return <div>{time().toLocaleString()}</div>;
+  return <div>{new Date(Number(props.timestamp)).toLocaleString()}</div>;
 }
 
 export function BackupSettings(_props: {
@@ -42,6 +48,61 @@ export function BackupSettings(_props: {
     queryFn: listBackups,
   }));
   const config = createConfigQuery();
+  const [selectedAction, setSelectedAction] = createSignal<
+    { action: "delete" | "restore"; timestamp: bigint } | undefined
+  >();
+  const [pendingAction, setPendingAction] = createSignal<string>();
+  const [operationError, setOperationError] = createSignal<string>();
+  let mounted = true;
+  onCleanup(() => {
+    mounted = false;
+  });
+
+  const timestampText = (timestamp: bigint) =>
+    new Date(Number(timestamp)).toLocaleString();
+  const refetchAfterSuccess = async () => {
+    if (mounted) await backupsList.refetch();
+  };
+  const runOperation = async (
+    action: "delete" | "restore",
+    timestamp: bigint,
+  ) => {
+    if (pendingAction()) return;
+    setPendingAction(action);
+    setOperationError();
+    try {
+      if (action === "delete") await deleteBackups([timestamp]);
+      else await restoreBackup(timestamp);
+      if (!mounted) return;
+      await refetchAfterSuccess();
+      if (!mounted) return;
+      setSelectedAction();
+      showToast({
+        title: action === "delete" ? "Backup deleted" : "Backup restored",
+        variant: "success",
+      });
+    } catch {
+      if (mounted) setOperationError("Backup operation failed. Try again.");
+    } finally {
+      if (mounted) setPendingAction();
+    }
+  };
+  const trigger = async () => {
+    if (pendingAction()) return;
+    setPendingAction("trigger");
+    setOperationError();
+    try {
+      await triggerBackup();
+      if (!mounted) return;
+      await refetchAfterSuccess();
+      if (!mounted) return;
+      showToast({ title: "Backup created", variant: "success" });
+    } catch {
+      if (mounted) setOperationError("Backup operation failed. Try again.");
+    } finally {
+      if (mounted) setPendingAction();
+    }
+  };
 
   return (
     <Card>
@@ -61,83 +122,132 @@ export function BackupSettings(_props: {
 
         <Switch fallback="Loading...">
           <Match when={backupsList.isError}>
-            {backupsList.error?.toString()}
+            <p role="alert">Unable to load backups. Try again.</p>
           </Match>
 
           <Match when={backupsList.isSuccess}>
-            <div class="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableHead>Time</TableHead>
-                  <TableHead class="w-[120px]">
-                    <span class="flex justify-center">Actions</span>
-                  </TableHead>
-                </TableHeader>
-
-                <TableBody>
-                  <For each={backupsList.data?.backups ?? []}>
-                    {(item) => {
-                      return (
-                        <TableRow>
-                          <TableCell>
-                            <Timestamp timestamp={item.timestamp} />
-                          </TableCell>
-                          <TableCell>
-                            <div class="flex gap-2">
-                              <IconButton
-                                tooltip="Delete backup."
-                                onClick={() => {
-                                  (async () => {
-                                    await deleteBackups([item.timestamp]);
-                                    await backupsList.refetch();
-                                  })();
-                                }}
-                              >
-                                <TbOutlineTrash />
-                              </IconButton>
-
-                              <IconButton
-                                tooltip="Restore backup."
-                                onClick={() => {
-                                  (async () => {
-                                    await restoreBackup(item.timestamp);
-
-                                    showToast({
-                                      title: "restored backup",
-                                      variant: "success",
-                                    });
-                                  })();
-                                }}
-                              >
-                                <TbOutlineRestore />
-                              </IconButton>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }}
-                  </For>
-                </TableBody>
-              </Table>
-            </div>
-
+            <Show
+              when={(backupsList.data?.backups ?? []).length > 0}
+              fallback={<p>No backups available.</p>}
+            >
+              <div class="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Time</TableHead>
+                      <TableHead>
+                        <span class="flex justify-center">Actions</span>
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    <For each={backupsList.data?.backups ?? []}>
+                      {(item) => {
+                        const readableTime = () =>
+                          timestampText(item.timestamp);
+                        return (
+                          <TableRow>
+                            <TableCell>
+                              <Timestamp timestamp={item.timestamp} />
+                            </TableCell>
+                            <TableCell>
+                              <div class="flex gap-2">
+                                <IconButton
+                                  aria-label={`Delete backup from ${readableTime()}`}
+                                  tooltip="Delete backup"
+                                  disabled={!!pendingAction()}
+                                  onClick={() =>
+                                    setSelectedAction({
+                                      action: "delete",
+                                      timestamp: item.timestamp,
+                                    })
+                                  }
+                                >
+                                  <TbOutlineTrash />
+                                </IconButton>
+                                <IconButton
+                                  aria-label={`Restore backup from ${readableTime()}`}
+                                  tooltip="Restore backup"
+                                  disabled={!!pendingAction()}
+                                  onClick={() =>
+                                    setSelectedAction({
+                                      action: "restore",
+                                      timestamp: item.timestamp,
+                                    })
+                                  }
+                                >
+                                  <TbOutlineRestore />
+                                </IconButton>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }}
+                    </For>
+                  </TableBody>
+                </Table>
+              </div>
+            </Show>
             <div class="flex justify-end">
               <Button
                 variant="outline"
-                onClick={() => {
-                  (async () => {
-                    await triggerBackup();
-                    await backupsList.refetch();
-                  })();
-                }}
+                disabled={!!pendingAction()}
+                onClick={trigger}
               >
                 <TbOutlineDeviceFloppy />
-                Trigger Backup
+                {pendingAction() === "trigger"
+                  ? "Triggering Backup…"
+                  : "Trigger Backup"}
               </Button>
             </div>
           </Match>
         </Switch>
+        <Show when={operationError()}>
+          <p role="alert">{operationError()}</p>
+        </Show>
       </CardContent>
+      <Dialog
+        open={selectedAction() !== undefined}
+        onOpenChange={(open) => {
+          if (!open && !pendingAction()) setSelectedAction();
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedAction() &&
+                `${selectedAction()!.action === "delete" ? "Delete" : "Restore"} backup from ${timestampText(selectedAction()!.timestamp)}`}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedAction() &&
+                `Backup from ${timestampText(selectedAction()!.timestamp)}.`}
+            </DialogDescription>
+          </DialogHeader>
+          <Show when={operationError()}>
+            <p role="alert">{operationError()}</p>
+          </Show>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={!!pendingAction()}
+              onClick={() => setSelectedAction()}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!!pendingAction()}
+              onClick={() => {
+                const selected = selectedAction();
+                if (selected)
+                  void runOperation(selected.action, selected.timestamp);
+              }}
+            >
+              {pendingAction() ? "Working…" : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
