@@ -52,7 +52,9 @@ export function BackupSettings(_props: {
     { action: "delete" | "restore"; timestamp: bigint } | undefined
   >();
   const [pendingAction, setPendingAction] = createSignal<string>();
-  const [operationError, setOperationError] = createSignal<string>();
+  const [operationError, setOperationError] = createSignal<
+    { scope: "trigger" | "dialog"; message: string } | undefined
+  >();
   let mounted = true;
   onCleanup(() => {
     mounted = false;
@@ -74,15 +76,29 @@ export function BackupSettings(_props: {
       if (action === "delete") await deleteBackups([timestamp]);
       else await restoreBackup(timestamp);
       if (!mounted) return;
-      await refetchAfterSuccess();
+      let refreshFailed = false;
+      try {
+        await refetchAfterSuccess();
+      } catch {
+        refreshFailed = true;
+      }
       if (!mounted) return;
       setSelectedAction();
       showToast({
         title: action === "delete" ? "Backup deleted" : "Backup restored",
         variant: "success",
       });
+      if (refreshFailed)
+        setOperationError({
+          scope: "trigger",
+          message: "Backup changed, but the list could not refresh. Try again.",
+        });
     } catch {
-      if (mounted) setOperationError("Backup operation failed. Try again.");
+      if (mounted)
+        setOperationError({
+          scope: "dialog",
+          message: "Backup operation failed. Try again.",
+        });
     } finally {
       if (mounted) setPendingAction();
     }
@@ -94,11 +110,24 @@ export function BackupSettings(_props: {
     try {
       await triggerBackup();
       if (!mounted) return;
-      await refetchAfterSuccess();
+      try {
+        await refetchAfterSuccess();
+      } catch {
+        if (mounted)
+          setOperationError({
+            scope: "trigger",
+            message:
+              "Backup created, but the list could not refresh. Try again.",
+          });
+      }
       if (!mounted) return;
       showToast({ title: "Backup created", variant: "success" });
     } catch {
-      if (mounted) setOperationError("Backup operation failed. Try again.");
+      if (mounted)
+        setOperationError({
+          scope: "trigger",
+          message: "Backup operation failed. Try again.",
+        });
     } finally {
       if (mounted) setPendingAction();
     }
@@ -120,7 +149,7 @@ export function BackupSettings(_props: {
           {Number(config.data?.config?.server?.backupWindowSize ?? 5)}.
         </p>
 
-        <Switch fallback="Loading...">
+        <Switch fallback={<p role="status">Loading...</p>}>
           <Match when={backupsList.isError}>
             <p role="alert">Unable to load backups. Try again.</p>
           </Match>
@@ -156,12 +185,13 @@ export function BackupSettings(_props: {
                                   aria-label={`Delete backup from ${readableTime()}`}
                                   tooltip="Delete backup"
                                   disabled={!!pendingAction()}
-                                  onClick={() =>
+                                  onClick={() => {
                                     setSelectedAction({
                                       action: "delete",
                                       timestamp: item.timestamp,
-                                    })
-                                  }
+                                    });
+                                    setOperationError();
+                                  }}
                                 >
                                   <TbOutlineTrash />
                                 </IconButton>
@@ -169,12 +199,13 @@ export function BackupSettings(_props: {
                                   aria-label={`Restore backup from ${readableTime()}`}
                                   tooltip="Restore backup"
                                   disabled={!!pendingAction()}
-                                  onClick={() =>
+                                  onClick={() => {
                                     setSelectedAction({
                                       action: "restore",
                                       timestamp: item.timestamp,
-                                    })
-                                  }
+                                    });
+                                    setOperationError();
+                                  }}
                                 >
                                   <TbOutlineRestore />
                                 </IconButton>
@@ -202,8 +233,8 @@ export function BackupSettings(_props: {
             </div>
           </Match>
         </Switch>
-        <Show when={operationError()}>
-          <p role="alert">{operationError()}</p>
+        <Show when={operationError()?.scope === "trigger"}>
+          <p role="alert">{operationError()?.message}</p>
         </Show>
       </CardContent>
       <Dialog
@@ -223,14 +254,17 @@ export function BackupSettings(_props: {
                 `Backup from ${timestampText(selectedAction()!.timestamp)}.`}
             </DialogDescription>
           </DialogHeader>
-          <Show when={operationError()}>
-            <p role="alert">{operationError()}</p>
+          <Show when={operationError()?.scope === "dialog"}>
+            <p role="alert">{operationError()?.message}</p>
           </Show>
           <DialogFooter>
             <Button
               variant="outline"
               disabled={!!pendingAction()}
-              onClick={() => setSelectedAction()}
+              onClick={() => {
+                setSelectedAction();
+                setOperationError();
+              }}
             >
               Cancel
             </Button>
@@ -243,7 +277,11 @@ export function BackupSettings(_props: {
                   void runOperation(selected.action, selected.timestamp);
               }}
             >
-              {pendingAction() ? "Working…" : "Confirm"}
+              {pendingAction() === "delete"
+                ? "Deleting…"
+                : pendingAction() === "restore"
+                  ? "Restoring…"
+                  : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>
