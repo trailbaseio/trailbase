@@ -130,6 +130,10 @@ function DatabaseSettingsForm(props: {
       [...selectedRows()].filter((selectedName) => names.has(selectedName)),
     );
     if (retained.size !== selectedRows().size) setSelectedRows(retained);
+    if (unlinkOpen() && retained.size === 0 && !pending()) {
+      setUnlinkOpen(false);
+      setError();
+    }
   });
   const allSelected = () =>
     namedDatabases().length > 0 &&
@@ -191,6 +195,7 @@ function DatabaseSettingsForm(props: {
             <TextFieldInput
               id="database-name"
               type="text"
+              disabled={pending()}
               value={name()}
               required
               pattern="[A-Za-z0-9_-]+"
@@ -257,7 +262,7 @@ function DatabaseSettingsForm(props: {
             <Button
               type="button"
               variant="destructive"
-              disabled={pending()}
+              disabled={pending() || selected().length === 0}
               onClick={() => void unlink()}
             >
               {pending() ? "Unlinking…" : "Confirm"}

@@ -117,7 +117,17 @@ vi.mock("@/components/ui/dialog", async () => {
       const context = Solid.useContext(Context)!;
       return (
         <Solid.Show when={context.open()}>
-          <div role="dialog">{props.children}</div>
+          <div role="dialog">
+            {props.children}
+            <button
+              type="button"
+              aria-label="Close"
+              disabled={props.closeDisabled}
+              onClick={() => context.setOpen(false)}
+            >
+              Close
+            </button>
+          </div>
         </Solid.Show>
       );
     },
@@ -296,6 +306,32 @@ describe("database link lifecycle", () => {
       "metrics",
     ]);
   });
+  it("disables name editing and dialog close while link is pending", async () => {
+    let resolve!: () => void;
+    state.setConfig.mockReturnValue(new Promise<void>((r) => (resolve = r)));
+    setup();
+    openLink();
+    const input = screen.getByLabelText("Name");
+    fireEvent.input(input, { target: { value: "metrics" } });
+    fireEvent.click(dialogButton("Link"));
+    expect(input).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    resolve();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("re-enables link dialog close after failure", async () => {
+    state.setConfig.mockRejectedValue(new Error("secret"));
+    setup();
+    openLink();
+    fireEvent.input(screen.getByLabelText("Name"), {
+      target: { value: "metrics" },
+    });
+    fireEvent.click(dialogButton("Link"));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Close" })).not.toBeDisabled();
+  });
+
   it("keeps link dialog and value while pending, then closes after success", async () => {
     let resolve!: () => void;
     state.setConfig.mockReturnValue(new Promise<void>((r) => (resolve = r)));
@@ -397,6 +433,7 @@ describe("database unlink lifecycle", () => {
     state.updateConfig?.(baseConfig(["analytics", "events", "remote"]));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     expect(screen.getByRole("button", { name: "Unlinking…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
     resolve();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(state.postSubmit).toHaveBeenCalledOnce();
