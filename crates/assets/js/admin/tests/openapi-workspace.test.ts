@@ -88,6 +88,40 @@ describe("collapsed OpenAPI tags", () => {
     ]);
   });
 
+  it("merges operation tags when the source has no top-level tags", () => {
+    const source = {
+      paths: {
+        "/users": { get: { tags: ["users", "admin"] } },
+        "/health": { parameters: [], post: { tags: ["admin"] } },
+      },
+    };
+    expect(withCollapsedOpenApiTags(source)).toEqual({
+      paths: source.paths,
+      tags: [
+        { name: "users", "x-tag-expanded": false },
+        { name: "admin", "x-tag-expanded": false },
+      ],
+    });
+    expect(source).toEqual({
+      paths: {
+        "/users": { get: { tags: ["users", "admin"] } },
+        "/health": { parameters: [], post: { tags: ["admin"] } },
+      },
+    });
+  });
+
+  it("preserves existing definitions and adds missing operation tags", () => {
+    const source = {
+      tags: [{ name: "users", description: "Users" }],
+      paths: { "/users": { get: { tags: ["users", "records"] } } },
+    };
+    expect(withCollapsedOpenApiTags(source).tags).toEqual([
+      { name: "users", description: "Users", "x-tag-expanded": false },
+      { name: "records", "x-tag-expanded": false },
+    ]);
+    expect(source.tags).toEqual([{ name: "users", description: "Users" }]);
+  });
+
   it("handles malformed or absent tag containers safely", () => {
     for (const spec of [
       undefined,

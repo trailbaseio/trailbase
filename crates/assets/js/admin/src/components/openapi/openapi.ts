@@ -52,13 +52,37 @@ export function openApiMetadata(spec: unknown): OpenApiMetadata {
 
 export function withCollapsedOpenApiTags(spec: unknown): OpenApiDocument {
   if (!isRecord(spec)) return {};
-  if (!Array.isArray(spec.tags)) return { ...spec };
+
+  const existing = Array.isArray(spec.tags)
+    ? spec.tags.filter(
+        (tag): tag is Record<string, unknown> =>
+          isRecord(tag) && typeof tag.name === "string" && tag.name.length > 0,
+      )
+    : [];
+  const names = new Set(existing.map((tag) => tag.name as string));
+  const operationTags: string[] = [];
+  const paths = isRecord(spec.paths) ? spec.paths : {};
+  for (const path of Object.values(paths)) {
+    if (!isRecord(path)) continue;
+    for (const [method, operation] of Object.entries(path)) {
+      if (!OPERATIONS.has(method.toLowerCase()) || !isRecord(operation)) continue;
+      if (!Array.isArray(operation.tags)) continue;
+      for (const tag of operation.tags) {
+        if (typeof tag === "string" && tag.length > 0 && !names.has(tag)) {
+          names.add(tag);
+          operationTags.push(tag);
+        }
+      }
+    }
+  }
+  if (existing.length === 0 && operationTags.length === 0) return { ...spec };
 
   return {
     ...spec,
-    tags: spec.tags.map((tag) =>
-      isRecord(tag) ? { ...tag, "x-tag-expanded": false } : tag,
-    ),
+    tags: [
+      ...existing.map((tag) => ({ ...tag, "x-tag-expanded": false })),
+      ...operationTags.map((name) => ({ name, "x-tag-expanded": false })),
+    ],
   };
 }
 

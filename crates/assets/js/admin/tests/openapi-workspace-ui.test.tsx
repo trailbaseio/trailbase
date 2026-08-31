@@ -157,6 +157,11 @@ describe("OpenAPI Explorer workspace", () => {
     expect(node).toHaveAttribute("schema-style", "table");
     expect(node).toHaveAttribute("show-side-nav", "true");
     expect(node).toHaveAttribute("allow-search", "true");
+    expect(node).toHaveAttribute("primary-color", "#0073a8");
+    expect(node.className).toContain("min-h-0");
+    expect(node.parentElement?.parentElement?.className).toContain(
+      "overflow-hidden",
+    );
     expect((node as TestRapiDoc).loadSpec).toHaveBeenCalledWith(
       expect.objectContaining({
         tags: [{ name: "Users", "x-tag-expanded": false }],

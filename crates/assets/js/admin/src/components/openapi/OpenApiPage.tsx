@@ -172,7 +172,7 @@ export default function Page() {
   };
 
   return (
-    <div class="flex h-full min-h-0 flex-col">
+    <div class="flex h-[calc(100dvh-3rem)] min-h-0 flex-col overflow-hidden md:h-dvh">
       <Header
         title="OpenAPI Explorer"
         description={<span>Explore and try {metadata().title}.</span>}
@@ -297,6 +297,7 @@ export default function Page() {
           nav-hover-text-color={palette().hoverText}
           nav-accent-color={palette().accent}
           nav-accent-text-color={palette().accentText}
+          primary-color={palette().accent}
           render-style="focused"
           layout="row"
           schema-style="table"
