@@ -22,6 +22,7 @@ const state = vi.hoisted(() => ({
   infoError: false,
   setConfig: vi.fn(),
   showToast: vi.fn(),
+  updateConfigQuery: undefined as undefined | ((config: any) => void),
 }));
 
 vi.mock("@tanstack/solid-query", () => ({ useQueryClient: () => ({}) }));
@@ -88,16 +89,28 @@ vi.mock("@/components/ui/text-field", () => ({
   TextFieldInput: (p: any) => <input {...p} onInput={p.onChange} />,
 }));
 vi.mock("@/lib/signals", () => ({ createIsMobile: () => () => state.mobile }));
-vi.mock("@/lib/api/config", () => ({
-  createConfigQuery: () => ({
-    data: state.config ? { config: state.config } : undefined,
-    isLoading: state.configLoading,
-    isError: state.configError,
-    error: new Error("backend secret"),
-  }),
-  setConfig: state.setConfig,
-  invalidateConfig: state.invalidate,
-}));
+vi.mock("@/lib/api/config", async () => {
+  const { createSignal } =
+    await vi.importActual<typeof import("solid-js")>("solid-js");
+  return {
+    createConfigQuery: () => {
+      const [data, setData] = createSignal(
+        state.config ? { config: state.config } : undefined,
+      );
+      state.updateConfigQuery = (config) => setData({ config });
+      return {
+        get data() {
+          return data();
+        },
+        isLoading: state.configLoading,
+        isError: state.configError,
+        error: new Error("backend secret"),
+      };
+    },
+    setConfig: state.setConfig,
+    invalidateConfig: state.invalidate,
+  };
+});
 vi.mock("@/lib/api/info", () => ({
   createSystemInfoQuery: () => ({
     data: state.info,
@@ -164,6 +177,7 @@ beforeEach(() => {
   state.setConfig.mockReset();
   state.setConfig.mockResolvedValue(undefined);
   state.showToast.mockReset();
+  state.updateConfigQuery = undefined;
 });
 
 describe("settings workspace", () => {
@@ -363,6 +377,78 @@ describe("General settings integration", () => {
     });
     fireEvent.click(screen.getByText("Email"));
     expect(state.navigate).toHaveBeenLastCalledWith("/settings/email");
+  });
+
+  it("preserves edits made while a save is in flight", async () => {
+    let finishSave!: () => void;
+    state.setConfig.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    render(() => <SettingsPage />);
+    const appName = screen.getAllByTestId("input")[0];
+    fireEvent.input(appName, { target: { value: "Changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(state.setConfig).toHaveBeenCalledOnce());
+    fireEvent.input(appName, { target: { value: "Changed while saving" } });
+    finishSave();
+
+    await waitFor(() => expect(state.showToast).toHaveBeenCalledOnce());
+    expect(appName).toHaveValue("Changed while saving");
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save changes" }),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+  });
+
+  it("does not report a pending save after unmount", async () => {
+    let finishSave!: () => void;
+    state.setConfig.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    const dom = render(() => <SettingsPage />);
+    fireEvent.input(screen.getAllByTestId("input")[0], {
+      target: { value: "Changed" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    dom.unmount();
+    finishSave();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.showToast).not.toHaveBeenCalled();
+  });
+
+  it("rebases clean incoming config updates", async () => {
+    render(() => <SettingsPage />);
+    state.updateConfigQuery!({
+      ...generalConfig(),
+      server: { ...generalConfig().server, applicationName: "Remote" },
+    });
+    await waitFor(() =>
+      expect(screen.getAllByTestId("input")[0]).toHaveValue("Remote"),
+    );
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("preserves dirty edits across incoming config and saves against the latest base", async () => {
+    render(() => <SettingsPage />);
+    const appName = screen.getAllByTestId("input")[0];
+    fireEvent.input(appName, { target: { value: "Local edit" } });
+    state.updateConfigQuery!({
+      ...generalConfig(),
+      email: { smtpHost: "latest-base" },
+      server: { ...generalConfig().server, applicationName: "Remote" },
+    });
+    await waitFor(() => expect(appName).toHaveValue("Local edit"));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(state.setConfig).toHaveBeenCalledOnce());
+    expect(state.setConfig.mock.calls[0][0].config.email.smtpHost).toBe(
+      "latest-base",
+    );
   });
 
   it("keeps edits and actions after failed save, and clears them after success", async () => {

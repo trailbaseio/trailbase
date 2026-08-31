@@ -8,6 +8,7 @@ import {
   Switch,
   Match,
   createEffect,
+  untrack,
 } from "solid-js";
 import type { Component, JSX } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
@@ -178,28 +179,35 @@ function ServerSettingsForm(
     return server ? cloneServerConfig(server) : ServerConfig.fromJSON({});
   }
 
-  const [savedValues, setSavedValues] = createSignal(
-    serverConfig(props.config),
-  );
+  const initialValues = serverConfig(props.config);
+  const [savedValues, setSavedValues] = createSignal(initialValues);
   const [submitError, setSubmitError] = createSignal(false);
+  let lastIncoming = cloneServerConfig(initialValues);
+  let active = true;
+  onCleanup(() => {
+    active = false;
+  });
   const form = createForm(() => ({
     defaultValues: cloneServerConfig(savedValues()),
     onSubmit: async ({ value }: { value: ServerConfig }) => {
       setSubmitError(false);
+      const submitted = cloneServerConfig(value);
       const newConfig = Config.fromPartial(props.config);
-      newConfig.server = value;
+      newConfig.server = submitted;
       try {
         await setConfig({
           client: queryClient,
           config: newConfig,
           throw: true,
         });
-        const saved = cloneServerConfig(value);
-        setSavedValues(saved);
-        form.reset(cloneServerConfig(saved));
-        props.postSubmit?.();
+        if (!active) return;
+
+        setSavedValues(submitted);
+        const stillModified = !sameServerConfig(submitted, formValues());
+        if (!stillModified) form.reset(cloneServerConfig(submitted));
+        props.postSubmit?.(stillModified);
       } catch {
-        setSubmitError(true);
+        if (active) setSubmitError(true);
       }
     },
   }));
@@ -207,6 +215,15 @@ function ServerSettingsForm(
   const formValues = form.useSelector((state) => state.values);
   const modified = () => !sameServerConfig(savedValues(), formValues());
 
+  createEffect(() => {
+    const incoming = serverConfig(props.config);
+    if (sameServerConfig(lastIncoming, incoming)) return;
+
+    lastIncoming = cloneServerConfig(incoming);
+    const wasModified = untrack(modified);
+    setSavedValues(cloneServerConfig(incoming));
+    if (!wasModified) form.reset(cloneServerConfig(incoming));
+  });
   createEffect(() => props.setDirty(modified()));
 
   return (
@@ -456,7 +473,7 @@ function SettingsSidebar(props: {
 
 interface CommonProps {
   setDirty: (dirty: boolean) => void;
-  postSubmit: () => void;
+  postSubmit: (dirty?: boolean) => void;
 }
 
 interface Site {
@@ -550,8 +567,8 @@ export function SettingsPage() {
   const p = () =>
     ({
       setDirty,
-      postSubmit: () => {
-        setDirty(false);
+      postSubmit: (dirty = false) => {
+        setDirty(dirty);
         showToast({
           title: "submitted",
           variant: "success",
