@@ -13,6 +13,7 @@ import {
   applyRequestTokens,
   parseImpersonationTokens,
   openApiMetadata,
+  usableRequestTokens,
   type OpenApiDocument,
 } from "./openapi";
 import "rapidoc";
@@ -25,10 +26,8 @@ declare module "solid-js" {
   }
 }
 
-type RapiDoc = HTMLElement & {
-  loadSpec?: (spec: OpenApiDocument) => void;
-  setAttribute: HTMLElement["setAttribute"];
-};
+type RapiDoc = HTMLElement & { loadSpec?: (spec: OpenApiDocument) => void };
+type BeforeTryEvent = CustomEvent<{ request: Request }>;
 
 async function fetchOpenApi(): Promise<OpenApiDocument> {
   const response = await adminFetch("/openapi.json");
@@ -44,22 +43,37 @@ export default function Page() {
   }));
   const [tokensInput, setTokensInput] = createSignal("");
   const [tokenError, setTokenError] = createSignal(false);
-  const server = import.meta.env.DEV ? "http://localhost:4000" : undefined;
+  const [overrideTokens, setOverrideTokens] =
+    createSignal<ReturnType<typeof parseImpersonationTokens>>();
   const identity = () => user()?.email || user()?.username || "Admin session";
   const metadata = () => openApiMetadata(query.data);
-  let rapidoc: RapiDoc | undefined;
+  const server = () => {
+    if (import.meta.env.DEV) return "http://localhost:4000";
+    const servers = query.data?.servers;
+    if (
+      Array.isArray(servers) &&
+      typeof servers[0] === "object" &&
+      servers[0] !== null &&
+      typeof (servers[0] as { url?: unknown }).url === "string"
+    )
+      return (servers[0] as { url: string }).url;
+    return window.location.origin;
+  };
+  const [rapidoc, setRapidoc] = createSignal<RapiDoc>();
   createEffect(() => {
+    const element = rapidoc();
     const spec = query.data;
-    if (spec) rapidoc?.loadSpec?.(spec);
+    if (element && spec) element.loadSpec?.(spec);
   });
   const refresh = () => query.refetch();
 
   const handleTokens = (value: string) => {
     setTokensInput(value);
     try {
-      parseImpersonationTokens(value);
+      setOverrideTokens(parseImpersonationTokens(value));
       setTokenError(false);
     } catch {
+      setOverrideTokens(undefined);
       setTokenError(true);
     }
   };
@@ -68,7 +82,7 @@ export default function Page() {
     <div class="flex h-full min-h-0 flex-col">
       <Header
         title="OpenAPI Explorer"
-        description="Explore and try the API specification."
+        description={() => `Explore and try ${metadata().title}.`}
         right={
           <Button
             size="sm"
@@ -82,17 +96,15 @@ export default function Page() {
         }
       />
       <div class="text-muted-foreground flex flex-wrap gap-2 px-4 py-2 text-xs">
-        <Badge variant="outline">
-          {metadata().version
-            ? `v${metadata().version}`
-            : "Version unavailable"}
-        </Badge>
+        <Show when={metadata().version}>
+          <Badge variant="outline">v{metadata().version}</Badge>
+        </Show>
         <span>
           {metadata().operationCount}{" "}
           {metadata().operationCount === 1 ? "operation" : "operations"}
         </span>
-        <Show when={server}>
-          <span>Server: {server}</span>
+        <Show when={query.data}>
+          <span>Server: {server()}</span>
         </Show>
         <span>Identity: {identity()}</span>
       </div>
@@ -168,21 +180,18 @@ export default function Page() {
         <rapi-doc
           ref={(element) => {
             const r = element as RapiDoc;
-            rapidoc = r;
-            if (server) {
-              r.setAttribute("server-url", server);
-              r.setAttribute("default-api-server", server);
-            }
+            setRapidoc(r);
+            r.setAttribute("server-url", server());
+            r.setAttribute("default-api-server", server());
             r.addEventListener("before-try", (event) => {
-              const override = parseImpersonationTokens(tokensInput());
-              const tokens = override ?? $tokens.get();
+              const tokens =
+                overrideTokens() ?? usableRequestTokens($tokens.get());
               if (tokens)
                 applyRequestTokens(
-                  (event as CustomEvent).detail.request,
+                  (event as BeforeTryEvent).detail.request,
                   tokens,
                 );
             });
-            r.loadSpec?.(query.data!);
           }}
           load-fonts="false"
           sort-tags="true"
