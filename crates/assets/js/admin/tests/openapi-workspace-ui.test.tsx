@@ -25,10 +25,29 @@ const state = vi.hoisted(() => ({
   bumpQuery: undefined as (() => void) | undefined,
   bumpUser: undefined as (() => void) | undefined,
   listeners: [] as EventListener[],
+  theme: "light" as "light" | "dark",
+  mobile: false,
+  bumpTheme: undefined as (() => void) | undefined,
+  bumpMobile: undefined as (() => void) | undefined,
+  added: [] as [string, EventListener][],
+  removed: [] as [string, EventListener][],
 }));
 vi.mock("rapidoc", () => ({}));
 vi.mock("@/lib/fetch", () => ({ adminFetch: state.fetch }));
-vi.mock("@/lib/theme", () => ({ createTheme: () => () => "light" }));
+vi.mock("@/lib/theme", () => ({
+  createTheme: () => {
+    const [v, set] = createSignal(state.theme);
+    state.bumpTheme = () => set(state.theme);
+    return v;
+  },
+}));
+vi.mock("@/lib/signals", () => ({
+  createIsMobile: () => {
+    const [v, set] = createSignal(state.mobile);
+    state.bumpMobile = () => set(state.mobile);
+    return v;
+  },
+}));
 vi.mock("@/lib/client", () => ({
   $user: {},
   $tokens: { get: () => state.currentTokens },
@@ -70,7 +89,12 @@ class TestRapiDoc extends HTMLElement {
   loadSpec = vi.fn();
   addEventListener(type: string, listener: EventListener) {
     if (type === "before-try") state.listeners.push(listener);
+    state.added.push([type, listener]);
     return super.addEventListener(type, listener);
+  }
+  removeEventListener(type: string, listener: EventListener) {
+    state.removed.push([type, listener]);
+    return super.removeEventListener(type, listener);
   }
 }
 customElements.define("rapi-doc", TestRapiDoc);
@@ -106,6 +130,10 @@ afterEach(() => {
   state.currentTokens = null;
   state.queryOptions = undefined;
   state.listeners = [];
+  state.added = [];
+  state.removed = [];
+  state.theme = "light";
+  state.mobile = false;
 });
 const spec = (count = 1, version?: string) => ({
   info: { title: "Things", ...(version ? { version } : {}) },
@@ -295,5 +323,54 @@ describe("OpenAPI Explorer workspace", () => {
     expect(sessionSet).not.toHaveBeenCalled();
     localSet.mockRestore();
     sessionSet.mockRestore();
+  });
+  it("reacts to theme changes without reloading the spec", () => {
+    ready();
+    const node = document.querySelector("rapi-doc") as TestRapiDoc;
+    const loads = node.loadSpec.mock.calls.length;
+    state.theme = "dark";
+    state.bumpTheme?.();
+    expect(node.getAttribute("primary-color")).toBe("#38bdf8");
+    expect(node.loadSpec).toHaveBeenCalledTimes(loads);
+  });
+
+  it("captures and removes both RapiDoc listeners", () => {
+    const value = spec();
+    ready(value);
+    const node = document.querySelector("rapi-doc") as TestRapiDoc;
+    const refs = state.added.filter(
+      ([type]) => type === "before-try" || type === "spec-loaded",
+    );
+    cleanup();
+    for (const [type, ref] of refs)
+      expect(state.removed).toContainEqual([type, ref]);
+    state.data = value;
+    render(() => <Page />);
+    state.bumpQuery?.();
+    const next = document.querySelector("rapi-doc") as TestRapiDoc;
+    expect(next).not.toBe(node);
+    expect(next.loadSpec).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects credentials for cross-origin requests", () => {
+    state.currentTokens = {
+      auth_token: "a",
+      refresh_token: "r",
+      csrf_token: "c",
+    };
+    ready();
+    const before = state.listeners[0];
+    const cross = new Request("https://evil.example/api");
+    before(new CustomEvent("before-try", { detail: { request: cross } }));
+    expect(Object.fromEntries(cross.headers)).toEqual({});
+    const local = new Request("http://localhost:4000/api");
+    before(new CustomEvent("before-try", { detail: { request: local } }));
+    expect(local.headers.get("authorization")).toBe("Bearer a");
+  });
+
+  it("safely invokes spec-loaded without a shadow root", () => {
+    ready();
+    const handler = state.added.find(([type]) => type === "spec-loaded")?.[1];
+    expect(() => handler?.(new Event("spec-loaded"))).not.toThrow();
   });
 });
