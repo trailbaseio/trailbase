@@ -1,4 +1,13 @@
-import { createSignal, For, Switch, Match } from "solid-js";
+import {
+  createSignal,
+  For,
+  Switch,
+  Match,
+  Show,
+  createEffect,
+  onCleanup,
+  untrack,
+} from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
 import { useStore } from "@nanostores/solid";
@@ -19,6 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { showToast } from "@/components/ui/toast";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
+import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
 import {
   Select,
   SelectContent,
@@ -139,33 +150,74 @@ export function EmailSettings(props: {
 }) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
-
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [submitError, setSubmitError] = createSignal(false);
+  const fieldNames = [
+    "smtpHost", "smtpPort", "smtpUsername", "smtpPassword", "smtpEncryption",
+    "senderName", "senderAddress", "userVerificationTemplate", "passwordResetTemplate",
+    "changeEmailTemplate", "otpTemplate",
+  ] as const;
+
+  const clone = (value: EmailConfig) =>
+    EmailConfig.decode(EmailConfig.encode(value).finish());
+  const same = (a: EmailConfig, b: EmailConfig) => {
+    const x = EmailConfig.encode(a).finish();
+    const y = EmailConfig.encode(b).finish();
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
+  const fieldSame = (a: EmailConfig, b: EmailConfig, name: string) => {
+    const pick = (v: EmailConfig) =>
+      EmailConfig.encode(EmailConfig.fromPartial({ [name]: v[name as keyof EmailConfig] } as Partial<EmailConfig>)).finish();
+    const x = pick(a), y = pick(b);
+    return x.length === y.length && x.every((v, i) => v === y[i]);
+  };
 
   const Form = (p: { config: EmailConfig }) => {
+    const initial = clone(p.config);
+    const [savedValues, setSavedValues] = createSignal(initial);
+    let editBaseline = clone(initial);
+    let lastIncoming = clone(initial);
+    let active = true;
+    onCleanup(() => { active = false; });
     const form = createForm(() => ({
-      defaultValues: p.config satisfies EmailConfig,
+      defaultValues: clone(initial),
       onSubmit: async ({ value }) => {
-        const c = config.data?.config;
-        if (!c) {
-          console.warn("Missing base config.");
-          return;
+        setSubmitError(false);
+        const latest = clone(savedValues());
+        for (const name of fieldNames) {
+          if (!fieldSame(value, editBaseline, name)) {
+            (latest as Record<string, unknown>)[name] = (value as Record<string, unknown>)[name];
+          }
         }
-
-        const newConfig = Config.fromPartial(c);
-        newConfig.email = value;
-        await setConfig({
-          client: queryClient,
-          config: newConfig,
-          throw: true,
-        });
-
-        props.postSubmit();
+        const base = config.data?.config;
+        if (!base) return;
+        const newConfig = Config.fromPartial(base);
+        newConfig.email = latest;
+        try {
+          await setConfig({ client: queryClient, config: newConfig, throw: true });
+          if (!active) return;
+          const saved = clone(latest);
+          setSavedValues(saved);
+          editBaseline = clone(saved);
+          if (!same(saved, form.useStore((s) => s.values))) form.reset(clone(saved));
+          props.postSubmit();
+        } catch {
+          if (active) setSubmitError(true);
+        }
       },
     }));
-
-    form.useStore((state) => {
-      props.setDirty(state.isDirty && !state.isSubmitted);
+    const formValues = form.useSelector((state) => state.values);
+    const modified = () => !same(formValues(), editBaseline);
+    createEffect(() => props.setDirty(modified()));
+    createEffect(() => {
+      const incoming = config.data?.config?.email;
+      if (!incoming) return;
+      const next = clone(incoming);
+      if (same(lastIncoming, next)) return;
+      lastIncoming = next;
+      const dirty = untrack(modified);
+      setSavedValues(clone(next));
+      if (!dirty) { editBaseline = clone(next); form.reset(clone(next)); }
     });
 
     return (
@@ -395,17 +447,22 @@ export function EmailSettings(props: {
                 isSubmitting: state.isSubmitting,
               })}
             >
-              {(state) => {
-                return (
-                  <Button
-                    type="submit"
-                    disabled={!state().canSubmit}
-                    variant="default"
-                  >
-                    {state().isSubmitting ? "..." : "Submit"}
-                  </Button>
-                );
-              }}
+              {(state) => (
+                <>
+                  <Show when={submitError()}>
+                    <Callout variant="error" role="alert">
+                      <CalloutTitle>Unable to save settings</CalloutTitle>
+                      <CalloutContent>Check your values and try again.</CalloutContent>
+                    </Callout>
+                  </Show>
+                  <SettingsFormActions
+                    dirty={modified()}
+                    canSubmit={state().canSubmit}
+                    isSubmitting={state().isSubmitting}
+                    onReset={() => { setSubmitError(false); editBaseline = clone(savedValues()); form.reset(clone(savedValues())); }}
+                  />
+                </>
+              )}
             </form.Subscribe>
           </div>
         </div>
@@ -413,48 +470,49 @@ export function EmailSettings(props: {
     );
   };
 
-  const emailConfig = () => {
-    const c = config.data?.config?.email;
-    if (c) {
-      // "deep-copy"
-      return EmailConfig.decode(EmailConfig.encode(c).finish());
-    }
-
-    // Fallback
-    return EmailConfig.fromJSON({});
-  };
-
-  return <Form config={emailConfig()} />;
+  return (
+    <Switch>
+      <Match when={config.isError}>
+        <Callout variant="error" role="alert"><CalloutTitle>Unable to load settings</CalloutTitle><CalloutContent>Please try again later.</CalloutContent></Callout>
+      </Match>
+      <Match when={config.isLoading}><div role="status">Loading settings...</div></Match>
+      <Match when={config.data?.config?.email}><Form config={config.data!.config!.email!} /></Match>
+    </Switch>
+  );
 }
 
 function TestEmailDialog(props: { closeDialog: () => void }) {
   const user = useStore($user);
+  const [pending, setPending] = createSignal(false);
+  const [error, setError] = createSignal(false);
+  let active = true;
   let email: HTMLInputElement | undefined;
+  onCleanup(() => { active = false; });
 
   return (
     <DialogContent>
       <form
         method="dialog"
-        onSubmit={(e: SubmitEvent) => {
+        onSubmit={async (e: SubmitEvent) => {
           e.preventDefault();
-
           const emailAddress = email?.value;
-          if (!emailAddress) return;
-
-          adminFetch("/email/test", {
-            method: "POST",
-            body: JSON.stringify({
-              email_address: emailAddress,
-            } as TestEmailRequest),
-            throwOnError: true,
-          });
-
-          props.closeDialog();
-
-          showToast({
-            title: `Sent to ${emailAddress}`,
-            variant: "success",
-          });
+          if (!emailAddress || pending()) return;
+          setPending(true);
+          setError(false);
+          try {
+            await adminFetch("/email/test", {
+              method: "POST",
+              body: JSON.stringify({ email_address: emailAddress } as TestEmailRequest),
+              throwOnError: true,
+            });
+            if (!active) return;
+            props.closeDialog();
+            showToast({ title: `Sent to ${emailAddress}`, variant: "success" });
+          } catch {
+            if (active) setError(true);
+          } finally {
+            if (active) setPending(false);
+          }
         }}
       >
         <DialogTitle>Send Test Email</DialogTitle>
@@ -477,13 +535,21 @@ function TestEmailDialog(props: { closeDialog: () => void }) {
           </TextField>
         </div>
 
+        <Show when={error()}>
+          <Callout variant="error" role="alert">
+            <CalloutTitle>Unable to send test email</CalloutTitle>
+            <CalloutContent>Please check the address and try again.</CalloutContent>
+          </Callout>
+        </Show>
         <DialogFooter>
           <div class="flex w-full justify-between gap-4">
-            <Button type="button" onClick={props.closeDialog} variant="outline">
+            <Button type="button" onClick={props.closeDialog} variant="outline" disabled={pending()}>
               Close
             </Button>
-
-            <Button type="submit">Send</Button>
+            <Button type="submit" disabled={pending()}>
+              {pending() ? "Sending…" : "Send"}
+            </Button>
+            <Show when={pending()}><div role="status" aria-live="polite">Sending…</div></Show>
           </div>
         </DialogFooter>
       </form>
