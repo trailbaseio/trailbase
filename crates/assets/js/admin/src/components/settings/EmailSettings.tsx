@@ -146,16 +146,24 @@ function EmailTemplate(props: {
 
 export function EmailSettings(props: {
   setDirty: (dirty: boolean) => void;
-  postSubmit: () => void;
+  postSubmit: (dirty?: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [submitError, setSubmitError] = createSignal(false);
   const fieldNames = [
-    "smtpHost", "smtpPort", "smtpUsername", "smtpPassword", "smtpEncryption",
-    "senderName", "senderAddress", "userVerificationTemplate", "passwordResetTemplate",
-    "changeEmailTemplate", "otpTemplate",
+    "smtpHost",
+    "smtpPort",
+    "smtpUsername",
+    "smtpPassword",
+    "smtpEncryption",
+    "senderName",
+    "senderAddress",
+    "userVerificationTemplate",
+    "passwordResetTemplate",
+    "changeEmailTemplate",
+    "otpTemplate",
   ] as const;
 
   const clone = (value: EmailConfig) =>
@@ -167,8 +175,13 @@ export function EmailSettings(props: {
   };
   const fieldSame = (a: EmailConfig, b: EmailConfig, name: string) => {
     const pick = (v: EmailConfig) =>
-      EmailConfig.encode(EmailConfig.fromPartial({ [name]: v[name as keyof EmailConfig] } as Partial<EmailConfig>)).finish();
-    const x = pick(a), y = pick(b);
+      EmailConfig.encode(
+        EmailConfig.fromPartial({
+          [name]: v[name as keyof EmailConfig],
+        } as Partial<EmailConfig>),
+      ).finish();
+    const x = pick(a),
+      y = pick(b);
     return x.length === y.length && x.every((v, i) => v === y[i]);
   };
 
@@ -178,15 +191,20 @@ export function EmailSettings(props: {
     let editBaseline = clone(initial);
     let lastIncoming = clone(initial);
     let active = true;
-    onCleanup(() => { active = false; });
+    onCleanup(() => {
+      active = false;
+    });
     const form = createForm(() => ({
       defaultValues: clone(initial),
       onSubmit: async ({ value }) => {
         setSubmitError(false);
+        const submitted = clone(value);
         const latest = clone(savedValues());
         for (const name of fieldNames) {
-          if (!fieldSame(value, editBaseline, name)) {
-            (latest as Record<string, unknown>)[name] = (value as Record<string, unknown>)[name];
+          if (!fieldSame(submitted, editBaseline, name)) {
+            (latest as Record<string, unknown>)[name] = (
+              submitted as Record<string, unknown>
+            )[name];
           }
         }
         const base = config.data?.config;
@@ -194,13 +212,18 @@ export function EmailSettings(props: {
         const newConfig = Config.fromPartial(base);
         newConfig.email = latest;
         try {
-          await setConfig({ client: queryClient, config: newConfig, throw: true });
+          await setConfig({
+            client: queryClient,
+            config: newConfig,
+            throw: true,
+          });
           if (!active) return;
           const saved = clone(latest);
           setSavedValues(saved);
           editBaseline = clone(saved);
-          if (!same(saved, form.useStore((s) => s.values))) form.reset(clone(saved));
-          props.postSubmit();
+          const dirty = !same(formValues(), submitted);
+          if (!dirty) form.reset(clone(saved));
+          props.postSubmit(dirty);
         } catch {
           if (active) setSubmitError(true);
         }
@@ -210,14 +233,16 @@ export function EmailSettings(props: {
     const modified = () => !same(formValues(), editBaseline);
     createEffect(() => props.setDirty(modified()));
     createEffect(() => {
-      const incoming = config.data?.config?.email;
-      if (!incoming) return;
+      const incoming = config.data?.config?.email ?? EmailConfig.fromJSON({});
       const next = clone(incoming);
       if (same(lastIncoming, next)) return;
       lastIncoming = next;
       const dirty = untrack(modified);
       setSavedValues(clone(next));
-      if (!dirty) { editBaseline = clone(next); form.reset(clone(next)); }
+      if (!dirty) {
+        editBaseline = clone(next);
+        form.reset(clone(next));
+      }
     });
 
     return (
@@ -452,14 +477,20 @@ export function EmailSettings(props: {
                   <Show when={submitError()}>
                     <Callout variant="error" role="alert">
                       <CalloutTitle>Unable to save settings</CalloutTitle>
-                      <CalloutContent>Check your values and try again.</CalloutContent>
+                      <CalloutContent>
+                        Check your values and try again.
+                      </CalloutContent>
                     </Callout>
                   </Show>
                   <SettingsFormActions
                     dirty={modified()}
                     canSubmit={state().canSubmit}
                     isSubmitting={state().isSubmitting}
-                    onReset={() => { setSubmitError(false); editBaseline = clone(savedValues()); form.reset(clone(savedValues())); }}
+                    onReset={() => {
+                      setSubmitError(false);
+                      editBaseline = clone(savedValues());
+                      form.reset(clone(savedValues()));
+                    }}
                   />
                 </>
               )}
@@ -473,10 +504,17 @@ export function EmailSettings(props: {
   return (
     <Switch>
       <Match when={config.isError}>
-        <Callout variant="error" role="alert"><CalloutTitle>Unable to load settings</CalloutTitle><CalloutContent>Please try again later.</CalloutContent></Callout>
+        <Callout variant="error" role="alert">
+          <CalloutTitle>Unable to load settings</CalloutTitle>
+          <CalloutContent>Please try again later.</CalloutContent>
+        </Callout>
       </Match>
-      <Match when={config.isLoading}><div role="status">Loading settings...</div></Match>
-      <Match when={config.data?.config?.email}><Form config={config.data!.config!.email!} /></Match>
+      <Match when={config.isLoading}>
+        <div role="status">Loading settings...</div>
+      </Match>
+      <Match when={config.data?.config}>
+        <Form config={config.data!.config!.email ?? EmailConfig.fromJSON({})} />
+      </Match>
     </Switch>
   );
 }
@@ -487,7 +525,9 @@ function TestEmailDialog(props: { closeDialog: () => void }) {
   const [error, setError] = createSignal(false);
   let active = true;
   let email: HTMLInputElement | undefined;
-  onCleanup(() => { active = false; });
+  onCleanup(() => {
+    active = false;
+  });
 
   return (
     <DialogContent>
@@ -502,7 +542,9 @@ function TestEmailDialog(props: { closeDialog: () => void }) {
           try {
             await adminFetch("/email/test", {
               method: "POST",
-              body: JSON.stringify({ email_address: emailAddress } as TestEmailRequest),
+              body: JSON.stringify({
+                email_address: emailAddress,
+              } as TestEmailRequest),
               throwOnError: true,
             });
             if (!active) return;
@@ -538,18 +580,29 @@ function TestEmailDialog(props: { closeDialog: () => void }) {
         <Show when={error()}>
           <Callout variant="error" role="alert">
             <CalloutTitle>Unable to send test email</CalloutTitle>
-            <CalloutContent>Please check the address and try again.</CalloutContent>
+            <CalloutContent>
+              Please check the address and try again.
+            </CalloutContent>
           </Callout>
         </Show>
         <DialogFooter>
           <div class="flex w-full justify-between gap-4">
-            <Button type="button" onClick={props.closeDialog} variant="outline" disabled={pending()}>
+            <Button
+              type="button"
+              onClick={props.closeDialog}
+              variant="outline"
+              disabled={pending()}
+            >
               Close
             </Button>
             <Button type="submit" disabled={pending()}>
               {pending() ? "Sending…" : "Send"}
             </Button>
-            <Show when={pending()}><div role="status" aria-live="polite">Sending…</div></Show>
+            <Show when={pending()}>
+              <div role="status" aria-live="polite">
+                Sending…
+              </div>
+            </Show>
           </div>
         </DialogFooter>
       </form>
