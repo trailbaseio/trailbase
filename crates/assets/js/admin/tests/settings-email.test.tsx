@@ -463,7 +463,7 @@ describe("Email settings form lifecycle", () => {
       ...initialConfig(),
       email: {
         ...initialConfig().email,
-        smtpHost: "smtp.submitted.test",
+        smtpHost: "smtp.remote-stale.test",
         senderName: "Refreshed Sender",
       },
     });
@@ -474,6 +474,7 @@ describe("Email settings form lifecycle", () => {
     expect(input("Sender Name")).toHaveValue("Refreshed Sender");
     fireEvent.change(input("Sender Name"), { target: { value: "Another" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(input("Host")).toHaveValue("smtp.submitted.test");
     expect(input("Sender Name")).toHaveValue("Refreshed Sender");
   });
 });

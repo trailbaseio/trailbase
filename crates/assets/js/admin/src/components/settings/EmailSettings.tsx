@@ -275,11 +275,12 @@ export function EmailSettings(props: {
       onSubmit: async ({ value }) => {
         setSubmitError(false);
         const submitted = clone(value);
+        const baselineAtSubmit = clone(editBaseline);
         const latestAtSubmit = clone(latestRemote);
         const revisionAtSubmit = remoteRevision;
         const merged = mergeEmailLeaves(
           submitted,
-          editBaseline,
+          baselineAtSubmit,
           latestAtSubmit,
         );
         const base = config.data?.config;
@@ -294,16 +295,16 @@ export function EmailSettings(props: {
           });
           if (!active) return;
           const saved = clone(
-            remoteRevision === revisionAtSubmit ? merged : latestRemote,
+            remoteRevision === revisionAtSubmit
+              ? merged
+              : mergeEmailLeaves(submitted, baselineAtSubmit, latestRemote),
           );
           latestRemote = clone(saved);
           const current = formValues();
           const editedAfterSubmit = !sameEmailLeaves(current, submitted);
           editBaseline = clone(saved);
           if (!editedAfterSubmit) form.reset(clone(saved));
-          props.postSubmit(
-            editedAfterSubmit && !sameEmailLeaves(current, editBaseline),
-          );
+          props.postSubmit(editedAfterSubmit);
         } catch {
           if (active) setSubmitError(true);
         }
