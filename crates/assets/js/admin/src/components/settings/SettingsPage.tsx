@@ -276,7 +276,9 @@ function ServerSettingsForm(
                 </Callout>
               </Show>
               <SettingsFormActions
-                dirty={state().isDirty && !state().isSubmitted}
+                dirty={
+                  state().isDirty && (!state().isSubmitted || submitError())
+                }
                 canSubmit={state().canSubmit}
                 isSubmitting={state().isSubmitting}
                 onReset={() => {
@@ -330,27 +332,27 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
       <dd>{info().compiler}</dd>
 
       <dt class={width}>Commit Hash:</dt>
-      <span>
+      <dd>
         <a
           href={`https://github.com/trailbaseio/trailbase/commit/${info().commit_hash}`}
         >
           {info().commit_hash?.substring(0, 10)}
         </a>
-      </span>
+      </dd>
 
       <dt class={width}>Commit Date:</dt>
       <dd>{info().commit_date}</dd>
 
       <dt class={width}>Version:</dt>
-      <span>
+      <dd>
         <Version info={info()} />
-      </span>
+      </dd>
 
       <dt class={width}>Uptime:</dt>
       <dd>{formatDuration(uptime())}</dd>
 
       <dt class={width}>Arguments:</dt>
-      <span class="font-mono">{info().command_line_arguments?.join(" ")}</span>
+      <dd class="font-mono">{info().command_line_arguments?.join(" ")}</dd>
 
       <Show when={props.systemInfo.postgres}>
         <dt class={width}>Postgres:</dt>

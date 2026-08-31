@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as Solid from "solid-js";
 
@@ -8,6 +14,13 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
   invalidate: vi.fn(),
   childProps: undefined as any,
+  config: undefined as any,
+  configLoading: false,
+  configError: false,
+  info: undefined as any,
+  infoLoading: false,
+  infoError: false,
+  setConfig: vi.fn(),
 }));
 
 vi.mock("@tanstack/solid-query", () => ({ useQueryClient: () => ({}) }));
@@ -70,22 +83,24 @@ vi.mock("@/components/ui/card", () => ({
 vi.mock("@/components/ui/text-field", () => ({
   TextField: (p: any) => <div>{p.children}</div>,
   TextFieldLabel: (p: any) => <label>{p.children}</label>,
+  TextFieldInput: (p: any) => <input {...p} onInput={p.onChange} />,
 }));
 vi.mock("@/lib/signals", () => ({ createIsMobile: () => () => state.mobile }));
 vi.mock("@/lib/api/config", () => ({
   createConfigQuery: () => ({
-    data: { config: undefined },
-    isLoading: false,
-    isError: false,
+    data: state.config ? { config: state.config } : undefined,
+    isLoading: state.configLoading,
+    isError: state.configError,
   }),
-  setConfig: vi.fn(),
+  setConfig: state.setConfig,
   invalidateConfig: state.invalidate,
 }));
 vi.mock("@/lib/api/info", () => ({
   createSystemInfoQuery: () => ({
-    isLoading: false,
-    isError: false,
-    isSuccess: false,
+    data: state.info,
+    isLoading: state.infoLoading,
+    isError: state.infoError,
+    isSuccess: !!state.info,
   }),
 }));
 vi.mock("@/components/settings/AuthSettings", () => ({
@@ -136,6 +151,14 @@ beforeEach(() => {
   state.navigate.mockReset();
   state.invalidate.mockReset();
   state.childProps = undefined;
+  state.config = undefined;
+  state.configLoading = false;
+  state.configError = false;
+  state.info = undefined;
+  state.infoLoading = false;
+  state.infoError = false;
+  state.setConfig.mockReset();
+  state.setConfig.mockResolvedValue(undefined);
 });
 
 describe("settings workspace", () => {
@@ -239,5 +262,103 @@ describe("settings workspace", () => {
       />
     ));
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+});
+
+const generalConfig = () => ({
+  server: {
+    applicationName: "Trailbase",
+    siteUrl: "https://example.test",
+    logsRetentionSec: 3600n,
+  },
+});
+const runtimeInfo = () => ({
+  threads: 4,
+  compiler: "rustc",
+  commit_hash: "abcdef123456",
+  commit_date: "today",
+  start_time: String(Date.now() / 1000),
+  command_line_arguments: ["trailbase"],
+  postgres: true,
+});
+
+describe("General settings integration", () => {
+  beforeEach(() => {
+    state.params.group = "host";
+    state.config = generalConfig();
+    state.info = runtimeInfo();
+  });
+
+  it("renders runtime information as semantic pairs and editable fields", () => {
+    render(() => <SettingsPage />);
+    expect(
+      screen.getByText("CPU Threads:", { selector: "dt" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("4", { selector: "dd" })).toBeInTheDocument();
+    expect(screen.getByText("Postgres:")).toBeInTheDocument();
+    expect(screen.getByText("enabled")).toBeInTheDocument();
+    expect(screen.getAllByTestId("input")[0]).toHaveValue("Trailbase");
+    expect(screen.getAllByTestId("input")[1]).toHaveValue(
+      "https://example.test",
+    );
+    expect(screen.getAllByTestId("input")[2]).toHaveValue("3,600");
+    expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+  });
+
+  it("uses generic loading and error messages", () => {
+    state.configLoading = true;
+    state.infoLoading = true;
+    render(() => <SettingsPage />);
+    expect(screen.getByText("Loading settings...")).toBeInTheDocument();
+    expect(
+      screen.getByText("Loading runtime information..."),
+    ).toBeInTheDocument();
+    cleanup();
+    state.configLoading = false;
+    state.infoLoading = false;
+    state.configError = true;
+    state.infoError = true;
+    render(() => <SettingsPage />);
+    expect(screen.getByText("Unable to load settings")).toBeInTheDocument();
+    expect(
+      screen.getByText("Unable to load runtime information"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/backend secret/)).toBeNull();
+  });
+
+  it("supports edit, revert, and reset dirty behavior", async () => {
+    render(() => <SettingsPage />);
+    const appName = screen.getAllByTestId("input")[0];
+    fireEvent.input(appName, { target: { value: "Changed" } });
+    expect(
+      screen.getByRole("button", { name: "Save changes" }),
+    ).toBeInTheDocument();
+    fireEvent.input(appName, { target: { value: "Trailbase" } });
+    // Reset remains the authoritative clean-state action for the form.
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(appName).toHaveValue("Trailbase");
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull(),
+    );
+  });
+
+  it("keeps edits and actions after failed save, and clears them after success", async () => {
+    state.setConfig.mockRejectedValueOnce(new Error("backend secret"));
+    render(() => <SettingsPage />);
+    const appName = screen.getAllByTestId("input")[0];
+    fireEvent.input(appName, { target: { value: "Changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(screen.getByText("Unable to save settings")).toBeInTheDocument(),
+    );
+    expect(appName).toHaveValue("Changed");
+    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+    expect(screen.queryByText("backend secret")).toBeNull();
+    state.setConfig.mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull(),
+    );
+    expect(state.setConfig).toHaveBeenCalled();
   });
 });
