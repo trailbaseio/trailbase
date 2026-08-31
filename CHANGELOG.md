@@ -1,3 +1,12 @@
+## v0.33.6
+
+- Best-effort fix Apple OAuth provider.
+- Reworked CI pipelines. Thanks @0x192 🙏
+- Consider `config.textproto` for CLI and MCP OpenApi definitions.
+- Admin UI: visually merge `email` and `unverified_email` column.
+- Handle `pg-test` timeouts better.
+- Update dependencies.
+
 ## v0.33.5
 
 - Add impersonation to admin UI: first click "cookie" button on user edit/details sheet (verified and non-admin users only) to copy the tokens, then go to the OpenApi page and paste the explicit tokens.

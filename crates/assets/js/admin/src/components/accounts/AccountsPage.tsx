@@ -103,7 +103,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
       },
     },
     {
-      header: "email (? = unverified)",
+      header: "email (? = 'unverified_email')",
       accessorKey: "email",
       minSize: 260,
       cell: (ctx) => {
