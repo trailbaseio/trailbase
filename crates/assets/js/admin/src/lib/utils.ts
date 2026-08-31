@@ -45,6 +45,7 @@ export function safeParseInt(value: string | undefined): number | undefined {
 }
 
 export function tryParseBigInt(value: string): bigint | undefined {
+  value = value.trim();
   if (value === "") {
     return undefined;
   }

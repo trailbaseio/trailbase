@@ -379,6 +379,29 @@ describe("General settings integration", () => {
     expect(state.navigate).toHaveBeenLastCalledWith("/settings/email");
   });
 
+  it("merges remote untouched server fields into a local General save", async () => {
+    render(() => <SettingsPage />);
+    const appName = screen.getAllByTestId("input")[0];
+    fireEvent.input(appName, { target: { value: "Local" } });
+    state.updateConfigQuery!({
+      server: {
+        applicationName: "Trailbase",
+        siteUrl: "https://remote.test",
+        logsRetentionSec: 3600n,
+        requestSizeLimitBytes: 987654321n,
+        enableRecordTransactions: true,
+      },
+    });
+    await waitFor(() => expect(appName).toHaveValue("Local"));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(state.setConfig).toHaveBeenCalledOnce());
+    const saved = state.setConfig.mock.calls[0][0].config.server;
+    expect(saved.applicationName).toBe("Local");
+    expect(saved.siteUrl).toBe("https://remote.test");
+    expect(saved.requestSizeLimitBytes).toBe(987654321n);
+    expect(saved.enableRecordTransactions).toBe(true);
+  });
+
   it("preserves edits made while a save is in flight", async () => {
     let finishSave!: () => void;
     state.setConfig.mockReturnValueOnce(

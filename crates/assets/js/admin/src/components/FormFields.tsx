@@ -615,5 +615,5 @@ export function unsetOrLargerThanZero() {
 
 export const gapStyle = "gap-x-2 gap-y-1";
 export const floatPattern = /^[+\\-]?[0-9]*[.]?[0-9]+$/;
-export const intPattern = /^[+\\-]?[0-9]+$/;
+export const intPattern = /^[+-]?[0-9]+$/;
 export const uintPattern = /^[+]?[0-9]+$/;

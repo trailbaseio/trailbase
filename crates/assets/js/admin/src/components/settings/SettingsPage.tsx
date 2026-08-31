@@ -181,6 +181,7 @@ function ServerSettingsForm(
 
   const initialValues = serverConfig(props.config);
   const [savedValues, setSavedValues] = createSignal(initialValues);
+  let editBaseline = cloneServerConfig(initialValues);
   const [submitError, setSubmitError] = createSignal(false);
   let lastIncoming = cloneServerConfig(initialValues);
   let active = true;
@@ -191,9 +192,18 @@ function ServerSettingsForm(
     defaultValues: cloneServerConfig(savedValues()),
     onSubmit: async ({ value }: { value: ServerConfig }) => {
       setSubmitError(false);
-      const submitted = cloneServerConfig(value);
+      const latest = cloneServerConfig(savedValues());
+      if (value.applicationName !== editBaseline.applicationName) {
+        latest.applicationName = value.applicationName;
+      }
+      if (value.siteUrl !== editBaseline.siteUrl) {
+        latest.siteUrl = value.siteUrl;
+      }
+      if (value.logsRetentionSec !== editBaseline.logsRetentionSec) {
+        latest.logsRetentionSec = value.logsRetentionSec;
+      }
       const newConfig = Config.fromPartial(props.config);
-      newConfig.server = submitted;
+      newConfig.server = latest;
       try {
         await setConfig({
           client: queryClient,
@@ -202,9 +212,11 @@ function ServerSettingsForm(
         });
         if (!active) return;
 
-        setSavedValues(submitted);
-        const stillModified = !sameServerConfig(submitted, formValues());
-        if (!stillModified) form.reset(cloneServerConfig(submitted));
+        const saved = cloneServerConfig(newConfig.server!);
+        setSavedValues(saved);
+        editBaseline = cloneServerConfig(saved);
+        const stillModified = !sameServerConfig(saved, formValues());
+        if (!stillModified) form.reset(cloneServerConfig(saved));
         props.postSubmit?.(stillModified);
       } catch {
         if (active) setSubmitError(true);
@@ -213,7 +225,14 @@ function ServerSettingsForm(
   }));
 
   const formValues = form.useSelector((state) => state.values);
-  const modified = () => !sameServerConfig(savedValues(), formValues());
+  const modified = () => {
+    const current = formValues();
+    return (
+      current.applicationName !== editBaseline.applicationName ||
+      current.siteUrl !== editBaseline.siteUrl ||
+      current.logsRetentionSec !== editBaseline.logsRetentionSec
+    );
+  };
 
   createEffect(() => {
     const incoming = serverConfig(props.config);
@@ -222,7 +241,10 @@ function ServerSettingsForm(
     lastIncoming = cloneServerConfig(incoming);
     const wasModified = untrack(modified);
     setSavedValues(cloneServerConfig(incoming));
-    if (!wasModified) form.reset(cloneServerConfig(incoming));
+    if (!wasModified) {
+      editBaseline = cloneServerConfig(incoming);
+      form.reset(cloneServerConfig(incoming));
+    }
   });
   createEffect(() => props.setDirty(modified()));
 
@@ -296,8 +318,6 @@ function ServerSettingsForm(
           selector={(state) => ({
             canSubmit: state.canSubmit,
             isSubmitting: state.isSubmitting,
-            isDirty: state.isDirty,
-            isSubmitted: state.isSubmitted,
           })}
         >
           {(state) => (
@@ -316,6 +336,7 @@ function ServerSettingsForm(
                 isSubmitting={state().isSubmitting}
                 onReset={() => {
                   setSubmitError(false);
+                  editBaseline = cloneServerConfig(savedValues());
                   form.reset(cloneServerConfig(savedValues()));
                 }}
               />

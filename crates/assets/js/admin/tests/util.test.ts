@@ -4,7 +4,7 @@ import { urlSafeBase64Encode } from "trailbase";
 import { buildListSearchParams, parseFilter } from "@/lib/list";
 import { urlSafeBase64EncodeStream } from "@/lib/base64";
 import { intPattern, uintPattern, floatPattern } from "@/components/FormFields";
-import { copyToClipboard } from "@/lib/utils";
+import { copyToClipboard, tryParseBigInt } from "@/lib/utils";
 
 describe("clipboard", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -97,6 +97,12 @@ describe("base64 stream", () => {
   });
 });
 
+describe("bigint parser", () => {
+  test("blank input is unset", () => {
+    expect(tryParseBigInt("   ")).toBeUndefined();
+  });
+});
+
 describe("regexPatters", () => {
   test("int", ({ expect }) => {
     expect(intPattern.exec("0")?.[0]).toEqual("0");
@@ -104,6 +110,8 @@ describe("regexPatters", () => {
     expect(intPattern.exec("1.1")).toBeNull();
     expect(intPattern.exec("+1")?.[0]).toEqual("+1");
     expect(intPattern.exec("-1")?.[0]).toEqual("-1");
+    expect(intPattern.exec("\\-1")).toBeNull();
+    expect(intPattern.exec("+1")?.[0]).toEqual("+1");
   });
 
   test("uint", ({ expect }) => {
