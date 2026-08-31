@@ -219,7 +219,7 @@ describe("OpenAPI Explorer workspace", () => {
     const tokens = { auth_token: "a", refresh_token: "r", csrf_token: "c" };
     fireEvent.input(input, { target: { value: btoa(JSON.stringify(tokens)) } });
     expect(screen.getByText("Using impersonation tokens")).toBeTruthy();
-    const request = new Request("https://example.test/api");
+    const request = new Request("http://localhost:4000/api");
     state.listeners[0](new CustomEvent("before-try", { detail: { request } }));
     expect(Object.fromEntries(request.headers)).toEqual({
       authorization: "Bearer a",
@@ -227,17 +227,13 @@ describe("OpenAPI Explorer workspace", () => {
       "refresh-token": "r",
     });
     fireEvent.input(input, { target: { value: "bad-secret" } });
-    const fallback = new Request("https://example.test/api");
+    const fallback = new Request("http://localhost:4000/api");
     expect(() =>
       state.listeners[0](
         new CustomEvent("before-try", { detail: { request: fallback } }),
       ),
     ).not.toThrow();
-    expect(Object.fromEntries(fallback.headers)).toEqual({
-      authorization: "Bearer current-a",
-      "csrf-token": "current-c",
-      "refresh-token": "current-r",
-    });
+    expect(Object.fromEntries(fallback.headers)).toEqual({});
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input.getAttribute("aria-describedby")).toContain(
       "openapi-tokens-error",
@@ -246,7 +242,7 @@ describe("OpenAPI Explorer workspace", () => {
     expect(screen.queryByText("bad-secret")).toBeNull();
     fireEvent.input(input, { target: { value: "" } });
     expect(screen.getByText("Using current admin session")).toBeTruthy();
-    const cleared = new Request("https://example.test/api");
+    const cleared = new Request("http://localhost:4000/api");
     state.listeners[0](
       new CustomEvent("before-try", { detail: { request: cleared } }),
     );

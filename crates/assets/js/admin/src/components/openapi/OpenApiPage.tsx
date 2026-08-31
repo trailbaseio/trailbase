@@ -13,6 +13,8 @@ import {
   applyRequestTokens,
   parseImpersonationTokens,
   openApiMetadata,
+  requestHasCredentialOrigin,
+  resolveOpenApiServer,
   usableRequestTokens,
   type OpenApiDocument,
 } from "./openapi";
@@ -49,16 +51,14 @@ export default function Page() {
   const identity = () => user()?.email || user()?.username || "Admin session";
   const metadata = () => openApiMetadata(query.data);
   const server = () => {
-    if (import.meta.env.DEV) return "http://localhost:4000";
     const servers = query.data?.servers;
-    if (
+    const candidate =
       Array.isArray(servers) &&
       typeof servers[0] === "object" &&
-      servers[0] !== null &&
-      typeof (servers[0] as { url?: unknown }).url === "string"
-    )
-      return (servers[0] as { url: string }).url;
-    return window.location.origin;
+      servers[0] !== null
+        ? (servers[0] as { url?: unknown }).url
+        : undefined;
+    return resolveOpenApiServer(candidate, import.meta.env.DEV);
   };
   const [rapidoc, setRapidoc] = createSignal<RapiDoc>();
   createEffect(() => {
@@ -123,7 +123,7 @@ export default function Page() {
         </div>
       </Show>
       <Show when={query.error && !query.data}>
-        <Callout variant="error" class="m-4">
+        <Callout role="alert" variant="error" class="m-4">
           <CalloutTitle>Unable to load the API specification</CalloutTitle>
           <CalloutContent>
             <Button size="sm" onClick={refresh}>
@@ -133,7 +133,12 @@ export default function Page() {
         </Callout>
       </Show>
       <Show when={query.error && query.data}>
-        <Callout variant="warning" class="mx-4 mb-2">
+        <Callout
+          role="alert"
+          aria-live="polite"
+          variant="warning"
+          class="mx-4 mb-2"
+        >
           <CalloutContent>
             Unable to refresh the API specification.{" "}
             <Button size="sm" variant="outline" onClick={refresh}>
@@ -187,13 +192,18 @@ export default function Page() {
             const r = element as RapiDoc;
             setRapidoc(r);
             r.addEventListener("before-try", (event) => {
+              const detail = (event as BeforeTryEvent).detail;
+              if (
+                !requestHasCredentialOrigin(
+                  detail.request.url,
+                  import.meta.env.DEV,
+                ) ||
+                tokenError()
+              )
+                return;
               const tokens =
                 overrideTokens() ?? usableRequestTokens($tokens.get());
-              if (tokens)
-                applyRequestTokens(
-                  (event as BeforeTryEvent).detail.request,
-                  tokens,
-                );
+              if (tokens) applyRequestTokens(detail.request, tokens);
             });
           }}
           load-fonts="false"

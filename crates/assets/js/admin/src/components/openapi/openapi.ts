@@ -108,8 +108,39 @@ export function usableRequestTokens(
   };
 }
 
+export function resolveOpenApiServer(candidate: unknown, dev: boolean): string {
+  const origin = window.location.origin;
+  if (dev) return "http://localhost:4000";
+  if (typeof candidate === "string") {
+    try {
+      const url = new URL(candidate, origin);
+      if (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        url.origin === origin
+      )
+        return url.href.replace(/\/$/, "");
+    } catch {
+      /* invalid candidate */
+    }
+  }
+  return origin;
+}
+
+export function requestHasCredentialOrigin(url: string, dev: boolean): boolean {
+  try {
+    const target = new URL(url, window.location.origin);
+    const expected = dev ? "http://localhost:4000" : window.location.origin;
+    return (
+      (target.protocol === "http:" || target.protocol === "https:") &&
+      target.origin === expected
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function applyRequestTokens(
-  request: Request,
+  request: { headers: Headers },
   tokens: RequestTokens,
 ): void {
   request.headers.set("Authorization", `Bearer ${tokens.auth_token}`);
