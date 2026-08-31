@@ -361,7 +361,7 @@ export function mergeAuthLeaves(
   const merged = cloneAuth(remote);
   for (const field of authScalarFields) {
     if (local[field] !== original[field]) {
-      (merged as AuthConfig)[field] = local[field];
+      Object.assign(merged, { [field]: local[field] });
     }
   }
   if (!sameArray(local.customUriSchemes, original.customUriSchemes)) {
