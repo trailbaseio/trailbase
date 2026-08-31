@@ -409,8 +409,9 @@ export function mergeAuthLeaves(
     );
     for (const field of changedFields) {
       const value = after[field];
-      if (Array.isArray(value)) (result[field] as string[]) = [...value];
-      else (result[field] as never) = value as never;
+      Object.assign(result, {
+        [field]: Array.isArray(value) ? [...value] : value,
+      });
     }
     if (!result.clientId?.trim() || !result.clientSecret?.trim()) {
       delete merged.oauthProviders[name];
