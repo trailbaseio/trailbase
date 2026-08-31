@@ -16,13 +16,12 @@ const state = vi.hoisted(() => ({
   restore: vi.fn(),
   del: vi.fn(),
   toast: vi.fn(),
-  configData: undefined as any,
+  configData: undefined as
+    { config?: { server?: { backupWindowSize?: bigint } } } | undefined,
   configLoading: false,
   configError: false,
 }));
-vi.mock("@tanstack/solid-query", async () => {
-  const { createSignal } =
-    await vi.importActual<typeof import("solid-js")>("solid-js");
+vi.mock("@tanstack/solid-query", () => {
   return {
     useQuery: () => ({
       get data() {
