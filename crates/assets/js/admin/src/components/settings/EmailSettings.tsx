@@ -144,6 +144,111 @@ function EmailTemplate(props: {
   );
 }
 
+const emailScalarFields = [
+  "smtpHost",
+  "smtpPort",
+  "smtpUsername",
+  "smtpPassword",
+  "smtpEncryption",
+  "senderName",
+  "senderAddress",
+] as const;
+const emailTemplateFields = [
+  "userVerificationTemplate",
+  "passwordResetTemplate",
+  "changeEmailTemplate",
+  "otpTemplate",
+] as const;
+
+type EmailTemplateValue = EmailConfig["userVerificationTemplate"];
+
+function sameTemplateLeaves(
+  left: EmailTemplateValue,
+  right: EmailTemplateValue,
+) {
+  return left?.subject === right?.subject && left?.body === right?.body;
+}
+
+function sameEmailLeaves(left: EmailConfig, right: EmailConfig) {
+  return (
+    emailScalarFields.every((field) => left[field] === right[field]) &&
+    emailTemplateFields.every((field) =>
+      sameTemplateLeaves(left[field], right[field]),
+    )
+  );
+}
+
+function mergeTemplateLeaves(
+  submitted: EmailTemplateValue,
+  baseline: EmailTemplateValue,
+  remote: EmailTemplateValue,
+): EmailTemplateValue {
+  const subjectChanged = submitted?.subject !== baseline?.subject;
+  const bodyChanged = submitted?.body !== baseline?.body;
+  if (!subjectChanged && !bodyChanged) return remote;
+  return {
+    subject: subjectChanged ? submitted?.subject : remote?.subject,
+    body: bodyChanged ? submitted?.body : remote?.body,
+  };
+}
+
+function mergeEmailLeaves(
+  submitted: EmailConfig,
+  baseline: EmailConfig,
+  remote: EmailConfig,
+) {
+  return EmailConfig.fromPartial({
+    smtpHost:
+      submitted.smtpHost !== baseline.smtpHost
+        ? submitted.smtpHost
+        : remote.smtpHost,
+    smtpPort:
+      submitted.smtpPort !== baseline.smtpPort
+        ? submitted.smtpPort
+        : remote.smtpPort,
+    smtpUsername:
+      submitted.smtpUsername !== baseline.smtpUsername
+        ? submitted.smtpUsername
+        : remote.smtpUsername,
+    smtpPassword:
+      submitted.smtpPassword !== baseline.smtpPassword
+        ? submitted.smtpPassword
+        : remote.smtpPassword,
+    smtpEncryption:
+      submitted.smtpEncryption !== baseline.smtpEncryption
+        ? submitted.smtpEncryption
+        : remote.smtpEncryption,
+    senderName:
+      submitted.senderName !== baseline.senderName
+        ? submitted.senderName
+        : remote.senderName,
+    senderAddress:
+      submitted.senderAddress !== baseline.senderAddress
+        ? submitted.senderAddress
+        : remote.senderAddress,
+    userVerificationTemplate: mergeTemplateLeaves(
+      submitted.userVerificationTemplate,
+      baseline.userVerificationTemplate,
+      remote.userVerificationTemplate,
+    ),
+    passwordResetTemplate: mergeTemplateLeaves(
+      submitted.passwordResetTemplate,
+      baseline.passwordResetTemplate,
+      remote.passwordResetTemplate,
+    ),
+    changeEmailTemplate: mergeTemplateLeaves(
+      submitted.changeEmailTemplate,
+      baseline.changeEmailTemplate,
+      remote.changeEmailTemplate,
+    ),
+    otpTemplate: mergeTemplateLeaves(
+      submitted.otpTemplate,
+      baseline.otpTemplate,
+      remote.otpTemplate,
+    ),
+  });
+}
+
 export function EmailSettings(props: {
   setDirty: (dirty: boolean) => void;
   postSubmit: (dirty?: boolean) => void;
@@ -152,42 +257,13 @@ export function EmailSettings(props: {
   const config = createConfigQuery();
   const [dialogOpen, setDialogOpen] = createSignal(false);
   const [submitError, setSubmitError] = createSignal(false);
-  const fieldNames = [
-    "smtpHost",
-    "smtpPort",
-    "smtpUsername",
-    "smtpPassword",
-    "smtpEncryption",
-    "senderName",
-    "senderAddress",
-    "userVerificationTemplate",
-    "passwordResetTemplate",
-    "changeEmailTemplate",
-    "otpTemplate",
-  ] as const;
-
   const clone = (value: EmailConfig) =>
     EmailConfig.decode(EmailConfig.encode(value).finish());
-  const same = (a: EmailConfig, b: EmailConfig) => {
-    const x = EmailConfig.encode(a).finish();
-    const y = EmailConfig.encode(b).finish();
-    return x.length === y.length && x.every((v, i) => v === y[i]);
-  };
-  const fieldSame = (a: EmailConfig, b: EmailConfig, name: string) => {
-    const pick = (v: EmailConfig) =>
-      EmailConfig.encode(
-        EmailConfig.fromPartial({
-          [name]: v[name as keyof EmailConfig],
-        } as Partial<EmailConfig>),
-      ).finish();
-    const x = pick(a),
-      y = pick(b);
-    return x.length === y.length && x.every((v, i) => v === y[i]);
-  };
 
   const Form = (p: { config: EmailConfig }) => {
     const initial = clone(p.config);
-    const [savedValues, setSavedValues] = createSignal(initial);
+    let latestRemote = clone(initial);
+    let remoteRevision = 0;
     let editBaseline = clone(initial);
     let lastIncoming = clone(initial);
     let active = true;
@@ -199,18 +275,17 @@ export function EmailSettings(props: {
       onSubmit: async ({ value }) => {
         setSubmitError(false);
         const submitted = clone(value);
-        const latest = clone(savedValues());
-        for (const name of fieldNames) {
-          if (!fieldSame(submitted, editBaseline, name)) {
-            (latest as Record<string, unknown>)[name] = (
-              submitted as Record<string, unknown>
-            )[name];
-          }
-        }
+        const latestAtSubmit = clone(latestRemote);
+        const revisionAtSubmit = remoteRevision;
+        const merged = mergeEmailLeaves(
+          submitted,
+          editBaseline,
+          latestAtSubmit,
+        );
         const base = config.data?.config;
         if (!base) return;
         const newConfig = Config.fromPartial(base);
-        newConfig.email = latest;
+        newConfig.email = merged;
         try {
           await setConfig({
             client: queryClient,
@@ -218,27 +293,33 @@ export function EmailSettings(props: {
             throw: true,
           });
           if (!active) return;
-          const saved = clone(latest);
-          setSavedValues(saved);
+          const saved = clone(
+            remoteRevision === revisionAtSubmit ? merged : latestRemote,
+          );
+          latestRemote = clone(saved);
+          const current = formValues();
+          const editedAfterSubmit = !sameEmailLeaves(current, submitted);
           editBaseline = clone(saved);
-          const dirty = !same(formValues(), submitted);
-          if (!dirty) form.reset(clone(saved));
-          props.postSubmit(dirty);
+          if (!editedAfterSubmit) form.reset(clone(saved));
+          props.postSubmit(
+            editedAfterSubmit && !sameEmailLeaves(current, editBaseline),
+          );
         } catch {
           if (active) setSubmitError(true);
         }
       },
     }));
     const formValues = form.useSelector((state) => state.values);
-    const modified = () => !same(formValues(), editBaseline);
+    const modified = () => !sameEmailLeaves(formValues(), editBaseline);
     createEffect(() => props.setDirty(modified()));
     createEffect(() => {
       const incoming = config.data?.config?.email ?? EmailConfig.fromJSON({});
       const next = clone(incoming);
-      if (same(lastIncoming, next)) return;
+      if (sameEmailLeaves(lastIncoming, next)) return;
       lastIncoming = next;
+      remoteRevision += 1;
       const dirty = untrack(modified);
-      setSavedValues(clone(next));
+      latestRemote = clone(next);
       if (!dirty) {
         editBaseline = clone(next);
         form.reset(clone(next));
@@ -363,6 +444,11 @@ export function EmailSettings(props: {
             </CardHeader>
 
             <CardContent>
+              <p class="mb-4 text-sm">
+                Template placeholders use {"{{ PARAMETER }}"}. Available
+                parameters are listed in each template editor.
+              </p>
+
               <Accordion multiple={true} collapsible class="w-full">
                 <AccordionItem value="item-email-verification">
                   <AccordionTrigger>Email Verification</AccordionTrigger>
@@ -488,8 +574,8 @@ export function EmailSettings(props: {
                     isSubmitting={state().isSubmitting}
                     onReset={() => {
                       setSubmitError(false);
-                      editBaseline = clone(savedValues());
-                      form.reset(clone(savedValues()));
+                      editBaseline = clone(latestRemote);
+                      form.reset(clone(latestRemote));
                     }}
                   />
                 </>
