@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { useStore } from "@nanostores/solid";
 import { TbOutlineRefresh } from "solid-icons/tb";
@@ -6,6 +6,7 @@ import { adminFetch } from "@/lib/fetch";
 import { createTheme } from "@/lib/theme";
 import { $tokens, $user } from "@/lib/client";
 import { Header } from "@/components/Header";
+import { createIsMobile } from "@/lib/signals";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
@@ -16,6 +17,7 @@ import {
   requestHasCredentialOrigin,
   resolveOpenApiServer,
   usableRequestTokens,
+  withCollapsedOpenApiTags,
   type OpenApiDocument,
 } from "./openapi";
 import "rapidoc";
@@ -24,12 +26,62 @@ declare module "solid-js" {
   // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      "rapi-doc": JSX.HTMLAttributes<HTMLElement> & { [key: string]: any };
+      "rapi-doc": JSX.HTMLAttributes<HTMLElement> & {
+        loadSpec?: (spec: OpenApiDocument) => void;
+        "server-url"?: string;
+        "default-api-server"?: string;
+        "render-style"?: "focused";
+        layout?: "row";
+        "schema-style"?: "table";
+        "show-header"?: "false";
+        "show-side-nav"?: "true";
+        "allow-search"?: "true";
+        "nav-item-spacing"?: "compact";
+        "show-method-in-nav-bar"?: "as-colored-block";
+        "use-path-in-nav-bar"?: "true";
+        "allow-try"?: "true";
+        "persist-auth"?: "false";
+        "allow-authentication"?: "false";
+        "allow-server-selection"?: "false";
+        "load-fonts"?: "false";
+        "sort-tags"?: "true";
+        theme?: "light" | "dark";
+        "bg-color"?: string;
+        "text-color"?: string;
+        "nav-bg-color"?: string;
+        "nav-text-color"?: string;
+        "nav-hover-bg-color"?: string;
+        "nav-hover-text-color"?: string;
+        "nav-accent-color"?: string;
+        "nav-accent-text-color"?: string;
+      };
     }
   }
 }
 
 type RapiDoc = HTMLElement & { loadSpec?: (spec: OpenApiDocument) => void };
+const palettes = {
+  light: {
+    bg: "#ffffff",
+    text: "#18181b",
+    nav: "#f4f4f5",
+    navText: "#3f3f46",
+    hover: "#e4e4e7",
+    hoverText: "#18181b",
+    accent: "#0073a8",
+    accentText: "#ffffff",
+  },
+  dark: {
+    bg: "#09090b",
+    text: "#fafafa",
+    nav: "#18181b",
+    navText: "#a1a1aa",
+    hover: "#27272a",
+    hoverText: "#fafafa",
+    accent: "#38bdf8",
+    accentText: "#082f49",
+  },
+} as const;
 type BeforeTryEvent = CustomEvent<{ request: Request }>;
 
 async function fetchOpenApi(): Promise<OpenApiDocument> {
@@ -39,6 +91,9 @@ async function fetchOpenApi(): Promise<OpenApiDocument> {
 
 export default function Page() {
   const theme = createTheme();
+  const isMobile = createIsMobile();
+  const [navOpen, setNavOpen] = createSignal(false);
+  const palette = () => palettes[theme()];
   const user = useStore($user);
   const query = useQuery(() => ({
     queryKey: ["openapi"],
@@ -67,8 +122,14 @@ export default function Page() {
     if (element && spec) {
       element.setAttribute("server-url", server());
       element.setAttribute("default-api-server", server());
-      element.loadSpec?.(spec);
+      if (element.dataset.loadedSpec !== String(spec)) {
+        element.loadSpec?.(withCollapsedOpenApiTags(spec));
+        element.dataset.loadedSpec = String(spec);
+      }
     }
+  });
+  createEffect(() => {
+    if (!isMobile()) setNavOpen(false);
   });
   const refresh = () => query.refetch();
 
@@ -187,11 +248,19 @@ export default function Page() {
             </Show>
           </div>
         </details>
+        <Show when={isMobile()}>
+          <Button
+            class="mx-4 mb-2"
+            aria-expanded={navOpen()}
+            onClick={() => setNavOpen(!navOpen())}
+          >
+            Browse endpoints
+          </Button>
+        </Show>
         <rapi-doc
           ref={(element) => {
             const r = element as RapiDoc;
-            setRapidoc(r);
-            r.addEventListener("before-try", (event) => {
+            const beforeTry = (event: Event) => {
               const detail = (event as BeforeTryEvent).detail;
               if (
                 !requestHasCredentialOrigin(
@@ -204,21 +273,41 @@ export default function Page() {
               const tokens =
                 overrideTokens() ?? usableRequestTokens($tokens.get());
               if (tokens) applyRequestTokens(detail.request, tokens);
+            };
+            const specLoaded = () => {};
+            r.addEventListener("before-try", beforeTry);
+            r.addEventListener("spec-loaded", specLoaded);
+            setRapidoc(r);
+            onCleanup(() => {
+              r.removeEventListener("before-try", beforeTry);
+              r.removeEventListener("spec-loaded", specLoaded);
             });
           }}
           load-fonts="false"
           sort-tags="true"
           theme={theme()}
-          bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
-          primary-color="#0073a8"
-          render-style="view"
+          bg-color={palette().bg}
+          text-color={palette().text}
+          nav-bg-color={palette().nav}
+          nav-text-color={palette().navText}
+          nav-hover-bg-color={palette().hover}
+          nav-hover-text-color={palette().hoverText}
+          nav-accent-color={palette().accent}
+          nav-accent-text-color={palette().accentText}
+          render-style="focused"
           layout="row"
+          schema-style="table"
           show-header="false"
+          show-side-nav="true"
+          allow-search="true"
+          nav-item-spacing="compact"
+          show-method-in-nav-bar="as-colored-block"
+          use-path-in-nav-bar="true"
           allow-try="true"
           persist-auth="false"
           allow-authentication="false"
           allow-server-selection="false"
-          class="min-h-0 flex-1"
+          class={`openapi-explorer min-h-0 flex-1 ${navOpen() ? "openapi-nav-open" : ""}`}
         />
       </Show>
     </div>

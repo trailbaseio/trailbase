@@ -287,3 +287,26 @@
   -ms-overflow-style: none; /* IE and Edge */
   scrollbar-width: none; /* Firefox */
 }
+
+.openapi-explorer {
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .openapi-explorer {
+    width: 100%;
+    overflow: hidden;
+  }
+  .openapi-explorer::part(section-navbar) {
+    display: none;
+  }
+  .openapi-explorer.openapi-nav-open::part(section-navbar) {
+    display: block;
+    position: fixed;
+    top: 4rem;
+    left: 0;
+    max-width: 100vw;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    z-index: 40;
+  }
+}
