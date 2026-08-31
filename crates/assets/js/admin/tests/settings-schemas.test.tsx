@@ -1,10 +1,4 @@
-import {
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  within,
-} from "@solidjs/testing-library";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JsonSchema } from "@bindings/JsonSchema";
 
@@ -106,9 +100,11 @@ describe("SchemaSettings", () => {
   });
   it("sorts a copy without mutating query data", () => {
     setup();
-    expect(screen.getAllByRole("button").map((x) => x.textContent)).toEqual(
-      expect.arrayContaining(["Alpha", "zeta"]),
-    );
+    expect(screen.getAllByRole("button").map((x) => x.textContent)).toEqual([
+      "Alphabuilt-in",
+      "unsafe",
+      "zeta",
+    ]);
     expect(state.schemas[0].name).toBe("zeta");
   });
   it("filters case-insensitively and clears search", () => {
@@ -138,7 +134,7 @@ describe("SchemaSettings", () => {
   it("opens accordion and pretty prints valid JSON", () => {
     setup();
     fireEvent.click(screen.getByRole("button", { name: /Alpha/ }));
-    expect(screen.getByText(/\"a\": true/)).toBeInTheDocument();
+    expect(screen.getByText(/"a": true/)).toBeInTheDocument();
   });
   it("renders malformed JSON as source text", () => {
     setup();
@@ -154,9 +150,11 @@ describe("SchemaSettings", () => {
   });
   it("has no form or save controls and never submits", () => {
     const post = vi.fn();
-    render(() => <SchemaSettings setDirty={vi.fn()} postSubmit={post} />);
+    const setDirty = vi.fn();
+    render(() => <SchemaSettings setDirty={setDirty} postSubmit={post} />);
     expect(document.querySelector("form")).toBeNull();
     expect(screen.queryByText(/save changes/i)).toBeNull();
+    expect(setDirty).toHaveBeenLastCalledWith(false);
     expect(post).not.toHaveBeenCalled();
   });
   it("formats valid and preserves malformed source", () => {

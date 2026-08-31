@@ -1,4 +1,12 @@
-import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
+import {
+  For,
+  Match,
+  Show,
+  Switch,
+  createEffect,
+  createMemo,
+  createSignal,
+} from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import {
   Accordion,
@@ -11,7 +19,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { adminFetch } from "@/lib/fetch";
 import { createSystemInfoQuery } from "@/lib/api/info";
 import type { ListJsonSchemasResponse } from "@bindings/ListJsonSchemasResponse";
-import type { JsonSchema } from "@bindings/JsonSchema";
 
 async function listSchemas(): Promise<ListJsonSchemasResponse> {
   const response = await adminFetch("/schema", { method: "GET" });
@@ -30,7 +37,7 @@ export function SchemaSettings(props: {
   setDirty: (dirty: boolean) => void;
   postSubmit: () => void;
 }) {
-  props.setDirty(false);
+  createEffect(() => props.setDirty(false));
   const schemas = useQuery(() => ({
     queryKey: ["admin", "jsonSchemas"],
     queryFn: listSchemas,
