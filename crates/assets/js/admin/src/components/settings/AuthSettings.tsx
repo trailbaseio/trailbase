@@ -392,25 +392,31 @@ export function mergeAuthLeaves(
     const before = baseline.namedOAuthProviders.find(
       (p) => p.provider.name === name,
     )?.state;
-    const changed = providerFields.some((field) => {
+    const changedFields = providerFields.filter((field) => {
       const left = after?.[field];
       const right = before?.[field];
       return Array.isArray(left) && Array.isArray(right)
         ? !sameArray(left, right)
         : left !== right;
     });
-    if (!changed) continue;
-    if (!after?.clientId?.trim() || !after.clientSecret?.trim()) {
+    if (changedFields.length === 0) continue;
+    if (!after) {
       delete merged.oauthProviders[name];
       continue;
     }
-    const result = OAuthProviderConfig.fromPartial(merged.oauthProviders[name]);
-    for (const field of providerFields) {
+    const result = OAuthProviderConfig.fromPartial(
+      merged.oauthProviders[name] ?? after,
+    );
+    for (const field of changedFields) {
       const value = after[field];
       if (Array.isArray(value)) (result[field] as string[]) = [...value];
       else (result[field] as never) = value as never;
     }
-    merged.oauthProviders[name] = result;
+    if (!result.clientId?.trim() || !result.clientSecret?.trim()) {
+      delete merged.oauthProviders[name];
+    } else {
+      merged.oauthProviders[name] = result;
+    }
   }
   return merged;
 }
