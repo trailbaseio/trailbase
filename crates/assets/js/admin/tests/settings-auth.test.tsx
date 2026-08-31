@@ -145,7 +145,14 @@ vi.mock("@/components/ui/accordion", async () => {
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: (props: any) => <span>{props.children}</span>,
   TooltipTrigger: (props: any) => (
-    <span onClick={props.onClick}>{props.children}</span>
+    <button
+      type={props.type ?? "button"}
+      class={props.class}
+      aria-label={props["aria-label"]}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
   ),
   TooltipContent: (props: any) => <span>{props.children}</span>,
 }));
