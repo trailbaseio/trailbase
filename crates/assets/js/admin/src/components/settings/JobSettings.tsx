@@ -161,9 +161,17 @@ function safeDate(value: unknown) {
     return null;
   }
 }
-export function formatDurationMillis(value: bigint) {
-  const sign = value < 0n ? "-" : "";
-  const absolute = value < 0n ? -value : value;
+export function formatDurationMillis(value: unknown) {
+  let milliseconds: bigint;
+  if (typeof value === "bigint") milliseconds = value;
+  else if (typeof value === "number" && Number.isSafeInteger(value)) {
+    milliseconds = BigInt(value);
+  } else if (typeof value === "string" && /^-?\d+$/.test(value)) {
+    milliseconds = BigInt(value);
+  } else return "—";
+
+  const sign = milliseconds < 0n ? "-" : "";
+  const absolute = milliseconds < 0n ? -milliseconds : milliseconds;
   const seconds = absolute / 1000n;
   const millis = (absolute % 1000n)
     .toString()

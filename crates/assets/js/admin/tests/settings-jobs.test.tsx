@@ -389,6 +389,8 @@ describe("JobSettings protobuf helpers", () => {
   });
   it("formats bigint durations without precision loss", () => {
     expect(formatDurationMillis(1_234n)).toBe("1.234s");
+    expect(formatDurationMillis(1_250)).toBe("1.25s");
+    expect(formatDurationMillis(Number.MAX_SAFE_INTEGER + 1)).toBe("—");
     expect(formatDurationMillis(9_007_199_254_740_993n)).toBe(
       "9007199254740.993s",
     );
