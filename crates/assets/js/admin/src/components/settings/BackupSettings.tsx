@@ -74,11 +74,23 @@ export function BackupSettings(_props: {
     { scope: "trigger" | "dialog"; message: string } | undefined
   >();
   let mounted = true;
+  let actionTrigger: HTMLButtonElement | undefined;
+  let triggerButton: HTMLButtonElement | undefined;
   onCleanup(() => {
     mounted = false;
   });
 
   const timestampText = formatBackupTimestamp;
+  const restoreActionFocus = () =>
+    queueMicrotask(() => {
+      if (!mounted) return;
+      if (actionTrigger?.isConnected) actionTrigger.focus();
+      else triggerButton?.focus();
+    });
+  const closeAction = () => {
+    setSelectedAction();
+    restoreActionFocus();
+  };
   const refetchAfterSuccess = async () => {
     if (mounted) await backupsList.refetch({ throwOnError: true });
   };
@@ -100,7 +112,7 @@ export function BackupSettings(_props: {
         refreshFailed = true;
       }
       if (!mounted) return;
-      setSelectedAction();
+      closeAction();
       showToast({
         title: action === "delete" ? "Backup deleted" : "Backup restored",
         variant: "success",
@@ -146,7 +158,10 @@ export function BackupSettings(_props: {
           message: "Backup operation failed. Try again.",
         });
     } finally {
-      if (mounted) setPendingAction();
+      if (mounted) {
+        setPendingAction();
+        queueMicrotask(() => triggerButton?.focus());
+      }
     }
   };
 
@@ -202,7 +217,8 @@ export function BackupSettings(_props: {
                                   aria-label={`Delete backup from ${readableTime()}`}
                                   tooltip="Delete backup"
                                   disabled={!!pendingAction()}
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    actionTrigger = event.currentTarget;
                                     setSelectedAction({
                                       action: "delete",
                                       timestamp: item.timestamp,
@@ -216,7 +232,8 @@ export function BackupSettings(_props: {
                                   aria-label={`Restore backup from ${readableTime()}`}
                                   tooltip="Restore backup"
                                   disabled={!!pendingAction()}
-                                  onClick={() => {
+                                  onClick={(event) => {
+                                    actionTrigger = event.currentTarget;
                                     setSelectedAction({
                                       action: "restore",
                                       timestamp: item.timestamp,
@@ -238,6 +255,7 @@ export function BackupSettings(_props: {
             </Show>
             <div class="flex justify-end">
               <Button
+                ref={(element) => (triggerButton = element)}
                 variant="outline"
                 disabled={!!pendingAction()}
                 onClick={trigger}
@@ -257,7 +275,7 @@ export function BackupSettings(_props: {
       <Dialog
         open={selectedAction() !== undefined}
         onOpenChange={(open) => {
-          if (!open && !pendingAction()) setSelectedAction();
+          if (!open && !pendingAction()) closeAction();
         }}
       >
         <DialogContent closeDisabled={!!pendingAction()}>
@@ -279,7 +297,7 @@ export function BackupSettings(_props: {
               variant="outline"
               disabled={!!pendingAction()}
               onClick={() => {
-                setSelectedAction();
+                closeAction();
                 setOperationError();
               }}
             >

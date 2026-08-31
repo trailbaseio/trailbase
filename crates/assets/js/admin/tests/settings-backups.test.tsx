@@ -192,15 +192,18 @@ describe("BackupSettings", () => {
     await waitFor(() => expect(state.trigger).toHaveBeenCalledTimes(2));
   });
 
-  it("cancels delete without calling the API", () => {
+  it("cancels delete, restores focus, and does not call the API", async () => {
     state.backups = { backups: [{ timestamp }] };
     renderBackups();
-    fireEvent.click(
-      screen.getByRole("button", { name: /delete backup from/i }),
-    );
+    const trigger = screen.getByRole("button", {
+      name: /delete backup from/i,
+    });
+    trigger.focus();
+    fireEvent.click(trigger);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(state.del).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("confirms delete and keeps confirmation open on failure", async () => {
