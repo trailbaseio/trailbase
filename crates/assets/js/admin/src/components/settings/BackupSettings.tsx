@@ -35,8 +35,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function formatBackupTimestamp(timestamp: bigint): string {
-  const milliseconds = timestamp * 1000n;
+export function formatBackupTimestamp(timestamp: unknown): string {
+  let seconds: bigint;
+  if (typeof timestamp === "bigint") seconds = timestamp;
+  else if (typeof timestamp === "number" && Number.isSafeInteger(timestamp)) {
+    seconds = BigInt(timestamp);
+  } else if (typeof timestamp === "string" && /^-?\d+$/.test(timestamp)) {
+    seconds = BigInt(timestamp);
+  } else return "Unknown date";
+
+  const milliseconds = seconds * 1000n;
   const maxMilliseconds = 8640000000000000n;
   if (milliseconds > maxMilliseconds || milliseconds < -maxMilliseconds) {
     return "Unknown date";

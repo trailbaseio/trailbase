@@ -141,7 +141,13 @@ describe("BackupSettings", () => {
     expect(screen.getByText("No backups available.")).toBeInTheDocument();
   });
 
-  it("uses a neutral fallback for out-of-range timestamps", () => {
+  it("formats runtime numbers and uses a neutral timestamp fallback", () => {
+    expect(formatBackupTimestamp(1_700_000_000)).toBe(
+      new Date(1_700_000_000_000).toLocaleString(),
+    );
+    expect(formatBackupTimestamp(Number.MAX_SAFE_INTEGER + 1)).toBe(
+      "Unknown date",
+    );
     expect(formatBackupTimestamp(9_000_000_000_000_000_000n)).toBe(
       "Unknown date",
     );
