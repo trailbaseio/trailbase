@@ -180,6 +180,7 @@ describe("settings workspace", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Refresh settings" }));
     expect(state.invalidate).toHaveBeenCalled();
+    expect(document.querySelector(".max-w-5xl")).not.toHaveClass("overflow-y-auto");
     state.mobile = true;
     cleanup();
     render(() => <SettingsPage />);
@@ -194,6 +195,13 @@ describe("settings workspace", () => {
     expect(screen.getByText("Confirm")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Confirm"));
     expect(state.navigate).toHaveBeenLastCalledWith("/settings/auth");
+    fireEvent.click(screen.getByText("Jobs"));
+    expect(state.navigate).toHaveBeenLastCalledWith("/settings/jobs");
+  });
+  it("allows navigation after a dirty form is reverted", () => {
+    render(() => <SettingsPage />);
+    state.childProps.setDirty(true);
+    state.childProps.setDirty(false);
     fireEvent.click(screen.getByText("Jobs"));
     expect(state.navigate).toHaveBeenLastCalledWith("/settings/jobs");
   });

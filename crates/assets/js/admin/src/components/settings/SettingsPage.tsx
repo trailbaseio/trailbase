@@ -171,9 +171,7 @@ function ServerSettingsForm(
   }));
 
   form.useStore((state) => {
-    if (state.isDirty && !state.isSubmitted) {
-      props.setDirty(true);
-    }
+    props.setDirty(state.isDirty && !state.isSubmitted);
   });
 
   return (
@@ -555,7 +553,7 @@ export function SettingsPage() {
         }
       />
 
-      <div class="m-4 max-w-5xl overflow-y-auto">{activeSite().child(p())}</div>
+      <div class="m-4 max-w-5xl">{activeSite().child(p())}</div>
     </Dialog>
   );
 
