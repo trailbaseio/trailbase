@@ -360,40 +360,33 @@ export function buildOptionalSmallIntegerFormField(opts: NumberFieldOptions) {
 export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
   return function builder(field: () => FieldApiT<bigint | undefined>) {
     return (
-      <NumberField
-        class="w-full"
-        value={field().state.value?.toString()}
-        disabled={opts.disabled ?? false}
-        onChange={(value: string) => {
-          field().handleChange(tryParseBigInt(value));
-        }}
-        step={1}
-        minValue={opts.min}
-        maxValue={opts.max}
-        formatOptions={{ useGrouping: false }}
-        allowedInput={/-?\d?/}
-      >
+      <TextField class="w-full">
         <div
           class={cn("grid items-center", gapStyle)}
           style={{ "grid-template-columns": "auto 1fr" }}
         >
-          <NumberFieldLabel>{opts.label()}</NumberFieldLabel>
+          <TextFieldLabel>{opts.label()}</TextFieldLabel>
 
-          <NumberFieldGroup>
-            <NumberFieldInput
-              placeholder={opts.placeholder}
-              onBlur={field().handleBlur}
-              data-testid="input"
-            />
-            <NumberFieldIncrementTrigger />
-            <NumberFieldDecrementTrigger />
-          </NumberFieldGroup>
+          <TextFieldInput
+            disabled={opts.disabled ?? false}
+            type="text"
+            inputmode="numeric"
+            pattern={intPattern.source}
+            value={field().state.value?.toString() ?? ""}
+            placeholder={opts.placeholder}
+            onBlur={field().handleBlur}
+            onChange={(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              field().handleChange(tryParseBigInt(value));
+            }}
+            data-testid="input"
+          />
 
           <GridFieldInfo field={field()} />
 
           <InfoColumn info={opts.info} />
         </div>
-      </NumberField>
+      </TextField>
     );
   };
 }

@@ -69,7 +69,8 @@ export async function setConfig(opts: {
     }
   }
 
-  // Trigger re-fetch after updating config.  await invalidateConfig(opts.client);
+  // Trigger re-fetch after updating config.
+  await invalidateConfig(opts.client);
 }
 
 export function invalidateConfig(queryClient: QueryClient) {
