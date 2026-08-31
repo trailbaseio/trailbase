@@ -7,7 +7,15 @@ import {
   within,
 } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { JSX } from "solid-js";
 import { Config, DatabaseConfig } from "@proto/config";
+
+type ChildrenProps = { children?: JSX.Element };
+type DialogRootProps = ChildrenProps & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+type DialogContentProps = ChildrenProps & { closeDisabled?: boolean };
 
 const state = vi.hoisted(() => ({
   config: undefined as Config | undefined,
@@ -95,14 +103,17 @@ vi.mock("@/components/ui/dialog", async () => {
     setOpen: (open: boolean) => void;
   }>();
   return {
-    Dialog: (props: any) => (
+    Dialog: (props: DialogRootProps) => (
       <Context.Provider
-        value={{ open: () => props.open, setOpen: props.onOpenChange }}
+        value={{
+          open: () => props.open,
+          setOpen: (open) => props.onOpenChange(open),
+        }}
       >
         {props.children}
       </Context.Provider>
     ),
-    DialogContent: (props: any) => {
+    DialogContent: (props: DialogContentProps) => {
       const context = Solid.useContext(Context)!;
       return (
         <Solid.Show when={context.open()}>
@@ -110,10 +121,10 @@ vi.mock("@/components/ui/dialog", async () => {
         </Solid.Show>
       );
     },
-    DialogHeader: (props: any) => <div>{props.children}</div>,
-    DialogTitle: (props: any) => <h2>{props.children}</h2>,
-    DialogFooter: (props: any) => <div>{props.children}</div>,
-    DialogTrigger: (props: any) => {
+    DialogHeader: (props: ChildrenProps) => <div>{props.children}</div>,
+    DialogTitle: (props: ChildrenProps) => <h2>{props.children}</h2>,
+    DialogFooter: (props: ChildrenProps) => <div>{props.children}</div>,
+    DialogTrigger: (props: ChildrenProps) => {
       const context = Solid.useContext(Context)!;
       return (
         <span onClick={() => context.setOpen(true)}>{props.children}</span>
@@ -201,8 +212,9 @@ describe("database settings states", () => {
     );
     expect(screen.queryByText(/raw config detail/i)).toBeNull();
   });
-  it("shows Postgres unsupported state", () => {
+  it("shows Postgres unsupported state without waiting for config", () => {
     setup();
+    state.setConfigLoading?.(true);
     state.updateInfo?.({ postgres: true });
     expect(screen.getByText(/not supported in postgres/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Link$/ })).toBeNull();
@@ -214,7 +226,7 @@ describe("database settings states", () => {
     expect(screen.getByText(/data import & export/i)).toBeInTheDocument();
     expect(screen.getAllByText(/sqlite3/i).length).toBeGreaterThan(0);
   });
-  it("renders semantic names, overflow containment, and selection labels", () => {
+  it("renders semantic names, overflow containment, and functional select all", () => {
     setup(baseConfig(["analytics", "events"]));
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.getByText("analytics")).toBeInTheDocument();
@@ -222,6 +234,19 @@ describe("database settings states", () => {
     expect(document.querySelector(".overflow-x-auto")).toBeTruthy();
     expect(screen.getByLabelText("Select analytics")).toBeInTheDocument();
     expect(screen.getByLabelText("Select events")).toBeInTheDocument();
+    const selectAll = screen.getByLabelText("Select all databases");
+    fireEvent.click(selectAll.querySelector("input") ?? selectAll);
+    expect(unlinkButton()).not.toBeDisabled();
+    fireEvent.click(unlinkButton());
+    expect(screen.getByRole("dialog")).toHaveTextContent("analytics, events");
+  });
+
+  it("clears stale selection after an incoming config refresh", async () => {
+    setup(baseConfig(["analytics"]));
+    selectDatabase("analytics");
+    expect(unlinkButton()).not.toBeDisabled();
+    state.updateConfig?.(baseConfig(["remote"]));
+    await waitFor(() => expect(unlinkButton()).toBeDisabled());
   });
 });
 
@@ -301,22 +326,20 @@ describe("database link lifecycle", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.queryByText(/secret backend detail/i)).toBeNull();
   });
-  it("preserves unrelated config and incoming databases while link is pending", async () => {
-    let resolve!: () => void;
-    state.setConfig.mockReturnValue(new Promise<void>((r) => (resolve = r)));
+  it("preserves unrelated config and incoming databases present before link", async () => {
     setup(baseConfig(["analytics"]));
     openLink();
     fireEvent.input(screen.getByLabelText("Name"), {
       target: { value: "metrics" },
     });
-    fireEvent.click(dialogButton("Link"));
     state.updateConfig?.(baseConfig(["analytics", "remote"]));
-    resolve();
+    fireEvent.click(dialogButton("Link"));
     await waitFor(() => expect(state.postSubmit).toHaveBeenCalledOnce());
     const saved = state.setConfig.mock.calls[0][0].config as Config;
     expect(saved.server?.applicationName).toBe("Keep this app");
     expect(saved.databases.map((db) => db.name)).toEqual([
       "analytics",
+      "remote",
       "metrics",
     ]);
   });
@@ -365,19 +388,20 @@ describe("database unlink lifecycle", () => {
     );
     expect(screen.queryByText(/secret unlink detail/i)).toBeNull();
   });
-  it("waits for unlink success, removes only selected, and calls postSubmit", async () => {
+  it("waits for unlink success and preserves incoming unselected databases", async () => {
     let resolve!: () => void;
     state.setConfig.mockReturnValue(new Promise<void>((r) => (resolve = r)));
     setup(baseConfig(["analytics", "events"]));
     selectDatabase("analytics");
     fireEvent.click(unlinkButton());
+    state.updateConfig?.(baseConfig(["analytics", "events", "remote"]));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     expect(screen.getByRole("button", { name: "Unlinking…" })).toBeDisabled();
     resolve();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(state.postSubmit).toHaveBeenCalledOnce();
     const saved = state.setConfig.mock.calls[0][0].config as Config;
-    expect(saved.databases.map((db) => db.name)).toEqual(["events"]);
+    expect(saved.databases.map((db) => db.name)).toEqual(["events", "remote"]);
   });
   it("does not callback after unlink unmount", async () => {
     let resolve!: () => void;

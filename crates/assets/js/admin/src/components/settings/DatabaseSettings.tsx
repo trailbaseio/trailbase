@@ -1,4 +1,12 @@
-import { createSignal, Switch, Match, For, Show, onCleanup } from "solid-js";
+import {
+  createSignal,
+  Switch,
+  Match,
+  For,
+  Show,
+  onCleanup,
+  createEffect,
+} from "solid-js";
 import { useQueryClient } from "@tanstack/solid-query";
 import { TbOutlineLink, TbOutlineUnlink } from "solid-icons/tb";
 
@@ -24,7 +32,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -43,14 +50,11 @@ export function DatabaseSettings(props: {
 
   return (
     <Switch>
-      <Match when={systemInfo.isLoading || config.isLoading}>
+      <Match when={systemInfo.isLoading}>
         <p role="status">Loading database settings...</p>
       </Match>
       <Match when={systemInfo.isError}>
         <p role="alert">Unable to load system information. Try again.</p>
-      </Match>
-      <Match when={config.isError}>
-        <p role="alert">Unable to load configuration. Try again.</p>
       </Match>
       <Match when={isPostgres() === true}>
         <div class="flex flex-col gap-4">
@@ -64,6 +68,12 @@ export function DatabaseSettings(props: {
             </CardContent>
           </Card>
         </div>
+      </Match>
+      <Match when={config.isLoading}>
+        <p role="status">Loading database settings...</p>
+      </Match>
+      <Match when={config.isError}>
+        <p role="alert">Unable to load configuration. Try again.</p>
       </Match>
 
       <Match when={config.data?.config !== undefined}>
@@ -105,10 +115,25 @@ function DatabaseSettingsForm(props: {
   const [pending, setPending] = createSignal(false);
   const [error, setError] = createSignal<string>();
   let active = true;
-  onCleanup(() => (active = false));
+  onCleanup(() => {
+    active = false;
+  });
+  createEffect(() => props.setDirty(false));
   const validation = () => validateDatabaseName(name(), props.config.databases);
   const selected = () =>
     props.config.databases.filter((db) => selectedRows().has(db.name ?? ""));
+  const namedDatabases = () =>
+    props.config.databases.filter((db) => db.name !== undefined);
+  createEffect(() => {
+    const names = new Set(namedDatabases().map((db) => db.name!));
+    const retained = new Set(
+      [...selectedRows()].filter((selectedName) => names.has(selectedName)),
+    );
+    if (retained.size !== selectedRows().size) setSelectedRows(retained);
+  });
+  const allSelected = () =>
+    namedDatabases().length > 0 &&
+    selected().length === namedDatabases().length;
 
   const link = async () => {
     const message = validation();
@@ -140,7 +165,7 @@ function DatabaseSettingsForm(props: {
       await setConfig({ client: queryClient, config, throw: true });
       if (!active) return;
       setUnlinkOpen(false);
-      setSelectedRows(new Set());
+      setSelectedRows(new Set<string>());
       props.postSubmit();
     } catch {
       if (active) setError("Unable to unlink databases. Try again.");
@@ -264,7 +289,19 @@ function DatabaseSettingsForm(props: {
                   <TableHeader>
                     <TableRow>
                       <TableHead class="w-10">
-                        <Checkbox aria-label="Select all databases" />
+                        <Checkbox
+                          aria-label="Select all databases"
+                          checked={allSelected()}
+                          onChange={(checked) => {
+                            if (checked) {
+                              setSelectedRows(
+                                new Set(namedDatabases().map((db) => db.name!)),
+                              );
+                            } else {
+                              setSelectedRows(new Set<string>());
+                            }
+                          }}
+                        />
                       </TableHead>
                       <TableHead>Name</TableHead>
                     </TableRow>
@@ -289,9 +326,8 @@ function DatabaseSettingsForm(props: {
                                 checked={selectedRows().has(db.name ?? "")}
                                 onChange={(checked) => {
                                   const next = new Set(selectedRows());
-                                  checked
-                                    ? next.add(db.name ?? "")
-                                    : next.delete(db.name ?? "");
+                                  if (checked) next.add(db.name ?? "");
+                                  else next.delete(db.name ?? "");
                                   setSelectedRows(next);
                                 }}
                               />
@@ -323,7 +359,7 @@ function DatabaseSettingsForm(props: {
               <Button
                 variant="destructive"
                 type="button"
-                disabled={selectedRows().size === 0 || pending()}
+                disabled={selected().length === 0 || pending()}
                 onClick={() => {
                   setError();
                   setUnlinkOpen(true);
