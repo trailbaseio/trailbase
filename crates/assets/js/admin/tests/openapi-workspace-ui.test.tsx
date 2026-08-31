@@ -1,89 +1,193 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@solidjs/testing-library";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 
-const state = vi.hoisted(() => {
-  const [data, setData] = createSignal<any>();
-  const [error, setError] = createSignal<any>();
-  const [loading, setLoading] = createSignal(true);
-  const [fetching, setFetching] = createSignal(false);
-  return {
-    data,
-    setData,
-    error,
-    setError,
-    loading,
-    setLoading,
-    fetching,
-    setFetching,
-    refetch: vi.fn(),
-    fetch: vi.fn(),
-    user: vi.fn(() => undefined),
-    tokens: { get: vi.fn(() => null) },
-  };
-});
+const state = vi.hoisted(() => ({
+  data: undefined as any,
+  error: undefined as any,
+  loading: true,
+  fetching: false,
+  user: undefined as any,
+  currentTokens: null as any,
+  queryOptions: undefined as any,
+  refetch: vi.fn(),
+  fetch: vi.fn(),
+  bumpQuery: undefined as (() => void) | undefined,
+  bumpUser: undefined as (() => void) | undefined,
+  listeners: [] as EventListener[],
+}));
 vi.mock("rapidoc", () => ({}));
 vi.mock("@/lib/fetch", () => ({ adminFetch: state.fetch }));
 vi.mock("@/lib/theme", () => ({ createTheme: () => () => "light" }));
-vi.mock("@/lib/client", () => ({ $user: {}, $tokens: state.tokens }));
-vi.mock("@nanostores/solid", () => ({ useStore: state.user }));
-vi.mock("@tanstack/solid-query", () => ({
-  useQuery: () => ({
-    get data() {
-      return state.data();
-    },
-    get error() {
-      return state.error();
-    },
-    get isLoading() {
-      return state.loading();
-    },
-    get isFetching() {
-      return state.fetching();
-    },
-    refetch: state.refetch,
-  }),
+vi.mock("@/lib/client", () => ({
+  $user: {},
+  $tokens: { get: () => state.currentTokens },
 }));
-
+vi.mock("@nanostores/solid", () => ({
+  useStore: () => {
+    const [value, setValue] = createSignal(state.user);
+    state.bumpUser = () => setValue(state.user);
+    return value;
+  },
+}));
+vi.mock("@tanstack/solid-query", () => ({
+  useQuery: (factory: () => any) => {
+    state.queryOptions = factory();
+    const [tick, bump] = createSignal(0);
+    state.bumpQuery = () => bump((v) => v + 1);
+    return {
+      get data() {
+        tick();
+        return state.data;
+      },
+      get error() {
+        tick();
+        return state.error;
+      },
+      get isLoading() {
+        tick();
+        return state.loading;
+      },
+      get isFetching() {
+        tick();
+        return state.fetching;
+      },
+      refetch: state.refetch,
+    };
+  },
+}));
 class TestRapiDoc extends HTMLElement {
   loadSpec = vi.fn();
+  addEventListener(type: string, listener: EventListener) {
+    if (type === "before-try") state.listeners.push(listener);
+    return super.addEventListener(type, listener);
+  }
 }
 customElements.define("rapi-doc", TestRapiDoc);
 import Page from "../src/components/openapi/OpenApiPage";
 
+beforeEach(() => {
+  state.fetch.mockResolvedValue({ json: () => Promise.resolve({}) });
+});
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  state.setData(undefined);
-  state.setError(undefined);
-  state.setLoading(true);
-  state.setFetching(false);
+  state.data = undefined;
+  state.error = undefined;
+  state.loading = true;
+  state.fetching = false;
+  state.user = undefined;
+  state.currentTokens = null;
+  state.queryOptions = undefined;
+  state.listeners = [];
 });
+const spec = (count = 1, version?: string) => ({
+  info: { title: "Things", ...(version ? { version } : {}) },
+  paths: {
+    "/x": Object.fromEntries(
+      Array.from({ length: count }, (_, i) => [i ? "post" : "get", {}]),
+    ),
+  },
+});
+const ready = (value = spec()) => {
+  state.loading = false;
+  state.data = value;
+  render(() => <Page />);
+  state.bumpQuery?.();
+};
 
 describe("OpenAPI Explorer workspace", () => {
-  it("renders loading status and query-owned success metadata", async () => {
+  it("captures stable query and fetches JSON", async () => {
     render(() => <Page />);
-    expect(screen.getByRole("status")).toBeTruthy();
-    state.setLoading(false);
-    state.setData({
-      info: { title: "Things", version: "1" },
-      paths: { "/x": { get: {} } },
-    });
-    expect(await screen.findByText("OpenAPI Explorer")).toBeTruthy();
+    expect(state.queryOptions?.queryKey).toEqual(["openapi"]);
+    await state.queryOptions?.queryFn();
+    expect(state.fetch).toHaveBeenCalledWith("/openapi.json");
+    expect(state.fetch.mock.results[0].value).toBeDefined();
+  });
+  it("renders loading and success metadata with one initial load", () => {
+    render(() => <Page />);
+    expect(
+      screen.getByRole("status", { name: /loading api specification/i }),
+    ).toBeTruthy();
+    state.loading = false;
+    state.data = spec();
+    state.bumpQuery?.();
+    expect(screen.getByText("OpenAPI Explorer")).toBeTruthy();
     expect(screen.getByText("Explore and try Things.")).toBeTruthy();
     expect(screen.getByText("v1")).toBeTruthy();
     expect(screen.getByText("1 operation")).toBeTruthy();
     expect(screen.getByText("http://localhost:4000")).toBeTruthy();
+    expect(document.querySelector("rapi-doc")?.loadSpec).toHaveBeenCalledTimes(
+      1,
+    );
   });
-
-  it("keeps authentication details closed and validates tokens without persistence", async () => {
-    state.setLoading(false);
-    state.setData({ info: {}, paths: {} });
+  it("handles plural and absent versions", () => {
+    ready(spec(2));
+    expect(screen.getByText("2 operations")).toBeTruthy();
+    cleanup();
+    state.data = spec(2);
+    state.bumpQuery?.();
     render(() => <Page />);
-    const details = await screen.findByText("Advanced authentication");
-    expect(details.parentElement?.hasAttribute("open")).toBe(false);
-    const localSet = vi.spyOn(Storage.prototype, "setItem");
-    expect(localSet).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Version unavailable/)).toBeNull();
+  });
+  it.each([
+    [{ email: "e@example.com", username: "u" }, "e@example.com"],
+    [{ username: "u" }, "u"],
+    [undefined, "Admin session"],
+  ])("shows identity fallback", (user, text) => {
+    state.user = user;
+    ready();
+    expect(screen.getByText(`Identity: ${text}`)).toBeTruthy();
+  });
+  it("shows generic initial error and retry", () => {
+    state.loading = false;
+    state.error = new Error("secret backend detail");
+    render(() => <Page />);
+    expect(
+      screen.getByText("Unable to load the API specification"),
+    ).toBeTruthy();
+    expect(screen.queryByText(/secret backend/)).toBeNull();
+    fireEvent.click(screen.getByText("Retry"));
+    expect(state.refetch).toHaveBeenCalled();
+  });
+  it("retains exact RapiDoc node and input on refresh error", () => {
+    ready();
+    const node = document.querySelector("rapi-doc");
+    fireEvent.click(screen.getByText("Advanced authentication"));
+    const input = screen.getByLabelText("Login tokens");
+    fireEvent.input(input, { target: { value: " " } });
+    state.error = new Error("x");
+    state.fetching = true;
+    state.bumpQuery?.();
+    expect(document.querySelector("rapi-doc")).toBe(node);
+    expect(screen.getByDisplayValue(" ")).toBeTruthy();
+    expect(screen.getByText(/Unable to refresh/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /refreshing/i })).toBeDisabled();
+  });
+  it("validates authentication and applies complete tokens", () => {
+    ready();
+    fireEvent.click(screen.getByText("Advanced authentication"));
+    const input = screen.getByLabelText("Login tokens");
+    const tokens = { auth_token: "a", refresh_token: "r", csrf_token: "c" };
+    fireEvent.input(input, { target: { value: btoa(JSON.stringify(tokens)) } });
+    expect(screen.getByText("Using impersonation tokens")).toBeTruthy();
+    const request = new Request("/");
+    state.listeners[0](new CustomEvent("before-try", { detail: { request } }));
+    expect(request.headers.get("Authorization")).toBe("Bearer a");
+    fireEvent.input(input, { target: { value: "bad-secret" } });
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByText("Invalid login tokens")).toBeTruthy();
+    expect(screen.queryByText("bad-secret")).toBeNull();
+    fireEvent.input(input, { target: { value: "" } });
+    expect(screen.getByText("Using current admin session")).toBeTruthy();
+  });
+  it("keeps details closed and does not persist", () => {
+    ready();
+    expect(
+      screen.getByText("Advanced authentication").parentElement,
+    ).not.toHaveAttribute("open");
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+    expect(setItem).not.toHaveBeenCalled();
   });
 });
