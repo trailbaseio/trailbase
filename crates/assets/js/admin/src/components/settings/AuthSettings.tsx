@@ -390,9 +390,7 @@ function AuthSettingsForm(props: {
   });
 
   form.useStore((state) => {
-    if (state.isDirty && !state.isSubmitted) {
-      props.setDirty(true);
-    }
+    props.setDirty(state.isDirty && !state.isSubmitted);
   });
 
   return (
