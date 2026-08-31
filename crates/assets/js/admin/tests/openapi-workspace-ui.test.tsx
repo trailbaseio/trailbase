@@ -334,6 +334,34 @@ describe("OpenAPI Explorer workspace", () => {
     expect(node.loadSpec).toHaveBeenCalledTimes(loads);
   });
 
+  it("toggles mobile endpoint navigation without replacing RapiDoc", () => {
+    ready();
+    const node = document.querySelector("rapi-doc") as TestRapiDoc;
+    const loads = node.loadSpec.mock.calls.length;
+    expect(
+      screen.queryByRole("button", { name: "Browse endpoints" }),
+    ).toBeNull();
+    state.mobile = true;
+    state.bumpMobile?.();
+    const browse = screen.getByRole("button", { name: "Browse endpoints" });
+    expect(browse).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(browse);
+    expect(browse).toHaveAttribute("aria-expanded", "true");
+    expect(node).toHaveClass("openapi-nav-open");
+    expect(document.querySelector("rapi-doc")).toBe(node);
+    expect(node.loadSpec).toHaveBeenCalledTimes(loads);
+    fireEvent.click(browse);
+    expect(browse).toHaveAttribute("aria-expanded", "false");
+    expect(node).not.toHaveClass("openapi-nav-open");
+    fireEvent.click(browse);
+    state.mobile = false;
+    state.bumpMobile?.();
+    expect(
+      screen.queryByRole("button", { name: "Browse endpoints" }),
+    ).toBeNull();
+    expect(node).not.toHaveClass("openapi-nav-open");
+  });
+
   it("captures and removes both RapiDoc listeners", () => {
     const value = spec();
     ready(value);
