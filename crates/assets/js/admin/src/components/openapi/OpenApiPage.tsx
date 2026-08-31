@@ -101,6 +101,7 @@ export default function Page() {
     queryKey: ["openapi"],
     queryFn: fetchOpenApi,
   }));
+  const refreshing = () => query.isFetching && Boolean(query.data);
   const [tokensInput, setTokensInput] = createSignal("");
   const [tokenError, setTokenError] = createSignal(false);
   const [overrideTokens, setOverrideTokens] =
@@ -137,11 +138,32 @@ export default function Page() {
       const info = element.shadowRoot?.getElementById("api-info");
       if (info) info.style.marginLeft = "0";
     };
+    const endpointSelected = (event: Event) => {
+      if (
+        isMobile() &&
+        navOpen() &&
+        (!(event instanceof KeyboardEvent) || event.key === "Enter") &&
+        event
+          .composedPath()
+          .some(
+            (node) =>
+              node instanceof HTMLElement && node.dataset.action === "navigate",
+          )
+      ) {
+        setNavOpen(false);
+        browseButton?.focus();
+      }
+    };
+    const root = element.shadowRoot;
     element.addEventListener("before-try", beforeTry);
     element.addEventListener("spec-loaded", specLoaded);
+    root?.addEventListener("click", endpointSelected, true);
+    root?.addEventListener("keyup", endpointSelected, true);
     onCleanup(() => {
       element.removeEventListener("before-try", beforeTry);
       element.removeEventListener("spec-loaded", specLoaded);
+      root?.removeEventListener("click", endpointSelected, true);
+      root?.removeEventListener("keyup", endpointSelected, true);
     });
   });
   createEffect(() => {
@@ -211,8 +233,17 @@ export default function Page() {
               disabled={query.isFetching}
             >
               <TbOutlineRefresh />
-              {query.isFetching ? "Refreshing…" : "Refresh"}
+              {refreshing() ? "Refreshing…" : "Refresh"}
             </Button>
+            <Show when={refreshing()}>
+              <span
+                role="status"
+                aria-label="Refreshing API specification"
+                class="sr-only"
+              >
+                Refreshing API specification…
+              </span>
+            </Show>
             <Show when={query.data}>
               <details class="relative">
                 <summary class="border-input hover:bg-accent focus-visible:ring-ring inline-flex cursor-pointer list-none items-center rounded-md border px-3 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none">

@@ -170,10 +170,13 @@ describe("OpenAPI Explorer workspace", () => {
     expect(state.fetch).toHaveBeenCalledWith("/openapi.json");
   });
   it("renders loading and success metadata with one initial load", () => {
+    state.fetching = true;
     render(() => <Page />);
     expect(
       screen.getByRole("status", { name: /loading api specification/i }),
     ).toBeTruthy();
+    expect(screen.queryByRole("status", { name: /refreshing/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /^refresh$/i })).toBeDisabled();
     state.loading = false;
     state.data = spec(1, "1");
     state.bumpQuery?.();
@@ -259,6 +262,9 @@ describe("OpenAPI Explorer workspace", () => {
     expect((input as HTMLInputElement).value).toBe(retained);
     expect(screen.getByText(/Unable to refresh/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /refreshing/i })).toBeDisabled();
+    expect(
+      screen.getByRole("status", { name: /refreshing api specification/i }),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(state.refetch).toHaveBeenCalled();
     state.error = undefined;
@@ -368,6 +374,14 @@ describe("OpenAPI Explorer workspace", () => {
     expect(node).toHaveClass("openapi-nav-open");
     expect(document.querySelector("rapi-doc")).toBe(node);
     expect(node.loadSpec).toHaveBeenCalledTimes(loads);
+    const endpoint = document.createElement("button");
+    endpoint.dataset.action = "navigate";
+    node.shadowRoot?.append(endpoint);
+    fireEvent.click(endpoint);
+    expect(browse).toHaveAttribute("aria-expanded", "false");
+    expect(document.activeElement).toBe(browse);
+    fireEvent.click(browse);
+    expect(browse).toHaveAttribute("aria-expanded", "true");
     fireEvent.click(browse);
     expect(browse).toHaveAttribute("aria-expanded", "false");
     expect(node).not.toHaveClass("openapi-nav-open");
@@ -392,9 +406,23 @@ describe("OpenAPI Explorer workspace", () => {
     const refs = state.added.filter(
       ([type]) => type === "before-try" || type === "spec-loaded",
     );
+    const removeShadowListener = vi.spyOn(
+      node.shadowRoot!,
+      "removeEventListener",
+    );
     cleanup();
     for (const [type, ref] of refs)
       expect(state.removed).toContainEqual([type, ref]);
+    expect(removeShadowListener).toHaveBeenCalledWith(
+      "click",
+      expect.any(Function),
+      true,
+    );
+    expect(removeShadowListener).toHaveBeenCalledWith(
+      "keyup",
+      expect.any(Function),
+      true,
+    );
     state.data = value;
     render(() => <Page />);
     state.bumpQuery?.();
