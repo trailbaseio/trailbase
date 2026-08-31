@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   infoLoading: false,
   infoError: false,
   setConfig: vi.fn(),
+  showToast: vi.fn(),
 }));
 
 vi.mock("@tanstack/solid-query", () => ({ useQueryClient: () => ({}) }));
@@ -48,6 +49,7 @@ vi.mock("@/components/IconButton", () => ({
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: (p: any) => <>{p.children}</>,
 }));
+vi.mock("@/components/ui/toast", () => ({ showToast: state.showToast }));
 vi.mock("@/components/SafeSheet", () => ({
   ConfirmCloseDialog: (p: any) => (
     <>
@@ -91,6 +93,7 @@ vi.mock("@/lib/api/config", () => ({
     data: state.config ? { config: state.config } : undefined,
     isLoading: state.configLoading,
     isError: state.configError,
+    error: new Error("backend secret"),
   }),
   setConfig: state.setConfig,
   invalidateConfig: state.invalidate,
@@ -101,6 +104,7 @@ vi.mock("@/lib/api/info", () => ({
     isLoading: state.infoLoading,
     isError: state.infoError,
     isSuccess: !!state.info,
+    error: new Error("backend secret"),
   }),
 }));
 vi.mock("@/components/settings/AuthSettings", () => ({
@@ -159,6 +163,7 @@ beforeEach(() => {
   state.infoError = false;
   state.setConfig.mockReset();
   state.setConfig.mockResolvedValue(undefined);
+  state.showToast.mockReset();
 });
 
 describe("settings workspace", () => {
@@ -297,6 +302,9 @@ describe("General settings integration", () => {
     expect(screen.getByText("4", { selector: "dd" })).toBeInTheDocument();
     expect(screen.getByText("Postgres:")).toBeInTheDocument();
     expect(screen.getByText("enabled")).toBeInTheDocument();
+    const runtime = document.querySelector("dl")!;
+    expect(runtime.querySelectorAll("dt")).toHaveLength(8);
+    expect(runtime.querySelectorAll("dd")).toHaveLength(8);
     expect(screen.getAllByTestId("input")[0]).toHaveValue("Trailbase");
     expect(screen.getAllByTestId("input")[1]).toHaveValue(
       "https://example.test",
@@ -326,7 +334,7 @@ describe("General settings integration", () => {
     expect(screen.queryByText(/backend secret/)).toBeNull();
   });
 
-  it("supports edit, revert, and reset dirty behavior", async () => {
+  it("clears dirty actions when edits return to their initial values", async () => {
     render(() => <SettingsPage />);
     const appName = screen.getAllByTestId("input")[0];
     fireEvent.input(appName, { target: { value: "Changed" } });
@@ -334,12 +342,26 @@ describe("General settings integration", () => {
       screen.getByRole("button", { name: "Save changes" }),
     ).toBeInTheDocument();
     fireEvent.input(appName, { target: { value: "Trailbase" } });
-    // Reset remains the authoritative clean-state action for the form.
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+    });
+    fireEvent.click(screen.getByText("Email"));
+    expect(state.navigate).toHaveBeenLastCalledWith("/settings/email");
+  });
+
+  it("resets edited values and clears dirty actions", async () => {
+    render(() => <SettingsPage />);
+    const appName = screen.getAllByTestId("input")[0];
+    fireEvent.input(appName, { target: { value: "Changed" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(appName).toHaveValue("Trailbase");
-    await waitFor(() =>
-      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull(),
-    );
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Reset" })).toBeNull();
+    });
+    fireEvent.click(screen.getByText("Email"));
+    expect(state.navigate).toHaveBeenLastCalledWith("/settings/email");
   });
 
   it("keeps edits and actions after failed save, and clears them after success", async () => {
@@ -354,11 +376,22 @@ describe("General settings integration", () => {
     expect(appName).toHaveValue("Changed");
     expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
     expect(screen.queryByText("backend secret")).toBeNull();
-    state.setConfig.mockResolvedValueOnce(undefined);
+    let finishSave!: () => void;
+    state.setConfig.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishSave = resolve;
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(state.showToast).not.toHaveBeenCalled();
+    finishSave();
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull(),
     );
     expect(state.setConfig).toHaveBeenCalled();
+    expect(state.showToast).toHaveBeenCalledWith({
+      title: "submitted",
+      variant: "success",
+    });
   });
 });

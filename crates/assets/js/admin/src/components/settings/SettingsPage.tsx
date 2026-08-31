@@ -152,6 +152,15 @@ function ServerSettings(props: CommonProps) {
   );
 }
 
+function sameServerConfig(left: ServerConfig, right: ServerConfig) {
+  const leftBytes = ServerConfig.encode(left).finish();
+  const rightBytes = ServerConfig.encode(right).finish();
+  return (
+    leftBytes.length === rightBytes.length &&
+    leftBytes.every((byte, index) => byte === rightBytes[index])
+  );
+}
+
 function ServerSettingsForm(
   props: {
     config: Config;
@@ -167,9 +176,10 @@ function ServerSettingsForm(
       : ServerConfig.fromJSON({});
   }
 
+  const initialValues = serverConfig(props.config);
   const [submitError, setSubmitError] = createSignal(false);
   const form = createForm(() => ({
-    defaultValues: serverConfig(props.config),
+    defaultValues: initialValues,
     onSubmit: async ({ value }: { value: ServerConfig }) => {
       setSubmitError(false);
       const newConfig = Config.fromPartial(props.config);
@@ -187,9 +197,15 @@ function ServerSettingsForm(
     },
   }));
 
-  form.useStore((state) => {
-    props.setDirty(state.isDirty && !state.isSubmitted);
-  });
+  const formState = form.useSelector((state) => ({
+    values: state.values,
+    isSubmitted: state.isSubmitted,
+  }));
+  const modified = () =>
+    !sameServerConfig(initialValues, formState().values) &&
+    (!formState().isSubmitted || submitError());
+
+  createEffect(() => props.setDirty(modified()));
 
   return (
     <form
@@ -276,14 +292,12 @@ function ServerSettingsForm(
                 </Callout>
               </Show>
               <SettingsFormActions
-                dirty={
-                  state().isDirty && (!state().isSubmitted || submitError())
-                }
+                dirty={modified()}
                 canSubmit={state().canSubmit}
                 isSubmitting={state().isSubmitting}
                 onReset={() => {
+                  setSubmitError(false);
                   form.reset();
-                  props.setDirty(false);
                 }}
               />
             </>
