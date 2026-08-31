@@ -68,9 +68,22 @@ customElements.define("rapi-doc", TestRapiDoc);
 import Page from "../src/components/openapi/OpenApiPage";
 
 beforeEach(() => {
-  const storage = () => ({ setItem: vi.fn(), getItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn(), key: vi.fn(), length: 0 });
-  Object.defineProperty(window, "localStorage", { configurable: true, value: storage() });
-  Object.defineProperty(window, "sessionStorage", { configurable: true, value: storage() });
+  const storage = () => ({
+    setItem: vi.fn(),
+    getItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+    key: vi.fn(),
+    length: 0,
+  });
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: storage(),
+  });
+  Object.defineProperty(window, "sessionStorage", {
+    configurable: true,
+    value: storage(),
+  });
   state.fetch.mockResolvedValue({ json: () => Promise.resolve({}) });
 });
 afterEach(() => {
@@ -121,7 +134,9 @@ describe("OpenAPI Explorer workspace", () => {
     expect(screen.getByText("Explore and try Things.")).toBeTruthy();
     expect(screen.getByText("v1")).toBeTruthy();
     expect(screen.getByText("1 operation")).toBeTruthy();
-    expect(screen.getByText(/Server:/)).toHaveTextContent("Server: http://localhost:4000");
+    expect(screen.getByText(/Server:/)).toHaveTextContent(
+      "Server: http://localhost:4000",
+    );
     const node = document.querySelector("rapi-doc") as TestRapiDoc;
     expect(node.loadSpec).toHaveBeenCalledTimes(1);
     const next = spec(1, "2");
@@ -129,6 +144,10 @@ describe("OpenAPI Explorer workspace", () => {
     state.bumpQuery?.();
     expect(node.loadSpec).toHaveBeenCalledTimes(2);
     expect(node.loadSpec).toHaveBeenLastCalledWith(next);
+    expect(node.getAttribute("server-url")).toBe("http://localhost:4000");
+    expect(node.getAttribute("default-api-server")).toBe(
+      "http://localhost:4000",
+    );
   });
   it("handles plural and absent versions", () => {
     ready(spec(2));
@@ -177,15 +196,23 @@ describe("OpenAPI Explorer workspace", () => {
     expect(screen.getByRole("button", { name: /refreshing/i })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: /retry/i }));
     expect(state.refetch).toHaveBeenCalled();
-    state.error = undefined; state.fetching = false; state.bumpQuery?.();
+    state.error = undefined;
+    state.fetching = false;
+    state.bumpQuery?.();
     expect(document.querySelector("rapi-doc")).toBe(node);
     expect((input as HTMLInputElement).value).toBe(retained);
-    expect(screen.getByRole("button", { name: /^refresh$/i })).not.toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: /^refresh$/i }),
+    ).not.toBeDisabled();
   });
   it("validates authentication and applies complete tokens", () => {
     const localSet = vi.spyOn(window.localStorage, "setItem");
     const sessionSet = vi.spyOn(window.sessionStorage, "setItem");
-    state.currentTokens = { auth_token: "current-a", refresh_token: "current-r", csrf_token: "current-c" };
+    state.currentTokens = {
+      auth_token: "current-a",
+      refresh_token: "current-r",
+      csrf_token: "current-c",
+    };
     ready();
     fireEvent.click(screen.getByText("Advanced authentication"));
     const input = screen.getByLabelText("Login tokens");
@@ -194,19 +221,35 @@ describe("OpenAPI Explorer workspace", () => {
     expect(screen.getByText("Using impersonation tokens")).toBeTruthy();
     const request = new Request("https://example.test/api");
     state.listeners[0](new CustomEvent("before-try", { detail: { request } }));
-    expect(Object.fromEntries(request.headers)).toEqual({ authorization: "Bearer a", "csrf-token": "c", "refresh-token": "r" });
+    expect(Object.fromEntries(request.headers)).toEqual({
+      authorization: "Bearer a",
+      "csrf-token": "c",
+      "refresh-token": "r",
+    });
     fireEvent.input(input, { target: { value: "bad-secret" } });
     const fallback = new Request("https://example.test/api");
-    expect(() => state.listeners[0](new CustomEvent("before-try", { detail: { request: fallback } }))).not.toThrow();
-    expect(Object.fromEntries(fallback.headers)).toEqual({ authorization: "Bearer current-a", "csrf-token": "current-c", "refresh-token": "current-r" });
+    expect(() =>
+      state.listeners[0](
+        new CustomEvent("before-try", { detail: { request: fallback } }),
+      ),
+    ).not.toThrow();
+    expect(Object.fromEntries(fallback.headers)).toEqual({
+      authorization: "Bearer current-a",
+      "csrf-token": "current-c",
+      "refresh-token": "current-r",
+    });
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input.getAttribute("aria-describedby")).toContain("openapi-tokens-error");
+    expect(input.getAttribute("aria-describedby")).toContain(
+      "openapi-tokens-error",
+    );
     expect(screen.getByText("Invalid login tokens")).toBeTruthy();
     expect(screen.queryByText("bad-secret")).toBeNull();
     fireEvent.input(input, { target: { value: "" } });
     expect(screen.getByText("Using current admin session")).toBeTruthy();
     const cleared = new Request("https://example.test/api");
-    state.listeners[0](new CustomEvent("before-try", { detail: { request: cleared } }));
+    state.listeners[0](
+      new CustomEvent("before-try", { detail: { request: cleared } }),
+    );
     expect(cleared.headers.get("Authorization")).toBe("Bearer current-a");
     expect(localSet).not.toHaveBeenCalled();
     expect(sessionSet).not.toHaveBeenCalled();

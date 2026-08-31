@@ -19,6 +19,7 @@ import {
 import "rapidoc";
 
 declare module "solid-js" {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
       "rapi-doc": JSX.HTMLAttributes<HTMLElement> & { [key: string]: any };
@@ -63,7 +64,11 @@ export default function Page() {
   createEffect(() => {
     const element = rapidoc();
     const spec = query.data;
-    if (element && spec) element.loadSpec?.(spec);
+    if (element && spec) {
+      element.setAttribute("server-url", server());
+      element.setAttribute("default-api-server", server());
+      element.loadSpec?.(spec);
+    }
   });
   const refresh = () => query.refetch();
 
@@ -82,7 +87,7 @@ export default function Page() {
     <div class="flex h-full min-h-0 flex-col">
       <Header
         title="OpenAPI Explorer"
-        description={() => `Explore and try ${metadata().title}.`}
+        description={<span>Explore and try {metadata().title}.</span>}
         right={
           <Button
             size="sm"
@@ -181,8 +186,6 @@ export default function Page() {
           ref={(element) => {
             const r = element as RapiDoc;
             setRapidoc(r);
-            r.setAttribute("server-url", server());
-            r.setAttribute("default-api-server", server());
             r.addEventListener("before-try", (event) => {
               const tokens =
                 overrideTokens() ?? usableRequestTokens($tokens.get());
