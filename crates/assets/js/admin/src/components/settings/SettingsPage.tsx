@@ -543,8 +543,11 @@ export function SettingsPage() {
         titleSelect={activeSite().label}
         leading={<SidebarTrigger />}
         left={
-          <IconButton onClick={() => invalidateConfig(queryClient)}>
-            <TbOutlineRefresh aria-label="Refresh settings" />
+          <IconButton
+            aria-label="Refresh settings"
+            onClick={() => invalidateConfig(queryClient)}
+          >
+            <TbOutlineRefresh />
           </IconButton>
         }
       />
