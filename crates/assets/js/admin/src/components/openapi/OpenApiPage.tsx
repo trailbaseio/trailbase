@@ -116,15 +116,16 @@ export default function Page() {
     return resolveOpenApiServer(candidate, import.meta.env.DEV);
   };
   const [rapidoc, setRapidoc] = createSignal<RapiDoc>();
+  let loadedSpec: OpenApiDocument | undefined;
   createEffect(() => {
     const element = rapidoc();
     const spec = query.data;
     if (element && spec) {
       element.setAttribute("server-url", server());
       element.setAttribute("default-api-server", server());
-      if (element.dataset.loadedSpec !== String(spec)) {
+      if (spec !== loadedSpec) {
         element.loadSpec?.(withCollapsedOpenApiTags(spec));
-        element.dataset.loadedSpec = String(spec);
+        loadedSpec = spec;
       }
     }
   });

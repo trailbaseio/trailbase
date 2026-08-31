@@ -149,6 +149,21 @@ describe("OpenAPI Explorer workspace", () => {
       "http://localhost:4000",
     );
   });
+  it("configures focused RapiDoc and collapses tags without mutating source", () => {
+    const value = { ...spec(), tags: [{ name: "Users" }] };
+    ready(value);
+    const node = document.querySelector("rapi-doc")!;
+    expect(node).toHaveAttribute("render-style", "focused");
+    expect(node).toHaveAttribute("schema-style", "table");
+    expect(node).toHaveAttribute("show-side-nav", "true");
+    expect(node).toHaveAttribute("allow-search", "true");
+    expect((node as TestRapiDoc).loadSpec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tags: [{ name: "Users", "x-tag-expanded": false }],
+      }),
+    );
+    expect(value.tags).toEqual([{ name: "Users" }]);
+  });
   it("handles plural and absent versions", () => {
     ready(spec(2));
     expect(screen.getByText("2 operations")).toBeTruthy();
