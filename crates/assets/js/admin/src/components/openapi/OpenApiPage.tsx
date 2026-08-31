@@ -1,146 +1,198 @@
-import { onMount, JSX } from "solid-js";
-import type { Tokens } from "trailbase";
-import { TbOutlineInfoCircle } from "solid-icons/tb";
-
-// Import with side-effects for the custom web component.
-import "rapidoc";
-
+import { Show, createSignal } from "solid-js";
+import { useQuery } from "@tanstack/solid-query";
+import { useStore } from "@nanostores/solid";
+import { TbOutlineRefresh } from "solid-icons/tb";
 import { adminFetch } from "@/lib/fetch";
 import { createTheme } from "@/lib/theme";
-import { $tokens } from "@/lib/client";
-
+import { $tokens, $user } from "@/lib/client";
+import { Header } from "@/components/Header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 import {
-  TextField,
-  TextFieldLabel,
-  TextFieldInput,
-} from "@/components/ui/text-field";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  applyRequestTokens,
+  parseImpersonationTokens,
+  openApiMetadata,
+  type OpenApiDocument,
+} from "./openapi";
+import "rapidoc";
 
 declare module "solid-js" {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace JSX {
     interface IntrinsicElements {
-      "rapi-doc": JSX.HTMLAttributes<HTMLElement> & {
-        "spec-url"?: string;
-        theme?: string;
-        // https://github.com/rapi-doc/RapiDoc/blob/7f53d25959e5a4e1beb4b610aaef445b896838f2/src/rapidoc.js#L47
-        //
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        [key: string]: any;
-      };
+      "rapi-doc": JSX.HTMLAttributes<HTMLElement> & { [key: string]: any };
     }
   }
 }
 
-type RapiDoc = JSX.IntrinsicElements["rapi-doc"];
+type RapiDoc = HTMLElement & {
+  loadSpec?: (spec: OpenApiDocument) => void;
+  setAttribute: HTMLElement["setAttribute"];
+};
 
-export default function Page() {
-  let ref: RapiDoc | undefined;
-  let tokensRef: HTMLInputElement | undefined;
-
-  const theme = createTheme();
-
-  onMount(async () => {
-    const res = await adminFetch("/openapi.json");
-    const spec = await res.json();
-
-    if (!ref) {
-      return;
-    }
-
-    // Lazy load the actual OpenApi spec.
-    ref.loadSpec(spec);
-
-    const url = serverUrl();
-    if (url) {
-      ref.setAttribute("server-url", serverUrl());
-      ref.setAttribute("default-api-server", serverUrl());
-    }
-
-    ref.addEventListener("spec-loaded", () => {
-      // HACK: Fix `api-info` style, which has a margin-left of -15px.
-      const apiInfo = ref.shadowRoot.getElementById("api-info");
-      if (apiInfo) {
-        apiInfo.style.marginLeft = "0";
-      }
-    });
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ref.addEventListener("before-try", (e: any) => {
-      function getTokens(): Tokens | null {
-        const inputTokens = tokensRef?.value;
-        if (inputTokens) {
-          return JSON.parse(atob(inputTokens)) as Tokens;
-        }
-
-        return $tokens.get();
-      }
-
-      const tokens = getTokens();
-      if (tokens) {
-        e.detail.request.headers.append(
-          "Authorization",
-          `Bearer ${tokens.auth_token}`,
-        );
-        e.detail.request.headers.append("Refresh-Token", tokens.refresh_token);
-        e.detail.request.headers.append("CSRF-Token", tokens.csrf_token);
-      }
-    });
-  });
-
-  return (
-    <rapi-doc
-      ref={
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ref as any
-      }
-      load-fonts="false"
-      sort-tags="true"
-      theme={theme()} // "light" | "dark"
-      bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
-      primary-color={primary}
-      render-style="view" // "read" | "view" | "focused"
-      layout="row" // "row" | "column"
-      schema-style="table" // "tree" | "table"
-      show-header="false" // removes the top bar: logo + title
-      allow-try="true"
-      persist-auth="false"
-      allow-authentication="false"
-      allow-server-selection="false"
-    >
-      {/* Contents */}
-      <div class="mx-4 my-4 lg:mx-8">
-        <TextField class="flex items-center gap-2">
-          <TextFieldLabel>
-            <Tooltip>
-              <TooltipTrigger class="flex gap-2">
-                <span class="underline">Tokens:</span>
-                <TbOutlineInfoCircle class="inline-block" />
-              </TooltipTrigger>
-
-              <TooltipContent>
-                You can optionally provide explicit tokens to impersonate
-                another user. To get the tokens of verified, non-admin users,
-                click a user on the accounts page.
-              </TooltipContent>
-            </Tooltip>
-          </TextFieldLabel>
-
-          <TextFieldInput
-            ref={tokensRef}
-            type="password"
-            autocomplete="new-password"
-          />
-        </TextField>
-      </div>
-    </rapi-doc>
-  );
+async function fetchOpenApi(): Promise<OpenApiDocument> {
+  const response = await adminFetch("/openapi.json");
+  return (await response.json()) as OpenApiDocument;
 }
 
-const serverUrl = () =>
-  import.meta.env.DEV ? "http://localhost:4000" : undefined;
-const primary = "#0073a8" as const;
+export default function Page() {
+  const theme = createTheme();
+  const user = useStore($user);
+  const query = useQuery(() => ({
+    queryKey: ["openapi"],
+    queryFn: fetchOpenApi,
+  }));
+  const [tokensInput, setTokensInput] = createSignal("");
+  const [tokenError, setTokenError] = createSignal(false);
+  const server = import.meta.env.DEV ? "http://localhost:4000" : undefined;
+  const identity = () => user()?.email || user()?.username || "Admin session";
+  const metadata = () => openApiMetadata(query.data);
+  const refresh = () => query.refetch();
+
+  const handleTokens = (value: string) => {
+    setTokensInput(value);
+    try {
+      parseImpersonationTokens(value);
+      setTokenError(false);
+    } catch {
+      setTokenError(true);
+    }
+  };
+
+  return (
+    <div class="flex h-full min-h-0 flex-col">
+      <Header
+        title="OpenAPI Explorer"
+        description="Explore and try the API specification."
+        right={
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={refresh}
+            disabled={query.isFetching}
+          >
+            <TbOutlineRefresh />
+            {query.isFetching ? "Refreshing…" : "Refresh"}
+          </Button>
+        }
+      />
+      <div class="text-muted-foreground flex flex-wrap gap-2 px-4 py-2 text-xs">
+        <Badge variant="outline">
+          {metadata().version
+            ? `v${metadata().version}`
+            : "Version unavailable"}
+        </Badge>
+        <span>
+          {metadata().operationCount}{" "}
+          {metadata().operationCount === 1 ? "operation" : "operations"}
+        </span>
+        <Show when={server}>
+          <span>Server: {server}</span>
+        </Show>
+        <span>Identity: {identity()}</span>
+      </div>
+      <Show when={query.isLoading}>
+        <div
+          role="status"
+          aria-label="Loading API specification"
+          class="animate-pulse p-6"
+        >
+          Loading API specification…
+        </div>
+      </Show>
+      <Show when={query.error && !query.data}>
+        <Callout variant="error" class="m-4">
+          <CalloutTitle>Unable to load the API specification</CalloutTitle>
+          <CalloutContent>
+            <Button size="sm" onClick={refresh}>
+              Retry
+            </Button>
+          </CalloutContent>
+        </Callout>
+      </Show>
+      <Show when={query.error && query.data}>
+        <Callout variant="warning" class="mx-4 mb-2">
+          <CalloutContent>
+            Unable to refresh the API specification.{" "}
+            <Button size="sm" variant="outline" onClick={refresh}>
+              Retry
+            </Button>
+          </CalloutContent>
+        </Callout>
+      </Show>
+      <Show when={query.data}>
+        <details class="mx-4 mb-2">
+          <summary class="cursor-pointer text-sm font-medium">
+            Advanced authentication
+          </summary>
+          <div class="mt-2 max-w-xl">
+            <label for="openapi-tokens" class="text-sm font-medium">
+              Login tokens
+            </label>
+            <p
+              id="openapi-tokens-description"
+              class="text-muted-foreground text-xs"
+            >
+              Paste copied Accounts login tokens. Stored locally only and never
+              persisted.
+            </p>
+            <input
+              id="openapi-tokens"
+              aria-describedby="openapi-tokens-description openapi-tokens-error"
+              aria-invalid={tokenError()}
+              type="password"
+              autocomplete="new-password"
+              value={tokensInput()}
+              onInput={(e) => handleTokens(e.currentTarget.value)}
+              class="border-input mt-1 w-full rounded-md border px-3 py-2"
+            />
+            <Show when={tokenError()}>
+              <p id="openapi-tokens-error" class="text-destructive text-xs">
+                Invalid login tokens
+              </p>
+            </Show>
+            <Show when={!tokenError()}>
+              <p class="text-muted-foreground text-xs">
+                {tokensInput().trim()
+                  ? "Using impersonation tokens"
+                  : "Using current admin session"}
+              </p>
+            </Show>
+          </div>
+        </details>
+        <rapi-doc
+          ref={(element) => {
+            const r = element as RapiDoc;
+            if (server) {
+              r.setAttribute("server-url", server);
+              r.setAttribute("default-api-server", server);
+            }
+            r.addEventListener("before-try", (event) => {
+              const override = parseImpersonationTokens(tokensInput());
+              const tokens = override ?? $tokens.get();
+              if (tokens)
+                applyRequestTokens(
+                  (event as CustomEvent).detail.request,
+                  tokens,
+                );
+            });
+            r.loadSpec?.(query.data!);
+          }}
+          load-fonts="false"
+          sort-tags="true"
+          theme={theme()}
+          bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
+          primary-color="#0073a8"
+          render-style="view"
+          layout="row"
+          show-header="false"
+          allow-try="true"
+          persist-auth="false"
+          allow-authentication="false"
+          allow-server-selection="false"
+          class="min-h-0 flex-1"
+        />
+      </Show>
+    </div>
+  );
+}
