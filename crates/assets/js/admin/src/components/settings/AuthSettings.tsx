@@ -177,29 +177,15 @@ function ProviderSettingsSubForm(props: {
   index: number;
   provider: OAuthProviderEntry;
   siteUrl: string | undefined;
+  baseline: () => OAuthProviderConfig | undefined;
 }) {
-  const [original, setOnce, { reset }] = createSetOnce<
-    OAuthProviderConfig | undefined
-  >(undefined);
-
   const current = createMemo(() =>
-    props.form.useStore((state: (typeof props.form)["state"]) => {
-      if (state.isSubmitted) {
-        reset(state.values.namedOAuthProviders[props.index].state);
-      }
-
-      const s = state.values.namedOAuthProviders[props.index].state;
-      setOnce(s && OAuthProviderConfig.fromPartial(s));
-      return s;
-    })(),
+    props.form.useStore((state: (typeof props.form)["state"]) =>
+      state.values.namedOAuthProviders[props.index].state,
+    )(),
   );
 
-  const dirty = () => {
-    const id = nonEmpty(current()?.clientId) !== nonEmpty(original()?.clientId);
-    const secret =
-      nonEmpty(current()?.clientSecret) !== nonEmpty(original()?.clientSecret);
-    return id || secret;
-  };
+  const dirty = () => !sameAuthProvider(current(), props.baseline());
 
   const Bullet = () => (
     <Switch
@@ -302,7 +288,7 @@ function ProviderSettingsSubForm(props: {
             onClick={() => {
               props.form.setFieldValue(
                 `namedOAuthProviders[${props.index}].state`,
-                original(),
+                props.baseline(),
               );
             }}
           >
@@ -345,18 +331,19 @@ const authScalarFields = [
 const cloneAuth = (value: AuthConfig) =>
   AuthConfig.decode(AuthConfig.encode(value).finish());
 
+function sameBytes(left: Uint8Array, right: Uint8Array) {
+  return left.length === right.length && left.every((value, i) => value === right[i]);
+}
+
 function sameAuth(left: AuthConfig, right: AuthConfig) {
-  return (
-    AuthConfig.encode(left).finish().join() ===
-    AuthConfig.encode(right).finish().join()
-  );
+  return sameBytes(AuthConfig.encode(left).finish(), AuthConfig.encode(right).finish());
 }
 
 function mergeAuthLeaves(
   submitted: AuthConfigProxy,
   baseline: AuthConfigProxy,
   remote: AuthConfig,
-  providers: OAuthProviderEntry[],
+  _providers: OAuthProviderEntry[],
 ): AuthConfig {
   const local = proxyToConfig(submitted);
   const original = proxyToConfig(baseline);
@@ -371,23 +358,28 @@ function mergeAuthLeaves(
     local.redirectUriAllowlist.join() !== original.redirectUriAllowlist.join()
   )
     merged.redirectUriAllowlist = [...local.redirectUriAllowlist];
-  for (const entry of submitted.namedOAuthProviders) {
-    const before = baseline.namedOAuthProviders.find(
-      (p) => p.provider.name === entry.provider.name,
-    )?.state;
-    const after = entry.state;
-    const oldConfig = before && OAuthProviderConfig.fromPartial(before);
-    const newConfig = after && OAuthProviderConfig.fromPartial(after);
-    const changed = !sameAuthProvider(newConfig, oldConfig);
-    if (changed) {
-      if (
-        newConfig &&
-        newConfig.clientId?.trim() &&
-        newConfig.clientSecret?.trim()
-      )
-        merged.oauthProviders[entry.provider.name] = newConfig;
-      else delete merged.oauthProviders[entry.provider.name];
+  const names = new Set([
+    ...Object.keys(merged.oauthProviders),
+    ...submitted.namedOAuthProviders.map((entry) => entry.provider.name),
+  ]);
+  for (const name of names) {
+    const after = submitted.namedOAuthProviders.find((p) => p.provider.name === name)?.state;
+    const before = baseline.namedOAuthProviders.find((p) => p.provider.name === name)?.state;
+    if (after === undefined) {
+      if (before !== undefined) delete merged.oauthProviders[name];
+      continue;
     }
+    const result = OAuthProviderConfig.fromPartial(merged.oauthProviders[name] ?? after);
+    const fields = ["providerId", "clientId", "clientSecret", "displayName", "authUrl", "tokenUrl", "userApiUrl", "scopes"] as const;
+    for (const field of fields) {
+      const local = after[field];
+      const base = before?.[field];
+      const equal = Array.isArray(local) && Array.isArray(base)
+        ? local.length === base.length && local.every((v, i) => v === base[i])
+        : local === base;
+      if (!equal) (result as any)[field] = Array.isArray(local) ? [...local] : local;
+    }
+    if (result.clientId?.trim() && result.clientSecret?.trim()) merged.oauthProviders[name] = result;
   }
   return merged;
 }
@@ -401,9 +393,9 @@ function sameAuthProvider(
   right?: OAuthProviderConfig,
 ) {
   if (!left || !right) return left === right;
-  return (
-    OAuthProviderConfig.encode(left).finish().join() ===
-    OAuthProviderConfig.encode(right).finish().join()
+  return sameBytes(
+    OAuthProviderConfig.encode(left).finish(),
+    OAuthProviderConfig.encode(right).finish(),
   );
 }
 
@@ -548,6 +540,11 @@ function AuthSettingsForm(props: {
           </CardHeader>
 
           <CardContent>
+            <p class="mb-4 text-sm">
+              Changing the user identifier changes the authentication UI and may
+              affect existing sign-in methods. Password rules apply to new or
+              changed passwords only.
+            </p>
             <div class="flex flex-col gap-4">
               <form.Field name="userIdentifier">
                 {(field) => {
@@ -778,6 +775,7 @@ function AuthSettingsForm(props: {
                             index={index()}
                             provider={provider.provider}
                             siteUrl={props.config.server?.siteUrl}
+                            baseline={() => editBaseline.namedOAuthProviders[index()]?.state}
                           />
                         );
                       }}
@@ -826,7 +824,7 @@ function AuthSettingsForm(props: {
                       const response = await adminFetch(`/public_key`);
                       return response.body;
                     },
-                    filename: "public_key.pep",
+                    filename: "public_key.pem",
                   });
                 }}
               >
