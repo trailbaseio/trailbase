@@ -180,7 +180,9 @@ describe("settings workspace", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Refresh settings" }));
     expect(state.invalidate).toHaveBeenCalled();
-    expect(document.querySelector(".max-w-5xl")).not.toHaveClass("overflow-y-auto");
+    expect(document.querySelector(".max-w-5xl")).not.toHaveClass(
+      "overflow-y-auto",
+    );
     state.mobile = true;
     cleanup();
     render(() => <SettingsPage />);
