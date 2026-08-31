@@ -92,11 +92,16 @@ describe("SchemaSettings", () => {
     setup();
     expect(screen.getByText("No schemas available.")).toBeInTheDocument();
   });
-  it("shows Postgres explanation and built-ins", () => {
+  it("shows only built-ins and hides custom registration in Postgres", () => {
     state.postgres = true;
     setup();
     expect(screen.getByText(/not supported in postgres/i)).toBeInTheDocument();
     expect(screen.getByText("built-in")).toBeInTheDocument();
+    expect(screen.getByText("Alpha")).toBeInTheDocument();
+    expect(screen.queryByText("zeta")).toBeNull();
+    expect(screen.queryByText("unsafe")).toBeNull();
+    expect(screen.queryByText(/registration via the admin ui/i)).toBeNull();
+    expect(screen.queryByText(/CREATE TABLE/)).toBeNull();
   });
   it("sorts a copy without mutating query data", () => {
     setup();

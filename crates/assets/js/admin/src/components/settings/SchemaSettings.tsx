@@ -43,11 +43,13 @@ export function SchemaSettings(props: {
     queryFn: listSchemas,
   }));
   const systemInfo = createSystemInfoQuery();
+  const isPostgres = () => systemInfo.data?.postgres === true;
   const [search, setSearch] = createSignal("");
   const filtered = createMemo(() => {
     const needle = search().trim().toLocaleLowerCase();
     return [...(schemas.data?.schemas ?? [])]
       .sort((a, b) => a.name.localeCompare(b.name))
+      .filter((schema) => !isPostgres() || schema.builtin)
       .filter((schema) => schema.name.toLocaleLowerCase().includes(needle));
   });
 
@@ -68,23 +70,29 @@ export function SchemaSettings(props: {
             <h2>JSON Schemas</h2>
           </CardHeader>
           <CardContent class="flex flex-col gap-4">
-            <Show when={systemInfo.data?.postgres}>
+            <Show
+              when={isPostgres()}
+              fallback={
+                <>
+                  <p class="text-sm">
+                    Custom JSON schemas can be registered to enforce constraints
+                    on columns of your database tables:
+                  </p>
+                  <pre class="overflow-x-auto text-sm whitespace-pre-wrap">
+                    {exampleTable}
+                  </pre>
+                  <p class="text-sm">
+                    Registration via the admin UI is not yet available. Register
+                    custom schemas in your instance&apos;s config.textproto.
+                  </p>
+                </>
+              }
+            >
               <p class="text-sm">
                 Custom schemas are not supported in Postgres mode. Only the
                 following built-ins are available:
               </p>
             </Show>
-            <p class="text-sm">
-              Custom JSON schemas can be registered to enforce constraints on
-              columns of your database tables:
-            </p>
-            <pre class="overflow-x-auto text-sm whitespace-pre-wrap">
-              {exampleTable}
-            </pre>
-            <p class="text-sm">
-              Registration via the admin UI is not yet available. Register
-              custom schemas in your instance&apos;s config.textproto.
-            </p>
             <label for="schema-search">Search schemas</label>
             <input
               id="schema-search"
