@@ -1,4 +1,4 @@
-import { Show, createSignal } from "solid-js";
+import { Show, createEffect, createSignal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { useStore } from "@nanostores/solid";
 import { TbOutlineRefresh } from "solid-icons/tb";
@@ -47,6 +47,11 @@ export default function Page() {
   const server = import.meta.env.DEV ? "http://localhost:4000" : undefined;
   const identity = () => user()?.email || user()?.username || "Admin session";
   const metadata = () => openApiMetadata(query.data);
+  let rapidoc: RapiDoc | undefined;
+  createEffect(() => {
+    const spec = query.data;
+    if (spec) rapidoc?.loadSpec?.(spec);
+  });
   const refresh = () => query.refetch();
 
   const handleTokens = (value: string) => {
@@ -163,6 +168,7 @@ export default function Page() {
         <rapi-doc
           ref={(element) => {
             const r = element as RapiDoc;
+            rapidoc = r;
             if (server) {
               r.setAttribute("server-url", server);
               r.setAttribute("default-api-server", server);
