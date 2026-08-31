@@ -109,11 +109,6 @@ function configSignature(config: Config) {
 function jobsConfigSignature(config: JobsConfig) {
   return Array.from(JobsConfig.encode(config).finish()).join(",");
 }
-function leafChanged(a: SystemJob, b: SystemJob) {
-  return (
-    a.id !== b.id || a.schedule !== b.schedule || a.disabled !== b.disabled
-  );
-}
 function mergeJobs(
   submitted: JobsConfig,
   baseline: JobsConfig,
@@ -160,11 +155,11 @@ function JobSettingsImpl(props: {
   refetchJobs: () => Promise<unknown>;
 }) {
   const queryClient = useQueryClient();
-  let baseline = buildFormProxy(props.config.jobs, props.jobs);
-  let latestConfig = cloneConfig(props.config),
-    latestJobs = cloneJobs(props.jobs),
-    lastConfig = configSignature(props.config),
-    lastJobs = jobsSignature(props.jobs),
+  let baseline = untrack(() => buildFormProxy(props.config.jobs, props.jobs));
+  let latestConfig = untrack(() => cloneConfig(props.config)),
+    latestJobs = untrack(() => cloneJobs(props.jobs)),
+    lastConfig = untrack(() => configSignature(props.config)),
+    lastJobs = untrack(() => jobsSignature(props.jobs)),
     active = true;
   const [submitError, setSubmitError] = createSignal(false),
     [runError, setRunError] = createSignal(false),
@@ -231,9 +226,10 @@ function JobSettingsImpl(props: {
     },
   }));
   const dirty = () =>
-    jobsConfigSignature(extractConfig(form.state.values)) !==
+    jobsConfigSignature(extractConfig(formValues())) !==
     jobsConfigSignature(extractConfig(baseline));
-  form.useStore(() => props.setDirty(dirty()));
+  const formValues = form.useSelector((state) => state.values);
+  createEffect(() => props.setDirty(dirty()));
   createEffect(() => {
     const incoming = props.config,
       encoded = configSignature(incoming),
@@ -358,17 +354,12 @@ function JobSettingsImpl(props: {
                             >
                               {(f: () => FieldApiT<string | undefined>) => (
                                 <>
-                                  <TextField>
+                                  <TextField onChange={f().handleChange}>
                                     <TextFieldInput
                                       type="text"
                                       aria-label={`Schedule for ${proxy().job?.name ?? proxy().config.id}`}
                                       value={f().state.value}
                                       onBlur={f().handleBlur}
-                                      onChange={(e) =>
-                                        f().handleChange(
-                                          (e.target as HTMLInputElement).value,
-                                        )
-                                      }
                                     />
                                   </TextField>
                                   <FieldInfo field={f()} />
@@ -436,7 +427,12 @@ function JobSettingsImpl(props: {
       </Card>
       <SettingsFormActions
         dirty={dirty()}
-        canSubmit={form.state.canSubmit}
+        canSubmit={
+          form.state.canSubmit &&
+          formValues().jobs.every((entry) =>
+            cronRegex.test(entry.config.schedule ?? ""),
+          )
+        }
         isSubmitting={form.state.isSubmitting}
         onReset={reset}
       />
@@ -452,11 +448,14 @@ export function JobSettings(props: {
     config = createConfigQuery(),
     jobList = useQuery(() => ({ queryKey: listJobsKey, queryFn: listJobs }));
   return (
-    <Switch fallback="Loading…">
+    <Switch fallback={<div role="status">Loading jobs settings…</div>}>
+      <Match when={jobList.isLoading || config.isLoading}>
+        <div role="status">Loading jobs settings…</div>
+      </Match>
       <Match when={jobList.isError}>
         <div role="alert">Unable to load jobs.</div>
       </Match>
-      <Match when={config.error}>
+      <Match when={config.isError}>
         <div role="alert">Unable to load configuration.</div>
       </Match>
       <Match when={jobList.isSuccess && config.data?.config}>

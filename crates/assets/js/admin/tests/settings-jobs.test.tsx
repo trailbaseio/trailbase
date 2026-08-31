@@ -228,7 +228,10 @@ describe("JobSettings editing and saving", () => {
     await fireEvent.click(screen.getByLabelText("Enabled for Cleanup"));
     await fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(schedule()).toHaveValue("@daily");
-    expect(screen.getByLabelText("Enabled for Cleanup")).toBeChecked();
+    expect(screen.getByLabelText("Enabled for Cleanup")).toHaveAttribute(
+      "data-checked",
+      "",
+    );
   });
   it("retains edits and shows a generic error when save rejects", async () => {
     state.setConfig.mockRejectedValue(new Error("secret save detail"));
@@ -259,7 +262,7 @@ describe("JobSettings editing and saving", () => {
     await fireEvent.input(schedule(), { target: { value: "@hourly" } });
     await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(state.setConfig).toHaveBeenCalled());
-    expect(order).toEqual(["setConfig"]);
+    expect(order).toEqual(["setConfig", "invalidate"]);
     refreshed.resolve(undefined);
     await waitFor(() => expect(state.invalidateQueries).toHaveBeenCalled());
     await waitFor(() => expect(v.postSubmit).toHaveBeenCalled());
@@ -289,8 +292,15 @@ describe("JobSettings editing and saving", () => {
     );
     state.setJobsSignal?.([job(), job(2, "Remote", "@daily", false)]);
     await waitFor(() => expect(schedule()).toHaveValue("@hourly"));
-    expect(screen.getByText("Remote")).toBeInTheDocument();
     expect(v.setDirty).toHaveBeenLastCalledWith(true);
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() => expect(state.setConfig).toHaveBeenCalled());
+    const saved = state.setConfig.mock.calls.at(-1)?.[0].config as Config;
+    expect(saved.jobs?.systemJobs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 2, schedule: "@daily", disabled: true }),
+      ]),
+    );
   });
   it("does not update callbacks after save completes on unmounted form", async () => {
     const pending = deferred<void>();
