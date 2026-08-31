@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { adminFetch } from "@/lib/fetch";
 import { createSystemInfoQuery } from "@/lib/api/info";
 import type { ListJsonSchemasResponse } from "@bindings/ListJsonSchemasResponse";
+import type { JsonSchema } from "@bindings/JsonSchema";
 
 async function listSchemas(): Promise<ListJsonSchemasResponse> {
   const response = await adminFetch("/schema", { method: "GET" });
@@ -27,7 +28,15 @@ async function listSchemas(): Promise<ListJsonSchemasResponse> {
 
 const MAX_SCHEMA_SOURCE_LENGTH = 50_000;
 const MAX_SCHEMA_DEPTH = 100;
-const MAX_FORMATTED_SCHEMA_LENGTH = 100_000;
+const MAX_FORMATTED_SCHEMA_LENGTH = MAX_SCHEMA_SOURCE_LENGTH;
+const MAX_SCHEMA_NAME_LENGTH = 256;
+
+function hasControlCharacters(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || (code >= 127 && code <= 159);
+  });
+}
 
 function boundedSource(source: string): string {
   return source.length > MAX_SCHEMA_SOURCE_LENGTH
@@ -86,11 +95,15 @@ export function SchemaSettings(props: {
   const [search, setSearch] = createSignal("");
   const filtered = createMemo(() => {
     const needle = search().trim().toLocaleLowerCase();
-    return [...(schemas.data?.schemas ?? [])]
+    const payload: unknown = schemas.data?.schemas;
+    const entries = Array.isArray(payload) ? payload : [];
+    return entries
       .filter(
-        (schema): schema is typeof schema & { name: string; schema: string } =>
+        (schema): schema is JsonSchema & { name: string; schema: string } =>
           typeof schema?.name === "string" &&
           schema.name.length > 0 &&
+          schema.name.length <= MAX_SCHEMA_NAME_LENGTH &&
+          !hasControlCharacters(schema.name) &&
           typeof schema?.schema === "string",
       )
       .sort((a, b) => a.name.localeCompare(b.name))

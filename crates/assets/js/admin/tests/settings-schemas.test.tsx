@@ -9,7 +9,7 @@ const state = vi.hoisted(() => ({
   postgres: false,
   infoLoading: false,
   infoError: false,
-  setSchemas: undefined as ((value: JsonSchema[]) => void) | undefined,
+  setSchemas: undefined as ((value: unknown) => void) | undefined,
   setLoading: undefined as ((value: boolean) => void) | undefined,
   setError: undefined as ((value: boolean) => void) | undefined,
   setPostgres: undefined as ((value: boolean) => void) | undefined,
@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@tanstack/solid-query", async () => {
   const { createSignal } =
     await vi.importActual<typeof import("solid-js")>("solid-js");
-  const [schemas, setSchemas] = createSignal<JsonSchema[]>([]);
+  const [schemas, setSchemas] = createSignal<unknown>([]);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal(false);
   state.setSchemas = setSchemas;
@@ -210,10 +210,26 @@ describe("SchemaSettings", () => {
     expect(formatSchemaSource(null)).toBe("");
     expect(formatSchemaSource({ bad: true })).toContain("[object Object]");
   });
-  it("caps oversized malformed sources and keeps source text", () => {
+  it("caps oversized malformed and expanded pretty output", () => {
     expect(formatSchemaSource("<script>" + "x".repeat(60_000))).toContain(
       "… truncated",
     );
+    const compact = JSON.stringify(Array(15_000).fill(0));
+    expect(compact.length).toBeLessThan(50_000);
+    expect(formatSchemaSource(compact).length).toBeLessThanOrEqual(50_000);
+  });
+
+  it("handles malformed top-level payloads and unsafe names", () => {
+    setup();
+    state.setSchemas?.({});
+    expect(screen.getByText("No schemas available.")).toBeInTheDocument();
+    state.setSchemas?.([
+      { name: "safe", schema: "{}", builtin: false },
+      { name: `too-long-${"x".repeat(300)}`, schema: "{}", builtin: false },
+      { name: "control\u0000name", schema: "{}", builtin: false },
+    ]);
+    expect(screen.getByText("safe")).toBeInTheDocument();
+    expect(screen.queryByText(/too-long/)).toBeNull();
   });
   it("reacts to loading and error transitions", async () => {
     setup();
@@ -227,6 +243,19 @@ describe("SchemaSettings", () => {
       ),
     );
   });
+  it("reacts to system information loading and error transitions", async () => {
+    setup();
+    state.setInfoLoading?.(true);
+    expect(screen.getByRole("status")).toHaveTextContent(/loading schemas/i);
+    state.setInfoLoading?.(false);
+    state.setInfoError?.(true);
+    await vi.waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /unable to load system/i,
+      ),
+    );
+  });
+
   it("reacts to Postgres and schema refresh transitions", async () => {
     setup();
     state.setPostgres?.(true);
