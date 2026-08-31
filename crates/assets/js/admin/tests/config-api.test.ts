@@ -60,6 +60,8 @@ describe("config API", () => {
   });
 
   it("posts exact protobuf data and awaits invalidation", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     let finishInvalidation!: () => void;
     const invalidateQueries = vi.fn(
       () =>
@@ -93,5 +95,9 @@ describe("config API", () => {
     finishInvalidation();
     await pending;
     expect(settled).toBe(true);
+    expect(debug).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    debug.mockRestore();
+    error.mockRestore();
   });
 });

@@ -10,6 +10,7 @@ import {
   buildTextFormField,
   buildOptionalTextFormField,
   buildOptionalIntegerFormField,
+  buildOptionalSmallIntegerFormField,
   type FieldApiT,
 } from "@/components/FormFields";
 
@@ -19,6 +20,7 @@ interface MyForm {
   nullable: string | null;
   optionalNullable: string | null | undefined;
   bigint: bigint | undefined;
+  smallInteger: number | undefined;
 }
 
 function Form(props: {
@@ -94,6 +96,32 @@ describe("required form fields", () => {
 });
 
 describe("number form fields", () => {
+  test("reset updates the controlled small integer input", async () => {
+    const user = userEvent.setup();
+    const [, setSubmitted] = createSignal<MyForm | undefined>();
+    const defaults = {
+      required: "default",
+      nullable: null,
+      smallInteger: 3600,
+    } as MyForm;
+    const dom = render(() => (
+      <Form
+        name="smallInteger"
+        setForm={setSubmitted}
+        defaultValue={defaults}
+        resetValue={{ ...defaults, smallInteger: 7200 }}
+        field={buildOptionalSmallIntegerFormField({
+          label: () => "Small integer",
+        })}
+      />
+    ));
+
+    const input = dom.getByTestId("input") as HTMLInputElement;
+    expect(input.value).toBe("3600");
+    await user.click(dom.getByRole("button", { name: "Reset test form" }));
+    expect(input.value).toBe("7200");
+  });
+
   test("keeps bigint exact and reset updates the controlled input", async () => {
     const user = userEvent.setup();
     const [submitted, setSubmitted] = createSignal<MyForm | undefined>();

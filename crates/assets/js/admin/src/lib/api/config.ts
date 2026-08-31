@@ -59,7 +59,7 @@ export async function setConfig(opts: {
   } else {
     try {
       await updateConfig(request);
-    } catch (err) {
+    } catch {
       showToast({
         title: "Config update failed",
         description: "Please refresh and try again.",
