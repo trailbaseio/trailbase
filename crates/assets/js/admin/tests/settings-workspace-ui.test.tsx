@@ -160,9 +160,11 @@ describe("settings workspace", () => {
       ["Databases", "data"],
       ["Schemas", "schema"],
     ]) {
+      cleanup();
+      state.params.group = route === "host" ? "email" : "host";
+      render(() => <SettingsPage />);
       fireEvent.click(screen.getByText(label));
-      if (route !== "email")
-        expect(state.navigate).toHaveBeenLastCalledWith(`/settings/${route}`);
+      expect(state.navigate).toHaveBeenLastCalledWith(`/settings/${route}`);
     }
   });
   it("falls invalid routes back to General", () => {
