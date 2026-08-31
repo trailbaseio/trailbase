@@ -26,6 +26,9 @@ export default [
         "error",
         {
           ignore: [
+            // Ours:
+            "openapi-explorer",
+            "openapi-nav-open",
             // Kobalte?
             "duration-250ms",
             "items-top",
