@@ -16,6 +16,9 @@ const state = vi.hoisted(() => ({
   restore: vi.fn(),
   del: vi.fn(),
   toast: vi.fn(),
+  configData: undefined as any,
+  configLoading: false,
+  configError: false,
 }));
 vi.mock("@tanstack/solid-query", async () => {
   const { createSignal } =
@@ -45,7 +48,17 @@ vi.mock("@/lib/api/backups", () => ({
   deleteBackups: (t: bigint[]) => state.del(t),
 }));
 vi.mock("@/lib/api/config", () => ({
-  createConfigQuery: () => ({ data: undefined }),
+  createConfigQuery: () => ({
+    get data() {
+      return state.configData;
+    },
+    get isLoading() {
+      return state.configLoading;
+    },
+    get isError() {
+      return state.configError;
+    },
+  }),
 }));
 vi.mock("@/components/ui/toast", () => ({
   showToast: (x: unknown) => state.toast(x),
@@ -69,6 +82,9 @@ beforeEach(() => {
   state.restore.mockReset().mockResolvedValue(undefined);
   state.del.mockReset().mockResolvedValue(undefined);
   state.toast.mockReset();
+  state.configData = undefined;
+  state.configLoading = false;
+  state.configError = false;
 });
 afterEach(cleanup);
 
@@ -264,6 +280,74 @@ describe("BackupSettings", () => {
     expect(state.restore).toHaveBeenCalledWith(timestamp);
     expect(state.refetch).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not block backups when config is loading or failed", () => {
+    state.configLoading = true;
+    state.backups = { backups: [{ timestamp }] };
+    renderBackups();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByText(/Current window size: 5/)).toBeInTheDocument();
+    cleanup();
+    state.configLoading = false;
+    state.configError = true;
+    renderBackups();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("reports trigger refresh failure without retrying mutation", async () => {
+    state.refetch.mockRejectedValue(new Error("raw refresh secret"));
+    renderBackups();
+    fireEvent.click(screen.getByRole("button", { name: /trigger backup/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/could not refresh/i),
+    );
+    expect(state.trigger).toHaveBeenCalledOnce();
+    expect(state.toast).toHaveBeenCalledOnce();
+    expect(screen.queryByText(/raw refresh secret/i)).not.toBeInTheDocument();
+  });
+
+  it("closes destructive confirmation after mutation despite refresh failure", async () => {
+    state.backups = { backups: [{ timestamp }] };
+    state.refetch.mockRejectedValue(new Error("raw refresh secret"));
+    renderBackups();
+    fireEvent.click(
+      screen.getByRole("button", { name: /delete backup from/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(state.toast).toHaveBeenCalledOnce();
+    expect(screen.getByRole("alert")).toHaveTextContent(/could not refresh/i);
+  });
+
+  it("suppresses trigger completion after unmount", async () => {
+    let resolve!: () => void;
+    state.trigger.mockReturnValue(new Promise<void>((r) => (resolve = r)));
+    const view = renderBackups();
+    fireEvent.click(screen.getByRole("button", { name: /trigger backup/i }));
+    view.unmount();
+    resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(state.refetch).not.toHaveBeenCalled();
+    expect(state.toast).not.toHaveBeenCalled();
+  });
+
+  it("suppresses row mutation completion after unmount", async () => {
+    let resolve!: () => void;
+    state.backups = { backups: [{ timestamp }] };
+    state.del.mockReturnValue(new Promise<void>((r) => (resolve = r)));
+    const view = renderBackups();
+    fireEvent.click(
+      screen.getByRole("button", { name: /delete backup from/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    view.unmount();
+    resolve();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(state.refetch).not.toHaveBeenCalled();
+    expect(state.toast).not.toHaveBeenCalled();
   });
 
   it("names actions for every row", () => {

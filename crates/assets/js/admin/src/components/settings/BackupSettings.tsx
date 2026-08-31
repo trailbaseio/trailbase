@@ -252,7 +252,7 @@ export function BackupSettings(_props: {
           if (!open && !pendingAction()) setSelectedAction();
         }}
       >
-        <DialogContent>
+        <DialogContent closeDisabled={!!pendingAction()}>
           <DialogHeader>
             <DialogTitle>
               {selectedAction() &&
