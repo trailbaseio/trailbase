@@ -43,7 +43,6 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 
 import type { InfoResponse } from "@bindings/InfoResponse";
 import { Config, ServerConfig } from "@proto/config";
@@ -66,6 +65,7 @@ import { BackupSettings } from "@/components/settings/BackupSettings";
 import { IconButton } from "@/components/IconButton";
 import { Version } from "@/components/Version";
 import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 
 import {
   createConfigQuery,
@@ -89,10 +89,15 @@ function ServerSettings(props: CommonProps) {
         <CardContent class="flex flex-col gap-4">
           <Switch>
             <Match when={systemInfo.isError}>
-              {systemInfo.error?.toString()}
+              <Callout variant="error" role="alert">
+                <CalloutTitle>Unable to load runtime information</CalloutTitle>
+                <CalloutContent>Please try again later.</CalloutContent>
+              </Callout>
             </Match>
 
-            <Match when={systemInfo.isLoading}>Loading...</Match>
+            <Match when={systemInfo.isLoading}>
+              <div role="status">Loading runtime information...</div>
+            </Match>
 
             <Match when={systemInfo.isSuccess}>
               <SystemInformation systemInfo={systemInfo.data!} />
@@ -102,9 +107,16 @@ function ServerSettings(props: CommonProps) {
       </Card>
 
       <Switch>
-        <Match when={config.isError}>{config.error?.toString()}</Match>
+        <Match when={config.isError}>
+          <Callout variant="error" role="alert">
+            <CalloutTitle>Unable to load settings</CalloutTitle>
+            <CalloutContent>Please try again later.</CalloutContent>
+          </Callout>
+        </Match>
 
-        <Match when={config.isLoading}>Lading...</Match>
+        <Match when={config.isLoading}>
+          <div role="status">Loading settings...</div>
+        </Match>
 
         <Match when={config.data?.config}>
           <ServerSettingsForm config={config.data!.config!} {...props} />
@@ -155,18 +167,23 @@ function ServerSettingsForm(
       : ServerConfig.fromJSON({});
   }
 
+  const [submitError, setSubmitError] = createSignal(false);
   const form = createForm(() => ({
     defaultValues: serverConfig(props.config),
     onSubmit: async ({ value }: { value: ServerConfig }) => {
+      setSubmitError(false);
       const newConfig = Config.fromPartial(props.config);
       newConfig.server = value;
-      await setConfig({
-        client: queryClient,
-        config: newConfig,
-        throw: true,
-      });
-
-      props.postSubmit?.();
+      try {
+        await setConfig({
+          client: queryClient,
+          config: newConfig,
+          throw: true,
+        });
+        props.postSubmit?.();
+      } catch {
+        setSubmitError(true);
+      }
     },
   }));
 
@@ -244,18 +261,30 @@ function ServerSettingsForm(
           selector={(state) => ({
             canSubmit: state.canSubmit,
             isSubmitting: state.isSubmitting,
+            isDirty: state.isDirty,
+            isSubmitted: state.isSubmitted,
           })}
         >
           {(state) => (
-            <SettingsFormActions
-              dirty={form.state.isDirty}
-              canSubmit={state().canSubmit}
-              isSubmitting={state().isSubmitting}
-              onReset={() => {
-                form.reset();
-                props.setDirty(false);
-              }}
-            />
+            <>
+              <Show when={submitError()}>
+                <Callout variant="error" role="alert">
+                  <CalloutTitle>Unable to save settings</CalloutTitle>
+                  <CalloutContent>
+                    Check your values and try again.
+                  </CalloutContent>
+                </Callout>
+              </Show>
+              <SettingsFormActions
+                dirty={state().isDirty && !state().isSubmitted}
+                canSubmit={state().canSubmit}
+                isSubmitting={state().isSubmitting}
+                onReset={() => {
+                  form.reset();
+                  props.setDirty(false);
+                }}
+              />
+            </>
           )}
         </form.Subscribe>
       </div>
@@ -290,48 +319,44 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
 
   const width = "w-40";
   return (
-    <TextField class="w-full">
-      <div
-        class={`grid items-center ${gapStyle}`}
-        style={{ "grid-template-columns": "auto 1fr" }}
-      >
-        <TextFieldLabel class={width}>CPU Threads:</TextFieldLabel>
-        <span>{info().threads}</span>
+    <dl
+      class={`grid items-center ${gapStyle}`}
+      style={{ "grid-template-columns": "auto 1fr" }}
+    >
+      <dt class={width}>CPU Threads:</dt>
+      <dd>{info().threads}</dd>
 
-        <TextFieldLabel class={width}>Compiler:</TextFieldLabel>
-        <span>{info().compiler}</span>
+      <dt class={width}>Compiler:</dt>
+      <dd>{info().compiler}</dd>
 
-        <TextFieldLabel class={width}>Commit Hash:</TextFieldLabel>
-        <span>
-          <a
-            href={`https://github.com/trailbaseio/trailbase/commit/${info().commit_hash}`}
-          >
-            {info().commit_hash?.substring(0, 10)}
-          </a>
-        </span>
+      <dt class={width}>Commit Hash:</dt>
+      <span>
+        <a
+          href={`https://github.com/trailbaseio/trailbase/commit/${info().commit_hash}`}
+        >
+          {info().commit_hash?.substring(0, 10)}
+        </a>
+      </span>
 
-        <TextFieldLabel class={width}>Commit Date:</TextFieldLabel>
-        <span>{info().commit_date}</span>
+      <dt class={width}>Commit Date:</dt>
+      <dd>{info().commit_date}</dd>
 
-        <TextFieldLabel class={width}>Version:</TextFieldLabel>
-        <span>
-          <Version info={info()} />
-        </span>
+      <dt class={width}>Version:</dt>
+      <span>
+        <Version info={info()} />
+      </span>
 
-        <TextFieldLabel class={width}>Uptime:</TextFieldLabel>
-        <span>{formatDuration(uptime())}</span>
+      <dt class={width}>Uptime:</dt>
+      <dd>{formatDuration(uptime())}</dd>
 
-        <TextFieldLabel class={width}>Arguments:</TextFieldLabel>
-        <span class="font-mono">
-          {info().command_line_arguments?.join(" ")}
-        </span>
+      <dt class={width}>Arguments:</dt>
+      <span class="font-mono">{info().command_line_arguments?.join(" ")}</span>
 
-        <Show when={props.systemInfo.postgres}>
-          <TextFieldLabel class={width}>Postgres:</TextFieldLabel>
-          <span>enabled</span>
-        </Show>
-      </div>
-    </TextField>
+      <Show when={props.systemInfo.postgres}>
+        <dt class={width}>Postgres:</dt>
+        <dd>enabled</dd>
+      </Show>
+    </dl>
   );
 }
 
