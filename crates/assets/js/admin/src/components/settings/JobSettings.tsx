@@ -88,6 +88,27 @@ export function extractConfig(proxy: FormProxy): JobsConfig {
 }
 const cloneConfig = (c: Config) => Config.decode(Config.encode(c).finish());
 const cloneJobs = (j: Job[]) => j.map((x) => ({ ...x }));
+function jobsSignature(jobs: Job[]) {
+  return jobs
+    .map((job) =>
+      [
+        job.id,
+        job.name,
+        job.schedule,
+        job.enabled,
+        job.next?.toString() ?? "",
+        job.latest?.map((value) => value?.toString() ?? "").join("|") ?? "",
+      ].join("\u001f"),
+    )
+    .sort()
+    .join("\u001e");
+}
+function configSignature(config: Config) {
+  return Array.from(Config.encode(config).finish()).join(",");
+}
+function jobsConfigSignature(config: JobsConfig) {
+  return Array.from(JobsConfig.encode(config).finish()).join(",");
+}
 function leafChanged(a: SystemJob, b: SystemJob) {
   return (
     a.id !== b.id || a.schedule !== b.schedule || a.disabled !== b.disabled
@@ -116,10 +137,12 @@ function mergeJobs(
 }
 function safeDate(value: unknown) {
   try {
-    const s = typeof value === "bigint" ? value.toString() : String(value);
-    const t = Number(s);
-    if (!Number.isSafeInteger(t) || t <= 0) return null;
-    const d = new Date(t * 1000);
+    const seconds = BigInt(typeof value === "bigint" ? value : String(value));
+    const millis = seconds * 1000n;
+    const min = BigInt(-8_640_000_000_000_000);
+    const max = BigInt(8_640_000_000_000_000);
+    if (seconds <= 0n || millis < min || millis > max) return null;
+    const d = new Date(Number(millis));
     return Number.isNaN(d.getTime()) ? null : d;
   } catch {
     return null;
@@ -140,7 +163,8 @@ function JobSettingsImpl(props: {
   let baseline = buildFormProxy(props.config.jobs, props.jobs);
   let latestConfig = cloneConfig(props.config),
     latestJobs = cloneJobs(props.jobs),
-    lastConfig = Config.encode(props.config).finish(),
+    lastConfig = configSignature(props.config),
+    lastJobs = jobsSignature(props.jobs),
     active = true;
   const [submitError, setSubmitError] = createSignal(false),
     [runError, setRunError] = createSignal(false),
@@ -160,7 +184,9 @@ function JobSettingsImpl(props: {
       };
       const submittedJobs = extractConfig(submitted),
         configAtSubmit = cloneConfig(latestConfig),
-        baselineAtSubmit = extractConfig(baseline);
+        baselineAtSubmit = extractConfig(baseline),
+        configRevisionAtSubmit = configSignature(latestConfig),
+        jobsRevisionAtSubmit = jobsSignature(latestJobs);
       try {
         const merged = mergeJobs(
           submittedJobs,
@@ -170,14 +196,32 @@ function JobSettingsImpl(props: {
         const save = cloneConfig(configAtSubmit);
         save.jobs = merged;
         await setConfig({ client: queryClient, config: save, throw: true });
-        await props.refetchJobs();
+        const refreshed = await props.refetchJobs();
+        if (
+          refreshed &&
+          typeof refreshed === "object" &&
+          "isError" in refreshed &&
+          refreshed.isError
+        ) {
+          throw new Error("Jobs refresh failed");
+        }
         if (!active) return;
-        latestConfig = save;
-        baseline = buildFormProxy(merged, latestJobs);
+        const refreshedDuringSave =
+          configRevisionAtSubmit !== configSignature(latestConfig) ||
+          jobsRevisionAtSubmit !== jobsSignature(latestJobs);
+        const finalJobs = refreshedDuringSave
+          ? mergeJobs(
+              submittedJobs,
+              baselineAtSubmit,
+              latestConfig.jobs ?? JobsConfig.create(),
+            )
+          : merged;
+        latestConfig = refreshedDuringSave ? cloneConfig(latestConfig) : save;
+        latestConfig.jobs = finalJobs;
+        baseline = buildFormProxy(finalJobs, latestJobs);
         const stillEdited =
-          extractConfig(form.state.values) !== undefined &&
-          JSON.stringify(extractConfig(form.state.values)) !==
-            JSON.stringify(submittedJobs);
+          jobsConfigSignature(extractConfig(form.state.values)) !==
+          jobsConfigSignature(submittedJobs);
         if (!stillEdited) form.reset(baseline);
         setSubmitError(false);
         props.postSubmit(stillEdited);
@@ -187,24 +231,48 @@ function JobSettingsImpl(props: {
     },
   }));
   const dirty = () =>
-    JSON.stringify(extractConfig(form.state.values)) !==
-    JSON.stringify(extractConfig(baseline));
+    jobsConfigSignature(extractConfig(form.state.values)) !==
+    jobsConfigSignature(extractConfig(baseline));
   form.useStore(() => props.setDirty(dirty()));
   createEffect(() => {
     const incoming = props.config,
-      encoded = Config.encode(incoming).finish();
-    const changed =
-      encoded.length !== lastConfig.length ||
-      encoded.some((x, i) => x !== lastConfig[i]) ||
-      props.jobs !== latestJobs;
+      encoded = configSignature(incoming),
+      incomingJobs = jobsSignature(props.jobs);
+    const changed = encoded !== lastConfig || incomingJobs !== lastJobs;
     if (!changed) return;
     const wasDirty = untrack(dirty);
+    const previousRemote = buildFormProxy(latestConfig.jobs, latestJobs);
     lastConfig = encoded;
+    lastJobs = incomingJobs;
     latestConfig = cloneConfig(incoming);
     latestJobs = cloneJobs(props.jobs);
+    const incomingBaseline = buildFormProxy(incoming.jobs, props.jobs);
     if (!wasDirty) {
-      baseline = buildFormProxy(incoming.jobs, props.jobs);
+      baseline = incomingBaseline;
       form.reset(baseline);
+    } else {
+      const current = form.state.values.jobs;
+      baseline = incomingBaseline;
+      form.reset(incomingBaseline);
+      for (const [index, entry] of baseline.jobs.entries()) {
+        const previous = current.find(
+          (item) => item.config.id === entry.config.id,
+        );
+        const old = previousRemote.jobs.find(
+          (item) => item.config.id === entry.config.id,
+        );
+        if (!previous || !old) continue;
+        if (previous.config.schedule !== old.config.schedule)
+          form.setFieldValue(
+            `jobs[${index}].config.schedule`,
+            previous.config.schedule,
+          );
+        if (previous.config.disabled !== old.config.disabled)
+          form.setFieldValue(
+            `jobs[${index}].config.disabled`,
+            previous.config.disabled,
+          );
+      }
     }
   });
   const reset = () => {
@@ -219,7 +287,15 @@ function JobSettingsImpl(props: {
     try {
       const result = await runJob({ id });
       if (result.error) throw new Error("job failed");
-      await props.refetchJobs();
+      const refreshed = await props.refetchJobs();
+      if (
+        refreshed &&
+        typeof refreshed === "object" &&
+        "isError" in refreshed &&
+        refreshed.isError
+      ) {
+        throw new Error("Jobs refresh failed");
+      }
       if (active) showToast({ title: "Job started", variant: "success" });
     } catch {
       if (active) {
@@ -389,7 +465,10 @@ export function JobSettings(props: {
           config={config.data!.config!}
           jobs={jobList.data?.jobs ?? []}
           refetchJobs={() =>
-            queryClient.invalidateQueries({ queryKey: listJobsKey })
+            queryClient.invalidateQueries(
+              { queryKey: listJobsKey },
+              { throwOnError: true },
+            )
           }
         />
       </Match>
