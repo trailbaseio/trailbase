@@ -266,7 +266,8 @@ describe("settings workspace", () => {
         onReset={reset}
       />
     ));
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("Saving…");
   });
 });
 
@@ -309,7 +310,7 @@ describe("General settings integration", () => {
     expect(screen.getAllByTestId("input")[1]).toHaveValue(
       "https://example.test",
     );
-    expect(screen.getAllByTestId("input")[2]).toHaveValue("3,600");
+    expect(screen.getAllByTestId("input")[2]).toHaveValue("3600");
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
   });
 
@@ -389,10 +390,12 @@ describe("General settings integration", () => {
       expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull(),
     );
     expect(state.setConfig).toHaveBeenCalled();
-    expect(state.showToast).toHaveBeenCalledWith({
-      title: "submitted",
-      variant: "success",
-    });
+    await waitFor(() =>
+      expect(state.showToast).toHaveBeenCalledWith({
+        title: "submitted",
+        variant: "success",
+      }),
+    );
 
     fireEvent.input(appName, { target: { value: "Changed Again" } });
     expect(

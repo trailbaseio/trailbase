@@ -24,8 +24,13 @@ export function SettingsFormActions(props: {
             class="w-full sm:w-auto"
             disabled={!props.canSubmit || props.isSubmitting}
           >
-            Save changes
+            {props.isSubmitting ? "Saving…" : "Save changes"}
           </Button>
+          {props.isSubmitting && (
+            <div role="status" aria-live="polite" class="sr-only">
+              Saving…
+            </div>
+          )}
         </>
       )}
     </div>

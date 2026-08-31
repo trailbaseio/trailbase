@@ -320,16 +320,16 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
 
   // Running second timer
   const [uptime, setUptime] = createSignal(calcUptime());
-  let handle: ReturnType<typeof setTimeout> | undefined = undefined;
+  let handle: ReturnType<typeof setInterval> | undefined = undefined;
   onMount(() => {
-    if (handle) {
+    if (handle !== undefined) {
       clearInterval(handle);
     }
     handle = setInterval(() => setUptime(calcUptime()), 1000);
   });
 
   onCleanup(() => {
-    if (handle) {
+    if (handle !== undefined) {
       clearInterval(handle);
     }
     handle = undefined;

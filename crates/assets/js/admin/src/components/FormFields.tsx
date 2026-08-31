@@ -321,13 +321,14 @@ export function buildOptionalSmallIntegerFormField(opts: NumberFieldOptions) {
       <NumberField
         class="w-full"
         disabled={opts.disabled ?? false}
-        defaultValue={field().state.value?.toString() ?? ""}
+        value={field().state.value}
         onChange={(value) => {
           field().handleChange(tryParseInt(value));
         }}
         step={1}
         minValue={opts.min}
         maxValue={opts.max}
+        formatOptions={{ useGrouping: false }}
         allowedInput={/-?\d?/}
       >
         <div
@@ -361,7 +362,7 @@ export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
     return (
       <NumberField
         class="w-full"
-        defaultValue={field().state.value?.toString() ?? ""}
+        value={field().state.value?.toString()}
         disabled={opts.disabled ?? false}
         onChange={(value: string) => {
           field().handleChange(tryParseBigInt(value));
@@ -369,6 +370,7 @@ export function buildOptionalIntegerFormField(opts: NumberFieldOptions) {
         step={1}
         minValue={opts.min}
         maxValue={opts.max}
+        formatOptions={{ useGrouping: false }}
         allowedInput={/-?\d?/}
       >
         <div

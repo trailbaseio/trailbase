@@ -15,9 +15,7 @@ export function createConfigQuery() {
   return useQuery(() => ({
     queryKey: _configKey,
     queryFn: async () => {
-      const config = await getConfig();
-      console.debug("Fetched config:", config);
-      return config;
+      return getConfig();
     },
     refetchInterval: 120 * 1000,
     refetchOnMount: false,
@@ -40,10 +38,14 @@ export async function setConfig(opts: {
     });
   }
 
-  // Get previous fetch.
   const hash = opts.client.getQueryData<GetConfigResponse>(_configKey)?.hash;
   if (!hash) {
-    console.error("Missing hash");
+    if (opts.throw) throw new Error("Missing config hash");
+    showToast({
+      title: "Config update failed",
+      description: "Please refresh and try again.",
+      variant: "error",
+    });
     return;
   }
 
@@ -51,8 +53,6 @@ export async function setConfig(opts: {
     config: opts.config,
     hash,
   };
-
-  console.debug("Updating config:", request);
 
   if (opts.throw) {
     await updateConfig(request);
@@ -62,19 +62,18 @@ export async function setConfig(opts: {
     } catch (err) {
       showToast({
         title: "Config update failed",
-        description: `${err}`,
+        description: "Please refresh and try again.",
         variant: "error",
       });
       return;
     }
   }
 
-  // Trigger re-fetch after updating config.
-  invalidateConfig(opts.client);
+  // Trigger re-fetch after updating config.  await invalidateConfig(opts.client);
 }
 
 export function invalidateConfig(queryClient: QueryClient) {
-  queryClient.invalidateQueries({
+  return queryClient.invalidateQueries({
     queryKey: _configKey,
   });
 }
