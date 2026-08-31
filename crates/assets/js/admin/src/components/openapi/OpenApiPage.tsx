@@ -94,6 +94,7 @@ export default function Page() {
   const theme = createTheme();
   const isMobile = createIsMobile();
   const [navOpen, setNavOpen] = createSignal(false);
+  let browseButton: HTMLButtonElement | undefined;
   const palette = () => palettes[theme()];
   const user = useStore($user);
   const query = useQuery(() => ({
@@ -157,7 +158,28 @@ export default function Page() {
     }
   });
   createEffect(() => {
-    if (!isMobile()) setNavOpen(false);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && navOpen() && isMobile()) {
+        setNavOpen(false);
+        browseButton?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    onCleanup(() => document.removeEventListener("keydown", onKeyDown));
+  });
+  createEffect(() => {
+    if (!isMobile()) {
+      setNavOpen(false);
+      return;
+    }
+    if (!navOpen()) return;
+    queueMicrotask(() => {
+      const root = rapidoc()?.shadowRoot;
+      const control = root?.querySelector<HTMLInputElement>(
+        'input[type="search"], input[type="text"], button, [tabindex]:not([tabindex="-1"]), a[href]',
+      );
+      control?.focus();
+    });
   });
   const refresh = () => query.refetch();
 
@@ -285,8 +307,10 @@ export default function Page() {
       <Show when={query.data}>
         <Show when={isMobile()}>
           <Button
+            ref={(element) => (browseButton = element)}
             class="mx-4 mb-2"
             aria-expanded={navOpen()}
+            aria-controls="openapi-endpoint-browser"
             onClick={() => setNavOpen(!navOpen())}
           >
             Browse endpoints
@@ -319,6 +343,7 @@ export default function Page() {
           persist-auth="false"
           allow-authentication="false"
           allow-server-selection="false"
+          id="openapi-endpoint-browser"
           class={`openapi-explorer min-h-0 flex-1 ${navOpen() ? "openapi-nav-open" : ""}`}
         />
       </Show>

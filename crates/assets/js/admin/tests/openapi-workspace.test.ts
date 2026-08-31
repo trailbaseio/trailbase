@@ -188,6 +188,9 @@ describe("request token trust boundary", () => {
       encode({ ...tokens, auth_token: 1 }),
       encode({ ...tokens, refresh_token: false }),
       encode({ ...tokens, csrf_token: null }),
+      ...["auth_token", "refresh_token", "csrf_token"].map((key) =>
+        encode({ ...tokens, [key]: "   \t" }),
+      ),
       encode({ ...tokens, extra: "nope" }),
       encode(null),
       encode([]),
@@ -209,6 +212,10 @@ describe("request token trust boundary", () => {
   it("rejects nullable or incomplete current tokens", () => {
     expect(usableRequestTokens(tokens)).toEqual(tokens);
     expect(usableRequestTokens({ ...tokens, refresh_token: null })).toBeNull();
+    for (const key of ["auth_token", "refresh_token", "csrf_token"] as const) {
+      expect(usableRequestTokens({ ...tokens, [key]: "" })).toBeNull();
+      expect(usableRequestTokens({ ...tokens, [key]: "  \t" })).toBeNull();
+    }
     expect(
       usableRequestTokens({ ...tokens, csrf_token: 1 } as never),
     ).toBeNull();

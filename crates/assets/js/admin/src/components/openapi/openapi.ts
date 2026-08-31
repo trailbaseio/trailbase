@@ -101,7 +101,10 @@ export function parseImpersonationTokens(input: string): RequestTokens | null {
       expectedKeys.some((key) => !keys.includes(key)) ||
       typeof decoded.auth_token !== "string" ||
       typeof decoded.refresh_token !== "string" ||
-      typeof decoded.csrf_token !== "string"
+      typeof decoded.csrf_token !== "string" ||
+      decoded.auth_token.trim() === "" ||
+      decoded.refresh_token.trim() === "" ||
+      decoded.csrf_token.trim() === ""
     ) {
       throw new Error();
     }
@@ -122,7 +125,10 @@ export function usableRequestTokens(
     !tokens ||
     typeof tokens.auth_token !== "string" ||
     typeof tokens.refresh_token !== "string" ||
-    typeof tokens.csrf_token !== "string"
+    typeof tokens.csrf_token !== "string" ||
+    tokens.auth_token.trim() === "" ||
+    tokens.refresh_token.trim() === "" ||
+    tokens.csrf_token.trim() === ""
   ) {
     return null;
   }
