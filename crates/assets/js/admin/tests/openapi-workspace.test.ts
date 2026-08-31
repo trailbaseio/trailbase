@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   applyRequestTokens,
   openApiMetadata,
+  requestHasCredentialOrigin,
+  resolveOpenApiServer,
   parseImpersonationTokens,
   usableRequestTokens,
   withCollapsedOpenApiTags,
@@ -14,6 +16,29 @@ const tokens = {
   csrf_token: "csrf-secret-value",
 };
 const encode = (value: unknown) => btoa(JSON.stringify(value));
+
+describe("OpenAPI server and credential boundaries", () => {
+  it("accepts cross-origin and relative HTTP servers in production", () => {
+    expect(resolveOpenApiServer("https://api.example.com/", false)).toBe(
+      "https://api.example.com",
+    );
+    expect(resolveOpenApiServer("/api/", false)).toBe(
+      `${window.location.origin}/api`,
+    );
+    expect(resolveOpenApiServer("javascript:alert(1)", false)).toBe(
+      window.location.origin,
+    );
+  });
+
+  it("keeps credential origins narrower than server selection", () => {
+    expect(
+      requestHasCredentialOrigin("https://api.example.com/api", false),
+    ).toBe(false);
+    expect(requestHasCredentialOrigin("http://localhost:4000/api", true)).toBe(
+      true,
+    );
+  });
+});
 
 describe("OpenAPI metadata", () => {
   it("counts supported methods case-insensitively and ignores path metadata", () => {

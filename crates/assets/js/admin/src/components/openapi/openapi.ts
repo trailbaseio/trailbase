@@ -139,10 +139,7 @@ export function resolveOpenApiServer(candidate: unknown, dev: boolean): string {
   if (typeof candidate === "string") {
     try {
       const url = new URL(candidate, origin);
-      if (
-        (url.protocol === "http:" || url.protocol === "https:") &&
-        url.origin === origin
-      )
+      if (url.protocol === "http:" || url.protocol === "https:")
         return url.href.replace(/\/$/, "");
     } catch {
       /* invalid candidate */
