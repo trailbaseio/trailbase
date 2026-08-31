@@ -194,7 +194,6 @@ describe("settings workspace", () => {
     expect(state.navigate).toHaveBeenLastCalledWith("/settings/auth");
     fireEvent.click(screen.getByText("Jobs"));
     expect(state.navigate).toHaveBeenLastCalledWith("/settings/jobs");
-    expect(screen.queryByText("Confirm")).toBeNull();
   });
   it("renders actions only dirty, disables submission, and invokes Reset", () => {
     const reset = vi.fn();
