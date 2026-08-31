@@ -243,20 +243,23 @@ function ServerSettingsForm(
         </Card>
 
         <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {(state) => (
-              <SettingsFormActions
-                dirty={form.state.isDirty}
-                canSubmit={state().canSubmit}
-                isSubmitting={state().isSubmitting}
-                onReset={() => { form.reset(); props.setDirty(false); }}
-              />
-            )}
-          </form.Subscribe>
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
+          {(state) => (
+            <SettingsFormActions
+              dirty={form.state.isDirty}
+              canSubmit={state().canSubmit}
+              isSubmitting={state().isSubmitting}
+              onReset={() => {
+                form.reset();
+                props.setDirty(false);
+              }}
+            />
+          )}
+        </form.Subscribe>
       </div>
     </form>
   );

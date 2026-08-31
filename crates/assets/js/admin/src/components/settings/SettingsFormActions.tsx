@@ -7,7 +7,7 @@ export function SettingsFormActions(props: {
   onReset: () => void;
 }) {
   return (
-    <div class="sticky bottom-0 flex w-full flex-col-reverse gap-2 bg-background py-4 sm:flex-row sm:justify-end">
+    <div class="bg-background sticky bottom-0 flex w-full flex-col-reverse gap-2 py-4 sm:flex-row sm:justify-end">
       {props.dirty && (
         <>
           <Button
