@@ -1,21 +1,21 @@
 import {
+  createEffect,
   createMemo,
   createSignal,
+  For,
   JSX,
   Match,
   Show,
   Switch,
   Suspense,
+  untrack,
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import {
   TbOutlineRefresh,
-  TbOutlineCrown,
   TbOutlineClipboardCopy,
   TbOutlineCookie,
-  TbOutlineQuestionMark,
 } from "solid-icons/tb";
-import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import type {
@@ -38,7 +38,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 
 import { Callout } from "@/components/ui/callout";
@@ -46,6 +45,7 @@ import { Header } from "@/components/Header";
 import { Table, buildTable } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { AddUser } from "@/components/accounts/AddUser";
 import {
   buildTextFormField,
@@ -53,6 +53,7 @@ import {
 } from "@/components/FormFields";
 import { SafeSheet, SheetContainer } from "@/components/SafeSheet";
 import { assets } from "@/components/settings/AuthSettings";
+import { OAuthProviderId } from "@proto/config";
 
 import { mintTokens } from "@/lib/api/mint";
 import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
@@ -62,111 +63,208 @@ import { formatSortingAsOrder } from "@/lib/list";
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 
-function buildColumns(): ColumnDef<UserJson>[] {
-  // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
+type AccountIdentity = { primary: string; secondary?: string };
+
+type AccountStatus = {
+  label: string;
+  variant: "default" | "success" | "warning";
+};
+
+export function accountIdentity(user: UserJson): AccountIdentity {
+  const identities = [user.email, user.username, user.unverified_email].filter(
+    (value): value is string => value !== null && value !== "",
+  );
+  const primary = identities[0] ?? "Unnamed account";
+  const secondary = identities.find((value) => value !== primary);
+
+  return { primary, secondary };
+}
+
+export function accountStatuses(user: UserJson): AccountStatus[] {
+  const statuses: AccountStatus[] = [];
+
+  if (user.admin) {
+    statuses.push({ label: "Admin", variant: "default" });
+  }
+  statuses.push(
+    user.unverified_email
+      ? { label: "Pending verification", variant: "warning" }
+      : { label: "Verified", variant: "success" },
+  );
+
+  return statuses;
+}
+
+const providerLabels = new Map<number, string>([
+  [OAuthProviderId.TEST, "Test"],
+  [OAuthProviderId.OIDC0, "OIDC"],
+  [OAuthProviderId.APPLE, "Apple"],
+  [OAuthProviderId.DISCORD, "Discord"],
+  [OAuthProviderId.GITLAB, "GitLab"],
+  [OAuthProviderId.GOOGLE, "Google"],
+  [OAuthProviderId.FACEBOOK, "Facebook"],
+  [OAuthProviderId.MICROSOFT, "Microsoft"],
+  [OAuthProviderId.TWITCH, "Twitch"],
+  [OAuthProviderId.YANDEX, "Yandex"],
+  [OAuthProviderId.GITHUB, "GitHub"],
+]);
+
+export function accountProviderLabel(providerId: bigint | number): string {
+  if (Number(providerId) === 0) {
+    return "Password";
+  }
+
+  return providerLabels.get(Number(providerId)) ?? `OAuth ${providerId}`;
+}
+
+export function formatAccountTime(
+  timestampSeconds: bigint,
+  nowMs: number,
+  locale?: string,
+): string {
+  const differenceMs = Number(timestampSeconds) * 1000 - nowMs;
+  const differenceSeconds = differenceMs / 1000;
+  const absoluteSeconds = Math.abs(differenceSeconds);
+
+  if (absoluteSeconds < 60) {
+    return "just now";
+  }
+
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["minute", 60],
+    ["hour", 60 * 60],
+    ["day", 60 * 60 * 24],
+    ["month", 60 * 60 * 24 * 30],
+    ["year", 60 * 60 * 24 * 365],
+  ];
+  let unit: Intl.RelativeTimeFormatUnit = "minute";
+  let unitSeconds = 60;
+
+  for (const [candidate, seconds] of units) {
+    if (absoluteSeconds >= seconds) {
+      unit = candidate;
+      unitSeconds = seconds;
+    }
+  }
+
+  return new Intl.RelativeTimeFormat(locale, { numeric: "always" }).format(
+    Math.round(differenceSeconds / unitSeconds),
+    unit,
+  );
+}
+
+export function shortAccountId(id: string): string {
+  return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+}
+
+export function buildColumns(
+  copyAccountId: (id: string) => Promise<void> = (id) =>
+    copyToClipboard(id, true),
+): ColumnDef<UserJson>[] {
   return [
     {
-      header: () => {
-        return <div class="ml-3">id</div>;
-      },
+      header: "Account",
       accessorKey: "id",
-      size: 350,
+      minSize: 260,
       cell: (ctx) => {
         const { id } = ctx.row.original;
-        return (
-          <div class="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                copyToClipboard(id, true);
-              }}
-            >
-              <TbOutlineClipboardCopy />
-            </Button>
+        const identity = accountIdentity(ctx.row.original);
 
-            <span>{id}</span>
+        return (
+          <div class="flex min-w-0 items-center gap-2">
+            <div class="min-w-0">
+              <div class="truncate font-medium">{identity.primary}</div>
+              <Show when={identity.secondary}>
+                <div class="text-muted-foreground truncate text-sm">
+                  {identity.secondary}
+                </div>
+              </Show>
+              <div class="text-muted-foreground flex items-center gap-1 font-mono text-xs">
+                <span>{shortAccountId(id)}</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-6"
+                  aria-label="Copy account ID"
+                  title="Copy account ID"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void copyAccountId(id);
+                  }}
+                >
+                  <TbOutlineClipboardCopy size={14} />
+                </Button>
+              </div>
+            </div>
           </div>
         );
       },
     },
     {
-      accessorKey: "username",
-      minSize: 180,
-      cell: (ctx) => {
-        return (
-          <span class="w-full text-wrap">
-            {ctx.row.original.username ?? "NULL"}
-          </span>
-        );
-      },
-    },
-    {
-      header: "email (? = unverified)",
-      accessorKey: "email",
-      minSize: 260,
-      cell: (ctx) => {
-        const { email, unverified_email } = ctx.row.original;
-
-        return (
-          <Switch>
-            <Match when={unverified_email}>
-              <div class="flex w-full items-center gap-2">
-                <TbOutlineQuestionMark />
-
-                <span class="text-muted-foreground w-[calc(100%-24px)] text-wrap">
-                  {unverified_email}
-                </span>
-              </div>
-            </Match>
-
-            <Match when={true}>{email}</Match>
-          </Switch>
-        );
-      },
-    },
-    {
-      accessorKey: "admin",
-      size: 60,
+      header: "Status",
+      accessorKey: "status",
+      enableSorting: false,
       cell: (ctx) => (
-        <div class="px-2">
-          {ctx.row.original.admin ? <TbOutlineCrown size={18} /> : null}
+        <div class="flex flex-wrap gap-1">
+          <For each={accountStatuses(ctx.row.original)}>
+            {(status) => <Badge variant={status.variant}>{status.label}</Badge>}
+          </For>
         </div>
       ),
     },
     {
-      header: "OAuth",
-      size: 60,
+      header: "Provider",
+      accessorKey: "provider",
       enableSorting: false,
       cell: (ctx) => {
         const providerId = ctx.row.original.provider_id;
+        const providerLabel = accountProviderLabel(providerId);
         const oauthAsset =
           providerId > 0n ? assets.get(Number(providerId)) : undefined;
 
         return (
-          <Switch>
-            <Match when={oauthAsset !== undefined}>
-              <div class="px-2">
-                <img class="size-[20px]" src={oauthAsset!} />
-              </div>
-            </Match>
-
-            <Match when={providerId > 0n}>{`${providerId}`}</Match>
-          </Switch>
+          <div class="flex items-center gap-2">
+            <Show when={oauthAsset}>
+              <img
+                class="size-5"
+                src={oauthAsset}
+                alt={providerLabel}
+                title={providerLabel}
+              />
+            </Show>
+            <span>{providerLabel}</span>
+          </div>
         );
       },
     },
     {
-      header: "updated",
+      header: "Created",
+      accessorKey: "created",
       cell: (ctx) => {
-        return new Date(Number(ctx.row.original.updated) * 1000).toUTCString();
+        const timestamp = ctx.row.original.created;
+        return (
+          <time
+            dateTime={new Date(Number(timestamp) * 1000).toISOString()}
+            title={new Date(Number(timestamp) * 1000).toUTCString()}
+          >
+            {formatAccountTime(timestamp, Date.now())}
+          </time>
+        );
       },
     },
     {
-      header: "created",
+      header: "Last updated",
+      accessorKey: "updated",
       cell: (ctx) => {
-        return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
+        const timestamp = ctx.row.original.updated;
+        return (
+          <time
+            dateTime={new Date(Number(timestamp) * 1000).toISOString()}
+            title={new Date(Number(timestamp) * 1000).toUTCString()}
+          >
+            {formatAccountTime(timestamp, Date.now())}
+          </time>
+        );
       },
     },
   ];
@@ -174,56 +272,75 @@ function buildColumns(): ColumnDef<UserJson>[] {
 
 function DeleteUserButton(props: {
   userId: string;
-  email: string | null;
-  username: string | null;
+  name: string;
   onDelete: () => void;
 }) {
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [deleting, setDeleting] = createSignal(false);
+  const [error, setError] = createSignal<string>();
 
   return (
     <Dialog
       id="confirm"
       modal={true}
       open={dialogOpen()}
-      onOpenChange={setDialogOpen}
+      onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (open) setError(undefined);
+      }}
     >
       <DialogContent>
         <DialogTitle>Confirmation</DialogTitle>
 
         <p>
           Are you sure you want to permanently delete{" "}
-          <span class="font-bold">{props.email ?? props.username}</span>?
+          <span class="font-bold">{props.name}</span>?
         </p>
+
+        <Show when={error()}>
+          <p class="text-destructive" role="alert">
+            {error()}
+          </p>
+        </Show>
 
         <DialogFooter>
           <div class="flex w-full justify-between">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Back
+              Cancel
             </Button>
 
             <Button
               variant="destructive"
+              disabled={deleting()}
               onClick={() => {
+                if (deleting()) return;
+                setDeleting(true);
                 (async () => {
                   try {
                     await deleteUser({ id: props.userId });
-                  } finally {
                     props.onDelete();
+                    setDialogOpen(false);
+                  } catch {
+                    setError("Unable to delete account. Please try again.");
+                  } finally {
+                    setDeleting(false);
                   }
                 })();
-
-                setDialogOpen(false);
               }}
             >
-              Delete
+              {deleting() ? "Deleting…" : "Delete account"}
             </Button>
           </div>
         </DialogFooter>
       </DialogContent>
 
       <Button
-        class="bg-destructive text-white"
-        onClick={() => setDialogOpen(true)}
+        type="button"
+        class="bg-destructive text-destructive-foreground"
+        onClick={() => {
+          setError(undefined);
+          setDialogOpen(true);
+        }}
       >
         Delete
       </Button>
@@ -234,35 +351,71 @@ function DeleteUserButton(props: {
 function EditSheetContent(props: {
   user: UserJson;
   close: () => void;
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   refetch: () => void;
 }) {
+  const [error, setError] = createSignal<string>();
+  const [copyError, setCopyError] = createSignal<string>();
+  const [tokenError, setTokenError] = createSignal<string>();
+  const [copyingTokens, setCopyingTokens] = createSignal(false);
+  const defaultValues = untrack((): UpdateUserRequest => ({
+    id: props.user.id,
+    email: props.user.email,
+    unverified_email: props.user.unverified_email,
+    username: props.user.username,
+    password: null,
+  }));
   const form = createForm(() => ({
-    defaultValues: {
-      id: props.user.id,
-      email: props.user.email,
-      unverified_email: props.user.unverified_email,
-      username: props.user.username,
-      password: null,
-    } as UpdateUserRequest,
+    defaultValues,
     onSubmit: async ({ value }) => {
+      setError(undefined);
       try {
         await updateUser(value);
-        props.close();
-      } finally {
+        props.markDirty(false);
         props.refetch();
+        props.close();
+      } catch {
+        setError("Unable to update account. Please try again.");
       }
     },
   }));
 
+  form.useStore((state) => {
+    const values = state.values;
+    props.markDirty(
+      values.email !== defaultValues.email ||
+        values.unverified_email !== defaultValues.unverified_email ||
+        values.username !== defaultValues.username ||
+        values.password !== defaultValues.password,
+    );
+  });
+
   return (
     <SheetContainer>
       <SheetHeader>
-        <SheetTitle>Edit User</SheetTitle>
+        <SheetTitle>Edit account</SheetTitle>
+
+        <Show when={error()}>
+          <p class="text-destructive" role="alert">
+            {error()}
+          </p>
+        </Show>
 
         <SheetDescription>
           Change a user's properties. Be careful
         </SheetDescription>
+
+        <Show when={copyError()}>
+          <p class="text-destructive" role="alert">
+            {copyError()}
+          </p>
+        </Show>
+
+        <Show when={tokenError()}>
+          <p class="text-destructive" role="alert">
+            {tokenError()}
+          </p>
+        </Show>
       </SheetHeader>
 
       <form
@@ -275,8 +428,50 @@ function EditSheetContent(props: {
       >
         <div class="flex flex-col items-center gap-4 py-4">
           <div class="flex w-full items-center justify-start gap-2">
-            <FixedWidthLabel>id</FixedWidthLabel>
-            <span class="text-sm text-gray-600">{props.user.id}</span>
+            <FixedWidthLabel>Identity</FixedWidthLabel>
+            <div class="min-w-0">
+              <div class="font-medium">
+                {accountIdentity(props.user).primary}
+              </div>
+              <Show when={accountIdentity(props.user).secondary}>
+                <div class="text-muted-foreground text-sm">
+                  {accountIdentity(props.user).secondary}
+                </div>
+              </Show>
+            </div>
+          </div>
+          <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>Account ID</FixedWidthLabel>
+            <code class="text-muted-foreground min-w-0 text-sm break-all">
+              {props.user.id}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCopyError(undefined);
+                void copyToClipboard(props.user.id, true).catch(() => {
+                  setCopyError("Unable to copy account ID. Please try again.");
+                });
+              }}
+            >
+              Copy ID
+            </Button>
+          </div>
+          <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>Status</FixedWidthLabel>
+            <div class="flex flex-wrap gap-1">
+              <For each={accountStatuses(props.user)}>
+                {(status) => (
+                  <Badge variant={status.variant}>{status.label}</Badge>
+                )}
+              </For>
+            </div>
+          </div>
+          <div class="flex w-full items-center justify-start gap-2">
+            <FixedWidthLabel>Provider</FixedWidthLabel>
+            <Badge>{accountProviderLabel(props.user.provider_id)}</Badge>
           </div>
 
           <form.Field name={"email"}>
@@ -316,41 +511,46 @@ function EditSheetContent(props: {
               })}
               children={(state) => {
                 return (
-                  <div class="flex w-full justify-between gap-2 py-4">
-                    <DeleteUserButton
-                      userId={props.user.id}
-                      email={props.user.email}
-                      username={props.user.username}
-                      onDelete={() => {
-                        props.close();
-                        props.refetch();
-                      }}
-                    />
-
+                  <div class="flex w-full justify-end gap-2 py-4">
                     <div class="flex gap-2">
                       <Show
                         when={!props.user.admin && !props.user.unverified_email}
                       >
                         <Button
+                          type="button"
                           variant="outline"
-                          size="icon"
+                          aria-label="Copy login tokens"
+                          title="Copy login tokens"
+                          disabled={copyingTokens()}
                           onClick={(e) => {
                             e.stopPropagation();
+                            if (copyingTokens()) return;
 
+                            setCopyingTokens(true);
+                            setTokenError(undefined);
                             (async () => {
-                              const loginResponse = await mintTokens({
-                                user: props.user.id,
-                              });
+                              try {
+                                const loginResponse = await mintTokens({
+                                  user: props.user.id,
+                                });
 
-                              copyToClipboard(
-                                btoa(JSON.stringify(loginResponse)),
-                                true,
-                                "Copied tokens to clipboard",
-                              );
+                                await copyToClipboard(
+                                  btoa(JSON.stringify(loginResponse)),
+                                  false,
+                                  "Copied tokens to clipboard",
+                                );
+                              } catch {
+                                setTokenError(
+                                  "Unable to copy login tokens. Please try again.",
+                                );
+                              } finally {
+                                setCopyingTokens(false);
+                              }
                             })();
                           }}
                         >
                           <TbOutlineCookie />
+                          Copy login tokens
                         </Button>
                       </Show>
 
@@ -359,13 +559,34 @@ function EditSheetContent(props: {
                         disabled={!state().canSubmit}
                         variant="default"
                       >
-                        {state().isSubmitting ? "..." : "Submit"}
+                        {state().isSubmitting ? "Saving…" : "Save changes"}
                       </Button>
                     </div>
                   </div>
                 );
               }}
             />
+
+            <section
+              class="border-destructive/30 mt-2 border-t pt-3"
+              aria-labelledby="danger-zone-title"
+            >
+              <h3 id="danger-zone-title" class="text-destructive font-medium">
+                Danger zone
+              </h3>
+              <p class="text-muted-foreground mb-2 text-sm">
+                Permanently delete this account.
+              </p>
+              <DeleteUserButton
+                userId={props.user.id}
+                name={accountIdentity(props.user).primary}
+                onDelete={() => {
+                  props.markDirty(false);
+                  props.close();
+                  props.refetch();
+                }}
+              />
+            </section>
 
             <Callout class="text-sm">
               The admin status can only be toggled using the CLI to prevent
@@ -378,9 +599,39 @@ function EditSheetContent(props: {
   );
 }
 
+export function AccountToolbar(props: {
+  advanced: boolean;
+  onModeChange: (advanced: boolean) => void;
+  children: JSX.Element;
+}) {
+  return (
+    <div class="w-full space-y-2">
+      <div class="flex gap-2">
+        <Button
+          variant={props.advanced ? "ghost" : "outline"}
+          aria-pressed={!props.advanced}
+          onClick={() => props.onModeChange(false)}
+        >
+          Search accounts
+        </Button>
+        <Button
+          variant={props.advanced ? "outline" : "ghost"}
+          aria-pressed={props.advanced}
+          onClick={() => props.onModeChange(true)}
+        >
+          Advanced account filter
+        </Button>
+      </div>
+      {props.children}
+    </div>
+  );
+}
+
 export function AccountsPage() {
   const [searchParams, setSearchParams] = useSearchParams<{
+    search?: string;
     filter?: string;
+    advanced?: string;
     pageSize?: string;
     pageIndex?: string;
   }>();
@@ -391,14 +642,10 @@ export function AccountsPage() {
     };
   };
 
-  const setFilter = (filter: string | undefined) => {
-    setSearchParams({
-      ...searchParams,
-      filter,
-      // Reset
-      pageIndex: "0",
-    });
-  };
+  const setFilter = (filter: string | undefined) =>
+    setSearchParams({ ...searchParams, filter, pageIndex: "0" });
+  const setSearch = (search: string | undefined) =>
+    setSearchParams({ ...searchParams, search, pageIndex: "0" });
 
   const [sorting, setSorting] = createSignal<SortingState>([]);
 
@@ -408,6 +655,8 @@ export function AccountsPage() {
     queryKey: [
       "users",
       searchParams.filter,
+      searchParams.search,
+      searchParams.advanced,
       pagination().pageSize,
       pagination().pageIndex,
       sorting(),
@@ -417,10 +666,11 @@ export function AccountsPage() {
       const s = sorting();
 
       const response = await fetchUsers(
-        searchParams.filter,
+        searchParams.advanced === "true" ? searchParams.filter : undefined,
         p.pageSize,
         p.pageIndex,
         formatSortingAsOrder(s),
+        searchParams.advanced === "true" ? undefined : searchParams.search,
       );
 
       return response;
@@ -433,14 +683,41 @@ export function AccountsPage() {
     });
   };
 
+  const usersData = () => (users.isError ? undefined : users.data);
+
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
+  const [editDirty, setEditDirty] = createSignal(false);
+  const [addUserOpen, setAddUserOpen] = createSignal(false);
+  const [copyError, setCopyError] = createSignal<string>();
+
+  createEffect(() => {
+    const selected = editUser();
+    const loadedUsers = usersData();
+    if (
+      selected &&
+      loadedUsers &&
+      !loadedUsers.users.some((user) => user.id === selected.id) &&
+      !editDirty()
+    ) {
+      setEditUser(undefined);
+    }
+  });
+
+  const copyAccountId = async (id: string) => {
+    setCopyError(undefined);
+    try {
+      await copyToClipboard(id, true);
+    } catch {
+      setCopyError("Unable to copy account ID. Please try again.");
+    }
+  };
 
   const accountsTable = createMemo(() => {
     return buildTable(
       {
-        columns: buildColumns(),
-        data: users.data?.users ?? [],
-        rowCount: Number(users.data?.total_row_count ?? -1),
+        columns: buildColumns(copyAccountId),
+        data: usersData()?.users ?? [],
+        rowCount: Number(usersData()?.total_row_count ?? -1),
         pagination: pagination(),
         onPaginationChange: (s: PaginationState) => {
           setSearchParams({
@@ -460,99 +737,160 @@ export function AccountsPage() {
     );
   });
 
+  const hasQuery = () =>
+    Boolean(
+      searchParams.advanced === "true"
+        ? searchParams.filter
+        : searchParams.search,
+    );
+  const emptyState = () =>
+    hasQuery() ? (
+      <div class="p-4 text-center">
+        <p>No accounts match the current search or filter.</p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setSearch(undefined);
+            setFilter(undefined);
+          }}
+        >
+          Clear search/filter
+        </Button>
+      </div>
+    ) : (
+      <div class="p-4 text-center">
+        <p>No accounts yet.</p>
+      </div>
+    );
+
   return (
-    <div>
+    <div class="flex h-full min-h-0 flex-col">
       <Header
         title="Accounts"
+        description={
+          usersData()
+            ? `${usersData()!.total_row_count ?? 0} accounts · Manage authentication identities and access`
+            : "Manage authentication identities and access"
+        }
         left={
-          <IconButton onClick={refetch}>
+          <IconButton
+            onClick={refetch}
+            aria-label="Refresh accounts"
+            title="Refresh accounts"
+          >
             <TbOutlineRefresh />
           </IconButton>
         }
+        right={
+          <Button data-add-account onClick={() => setAddUserOpen(true)}>
+            Add account
+          </Button>
+        }
       />
-
-      <div class="flex flex-col items-end gap-4 p-4">
-        <FilterBar
-          initial={searchParams.filter}
-          onSubmit={(value: string) => {
-            if (value === searchParams.filter) {
-              refetch();
-            } else {
-              setFilter(value);
+      <div class="min-h-0 flex-1 overflow-auto p-4">
+        <AccountToolbar
+          advanced={searchParams.advanced === "true"}
+          onModeChange={(advanced) =>
+            setSearchParams({
+              ...searchParams,
+              advanced: advanced ? "true" : "false",
+              pageIndex: "0",
+            })
+          }
+        >
+          <FilterBar
+            label={
+              searchParams.advanced === "true"
+                ? "Advanced account filter"
+                : "Search accounts"
             }
-          }}
-          placeholder={`Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`}
-        />
-
-        <Suspense fallback={<div>Loading...</div>}>
+            initial={
+              searchParams.advanced === "true"
+                ? searchParams.filter
+                : searchParams.search
+            }
+            onSubmit={(value) => {
+              const current =
+                searchParams.advanced === "true"
+                  ? searchParams.filter
+                  : searchParams.search;
+              if (value === current) refetch();
+              else if (searchParams.advanced === "true") setFilter(value);
+              else setSearch(value);
+            }}
+            placeholder={
+              searchParams.advanced === "true"
+                ? `Filter, e.g.: 'email ~ "admin@%" && admin = TRUE'`
+                : "Search accounts…"
+            }
+          />
+        </AccountToolbar>
+        <Show when={copyError()}>
+          <Callout variant="error" role="alert" class="mt-4">
+            {copyError()}
+          </Callout>
+        </Show>
+        <Suspense fallback={<div>Loading accounts…</div>}>
           <Switch>
             <Match when={users.isError}>
-              <span>Error: {users.error?.toString()}</span>
+              <Callout variant="error" role="alert">
+                Unable to load accounts.
+                <Button variant="outline" onClick={refetch}>
+                  Retry
+                </Button>
+              </Callout>
             </Match>
-
             <Match when={true}>
-              <div class="w-full space-y-2.5">
+              <div class="mt-4">
                 <Table
                   table={accountsTable()}
                   loading={users.isLoading}
-                  onRowClick={(_idx: number, row: UserJson) => {
+                  dense={true}
+                  paginationPosition="bottom"
+                  emptyState={emptyState()}
+                  onRowClick={(_idx, row) => {
+                    setEditDirty(false);
                     setEditUser(row);
                   }}
                 />
               </div>
             </Match>
           </Switch>
-
-          <SafeSheet
-            children={(sheet) => {
-              return (
-                <>
-                  <SheetContent class={sheetMaxWidth}>
-                    <AddUser userRefetch={refetch} {...sheet} />
-                  </SheetContent>
-
-                  <SheetTrigger
-                    as={(props: DialogTriggerProps) => (
-                      <Button
-                        variant="outline"
-                        class="flex gap-2"
-                        onClick={() => {}}
-                        {...props}
-                      >
-                        Add User
-                      </Button>
-                    )}
-                  />
-                </>
-              );
-            }}
-          />
-
-          {/* WARN: This might open multiple sheets or at least scrims for each row */}
-          <SafeSheet
-            open={[
-              () => editUser() !== undefined,
-              (isOpen: boolean | ((value: boolean) => boolean)) => {
-                if (!isOpen) {
-                  setEditUser(undefined);
-                }
-              },
-            ]}
-            children={(sheet) => {
-              return (
-                <SheetContent class={sheetMaxWidth}>
-                  <Show when={editUser()}>
-                    <EditSheetContent
-                      user={editUser()!}
-                      refetch={refetch}
-                      {...sheet}
-                    />
-                  </Show>
-                </SheetContent>
-              );
-            }}
-          />
         </Suspense>
+        <SafeSheet
+          open={[addUserOpen, setAddUserOpen]}
+          children={(sheet) => (
+            <SheetContent class={sheetMaxWidth}>
+              <AddUser userRefetch={refetch} {...sheet} />
+            </SheetContent>
+          )}
+        />
+        <SafeSheet
+          open={[
+            () => editUser() !== undefined,
+            (isOpen: boolean | ((value: boolean) => boolean)) => {
+              if (!isOpen) {
+                setEditDirty(false);
+                setEditUser(undefined);
+              }
+            },
+          ]}
+          children={(sheet) => (
+            <SheetContent class={sheetMaxWidth}>
+              <Show when={editUser()}>
+                <EditSheetContent
+                  user={editUser()!}
+                  refetch={refetch}
+                  close={sheet.close}
+                  markDirty={(dirty) => {
+                    setEditDirty(dirty ?? true);
+                    sheet.markDirty(dirty);
+                  }}
+                />
+              </Show>
+            </SheetContent>
+          )}
+        />
       </div>
     </div>
   );

@@ -24,7 +24,7 @@ const SelectTrigger = <T extends ValidComponent = "button">(
   return (
     <SelectPrimitive.Trigger
       class={cn(
-        "flex h-10 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         local.class
       )}
       {...others}
@@ -49,7 +49,10 @@ const SelectTrigger = <T extends ValidComponent = "button">(
 }
 
 type SelectContentProps<T extends ValidComponent = "div"> =
-  SelectPrimitive.SelectContentProps<T> & { class?: string | undefined }
+  SelectPrimitive.SelectContentProps<T> & {
+    class?: string | undefined
+    children?: JSX.Element
+  }
 
 // Prevent overflow
 const customStyles = "overflow-y-auto max-h-[50dvh]"
@@ -57,7 +60,7 @@ const customStyles = "overflow-y-auto max-h-[50dvh]"
 const SelectContent = <T extends ValidComponent = "div">(
   props: PolymorphicProps<T, SelectContentProps<T>>
 ) => {
-  const [local, others] = splitProps(props as SelectContentProps, ["class"])
+  const [local, others] = splitProps(props as SelectContentProps, ["class", "children"])
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -68,6 +71,7 @@ const SelectContent = <T extends ValidComponent = "div">(
         )}
         {...others}
       >
+        {local.children}
         <SelectPrimitive.Listbox class="m-0 p-1" />
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
@@ -116,9 +120,9 @@ const labelVariants = cva(
   {
     variants: {
       variant: {
-        label: "data-[invalid]:text-destructive",
+        label: "data-[invalid]:text-error-foreground",
         description: "font-normal text-muted-foreground",
-        error: "text-xs text-destructive"
+        error: "text-xs text-error-foreground"
       }
     },
     defaultVariants: {

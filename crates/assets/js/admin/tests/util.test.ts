@@ -1,14 +1,27 @@
-import { test, describe } from "vitest";
+import { afterEach, test, describe, expect, vi } from "vitest";
 import { urlSafeBase64Encode } from "trailbase";
 
-import { parseFilter } from "@/lib/list";
+import { buildListSearchParams, parseFilter } from "@/lib/list";
 import { urlSafeBase64EncodeStream } from "@/lib/base64";
 import { intPattern, uintPattern, floatPattern } from "@/components/FormFields";
+import { copyToClipboard, tryParseBigInt } from "@/lib/utils";
+
+describe("clipboard", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("surfaces clipboard write failures", async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error("clipboard failed"));
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+
+    await expect(copyToClipboard("secret")).rejects.toThrow("clipboard failed");
+  });
+});
 
 describe("filterParser", () => {
   test("basic", ({ expect }) => {
     expect(() => parseFilter("x = 3)")).toThrow();
     expect(() => parseFilter("(x = 3 && x = 5 || x = 7)")).toThrow();
+    expect(() => buildListSearchParams({ filter: "x = 3)" })).toThrow();
 
     expect(parseFilter("")).toEqual([]);
 
@@ -84,6 +97,12 @@ describe("base64 stream", () => {
   });
 });
 
+describe("bigint parser", () => {
+  test("blank input is unset", () => {
+    expect(tryParseBigInt("   ")).toBeUndefined();
+  });
+});
+
 describe("regexPatters", () => {
   test("int", ({ expect }) => {
     expect(intPattern.exec("0")?.[0]).toEqual("0");
@@ -91,6 +110,8 @@ describe("regexPatters", () => {
     expect(intPattern.exec("1.1")).toBeNull();
     expect(intPattern.exec("+1")?.[0]).toEqual("+1");
     expect(intPattern.exec("-1")?.[0]).toEqual("-1");
+    expect(intPattern.exec("\\-1")).toBeNull();
+    expect(intPattern.exec("+1")?.[0]).toEqual("+1");
   });
 
   test("uint", ({ expect }) => {

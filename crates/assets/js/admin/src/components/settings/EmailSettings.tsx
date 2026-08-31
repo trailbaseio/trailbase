@@ -1,4 +1,13 @@
-import { createSignal, For, Switch, Match } from "solid-js";
+import {
+  createSignal,
+  For,
+  Switch,
+  Match,
+  Show,
+  createEffect,
+  onCleanup,
+  untrack,
+} from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { useQueryClient } from "@tanstack/solid-query";
 import { useStore } from "@nanostores/solid";
@@ -19,6 +28,8 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { showToast } from "@/components/ui/toast";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
+import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
 import {
   Select,
   SelectContent,
@@ -70,7 +81,7 @@ function EmailTemplate(props: {
   const Parameter = (props: { label: string }) => (
     <>
       {" "}
-      <span class="rounded-sm bg-gray-200 font-mono text-nowrap">
+      <span class="bg-muted rounded-sm font-mono text-nowrap">
         {`{{ ${props.label} }}`}
       </span>{" "}
     </>
@@ -133,40 +144,186 @@ function EmailTemplate(props: {
   );
 }
 
+const emailScalarFields = [
+  "smtpHost",
+  "smtpPort",
+  "smtpUsername",
+  "smtpPassword",
+  "smtpEncryption",
+  "senderName",
+  "senderAddress",
+] as const;
+const emailTemplateFields = [
+  "userVerificationTemplate",
+  "passwordResetTemplate",
+  "changeEmailTemplate",
+  "otpTemplate",
+] as const;
+
+type EmailTemplateValue = EmailConfig["userVerificationTemplate"];
+
+function sameTemplateLeaves(
+  left: EmailTemplateValue,
+  right: EmailTemplateValue,
+) {
+  return left?.subject === right?.subject && left?.body === right?.body;
+}
+
+function sameEmailLeaves(left: EmailConfig, right: EmailConfig) {
+  return (
+    emailScalarFields.every((field) => left[field] === right[field]) &&
+    emailTemplateFields.every((field) =>
+      sameTemplateLeaves(left[field], right[field]),
+    )
+  );
+}
+
+function mergeTemplateLeaves(
+  submitted: EmailTemplateValue,
+  baseline: EmailTemplateValue,
+  remote: EmailTemplateValue,
+): EmailTemplateValue {
+  const subjectChanged = submitted?.subject !== baseline?.subject;
+  const bodyChanged = submitted?.body !== baseline?.body;
+  if (!subjectChanged && !bodyChanged) return remote;
+  return {
+    subject: subjectChanged ? submitted?.subject : remote?.subject,
+    body: bodyChanged ? submitted?.body : remote?.body,
+  };
+}
+
+function mergeEmailLeaves(
+  submitted: EmailConfig,
+  baseline: EmailConfig,
+  remote: EmailConfig,
+) {
+  return EmailConfig.fromPartial({
+    smtpHost:
+      submitted.smtpHost !== baseline.smtpHost
+        ? submitted.smtpHost
+        : remote.smtpHost,
+    smtpPort:
+      submitted.smtpPort !== baseline.smtpPort
+        ? submitted.smtpPort
+        : remote.smtpPort,
+    smtpUsername:
+      submitted.smtpUsername !== baseline.smtpUsername
+        ? submitted.smtpUsername
+        : remote.smtpUsername,
+    smtpPassword:
+      submitted.smtpPassword !== baseline.smtpPassword
+        ? submitted.smtpPassword
+        : remote.smtpPassword,
+    smtpEncryption:
+      submitted.smtpEncryption !== baseline.smtpEncryption
+        ? submitted.smtpEncryption
+        : remote.smtpEncryption,
+    senderName:
+      submitted.senderName !== baseline.senderName
+        ? submitted.senderName
+        : remote.senderName,
+    senderAddress:
+      submitted.senderAddress !== baseline.senderAddress
+        ? submitted.senderAddress
+        : remote.senderAddress,
+    userVerificationTemplate: mergeTemplateLeaves(
+      submitted.userVerificationTemplate,
+      baseline.userVerificationTemplate,
+      remote.userVerificationTemplate,
+    ),
+    passwordResetTemplate: mergeTemplateLeaves(
+      submitted.passwordResetTemplate,
+      baseline.passwordResetTemplate,
+      remote.passwordResetTemplate,
+    ),
+    changeEmailTemplate: mergeTemplateLeaves(
+      submitted.changeEmailTemplate,
+      baseline.changeEmailTemplate,
+      remote.changeEmailTemplate,
+    ),
+    otpTemplate: mergeTemplateLeaves(
+      submitted.otpTemplate,
+      baseline.otpTemplate,
+      remote.otpTemplate,
+    ),
+  });
+}
+
 export function EmailSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
+  setDirty: (dirty: boolean) => void;
+  postSubmit: (dirty?: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const config = createConfigQuery();
-
   const [dialogOpen, setDialogOpen] = createSignal(false);
+  const [submitError, setSubmitError] = createSignal(false);
+  const clone = (value: EmailConfig) =>
+    EmailConfig.decode(EmailConfig.encode(value).finish());
 
   const Form = (p: { config: EmailConfig }) => {
+    const initial = clone(p.config);
+    let latestRemote = clone(initial);
+    let remoteRevision = 0;
+    let editBaseline = clone(initial);
+    let lastIncoming = clone(initial);
+    let active = true;
+    onCleanup(() => {
+      active = false;
+    });
     const form = createForm(() => ({
-      defaultValues: p.config satisfies EmailConfig,
+      defaultValues: clone(initial),
       onSubmit: async ({ value }) => {
-        const c = config.data?.config;
-        if (!c) {
-          console.warn("Missing base config.");
-          return;
+        setSubmitError(false);
+        const submitted = clone(value);
+        const baselineAtSubmit = clone(editBaseline);
+        const latestAtSubmit = clone(latestRemote);
+        const revisionAtSubmit = remoteRevision;
+        const merged = mergeEmailLeaves(
+          submitted,
+          baselineAtSubmit,
+          latestAtSubmit,
+        );
+        const base = config.data?.config;
+        if (!base) return;
+        const newConfig = Config.fromPartial(base);
+        newConfig.email = merged;
+        try {
+          await setConfig({
+            client: queryClient,
+            config: newConfig,
+            throw: true,
+          });
+          if (!active) return;
+          const saved = clone(
+            remoteRevision === revisionAtSubmit
+              ? merged
+              : mergeEmailLeaves(submitted, baselineAtSubmit, latestRemote),
+          );
+          latestRemote = clone(saved);
+          const current = formValues();
+          const editedAfterSubmit = !sameEmailLeaves(current, submitted);
+          editBaseline = clone(saved);
+          if (!editedAfterSubmit) form.reset(clone(saved));
+          props.postSubmit(editedAfterSubmit);
+        } catch {
+          if (active) setSubmitError(true);
         }
-
-        const newConfig = Config.fromPartial(c);
-        newConfig.email = value;
-        await setConfig({
-          client: queryClient,
-          config: newConfig,
-          throw: true,
-        });
-
-        props.postSubmit();
       },
     }));
-
-    form.useStore((state) => {
-      if (state.isDirty && !state.isSubmitted) {
-        props.markDirty();
+    const formValues = form.useSelector((state) => state.values);
+    const modified = () => !sameEmailLeaves(formValues(), editBaseline);
+    createEffect(() => props.setDirty(modified()));
+    createEffect(() => {
+      const incoming = config.data?.config?.email ?? EmailConfig.fromJSON({});
+      const next = clone(incoming);
+      if (sameEmailLeaves(lastIncoming, next)) return;
+      lastIncoming = next;
+      remoteRevision += 1;
+      const dirty = untrack(modified);
+      latestRemote = clone(next);
+      if (!dirty) {
+        editBaseline = clone(next);
+        form.reset(clone(next));
       }
     });
 
@@ -288,6 +445,11 @@ export function EmailSettings(props: {
             </CardHeader>
 
             <CardContent>
+              <p class="mb-4 text-sm">
+                Template placeholders use {"{{ PARAMETER }}"}. Available
+                parameters are listed in each template editor.
+              </p>
+
               <Accordion multiple={true} collapsible class="w-full">
                 <AccordionItem value="item-email-verification">
                   <AccordionTrigger>Email Verification</AccordionTrigger>
@@ -397,17 +559,28 @@ export function EmailSettings(props: {
                 isSubmitting: state.isSubmitting,
               })}
             >
-              {(state) => {
-                return (
-                  <Button
-                    type="submit"
-                    disabled={!state().canSubmit}
-                    variant="default"
-                  >
-                    {state().isSubmitting ? "..." : "Submit"}
-                  </Button>
-                );
-              }}
+              {(state) => (
+                <>
+                  <Show when={submitError()}>
+                    <Callout variant="error" role="alert">
+                      <CalloutTitle>Unable to save settings</CalloutTitle>
+                      <CalloutContent>
+                        Check your values and try again.
+                      </CalloutContent>
+                    </Callout>
+                  </Show>
+                  <SettingsFormActions
+                    dirty={modified()}
+                    canSubmit={state().canSubmit}
+                    isSubmitting={state().isSubmitting}
+                    onReset={() => {
+                      setSubmitError(false);
+                      editBaseline = clone(latestRemote);
+                      form.reset(clone(latestRemote));
+                    }}
+                  />
+                </>
+              )}
             </form.Subscribe>
           </div>
         </div>
@@ -415,48 +588,60 @@ export function EmailSettings(props: {
     );
   };
 
-  const emailConfig = () => {
-    const c = config.data?.config?.email;
-    if (c) {
-      // "deep-copy"
-      return EmailConfig.decode(EmailConfig.encode(c).finish());
-    }
-
-    // Fallback
-    return EmailConfig.fromJSON({});
-  };
-
-  return <Form config={emailConfig()} />;
+  return (
+    <Switch>
+      <Match when={config.isError}>
+        <Callout variant="error" role="alert">
+          <CalloutTitle>Unable to load settings</CalloutTitle>
+          <CalloutContent>Please try again later.</CalloutContent>
+        </Callout>
+      </Match>
+      <Match when={config.isLoading}>
+        <div role="status">Loading settings...</div>
+      </Match>
+      <Match when={config.data?.config}>
+        <Form config={config.data!.config!.email ?? EmailConfig.fromJSON({})} />
+      </Match>
+    </Switch>
+  );
 }
 
 function TestEmailDialog(props: { closeDialog: () => void }) {
   const user = useStore($user);
+  const [pending, setPending] = createSignal(false);
+  const [error, setError] = createSignal(false);
+  let active = true;
   let email: HTMLInputElement | undefined;
+  onCleanup(() => {
+    active = false;
+  });
 
   return (
     <DialogContent>
       <form
         method="dialog"
-        onSubmit={(e: SubmitEvent) => {
+        onSubmit={async (e: SubmitEvent) => {
           e.preventDefault();
-
           const emailAddress = email?.value;
-          if (!emailAddress) return;
-
-          adminFetch("/email/test", {
-            method: "POST",
-            body: JSON.stringify({
-              email_address: emailAddress,
-            } as TestEmailRequest),
-            throwOnError: true,
-          });
-
-          props.closeDialog();
-
-          showToast({
-            title: `Sent to ${emailAddress}`,
-            variant: "success",
-          });
+          if (!emailAddress || pending()) return;
+          setPending(true);
+          setError(false);
+          try {
+            await adminFetch("/email/test", {
+              method: "POST",
+              body: JSON.stringify({
+                email_address: emailAddress,
+              } as TestEmailRequest),
+              throwOnError: true,
+            });
+            if (!active) return;
+            props.closeDialog();
+            showToast({ title: `Sent to ${emailAddress}`, variant: "success" });
+          } catch {
+            if (active) setError(true);
+          } finally {
+            if (active) setPending(false);
+          }
         }}
       >
         <DialogTitle>Send Test Email</DialogTitle>
@@ -479,13 +664,32 @@ function TestEmailDialog(props: { closeDialog: () => void }) {
           </TextField>
         </div>
 
+        <Show when={error()}>
+          <Callout variant="error" role="alert">
+            <CalloutTitle>Unable to send test email</CalloutTitle>
+            <CalloutContent>
+              Please check the address and try again.
+            </CalloutContent>
+          </Callout>
+        </Show>
         <DialogFooter>
           <div class="flex w-full justify-between gap-4">
-            <Button type="button" onClick={props.closeDialog} variant="outline">
+            <Button
+              type="button"
+              onClick={props.closeDialog}
+              variant="outline"
+              disabled={pending()}
+            >
               Close
             </Button>
-
-            <Button type="submit">Send</Button>
+            <Button type="submit" disabled={pending()}>
+              {pending() ? "Sending…" : "Send"}
+            </Button>
+            <Show when={pending()}>
+              <div role="status" aria-live="polite">
+                Sending…
+              </div>
+            </Show>
           </div>
         </DialogFooter>
       </form>

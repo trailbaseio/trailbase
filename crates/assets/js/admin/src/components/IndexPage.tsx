@@ -8,6 +8,7 @@ import {
   TbOutlineUsers,
   TbOutlinePackage,
   TbOutlineTimeline,
+  TbOutlineApi,
   TbOutlineSettings,
 } from "solid-icons/tb";
 
@@ -16,50 +17,6 @@ import type { SqlValue } from "@/lib/value";
 
 import { Header } from "@/components/Header";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
-
-function ColorPalette() {
-  return (
-    <div class="my-4 grid max-w-[400px] grid-cols-2 text-sm">
-      <div class="bg-background">Background</div>
-      <div class="bg-foreground text-white">Foreground</div>
-
-      <div class="bg-muted">Muted</div>
-      <div class="bg-muted-foreground text-white">Muted FG</div>
-
-      <div class="bg-border">Border</div>
-      <div>N/A</div>
-
-      <div class="bg-card">Card</div>
-      <div class="bg-card-foreground text-white">Card FG</div>
-
-      <div class="bg-primary text-white">Primary</div>
-      <div class="bg-primary-foreground">Primary FG</div>
-
-      <div class="bg-secondary">Secondary</div>
-      <div class="bg-secondary-foreground text-white">Secondary FG</div>
-
-      <div class="bg-accent">Accent</div>
-      <div class="bg-accent-foreground text-white">Accent FG</div>
-
-      <div class="bg-destructive">Destructive</div>
-      <div class="bg-destructive-foreground">Destructive FG</div>
-
-      <div class="bg-info">info</div>
-      <div class="bg-info-foreground text-white">info FG</div>
-
-      <div class="bg-success">success</div>
-      <div class="bg-success-foreground text-white">success FG</div>
-
-      <div class="bg-warning">warning</div>
-      <div class="bg-warning-foreground text-white">warning FG</div>
-
-      <div class="bg-error">error</div>
-      <div class="bg-error-foreground text-white">error FG</div>
-
-      <div class="bg-ring text-white">Ring</div>
-    </div>
-  );
-}
 
 type Element = {
   icon: IconTypes;
@@ -92,12 +49,17 @@ const elements = [
   {
     icon: TbOutlinePackage,
     content: "Loaded WASM modules",
-    href: `${BASE}/wasm-modules`,
+    href: `${BASE}/wasm`,
   },
   {
     icon: TbOutlineTimeline,
     content: "Access logs for your application",
     href: `${BASE}/logs`,
+  },
+  {
+    icon: TbOutlineApi,
+    content: "OpenAPI documentation",
+    href: `${BASE}/openapi`,
   },
   {
     icon: TbOutlineSettings,
@@ -180,8 +142,16 @@ export function IndexPage() {
       <Header title="TrailBase" />
 
       <div class="prose dark:prose-invert flex grow flex-col gap-4 p-4">
-        {dashboardFetch.data && (
-          <div class="flex shrink gap-4">
+        {dashboardFetch.isLoading ? (
+          <div class="text-muted-foreground text-sm" role="status">
+            Loading dashboard metrics…
+          </div>
+        ) : dashboardFetch.error ? (
+          <div class="text-destructive text-sm" role="alert">
+            Unable to load dashboard metrics.
+          </div>
+        ) : dashboardFetch.data ? (
+          <div class="grid grid-cols-[repeat(auto-fit,minmax(12rem,1fr))] gap-4">
             <FactCard
               title="Users"
               content={`${dashboardFetch.data!.numUsers}`}
@@ -196,6 +166,10 @@ export function IndexPage() {
               title="Size"
               content={formatBytes(Number(dashboardFetch?.data.dbSize ?? 0))}
             />
+          </div>
+        ) : (
+          <div class="text-muted-foreground text-sm">
+            No dashboard metrics available.
           </div>
         )}
 
@@ -242,8 +216,6 @@ export function IndexPage() {
             </For>
           </CardContent>
         </Card>
-
-        {import.meta.env.DEV && <ColorPalette />}
       </div>
     </div>
   );
@@ -256,7 +228,8 @@ function castToInteger(value: SqlValue): bigint {
   throw Error(`Expected integer, got: ${value}`);
 }
 
-function formatBytes(bytes: number, decimals: number = 0) {
+export function formatBytes(bytes: number, decimals: number = 0) {
+  if (bytes <= 0) return "0 Bytes";
   const k = 1024;
 
   const i = Math.floor(Math.log(bytes) / Math.log(k));

@@ -8,12 +8,20 @@ export function applyResolvedTheme(theme: ResolvedTheme) {
   const root = document.documentElement;
 
   root.classList.toggle("dark", theme === "dark");
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute(
+      "content",
+      theme === "dark" ? "hsl(215 30% 12%)" : "hsl(210 30% 96%)",
+    );
   root.setAttribute("data-kb-theme", theme);
-  $themePreference.set(theme);
 }
 
 export function currentTheme(): ResolvedTheme {
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  return document.documentElement.getAttribute("data-kb-theme") === "dark" ||
+    document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light";
 }
 
 export function initializeTheme() {
@@ -24,7 +32,8 @@ export function initializeTheme() {
 
   // Set theme based on stored preference (i.e. user selected it before) or
   // system-wide preference.
-  applyResolvedTheme($themePreference.get() ?? systemsPreferredTheme());
+  const preference = $themePreference.get();
+  applyResolvedTheme(preference ?? systemsPreferredTheme());
 }
 
 export function createTheme(): Accessor<ResolvedTheme> {
@@ -32,7 +41,10 @@ export function createTheme(): Accessor<ResolvedTheme> {
 
   const attrObserver = new MutationObserver((mutations) => {
     mutations.forEach((mu) => {
-      if (mu.type === "attributes" && mu.attributeName === "class") {
+      if (
+        mu.type === "attributes" &&
+        (mu.attributeName === "class" || mu.attributeName === "data-kb-theme")
+      ) {
         setTheme(currentTheme());
       }
     });

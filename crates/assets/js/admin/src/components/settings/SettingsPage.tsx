@@ -8,6 +8,7 @@ import {
   Switch,
   Match,
   createEffect,
+  untrack,
 } from "solid-js";
 import type { Component, JSX } from "solid-js";
 import { useParams, useNavigate } from "@solidjs/router";
@@ -25,7 +26,6 @@ import {
 import { IconProps } from "solid-icons";
 import { useQueryClient } from "@tanstack/solid-query";
 
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { showToast } from "@/components/ui/toast";
@@ -43,7 +43,6 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 
 import type { InfoResponse } from "@bindings/InfoResponse";
 import { Config, ServerConfig } from "@proto/config";
@@ -65,6 +64,8 @@ import { JobSettings } from "@/components/settings/JobSettings";
 import { BackupSettings } from "@/components/settings/BackupSettings";
 import { IconButton } from "@/components/IconButton";
 import { Version } from "@/components/Version";
+import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 
 import {
   createConfigQuery,
@@ -88,10 +89,15 @@ function ServerSettings(props: CommonProps) {
         <CardContent class="flex flex-col gap-4">
           <Switch>
             <Match when={systemInfo.isError}>
-              {systemInfo.error?.toString()}
+              <Callout variant="error" role="alert">
+                <CalloutTitle>Unable to load runtime information</CalloutTitle>
+                <CalloutContent>Please try again later.</CalloutContent>
+              </Callout>
             </Match>
 
-            <Match when={systemInfo.isLoading}>Loading...</Match>
+            <Match when={systemInfo.isLoading}>
+              <div role="status">Loading runtime information...</div>
+            </Match>
 
             <Match when={systemInfo.isSuccess}>
               <SystemInformation systemInfo={systemInfo.data!} />
@@ -101,41 +107,35 @@ function ServerSettings(props: CommonProps) {
       </Card>
 
       <Switch>
-        <Match when={config.isError}>{config.error?.toString()}</Match>
+        <Match when={config.isError}>
+          <Callout variant="error" role="alert">
+            <CalloutTitle>Unable to load settings</CalloutTitle>
+            <CalloutContent>Please try again later.</CalloutContent>
+          </Callout>
+        </Match>
 
-        <Match when={config.isLoading}>Lading...</Match>
+        <Match when={config.isLoading}>
+          <div role="status">Loading settings...</div>
+        </Match>
 
         <Match when={config.data?.config}>
           <ServerSettingsForm config={config.data!.config!} {...props} />
         </Match>
       </Switch>
-
-      <Show when={import.meta.env.DEV}>
-        <div class="flex justify-end gap-4">
-          <Button
-            variant={"destructive"}
-            type="button"
-            onClick={() => {
-              throw new Error("test sync exception");
-            }}
-          >
-            DEV: Throw
-          </Button>
-
-          <Button
-            variant={"destructive"}
-            type="button"
-            onClick={() => {
-              (async () => {
-                throw new Error("test async exception");
-              })();
-            }}
-          >
-            DEV: Async Throw
-          </Button>
-        </div>
-      </Show>
     </div>
+  );
+}
+
+function cloneServerConfig(config: ServerConfig) {
+  return ServerConfig.decode(ServerConfig.encode(config).finish());
+}
+
+function sameServerConfig(left: ServerConfig, right: ServerConfig) {
+  const leftBytes = ServerConfig.encode(left).finish();
+  const rightBytes = ServerConfig.encode(right).finish();
+  return (
+    leftBytes.length === rightBytes.length &&
+    leftBytes.every((byte, index) => byte === rightBytes[index])
   );
 }
 
@@ -149,31 +149,77 @@ function ServerSettingsForm(
   function serverConfig(config: Config) {
     const server = config.server;
     // "deep-copy" & fallback
-    return server
-      ? ServerConfig.decode(ServerConfig.encode(server).finish())
-      : ServerConfig.fromJSON({});
+    return server ? cloneServerConfig(server) : ServerConfig.fromJSON({});
   }
 
+  const initialValues = serverConfig(props.config);
+  const [savedValues, setSavedValues] = createSignal(initialValues);
+  let editBaseline = cloneServerConfig(initialValues);
+  const [submitError, setSubmitError] = createSignal(false);
+  let lastIncoming = cloneServerConfig(initialValues);
+  let active = true;
+  onCleanup(() => {
+    active = false;
+  });
   const form = createForm(() => ({
-    defaultValues: serverConfig(props.config),
+    defaultValues: cloneServerConfig(savedValues()),
     onSubmit: async ({ value }: { value: ServerConfig }) => {
+      setSubmitError(false);
+      const latest = cloneServerConfig(savedValues());
+      if (value.applicationName !== editBaseline.applicationName) {
+        latest.applicationName = value.applicationName;
+      }
+      if (value.siteUrl !== editBaseline.siteUrl) {
+        latest.siteUrl = value.siteUrl;
+      }
+      if (value.logsRetentionSec !== editBaseline.logsRetentionSec) {
+        latest.logsRetentionSec = value.logsRetentionSec;
+      }
       const newConfig = Config.fromPartial(props.config);
-      newConfig.server = value;
-      await setConfig({
-        client: queryClient,
-        config: newConfig,
-        throw: true,
-      });
+      newConfig.server = latest;
+      try {
+        await setConfig({
+          client: queryClient,
+          config: newConfig,
+          throw: true,
+        });
+        if (!active) return;
 
-      props.postSubmit?.();
+        const saved = cloneServerConfig(newConfig.server!);
+        setSavedValues(saved);
+        editBaseline = cloneServerConfig(saved);
+        const stillModified = !sameServerConfig(saved, formValues());
+        if (!stillModified) form.reset(cloneServerConfig(saved));
+        props.postSubmit?.(stillModified);
+      } catch {
+        if (active) setSubmitError(true);
+      }
     },
   }));
 
-  form.useStore((state) => {
-    if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+  const formValues = form.useSelector((state) => state.values);
+  const modified = () => {
+    const current = formValues();
+    return (
+      current.applicationName !== editBaseline.applicationName ||
+      current.siteUrl !== editBaseline.siteUrl ||
+      current.logsRetentionSec !== editBaseline.logsRetentionSec
+    );
+  };
+
+  createEffect(() => {
+    const incoming = serverConfig(props.config);
+    if (sameServerConfig(lastIncoming, incoming)) return;
+
+    lastIncoming = cloneServerConfig(incoming);
+    const wasModified = untrack(modified);
+    setSavedValues(cloneServerConfig(incoming));
+    if (!wasModified) {
+      editBaseline = cloneServerConfig(incoming);
+      form.reset(cloneServerConfig(incoming));
     }
   });
+  createEffect(() => props.setDirty(modified()));
 
   return (
     <form
@@ -241,26 +287,35 @@ function ServerSettingsForm(
           </CardContent>
         </Card>
 
-        <div class="flex justify-end gap-4">
-          <form.Subscribe
-            selector={(state) => ({
-              canSubmit: state.canSubmit,
-              isSubmitting: state.isSubmitting,
-            })}
-          >
-            {(state) => {
-              return (
-                <Button
-                  type="submit"
-                  disabled={!state().canSubmit}
-                  variant="default"
-                >
-                  {state().isSubmitting ? "..." : "Submit"}
-                </Button>
-              );
-            }}
-          </form.Subscribe>
-        </div>
+        <form.Subscribe
+          selector={(state) => ({
+            canSubmit: state.canSubmit,
+            isSubmitting: state.isSubmitting,
+          })}
+        >
+          {(state) => (
+            <>
+              <Show when={submitError()}>
+                <Callout variant="error" role="alert">
+                  <CalloutTitle>Unable to save settings</CalloutTitle>
+                  <CalloutContent>
+                    Check your values and try again.
+                  </CalloutContent>
+                </Callout>
+              </Show>
+              <SettingsFormActions
+                dirty={modified()}
+                canSubmit={state().canSubmit}
+                isSubmitting={state().isSubmitting}
+                onReset={() => {
+                  setSubmitError(false);
+                  editBaseline = cloneServerConfig(savedValues());
+                  form.reset(cloneServerConfig(savedValues()));
+                }}
+              />
+            </>
+          )}
+        </form.Subscribe>
       </div>
     </form>
   );
@@ -276,16 +331,16 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
 
   // Running second timer
   const [uptime, setUptime] = createSignal(calcUptime());
-  let handle: ReturnType<typeof setTimeout> | undefined = undefined;
+  let handle: ReturnType<typeof setInterval> | undefined = undefined;
   onMount(() => {
-    if (handle) {
+    if (handle !== undefined) {
       clearInterval(handle);
     }
     handle = setInterval(() => setUptime(calcUptime()), 1000);
   });
 
   onCleanup(() => {
-    if (handle) {
+    if (handle !== undefined) {
       clearInterval(handle);
     }
     handle = undefined;
@@ -293,48 +348,44 @@ function SystemInformation(props: { systemInfo: InfoResponse }) {
 
   const width = "w-40";
   return (
-    <TextField class="w-full">
-      <div
-        class={`grid items-center ${gapStyle}`}
-        style={{ "grid-template-columns": "auto 1fr" }}
-      >
-        <TextFieldLabel class={width}>CPU Threads:</TextFieldLabel>
-        <span>{info().threads}</span>
+    <dl
+      class={`grid items-center ${gapStyle}`}
+      style={{ "grid-template-columns": "auto 1fr" }}
+    >
+      <dt class={width}>CPU Threads:</dt>
+      <dd>{info().threads}</dd>
 
-        <TextFieldLabel class={width}>Compiler:</TextFieldLabel>
-        <span>{info().compiler}</span>
+      <dt class={width}>Compiler:</dt>
+      <dd>{info().compiler}</dd>
 
-        <TextFieldLabel class={width}>Commit Hash:</TextFieldLabel>
-        <span>
-          <a
-            href={`https://github.com/trailbaseio/trailbase/commit/${info().commit_hash}`}
-          >
-            {info().commit_hash?.substring(0, 10)}
-          </a>
-        </span>
+      <dt class={width}>Commit Hash:</dt>
+      <dd>
+        <a
+          href={`https://github.com/trailbaseio/trailbase/commit/${info().commit_hash}`}
+        >
+          {info().commit_hash?.substring(0, 10)}
+        </a>
+      </dd>
 
-        <TextFieldLabel class={width}>Commit Date:</TextFieldLabel>
-        <span>{info().commit_date}</span>
+      <dt class={width}>Commit Date:</dt>
+      <dd>{info().commit_date}</dd>
 
-        <TextFieldLabel class={width}>Version:</TextFieldLabel>
-        <span>
-          <Version info={info()} />
-        </span>
+      <dt class={width}>Version:</dt>
+      <dd>
+        <Version info={info()} />
+      </dd>
 
-        <TextFieldLabel class={width}>Uptime:</TextFieldLabel>
-        <span>{formatDuration(uptime())}</span>
+      <dt class={width}>Uptime:</dt>
+      <dd>{formatDuration(uptime())}</dd>
 
-        <TextFieldLabel class={width}>Arguments:</TextFieldLabel>
-        <span class="font-mono">
-          {info().command_line_arguments?.join(" ")}
-        </span>
+      <dt class={width}>Arguments:</dt>
+      <dd class="font-mono">{info().command_line_arguments?.join(" ")}</dd>
 
-        <Show when={props.systemInfo.postgres}>
-          <TextFieldLabel class={width}>Postgres:</TextFieldLabel>
-          <span>enabled</span>
-        </Show>
-      </div>
-    </TextField>
+      <Show when={props.systemInfo.postgres}>
+        <dt class={width}>Postgres:</dt>
+        <dd>enabled</dd>
+      </Show>
+    </dl>
   );
 }
 
@@ -415,8 +466,8 @@ function SettingsSidebar(props: {
 }
 
 interface CommonProps {
-  markDirty: () => void;
-  postSubmit: () => void;
+  setDirty: (dirty: boolean) => void;
+  postSubmit: (dirty?: boolean) => void;
 }
 
 interface Site {
@@ -429,7 +480,7 @@ interface Site {
 const sites = [
   {
     route: "host",
-    label: "Host",
+    label: "General",
     child: ServerSettings,
     icon: TbOutlineServer,
   },
@@ -441,7 +492,7 @@ const sites = [
   },
   {
     route: "auth",
-    label: "Auth",
+    label: "Authentication",
     child: AuthSettings,
     icon: TbOutlineUser,
   },
@@ -509,9 +560,9 @@ export function SettingsPage() {
 
   const p = () =>
     ({
-      markDirty: () => setDirty(true),
-      postSubmit: () => {
-        setDirty(false);
+      setDirty,
+      postSubmit: (dirty = false) => {
+        setDirty(dirty);
         showToast({
           title: "submitted",
           variant: "success",
@@ -547,13 +598,16 @@ export function SettingsPage() {
         titleSelect={activeSite().label}
         leading={<SidebarTrigger />}
         left={
-          <IconButton onClick={() => invalidateConfig(queryClient)}>
+          <IconButton
+            aria-label="Refresh settings"
+            onClick={() => invalidateConfig(queryClient)}
+          >
             <TbOutlineRefresh />
           </IconButton>
         }
       />
 
-      <div class="m-4">{activeSite().child(p())}</div>
+      <div class="m-4 max-w-5xl">{activeSite().child(p())}</div>
     </Dialog>
   );
 

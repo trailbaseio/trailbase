@@ -7,12 +7,13 @@ import {
   createMemo,
   createEffect,
   createSignal,
+  on,
   onCleanup,
 } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
-import type { ColumnDef } from "@tanstack/solid-table";
+import type { ColumnDef, PaginationState } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import {
@@ -22,18 +23,23 @@ import {
   TbOutlinePencilPlus,
   TbOutlineX,
   TbOutlineCopy,
+  TbOutlineChevronDown,
+  TbOutlineDotsVertical,
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
+import { tags } from "@lezer/highlight";
 import { EditorState } from "@codemirror/state";
 import { minimalSetup } from "codemirror";
 import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 
 import { IconButton } from "@/components/IconButton";
-import { Header } from "@/components/Header";
+import { Spinner } from "@/components/Spinner";
+import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/ui/callout";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -47,9 +53,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 import {
   useSidebar,
   Sidebar,
@@ -64,12 +68,17 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { showToast } from "@/components/ui/toast";
 import { Table, buildTable } from "@/components/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
@@ -83,13 +92,129 @@ import { currentTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
-import { copyToClipboard } from "@/lib/utils";
-import { sqlValueToString } from "@/lib/value";
+import {
+  copyToClipboard,
+  showSaveFileDialog,
+  stringToReadableStream,
+} from "@/lib/utils";
+import { sqlValueToString, tryFormatUuidBlob } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
 import type { ArrayRecord } from "@/lib/record";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
+
+export const DARK_SQL_COLORS = {
+  keyword: "#7dd3fc",
+  string: "#86efac",
+  number: "#fde68a",
+  comment: "#a1a1aa",
+  name: "#e4e4e7",
+  operator: "#f9a8d4",
+  punctuation: "#cbd5e1",
+  invalid: "#fca5a5",
+} as const;
+
+const darkSqlSyntaxHighlighting = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.keyword, color: DARK_SQL_COLORS.keyword, fontWeight: "600" },
+    {
+      tag: [tags.string, tags.special(tags.string)],
+      color: DARK_SQL_COLORS.string,
+    },
+    {
+      tag: [tags.number, tags.bool, tags.atom],
+      color: DARK_SQL_COLORS.number,
+    },
+    {
+      tag: [tags.comment, tags.lineComment, tags.blockComment],
+      color: DARK_SQL_COLORS.comment,
+      fontStyle: "italic",
+    },
+    {
+      tag: [tags.variableName, tags.propertyName, tags.typeName],
+      color: DARK_SQL_COLORS.name,
+    },
+    {
+      tag: [tags.operator, tags.compareOperator],
+      color: DARK_SQL_COLORS.operator,
+    },
+    {
+      tag: [tags.punctuation, tags.separator],
+      color: DARK_SQL_COLORS.punctuation,
+    },
+    { tag: tags.invalid, color: DARK_SQL_COLORS.invalid },
+  ]),
+);
+
+export type EditorWorkspaceTab = "editor" | "results";
+
+export function nextEditorTabAfterExecution(
+  mobile: boolean,
+  current: EditorWorkspaceTab,
+): EditorWorkspaceTab {
+  return mobile ? "results" : current;
+}
+
+export function filterSavedQueries(
+  scripts: Script[],
+  search: string,
+): Script[] {
+  const query = search.trim().toLocaleLowerCase();
+  return query
+    ? scripts.filter((script) =>
+        script.name.toLocaleLowerCase().includes(query),
+      )
+    : scripts;
+}
+
+export function paginateResultRows<T>(
+  rows: T[],
+  pageIndex: number,
+  pageSize: number,
+): T[] {
+  if (rows.length === 0) return [];
+  const size = Math.max(1, pageSize);
+  const lastPage = Math.ceil(rows.length / size) - 1;
+  const page = Math.min(lastPage, Math.max(0, pageIndex));
+  const start = page * size;
+  return rows.slice(start, start + size);
+}
+
+export function detectUuidColumnVersion(
+  data: QueryResponse,
+  columnIndex: number,
+): 4 | 7 | undefined {
+  if (data.columns?.[columnIndex]?.data_type !== "Blob") return undefined;
+
+  let detected: 4 | 7 | undefined;
+  for (const row of data.rows) {
+    const value = row[columnIndex];
+    if (value === "Null") continue;
+    if (value === undefined || !("Blob" in value)) return undefined;
+
+    const uuid = tryFormatUuidBlob(value.Blob);
+    if (!uuid || (detected !== undefined && detected !== uuid.version)) {
+      return undefined;
+    }
+    detected = uuid.version;
+  }
+  return detected;
+}
+
+export function resultPresentation(
+  result: ExecutionResult | undefined,
+  cached: boolean,
+  running = false,
+): { label: string } {
+  if (running) return { label: "Running…" };
+  if (!result) return { label: "No result" };
+  if (result.error) return { label: "Error" };
+  if (cached) return { label: "Cached result" };
+  if (result.data?.columns === null) return { label: "No data" };
+  if (result.data?.rows.length === 0) return { label: "No rows" };
+  return { label: "Success" };
+}
 
 function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   const schema: {
@@ -115,44 +240,231 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
-function buildCsv(response: QueryResponse): string {
-  function escapeCsv(v: string): string {
-    return `"${v.replaceAll('"', '""')}"`;
-  }
+function resultUuidVersions(response: QueryResponse): (4 | 7 | undefined)[] {
+  return (response.columns ?? []).map((_, index) =>
+    detectUuidColumnVersion(response, index),
+  );
+}
 
+function resultValueToString(
+  value: SqlValue,
+  uuidVersion: 4 | 7 | undefined,
+): string {
+  if (uuidVersion && value !== "Null" && "Blob" in value) {
+    return tryFormatUuidBlob(value.Blob)?.value ?? sqlValueToString(value);
+  }
+  return sqlValueToString(value);
+}
+
+function buildDelimited(response: QueryResponse, delimiter: string): string {
+  const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;
   const lines: string[] = [];
+  const uuidVersions = resultUuidVersions(response);
 
-  const columns = response.columns;
-  if (columns !== null) {
-    lines.push(columns.map((c) => escapeCsv(c.name)).join(", "));
+  if (response.columns !== null) {
+    lines.push(
+      response.columns.map((column) => escape(column.name)).join(delimiter),
+    );
   }
-
   for (const row of response.rows) {
-    lines.push(row.map((v) => escapeCsv(sqlValueToString(v))).join(", "));
+    lines.push(
+      row
+        .map((value, index) =>
+          escape(resultValueToString(value, uuidVersions[index])),
+        )
+        .join(delimiter),
+    );
   }
-
   return lines.join("\n");
+}
+
+export function buildCsv(response: QueryResponse): string {
+  return buildDelimited(response, ", ");
+}
+
+export function buildTsv(response: QueryResponse): string {
+  return buildDelimited(response, "\t");
+}
+
+function sqlValueToJson(
+  value: SqlValue,
+  uuidVersion: 4 | 7 | undefined,
+): null | number | string {
+  if (value === "Null") return null;
+  if ("Integer" in value) {
+    const number = Number(value.Integer);
+    return Number.isSafeInteger(number) ? number : value.Integer.toString();
+  }
+  if ("Real" in value) return value.Real;
+  if ("Blob" in value) return resultValueToString(value, uuidVersion);
+  return value.Text;
+}
+
+function resultObjects(response: QueryResponse): Record<string, unknown>[] {
+  const used = new Set<string>();
+  const uuidVersions = resultUuidVersions(response);
+  const names = (response.columns ?? []).map((column) => {
+    let name = column.name;
+    for (let suffix = 2; used.has(name); suffix++)
+      name = `${column.name}_${suffix}`;
+    used.add(name);
+    return name;
+  });
+
+  return response.rows.map((row) =>
+    Object.fromEntries(
+      names.map((name, index) => [
+        name,
+        sqlValueToJson(row[index], uuidVersions[index]),
+      ]),
+    ),
+  );
+}
+
+export function buildJson(response: QueryResponse): string {
+  return JSON.stringify(resultObjects(response), null, 2);
+}
+
+export function buildJsonl(response: QueryResponse): string {
+  return resultObjects(response)
+    .map((row) => JSON.stringify(row))
+    .join("\n");
+}
+
+export type ResultExportFormat = "csv" | "tsv" | "json" | "jsonl";
+
+export function buildResultExport(
+  response: QueryResponse,
+  format: ResultExportFormat,
+): string {
+  switch (format) {
+    case "csv":
+      return buildCsv(response);
+    case "tsv":
+      return buildTsv(response);
+    case "json":
+      return buildJson(response);
+    case "jsonl":
+      return buildJsonl(response);
+  }
+}
+
+export function resultExportFilename(
+  scriptName: string,
+  format: ResultExportFormat,
+): string {
+  const name = scriptName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${name || "query-results"}.${format}`;
+}
+
+const RESULT_EXPORT_FORMATS = ["csv", "tsv", "json", "jsonl"] as const;
+const RESULT_EXPORT_MIME_TYPES: Record<ResultExportFormat, string> = {
+  csv: "text/csv;charset=utf-8",
+  tsv: "text/tab-separated-values;charset=utf-8",
+  json: "application/json;charset=utf-8",
+  jsonl: "application/x-ndjson;charset=utf-8",
+};
+
+function ResultsExportMenu(props: {
+  data: QueryResponse | undefined;
+  scriptName: string;
+}) {
+  const copy = (format: ResultExportFormat) => {
+    if (props.data?.columns !== null && props.data !== undefined) {
+      copyToClipboard(
+        buildResultExport(props.data, format),
+        false,
+        `Copied ${format.toUpperCase()}`,
+      );
+    }
+  };
+
+  const save = async (format: ResultExportFormat) => {
+    if (props.data?.columns === null || props.data === undefined) return;
+
+    try {
+      await showSaveFileDialog({
+        contents: async () =>
+          stringToReadableStream(buildResultExport(props.data!, format)),
+        filename: resultExportFilename(props.scriptName, format),
+        mimeType: RESULT_EXPORT_MIME_TYPES[format],
+      });
+    } catch (error) {
+      showToast({
+        title: "Could not save results",
+        description: error instanceof Error ? error.message : `${error}`,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <DropdownMenu placement="bottom-start">
+      <DropdownMenuTrigger
+        class={buttonVariants({ variant: "ghost", size: "sm" })}
+        aria-label="Export results"
+        disabled={props.data?.columns == null}
+      >
+        <TbOutlineCopy />
+        Export
+        <TbOutlineChevronDown />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Copy to clipboard</DropdownMenuLabel>
+          <For each={RESULT_EXPORT_FORMATS}>
+            {(format) => (
+              <DropdownMenuItem onSelect={() => copy(format)}>
+                {format.toUpperCase()}
+              </DropdownMenuItem>
+            )}
+          </For>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Save to file</DropdownMenuLabel>
+          <For each={RESULT_EXPORT_FORMATS}>
+            {(format) => (
+              <DropdownMenuItem onSelect={() => void save(format)}>
+                {format.toUpperCase()}
+              </DropdownMenuItem>
+            )}
+          </For>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 function ResultsHeader(props: {
   data: QueryResponse | undefined;
+  scriptName: string;
   timestamp: number | undefined;
+  status: string;
 }) {
+  const variant = (): "error" | "warning" | "success" | "secondary" => {
+    if (props.status === "Error") return "error";
+    if (props.status === "Running…") return "warning";
+    if (props.status === "Success") return "success";
+    return "secondary";
+  };
+
   return (
-    <div class="flex items-center justify-between text-sm">
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={props.data === undefined}
-        onClick={() => {
-          const data = props.data;
-          if (data !== undefined) {
-            copyToClipboard(buildCsv(data));
-          }
-        }}
-      >
-        <TbOutlineCopy />
-      </Button>
+    <div class="flex flex-wrap items-center justify-between gap-2 text-sm">
+      <div class="flex items-center gap-2">
+        <Badge variant={variant()}>{props.status}</Badge>
+        <Show when={props.data?.columns !== null && props.data !== undefined}>
+          <span class="text-muted-foreground">
+            {props.data!.rows.length}{" "}
+            {props.data!.rows.length === 1 ? "row" : "rows"}
+          </span>
+        </Show>
+        <ResultsExportMenu data={props.data} scriptName={props.scriptName} />
+      </div>
 
       <ExecutionTime timestamp={props.timestamp} />
     </div>
@@ -162,37 +474,76 @@ function ResultsHeader(props: {
 function ResultView(props: {
   script: Script;
   response: ExecutionResult | undefined;
+  running: boolean;
+  cached: boolean;
 }) {
-  const isCached = () => props.response === undefined;
   const response = () => props.response ?? props.script.result;
+  const status = () =>
+    resultPresentation(response(), props.cached, props.running).label;
 
   return (
     <Switch>
+      <Match when={!response()}>
+        <div class="flex min-h-40 flex-col gap-4 p-4">
+          <ResultsHeader
+            data={undefined}
+            scriptName={props.script.name}
+            timestamp={undefined}
+            status={status()}
+          />
+          <div class="text-muted-foreground flex flex-1 items-center justify-center text-sm">
+            Execute the query to see results.
+          </div>
+        </div>
+      </Match>
+
       <Match when={response()?.error}>
         <div class="flex flex-col gap-2 p-4">
           <ResultsHeader
             data={response()?.data}
+            scriptName={props.script.name}
             timestamp={response()?.timestamp}
+            status={status()}
           />
           Error: {response()?.error?.message}
         </div>
       </Match>
 
       <Match when={response()?.data === undefined}>
-        <div class="flex flex-col gap-2 p-4">
+        <div class="flex min-h-40 flex-col gap-4 p-4">
+          <ResultsHeader
+            data={undefined}
+            scriptName={props.script.name}
+            timestamp={response()?.timestamp}
+            status={status()}
+          />
+          <div class="text-muted-foreground flex flex-1 items-center justify-center text-sm">
+            No tabular result was returned.
+          </div>
+        </div>
+      </Match>
+
+      <Match when={response()?.data?.columns === null}>
+        <div class="flex min-h-40 flex-col gap-4 p-4">
           <ResultsHeader
             data={response()?.data}
+            scriptName={props.script.name}
             timestamp={response()?.timestamp}
+            status={status()}
           />
-          No data
+          <div class="text-muted-foreground flex flex-1 items-center justify-center text-sm">
+            Statement executed without tabular results.
+          </div>
         </div>
       </Match>
 
       <Match when={response()?.data !== undefined}>
         <ResultViewImpl
           data={response()!.data!}
+          scriptName={props.script.name}
           timestamp={response()?.timestamp}
-          isCached={isCached()}
+          isCached={props.cached}
+          status={status()}
         />
       </Match>
     </Switch>
@@ -201,34 +552,62 @@ function ResultView(props: {
 
 function ResultViewImpl(props: {
   data: QueryResponse;
+  scriptName: string;
   isCached: boolean;
+  status: string;
   timestamp?: number;
 }) {
   const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [pagination, setPagination] = createSignal<PaginationState>({
+    pageIndex: 0,
+    pageSize: 20,
+  });
+
+  createEffect(
+    on(
+      () => props.data,
+      () => setPagination((state) => ({ ...state, pageIndex: 0 })),
+      { defer: true },
+    ),
+  );
 
   function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
+      const uuidVersion = detectUuidColumnVersion(data, idx);
+      const type = uuidVersion ? `UUIDv${uuidVersion}` : col.data_type;
 
-      const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
+      const header = `${col.name} [${type}${notNull ? "" : "?"}]`;
       return {
         accessorFn: (row: ArrayRecord) => {
-          return sqlValueToString(row[idx]);
+          const value = row[idx];
+          if (uuidVersion && value !== "Null" && "Blob" in value) {
+            return (
+              tryFormatUuidBlob(value.Blob)?.value ?? sqlValueToString(value)
+            );
+          }
+          return sqlValueToString(value);
         },
         header,
       };
     });
   }
 
-  const dataTable = createMemo(() => {
-    // TODO: Enable pagination
-    return buildTable({
+  const dataTable = createMemo(() =>
+    buildTable({
       columns: columnDefs(props.data),
-      data: props.data.rows,
+      data: paginateResultRows(
+        props.data.rows,
+        pagination().pageIndex,
+        pagination().pageSize,
+      ),
+      rowCount: props.data.rows.length,
+      pagination: pagination(),
+      onPaginationChange: setPagination,
       columnPinning: columnPinningState,
       onColumnPinningChange: setColumnPinningState,
-    });
-  });
+    }),
+  );
 
   return (
     <ErrorBoundary
@@ -248,90 +627,152 @@ function ResultViewImpl(props: {
       }}
     >
       <div class="flex flex-col gap-2 p-4">
-        <ResultsHeader data={props.data} timestamp={props.timestamp} />
+        <ResultsHeader
+          data={props.data}
+          scriptName={props.scriptName}
+          timestamp={props.timestamp}
+          status={props.status}
+        />
 
-        <Table table={dataTable()} loading={false} />
+        <Table
+          table={dataTable()}
+          loading={false}
+          dense
+          paginationPosition="bottom"
+          emptyState={
+            <div class="text-muted-foreground py-8 text-center">
+              No rows returned.
+            </div>
+          }
+        />
       </div>
     </ErrorBoundary>
   );
 }
 
 function ExecutionTime(props: { timestamp: number | undefined }) {
-  const time = () => new Date(props.timestamp ?? 0);
-
-  return <div class="text-sm">{`Executed: ${time().toLocaleString()}`}</div>;
+  return (
+    <Show when={props.timestamp !== undefined}>
+      <div class="text-muted-foreground text-xs">
+        {`Executed ${new Date(props.timestamp!).toLocaleString()}`}
+      </div>
+    </Show>
+  );
 }
 
-function EditorSidebar(props: {
+export function EditorSidebar(props: {
   selected: number;
   setSelected: (idx: number) => void;
   dirty: boolean;
-  horizontal: boolean;
   deleteScriptByIdx: (idx: number) => void;
 }) {
   const { setOpenMobile } = useSidebar();
   const scripts = useStore($scripts);
+  const [search, setSearch] = createSignal("");
+  const filteredScripts = createMemo(() =>
+    filterSavedQueries(scripts(), search()),
+  );
 
-  const addNewScript = () => props.setSelected(createNewScript());
+  const addNewScript = () => {
+    setOpenMobile(false);
+    props.setSelected(createNewScript());
+  };
 
   return (
-    <div class="p-2">
-      <SidebarGroupContent>
+    <div class="flex h-full min-h-0 flex-col gap-3 p-2">
+      <div class="flex items-start justify-between gap-2 px-1 pt-1">
+        <div>
+          <h2 class="text-sm font-semibold">Saved queries</h2>
+          <p class="text-muted-foreground text-xs">
+            {search().trim()
+              ? `${filteredScripts().length} of ${scripts().length}`
+              : `${scripts().length} saved`}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          class="size-8"
+          aria-label="Create query"
+          onClick={addNewScript}
+        >
+          <TbOutlinePencilPlus />
+        </Button>
+      </div>
+
+      <TextField>
+        <TextFieldInput
+          type="search"
+          aria-label="Search saved queries"
+          placeholder="Search saved queries"
+          value={search()}
+          onInput={(event) => setSearch(event.currentTarget.value)}
+        />
+      </TextField>
+
+      <SidebarGroupContent class="min-h-0 overflow-y-auto">
         <SidebarMenu>
-          <Button
-            class="flex gap-2"
-            variant="secondary"
-            onClick={() => {
-              setOpenMobile(false);
-              addNewScript();
-            }}
+          <Show
+            when={scripts().length > 0}
+            fallback={
+              <div class="text-muted-foreground flex flex-col items-center gap-3 px-3 py-8 text-center text-sm">
+                <p>No saved queries yet</p>
+                <Button variant="secondary" onClick={addNewScript}>
+                  Create query
+                </Button>
+              </div>
+            }
           >
-            <TbOutlinePencilPlus /> New
-          </Button>
+            <Show
+              when={filteredScripts().length > 0}
+              fallback={
+                <div class="text-muted-foreground flex flex-col items-center gap-3 px-3 py-8 text-center text-sm">
+                  <p>No saved queries match</p>
+                  <Button variant="ghost" onClick={() => setSearch("")}>
+                    Clear search
+                  </Button>
+                </div>
+              }
+            >
+              <For each={filteredScripts()}>
+                {(script: Script) => {
+                  const index = () => scripts().indexOf(script);
+                  const selected = () => props.selected === index();
+                  const dirty = () => selected() && props.dirty;
 
-          <For each={scripts()}>
-            {(script: Script, i: Accessor<number>) => {
-              const scriptName = () => scripts()[i()].name;
-              const showStar = () => props.selected === i() && props.dirty;
+                  return (
+                    <SidebarMenuItem class="flex items-center gap-1">
+                      <SidebarMenuButton
+                        isActive={selected()}
+                        tooltip={script.name}
+                        class="min-w-0 flex-1"
+                        variant="default"
+                        size="md"
+                        onClick={() => {
+                          setOpenMobile(false);
+                          props.setSelected(index());
+                        }}
+                      >
+                        <span class="truncate">{script.name}</span>
+                        <Show when={dirty()}>
+                          <span class="text-primary ml-auto" aria-hidden="true">
+                            •
+                          </span>
+                          <span class="sr-only">Unsaved changes</span>
+                        </Show>
+                      </SidebarMenuButton>
 
-              return (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={props.selected === i()}
-                    tooltip={scriptName()}
-                    class="pr-0"
-                    variant="default"
-                    size="md"
-                    onClick={() => {
-                      setOpenMobile(false);
-                      props.setSelected(i());
-                    }}
-                  >
-                    <div class="flex w-full items-center justify-between">
-                      <span class="truncate">
-                        {`${scriptName()}${showStar() ? "*" : ""}`}
-                      </span>
-
-                      <div class="flex">
-                        <RenameDialog selected={i()} script={script} />
-
-                        <IconButton
-                          class="hover:bg-border"
-                          tooltip="Delete this script"
-                          onClick={(e) => {
-                            props.deleteScriptByIdx(i());
-                            e.stopPropagation();
-                          }}
-                        >
-                          <TbOutlineTrash />
-                        </IconButton>
-                      </div>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            }}
-          </For>
+                      <QueryActions
+                        selected={index()}
+                        script={script}
+                        deleteScript={() => props.deleteScriptByIdx(index())}
+                      />
+                    </SidebarMenuItem>
+                  );
+                }}
+              </For>
+            </Show>
+          </Show>
         </SidebarMenu>
       </SidebarGroupContent>
     </div>
@@ -342,7 +783,7 @@ function HelpDialog() {
   return (
     <Dialog id="edit-help">
       <DialogTrigger>
-        <IconButton>
+        <IconButton tooltip="SQL editor help">
           <TbOutlineHelp />
         </IconButton>
       </DialogTrigger>
@@ -375,26 +816,92 @@ function HelpDialog() {
   );
 }
 
-function RenameDialog(props: { selected: number; script: Script }) {
-  const [open, setOpen] = createSignal(false);
+function QueryActions(props: {
+  selected: number;
+  script: Script;
+  deleteScript: () => void;
+}) {
+  const [renameOpen, setRenameOpen] = createSignal(false);
+  const [deleteOpen, setDeleteOpen] = createSignal(false);
 
+  return (
+    <>
+      <DropdownMenu placement="bottom-end">
+        <DropdownMenuTrigger
+          class={buttonVariants({ variant: "ghost", size: "icon" })}
+          aria-label={`Actions for ${props.script.name}`}
+        >
+          <TbOutlineDotsVertical />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+            <TbOutlineEdit />
+            Rename
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            class="text-destructive ui-highlighted:text-destructive"
+            onSelect={() => setDeleteOpen(true)}
+          >
+            <TbOutlineTrash />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <RenameDialog
+        open={renameOpen()}
+        onOpenChange={setRenameOpen}
+        selected={props.selected}
+        script={props.script}
+      />
+
+      <Dialog open={deleteOpen()} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete query?</DialogTitle>
+          </DialogHeader>
+          <p class="text-muted-foreground text-sm">
+            “{props.script.name}” and its cached result will be removed from
+            this browser.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                props.deleteScript();
+                setDeleteOpen(false);
+              }}
+            >
+              Delete query
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function RenameDialog(props: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selected: number;
+  script: Script;
+}) {
   let ref: HTMLInputElement | undefined;
 
   return (
-    <Dialog id="script-rename-dialog" open={open()} onOpenChange={setOpen}>
-      <DialogTrigger
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <IconButton tooltip="Rename script" class="hover:bg-border">
-          <TbOutlineEdit />
-        </IconButton>
-      </DialogTrigger>
-
+    <Dialog
+      id="script-rename-dialog"
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+    >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rename</DialogTitle>
+          <DialogTitle>Rename query</DialogTitle>
         </DialogHeader>
 
         <form
@@ -403,19 +910,20 @@ function RenameDialog(props: { selected: number; script: Script }) {
           onSubmit={(e: SubmitEvent) => {
             e.preventDefault();
 
-            const name = ref?.value;
-            if (name !== undefined) {
+            const name = ref?.value.trim();
+            if (name) {
               updateExistingScript(props.selected, {
                 ...props.script,
                 name,
               });
-              setOpen(false);
+              props.onOpenChange(false);
             }
           }}
         >
           <TextField>
             <TextFieldInput
               ref={ref}
+              aria-label="Query name"
               required={true}
               pattern=".+"
               value={props.script.name}
@@ -424,11 +932,75 @@ function RenameDialog(props: { selected: number; script: Script }) {
           </TextField>
 
           <DialogFooter>
-            <Button type="submit">Save</Button>
+            <Button type="submit">Rename query</Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function QueryActionBar(props: {
+  busy: boolean;
+  mobile: boolean;
+  onSave: () => void;
+  onExecute: () => void;
+}) {
+  return (
+    <div class="flex items-center justify-end gap-2">
+      <Button variant="outline" aria-label="Save query" onClick={props.onSave}>
+        {props.mobile ? "Save" : "Save (Ctrl/⌘+S)"}
+      </Button>
+      <Button
+        aria-label="Execute query"
+        disabled={props.busy}
+        onClick={props.onExecute}
+      >
+        <Show
+          when={!props.busy}
+          fallback={
+            <>
+              <Spinner class="size-4" size={16} />
+              Running…
+            </>
+          }
+        >
+          {props.mobile ? "Execute" : "Execute (Ctrl/⌘+Enter)"}
+        </Show>
+      </Button>
+    </div>
+  );
+}
+
+export function AttachedDatabaseSelect(props: {
+  options: string[];
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  return (
+    <Select<string>
+      multiple
+      options={props.options}
+      value={props.value}
+      itemComponent={(itemProps) => (
+        <SelectItem item={itemProps.item}>{itemProps.item.rawValue}</SelectItem>
+      )}
+      onChange={props.onChange}
+    >
+      <SelectTrigger class="w-auto" aria-label="Attached databases">
+        <span class="max-w-44 text-ellipsis">
+          Attached databases · {props.value.length}
+        </span>
+      </SelectTrigger>
+      <SelectContent>
+        <div class="border-b px-3 py-2">
+          <div class="text-sm font-medium">Attached databases</div>
+          <div class="text-muted-foreground text-xs">
+            main.db is always connected
+          </div>
+        </div>
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -455,15 +1027,23 @@ function EditorPanel(props: {
   const config = createConfigQuery();
 
   const isMobile = createIsMobile();
+  const { state: explorerState } = useSidebar();
+  const [activeTab, setActiveTab] = createSignal<EditorWorkspaceTab>("editor");
 
   const databases = () =>
     config.data?.config?.databases
       .map((db) => db.name)
       .filter((n) => n !== undefined);
 
-  const [attachedDbs, setAttachedDbs] = createSignal<string[]>(
-    databases()?.slice(0, 124) ?? [],
-  );
+  const [attachedDbs, setAttachedDbs] = createSignal<string[]>([]);
+  let attachedDbsInitialized = false;
+  createEffect(() => {
+    const available = databases();
+    if (!attachedDbsInitialized && available !== undefined) {
+      setAttachedDbs(available.slice(0, 124));
+      attachedDbsInitialized = true;
+    }
+  });
   const [queryString, setQueryString] = createWritableMemo<string | null>(
     () => {
       // Reset queryString to null whenever we switch scripts. If we read query
@@ -507,6 +1087,7 @@ function EditorPanel(props: {
           ...props.script,
           result: response,
         });
+        setActiveTab(nextEditorTabAfterExecution(isMobile(), activeTab()));
 
         return response;
       },
@@ -521,7 +1102,7 @@ function EditorPanel(props: {
     const newEditorState = (contents: string) => {
       const customKeymap = keymap.of([
         {
-          key: "Ctrl-Enter",
+          key: "Mod-Enter",
           run: () => {
             execute();
             return true;
@@ -529,7 +1110,7 @@ function EditorPanel(props: {
           preventDefault: true,
         },
         {
-          key: "Ctrl-s",
+          key: "Mod-s",
           run: () => {
             saveScript();
             return true;
@@ -542,6 +1123,7 @@ function EditorPanel(props: {
         doc: contents,
         extensions: [
           editorTheme(currentTheme() === "dark"),
+          currentTheme() === "dark" ? darkSqlSyntaxHighlighting : [],
           customKeymap,
           lineNumbers(),
           // Let's you define your own custom CSS style for the line number gutter.
@@ -575,6 +1157,7 @@ function EditorPanel(props: {
   });
 
   const execute = () => {
+    if (executionResult.isFetching) return;
     const query = editor?.state.doc.toString();
     if (query !== undefined) {
       setQueryString(query);
@@ -590,7 +1173,7 @@ function EditorPanel(props: {
       });
     }
     setDirty(false);
-    showToast({ title: "saved" });
+    showToast({ title: "Query saved" });
   };
 
   return (
@@ -618,104 +1201,102 @@ function EditorPanel(props: {
         save={saveScript}
       />
 
-      <Header
-        title="Editor"
-        leading={<SidebarTrigger />}
-        titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-        right={
-          <div class="flex items-center">
-            <Select<string>
-              multiple={true}
+      <header class="bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm">
+        <div class="flex min-h-14 flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
+          <div class="flex min-w-0 items-center gap-2">
+            <SidebarTrigger
+              aria-label={
+                explorerState() === "collapsed"
+                  ? "Show saved queries"
+                  : "Hide saved queries"
+              }
+            />
+            <div class="flex min-w-0 items-center gap-2 text-sm">
+              <span class="text-muted-foreground hidden sm:inline">
+                SQL Editor
+              </span>
+              <span class="text-muted-foreground hidden sm:inline">›</span>
+              <span class="truncate font-semibold">{props.script.name}</span>
+              <Show when={dirty()}>
+                <Badge variant="warning">Unsaved</Badge>
+              </Show>
+            </div>
+          </div>
+
+          <div class="flex min-w-0 items-center gap-2">
+            <AttachedDatabaseSelect
               options={[...(databases() ?? [])]}
               value={attachedDbs()}
-              itemComponent={(props) => (
-                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-              )}
-              onChange={(value: string[]) => setAttachedDbs(value)}
-            >
-              <div class="flex items-center gap-2">
-                Attached
-                <SelectTrigger>
-                  <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
-                    {(state) => {
-                      const selected = state.selectedOptions();
-                      if (selected.length === 0) {
-                        // FIXME: state callback never gets called when empty.
-                        return "none";
-                      }
-                      return selected.join(", ");
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-              </div>
-
-              <SelectContent />
-            </Select>
+              onChange={setAttachedDbs}
+            />
 
             <HelpDialog />
           </div>
-        }
-      />
-
-      <div class="mx-4 my-2 flex flex-col gap-2">
-        {(uiState().showMigrationWarning ?? true) && (
-          <Callout
-            class="flex items-center text-sm hover:opacity-80"
-            onClick={() => {
-              $uiState.set({
-                ...uiState(),
-                showMigrationWarning: false,
-              });
-            }}
-          >
-            <p>{migrationWarning}</p>
-
-            <div class="p-2">
-              <TbOutlineX size={20} />
-            </div>
-          </Callout>
-        )}
-
-        {/* Editor */}
-        <div class="min-h-24 shrink" ref={ref} />
-
-        <div class="flex items-center justify-between">
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button variant="secondary" onClick={() => saveScript()}>
-                <Show when={!isMobile()} fallback="Save">
-                  Save (Ctrl+S)
-                </Show>
-              </Button>
-            </TooltipTrigger>
-
-            <TooltipContent>
-              Save script to browser local storage.
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button variant="destructive" onClick={execute}>
-                <Show when={!isMobile()} fallback="Execute">
-                  Execute (Ctrl+Enter)
-                </Show>
-              </Button>
-            </TooltipTrigger>
-
-            <TooltipContent>
-              Execute script on the server. No turning back.
-            </TooltipContent>
-          </Tooltip>
         </div>
-      </div>
+      </header>
 
-      <Separator />
+      <Tabs
+        value={activeTab()}
+        onChange={(value) => setActiveTab(value as EditorWorkspaceTab)}
+      >
+        <TabsList class="mx-3 mt-3 grid w-[calc(100%-1.5rem)] grid-cols-2 md:hidden">
+          <TabsTrigger value="editor">Editor</TabsTrigger>
+          <TabsTrigger value="results">Results</TabsTrigger>
+        </TabsList>
 
-      <ResultView
-        script={props.script}
-        response={executionResult.data ?? undefined}
-      />
+        <TabsContent
+          value="editor"
+          forceMount
+          class="ui-selected:block m-0 hidden md:block"
+        >
+          <div class="flex flex-col gap-3 p-3 sm:p-4">
+            {(uiState().showMigrationWarning ?? true) && (
+              <Callout class="flex items-start justify-between gap-3 text-sm">
+                <p class="leading-relaxed">{migrationWarning}</p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-7 shrink-0"
+                  aria-label="Dismiss migration warning"
+                  onClick={() => {
+                    $uiState.set({
+                      ...uiState(),
+                      showMigrationWarning: false,
+                    });
+                  }}
+                >
+                  <TbOutlineX />
+                </Button>
+              </Callout>
+            )}
+
+            <div
+              class="min-h-64 overflow-hidden rounded-md border [&_.cm-editor]:min-h-64"
+              ref={ref}
+            />
+
+            <QueryActionBar
+              busy={executionResult.isFetching}
+              mobile={isMobile()}
+              onSave={saveScript}
+              onExecute={execute}
+            />
+          </div>
+        </TabsContent>
+
+        <TabsContent
+          value="results"
+          forceMount
+          class="ui-selected:block m-0 hidden md:block md:border-t"
+        >
+          <ResultView
+            script={props.script}
+            response={executionResult.data ?? undefined}
+            running={executionResult.isFetching}
+            cached={queryString() === null}
+          />
+        </TabsContent>
+      </Tabs>
     </Dialog>
   );
 }
@@ -773,7 +1354,10 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      cookieName="sql-explorer:state"
+      style={{ "--sidebar-width": "15rem" }}
+    >
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -786,7 +1370,6 @@ export function EditorPage() {
               selected={selected()}
               setSelected={switchToScript}
               dirty={dirty()}
-              horizontal={true}
               deleteScriptByIdx={deleteScriptByIdx}
             />
           </SidebarGroup>
@@ -836,25 +1419,19 @@ function editorTheme(dark: boolean) {
   return EditorView.theme(
     {
       ".cm-gutters": {
-        backgroundColor: dark ? "#000" : "#f3f7f9",
-        color: dark ? "#FFFFFF" : "#000",
+        backgroundColor: "transparent",
+        color: dark ? "#a1a1aa" : "#52525b",
         border: "none",
-        borderRadius: "8px 0px 0px 8px",
       },
       "&.cm-editor": {
-        outline: "1px solid #e4e4e7",
-        borderRadius: "8px",
+        height: "100%",
       },
-      // "&.cm-editor.cm-focused": {
-      //   outline: "1px solid gray",
-      //   borderRadius: "8px",
-      // },
     },
     { dark },
   );
 }
 
-type Script = {
+export type Script = {
   name: string;
   contents: string;
 

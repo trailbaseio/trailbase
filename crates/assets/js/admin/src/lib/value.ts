@@ -1,5 +1,10 @@
 import { fromHex } from "@/lib/utils";
-import { urlSafeBase64Encode } from "trailbase";
+import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
+import {
+  stringify as uuidStringify,
+  validate as uuidValidate,
+  version as uuidVersion,
+} from "uuid";
 
 import type { Blob } from "@bindings/Blob";
 import type { SqlValue } from "@bindings/SqlValue";
@@ -33,6 +38,27 @@ assert<
     SqlIntegerValue | SqlRealValue | SqlTextValue | SqlBlobValue
   >
 >(); // no error
+
+export function tryFormatUuidBlob(
+  blob: Blob,
+): { value: string; version: 4 | 7 } | undefined {
+  try {
+    const bytes =
+      "Base64UrlSafe" in blob
+        ? urlSafeBase64Decode(blob.Base64UrlSafe)
+        : "Hex" in blob
+          ? fromHex(blob.Hex)
+          : Uint8Array.from(blob.Array);
+    if (bytes.length !== 16) return undefined;
+
+    const value = uuidStringify(bytes);
+    if (!uuidValidate(value)) return undefined;
+    const version = uuidVersion(value);
+    return version === 4 || version === 7 ? { value, version } : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export function sqlValueToString(value: SqlValue): string {
   if (value === "Null") {

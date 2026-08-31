@@ -2,6 +2,7 @@
 target/
 node_modules/
 dist/
+traildepot/
 
 # Dart workspace artifacts
 .dart_tool

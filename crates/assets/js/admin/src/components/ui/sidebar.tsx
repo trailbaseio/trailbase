@@ -17,6 +17,7 @@ import type { PolymorphicProps } from "@kobalte/core"
 import { Polymorphic } from "@kobalte/core"
 import type { VariantProps } from "class-variance-authority"
 import { cva } from "class-variance-authority"
+import { TbOutlineLayoutSidebarLeftCollapse } from "solid-icons/tb"
 
 import { cn } from "@/lib/utils"
 import type { ButtonProps } from "@/components/ui/button"
@@ -30,9 +31,28 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 export const MOBILE_BREAKPOINT = 768
 const SIDEBAR_COOKIE_NAME = "sidebar:state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-const SIDEBAR_WIDTH = "14rem"
+
+export function readSidebarCookie(
+  cookie: string,
+  cookieName = SIDEBAR_COOKIE_NAME,
+): boolean | undefined {
+  const value = cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${cookieName}=`))
+    ?.slice(cookieName.length + 1)
+  if (value === undefined) return undefined
+  try {
+    const decoded = decodeURIComponent(value)
+    return decoded === "true" ? true : decoded === "false" ? false : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export const SIDEBAR_WIDTH = "15rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "3rem"
+export const SIDEBAR_WIDTH_ICON = "4rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContext = {
@@ -73,6 +93,7 @@ export function useIsMobile(fallback = false) {
 }
 
 type SidebarProviderProps = Omit<ComponentProps<"div">, "style"> & {
+  cookieName?: string
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -80,8 +101,12 @@ type SidebarProviderProps = Omit<ComponentProps<"div">, "style"> & {
 }
 
 const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
-  const props = mergeProps({ defaultOpen: true }, rawProps)
+  const props = mergeProps(
+    { cookieName: SIDEBAR_COOKIE_NAME, defaultOpen: true },
+    rawProps,
+  )
   const [local, others] = splitProps(props, [
+    "cookieName",
     "defaultOpen",
     "open",
     "onOpenChange",
@@ -95,7 +120,12 @@ const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
 
   // This is the internal state of the sidebar.
   // We use open and onOpenChange for control from outside the component.
-  const [_open, _setOpen] = createSignal(local.defaultOpen)
+  const cookieState = typeof document !== "undefined"
+    ? readSidebarCookie(document.cookie, local.cookieName)
+    : undefined
+  const [_open, _setOpen] = createSignal(
+    cookieState === undefined ? local.defaultOpen : cookieState,
+  )
   const open = () => local.open ?? _open()
   const setOpen = (value: boolean | ((value: boolean) => boolean)) => {
     if (local.onOpenChange) {
@@ -104,7 +134,7 @@ const SidebarProvider: Component<SidebarProviderProps> = (rawProps) => {
     _setOpen(value)
 
     // This sets the cookie to keep the sidebar state.
-    document.cookie = `${SIDEBAR_COOKIE_NAME}=${open()}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+    document.cookie = `${local.cookieName}=${open()}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
   }
 
   // Helper to toggle the sidebar.
@@ -230,6 +260,7 @@ const Sidebar: Component<SidebarProps> = (rawProps) => {
           <div
             class={cn(
               "w-(--sidebar-width) fixed inset-y-0 z-10 hidden h-svh transition-[left,right,width] duration-200 ease-linear md:flex",
+              "group-data-[collapsible=offcanvas]:invisible",
               local.side === "left"
                 ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
                 : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -240,6 +271,12 @@ const Sidebar: Component<SidebarProps> = (rawProps) => {
               local.class
             )}
             {...others}
+            aria-hidden={
+              state() === "collapsed" && local.collapsible === "offcanvas"
+                ? "true"
+                : undefined
+            }
+            inert={state() === "collapsed" && local.collapsible === "offcanvas"}
           >
             <div
               data-sidebar="sidebar"
@@ -260,7 +297,9 @@ type SidebarTriggerProps<T extends ValidComponent = "button"> = ButtonProps<T> &
 
 const SidebarTrigger = <T extends ValidComponent = "button">(props: SidebarTriggerProps<T>) => {
   const [local, others] = splitProps(props as SidebarTriggerProps, ["class", "onClick"])
-  const { toggleSidebar } = useSidebar()
+  const { isMobile, openMobile, state, toggleSidebar } = useSidebar()
+  const expanded = () => isMobile() ? openMobile() : state() === "expanded"
+  const actionLabel = () => expanded() ? "Collapse sidebar" : "Expand sidebar"
 
   return (
     <Button
@@ -274,19 +313,10 @@ const SidebarTrigger = <T extends ValidComponent = "button">(props: SidebarTrigg
       }}
       {...others}
     >
-      <svg
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="size-4"
-      >
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="M9 3v18" />
-      </svg>
-      <span class="sr-only">Toggle Sidebar</span>
+      <TbOutlineLayoutSidebarLeftCollapse
+        class={`size-4 transition-transform ${expanded() ? "" : "rotate-180"}`}
+      />
+      <span class="sr-only">{actionLabel()}</span>
     </Button>
   )
 }
@@ -469,7 +499,7 @@ const SidebarMenuItem: Component<ComponentProps<"li">> = (props) => {
 }
 
 const sidebarMenuButtonVariants = cva(
-  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+  "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-none ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-[[data-sidebar=menu-action]]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-2 [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -527,7 +557,7 @@ const SidebarMenuButton = <T extends ValidComponent = "button">(
   return (
     <Show when={local.tooltip} fallback={button}>
       <Tooltip placement="right">
-        <TooltipTrigger class="w-full">{button}</TooltipTrigger>
+        <TooltipTrigger as="div" class="w-full">{button}</TooltipTrigger>
         <TooltipContent hidden={state() !== "collapsed" || isMobile()}>
           {local.tooltip}
         </TooltipContent>

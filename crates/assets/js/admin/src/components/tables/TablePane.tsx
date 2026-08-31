@@ -13,8 +13,11 @@ import {
   TbOutlineTable,
   TbOutlineTrash,
   TbOutlineColumns,
+  TbOutlineChevronRight,
+  TbOutlineCopy,
+  TbOutlineDotsVertical,
 } from "solid-icons/tb";
-import { useSearchParams } from "@solidjs/router";
+import { A, useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
 import type {
@@ -29,17 +32,17 @@ import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { urlSafeBase64Decode } from "trailbase";
 
-import { Header } from "@/components/Header";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
   Select,
@@ -48,7 +51,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { showToast } from "@/components/ui/toast";
 
 import { DebugDialogButton } from "@/components/tables/SchemaDownload";
@@ -57,11 +68,10 @@ import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
 import { Table as TableComponent, buildTable } from "@/components/Table";
 import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
-import { DestructiveActionButton } from "@/components/DestructiveActionButton";
-import { IconButton } from "@/components/IconButton";
 import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
 import {
   RecordApiSettingsForm,
+  getRecordApis,
   hasRecordApis,
 } from "@/components/tables/RecordApiSettings";
 import { SafeSheet } from "@/components/SafeSheet";
@@ -88,7 +98,10 @@ import { deleteRows, fetchRows } from "@/lib/api/row";
 import { formatSortingAsOrder } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
+  getDefaultValue,
   getForeignKey,
+  getUnique,
+  isPrimaryKeyColumn,
   isFileUploadColumn,
   isGeometryColumn,
   isFileUploadsColumn,
@@ -112,6 +125,7 @@ import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
 import type { TableTrigger } from "@bindings/TableTrigger";
 import type { View } from "@bindings/View";
+import type { Config } from "@proto/config";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
@@ -287,11 +301,35 @@ function validateTableOrViewRecordApiRequirements(
   }
 }
 
+export function tableApiSummary(
+  table: Table | View,
+  allTables: Table[],
+  config: Config | undefined,
+): {
+  supported: boolean;
+  enabled: boolean;
+  names: string[];
+  errors: string[];
+} {
+  const errors = validateTableOrViewRecordApiRequirements(table, allTables);
+  const names = getRecordApis(config, table.name)
+    .map((api) => api.name)
+    .filter((name): name is string => Boolean(name));
+
+  return {
+    supported: errors.length === 0,
+    enabled: names.length > 0,
+    names,
+    errors,
+  };
+}
+
 function TableHeaderRightHandButtons(props: {
   table: Table | View;
   allTables: Table[];
   schemaRefetch: () => Promise<void>;
   postgres: boolean;
+  activeTab: WorkspaceTab;
 }) {
   const selectedSchema = () => props.table;
   const hidden = () => hiddenTable(selectedSchema());
@@ -307,118 +345,98 @@ function TableHeaderRightHandButtons(props: {
 
   return (
     <div class="flex items-center justify-end gap-2">
-      {/* Delete table button */}
-      {!hidden() && !props.postgres && (
-        <DestructiveActionButton
-          size="sm"
-          action={() => {
-            return (async () => {
-              try {
-                await dropTable({
-                  name: prettyFormatQualifiedName(selectedSchema().name),
-                  dry_run: null,
-                });
-              } finally {
-                await config.refetch();
-                await props.schemaRefetch();
-              }
-            })();
-          }}
-          msg="Deleting a table will irreversibly delete all the data contained. Are you sure you'd like to continue?"
-        >
-          <div class="flex items-center gap-2">
-            Delete <TbOutlineTrash />
-          </div>
-        </DestructiveActionButton>
-      )}
-
       {/* Record API settings*/}
-      {(type() === "table" || type() === "view") && !hidden() && (
-        <SafeSheet
-          children={(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <RecordApiSettingsForm schema={props.table} {...sheet} />
-                </SheetContent>
+      {props.activeTab === "api" &&
+        (type() === "table" || type() === "view") &&
+        !hidden() && (
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <RecordApiSettingsForm schema={props.table} {...sheet} />
+                  </SheetContent>
 
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Tooltip>
-                      <TooltipTrigger as="div">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          class="flex items-center"
-                          disabled={!satisfiesRecordApi()}
-                          {...props}
-                        >
-                          API
-                          <Checkbox
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Tooltip>
+                        <TooltipTrigger as="div">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            class="flex items-center"
                             disabled={!satisfiesRecordApi()}
-                            checked={hasRecordApi()}
-                          />
-                        </Button>
-                      </TooltipTrigger>
-
-                      <TooltipContent>
-                        <Switch>
-                          <Match when={!satisfiesRecordApi()}>
-                            <UnsatisfiedApiRequirementsTooltip
-                              type={type()}
-                              errors={validateRecordApi()}
+                            {...props}
+                          >
+                            <span class="hidden sm:inline">Configure </span>API
+                            <Checkbox
+                              disabled={!satisfiesRecordApi()}
+                              checked={hasRecordApi()}
                             />
-                          </Match>
+                          </Button>
+                        </TooltipTrigger>
 
-                          <Match when={true}>
-                            <p>
-                              Expose an API for this{" "}
-                              {type().toLocaleUpperCase()}.
-                            </p>
-                          </Match>
-                        </Switch>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                />
-              </>
-            );
-          }}
-        />
-      )}
+                        <TooltipContent>
+                          <Switch>
+                            <Match when={!satisfiesRecordApi()}>
+                              <UnsatisfiedApiRequirementsTooltip
+                                type={type()}
+                                errors={validateRecordApi()}
+                              />
+                            </Match>
+
+                            <Match when={true}>
+                              <p>
+                                Expose an API for this{" "}
+                                {type().toLocaleUpperCase()}.
+                              </p>
+                            </Match>
+                          </Switch>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+        )}
 
       {/* Alter table schema */}
-      {type() === "table" && !hidden() && !props.postgres && (
-        <SafeSheet
-          children={(sheet) => {
-            return (
-              <>
-                <SheetContent class={sheetMaxWidth}>
-                  <CreateAlterTableForm
-                    schemaRefetch={props.schemaRefetch}
-                    allTables={props.allTables}
-                    setSelected={() => {
-                      /* No selection change needed for AlterTable */
-                    }}
-                    schema={props.table as Table}
-                    {...sheet}
-                  />
-                </SheetContent>
+      {props.activeTab === "structure" &&
+        type() === "table" &&
+        !hidden() &&
+        !props.postgres && (
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <CreateAlterTableForm
+                      schemaRefetch={props.schemaRefetch}
+                      allTables={props.allTables}
+                      setSelected={() => {
+                        /* No selection change needed for AlterTable */
+                      }}
+                      schema={props.table as Table}
+                      {...sheet}
+                    />
+                  </SheetContent>
 
-                <SheetTrigger
-                  as={(props: DialogTriggerProps) => (
-                    <Button variant="default" size="sm" {...props}>
-                      <div class="flex items-center gap-2">
-                        Alter <TbOutlineTable />
-                      </div>
-                    </Button>
-                  )}
-                />
-              </>
-            );
-          }}
-        />
-      )}
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button variant="default" size="sm" {...props}>
+                        <div class="flex items-center gap-2">
+                          Alter <TbOutlineTable />
+                        </div>
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+        )}
     </div>
   );
 }
@@ -429,9 +447,15 @@ function TableHeader(props: {
   schemaRefetch: () => Promise<void>;
   rowsRefetch: () => void;
   postgres: boolean;
+  activeTab: WorkspaceTab;
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
   const selectedSchema = () => props.table[0];
+  const { state: explorerState } = useSidebar();
+  const [sqlOpen, setSqlOpen] = createSignal(false);
+  const [deleteOpen, setDeleteOpen] = createSignal(false);
+  const [deleting, setDeleting] = createSignal(false);
+  const config = createConfigQuery();
 
   const headerTitle = () => {
     switch (tableType(selectedSchema())) {
@@ -443,46 +467,138 @@ function TableHeader(props: {
         return "Table";
     }
   };
+  const schemaName = () => selectedSchema().name.database_schema || "main";
+  const resourceName = () => selectedSchema().name.name;
+  const canDelete = () => !hiddenTable(selectedSchema()) && !props.postgres;
+
+  const deleteTable = async () => {
+    setDeleting(true);
+    try {
+      await dropTable({
+        name: prettyFormatQualifiedName(selectedSchema().name),
+        dry_run: null,
+      });
+      await config.refetch();
+      await props.schemaRefetch();
+      setDeleteOpen(false);
+    } catch (err) {
+      showToast({
+        title: "Deletion Error",
+        description: `${err}`,
+        variant: "error",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
-    <Header
-      leading={<SidebarTrigger />}
-      title={headerTitle()}
-      titleSelect={prettyFormatQualifiedName(selectedSchema().name)}
-      left={
-        <div class="flex items-center">
-          <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
-            <TbOutlineRefresh />
-          </IconButton>
-
-          <Dialog id="sql-schema">
-            <DialogTrigger>
-              <IconButton tooltip="SQL Schema">
-                <TbOutlineColumns />
-              </IconButton>
-            </DialogTrigger>
-
-            <DialogContent class="max-w-[80dvw]">
-              <DialogHeader>
-                <DialogTitle>SQL Schema</DialogTitle>
-              </DialogHeader>
-
-              <span class="font-mono text-sm whitespace-pre-wrap">
-                {props.table[1]}
-              </span>
-            </DialogContent>
-          </Dialog>
+    <header class="bg-background/95 sticky top-0 z-20 border-b backdrop-blur-sm">
+      <div class="flex min-h-14 items-center justify-between gap-2 px-3 sm:px-4">
+        <div class="flex min-w-0 items-center gap-2">
+          <SidebarTrigger
+            aria-label={
+              explorerState() === "collapsed"
+                ? "Show table explorer"
+                : "Hide table explorer"
+            }
+          />
+          <div class="text-muted-foreground flex min-w-0 items-center gap-1.5 text-sm">
+            <span class="hidden sm:inline">Tables</span>
+            <TbOutlineChevronRight class="hidden size-3.5 sm:block" />
+            <span class="hidden sm:inline">{schemaName()}</span>
+            <TbOutlineChevronRight class="hidden size-3.5 sm:block" />
+            <span class="text-foreground truncate font-semibold">
+              {resourceName()}
+            </span>
+          </div>
+          <Badge variant="outline" class="hidden sm:inline-flex">
+            {headerTitle()}
+          </Badge>
         </div>
-      }
-      right={
-        <TableHeaderRightHandButtons
-          table={selectedSchema()}
-          allTables={allTables()}
-          schemaRefetch={props.schemaRefetch}
-          postgres={props.postgres}
-        />
-      }
-    />
+
+        <div class="flex shrink-0 items-center gap-2">
+          <Show when={props.activeTab === "data"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Refresh rows"
+              title="Refresh rows"
+              onClick={props.rowsRefetch}
+            >
+              <TbOutlineRefresh />
+            </Button>
+          </Show>
+
+          <TableHeaderRightHandButtons
+            table={selectedSchema()}
+            allTables={allTables()}
+            schemaRefetch={props.schemaRefetch}
+            postgres={props.postgres}
+            activeTab={props.activeTab}
+          />
+
+          <DropdownMenu placement="bottom-end">
+            <DropdownMenuTrigger
+              class={buttonVariants({ variant: "outline", size: "icon" })}
+              aria-label="More table actions"
+            >
+              <TbOutlineDotsVertical />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onSelect={() => setSqlOpen(true)}>
+                <TbOutlineColumns />
+                SQL schema
+              </DropdownMenuItem>
+              <Show when={canDelete()}>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  class="text-destructive ui-highlighted:text-destructive"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <TbOutlineTrash />
+                  Delete table
+                </DropdownMenuItem>
+              </Show>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <Dialog open={sqlOpen()} onOpenChange={setSqlOpen}>
+        <DialogContent class="max-w-[80dvw]">
+          <DialogHeader>
+            <DialogTitle>SQL Schema</DialogTitle>
+          </DialogHeader>
+          <pre class="bg-muted max-h-[70dvh] overflow-auto rounded-md p-4 font-mono text-sm whitespace-pre-wrap">
+            {props.table[1]}
+          </pre>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen()} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {resourceName()}?</DialogTitle>
+          </DialogHeader>
+          <p class="text-muted-foreground text-sm">
+            Deleting this table will irreversibly delete all data it contains.
+          </p>
+          <DialogFooter class="gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting()}
+              onClick={deleteTable}
+            >
+              {deleting() ? "Deleting…" : "Delete table"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </header>
   );
 }
 
@@ -578,9 +694,11 @@ function RecordTable(props: {
 }) {
   const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
   const [editRow, setEditRow] = createSignal<Record | undefined>();
+  const [insertOpen, setInsertOpen] = createSignal(false);
   const [selectedRows, setSelectedRows] = createSignal(
     new Map<string, SqlValue>(),
   );
+  const [deletingRows, setDeletingRows] = createSignal(false);
 
   const selectedSchema = () => props.selectedSchema;
   const mutable = () =>
@@ -645,6 +763,29 @@ function RecordTable(props: {
     );
   });
 
+  const deleteSelectedRows = async () => {
+    const ids = [...selectedRows().values()];
+    if (ids.length === 0) return;
+
+    setDeletingRows(true);
+    try {
+      await deleteRows(prettyFormatQualifiedName(selectedSchema().name), {
+        primary_key_column: columns()?.[pkColumnIndex()].name ?? "??",
+        values: ids,
+      });
+      setSelectedRows(new Map<string, SqlValue>());
+    } catch (err) {
+      showToast({
+        title: "Deletion Error",
+        description: `${err}`,
+        variant: "error",
+      });
+    } finally {
+      setDeletingRows(false);
+      rowsRefetch();
+    }
+  };
+
   return (
     <div id="data">
       <SafeSheet
@@ -668,133 +809,307 @@ function RecordTable(props: {
                 />
               </SheetContent>
 
-              <FilterBar
-                initial={props.filter[0]()}
-                onSubmit={(value: string) => {
-                  if (value === props.filter[0]()) {
-                    rowsRefetch();
-                  } else {
-                    props.filter[1](value);
-                  }
-                }}
-                placeholder={`Filter, e.g.: '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
-              />
+              <div class="flex flex-col gap-3">
+                <div class="flex flex-col gap-2 lg:flex-row lg:items-start">
+                  <FilterBar
+                    initial={props.filter[0]()}
+                    onSubmit={(value: string) => {
+                      const next = value || undefined;
+                      if (next === props.filter[0]()) {
+                        rowsRefetch();
+                      } else {
+                        props.filter[1](next);
+                      }
+                    }}
+                    placeholder="Filter rows with an expression…"
+                    example={
+                      <span>
+                        Press{" "}
+                        <kbd class="rounded-sm border px-1 font-mono">/</kbd> to
+                        focus. Example: <code>status = "active"</code>
+                      </span>
+                    }
+                  />
 
-              <div class="overflow-x-auto pt-4">
-                <TableComponent
-                  table={table()}
-                  loading={props.records === undefined}
-                  onRowClick={
-                    mutable()
-                      ? (_idx: number, row: ArrayRecord) => {
-                          setEditRow(rowDataToRow(columns() ?? [], row));
-                        }
-                      : undefined
-                  }
-                />
+                  <div class="flex shrink-0 flex-wrap items-center gap-2">
+                    <span class="text-muted-foreground text-sm whitespace-nowrap">
+                      {props.records === undefined
+                        ? "Loading rows…"
+                        : `${totalRowCount()} rows`}
+                    </span>
+
+                    <Select
+                      multiple={false}
+                      options={[...blobEncodings]}
+                      value={blobEncoding()}
+                      itemComponent={(props) => (
+                        <SelectItem item={props.item}>
+                          {props.item.rawValue}
+                        </SelectItem>
+                      )}
+                      onChange={(encoding: BlobEncoding | null) => {
+                        if (encoding !== null) setBlobEncoding(encoding);
+                      }}
+                    >
+                      <SelectTrigger class="w-32" aria-label="Blob format">
+                        <SelectValue<string>>
+                          {(state) => `Blobs: ${state.selectedOption()}`}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent />
+                    </Select>
+
+                    <Show when={import.meta.env.DEV}>
+                      <DebugDialogButton title="Schema" data={data() ?? []} />
+                    </Show>
+
+                    <Show when={mutable()}>
+                      <SafeSheet open={[insertOpen, setInsertOpen]}>
+                        {(sheet) => (
+                          <>
+                            <SheetContent class={sheetMaxWidth}>
+                              <InsertUpdateRowForm
+                                schema={selectedSchema() as Table}
+                                rowsRefetch={rowsRefetch}
+                                {...sheet}
+                              />
+                            </SheetContent>
+                            <SheetTrigger
+                              as={(triggerProps: DialogTriggerProps) => (
+                                <Button {...triggerProps}>Insert row</Button>
+                              )}
+                            />
+                          </>
+                        )}
+                      </SafeSheet>
+                    </Show>
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <TableComponent
+                    table={table()}
+                    loading={props.records === undefined}
+                    dense
+                    paginationPosition="bottom"
+                    emptyState={
+                      <div class="flex flex-col items-center gap-2 py-8 text-center">
+                        <p class="font-medium">
+                          {props.filter[0]()
+                            ? "No rows match this filter"
+                            : "No rows yet"}
+                        </p>
+                        <p class="text-muted-foreground text-sm">
+                          {props.filter[0]()
+                            ? "Try a different expression or clear the filter."
+                            : "Insert the first record to get started."}
+                        </p>
+                        <Show
+                          when={props.filter[0]()}
+                          fallback={
+                            <Show when={mutable()}>
+                              <Button onClick={() => setInsertOpen(true)}>
+                                Insert first row
+                              </Button>
+                            </Show>
+                          }
+                        >
+                          <Button
+                            variant="outline"
+                            onClick={() => props.filter[1](undefined)}
+                          >
+                            Clear filter
+                          </Button>
+                        </Show>
+                      </div>
+                    }
+                    onRowClick={
+                      mutable()
+                        ? (_idx: number, row: ArrayRecord) => {
+                            setEditRow(rowDataToRow(columns() ?? [], row));
+                          }
+                        : undefined
+                    }
+                  />
+                </div>
               </div>
             </>
           );
         }}
       />
 
-      <div class="my-2 flex flex-wrap justify-between gap-2">
-        {mutable() && (
-          <div class="flex gap-2">
-            {/* Insert Rows */}
-            <SafeSheet
-              children={(sheet) => {
-                return (
-                  <>
-                    <SheetContent class={sheetMaxWidth}>
-                      <InsertUpdateRowForm
-                        schema={selectedSchema() as Table}
-                        rowsRefetch={rowsRefetch}
-                        {...sheet}
-                      />
-                    </SheetContent>
-
-                    <SheetTrigger
-                      as={(props: DialogTriggerProps) => (
-                        <Button variant="default" {...props}>
-                          Insert Row
-                        </Button>
-                      )}
-                    />
-                  </>
-                );
-              }}
-            />
-
-            {/* Delete rows */}
+      <Show when={selectedRows().size > 0}>
+        <div class="border-primary/30 bg-primary/5 mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2">
+          <span class="text-sm font-medium">
+            {selectedRows().size} {selectedRows().size === 1 ? "row" : "rows"}{" "}
+            selected
+          </span>
+          <div class="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedRows(new Map<string, SqlValue>())}
+            >
+              Clear selection
+            </Button>
             <Button
               variant="destructive"
-              disabled={selectedRows().size === 0}
-              onClick={() => {
-                const ids = [...selectedRows().values()];
-                if (ids.length === 0) {
-                  return;
-                }
-
-                (async () => {
-                  try {
-                    await deleteRows(
-                      prettyFormatQualifiedName(selectedSchema().name),
-                      {
-                        primary_key_column:
-                          columns()?.[pkColumnIndex()].name ?? "??",
-                        values: ids,
-                      },
-                    );
-
-                    setSelectedRows(new Map<string, SqlValue>());
-                  } catch (err) {
-                    showToast({
-                      title: "Deletion Error",
-                      description: `${err}`,
-                      variant: "error",
-                    });
-                  } finally {
-                    rowsRefetch();
-                  }
-                })();
-              }}
+              size="sm"
+              disabled={deletingRows()}
+              onClick={deleteSelectedRows}
             >
-              Delete rows
+              {deletingRows() ? "Deleting…" : "Delete selected"}
             </Button>
           </div>
-        )}
-
-        <div class="flex items-center gap-2">
-          <Label>Blobs:</Label>
-
-          <Select
-            multiple={false}
-            options={[...blobEncodings]}
-            value={blobEncoding()}
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-            )}
-            onChange={(encoding: BlobEncoding | null) => {
-              if (encoding !== null) {
-                setBlobEncoding(encoding);
-              }
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue<string>>
-                {(state) => state.selectedOption()}
-              </SelectValue>
-            </SelectTrigger>
-
-            <SelectContent />
-          </Select>
-
-          <Show when={import.meta.env.DEV}>
-            <DebugDialogButton title="Schema" data={data() ?? []} />
-          </Show>
         </div>
-      </div>
+      </Show>
+    </div>
+  );
+}
+
+export function tableStructureCounts(
+  table: Table,
+  schemas: ListSchemasResponse,
+): { columns: number; indexes: number; triggers: number } {
+  const matchesTable = (tableName: string, databaseSchema: string | null) =>
+    equalQualifiedNames(table.name, {
+      name: tableName,
+      database_schema: databaseSchema,
+    });
+
+  return {
+    columns: table.columns.length,
+    indexes: schemas.indexes.filter(([index]) =>
+      matchesTable(index.table_name, index.name.database_schema),
+    ).length,
+    triggers: schemas.triggers.filter(([trigger]) =>
+      matchesTable(trigger.table_name, trigger.name.database_schema),
+    ).length,
+  };
+}
+
+function StructureTab(props: {
+  table: Table;
+  schemas: ListSchemasResponse;
+  schemaRefetch: () => Promise<void>;
+}) {
+  const counts = () => tableStructureCounts(props.table, props.schemas);
+  const primaryKey = () =>
+    props.table.columns.find(isPrimaryKeyColumn)?.name ?? "None";
+
+  return (
+    <div class="flex flex-col gap-6">
+      <section aria-labelledby="structure-overview">
+        <h2 id="structure-overview" class="text-base font-semibold">
+          Overview
+        </h2>
+        <div class="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Resource
+            </p>
+            <p class="mt-1 truncate font-mono text-sm">
+              {prettyFormatQualifiedName(props.table.name)}
+            </p>
+          </div>
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Primary key
+            </p>
+            <p class="mt-1 truncate font-mono text-sm">{primaryKey()}</p>
+          </div>
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Columns
+            </p>
+            <p class="mt-1 text-lg font-semibold">{counts().columns}</p>
+          </div>
+          <div class="bg-card rounded-md border p-3">
+            <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+              Schema objects
+            </p>
+            <p class="mt-1 text-sm">
+              {counts().indexes} indexes · {counts().triggers} triggers
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="columns-heading">
+        <div class="mb-3 flex items-center justify-between">
+          <h2 id="columns-heading" class="text-base font-semibold">
+            Columns
+          </h2>
+          <span class="text-muted-foreground text-sm">
+            {counts().columns} total
+          </span>
+        </div>
+        <div class="overflow-x-auto rounded-md border">
+          <div class="bg-muted/40 text-muted-foreground grid min-w-[720px] grid-cols-[minmax(180px,1fr)_160px_minmax(260px,1.4fr)_minmax(180px,1fr)] border-b px-3 py-2 text-xs font-medium tracking-wide uppercase">
+            <span>Name</span>
+            <span>Type</span>
+            <span>Constraints</span>
+            <span>Default</span>
+          </div>
+          <For each={props.table.columns}>
+            {(column) => {
+              const unique = () => getUnique(column.options);
+              const foreignKey = () => getForeignKey(column.options);
+              const defaultValue = () => getDefaultValue(column.options);
+              return (
+                <div class="grid min-w-[720px] grid-cols-[minmax(180px,1fr)_160px_minmax(260px,1.4fr)_minmax(180px,1fr)] items-center border-b px-3 py-2.5 text-sm last:border-b-0">
+                  <code class="text-foreground truncate font-medium">
+                    {column.name}
+                  </code>
+                  <span class="text-muted-foreground truncate font-mono">
+                    {column.type_name || column.data_type}
+                  </span>
+                  <div class="flex flex-wrap gap-1.5">
+                    <Show when={unique()?.is_primary}>
+                      <Badge variant="secondary">Primary key</Badge>
+                    </Show>
+                    <Show when={unique() && !unique()?.is_primary}>
+                      <Badge variant="outline">Unique</Badge>
+                    </Show>
+                    <Show when={isNotNull(column.options)}>
+                      <Badge variant="outline">Not null</Badge>
+                    </Show>
+                    <Show when={foreignKey()}>
+                      {(foreignKey) => (
+                        <Badge variant="outline">
+                          <A
+                            class="hover:underline"
+                            href={`/table/${encodeURIComponent(foreignKey().foreign_table)}`}
+                          >
+                            → {foreignKey().foreign_table}
+                          </A>
+                        </Badge>
+                      )}
+                    </Show>
+                    <Show
+                      when={
+                        !unique() && !isNotNull(column.options) && !foreignKey()
+                      }
+                    >
+                      <span class="text-muted-foreground">—</span>
+                    </Show>
+                  </div>
+                  <code class="text-muted-foreground truncate text-xs">
+                    {defaultValue() ?? "—"}
+                  </code>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      </section>
+
+      <IndexTable
+        table={props.table}
+        schemas={props.schemas}
+        schemaRefetch={props.schemaRefetch}
+      />
+      <TriggerTable table={props.table} schemas={props.schemas} />
     </div>
   );
 }
@@ -843,8 +1158,8 @@ function IndexTable(props: {
   });
 
   return (
-    <div id="indexes">
-      <h2>
+    <section id="indexes" class="bg-card rounded-md border p-4">
+      <h2 class="mb-3 flex items-center gap-2 text-base font-semibold">
         Indexes
         <Show when={import.meta.env.DEV}>
           <DebugDialogButton title="Indexes" data={indexes()} />
@@ -877,6 +1192,11 @@ function IndexTable(props: {
                 <TableComponent
                   table={indexesTable()}
                   loading={false}
+                  emptyState={
+                    <span class="text-muted-foreground">
+                      No indexes configured
+                    </span>
+                  }
                   onRowClick={
                     hidden()
                       ? undefined
@@ -907,8 +1227,8 @@ function IndexTable(props: {
 
                   <SheetTrigger
                     as={(props: DialogTriggerProps) => (
-                      <Button variant="default" {...props}>
-                        Add Index
+                      <Button variant="default" size="sm" {...props}>
+                        Add index
                       </Button>
                     )}
                   />
@@ -919,6 +1239,7 @@ function IndexTable(props: {
 
           <Button
             variant="destructive"
+            size="sm"
             disabled={selectedIndexes().size == 0}
             onClick={() => {
               const names = Array.from(selectedIndexes());
@@ -949,7 +1270,7 @@ function IndexTable(props: {
           </Button>
         </div>
       </Show>
-    </div>
+    </section>
   );
 }
 
@@ -974,34 +1295,172 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   });
 
   return (
-    <div id="triggers">
-      <h2>
+    <section id="triggers" class="bg-card rounded-md border p-4">
+      <h2 class="flex items-center gap-2 text-base font-semibold">
         Triggers
         <Show when={import.meta.env.DEV}>
           <DebugDialogButton title="Triggers" data={triggers()} />
         </Show>
       </h2>
 
-      <p class="text-sm">
-        The admin dashboard currently does not support modifying triggers.
-        Please use the editor to{" "}
-        <a href="https://www.sqlite.org/lang_createtrigger.html">create</a> new
-        triggers or <a href="https://sqlite.org/lang_droptrigger.html">drop</a>{" "}
-        existing ones.
-      </p>
-
-      <div class="mt-4">
-        <TableComponent loading={false} table={triggersTable()} />
+      <div class="border-border bg-muted/30 mt-3 flex flex-col gap-2 rounded-md border p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+        <p class="text-muted-foreground">
+          Trigger changes are currently managed through SQL.
+        </p>
+        <Button as={A} href="/editor" variant="outline" size="sm">
+          Open SQL Editor
+        </Button>
       </div>
+
+      <div class="mt-4 overflow-x-auto">
+        <TableComponent
+          loading={false}
+          table={triggersTable()}
+          emptyState={
+            <span class="text-muted-foreground">No triggers configured</span>
+          }
+        />
+      </div>
+    </section>
+  );
+}
+
+function ApiTab(props: { table: Table | View; allTables: Table[] }) {
+  const config = createConfigQuery();
+  const summary = createMemo(() =>
+    tableApiSummary(props.table, props.allTables, config.data?.config),
+  );
+
+  const copyEndpoint = async (endpoint: string) => {
+    try {
+      await navigator.clipboard.writeText(endpoint);
+      showToast({
+        title: "Copied",
+        description: endpoint,
+        variant: "success",
+      });
+    } catch (err) {
+      showToast({
+        title: "Copy failed",
+        description: `${err}`,
+        variant: "error",
+      });
+    }
+  };
+
+  return (
+    <div class="flex max-w-5xl flex-col gap-4">
+      <section class="bg-card rounded-md border p-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base font-semibold">Record API</h2>
+              <Badge variant={summary().enabled ? "success" : "outline"}>
+                {summary().enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            </div>
+            <p class="text-muted-foreground mt-1 text-sm">
+              Expose typed CRUD endpoints for this database resource.
+            </p>
+          </div>
+          <span class="text-muted-foreground font-mono text-xs">
+            {prettyFormatQualifiedName(props.table.name)}
+          </span>
+        </div>
+      </section>
+
+      <Show
+        when={summary().supported}
+        fallback={
+          <Callout variant="warning">
+            <CalloutTitle>Record API unavailable</CalloutTitle>
+            <CalloutContent>
+              <ul class="list-inside list-disc text-sm">
+                <For each={summary().errors}>{(error) => <li>{error}</li>}</For>
+              </ul>
+            </CalloutContent>
+          </Callout>
+        }
+      >
+        <Show
+          when={summary().names.length > 0}
+          fallback={
+            <div class="rounded-md border border-dashed p-8 text-center">
+              <p class="font-medium">No Record API configured</p>
+              <p class="text-muted-foreground mt-1 text-sm">
+                Use Configure API above to choose permissions and access rules.
+              </p>
+            </div>
+          }
+        >
+          <section aria-labelledby="api-endpoints" class="rounded-md border">
+            <div class="border-b px-4 py-3">
+              <h3 id="api-endpoints" class="font-medium">
+                Configured endpoints
+              </h3>
+              <p class="text-muted-foreground mt-1 text-sm">
+                Base paths for APIs backed by this resource.
+              </p>
+            </div>
+            <div class="divide-y">
+              <For each={summary().names}>
+                {(name) => {
+                  const endpoint = `/api/records/v1/${name}`;
+                  return (
+                    <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                          <Badge variant="outline">GET</Badge>
+                          <Badge variant="outline">POST</Badge>
+                          <Badge variant="outline">PATCH</Badge>
+                          <Badge variant="outline">DELETE</Badge>
+                        </div>
+                        <code class="mt-2 block truncate text-sm">
+                          {endpoint}
+                        </code>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => copyEndpoint(endpoint)}
+                      >
+                        <TbOutlineCopy />
+                        Copy path
+                      </Button>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </section>
+        </Show>
+      </Show>
     </div>
   );
+}
+
+export type WorkspaceTab = "data" | "structure" | "api";
+
+export function normalizeWorkspaceTab(value: string | undefined): WorkspaceTab {
+  return value === "structure" || value === "api" ? value : "data";
 }
 
 type SearchParams = {
   filter?: string;
   pageSize?: string;
   pageIndex?: string;
+  tab?: string;
 };
+
+export function workspaceTabSearchParams<T extends object>(
+  searchParams: T,
+  tab: WorkspaceTab,
+): T & { tab: WorkspaceTab | undefined } {
+  return {
+    ...searchParams,
+    tab: tab === "data" ? undefined : tab,
+  };
+}
 
 export function TablePane(props: {
   selectedTable: [Table, string] | [View, string];
@@ -1033,6 +1492,7 @@ export function TablePane(props: {
   const setFilter = (filter: string | undefined) => {
     // Reset pagination.
     setSearchParams({
+      ...searchParams,
       pageIndex: undefined,
       pageSize: undefined,
       filter,
@@ -1096,6 +1556,7 @@ export function TablePane(props: {
       } catch (err) {
         // Reset.
         setSearchParams({
+          ...searchParams,
           filter: undefined,
           pageSize: undefined,
           pageIndex: undefined,
@@ -1114,57 +1575,104 @@ export function TablePane(props: {
   };
 
   const [columnPinningState, setColumnPinningState] = createSignal({});
+  const activeTab = () => normalizeWorkspaceTab(searchParams.tab);
 
   return (
-    <>
+    <div class="flex min-h-0 flex-1 flex-col">
       <TableHeader
         table={props.selectedTable}
         allTables={props.schemas.tables}
         schemaRefetch={schemaRefetch}
         rowsRefetch={rowsRefetch}
         postgres={props.postgres}
+        activeTab={activeTab()}
       />
 
-      <div class="flex flex-col gap-8 p-4">
-        <Switch>
-          <Match when={records.isError}>
-            <div class="my-2 flex flex-col gap-4">
-              Failed to fetch rows: {`${records.error}`}
-              <div>
-                <Button onClick={() => window.location.reload()}>Reload</Button>
+      <Tabs
+        class="flex min-h-0 flex-1 flex-col"
+        value={activeTab()}
+        onChange={(tab) =>
+          setSearchParams(
+            workspaceTabSearchParams(searchParams, normalizeWorkspaceTab(tab)),
+          )
+        }
+      >
+        <div class="overflow-x-auto border-b px-4">
+          <TabsList class="h-10 rounded-none bg-transparent p-0">
+            <TabsTrigger
+              value="data"
+              class="ui-selected:border-primary ui-selected:bg-transparent ui-selected:shadow-none h-10 rounded-none border-b-2 border-transparent px-4"
+            >
+              Data
+            </TabsTrigger>
+            <TabsTrigger
+              value="structure"
+              class="ui-selected:border-primary ui-selected:bg-transparent ui-selected:shadow-none h-10 rounded-none border-b-2 border-transparent px-4"
+            >
+              Structure
+            </TabsTrigger>
+            <TabsTrigger
+              value="api"
+              class="ui-selected:border-primary ui-selected:bg-transparent ui-selected:shadow-none h-10 rounded-none border-b-2 border-transparent px-4"
+            >
+              API
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="data" class="m-0 min-h-0 flex-1 p-4">
+          <Switch>
+            <Match when={records.isError}>
+              <div class="border-destructive/30 bg-destructive/5 rounded-md border p-4">
+                <p class="font-medium">Failed to fetch rows</p>
+                <p class="text-muted-foreground mt-1 text-sm">
+                  {`${records.error}`}
+                </p>
+                <Button class="mt-3" onClick={() => records.refetch()}>
+                  Retry
+                </Button>
               </div>
-            </div>
-          </Match>
+            </Match>
 
-          <Match when={true}>
-            <RecordTable
-              selectedSchema={selectedSchema()}
-              records={records.isSuccess ? records.data : undefined}
-              pagination={[pagination, setPagination]}
-              filter={[filter, setFilter]}
-              columnPinningState={[columnPinningState, setColumnPinningState]}
-              sorting={[sorting, setSorting]}
-              rowsRefetch={rowsRefetch}
+            <Match when={true}>
+              <RecordTable
+                selectedSchema={selectedSchema()}
+                records={records.isSuccess ? records.data : undefined}
+                pagination={[pagination, setPagination]}
+                filter={[filter, setFilter]}
+                columnPinningState={[columnPinningState, setColumnPinningState]}
+                sorting={[sorting, setSorting]}
+                rowsRefetch={rowsRefetch}
+              />
+            </Match>
+          </Switch>
+        </TabsContent>
+
+        <TabsContent value="structure" class="m-0 flex flex-col gap-8 p-4">
+          <Show
+            when={isTable()}
+            fallback={
+              <div class="text-muted-foreground rounded-md border p-4 text-sm">
+                Structure editing is unavailable for this resource type.
+              </div>
+            }
+          >
+            <StructureTab
+              table={selectedSchema() as Table}
+              schemas={props.schemas}
+              schemaRefetch={props.schemaRefetch}
             />
-          </Match>
-        </Switch>
+          </Show>
+        </TabsContent>
 
-        <Show when={isTable()}>
-          <IndexTable
-            table={selectedSchema() as Table}
-            schemas={props.schemas}
-            schemaRefetch={props.schemaRefetch}
+        <TabsContent value="api" class="m-0 p-4">
+          <ApiTab
+            table={selectedSchema()}
+            allTables={props.schemas.tables.map(([table]) => table)}
           />
-        </Show>
-
-        <Show when={isTable()}>
-          <TriggerTable
-            table={selectedSchema() as Table}
-            schemas={props.schemas}
-          />
-        </Show>
-      </div>
-    </>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 

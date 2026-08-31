@@ -9,6 +9,8 @@ import { createForm, type DeepKeys } from "@tanstack/solid-form";
 import {
   buildTextFormField,
   buildOptionalTextFormField,
+  buildOptionalIntegerFormField,
+  buildOptionalSmallIntegerFormField,
   type FieldApiT,
 } from "@/components/FormFields";
 
@@ -17,6 +19,8 @@ interface MyForm {
   optional: string | undefined;
   nullable: string | null;
   optionalNullable: string | null | undefined;
+  bigint: bigint | undefined;
+  smallInteger: number | undefined;
 }
 
 function Form(props: {
@@ -24,6 +28,7 @@ function Form(props: {
   setForm: Setter<MyForm | undefined>;
   defaultValue?: MyForm;
   field: (field: () => FieldApiT<any>) => JSX.Element;
+  resetValue?: MyForm;
 }) {
   const form = createForm(() => ({
     defaultValues:
@@ -50,6 +55,11 @@ function Form(props: {
           Submit
         </button>
       </form.Subscribe>
+      {props.resetValue && (
+        <button type="button" onClick={() => form.reset(props.resetValue)}>
+          Reset test form
+        </button>
+      )}
     </form>
   );
 }
@@ -82,6 +92,67 @@ describe("required form fields", () => {
       await user.click(result.getByTestId("sub"));
       expect(form()!.required).toBe("");
     }
+  });
+});
+
+describe("number form fields", () => {
+  test("reset updates the controlled small integer input", async () => {
+    const user = userEvent.setup();
+    const [, setSubmitted] = createSignal<MyForm | undefined>();
+    const defaults = {
+      required: "default",
+      nullable: null,
+      smallInteger: 3600,
+    } as MyForm;
+    const dom = render(() => (
+      <Form
+        name="smallInteger"
+        setForm={setSubmitted}
+        defaultValue={defaults}
+        resetValue={{ ...defaults, smallInteger: 7200 }}
+        field={buildOptionalSmallIntegerFormField({
+          label: () => "Small integer",
+        })}
+      />
+    ));
+
+    const input = dom.getByTestId("input") as HTMLInputElement;
+    expect(input.value).toBe("3600");
+    await user.click(dom.getByRole("button", { name: "Reset test form" }));
+    expect(input.value).toBe("7200");
+  });
+
+  test("keeps bigint exact and reset updates the controlled input", async () => {
+    const user = userEvent.setup();
+    const [submitted, setSubmitted] = createSignal<MyForm | undefined>();
+    const defaults = {
+      required: "default",
+      nullable: null,
+      bigint: 3600n,
+    } as MyForm;
+    const resetValue = { ...defaults, bigint: 7200n };
+    const dom = render(() => (
+      <Form
+        name="bigint"
+        setForm={setSubmitted}
+        defaultValue={defaults}
+        resetValue={resetValue}
+        field={buildOptionalIntegerFormField({ label: () => "Big integer" })}
+      />
+    ));
+
+    const input = dom.getByTestId("input") as HTMLInputElement;
+    expect(input.value).toBe("3600");
+    await user.clear(input);
+    await user.type(input, "9007199254740993");
+    await user.tab();
+    await user.click(dom.getByTestId("sub"));
+    expect(submitted()!.bigint).toBe(9007199254740993n);
+
+    await user.click(dom.getByRole("button", { name: "Reset test form" }));
+    expect(input.value).toBe("7200");
+    await user.click(dom.getByTestId("sub"));
+    expect(submitted()!.bigint).toBe(7200n);
   });
 });
 

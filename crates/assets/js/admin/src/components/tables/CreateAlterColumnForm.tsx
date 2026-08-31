@@ -626,7 +626,7 @@ export function ColumnSubForm(props: {
                   <For each={presets}>
                     {([name, preset]) => (
                       <ButtonBadge
-                        class="p-1 active:scale-90"
+                        class="p-1"
                         type="button"
                         onClick={() => {
                           patchColumn(
@@ -768,7 +768,7 @@ export function PrimaryKeyColumnSubForm(props: {
                     <For each={primaryKeyPresets}>
                       {([name, preset]) => (
                         <ButtonBadge
-                          class="p-1 active:scale-90"
+                          class="p-1"
                           type="button"
                           onClick={() => {
                             patchColumn(

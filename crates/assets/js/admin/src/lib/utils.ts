@@ -16,12 +16,12 @@ export function pathJoin(parts: string[], sep?: string): string {
   return parts.join(separator).replace(replace, separator);
 }
 
-export function copyToClipboard(
+export async function copyToClipboard(
   contents: string,
   showContents?: boolean,
   message?: string,
-) {
-  navigator.clipboard.writeText(contents);
+): Promise<void> {
+  await navigator.clipboard.writeText(contents);
   const msg = message ?? "Copied to clipboard";
   showToast({
     title: (showContents ?? false) ? `${msg}: ${contents}` : msg,
@@ -45,6 +45,7 @@ export function safeParseInt(value: string | undefined): number | undefined {
 }
 
 export function tryParseBigInt(value: string): bigint | undefined {
+  value = value.trim();
   if (value === "") {
     return undefined;
   }

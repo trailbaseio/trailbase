@@ -1,319 +1,401 @@
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js";
-import { template } from "solid-js/web";
-import { useQuery } from "@tanstack/solid-query";
 import { A } from "@solidjs/router";
 import {
   TbOutlinePuzzle,
+  TbOutlineRefresh,
   TbOutlineArrowRight,
-  TbOutlineDownload,
-  TbOutlineTrash,
 } from "solid-icons/tb";
-
 import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
-import {
-  Card,
-  CardContent,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
+import { Badge } from "@/components/ui/badge";
+import { Header } from "@/components/Header";
+import { Spinner } from "@/components/Spinner";
 import {
   Dialog,
   DialogContent,
-  DialogTrigger,
-  DialogTitle,
+  DialogDescription,
   DialogFooter,
+  DialogTitle,
 } from "@/components/ui/dialog";
-import { Header } from "@/components/Header";
-import { Spinner } from "@/components/Spinner";
-
 import {
-  listWasmComponents,
   installWasmComponent,
   uninstallWasmComponent,
 } from "@/lib/api/wasm-components";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { WasmComponent } from "@bindings/WasmComponent";
-import { cn } from "@/lib/utils";
 
-function ComponentIcon(props: { icon?: string }) {
-  const icon = createMemo(() => props.icon?.trim());
-
-  // Inline SVGs avoid <img> to keep 'em work with background colors.
-  const buildSvg = (icon: string) => {
-    return template(icon.trim())();
+export type WasmComponentStatus = {
+  key: "running" | "available" | "install-pending" | "removal-pending";
+  label: string;
+  priority: number;
+  variant: "success" | "secondary" | "warning";
+};
+export function wasmComponentStatus(c: WasmComponent): WasmComponentStatus {
+  if (c.loaded && c.installed)
+    return {
+      key: "running",
+      label: "Running",
+      priority: 1,
+      variant: "success",
+    };
+  if (!c.loaded && c.installed)
+    return {
+      key: "install-pending",
+      label: "Install pending restart",
+      priority: 0,
+      variant: "warning",
+    };
+  if (c.loaded && !c.installed)
+    return {
+      key: "removal-pending",
+      label: "Removal pending restart",
+      priority: 0,
+      variant: "warning",
+    };
+  return {
+    key: "available",
+    label: "Available",
+    priority: 2,
+    variant: "secondary",
   };
-
-  return (
-    <Switch>
-      <Match when={icon()?.startsWith("<svg") ? icon() : undefined}>
-        {(icon) => <div class="size-6 [&>svg]:size-6">{buildSvg(icon())}</div>}
-      </Match>
-
-      <Match when={icon()?.startsWith("data:") ? icon() : undefined}>
-        {(icon) => <img src={icon()} class="size-6" />}
-      </Match>
-
-      <Match when={true}>
-        <TbOutlinePuzzle size={24} />
-      </Match>
-    </Switch>
+}
+export function sortWasmComponents(cs: WasmComponent[]) {
+  return [...cs].sort(
+    (a, b) =>
+      wasmComponentStatus(a).priority - wasmComponentStatus(b).priority ||
+      (a.display_name ?? a.name).localeCompare(b.display_name ?? b.name),
   );
 }
-
-function ComponentCardContent(props: {
-  component: WasmComponent;
-  refetch: () => void;
-  hasDetails: boolean;
-}) {
-  const displayName = () =>
-    props.component.display_name ?? props.component.name;
-
-  const skew = () => props.component.loaded != props.component.installed;
-
-  return (
-    <CardContent class={cn("flex p-4", skew() && "bg-red-200")}>
-      <div class="text-muted-foreground size-10 shrink-0 content-center">
-        <ComponentIcon icon={props.component.icon ?? undefined} />
-      </div>
-
-      <div class="flex w-full gap-2">
-        <div class="flex grow flex-col justify-start">
-          <div class="flex h-full flex-wrap items-center gap-2">
-            <CardTitle class={props.hasDetails ? "" : "text-muted-foreground"}>
-              {displayName()}
-            </CardTitle>
-
-            <Show when={displayName() !== props.component.name}>
-              <span class="text-muted-foreground text-xs">
-                {props.component.name}
-              </span>
-            </Show>
-
-            <Show when={props.component.version}>
-              <span class="text-muted-foreground text-xs">
-                {`@${props.component.version}`}
-              </span>
-            </Show>
-          </div>
-
-          <Show when={props.component.description}>
-            <CardDescription>{props.component.description}</CardDescription>
-          </Show>
-        </div>
-
-        <Show
-          when={props.component.repo_id && props.component.installed === false}
-        >
-          <InstallButton {...props} />
-        </Show>
-
-        <Show when={props.component.installed === true}>
-          <UninstallButton {...props} />
-        </Show>
-
-        <Show when={props.component.admin_ui_path}>
-          <div class="text-muted-foreground hover:bg-accent hover:text-accent-foreground content-center rounded-sm p-2">
-            <TbOutlineArrowRight size={18} />
-          </div>
-        </Show>
-      </div>
-    </CardContent>
-  );
+export function wasmComponentSource(c: WasmComponent) {
+  return c.repo_id ?? c.path;
 }
-
-function ComponentCard(props: {
-  component: WasmComponent;
-  refetch: () => void;
-}) {
-  const hasDetails = () => !!props.component.admin_ui_path;
-
-  return (
-    <Card>
-      <Switch>
-        <Match when={hasDetails()}>
-          <A href={`/wasm/${props.component.name}`}>
-            <ComponentCardContent {...props} hasDetails={true} />
-          </A>
-        </Match>
-
-        <Match when={true}>
-          <ComponentCardContent {...props} hasDetails={false} />
-        </Match>
-      </Switch>
-    </Card>
-  );
-}
-
-export function WasmComponentsList() {
-  const wasmComponents = useQuery(() => ({
-    queryKey: ["wasm-components"],
-    queryFn: listWasmComponents,
-  }));
-
-  const components = (): WasmComponent[] => {
-    const components = [...(wasmComponents.data?.components ?? [])];
-    if (import.meta.env.DEV) {
-      components.push({
-        name: "[DEV]injected_debug_default",
-        path: "wasm/fake_component.wasm",
-        loaded: false,
-        installed: false,
-      });
+function Icon(props: { value?: string }) {
+  const value = () => props.value?.trim();
+  const image = () => {
+    const icon = value();
+    if (icon?.startsWith("<svg")) {
+      return `data:image/svg+xml,${encodeURIComponent(icon)}`;
     }
-    return components;
+    return icon?.match(/^data:image\//i) ? icon : undefined;
+  };
+  return (
+    <Show when={image()} fallback={<TbOutlinePuzzle size={24} />}>
+      <img src={image()} alt="" class="size-6" />
+    </Show>
+  );
+}
+export function WasmComponentsList(props: {
+  components: WasmComponent[];
+  isLoading: boolean;
+  isError: boolean;
+  refetch: () => void | Promise<unknown>;
+}) {
+  const components = createMemo(() => sortWasmComponents(props.components));
+  const [dialog, setDialog] = createSignal<{
+    component: WasmComponent;
+    action: "install" | "remove";
+  }>();
+  const [pending, setPending] = createSignal(false);
+  const [error, setError] = createSignal<"mutation" | "refresh">();
+  let actionTrigger: HTMLButtonElement | undefined;
+
+  const closeDialog = () => {
+    setDialog(undefined);
+    queueMicrotask(() => actionTrigger?.focus());
   };
 
+  const retryRefresh = async () => {
+    if (pending()) return;
+    setPending(true);
+    setError(undefined);
+    try {
+      await props.refetch();
+      closeDialog();
+    } catch {
+      setError("refresh");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const runAction = async () => {
+    const current = dialog();
+    if (!current || pending()) return;
+    if (error() === "refresh") {
+      await retryRefresh();
+      return;
+    }
+    setPending(true);
+    setError(undefined);
+    try {
+      const request = current.component.repo_id
+        ? { RepoId: current.component.repo_id }
+        : { Path: current.component.path };
+      if (current.action === "install") await installWasmComponent(request);
+      else await uninstallWasmComponent(request);
+    } catch {
+      setError("mutation");
+      setPending(false);
+      return;
+    }
+
+    try {
+      await props.refetch();
+      closeDialog();
+    } catch {
+      setError("refresh");
+    } finally {
+      setPending(false);
+    }
+  };
+  const running = createMemo(
+    () => components().filter((c) => c.loaded && c.installed).length,
+  );
+  const hasPendingChanges = createMemo(() =>
+    components().some((c) => c.loaded !== c.installed),
+  );
   return (
     <div>
-      <Header title="WASM Components" />
-
-      <div class="flex flex-col gap-3 p-4">
-        <Callout class="text-sm">
-          Installing or removing a WASM component currently requires the server
-          to be restarted in order to take effect. Alternatively, to avoid skew
-          between a component being installed on the file system and loaded for
-          use, you can run the CLI while the server is off, e.g.:
-          <pre class="my-2 ml-4 whitespace-pre-wrap">
-            trail [--depot=..] components add trailbase/auth_ui
-          </pre>
+      <Header
+        title="WASM Components"
+        description={`${components().length} total · ${running()} running`}
+        right={
+          <Button
+            variant="outline"
+            onClick={() => props.refetch()}
+            disabled={props.isLoading}
+            title="Refresh WASM components"
+            aria-label="Refresh WASM components"
+          >
+            <TbOutlineRefresh /> Refresh
+          </Button>
+        }
+      />
+      <div class="min-w-0 overflow-x-auto p-4">
+        <Callout
+          variant={hasPendingChanges() ? "warning" : "default"}
+          class="mb-3 text-sm"
+        >
+          <Show when={hasPendingChanges()}>
+            <CalloutTitle>Restart required</CalloutTitle>
+          </Show>
+          <CalloutContent>
+            Installing or removing a WASM component requires restarting the
+            server. You can also run this while the server is off:
+            <pre class="my-2 ml-4 whitespace-pre-wrap">
+              trail [--depot=..] components add trailbase/auth_ui
+            </pre>
+          </CalloutContent>
         </Callout>
-
         <Switch>
-          <Match when={wasmComponents.isLoading}>
+          <Match when={props.isLoading}>
             <div class="flex h-64 items-center justify-center">
               <Spinner size={32} class="text-muted-foreground" />
             </div>
           </Match>
-
-          <Match when={wasmComponents.isError}>
-            {`${wasmComponents.error}`}
+          <Match when={props.isError}>
+            <Callout variant="error">
+              <CalloutTitle>Unable to load WASM components</CalloutTitle>
+              <CalloutContent>
+                WASM components could not be loaded. Please try again.
+                <div class="mt-2">
+                  <Button onClick={() => props.refetch()}>Retry</Button>
+                </div>
+              </CalloutContent>
+            </Callout>
           </Match>
-
-          <Match when={wasmComponents.isSuccess}>
-            <For each={components()}>
-              {(c) => (
-                <ComponentCard component={c} refetch={wasmComponents.refetch} />
-              )}
-            </For>
+          <Match when={!components().length}>
+            <div class="py-12 text-center">
+              <p>No WASM components installed.</p>
+              <code>trail components add trailbase/auth_ui</code>
+            </div>
+          </Match>
+          <Match when={true}>
+            <div class="overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Component</TableHead>
+                    <TableHead>State</TableHead>
+                    <TableHead>Runtime / Version</TableHead>
+                    <TableHead>Source</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <For each={components()}>
+                    {(c) => {
+                      const status = wasmComponentStatus(c);
+                      return (
+                        <TableRow>
+                          <TableCell>
+                            <div class="flex items-start gap-2">
+                              <Icon value={c.icon} />
+                              <div>
+                                <div class="font-medium">
+                                  {c.display_name ?? c.name}
+                                </div>
+                                <div class="text-muted-foreground text-xs">
+                                  Internal name: {c.name}
+                                </div>
+                                <Show when={c.description}>
+                                  <div class="text-muted-foreground text-xs">
+                                    {c.description}
+                                  </div>
+                                </Show>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={status.variant}>
+                              {status.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {c.guest_runtime ?? "—"} / {c.version ?? "—"}
+                          </TableCell>
+                          <TableCell>
+                            <code class="select-text">
+                              {wasmComponentSource(c)}
+                            </code>
+                          </TableCell>
+                          <TableCell>
+                            <div class="flex flex-wrap gap-2">
+                              <Show when={c.admin_ui_path}>
+                                <A
+                                  href={`/wasm/${c.name}`}
+                                  class="inline-flex items-center gap-1 underline"
+                                >
+                                  Open dashboard <TbOutlineArrowRight />
+                                </A>
+                              </Show>
+                              <Show when={c.installed}>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  title={`Remove ${c.name}`}
+                                  aria-label={`Remove ${c.name}`}
+                                  disabled={pending()}
+                                  onClick={(event) => {
+                                    actionTrigger = event.currentTarget;
+                                    setError(undefined);
+                                    setDialog({
+                                      component: c,
+                                      action: "remove",
+                                    });
+                                  }}
+                                >
+                                  Remove
+                                </Button>
+                              </Show>
+                              <Show
+                                when={!c.loaded && !c.installed && !!c.repo_id}
+                              >
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  title={`Install ${c.name}`}
+                                  aria-label={`Install ${c.name}`}
+                                  disabled={pending()}
+                                  onClick={(event) => {
+                                    actionTrigger = event.currentTarget;
+                                    setError(undefined);
+                                    setDialog({
+                                      component: c,
+                                      action: "install",
+                                    });
+                                  }}
+                                >
+                                  Install
+                                </Button>
+                              </Show>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }}
+                  </For>
+                </TableBody>
+              </Table>
+            </div>
           </Match>
         </Switch>
       </div>
-    </div>
-  );
-}
-
-function InstallButton(props: {
-  component: WasmComponent;
-  refetch: () => void;
-}) {
-  const [open, setOpen] = createSignal(false);
-
-  return (
-    <Dialog open={open()} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <Button variant="ghost" size="icon">
-          <TbOutlineDownload />
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent>
-        <DialogTitle>Confirmation</DialogTitle>
-
-        <p>
-          For the installing of the WASM component to take effect, the server
-          needs to be restarted.
-        </p>
-
-        <DialogFooter class="gap-2">
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Back
-          </Button>
-
-          <Button
-            variant="destructive"
-            onClick={() => {
-              // Install the component.
-              const repoId = props.component.repo_id;
-              if (!repoId) {
-                throw new Error("missing repo id");
+      <Dialog
+        open={dialog() !== undefined}
+        onOpenChange={(open) => {
+          if (!pending() && !open) closeDialog();
+        }}
+      >
+        <DialogContent>
+          <DialogTitle>
+            {dialog()?.action === "install" ? "Install" : "Remove"}{" "}
+            {dialog()?.component.name}
+          </DialogTitle>
+          <DialogDescription>
+            {dialog()?.action === "install"
+              ? `Install ${dialog()?.component.name}? Installed dashboards are trusted extensions and receive admin-context credentials. Only install components you trust. This change requires a server restart.`
+              : `Remove ${dialog()?.component.name}? This change requires a server restart. The loaded instance continues until restart.`}
+          </DialogDescription>
+          <Show when={error() === "mutation"}>
+            <Callout variant="error">
+              <CalloutTitle>
+                Unable to{" "}
+                {dialog()?.action === "install" ? "install" : "remove"}{" "}
+                component
+              </CalloutTitle>
+              <CalloutContent>
+                The component could not be{" "}
+                {dialog()?.action === "install" ? "installed" : "removed"}. No
+                changes were made. Check the server and try again.
+              </CalloutContent>
+            </Callout>
+          </Show>
+          <Show when={error() === "refresh"}>
+            <Callout variant="error">
+              <CalloutTitle>Component changed, refresh failed</CalloutTitle>
+              <CalloutContent>
+                The component was changed, but the list could not be refreshed.
+                Retry refresh before trying this action again.
+              </CalloutContent>
+            </Callout>
+          </Show>
+          <DialogFooter class="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending()}
+              onClick={closeDialog}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant={
+                dialog()?.action === "remove" ? "destructive" : "default"
               }
-
-              (async () => {
-                await installWasmComponent({
-                  RepoId: repoId,
-                });
-
-                props.refetch();
-                setOpen(false);
-              })();
-            }}
-          >
-            Proceed
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function UninstallButton(props: {
-  component: WasmComponent;
-  refetch: () => void;
-}) {
-  const [open, setOpen] = createSignal(false);
-
-  return (
-    <Dialog open={open()} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={(e) => {
-            // Do not follow the link to the dashboard.
-            e.preventDefault();
-          }}
-        >
-          <TbOutlineTrash />
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent>
-        <DialogTitle>Confirmation</DialogTitle>
-
-        <p>
-          For the removal of the WASM component to take effect, the server needs
-          to be restarted.
-        </p>
-
-        <DialogFooter class="gap-2">
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Back
-          </Button>
-
-          <Button
-            variant="destructive"
-            onClick={() => {
-              // Delete the component.
-              (async () => {
-                uninstallWasmComponent(
-                  props.component.repo_id
-                    ? {
-                        RepoId: props.component.repo_id,
-                      }
-                    : {
-                        Path: props.component.path,
-                      },
-                );
-
-                props.refetch();
-                setOpen(false);
-              })();
-            }}
-          >
-            Proceed
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+              disabled={pending()}
+              onClick={runAction}
+            >
+              {pending()
+                ? "Working…"
+                : error() === "refresh"
+                  ? "Retry refresh"
+                  : dialog()?.action === "install"
+                    ? "Install"
+                    : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

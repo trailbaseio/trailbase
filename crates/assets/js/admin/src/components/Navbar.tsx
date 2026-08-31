@@ -1,14 +1,6 @@
-import {
-  createContext,
-  createSignal,
-  useContext,
-  For,
-  Match,
-  Show,
-  Switch,
-} from "solid-js";
+import { createContext, createSignal, useContext, For, Show } from "solid-js";
 import type { Accessor } from "solid-js";
-import { useNavigate, Location } from "@solidjs/router";
+import { useNavigate, useLocation } from "@solidjs/router";
 import {
   TbOutlineDatabase,
   TbOutlineEdit,
@@ -16,12 +8,12 @@ import {
   TbOutlineChartDots3,
   TbOutlineTimeline,
   TbOutlineSettings,
-  TbOutlineMoon,
-  TbOutlineSun,
   TbOutlinePackage,
   TbOutlineApi,
+  TbOutlineMoon,
+  TbOutlineSun,
+  TbOutlineLayoutSidebarLeftCollapse,
 } from "solid-icons/tb";
-
 import { AuthButton } from "@/components/auth/AuthButton";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,180 +24,172 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  createTheme,
+  currentTheme,
+  applyResolvedTheme,
+  $themePreference,
+} from "@/lib/theme";
 import { Version } from "@/components/Version";
-
 import { createSystemInfoQuery } from "@/lib/api/info";
-import { createTheme, currentTheme, applyResolvedTheme } from "@/lib/theme";
-
-import logo from "@/assets/logo_104.webp";
+import {
+  SidebarHeader,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import logo from "@/assets/favicon.svg";
 
 const BASE = import.meta.env.BASE_URL;
-const options = [
-  [`${BASE}/table/`, TbOutlineDatabase, "Table & View Browser"],
-  [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
-  [`${BASE}/erd`, TbOutlineChartDots3, "Entity Relationship Diagram"],
-  [`${BASE}/auth`, TbOutlineUsers, "User Accounts"],
-  [`${BASE}/wasm/`, TbOutlinePackage, "WASM Components"],
-  [`${BASE}/logs`, TbOutlineTimeline, "Logs & Metrics"],
-  [`${BASE}/openapi`, TbOutlineApi, "OpenApi"],
-  [`${BASE}/settings/`, TbOutlineSettings, "Settings"],
+const groups = [
+  [
+    "Data",
+    [
+      [`${BASE}/table/`, TbOutlineDatabase, "Tables"],
+      [`${BASE}/editor`, TbOutlineEdit, "SQL Editor"],
+      [`${BASE}/erd`, TbOutlineChartDots3, "ERD"],
+    ],
+  ],
+  [
+    "Operate",
+    [
+      [`${BASE}/auth`, TbOutlineUsers, "Accounts"],
+      [`${BASE}/wasm/`, TbOutlinePackage, "WASM"],
+      [`${BASE}/logs`, TbOutlineTimeline, "Logs"],
+      [`${BASE}/openapi`, TbOutlineApi, "OpenAPI"],
+    ],
+  ],
+  ["System", [[`${BASE}/settings/`, TbOutlineSettings, "Settings"]]],
 ] as const;
-
-type NavbarContextT = {
+export type NavbarContextT = {
   dirty: Accessor<boolean>;
   setDirty: (dirty: boolean) => void;
 };
-
 export const NavbarContext = createContext<NavbarContextT | null>(null);
-
-export function useNavbar(): NavbarContextT | undefined {
-  const context = useContext(NavbarContext);
-  if (context) {
-    return context;
-  }
-
-  console.warn("useNavbar() called outside a NavbarContext");
+export function useNavbar() {
+  return useContext(NavbarContext) ?? undefined;
 }
 
-type DirtyDialogState = {
-  next: string;
-};
-
-function NavbarItems(props: { location: Location; horizontal: boolean }) {
-  const navbar = useNavbar();
-  const [dirtyDialog, setDirtyDialog] = createSignal<DirtyDialogState | null>(
-    null,
+/** Match a route exactly or beneath it, ignoring trailing slashes. */
+export function isPathActive(current: string, target: string): boolean {
+  const normalize = (path: string) => path.replace(/\/+$/, "") || "/";
+  const currentPath = normalize(current);
+  const targetPath = normalize(target);
+  return (
+    currentPath === targetPath ||
+    (targetPath !== "/" && currentPath.startsWith(`${targetPath}/`))
   );
-  const navigate = useNavigate();
+}
 
-  const onClick = (e: Event, next: string) => {
-    if (navbar?.dirty() && true) {
+export function Navbar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navbar = useNavbar();
+  const { isMobile, setOpenMobile, state, toggleSidebar } = useSidebar();
+  const sidebarActionLabel = () =>
+    isMobile()
+      ? "Close navigation"
+      : state() === "collapsed"
+        ? "Expand sidebar"
+        : "Collapse sidebar";
+  const [dirtyDialog, setDirtyDialog] = createSignal<string | null>(null);
+  const onClick = (e: MouseEvent, next: string) => {
+    if (navbar?.dirty()) {
       e.preventDefault();
-      setDirtyDialog({ next });
+      setDirtyDialog(next);
+    } else {
+      setOpenMobile(false);
     }
   };
-
-  return (
-    <Dialog
-      id="navbar-dirty-dialog"
-      open={dirtyDialog() !== null}
-      onOpenChange={(open: boolean) => {
-        if (!open) {
-          setDirtyDialog(null);
-        }
-      }}
-    >
-      <DirtyDialog
-        proceed={() => {
-          const target = dirtyDialog()?.next ?? "";
-          navigate(target, { resolve: false });
-          navbar?.setDirty(false);
-          setDirtyDialog(null);
-        }}
-        back={() => setDirtyDialog(null)}
-      />
-
-      {/* Hide the logo if it would shrink otherwise */}
-      <a
-        class={
-          props.horizontal ? "hidden shrink-0 min-[486px]:block" : undefined
-        }
-        href={`${BASE}/`}
-        onClick={(e) => onClick(e, `${BASE}/`)}
-      >
-        <img src={logo} width={props.horizontal ? "34" : "42"} alt="Logo" />
-      </a>
-
-      <For each={options}>
-        {([pathname, Icon, tooltip]) => {
-          const active = () => props.location.pathname === pathname;
-          const style = () =>
-            active() ? navbarIconActiveStyle : navbarIconStyle;
-
-          return (
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <a href={pathname} onClick={(e) => onClick(e, pathname)}>
-                  <div class={style()}>
-                    <Icon size={iconSize(props.horizontal)} />
-                  </div>
-                </a>
-              </TooltipTrigger>
-
-              <TooltipContent>{tooltip}</TooltipContent>
-            </Tooltip>
-          );
-        }}
-      </For>
-    </Dialog>
-  );
-}
-
-function NavFooterItems(props: { horizontal: boolean }) {
-  const systemInfo = createSystemInfoQuery();
-
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger as="div">
-          <SwitchThemeButton horizontal={props.horizontal} />
-        </TooltipTrigger>
-
-        <TooltipContent>
-          {currentTheme() === "dark"
-            ? "Switch to light mode"
-            : "Switch to dark mode"}
-        </TooltipContent>
-      </Tooltip>
-
-      <AuthButton iconSize={iconSize(props.horizontal)} />
-
-      <Show when={!props.horizontal}>
-        <div class="text-[9px]">
-          <Version info={systemInfo.data} />
+      <SidebarHeader>
+        <a
+          class="flex h-9 items-center gap-2 px-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          href={`${BASE}/`}
+          onClick={(e: MouseEvent) => onClick(e, `${BASE}/`)}
+        >
+          <img class="size-7 shrink-0" src={logo} alt="" />
+          <span class="truncate text-base font-semibold group-data-[collapsible=icon]:hidden">
+            TrailBase
+          </span>
+        </a>
+        <Button
+          variant="ghost"
+          class="w-full justify-start px-2 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          aria-label={sidebarActionLabel()}
+          title={sidebarActionLabel()}
+          onClick={toggleSidebar}
+        >
+          <TbOutlineLayoutSidebarLeftCollapse
+            class={`transition-transform ${state() === "collapsed" ? "rotate-180" : ""}`}
+          />
+          <span class="group-data-[collapsible=icon]:hidden">
+            {sidebarActionLabel()}
+          </span>
+        </Button>
+      </SidebarHeader>
+      <SidebarContent>
+        <For each={groups}>
+          {([label, items]) => (
+            <SidebarGroup>
+              <SidebarGroupLabel>{label}</SidebarGroupLabel>
+              <SidebarMenu>
+                <For each={items}>
+                  {([pathname, Icon, text]) => {
+                    const active = () =>
+                      isPathActive(location.pathname, pathname);
+                    return (
+                      <SidebarMenuItem>
+                        <SidebarMenuButton
+                          as="a"
+                          href={pathname}
+                          isActive={active()}
+                          tooltip={text}
+                          onClick={(e: MouseEvent) => onClick(e, pathname)}
+                        >
+                          <Icon />
+                          <span>{text}</span>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  }}
+                </For>
+              </SidebarMenu>
+            </SidebarGroup>
+          )}
+        </For>
+      </SidebarContent>
+      <SidebarFooter>
+        <div class="flex min-w-0 flex-col gap-1 group-data-[collapsible=icon]:items-center">
+          <div class="flex min-w-0 items-center gap-2 group-data-[collapsible=icon]:flex-col">
+            <SwitchThemeButton horizontal={false} />
+            <AuthButton iconSize={22} />
+          </div>
+          <div class="truncate text-[9px] group-data-[collapsible=icon]:hidden">
+            <Version info={createSystemInfoQuery().data} />
+          </div>
         </div>
-      </Show>
+      </SidebarFooter>
+      <Dialog
+        open={dirtyDialog() !== null}
+        onOpenChange={(open) => !open && setDirtyDialog(null)}
+      >
+        <DirtyDialog
+          proceed={() => {
+            navigate(dirtyDialog() ?? "", { resolve: false });
+            setOpenMobile(false);
+            navbar?.setDirty(false);
+            setDirtyDialog(null);
+          }}
+          back={() => setDirtyDialog(null)}
+        />
+      </Dialog>
     </>
-  );
-}
-
-export function HorizontalNavbar(props: {
-  height: number;
-  location: Location;
-}) {
-  return (
-    <nav
-      style={{ height: `${props.height}px` }}
-      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between gap-2 overflow-x-auto overflow-y-hidden border-b p-2"
-    >
-      <NavbarItems location={props.location} horizontal={true} />
-
-      <div class="flex items-center gap-2">
-        <NavFooterItems horizontal={true} />
-      </div>
-    </nav>
-  );
-}
-
-export function VerticalNavbar(props: { location: Location }) {
-  return (
-    <nav
-      class={
-        "border-border bg-sidebar text-sidebar-foreground flex h-dvh grow flex-col items-center justify-between gap-4 border-r py-2"
-      }
-    >
-      <div class="flex flex-col items-center gap-4">
-        <NavbarItems location={props.location} horizontal={false} />
-      </div>
-
-      <div class="flex flex-col items-center">
-        <NavFooterItems horizontal={false} />
-      </div>
-    </nav>
   );
 }
 
@@ -216,31 +200,22 @@ export function DirtyDialog(props: {
   message?: string;
 }) {
   return (
-    <DialogContent
-      onEscapeKeyDown={() => {
-        // FIXME: escape button handler doesn't seem to work in Firefox.
-        props.back();
-      }}
-    >
+    <DialogContent onEscapeKeyDown={props.back}>
       <DialogHeader>
         <DialogTitle>Discard Changes</DialogTitle>
       </DialogHeader>
-
       <p>
         {props.message ??
           "The current page has pending changes. Leaving the page now will discard them. Proceed with caution."}
       </p>
-
       <DialogFooter>
         <div class="flex w-full justify-between">
           <Button variant="outline" onClick={props.back}>
             Back
           </Button>
-
           <div class="flex gap-4">
-            <Show when={props.save !== undefined}>
+            <Show when={props.save}>
               <Button
-                variant="default"
                 onClick={() => {
                   props.save?.();
                   props.proceed();
@@ -249,9 +224,8 @@ export function DirtyDialog(props: {
                 Save
               </Button>
             </Show>
-
             <Button variant="destructive" onClick={props.proceed}>
-              {props.save !== undefined ? "Discard" : "Proceed"}
+              {props.save ? "Discard" : "Proceed"}
             </Button>
           </div>
         </div>
@@ -260,38 +234,24 @@ export function DirtyDialog(props: {
   );
 }
 
-export function SwitchThemeButton(props: { horizontal: boolean }) {
+export function SwitchThemeButton(_props: { horizontal: boolean }) {
   const theme = createTheme();
-
   return (
     <button
       type="button"
-      class={navbarIconStyle}
+      class="hover:bg-accent rounded-full p-2"
       onClick={() => {
-        applyResolvedTheme(currentTheme() === "dark" ? "light" : "dark");
+        const next = currentTheme() === "dark" ? "light" : "dark";
+        applyResolvedTheme(next);
+        $themePreference.set(next);
       }}
-      aria-label={
-        theme() === "dark" ? "Switch to light mode" : "Switch to dark mode"
-      }
+      aria-label="Switch theme"
     >
-      <Switch>
-        <Match when={theme() === "dark"}>
-          <TbOutlineSun size={iconSize(props.horizontal)} />
-        </Match>
-
-        <Match when={theme() === "light"}>
-          <TbOutlineMoon size={iconSize(props.horizontal)} />
-        </Match>
-      </Switch>
+      {theme() === "dark" ? (
+        <TbOutlineSun size={22} />
+      ) : (
+        <TbOutlineMoon size={22} />
+      )}
     </button>
   );
 }
-
-function iconSize(horizontal: boolean) {
-  return horizontal ? 18 : 22;
-}
-
-export const navbarIconStyle =
-  "rounded-full p-2 transition-all hover:bg-accent hover:text-accent-foreground active:scale-90";
-const navbarIconActiveStyle =
-  "rounded-full bg-primary p-2 text-primary-foreground transition-all active:scale-90";

@@ -1,0 +1,38 @@
+import { Button } from "@/components/ui/button";
+
+export function SettingsFormActions(props: {
+  dirty: boolean;
+  canSubmit: boolean;
+  isSubmitting: boolean;
+  onReset: () => void;
+}) {
+  return (
+    <div class="bg-background sticky bottom-0 flex w-full flex-col-reverse gap-2 py-4 sm:flex-row sm:justify-end">
+      {props.dirty && (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            class="w-full sm:w-auto"
+            onClick={props.onReset}
+            disabled={props.isSubmitting}
+          >
+            Reset
+          </Button>
+          <Button
+            type="submit"
+            class="w-full sm:w-auto"
+            disabled={!props.canSubmit || props.isSubmitting}
+          >
+            {props.isSubmitting ? "Saving…" : "Save changes"}
+          </Button>
+          {props.isSubmitting && (
+            <div role="status" aria-live="polite" class="sr-only">
+              Saving…
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

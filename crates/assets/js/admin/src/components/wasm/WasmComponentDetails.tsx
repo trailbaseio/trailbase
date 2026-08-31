@@ -16,14 +16,22 @@ import {
 } from "@/components/ui/switch";
 
 import { client, hostAddress } from "@/lib/client";
-import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
-import { getSpareHeaderStyle } from "@/lib/header";
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/Spinner";
 import { cn } from "@/lib/utils";
 
 function SandboxedIframe(props: { component: WasmComponent }) {
   const source = () => getAdminUiPath(props.component);
+  const dashboardOrigin = () => {
+    const src = source();
+    return src ? new URL(src, window.location.origin).origin : undefined;
+  };
+  const dashboardCsp = () => {
+    const origin = dashboardOrigin();
+    return origin ? iframeCsp(origin) : undefined;
+  };
   const dashboardPage = useQuery(() => ({
     queryKey: ["wasm-dash", source()],
     queryFn: async ({ queryKey: _ }) => {
@@ -33,6 +41,12 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       }
 
       const response = await fetch(src, { headers: client.headers() });
+      if (!response.ok) {
+        throw new Error("dashboard request failed");
+      }
+      if (!isDashboardResponseOriginAllowed(src, response.url)) {
+        throw new Error("dashboard origin rejected");
+      }
       return await response.text();
     },
   }));
@@ -46,6 +60,13 @@ function SandboxedIframe(props: { component: WasmComponent }) {
         console.error("iframe not bound");
         return;
       }
+
+      const origin = dashboardOrigin();
+      if (!origin) {
+        return;
+      }
+      const metaCsp = iframeCsp(origin);
+      body = injectCspMeta(body, metaCsp);
 
       if (import.meta.env.DEV) {
         // NOTE: Dev-server-only hack to allow guest dashboard to be mounted when
@@ -62,18 +83,15 @@ function SandboxedIframe(props: { component: WasmComponent }) {
       }
 
       let cleanup: (() => void) | undefined;
+      let loaded = false;
       const onLoad = (_ev: HTMLElementEventMap["load"]) => {
-        // Will be called after `srcdoc` was set (below), then parsed and built.
-        console.debug("iframe loaded");
-
-        // Focus the iframe so it can receive keyboard events.
+        if (loaded) {
+          cleanup?.();
+          cleanup = undefined;
+          return;
+        }
+        loaded = true;
         iframe.focus();
-
-        // NOTE: with the iframe sandbox, we cannot access `iframe.contentDocument`
-        // directly to interact with globals in the child. It would be rejected as
-        // a cross-origin request. We thus need postMessage.
-        // NOTE: the `*` target is critical for sandboxed (different-origin)
-        // iframes to avoid messages being rejected.
         cleanup = $tokens.subscribe((tokens) => {
           iframe.contentWindow?.postMessage(
             {
@@ -87,12 +105,13 @@ function SandboxedIframe(props: { component: WasmComponent }) {
             "*",
           );
         });
-
-        // TODO: Subscribe to theme changes and send a dedicated "theme" message.
       };
 
       iframe.addEventListener("load", onLoad);
-      onCleanup(() => cleanup?.());
+      onCleanup(() => {
+        iframe?.removeEventListener("load", onLoad);
+        cleanup?.();
+      });
 
       // Set the actual body.
       //
@@ -105,9 +124,7 @@ function SandboxedIframe(props: { component: WasmComponent }) {
   });
 
   return (
-    <Switch>
-      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
-
+    <div class="relative size-full">
       {/*
          Sandbox options:
          https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/iframe#sandbox
@@ -115,19 +132,45 @@ function SandboxedIframe(props: { component: WasmComponent }) {
          WARN: An iframe which has both allow-scripts and allow-same-origin for its
          sandbox attribute can remove its sandboxing.
       */}
-      <Match when={true}>
-        <iframe
-          ref={iframe}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-          }}
-          sandbox="allow-scripts allow-modals"
-          csp={iframeCsp}
-        />
-      </Match>
-    </Switch>
+      <iframe
+        ref={iframe}
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "block",
+        }}
+        title={`WASM component preview: ${props.component.name}`}
+        sandbox="allow-scripts allow-modals"
+        csp={dashboardCsp()}
+      />
+
+      <Show when={dashboardPage.isLoading || dashboardPage.isError}>
+        <div
+          class="bg-background/90 absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center"
+          role={dashboardPage.isError ? "alert" : "status"}
+          aria-live="polite"
+        >
+          <Show
+            when={dashboardPage.isError}
+            fallback={
+              <>
+                <Spinner size={28} />
+                <p class="m-0">Loading component dashboard...</p>
+              </>
+            }
+          >
+            <p class="m-0">Unable to load the component dashboard.</p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => dashboardPage.refetch()}
+            >
+              Retry
+            </Button>
+          </Show>
+        </div>
+      </Show>
+    </div>
   );
 }
 
@@ -137,6 +180,7 @@ function YoloIframe(props: { component: WasmComponent }) {
   return (
     <iframe
       src={source()}
+      title={`WASM component dashboard: ${props.component.name}`}
       style={{
         width: "100%",
         height: "100%",
@@ -148,69 +192,13 @@ function YoloIframe(props: { component: WasmComponent }) {
   );
 }
 
-// FIXME: This one is broken because assets cannot be loaded, since origin is `blob:...`.
-function YoloWithExtraStepsIframe(props: { component: WasmComponent }) {
-  const source = () => getAdminUiPath(props.component);
-  const dashboardPage = useQuery(() => ({
-    queryKey: ["wasm-dash", source()],
-    queryFn: async ({ queryKey: _ }) => {
-      const src = source();
-      if (!src) {
-        return;
-      }
-
-      const response = await fetch(src, { headers: client.headers() });
-      return await response.blob();
-    },
-  }));
-
-  let iframe: HTMLIFrameElement | undefined;
-
-  createEffect(() => {
-    const blob: Blob | undefined = dashboardPage.data;
-    if (blob !== undefined) {
-      if (iframe === undefined) {
-        console.error("iframe not bound");
-        return;
-      }
-
-      const html = new Blob([blob], { type: "text/html" });
-      const url = URL.createObjectURL(html);
-
-      iframe.src = url;
-      iframe.style.width = "100%";
-      iframe.style.height = "400px";
-
-      iframe.addEventListener("load", () => URL.revokeObjectURL(url));
-    }
-  });
-
-  return (
-    <Switch>
-      <Match when={dashboardPage.isError}>{`${dashboardPage.error}`}</Match>
-
-      <Match when={true}>
-        <iframe
-          ref={iframe}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-          }}
-          sandbox={undefined}
-          csp={undefined}
-        />
-      </Match>
-    </Switch>
-  );
-}
-
 function BackButton() {
   return (
     <A
       href="/wasm"
       class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
       title="Back to the list of WASM components"
+      aria-label="Back to the list of WASM components"
     >
       <TbOutlineArrowLeft size={20} />
     </A>
@@ -224,13 +212,13 @@ function SandboxButton(props: {
   return (
     <ToggleSwitch
       class="flex items-center space-x-2"
-      defaultChecked={props.sandboxed}
+      checked={props.sandboxed}
       onChange={(v) => {
         console.debug("sandbox enabled:", v);
         props.setSandboxed(v);
       }}
     >
-      <SwitchControl class="bg-destructive data-[checked]:bg-input">
+      <SwitchControl class="bg-destructive ui-checked:bg-input">
         <SwitchThumb />
       </SwitchControl>
 
@@ -247,20 +235,33 @@ export function WasmComponentDetails(props: {
   component: WasmComponent;
   sandboxed: boolean;
 }) {
-  const isMobile = createIsMobile();
   const [sandboxed, setSandboxed] = createWritableMemo<boolean>(
     () => props.sandboxed,
   );
+  const dashboardPath = () => getAdminUiPath(props.component);
 
   return (
     <Switch>
-      <Match when={!props.component.admin_ui_path}>
-        {`The '${props.component.name}' component has no dashboard.`}
+      <Match when={!dashboardPath()}>
+        <div class="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+          <h2 class="text-lg font-semibold">
+            {props.component.admin_ui_path
+              ? "Dashboard unavailable"
+              : "No dashboard available"}
+          </h2>
+          <p class="text-muted-foreground m-0">
+            {props.component.admin_ui_path
+              ? "The dashboard path was rejected for safety."
+              : `The '${props.component.name}' component has no dashboard.`}
+          </p>
+          <BackButton />
+        </div>
       </Match>
 
       <Match when={true}>
         <Header
           title={props.component.display_name ?? props.component.name}
+          description={`Internal name: ${props.component.name}`}
           leading={BackButton()}
           left={props.component.version && `@${props.component.version}`}
           right={
@@ -273,7 +274,7 @@ export function WasmComponentDetails(props: {
           }
         />
 
-        <div class={getSpareHeaderStyle(isMobile())}>
+        <div class="size-full">
           <Switch>
             <Match when={!sandboxed()}>
               <YoloIframe component={props.component} />
@@ -314,8 +315,14 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
   // still true, i.e. a local path can forward credentials.
   //
   // Even with a stricter CSP, this defence in depth.
-  if (URL.parse(path)) {
-    throw Error(`only paths allowed for safety, got: ${path}`);
+  let resolved: URL;
+  try {
+    resolved = new URL(path, window.location.origin);
+  } catch {
+    return;
+  }
+  if (!path.startsWith("/") || resolved.origin !== window.location.origin) {
+    return;
   }
 
   // Fix up for separate dev server.
@@ -324,20 +331,30 @@ function getAdminUiPath(component: WasmComponent): string | undefined {
     : path;
 }
 
+export function isDashboardResponseOriginAllowed(
+  source: string,
+  responseUrl: string,
+): boolean {
+  try {
+    const expectedOrigin = new URL(source, window.location.origin).origin;
+    return new URL(responseUrl, expectedOrigin).origin === expectedOrigin;
+  } catch {
+    return false;
+  }
+}
+
+export function injectCspMeta(body: string, csp: string): string {
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${csp}">`;
+  if (/<head(?:\s[^>]*)?>/i.test(body)) {
+    return body.replace(/(<head(?:\s[^>]*)?>)/i, `$1${meta}`);
+  }
+  if (/<html(?:\s[^>]*)?>/i.test(body)) {
+    return body.replace(/(<html(?:\s[^>]*)?>)/i, `$1<head>${meta}</head>`);
+  }
+  return `<head>${meta}</head>${body}`;
+}
+
 // NOTE: The `csp` attribute is not yet supported by Firefox & Safari:
 //   https://developer.mozilla.org/en-US/docs/Web/API/HTMLIFrameElement/csp
-const iframeCsp = import.meta.env.DEV
-  ? ""
-  : [
-      "default-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      // NOTE: the "*" is critical here because the sandboxed srcdoc iframe's
-      // origin is "null", i.e. 'self' is null and we need to allow fetches from
-      // the server. We also had '*' to the admin UI's CSP because Firefox/Safari
-      // ignore this property.
-      "connect-src * 'self' 'unsafe-inline'",
-      // NOTE: For some reason `script-src` and `script-src-elem` seem to be ignored
-      // even by Chrome and instead the parent CSP is maintained.
-      // "script-src 'self' 'unsafe-inline'",
-      // "img-src *",
-    ].join("; ");
+const iframeCsp = (origin: string) =>
+  `default-src 'self' ${origin}; style-src 'self' ${origin} 'unsafe-inline'; script-src 'self' ${origin} 'unsafe-inline'; img-src 'self' ${origin} data:; connect-src ${origin}`;

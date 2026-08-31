@@ -1,8 +1,14 @@
+import { createSignal, Show } from "solid-js";
 import type { JSXElement } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 
 import { Button } from "@/components/ui/button";
-import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
+import {
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import {
   buildBoolFormField,
   buildTextFormField,
@@ -16,30 +22,48 @@ import type { CreateUserRequest } from "@bindings/CreateUserRequest";
 
 export function AddUser(props: {
   close: () => void;
-  markDirty: () => void;
+  markDirty: (dirty?: boolean) => void;
   userRefetch: () => void;
 }) {
+  const [error, setError] = createSignal<string>();
+  const defaultValues: CreateUserRequest = {
+    email: "",
+    password: "",
+    verified: true,
+    admin: false,
+  };
   const form = createForm(() => ({
-    defaultValues: {
-      email: "",
-      password: "",
-      verified: true,
-      admin: false,
-    } as CreateUserRequest,
+    defaultValues,
     onSubmit: async ({ value }) => {
+      setError(undefined);
       try {
         await createUser(value);
-        props.close();
-      } finally {
+        props.markDirty(false);
         props.userRefetch();
+        props.close();
+      } catch {
+        setError("Unable to create account. Please try again.");
       }
     },
   }));
+
+  form.useStore((state) => {
+    const values = state.values;
+    props.markDirty(
+      values.email !== defaultValues.email ||
+        values.password !== defaultValues.password ||
+        values.verified !== defaultValues.verified ||
+        values.admin !== defaultValues.admin,
+    );
+  });
 
   return (
     <div class="overflow-x-hidden overflow-y-auto pr-1">
       <SheetHeader>
         <SheetTitle>{"Add new user"}</SheetTitle>
+        <SheetDescription>
+          Create a new user account and configure its access.
+        </SheetDescription>
       </SheetHeader>
 
       <form
@@ -50,6 +74,12 @@ export function AddUser(props: {
           form.handleSubmit();
         }}
       >
+        <Show when={error()}>
+          <p class="text-destructive" role="alert">
+            {error()}
+          </p>
+        </Show>
+
         <div class="flex flex-col items-start gap-4 py-4">
           <form.Field name="email" validators={notEmptyValidator()}>
             {buildTextFormField({ label: () => <L>Email</L>, type: "email" })}
@@ -95,7 +125,7 @@ export function AddUser(props: {
                   disabled={!state().canSubmit}
                   variant="default"
                 >
-                  {state().isSubmitting ? "..." : "Add"}
+                  {state().isSubmitting ? "Creating…" : "Add account"}
                 </Button>
               );
             }}

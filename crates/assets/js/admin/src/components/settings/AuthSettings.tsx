@@ -1,4 +1,16 @@
-import { createMemo, For, Suspense, Switch, Show, Match, JSX } from "solid-js";
+import {
+  createMemo,
+  For,
+  Suspense,
+  Switch,
+  Show,
+  Match,
+  JSX,
+  createEffect,
+  onCleanup,
+  untrack,
+  createSignal,
+} from "solid-js";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
 import { createForm } from "@tanstack/solid-form";
 import {
@@ -25,6 +37,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
+import { SettingsFormActions } from "@/components/settings/SettingsFormActions";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import {
@@ -88,11 +102,11 @@ type NamedOAuthProvider = {
   provider: OAuthProviderEntry;
   state?: OAuthProviderConfig;
 };
-type AuthConfigProxy = Omit<AuthConfig, "oauthProviders"> & {
+export type AuthConfigProxy = Omit<AuthConfig, "oauthProviders"> & {
   namedOAuthProviders: NamedOAuthProvider[];
 };
 
-function configToProxy(
+export function configToProxy(
   providers: Array<OAuthProviderEntry>,
   config: AuthConfig,
 ): AuthConfigProxy {
@@ -100,7 +114,6 @@ function configToProxy(
     Object.values(config.oauthProviders).map((c) => {
       const providerId = c.providerId;
       if (!providerId) {
-        console.warn("missing provider id:", c);
         return [-1, c];
       }
 
@@ -124,7 +137,7 @@ function configToProxy(
   };
 }
 
-function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
+export function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
   const config = AuthConfig.fromPartial({
     ...(proxy as Omit<AuthConfigProxy, "namedOAuthProviders">),
   });
@@ -134,24 +147,24 @@ function proxyToConfig(proxy: AuthConfigProxy): AuthConfig {
     const p = entry.provider;
 
     // Only add complete providers back to config, i.e. once that have both a provider id and client secret.
-    const clientId = entry.state?.clientId?.trim();
-    const clientSecret = entry.state?.clientSecret?.trim();
+    const clientId = nonEmpty(entry.state?.clientId);
+    const clientSecret = nonEmpty(entry.state?.clientSecret);
 
     if (clientId && clientSecret) {
       config.oauthProviders[p.name] = OAuthProviderConfig.fromPartial({
         providerId: p.id,
-
         ...entry.state,
+        clientId,
+        clientSecret,
       });
-    } else {
-      console.debug("Skipping incomplete: ", entry);
     }
   }
   return config;
 }
 
 function nonEmpty(v: string | undefined): string | undefined {
-  return v && v !== "" ? v : undefined;
+  const trimmed = v?.trim();
+  return trimmed || undefined;
 }
 
 export async function adminListOAuthProviders(): Promise<OAuthProviderResponse> {
@@ -166,38 +179,32 @@ function ProviderSettingsSubForm(props: {
   index: number;
   provider: OAuthProviderEntry;
   siteUrl: string | undefined;
+  baseline: () => OAuthProviderConfig | undefined;
 }) {
-  const [original, setOnce, { reset }] = createSetOnce<
-    OAuthProviderConfig | undefined
-  >(undefined);
-
   const current = createMemo(() =>
-    props.form.useStore((state: (typeof props.form)["state"]) => {
-      if (state.isSubmitted) {
-        reset(state.values.namedOAuthProviders[props.index].state);
-      }
-
-      const s = state.values.namedOAuthProviders[props.index].state;
-      setOnce(s && OAuthProviderConfig.fromPartial(s));
-      return s;
-    })(),
+    props.form.useStore(
+      (state: (typeof props.form)["state"]) =>
+        state.values.namedOAuthProviders[props.index].state,
+    )(),
   );
 
-  const dirty = () => {
-    const id = nonEmpty(current()?.clientId) !== nonEmpty(original()?.clientId);
-    const secret =
-      nonEmpty(current()?.clientSecret) !== nonEmpty(original()?.clientSecret);
-    return id || secret;
-  };
+  const dirty = () => !sameAuthProvider(current(), props.baseline());
 
   const Bullet = () => (
-    <Switch fallback={<TbOutlineCircle color="grey" />}>
+    <Switch
+      fallback={<TbOutlineCircle aria-label="Not configured" color="grey" />}
+    >
       <Match when={dirty()}>
-        <TbOutlineCirclePlus color="orange" />
+        <TbOutlineCirclePlus aria-label="Unsaved changes" color="orange" />
       </Match>
 
-      <Match when={current()?.clientId !== undefined}>
-        <TbOutlineCircleCheck color="green" />
+      <Match
+        when={
+          nonEmpty(current()?.clientId) !== undefined &&
+          nonEmpty(current()?.clientSecret) !== undefined
+        }
+      >
+        <TbOutlineCircleCheck aria-label="Configured" color="green" />
       </Match>
     </Switch>
   );
@@ -284,11 +291,12 @@ function ProviderSettingsSubForm(props: {
         <div class="mr-4 flex items-center justify-end gap-2">
           <Button
             variant={"outline"}
+            aria-label={`Reset ${props.provider.display_name}`}
             disabled={!dirty()}
             onClick={() => {
               props.form.setFieldValue(
                 `namedOAuthProviders[${props.index}].state`,
-                original(),
+                props.baseline(),
               );
             }}
           >
@@ -297,7 +305,11 @@ function ProviderSettingsSubForm(props: {
 
           <Button
             variant={"outline"}
-            disabled={current()?.clientId === undefined}
+            aria-label={`Remove ${props.provider.display_name}`}
+            disabled={
+              nonEmpty(current()?.clientId) === undefined ||
+              nonEmpty(current()?.clientSecret) === undefined
+            }
             onClick={() => {
               props.form.setFieldValue(
                 `namedOAuthProviders[${props.index}].state`,
@@ -313,85 +325,271 @@ function ProviderSettingsSubForm(props: {
   );
 }
 
+const authScalarFields = [
+  "authTokenTtlSec",
+  "refreshTokenTtlSec",
+  "anonymousRefreshTokenTtlSec",
+  "disablePasswordAuth",
+  "enableOtpSignin",
+  "enableAnonymousSignin",
+  "passwordMinimalLength",
+  "passwordMustContainUpperAndLowerCase",
+  "passwordMustContainDigits",
+  "passwordMustContainSpecialCharacters",
+  "userIdentifier",
+] as const;
+
+const cloneAuth = (value: AuthConfig) =>
+  AuthConfig.decode(AuthConfig.encode(value).finish());
+
+function sameBytes(left: Uint8Array, right: Uint8Array) {
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
+}
+
+function sameArray<T>(left: T[], right: T[]) {
+  return (
+    left.length === right.length && left.every((value, i) => value === right[i])
+  );
+}
+
+function sameAuth(left: AuthConfig, right: AuthConfig) {
+  return sameBytes(
+    AuthConfig.encode(left).finish(),
+    AuthConfig.encode(right).finish(),
+  );
+}
+
+export function mergeAuthLeaves(
+  submitted: AuthConfigProxy,
+  baseline: AuthConfigProxy,
+  remote: AuthConfig,
+): AuthConfig {
+  const local = proxyToConfig(submitted);
+  const original = proxyToConfig(baseline);
+  const merged = cloneAuth(remote);
+  for (const field of authScalarFields) {
+    if (local[field] !== original[field]) {
+      Object.assign(merged, { [field]: local[field] });
+    }
+  }
+  if (!sameArray(local.customUriSchemes, original.customUriSchemes)) {
+    merged.customUriSchemes = [...local.customUriSchemes];
+  }
+  if (!sameArray(local.redirectUriAllowlist, original.redirectUriAllowlist)) {
+    merged.redirectUriAllowlist = [...local.redirectUriAllowlist];
+  }
+  const names = new Set([
+    ...Object.keys(merged.oauthProviders),
+    ...baseline.namedOAuthProviders.map((entry) => entry.provider.name),
+    ...submitted.namedOAuthProviders.map((entry) => entry.provider.name),
+  ]);
+  const providerFields = [
+    "providerId",
+    "clientId",
+    "clientSecret",
+    "displayName",
+    "authUrl",
+    "tokenUrl",
+    "userApiUrl",
+    "scopes",
+  ] as const;
+  for (const name of names) {
+    const after = submitted.namedOAuthProviders.find(
+      (p) => p.provider.name === name,
+    )?.state;
+    const before = baseline.namedOAuthProviders.find(
+      (p) => p.provider.name === name,
+    )?.state;
+    const changedFields = providerFields.filter((field) => {
+      const left = after?.[field];
+      const right = before?.[field];
+      return Array.isArray(left) && Array.isArray(right)
+        ? !sameArray(left, right)
+        : left !== right;
+    });
+    if (changedFields.length === 0) continue;
+    if (!after) {
+      delete merged.oauthProviders[name];
+      continue;
+    }
+    const result = OAuthProviderConfig.fromPartial(
+      merged.oauthProviders[name] ?? after,
+    );
+    for (const field of changedFields) {
+      const value = after[field];
+      Object.assign(result, {
+        [field]: Array.isArray(value) ? [...value] : value,
+      });
+    }
+    if (!result.clientId?.trim() || !result.clientSecret?.trim()) {
+      delete merged.oauthProviders[name];
+    } else {
+      merged.oauthProviders[name] = result;
+    }
+  }
+  return merged;
+}
+
+function cloneAuthProxy(value: AuthConfigProxy): AuthConfigProxy {
+  return {
+    ...value,
+    customUriSchemes: [...value.customUriSchemes],
+    redirectUriAllowlist: [...value.redirectUriAllowlist],
+    namedOAuthProviders: value.namedOAuthProviders.map((entry) => ({
+      provider: entry.provider,
+      state: entry.state
+        ? OAuthProviderConfig.fromPartial({
+            ...entry.state,
+            scopes: [...entry.state.scopes],
+          })
+        : undefined,
+    })),
+  };
+}
+
+function sameAuthProxy(left: AuthConfigProxy, right: AuthConfigProxy) {
+  return sameAuth(proxyToConfig(left), proxyToConfig(right));
+}
+
+function sameAuthProvider(
+  left?: OAuthProviderConfig,
+  right?: OAuthProviderConfig,
+) {
+  if (!left || !right) return left === right;
+  return sameBytes(
+    OAuthProviderConfig.encode(left).finish(),
+    OAuthProviderConfig.encode(right).finish(),
+  );
+}
+
 function createAuthSettingsForm(opts: {
   config: () => Config;
   values: () => AuthConfigProxy;
-  postSubmit: () => void;
+  latest: () => AuthConfig;
+  baseline: () => AuthConfigProxy;
+  postSubmit: (saved: AuthConfig, submitted: AuthConfigProxy) => void;
+  onError: () => void;
+  revision: () => number;
 }) {
   const queryClient = useQueryClient();
 
-  return createForm(() => {
-    return {
-      defaultValues: opts.values(),
-      onSubmit: async ({ value }) => {
-        const newConfig = Config.decode(Config.encode(opts.config()).finish());
-
-        newConfig.auth = proxyToConfig(value);
-
-        console.debug("Submitting provider config:", value);
+  return createForm(() => ({
+    defaultValues: opts.values(),
+    onSubmit: async ({ value }) => {
+      const submitted = cloneAuthProxy(value);
+      const baselineAtSubmit = cloneAuthProxy(opts.baseline());
+      const latestAtSubmit = cloneAuth(opts.latest());
+      const revisionAtSubmit = opts.revision();
+      const merged = mergeAuthLeaves(
+        submitted,
+        baselineAtSubmit,
+        latestAtSubmit,
+      );
+      const base = Config.decode(Config.encode(opts.config()).finish());
+      base.auth = merged;
+      try {
         await setConfig({
           client: queryClient,
-          config: newConfig,
+          config: base,
           throw: true,
         });
-
-        opts.postSubmit();
-      },
-      validators: {
-        onChange: ({ value }: { value: AuthConfigProxy }) => {
-          // We can return field-level errors from the form-level validation. (we're also not displaying form-level errors right now).
-          for (const i in value.namedOAuthProviders) {
-            const provider = value.namedOAuthProviders[i];
-            const state = provider.state;
-            if (state === undefined) {
-              continue;
-            }
-
-            if (
-              state.clientId !== undefined &&
-              state.clientSecret === undefined
-            ) {
-              return {
-                form: "invalid data",
-                fields: Object.fromEntries([
-                  [
-                    `namedOAuthProviders[${i}].state.clientSecret`,
-                    `Missing client secret for ${provider.provider.display_name}`,
-                  ],
-                ]),
-              };
-            }
+        opts.postSubmit(
+          opts.revision() === revisionAtSubmit
+            ? merged
+            : mergeAuthLeaves(submitted, baselineAtSubmit, opts.latest()),
+          submitted,
+        );
+      } catch {
+        opts.onError();
+      }
+    },
+    validators: {
+      onChange: ({ value }: { value: AuthConfigProxy }) => {
+        // We can return field-level errors from the form-level validation. (we're also not displaying form-level errors right now).
+        for (const i in value.namedOAuthProviders) {
+          const provider = value.namedOAuthProviders[i];
+          const state = provider.state;
+          if (state === undefined) {
+            continue;
           }
 
-          return null;
-        },
+          const clientId = nonEmpty(state.clientId);
+          const clientSecret = nonEmpty(state.clientSecret);
+          if ((clientId === undefined) !== (clientSecret === undefined)) {
+            const missing =
+              clientId === undefined ? "clientId" : "clientSecret";
+            return {
+              form: "invalid data",
+              fields: Object.fromEntries([
+                [
+                  `namedOAuthProviders[${i}].state.${missing}`,
+                  `Missing ${missing === "clientId" ? "client ID" : "client secret"} for ${provider.provider.display_name}`,
+                ],
+              ]),
+            };
+          }
+        }
+
+        return null;
       },
-    };
-  });
+    },
+  }));
 }
 
 function AuthSettingsForm(props: {
   config: Config;
   providers: OAuthProviderResponse;
-  markDirty: () => void;
-  postSubmit: () => void;
+  setDirty: (dirty: boolean) => void;
+  postSubmit: (dirty?: boolean) => void;
 }) {
-  const values = createMemo(() =>
-    configToProxy(
-      props.providers.providers,
-      props.config.auth ?? AuthConfig.create(),
-    ),
+  const initial = configToProxy(
+    props.providers.providers,
+    props.config.auth ?? AuthConfig.create(),
   );
-
+  let latestRemote = cloneAuth(props.config.auth ?? AuthConfig.create());
+  let editBaseline = initial;
+  let lastIncoming = cloneAuth(latestRemote);
+  let remoteRevision = 0;
+  let active = true;
+  const [submitError, setSubmitError] = createSignal(false);
+  onCleanup(() => {
+    active = false;
+  });
+  const values = () => initial;
   const form = createAuthSettingsForm({
     config: () => props.config,
     values,
-    postSubmit: () => props.postSubmit(),
+    latest: () => latestRemote,
+    baseline: () => editBaseline,
+    postSubmit: (saved, submitted) => {
+      if (!active) return;
+      latestRemote = cloneAuth(saved);
+      const current = formValues();
+      const editedAfterSubmit = !sameAuthProxy(current, submitted);
+      editBaseline = configToProxy(props.providers.providers, saved);
+      if (!editedAfterSubmit) form.reset(editBaseline);
+      setSubmitError(false);
+      props.postSubmit(editedAfterSubmit);
+    },
+    onError: () => active && setSubmitError(true),
+    revision: () => remoteRevision,
   });
-
-  form.useStore((state) => {
-    if (state.isDirty && !state.isSubmitted) {
-      props.markDirty();
+  const formValues = form.useSelector((state) => state.values);
+  const modified = () => !sameAuthProxy(formValues(), editBaseline);
+  createEffect(() => props.setDirty(modified()));
+  createEffect(() => {
+    const incoming = props.config.auth ?? AuthConfig.create();
+    const next = cloneAuth(incoming);
+    if (sameAuth(lastIncoming, next)) return;
+    const dirty = untrack(modified);
+    lastIncoming = next;
+    latestRemote = next;
+    remoteRevision += 1;
+    if (!dirty) {
+      editBaseline = configToProxy(props.providers.providers, next);
+      form.reset(editBaseline);
     }
   });
 
@@ -410,6 +608,11 @@ function AuthSettingsForm(props: {
           </CardHeader>
 
           <CardContent>
+            <p class="mb-4 text-sm">
+              Changing the user identifier changes the authentication UI and may
+              affect existing sign-in methods. Password rules apply to new or
+              changed passwords only.
+            </p>
             <div class="flex flex-col gap-4">
               <form.Field name="userIdentifier">
                 {(field) => {
@@ -640,6 +843,9 @@ function AuthSettingsForm(props: {
                             index={index()}
                             provider={provider.provider}
                             siteUrl={props.config.server?.siteUrl}
+                            baseline={() =>
+                              editBaseline.namedOAuthProviders[index()]?.state
+                            }
                           />
                         );
                       }}
@@ -681,13 +887,14 @@ function AuthSettingsForm(props: {
               {/* NOTE: we cannot just have a <a download /> here since admin APIs require CSRF token. */}
               <Button
                 variant="default"
+                aria-label="Download public key"
                 onClick={() => {
                   showSaveFileDialog({
                     contents: async () => {
                       const response = await adminFetch(`/public_key`);
                       return response.body;
                     },
-                    filename: "public_key.pep",
+                    filename: "public_key.pem",
                   });
                 }}
               >
@@ -704,17 +911,31 @@ function AuthSettingsForm(props: {
               isSubmitting: state.isSubmitting,
             })}
           >
-            {(state) => {
-              return (
-                <Button
-                  type="submit"
-                  disabled={!state().canSubmit}
-                  variant="default"
-                >
-                  {state().isSubmitting ? "..." : "Submit"}
-                </Button>
-              );
-            }}
+            {(state) => (
+              <>
+                <Show when={submitError()}>
+                  <Callout variant="error" role="alert">
+                    <CalloutTitle>Unable to save settings</CalloutTitle>
+                    <CalloutContent>
+                      Check your values and try again.
+                    </CalloutContent>
+                  </Callout>
+                </Show>
+                <SettingsFormActions
+                  dirty={modified()}
+                  canSubmit={state().canSubmit}
+                  isSubmitting={state().isSubmitting}
+                  onReset={() => {
+                    setSubmitError(false);
+                    editBaseline = configToProxy(
+                      props.providers.providers,
+                      latestRemote,
+                    );
+                    form.reset(editBaseline);
+                  }}
+                />
+              </>
+            )}
           </form.Subscribe>
         </div>
       </div>
@@ -732,11 +953,17 @@ function OAuthCallbackAddressInfo(props: {
   siteUrl: string | undefined;
 }) {
   const address = () => {
-    const url = new URL(
-      `/api/auth/v1/oauth/${props.provider.name}/callback`,
-      props.siteUrl ?? window.location.origin,
-    );
-    return url.toString();
+    try {
+      return new URL(
+        `/api/auth/v1/oauth/${props.provider.name}/callback`,
+        props.siteUrl ?? window.location.origin,
+      ).toString();
+    } catch {
+      return new URL(
+        `/api/auth/v1/oauth/${props.provider.name}/callback`,
+        window.location.origin,
+      ).toString();
+    }
   };
 
   const ProviderName = () => {
@@ -745,7 +972,12 @@ function OAuthCallbackAddressInfo(props: {
 
     return (
       <Show when={url} fallback={props.provider.display_name}>
-        <a class="underline" href={url}>
+        <a
+          class="underline"
+          href={url}
+          target="_blank"
+          rel="noreferrer noopener"
+        >
           {props.provider.display_name}
         </a>
       </Show>
@@ -757,9 +989,12 @@ function OAuthCallbackAddressInfo(props: {
       To use this provider, register your application with <ProviderName />{" "}
       using your instance's{" "}
       <Tooltip>
-        <TooltipTrigger as="span" onClick={() => copyToClipboard(address())}>
-          <span class="underline">Redirect URI</span>{" "}
-          <TbOutlineInfoCircle class="inline-block" />
+        <TooltipTrigger
+          class="underline"
+          aria-label="Copy Redirect URI"
+          onClick={() => copyToClipboard(address())}
+        >
+          Redirect URI <TbOutlineInfoCircle class="inline-block" />
         </TooltipTrigger>
 
         <TooltipContent>
@@ -773,8 +1008,8 @@ function OAuthCallbackAddressInfo(props: {
 }
 
 export function AuthSettings(props: {
-  markDirty: () => void;
-  postSubmit: () => void;
+  setDirty: (dirty: boolean) => void;
+  postSubmit: (dirty?: boolean) => void;
 }) {
   const providers = useQuery(() => ({
     queryKey: ["admin", "oauthproviders"],
@@ -793,19 +1028,23 @@ export function AuthSettings(props: {
   };
 
   return (
-    <Suspense fallback={<div>Loading...</div>}>
+    <Suspense
+      fallback={<div role="status">Loading authentication settings...</div>}
+    >
       <Switch>
-        <Match when={providers.error}>
-          <span>Error: {providers.error?.toString()}</span>
+        <Match when={providers.isLoading || config.isLoading}>
+          <div role="status">Loading authentication settings...</div>
         </Match>
-
-        <Match when={config.isError}>
-          <span>Error: {config.error?.toString()}</span>
+        <Match when={providers.error || config.isError}>
+          <Callout variant="error" role="alert">
+            <CalloutTitle>Unable to load authentication settings</CalloutTitle>
+            <CalloutContent>Please try again later.</CalloutContent>
+          </Callout>
         </Match>
 
         <Match when={config.data && providers.data}>
           <AuthSettingsForm
-            markDirty={props.markDirty}
+            setDirty={props.setDirty}
             postSubmit={props.postSubmit}
             providers={providers.data!}
             config={protoConfig()}

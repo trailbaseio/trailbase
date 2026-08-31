@@ -33,6 +33,7 @@ export function buildListSearchParams({
         description: `${err}`,
         variant: "error",
       });
+      throw err;
     }
   }
 

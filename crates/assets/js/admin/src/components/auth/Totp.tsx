@@ -145,7 +145,7 @@ function RegisterTotpDialog(props: {
         <DialogTitle>Scan QR Code</DialogTitle>
       </DialogHeader>
 
-      <div class="rounded-sm bg-white p-2">
+      <div class="bg-card rounded-sm p-2">
         <img src={`data:image/png;base64,${props.totp.png ?? ""}`} />
       </div>
 
