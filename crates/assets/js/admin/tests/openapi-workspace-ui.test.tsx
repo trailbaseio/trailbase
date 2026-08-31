@@ -2,15 +2,24 @@
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
+import type { Tokens } from "trailbase";
+import type { OpenApiDocument } from "../src/components/openapi/openapi";
+
+type QueryOptions = {
+  queryKey: readonly ["openapi"];
+  queryFn: () => Promise<OpenApiDocument>;
+};
+
+type TestUser = { email?: string; username?: string };
 
 const state = vi.hoisted(() => ({
-  data: undefined as any,
-  error: undefined as any,
+  data: undefined as OpenApiDocument | undefined,
+  error: undefined as Error | undefined,
   loading: true,
   fetching: false,
-  user: undefined as any,
-  currentTokens: null as any,
-  queryOptions: undefined as any,
+  user: undefined as TestUser | undefined,
+  currentTokens: null as Tokens | null,
+  queryOptions: undefined as QueryOptions | undefined,
   refetch: vi.fn(),
   fetch: vi.fn(),
   bumpQuery: undefined as (() => void) | undefined,
@@ -32,7 +41,7 @@ vi.mock("@nanostores/solid", () => ({
   },
 }));
 vi.mock("@tanstack/solid-query", () => ({
-  useQuery: (factory: () => any) => {
+  useQuery: (factory: () => QueryOptions) => {
     state.queryOptions = factory();
     const [tick, bump] = createSignal(0);
     state.bumpQuery = () => bump((v) => v + 1);
