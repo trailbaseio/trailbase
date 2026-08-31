@@ -209,15 +209,16 @@ async fn test_oauth_login_flow_without_pkce() {
   );
 
   // Pretend to be the browser and call TB's OAuth callback handler.
-  let internal_redirect = callback::callback_from_external_auth_provider(
+  let internal_redirect = callback::callback_from_external_auth_provider_get(
     State(state.clone()),
     Path(TestOAuthProvider::NAME.to_string()),
-    Query(callback::AuthQuery {
-      state: auth_query.state.clone(),
-      code: auth_query.code_challenge.clone(),
-    }),
     Extension(HasRoot(false)),
     cookies.clone(),
+    Query(callback::CallbackQuery {
+      state: auth_query.state.clone(),
+      code: auth_query.code_challenge.clone(),
+      error: None,
+    }),
   )
   .await
   .unwrap();
@@ -318,15 +319,17 @@ async fn test_oauth_login_flow_with_pkce() {
   );
 
   // Pretend to be the browser and call TB's OAuth callback handler.
-  let internal_redirect = callback::callback_from_external_auth_provider(
+  let internal_redirect = callback::callback_from_external_auth_provider_get(
     State(state.clone()),
     Path(TestOAuthProvider::NAME.to_string()),
-    Query(callback::AuthQuery {
-      state: auth_query.state.clone(),
-      code: auth_query.code_challenge.clone(),
-    }),
     Extension(HasRoot(false)),
     cookies.clone(),
+    Query(callback::CallbackQuery {
+      state: auth_query.state.clone(),
+      code: auth_query.code_challenge.clone(),
+
+      error: None,
+    }),
   )
   .await
   .unwrap();

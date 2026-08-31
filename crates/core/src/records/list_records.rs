@@ -523,6 +523,8 @@ static EPHEMERAL_CURSOR_KEY: LazyLock<KeyType> = LazyLock::new(generate_random_k
 
 #[cfg(test)]
 mod tests {
+  #![allow(irrefutable_let_patterns)]
+
   use serde::Deserialize;
   use trailbase_schema::metadata::ColumnMetadata;
   use trailbase_schema::parse::{Bump, parse_into_statement};

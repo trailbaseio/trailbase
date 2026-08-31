@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use lazy_static::lazy_static;
 use serde::Deserialize;
+use std::sync::LazyLock;
 use url::Url;
 
 use crate::auth::AuthError;
@@ -47,11 +47,6 @@ pub struct AppleIdToken {
 impl AppleOAuthProvider {
   const NAME: &'static str = "apple";
   const DISPLAY_NAME: &'static str = "Apple";
-
-  // Unlike most other OAuth provider, Apple doesn't have a user api, but rather puts claims in the
-  // JWT id_token.
-  const AUTH_URL: &str = "https://appleid.apple.com/auth/authorize";
-  const TOKEN_URL: &str = "https://appleid.apple.com/auth/token";
 
   fn new(config: &proto::OAuthProviderConfig) -> Result<Self, OAuthProviderError> {
     let Some(client_id) = config.client_id.clone() else {
@@ -118,20 +113,29 @@ impl AppleOAuthProvider {
 #[async_trait]
 impl OAuthProvider for AppleOAuthProvider {
   fn name(&self) -> &'static str {
-    Self::NAME
+    return Self::NAME;
   }
+
   fn provider(&self) -> proto::OAuthProviderId {
-    proto::OAuthProviderId::Apple
+    return proto::OAuthProviderId::Apple;
   }
+
   fn display_name(&self) -> &'static str {
-    Self::DISPLAY_NAME
+    return Self::DISPLAY_NAME;
   }
 
   fn settings(&self) -> Result<OAuthClientSettings, AuthError> {
-    lazy_static! {
-      static ref AUTH_URL: Url = Url::parse(AppleOAuthProvider::AUTH_URL).expect("infallible");
-      static ref TOKEN_URL: Url = Url::parse(AppleOAuthProvider::TOKEN_URL).expect("infallible");
-    }
+    static AUTH_URL: LazyLock<Url> = LazyLock::new(|| {
+      // When scopes "name" and/or "email" are specified, apple expects `response_mode=form_post`
+      // and to call-back using a POST method:
+      //   https://developer.apple.com/documentation/signinwithapple/incorporating-sign-in-with-apple-into-other-platforms
+      const AUTH_URL: &str = "https://appleid.apple.com/auth/authorize?response_mode=form_post";
+      return Url::parse(AUTH_URL).expect("tested");
+    });
+    static TOKEN_URL: LazyLock<Url> = LazyLock::new(|| {
+      const TOKEN_URL: &str = "https://appleid.apple.com/auth/token";
+      return Url::parse(TOKEN_URL).expect("tested");
+    });
 
     return Ok(OAuthClientSettings {
       auth_url: AUTH_URL.clone(),
@@ -146,6 +150,8 @@ impl OAuthProvider for AppleOAuthProvider {
     return vec!["name".to_string(), "email".to_string()];
   }
 
+  /// Unlike most other OAuth provider, Apple doesn't have a user api, but rather puts claims in
+  /// the JWT id_token.
   async fn get_user(
     &self,
     http_client: &reqwest::Client,
@@ -187,4 +193,21 @@ async fn fetch_apple_public_keys(
     .json()
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()));
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_apple_settings() {
+    let provider = AppleOAuthProvider {
+      client_id: "12345".to_string(),
+      client_secret: "s3cre7".to_string(),
+    };
+
+    let settings = provider.settings().unwrap();
+    let query: Vec<_> = settings.auth_url.query_pairs().collect();
+    assert!(!query.is_empty());
+  }
 }

@@ -26,5 +26,9 @@ pub fn oauth_router() -> OpenApiRouter<AppState> {
   return OpenApiRouter::new()
     .routes(routes!(list_providers::list_configured_providers_handler))
     .routes(routes!(login::login_with_external_auth_provider))
-    .routes(routes!(callback::callback_from_external_auth_provider));
+    .routes(routes!(
+      callback::callback_from_external_auth_provider_get,
+      // We re-register the GET callback as POST, for apple which calls by POST.
+      callback::callback_from_external_auth_provider_post
+    ));
 }

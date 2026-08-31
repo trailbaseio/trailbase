@@ -1,4 +1,4 @@
-use axum::extract::{Extension, Path, Query, State};
+use axum::extract::{Extension, Json, Path, Query, State};
 use axum::http::{self, HeaderName, HeaderValue, StatusCode};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
 use chrono::Utc;
@@ -7,7 +7,7 @@ use oauth2::{AuthorizationCode, PkceCodeVerifier};
 use serde::Deserialize;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{named_params, params};
-use utoipa::IntoParams;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
 use crate::auth::AuthError;
@@ -27,10 +27,11 @@ use crate::constants::{
 use crate::extract::HasRoot;
 use crate::rand::random_alphanumeric;
 
-#[derive(Debug, Deserialize, IntoParams)]
-pub struct AuthQuery {
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
+pub struct CallbackQuery {
   pub code: String,
   pub state: String,
+  pub error: Option<String>,
 }
 
 /// This handler receives the ?code=<>&state=<>, uses it to get an external oauth token, gets the
@@ -39,18 +40,55 @@ pub struct AuthQuery {
   get,
   path = "/oauth/{provider}/callback",
   tag = "auth",
-  params(AuthQuery),
+  params(CallbackQuery),
   responses(
     (status = 200, description = "Redirect.")
   )
 )]
-pub(crate) async fn callback_from_external_auth_provider(
+pub(crate) async fn callback_from_external_auth_provider_get(
   State(state): State<AppState>,
   Path(provider): Path<String>,
-  Query(query): Query<AuthQuery>,
   Extension(HasRoot(has_root)): Extension<HasRoot>,
   cookies: Cookies,
+  query: Query<CallbackQuery>,
 ) -> Result<Response, AuthError> {
+  return callback_from_external_auth_provider_impl(&state, provider, query.0, has_root, &cookies)
+    .await;
+}
+
+#[utoipa::path(
+  post,
+  path = "/oauth/{provider}/callback",
+  tag = "auth",
+  request_body = CallbackQuery,
+  responses(
+    (status = 200, description = "Redirect.")
+  )
+)]
+pub(crate) async fn callback_from_external_auth_provider_post(
+  State(state): State<AppState>,
+  Path(provider): Path<String>,
+  Extension(HasRoot(has_root)): Extension<HasRoot>,
+  cookies: Cookies,
+  request: Json<CallbackQuery>,
+) -> Result<Response, AuthError> {
+  return callback_from_external_auth_provider_impl(
+    &state, provider, request.0, has_root, &cookies,
+  )
+  .await;
+}
+
+async fn callback_from_external_auth_provider_impl(
+  state: &AppState,
+  provider: String,
+  query: CallbackQuery,
+  has_root: bool,
+  cookies: &Cookies,
+) -> Result<Response, AuthError> {
+  if let Some(err) = query.error {
+    return Err(AuthError::FailedDependency(err.into()));
+  }
+
   let auth_options = state.auth_options();
   let Some(oauth_entry) = auth_options.lookup_oauth_provider(&provider) else {
     return Err(AuthError::OAuthProviderNotFound);
@@ -73,23 +111,23 @@ pub(crate) async fn callback_from_external_auth_provider(
         .value(),
     )
     .map_err(|_err| {
-      remove_cookie(&cookies, COOKIE_OAUTH_STATE);
+      remove_cookie(cookies, COOKIE_OAUTH_STATE);
       return AuthError::BadRequest("invalid state");
     })?;
 
   if csrf_secret != query.state {
-    remove_cookie(&cookies, COOKIE_OAUTH_STATE);
+    remove_cookie(cookies, COOKIE_OAUTH_STATE);
     return Err(AuthError::BadRequest("invalid state"));
   }
 
   // NOTE: This was already validated in the login-handler, we're just pedantic.
-  let redirect_uri = validate_redirect(&state, redirect_uri)?;
+  let redirect_uri = validate_redirect(state, redirect_uri)?;
 
   return match response_type {
     Some(ResponseType::Code) => {
       callback_from_oauth_provider_using_auth_code_flow(
-        &state,
-        &cookies,
+        state,
+        cookies,
         oauth_entry,
         redirect_uri,
         query.code,
@@ -100,8 +138,8 @@ pub(crate) async fn callback_from_external_auth_provider(
     }
     _ => {
       callback_from_oauth_provider_setting_token_cookies(
-        &state,
-        &cookies,
+        state,
+        cookies,
         oauth_entry,
         redirect_uri,
         query.code,

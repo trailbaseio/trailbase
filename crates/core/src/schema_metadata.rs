@@ -376,6 +376,8 @@ fn list_databases(
 
 #[cfg(test)]
 mod tests {
+  #![allow(irrefutable_let_patterns)]
+
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
   use trailbase_schema::QualifiedName;
