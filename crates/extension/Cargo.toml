@@ -13,7 +13,7 @@ crate-type=["rlib"]
 
 [dependencies]
 arc-swap = "1.9.2"
-argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash", "rand", "std"] }
+argon2 = { version = "^0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash"] }
 base64 = { workspace = true }
 bcrypt = "0.19.3"
 jsonschema = { version = "0.52.0", default-features = false }
