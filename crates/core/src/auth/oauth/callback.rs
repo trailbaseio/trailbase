@@ -1,4 +1,4 @@
-use axum::extract::{Extension, Json, Path, Query, State};
+use axum::extract::{Extension, Form, Path, Query, State};
 use axum::http::{self, HeaderName, HeaderValue, StatusCode};
 use axum::response::{AppendHeaders, IntoResponse, Redirect, Response};
 use chrono::Utc;
@@ -29,7 +29,9 @@ use crate::rand::random_alphanumeric;
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct CallbackQuery {
-  pub code: String,
+  /// Authorization code. Absent when the provider reports an `error` instead, e.g. when
+  /// the user cancelled the consent dialog (Apple sends `error` + `state` without `code`).
+  pub code: Option<String>,
   pub state: String,
   pub error: Option<String>,
 }
@@ -60,7 +62,7 @@ pub(crate) async fn callback_from_external_auth_provider_get(
   post,
   path = "/oauth/{provider}/callback",
   tag = "auth",
-  request_body = CallbackQuery,
+  request_body(content = CallbackQuery, content_type = "application/x-www-form-urlencoded"),
   responses(
     (status = 200, description = "Redirect.")
   )
@@ -70,7 +72,7 @@ pub(crate) async fn callback_from_external_auth_provider_post(
   Path(provider): Path<String>,
   Extension(HasRoot(has_root)): Extension<HasRoot>,
   cookies: Cookies,
-  request: Json<CallbackQuery>,
+  request: Form<CallbackQuery>,
 ) -> Result<Response, AuthError> {
   return callback_from_external_auth_provider_impl(
     &state, provider, request.0, has_root, &cookies,
@@ -88,6 +90,10 @@ async fn callback_from_external_auth_provider_impl(
   if let Some(err) = query.error {
     return Err(AuthError::FailedDependency(err.into()));
   }
+
+  let Some(auth_code) = query.code else {
+    return Err(AuthError::BadRequest("missing code"));
+  };
 
   let auth_options = state.auth_options();
   let Some(oauth_entry) = auth_options.lookup_oauth_provider(&provider) else {
@@ -130,7 +136,7 @@ async fn callback_from_external_auth_provider_impl(
         cookies,
         oauth_entry,
         redirect_uri,
-        query.code,
+        auth_code,
         pkce_code_verifier,
         user_pkce_code_challenge,
       )
@@ -142,7 +148,7 @@ async fn callback_from_external_auth_provider_impl(
         cookies,
         oauth_entry,
         redirect_uri,
-        query.code,
+        auth_code,
         pkce_code_verifier,
         has_root,
       )

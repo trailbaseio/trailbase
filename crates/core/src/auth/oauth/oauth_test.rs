@@ -7,7 +7,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use tower_cookies::Cookies;
+use tower_cookies::{CookieManagerLayer, Cookies, cookie::SameSite};
 use uuid::Uuid;
 
 use crate::api::AuthTokenClaims;
@@ -20,6 +20,7 @@ use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthStateClaims;
 use crate::auth::oauth::{callback, list_providers, login};
 use crate::auth::user::DbUser;
+use crate::auth::AuthError;
 use crate::auth::util::derive_pkce_code_challenge;
 use crate::config::proto;
 use crate::constants::{
@@ -216,7 +217,7 @@ async fn test_oauth_login_flow_without_pkce() {
     cookies.clone(),
     Query(callback::CallbackQuery {
       state: auth_query.state.clone(),
-      code: auth_query.code_challenge.clone(),
+      code: Some(auth_query.code_challenge.clone()),
       error: None,
     }),
   )
@@ -326,8 +327,7 @@ async fn test_oauth_login_flow_with_pkce() {
     cookies.clone(),
     Query(callback::CallbackQuery {
       state: auth_query.state.clone(),
-      code: auth_query.code_challenge.clone(),
-
+      code: Some(auth_query.code_challenge.clone()),
       error: None,
     }),
   )
@@ -388,6 +388,307 @@ async fn test_oauth_login_flow_with_pkce() {
   assert_eq!(
     EXTERNAL_USER_EMAIL,
     decoded_claims.email.as_deref().unwrap()
+  );
+}
+
+#[tokio::test]
+async fn test_apple_oauth_login_uses_form_post_response_mode() {
+  // Apple's provider uses hardcoded appleid.apple.com URLs and no network requests are made:
+  // we only inspect the generated redirect URL and the OAuth state cookie.
+  let site_url = "https://bar.org";
+  let state = test_state(Some(TestStateOptions {
+    config: Some({
+      let mut config = proto::Config::new_with_custom_defaults();
+      config.server.site_url = Some(site_url.to_string());
+      config.auth.oauth_providers = [(
+        "apple".to_string(),
+        proto::OAuthProviderConfig {
+          client_id: Some("test_client_id".to_string()),
+          client_secret: Some("test_client_secret".to_string()),
+          provider_id: Some(proto::OAuthProviderId::Apple as i32),
+          ..Default::default()
+        },
+      )]
+      .into();
+      config
+    }),
+    ..Default::default()
+  }))
+  .await
+  .unwrap();
+
+  // Call TB's OAuth login handler for Apple, which produces the redirect to Apple's
+  // authorization endpoint.
+  let cookies = Cookies::default();
+  let redirect_uri = format!("{site_url}/login-success-welcome");
+  let external_redirect: Redirect = login::login_with_external_auth_provider(
+    State(state.clone()),
+    Path("apple".to_string()),
+    Query(LoginInputParams {
+      redirect_uri: Some(redirect_uri),
+      mfa_redirect_uri: None,
+      response_type: None,
+      pkce_code_challenge: None,
+    }),
+    cookies.clone(),
+  )
+  .await
+  .unwrap();
+
+  let (location, _) = get_redirect_location(external_redirect);
+  let location = location.unwrap();
+
+  let authorize_url = url::Url::parse(&location).unwrap();
+  assert_eq!(authorize_url.host_str(), Some("appleid.apple.com"));
+  assert_eq!(authorize_url.path(), "/auth/authorize");
+
+  let query_params: HashMap<Cow<'_, str>, Cow<'_, str>> = authorize_url.query_pairs().collect();
+  // Apple rejects authorization requests requesting user-info scopes without
+  // `response_mode=form_post`.
+  assert_eq!(query_params.get("response_mode").unwrap(), "form_post");
+  assert_eq!(query_params.get("response_type").unwrap(), "code");
+  assert_eq!(query_params.get("scope").unwrap(), "name email");
+  assert_eq!(
+    query_params.get("redirect_uri").unwrap(),
+    format!("{site_url}/{AUTH_API_PATH}/oauth/apple/callback").as_str()
+  );
+
+  // The `state` sent to Apple must roundtrip the CSRF secret stored in the state cookie.
+  let oauth_state: OAuthStateClaims = state
+    .jwt()
+    .decode(cookies.get(COOKIE_OAUTH_STATE).unwrap().value())
+    .unwrap();
+  assert_eq!(
+    query_params.get("state").unwrap(),
+    oauth_state.csrf_secret.as_str()
+  );
+
+  // The OAuth state cookie has to be attached to Apple's cross-site form POST callback
+  // and thus requires SameSite=None.
+  assert_eq!(
+    cookies.get(COOKIE_OAUTH_STATE).unwrap().same_site(),
+    Some(SameSite::None)
+  );
+  assert_eq!(
+    cookies.get(COOKIE_OAUTH_STATE).unwrap().http_only(),
+    Some(true)
+  );
+}
+
+#[tokio::test]
+async fn test_oauth_login_flow_with_form_post_callback() {
+  let site_url = "https://bar.org";
+  let (_server, state) = setup_fake_oauth_server(site_url).await;
+
+  // Call TB's OAuth login handler, which will produce a redirect for users to get the external
+  // auth provider's login form.
+  let cookies = Cookies::default();
+  let redirect_uri = format!("{site_url}/login-success-welcome");
+  let external_redirect: Redirect = login::login_with_external_auth_provider(
+    State(state.clone()),
+    Path(TestOAuthProvider::NAME.to_string()),
+    Query(LoginInputParams {
+      redirect_uri: Some(redirect_uri.to_string()),
+      mfa_redirect_uri: None,
+      response_type: None,
+      pkce_code_challenge: None,
+    }),
+    cookies.clone(),
+  )
+  .await
+  .unwrap();
+
+  // Redirect-response providers, like this test provider, must not request form_post.
+  let (location, _) = get_redirect_location(external_redirect);
+  let authorize_url = url::Url::parse(&location.unwrap()).unwrap();
+  let query_params: HashMap<Cow<'_, str>, Cow<'_, str>> = authorize_url.query_pairs().collect();
+  assert!(!query_params.contains_key("response_mode"));
+  assert_eq!(
+    cookies.get(COOKIE_OAUTH_STATE).unwrap().same_site(),
+    Some(SameSite::None)
+  );
+
+  // Call the fake server's auth endpoint.
+  let auth_query: AuthQuery = reqwest::get(authorize_url.as_str())
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+  // Pretend to be the external provider responding with `response_mode=form_post`: POST the
+  // code/state as a form to TB's OAuth callback handler.
+  let internal_redirect = callback::callback_from_external_auth_provider_post(
+    State(state.clone()),
+    Path(TestOAuthProvider::NAME.to_string()),
+    Extension(HasRoot(false)),
+    cookies.clone(),
+    Form(callback::CallbackQuery {
+      state: auth_query.state.clone(),
+      code: Some(auth_query.code_challenge.clone()),
+      error: None,
+    }),
+  )
+  .await
+  .unwrap();
+
+  let (location, referrer_policy) = get_redirect_location(internal_redirect);
+  assert_eq!(location, Some(redirect_uri));
+  assert_eq!(referrer_policy.as_deref(), Some("no-referrer"));
+
+  // Check user exists and is logged in.
+  let db_user = state
+    .user_conn()
+    .read_query_value::<DbUser>(
+      format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+      (EXTERNAL_USER_ID,),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+  assert_eq!(EXTERNAL_USER_EMAIL, db_user.email.as_deref().unwrap());
+
+  // Is logged in.
+  assert!(session_exists(&state, db_user.uuid()).await);
+
+  // And we have tokens.
+  let auth_token = cookies.get(COOKIE_AUTH_TOKEN).unwrap().value().to_string();
+  let decoded_claims = state.jwt().decode::<AuthTokenClaims>(&auth_token).unwrap();
+  assert_eq!(db_user.email, decoded_claims.email);
+}
+
+#[tokio::test]
+async fn test_oauth_callback_rejects_invalid_state() {
+  let site_url = "https://bar.org";
+  let (_server, state) = setup_fake_oauth_server(site_url).await;
+
+  // A prior login sets the OAuth state cookie.
+  let cookies = Cookies::default();
+  let external_redirect: Redirect = login::login_with_external_auth_provider(
+    State(state.clone()),
+    Path(TestOAuthProvider::NAME.to_string()),
+    Query(LoginInputParams {
+      redirect_uri: Some(format!("{site_url}/login-success-welcome")),
+      mfa_redirect_uri: None,
+      response_type: None,
+      pkce_code_challenge: None,
+    }),
+    cookies.clone(),
+  )
+  .await
+  .unwrap();
+
+  let (location, _) = get_redirect_location(external_redirect);
+  let authorize_url = url::Url::parse(&location.unwrap()).unwrap();
+  let auth_query: AuthQuery = reqwest::get(authorize_url.as_str())
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+  // The form_post callback must reject a response whose state doesn't match the CSRF secret
+  // stored in the state cookie.
+  let result = callback::callback_from_external_auth_provider_post(
+    State(state.clone()),
+    Path(TestOAuthProvider::NAME.to_string()),
+    Extension(HasRoot(false)),
+    cookies.clone(),
+    Form(callback::CallbackQuery {
+      state: "tampered".to_string(),
+      code: Some(auth_query.code_challenge.clone()),
+      error: None,
+    }),
+  )
+  .await;
+  assert!(matches!(
+    result,
+    Err(AuthError::BadRequest("invalid state"))
+  ));
+
+  // Similarly, without a state cookie from a prior login the callback must reject, too.
+  let result = callback::callback_from_external_auth_provider_post(
+    State(state.clone()),
+    Path(TestOAuthProvider::NAME.to_string()),
+    Extension(HasRoot(false)),
+    Cookies::default(),
+    Form(callback::CallbackQuery {
+      state: auth_query.state.clone(),
+      code: Some(auth_query.code_challenge.clone()),
+      error: None,
+    }),
+  )
+  .await;
+  assert!(matches!(
+    result,
+    Err(AuthError::BadRequest("missing state"))
+  ));
+}
+
+#[tokio::test]
+async fn test_oauth_form_post_callback_via_http_router() {
+  let site_url = "https://bar.org";
+  let (_server, state) = setup_fake_oauth_server(site_url).await;
+
+  // Build the real OAuth router (as mounted by the server) with the cookie and HasRoot
+  // extension layers.
+  let router: Router = Router::from(crate::auth::oauth::oauth_router())
+    .layer(Extension(HasRoot(false)))
+    .layer(CookieManagerLayer::new())
+    .with_state(state.clone());
+  let server = TestServer::new(router);
+
+  // Trigger a login. Forwarding the resulting state cookie like a browser would: note that
+  // `SameSite=None` cookies require `Secure` and aren't forwarded by the test server's jar
+  // over plain HTTP, so it's passed along manually.
+  let redirect_uri = format!("{site_url}/login-success-welcome");
+  let login_response = server
+    .get(&format!(
+      "/oauth/{}/login?redirect_uri={redirect_uri}",
+      TestOAuthProvider::NAME
+    ))
+    .await;
+  login_response.assert_status(axum::http::StatusCode::SEE_OTHER);
+
+  // Complete the external login like the browser would.
+  let location = login_response
+    .headers()
+    .get("location")
+    .unwrap()
+    .to_str()
+    .unwrap()
+    .to_string();
+  let auth_query: AuthQuery = reqwest::get(&location).await.unwrap().json().await.unwrap();
+
+  // Pretend to be the external provider responding with `response_mode=form_post`: the
+  // callback is reached via a real HTTP POST through the router.
+  let state_cookie = login_response
+    .headers()
+    .get("set-cookie")
+    .unwrap()
+    .to_str()
+    .unwrap()
+    .split(';')
+    .next()
+    .unwrap()
+    .to_string();
+  let callback_response = server
+    .post(&format!("/oauth/{}/callback", TestOAuthProvider::NAME))
+    .add_header("cookie", &state_cookie)
+    .form(&[
+      ("state", auth_query.state.clone()),
+      ("code", auth_query.code_challenge.clone()),
+    ])
+    .await;
+  callback_response.assert_status(axum::http::StatusCode::SEE_OTHER);
+  assert!(
+    callback_response
+      .headers()
+      .get("location")
+      .unwrap()
+      .to_str()
+      .unwrap()
+      .starts_with(&redirect_uri)
   );
 }
 
