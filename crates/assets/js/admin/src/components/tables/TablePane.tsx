@@ -886,52 +886,50 @@ function RecordTable(props: {
                   </div>
                 </div>
 
-                <div class="overflow-x-auto">
-                  <TableComponent
-                    table={table()}
-                    loading={props.records === undefined}
-                    dense
-                    paginationPosition="bottom"
-                    emptyState={
-                      <div class="flex flex-col items-center gap-2 py-8 text-center">
-                        <p class="font-medium">
-                          {props.filter[0]()
-                            ? "No rows match this filter"
-                            : "No rows yet"}
-                        </p>
-                        <p class="text-muted-foreground text-sm">
-                          {props.filter[0]()
-                            ? "Try a different expression or clear the filter."
-                            : "Insert the first record to get started."}
-                        </p>
-                        <Show
-                          when={props.filter[0]()}
-                          fallback={
-                            <Show when={mutable()}>
-                              <Button onClick={() => setInsertOpen(true)}>
-                                Insert first row
-                              </Button>
-                            </Show>
-                          }
+                <TableComponent
+                  table={table()}
+                  loading={props.records === undefined}
+                  dense
+                  paginationPosition="bottom"
+                  emptyState={
+                    <div class="flex flex-col items-center gap-2 py-8 text-center">
+                      <p class="font-medium">
+                        {props.filter[0]()
+                          ? "No rows match this filter"
+                          : "No rows yet"}
+                      </p>
+                      <p class="text-muted-foreground text-sm">
+                        {props.filter[0]()
+                          ? "Try a different expression or clear the filter."
+                          : "Insert the first record to get started."}
+                      </p>
+                      <Show
+                        when={props.filter[0]()}
+                        fallback={
+                          <Show when={mutable()}>
+                            <Button onClick={() => setInsertOpen(true)}>
+                              Insert first row
+                            </Button>
+                          </Show>
+                        }
+                      >
+                        <Button
+                          variant="outline"
+                          onClick={() => props.filter[1](undefined)}
                         >
-                          <Button
-                            variant="outline"
-                            onClick={() => props.filter[1](undefined)}
-                          >
-                            Clear filter
-                          </Button>
-                        </Show>
-                      </div>
-                    }
-                    onRowClick={
-                      mutable()
-                        ? (_idx: number, row: ArrayRecord) => {
-                            setEditRow(rowDataToRow(columns() ?? [], row));
-                          }
-                        : undefined
-                    }
-                  />
-                </div>
+                          Clear filter
+                        </Button>
+                      </Show>
+                    </div>
+                  }
+                  onRowClick={
+                    mutable()
+                      ? (_idx: number, row: ArrayRecord) => {
+                          setEditRow(rowDataToRow(columns() ?? [], row));
+                        }
+                      : undefined
+                  }
+                />
               </div>
             </>
           );
@@ -1188,7 +1186,7 @@ function IndexTable(props: {
                 />
               </SheetContent>
 
-              <div class="space-y-2.5 overflow-x-auto">
+              <div class="space-y-2.5">
                 <TableComponent
                   table={indexesTable()}
                   loading={false}
@@ -1312,7 +1310,7 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
         </Button>
       </div>
 
-      <div class="mt-4 overflow-x-auto">
+      <div class="mt-4">
         <TableComponent
           loading={false}
           table={triggersTable()}

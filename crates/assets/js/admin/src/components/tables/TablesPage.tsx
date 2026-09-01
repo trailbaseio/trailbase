@@ -433,20 +433,18 @@ function TableSplitView(props: {
                 <SidebarRail />
               </Sidebar>
 
-              <SidebarInset class="min-h-0 overflow-hidden">
+              <SidebarInset class="min-h-0">
                 <Show
                   when={selectedTable()}
                   fallback={<div class="p-4">No table selected</div>}
                 >
                   {(selected) => (
-                    <div class="min-h-0 flex-1 overflow-y-auto">
-                      <TablePane
-                        selectedTable={selected()}
-                        schemas={props.schemas}
-                        schemaRefetch={props.schemaRefetch}
-                        postgres={isPostgres()}
-                      />
-                    </div>
+                    <TablePane
+                      selectedTable={selected()}
+                      schemas={props.schemas}
+                      schemaRefetch={props.schemaRefetch}
+                      postgres={isPostgres()}
+                    />
                   )}
                 </Show>
               </SidebarInset>

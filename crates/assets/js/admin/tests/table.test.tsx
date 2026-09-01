@@ -2,6 +2,7 @@ import { fireEvent, render } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 
 import { Table, buildTable } from "@/components/Table";
+import { Table as TablePrimitive } from "@/components/ui/table";
 
 type RowData = { name: string };
 
@@ -20,6 +21,18 @@ function makeTable(data: RowData[], paginated = false) {
 }
 
 describe("Table presentation", () => {
+  it("owns only horizontal overflow", () => {
+    const result = render(() => (
+      <TablePrimitive>
+        <tbody />
+      </TablePrimitive>
+    ));
+    const scroller = result.container.querySelector("table")?.parentElement;
+
+    expect(scroller).toHaveClass("overflow-x-auto");
+    expect(scroller).not.toHaveClass("overflow-auto");
+  });
+
   it("renders a supplied empty state", () => {
     const result = render(() => (
       <Table
