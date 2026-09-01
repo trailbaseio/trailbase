@@ -1,3 +1,11 @@
+## v0.33.7
+
+- Add username to support admin `CreateUser` endpoint.
+- Loosen `SameSite` policy for round-tripped OAuth state. Thanks @yurvon-screamo 🙏
+- Further fix Apple OAuth provider: form content-type and boolean `email_verified` parsing. Thanks @yurvon-screamo 🙏
+- Admin UI styling: start adopting polish from #283. Thanks @burggraf 🙏
+- Update dependencies.
+
 ## v0.33.6
 
 - Best-effort fix Apple OAuth provider.
