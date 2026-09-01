@@ -35,7 +35,8 @@ mod tests {
     let user_id = create_user_handler(
       State(state.clone()),
       Json(CreateUserRequest {
-        email: email.to_string(),
+        email: Some(email.to_string()),
+        username: None,
         password: "Secret!1!!".to_string(),
         verified: true,
         admin: true,

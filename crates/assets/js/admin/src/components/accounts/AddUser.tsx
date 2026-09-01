@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import {
   buildBoolFormField,
-  buildTextFormField,
   buildSecretFormField,
   notEmptyValidator,
+  unsetOrNotEmptyValidator,
+  buildOptionalTextFormField,
 } from "@/components/FormFields";
 
 import { createUser } from "@/lib/api/user";
@@ -21,7 +22,8 @@ export function AddUser(props: {
 }) {
   const form = createForm(() => ({
     defaultValues: {
-      email: "",
+      email: undefined,
+      username: undefined,
       password: "",
       verified: true,
       admin: false,
@@ -51,8 +53,15 @@ export function AddUser(props: {
         }}
       >
         <div class="flex flex-col items-start gap-4 py-4">
-          <form.Field name="email" validators={notEmptyValidator()}>
-            {buildTextFormField({ label: () => <L>Email</L>, type: "email" })}
+          <form.Field name="email" validators={unsetOrNotEmptyValidator()}>
+            {buildOptionalTextFormField({
+              label: () => <L>Email</L>,
+              type: "email",
+            })}
+          </form.Field>
+
+          <form.Field name="username" validators={unsetOrNotEmptyValidator()}>
+            {buildOptionalTextFormField({ label: () => <L>Username</L> })}
           </form.Field>
 
           <form.Field name="password" validators={notEmptyValidator()}>

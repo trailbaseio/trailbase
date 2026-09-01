@@ -14,6 +14,7 @@ import {
   TbOutlineClipboardCopy,
   TbOutlineCookie,
   TbOutlineQuestionMark,
+  TbOutlineUser,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
@@ -469,6 +470,33 @@ export function AccountsPage() {
             <TbOutlineRefresh />
           </IconButton>
         }
+        right={
+          <SafeSheet
+            children={(sheet) => {
+              return (
+                <>
+                  <SheetContent class={sheetMaxWidth}>
+                    <AddUser userRefetch={refetch} {...sheet} />
+                  </SheetContent>
+
+                  <SheetTrigger
+                    as={(props: DialogTriggerProps) => (
+                      <Button
+                        variant="outline"
+                        class="flex gap-2"
+                        onClick={() => {}}
+                        {...props}
+                      >
+                        <span>Add</span>
+                        <TbOutlineUser />
+                      </Button>
+                    )}
+                  />
+                </>
+              );
+            }}
+          />
+        }
       />
 
       <div class="flex flex-col items-end gap-4 p-4">
@@ -502,31 +530,6 @@ export function AccountsPage() {
               </div>
             </Match>
           </Switch>
-
-          <SafeSheet
-            children={(sheet) => {
-              return (
-                <>
-                  <SheetContent class={sheetMaxWidth}>
-                    <AddUser userRefetch={refetch} {...sheet} />
-                  </SheetContent>
-
-                  <SheetTrigger
-                    as={(props: DialogTriggerProps) => (
-                      <Button
-                        variant="outline"
-                        class="flex gap-2"
-                        onClick={() => {}}
-                        {...props}
-                      >
-                        Add User
-                      </Button>
-                    )}
-                  />
-                </>
-              );
-            }}
-          />
 
           {/* WARN: This might open multiple sheets or at least scrims for each row */}
           <SafeSheet

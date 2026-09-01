@@ -7,7 +7,8 @@
 @custom-variant dark (&:where(.dark, .dark *, [data-kb-theme=dark], [data-kb-theme=dark] *));
 
 :root {
-  --background: hsl(0 0% 100%);
+  /* --background: hsl(0 0% 100%); */
+  --background: #f8fafc;
   --foreground: hsl(240 10% 3.9%);
 
   --muted: hsl(240 4.8% 95.9%);

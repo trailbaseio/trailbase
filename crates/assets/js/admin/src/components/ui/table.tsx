@@ -58,7 +58,7 @@ const TableHead: Component<ComponentProps<"th">> = (props) => {
 const TableCell: Component<ComponentProps<"td">> = (props) => {
   const [local, others] = splitProps(props, ["class"])
   return (
-    <td class={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", local.class)} {...others} />
+    <td class={cn("p-2 align-middle [&:has([role=checkbox])]:pr-0", local.class)} {...others} />
   )
 }
 

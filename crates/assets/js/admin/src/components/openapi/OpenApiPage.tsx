@@ -113,7 +113,7 @@ export default function Page() {
       allow-server-selection="false"
     >
       {/* Contents */}
-      <div class="mx-4 my-4 lg:mx-8">
+      <div class="m-4 lg:mx-8">
         <TextField class="flex items-center gap-2">
           <TextFieldLabel>
             <Tooltip>

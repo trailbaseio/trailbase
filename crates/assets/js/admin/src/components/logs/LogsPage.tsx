@@ -33,6 +33,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import * as maplibregl from "maplibre-gl";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -102,10 +103,30 @@ const columns: ColumnDef<LogJson>[] = [
   {
     accessorKey: "status",
     size: 60,
+    cell: (ctx) => {
+      const { status } = ctx.row.original;
+      return (
+        <Switch>
+          <Match when={status < 300}>
+            <Badge variant="success">{status}</Badge>
+          </Match>
+
+          <Match when={status < 400}>
+            <Badge variant="default">{status}</Badge>
+          </Match>
+
+          <Match when={true}>
+            <Badge variant="warning">{status}</Badge>
+          </Match>
+        </Switch>
+      );
+    },
   },
   {
     accessorKey: "method",
-    size: 80,
+    minSize: 80,
+
+    cell: (ctx) => <Badge variant="outline">{ctx.row.original.method}</Badge>,
   },
   {
     accessorKey: "url",
@@ -114,11 +135,11 @@ const columns: ColumnDef<LogJson>[] = [
   {
     // Used for sorting.
     id: "latency",
-    header: "latency (ms)",
+    header: "latency",
     // Used for accessing the request (there's a rename from latency in DB to latency_ms in response)
     accessorKey: "latency_ms",
     size: 80,
-    cell: (ctx) => ctx.row.original.latency_ms.toFixed(6),
+    cell: (ctx) => `${ctx.row.original.latency_ms.toFixed(2)}ms`,
   },
   {
     accessorKey: "client_ip",

@@ -404,7 +404,8 @@ async fn create_user_for_test(
     create_user_handler(
       State(state.clone()),
       Json(CreateUserRequest {
-        email: email.to_string(),
+        email: Some(email.to_string()),
+        username: None,
         password: password.to_string(),
         verified: true,
         admin: false,

@@ -151,7 +151,8 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   let user_x = create_user_handler(
     State(app.state.clone()),
     Json(CreateUserRequest {
-      email: email.to_string(),
+      email: Some(email.to_string()),
+      username: None,
       password: password.to_string(),
       verified: true,
       admin: false,

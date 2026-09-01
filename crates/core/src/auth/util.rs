@@ -361,23 +361,24 @@ pub async fn get_user_by_id(
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
 
-pub async fn user_exists(state: &AppState, email: &str) -> bool {
-  const QUERY: &str = formatcp!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email = $1)"#);
-
-  return match state
-    .user_conn()
-    .read_query_row_get::<bool>(QUERY, params!(email.to_string()), 0)
-    .await
-  {
-    Ok(Some(exists)) => exists,
-    Ok(None) => false,
-    Err(err) => {
-      debug_assert!(false, "USER EXISTS query failed: {err}");
-
-      false
-    }
-  };
-}
+// pub async fn user_exists(state: &AppState, email: &str) -> bool {
+//   const QUERY: &str = formatcp!(r#"SELECT EXISTS(SELECT 1 FROM "{USER_TABLE}" WHERE email =
+// $1)"#);
+//
+//   return match state
+//     .user_conn()
+//     .read_query_row_get::<bool>(QUERY, params!(email.to_string()), 0)
+//     .await
+//   {
+//     Ok(Some(exists)) => exists,
+//     Ok(None) => false,
+//     Err(err) => {
+//       debug_assert!(false, "USER EXISTS query failed: {err}");
+//
+//       false
+//     }
+//   };
+// }
 
 pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
   const QUERY: &str = formatcp!(r#"SELECT admin FROM "{USER_TABLE}" WHERE id = $1"#);
