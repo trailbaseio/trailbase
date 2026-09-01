@@ -235,17 +235,43 @@ pub(crate) fn new_cookie(
   // some o the most blatant XSS attacks, however generally isn't enough. For example,
   // same-origin user-generated content can by-pass this. When cookies are used, forms should
   // also check the CSRF token.
+  return new_cookie_same_site(
+    state,
+    key,
+    value,
+    ttl,
+    if same_site_strict {
+      SameSite::Strict
+    } else {
+      SameSite::Lax
+    },
+  );
+}
+
+/// Cookie with an explicitly chosen `SameSite` policy.
+///
+/// Used, for example, for the OAuth state cookie when the provider responds with
+/// `response_mode=form_post` (e.g. Apple): that response is a cross-site POST navigation
+/// and `SameSite=Lax` cookies are not attached to those. Note that `SameSite=None` requires
+/// the `Secure` attribute, i.e. HTTPS, to be honored by browsers.
+pub(crate) fn new_cookie_same_site(
+  state: &AppState,
+  key: &'static str,
+  value: String,
+  ttl: Duration,
+  same_site: SameSite,
+) -> Cookie<'static> {
   return new_cookie_opts(
     key,
     value,
     ttl,
     /* tls_only= */ secure_tls_only(state),
-    /* same_site_strict= */ same_site_strict,
+    same_site,
   );
 }
 
 #[inline]
-fn secure_tls_only(state: &AppState) -> bool {
+pub(crate) fn secure_tls_only(state: &AppState) -> bool {
   // Be strict in prod-mode and when the site is configured with HTTPS/TLS.
   if state.dev_mode() {
     return false;
@@ -263,7 +289,7 @@ fn new_cookie_opts(
   value: String,
   ttl: Duration,
   tls_only: bool,
-  same_site_strict: bool,
+  same_site: SameSite,
 ) -> Cookie<'static> {
   return Cookie::build((key, value))
     .path("/")
@@ -272,11 +298,7 @@ fn new_cookie_opts(
     // Only send cookie over HTTPs.
     .secure(tls_only)
     // Only include cookie if request originates from origin site.
-    .same_site(if same_site_strict {
-      SameSite::Strict
-    } else {
-      SameSite::Lax
-    })
+    .same_site(same_site)
     .max_age(cookie::time::Duration::seconds(ttl.num_seconds()))
     .build();
 }
@@ -292,7 +314,7 @@ pub(crate) fn remove_cookie(cookies: &Cookies, key: &'static str) {
       "".to_string(),
       Duration::seconds(1),
       /* tls_only= */ false,
-      /* same_site_strict= */ false,
+      SameSite::Lax,
     ));
   }
 }
