@@ -8823,7 +8823,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-wasm"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "base64 0.23.1",
  "bytes",
@@ -8845,7 +8845,7 @@ dependencies = [
 
 [[package]]
 name = "trailbase-wasm-common"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "trailbase-sqlvalue",
