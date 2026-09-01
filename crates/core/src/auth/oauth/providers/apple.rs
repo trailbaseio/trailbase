@@ -32,10 +32,27 @@ struct ApplePublicKeys {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Boolean {
+  String(String),
+  Bool(bool),
+}
+
+impl Boolean {
+  fn value(&self) -> bool {
+    return match self {
+      Boolean::Bool(v) => *v,
+      Boolean::String(s) if s.to_lowercase() == "true" => true,
+      Boolean::String(_) => false,
+    };
+  }
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct AppleIdToken {
   pub sub: String,
   pub email: Option<String>,
-  pub email_verified: Option<String>,
+  pub email_verified: Option<Boolean>,
   // ...Other fields, e.g.:
   // pub aud: String,
   // pub iss: String,
@@ -172,7 +189,7 @@ impl OAuthProvider for AppleOAuthProvider {
       provider_id: proto::OAuthProviderId::Apple,
       email: Some(email),
       username: None,
-      verified: apple_id_token.email_verified.is_some_and(|v| v == "true"),
+      verified: apple_id_token.email_verified.is_some_and(|v| v.value()),
       avatar: None,
     });
   }
@@ -197,6 +214,8 @@ async fn fetch_apple_public_keys(
 
 #[cfg(test)]
 mod tests {
+  use serde_json::{from_value, json};
+
   use super::*;
 
   #[test]
@@ -209,5 +228,37 @@ mod tests {
     let settings = provider.settings().unwrap();
     let query: Vec<_> = settings.auth_url.query_pairs().collect();
     assert!(!query.is_empty());
+  }
+
+  #[test]
+  fn test_apple_boolean() {
+    // Apple may return strings or booleans: https://developer.apple.com/forums/thread/746352
+    let v0 = from_value::<AppleIdToken>(json!({
+            "sub": "123",
+            "email_verified": "TruE",
+    }))
+    .unwrap();
+    assert_eq!(true, v0.email_verified.unwrap().value());
+
+    let v1 = from_value::<AppleIdToken>(json!({
+            "sub": "123",
+            "email_verified": "Anything Else",
+    }))
+    .unwrap();
+    assert_eq!(false, v1.email_verified.unwrap().value());
+
+    let v2 = from_value::<AppleIdToken>(json!({
+            "sub": "123",
+            "email_verified": false,
+    }))
+    .unwrap();
+    assert_eq!(false, v2.email_verified.unwrap().value());
+
+    let v3 = from_value::<AppleIdToken>(json!({
+            "sub": "123",
+            "email_verified": true,
+    }))
+    .unwrap();
+    assert_eq!(true, v3.email_verified.unwrap().value());
   }
 }
