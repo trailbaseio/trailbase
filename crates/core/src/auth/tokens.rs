@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::user::DbUser;
-use crate::auth::util::new_cookie;
+use crate::auth::util::{SameSite, new_cookie};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, HEADER_REFRESH_TOKEN, REFRESH_TOKEN_LENGTH,
   SESSION_TABLE, USER_TABLE,
@@ -110,7 +110,7 @@ pub(crate) async fn extract_tokens_from_request_parts(
         COOKIE_AUTH_TOKEN,
         new_auth_token,
         ttl,
-        /* same_site_strict= */ true,
+        SameSite::Strict,
       ));
 
       return Ok(Tokens {

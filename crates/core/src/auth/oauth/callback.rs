@@ -17,7 +17,7 @@ use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  new_cookie, remove_cookie, validate_and_normalize_username, validate_redirect,
+  SameSite, new_cookie, remove_cookie, validate_and_normalize_username, validate_redirect,
 };
 use crate::config::proto;
 use crate::constants::{
@@ -184,22 +184,22 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     .encode(&auth_token_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  // NOTE: The auth cookie must be same-site=lax in order to be forwarded with the final redirect
-  // (e.g. to auth UI), since browsers will still consider this redirection chain as originating
-  // from the external oauth provider and thus not to be same site..
   cookies.add(new_cookie(
     state,
     COOKIE_AUTH_TOKEN,
     auth_token,
     auth_token_ttl,
-    /* same_site_strict= */ false,
+    // NOTE: The auth cookie must be same-site=lax in order to be forwarded with the final redirect
+    // (e.g. to auth UI), since browsers will still consider this redirection chain as originating
+    // from the external oauth provider and thus not to be same site..
+    SameSite::Lax,
   ));
   cookies.add(new_cookie(
     state,
     COOKIE_REFRESH_TOKEN,
     refresh_token,
     refresh_token_ttl,
-    /* same_site_strict= */ true,
+    SameSite::Strict,
   ));
 
   // NOTE: we're removing the OAUTH_STATE cookie deliberately late in case there are any

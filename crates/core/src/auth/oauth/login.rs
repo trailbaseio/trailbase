@@ -9,7 +9,7 @@ use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
-use crate::auth::util::new_cookie;
+use crate::auth::util::{SameSite, new_cookie};
 use crate::config::proto;
 use crate::constants::COOKIE_OAUTH_STATE;
 
@@ -91,15 +91,13 @@ pub(crate) async fn login_with_external_auth_provider(
     COOKIE_OAUTH_STATE,
     // Encoding as JWT token for tamper proofing. This doesn't encrypt anything but merely adds a
     // signature. None of the state handed to the user needs to be hidden from the user.
-    //
-    // NOTE: we need cookie to be included when redirected back from oauth provider, thus
-    // `same_site_strict = false`.
     state
       .jwt()
       .encode(&oauth_state)
       .map_err(|err| AuthError::Internal(err.into()))?,
     Duration::minutes(5),
-    /* same_site_strict= */ false,
+    // NOTE: we need cookie to be included when redirected back from oauth provider, thus:
+    SameSite::None,
   ));
 
   Ok(Redirect::to(authorize_url.as_str()))

@@ -4,10 +4,7 @@ use const_format::formatcp;
 use regex::Regex;
 use sha2::{Digest, Sha256};
 use std::sync::LazyLock;
-use tower_cookies::{
-  Cookie, Cookies,
-  cookie::{self, SameSite},
-};
+use tower_cookies::{Cookie, Cookies, cookie};
 use trailbase_sqlite::params;
 use validator::ValidateEmail;
 
@@ -17,6 +14,8 @@ use crate::auth::user::DbUser;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
 };
+
+pub use tower_cookies::cookie::SameSite;
 
 /// Strips plus-addressing, e.g. foo+spam@test.org becomes foo@test.org.
 ///
@@ -228,7 +227,7 @@ pub(crate) fn new_cookie(
   key: &'static str,
   value: String,
   ttl: Duration,
-  same_site_strict: bool,
+  same_site: SameSite,
 ) -> Cookie<'static> {
   // TODO: We may want to make `same_site` configurable. By default we pick the strict setting,
   // i.e. have browsers not attach the cookie when coming from another site. This can prevent
@@ -240,7 +239,7 @@ pub(crate) fn new_cookie(
     value,
     ttl,
     /* tls_only= */ secure_tls_only(state),
-    /* same_site_strict= */ same_site_strict,
+    same_site,
   );
 }
 
@@ -263,7 +262,7 @@ fn new_cookie_opts(
   value: String,
   ttl: Duration,
   tls_only: bool,
-  same_site_strict: bool,
+  same_site: SameSite,
 ) -> Cookie<'static> {
   return Cookie::build((key, value))
     .path("/")
@@ -272,11 +271,7 @@ fn new_cookie_opts(
     // Only send cookie over HTTPs.
     .secure(tls_only)
     // Only include cookie if request originates from origin site.
-    .same_site(if same_site_strict {
-      SameSite::Strict
-    } else {
-      SameSite::Lax
-    })
+    .same_site(same_site)
     .max_age(cookie::time::Duration::seconds(ttl.num_seconds()))
     .build();
 }
@@ -292,7 +287,7 @@ pub(crate) fn remove_cookie(cookies: &Cookies, key: &'static str) {
       "".to_string(),
       Duration::seconds(1),
       /* tls_only= */ false,
-      /* same_site_strict= */ false,
+      SameSite::None,
     ));
   }
 }

@@ -17,7 +17,7 @@ use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validat
 use crate::auth::password::check_user_password;
 use crate::auth::user::DbUser;
 use crate::auth::util::{
-  new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
+  SameSite, new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
   validate_and_normalize_email_address, validate_and_normalize_username,
 };
 use crate::constants::{
@@ -296,14 +296,14 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
         COOKIE_AUTH_TOKEN,
         response.auth_token,
         auth_token_ttl,
-        /* same_site_strict= */ true,
+        SameSite::Strict,
       ));
       cookies.add(new_cookie(
         state,
         COOKIE_REFRESH_TOKEN,
         response.refresh_token,
         refresh_token_ttl,
-        /* same_site_strict= */ true,
+        SameSite::Strict,
       ));
 
       if let Some(ref redirect) = redirect {

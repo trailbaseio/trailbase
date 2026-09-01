@@ -7,7 +7,7 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{Tokens, reauth_with_refresh_token};
-use crate::auth::util::new_cookie;
+use crate::auth::util::{SameSite, new_cookie};
 use crate::constants::COOKIE_AUTH_TOKEN;
 
 #[derive(Debug, Serialize, Deserialize, TS, ToSchema)]
@@ -62,7 +62,7 @@ pub(crate) async fn login_status_handler(
         COOKIE_AUTH_TOKEN,
         auth_token.clone(),
         ttl,
-        /* same_site_strict= */ true,
+        SameSite::Strict,
       ));
     }
 
