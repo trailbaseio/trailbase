@@ -3,13 +3,14 @@ use axum::response::Redirect;
 use chrono::Duration;
 use oauth2::{CsrfToken, PkceCodeChallenge, Scope};
 use tower_cookies::Cookies;
+use tower_cookies::cookie::SameSite;
 
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
-use crate::auth::util::new_cookie;
+use crate::auth::util::{new_cookie_same_site, secure_tls_only};
 use crate::config::proto;
 use crate::constants::COOKIE_OAUTH_STATE;
 
@@ -39,6 +40,11 @@ pub(crate) async fn login_with_external_auth_provider(
     client: oauth_client,
     ..
   } = oauth_entry;
+
+  // Some providers, e.g. Apple, respond to the authorization request with an auto-submitting
+  // form POSTing the response to our callback (`response_mode=form_post`) rather than
+  // redirecting with query parameters.
+  let form_post_response_mode = provider.uses_form_post_response_mode();
 
   let login_params = build_and_validate_input_params(&state, login_input_query)?;
   let user_identifier = state
@@ -86,20 +92,37 @@ pub(crate) async fn login_with_external_auth_provider(
     },
   };
 
-  cookies.add(new_cookie(
+  // NOTE: we need cookie to be included when redirected back from oauth provider, thus
+  // `same_site` can at most be `Lax`. For providers responding with `form_post`, the
+  // response is a cross-site POST navigation and `SameSite=Lax` cookies are not attached
+  // to those, so we have to fall back to `SameSite=None` (which browsers only honor
+  // together with `Secure`, i.e. HTTPS).
+  let state_cookie_same_site = if form_post_response_mode {
+    SameSite::None
+  } else {
+    SameSite::Lax
+  };
+
+  if form_post_response_mode && !secure_tls_only(&state) {
+    log::warn!(
+      "OAuth provider '{}' responds with `response_mode=form_post`, but the site \
+       isn't served over HTTPS: browsers drop `SameSite=None` cookies without the `Secure` \
+       attribute and the OAuth flow will fail at the callback",
+      provider.name()
+    );
+  }
+
+  cookies.add(new_cookie_same_site(
     &state,
     COOKIE_OAUTH_STATE,
     // Encoding as JWT token for tamper proofing. This doesn't encrypt anything but merely adds a
     // signature. None of the state handed to the user needs to be hidden from the user.
-    //
-    // NOTE: we need cookie to be included when redirected back from oauth provider, thus
-    // `same_site_strict = false`.
     state
       .jwt()
       .encode(&oauth_state)
       .map_err(|err| AuthError::Internal(err.into()))?,
     Duration::minutes(5),
-    /* same_site_strict= */ false,
+    state_cookie_same_site,
   ));
 
   Ok(Redirect::to(authorize_url.as_str()))
