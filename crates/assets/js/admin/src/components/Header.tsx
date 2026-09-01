@@ -1,5 +1,7 @@
-import { JSX, Show } from "solid-js";
+import { useContext, JSX, Show } from "solid-js";
+
 import { Separator } from "@/components/ui/separator";
+import { SidebarContext, SidebarTrigger } from "@/components/ui/sidebar";
 
 export function Header(props: {
   title: string;
@@ -9,14 +11,28 @@ export function Header(props: {
   leading?: JSX.Element;
   class?: string;
 }) {
+  const context = useContext(SidebarContext);
+  const hasLeading = () => props.leading || context;
+
   return (
     <div class={props.class}>
       <header
-        class={`${props.leading ? "mr-4" : "mx-4"} my-3 flex flex-wrap items-center gap-2`}
+        class={`${hasLeading() ? "mr-4" : "mx-4"} my-3 flex flex-wrap items-center gap-2`}
       >
-        <Show when={props.leading !== undefined}>
-          <div class="bg-sidebar-accent flex h-10 w-9 items-center justify-center rounded-r-lg">
+        <Show when={props.leading}>
+          <div class="hover:bg-accent hover:text-accent-foreground flex h-10 w-9 items-center justify-center rounded-r-lg">
             {props.leading}
+          </div>
+        </Show>
+
+        <Show when={!props.leading && context}>
+          <div
+            class="hover:bg-accent hover:text-accent-foreground flex h-10 w-9 items-center justify-center rounded-r-lg"
+            onClick={() => {
+              context?.toggleSidebar();
+            }}
+          >
+            <SidebarTrigger />
           </div>
         </Show>
 

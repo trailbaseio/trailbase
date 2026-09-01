@@ -209,7 +209,7 @@ function BackButton() {
   return (
     <A
       href="/wasm"
-      class="text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors"
+      class="text-muted-foreground hover:text-foreground flex size-full items-center justify-center transition-colors"
       title="Back to the list of WASM components"
     >
       <TbOutlineArrowLeft size={20} />

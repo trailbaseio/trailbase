@@ -48,7 +48,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import { showToast } from "@/components/ui/toast";
 
 import { DebugDialogButton } from "@/components/tables/SchemaDownload";
@@ -446,7 +445,6 @@ function TableHeader(props: {
 
   return (
     <Header
-      leading={<SidebarTrigger />}
       title={headerTitle()}
       titleSelect={prettyFormatQualifiedName(selectedSchema().name)}
       left={

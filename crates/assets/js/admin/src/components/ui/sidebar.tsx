@@ -45,7 +45,7 @@ type SidebarContext = {
   toggleSidebar: () => void
 }
 
-const SidebarContext = createContext<SidebarContext | null>(null)
+export const SidebarContext = createContext<SidebarContext | null>(null)
 
 function useSidebar() {
   const context = useContext(SidebarContext)
@@ -267,8 +267,10 @@ const SidebarTrigger = <T extends ValidComponent = "button">(props: SidebarTrigg
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      class={cn("size-7", local.class)}
+      class={cn("size-6", local.class)}
       onClick={(event: MouseEvent) => {
+        event.stopPropagation();
+
         local.onClick?.(event)
         toggleSidebar()
       }}
@@ -353,7 +355,7 @@ const SidebarInput = <T extends ValidComponent = "input">(props: SidebarInputPro
 const SidebarHeader: Component<ComponentProps<"div">> = (props) => {
   const [local, others] = splitProps(props, ["class"])
   return (
-    <div data-sidebar="header" class={cn("flex flex-col gap-2 p-2", local.class)} {...others} />
+    <div data-sidebar="header" class={cn("flex flex-col gap-2 px-2 py-1", local.class)} {...others} />
   )
 }
 

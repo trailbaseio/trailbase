@@ -23,6 +23,8 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
@@ -69,27 +71,41 @@ function pickInitiallySelectedTable(
     }
   }
 
-  const first = tables[0];
+  const first = tables.find(([t, _]) => !hiddenTable(t)) ?? tables[0];
   console.debug(
     `Table '${qualifiedTableName}' not found. Fallback: ${prettyFormatQualifiedName(first[0].name)}`,
   );
   return first;
 }
 
-function tableCompare(
-  a: [Table, string] | [View, string],
-  b: [Table, string] | [View, string],
-): number {
-  const aHidden = hiddenTable(a[0]);
-  const bHidden = hiddenTable(b[0]);
+function tableCompare(a: Table | View, b: Table | View): number {
+  const [aDb, bDb] = [
+    a.name.database_schema ?? "main",
+    b.name.database_schema ?? "main",
+  ];
+  if (aDb !== bDb) {
+    return aDb.localeCompare(bDb);
+  }
 
+  const [aHidden, bHidden] = [hiddenTable(a), hiddenTable(b)];
   if (aHidden == bHidden) {
-    return prettyFormatQualifiedName(a[0].name).localeCompare(
-      prettyFormatQualifiedName(b[0].name),
-    );
+    return a.name.name.localeCompare(b.name.name);
   }
   // Sort hidden tables to the back.
   return aHidden ? 1 : -1;
+}
+
+function groupBy<T, K>(arr: T[], keySelector: (item: T) => K): T[][] {
+  const groups = arr.reduce((acc, item) => {
+    const key = keySelector(item);
+    if (!acc.has(key)) {
+      acc.set(key, []);
+    }
+    acc.get(key)!.push(item);
+    return acc;
+  }, new Map<K, T[]>());
+
+  return Array.from(groups.values());
 }
 
 function TablePickerSidebar(props: {
@@ -106,30 +122,38 @@ function TablePickerSidebar(props: {
   const selectedTable = () => props.selectedTable;
   const navigate = useNavigate();
 
-  return (
-    <div class="p-2">
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {/* Add table & show hidden tables buttons */}
-          <div class="flex w-full justify-between gap-2">
-            <Button
-              class="min-w-[100px] grow gap-2"
-              variant="secondary"
-              disabled={props.postgres}
-              onClick={() => {
-                setOpenMobile(false);
-                props.openCreateTableDialog();
-              }}
-            >
-              <TbOutlineTablePlus />
-              Add Table
-            </Button>
+  const tablesAndViewsBySchema = createMemo((): (Table | View)[][] => {
+    const show = showHidden();
+    const bySchema = groupBy(
+      show
+        ? props.tablesAndViews
+        : props.tablesAndViews.filter(
+            (t) => !hiddenTable(t) || t === selectedTable(),
+          ),
+      (table) => table.name.database_schema ?? "main",
+    );
+    for (const tables of bySchema) {
+      tables.sort(tableCompare);
+    }
+    return bySchema;
+  });
 
+  return (
+    <>
+      {/* Add table & show hidden tables buttons */}
+      <SidebarHeader>
+        <div class="flex justify-between gap-2 p-2">
+          <div>
+            <h3>Schemas</h3>
+            <span class="text-xs">{props.tablesAndViews.length} visible</span>
+          </div>
+
+          <div class="flex gap-1">
             <Tooltip>
               <TooltipTrigger as="div">
                 <Button
                   size="icon"
-                  variant="secondary"
+                  variant="ghost"
                   onClick={() => {
                     const nextShowHidden = !(settings().showHidden ?? false);
                     const currentHidden = () => {
@@ -160,58 +184,96 @@ function TablePickerSidebar(props: {
                 Toggle visibility of hidden tables.
               </TooltipContent>
             </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={props.postgres}
+                  onClick={() => {
+                    setOpenMobile(false);
+                    props.openCreateTableDialog();
+                  }}
+                >
+                  <TbOutlineTablePlus />
+                </Button>
+              </TooltipTrigger>
+
+              <TooltipContent>Add new table.</TooltipContent>
+            </Tooltip>
           </div>
+        </div>
+      </SidebarHeader>
 
-          <For each={props.tablesAndViews}>
-            {(item: Table | View) => {
-              const hidden = hiddenTable(item);
-              const type = tableType(item);
-              const selected = () => {
-                const s = selectedTable();
-                if (s !== undefined) {
-                  return equalQualifiedNames(item.name, s.name);
-                }
-                return false;
-              };
+      <SidebarContent class="px-2">
+        <For each={tablesAndViewsBySchema()}>
+          {(tables: (Table | View)[]) => (
+            <SidebarGroup>
+              <SidebarGroupLabel>
+                <div class="flex w-full justify-between gap-2">
+                  <span>{tables[0].name.database_schema ?? "main"}</span>
 
-              const name = prettyFormatQualifiedName(item.name);
+                  <span class="text-xs">{tables.length}</span>
+                </div>
+              </SidebarGroupLabel>
 
-              return (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={selected()}
-                    tooltip={prettyFormatQualifiedName(item.name)}
-                    variant="default"
-                    size="md"
-                    onClick={() => {
-                      setOpenMobile(false);
-                      navigateToTable(navigate, item);
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <For each={tables}>
+                    {(item: Table | View) => {
+                      const hidden = hiddenTable(item);
+                      const type = tableType(item);
+                      const selected = () => {
+                        const s = selectedTable();
+                        if (s !== undefined) {
+                          return equalQualifiedNames(item.name, s.name);
+                        }
+                        return false;
+                      };
+
+                      const name = prettyFormatQualifiedName(item.name);
+
+                      return (
+                        <SidebarMenuItem>
+                          <SidebarMenuButton
+                            isActive={selected()}
+                            tooltip={prettyFormatQualifiedName(item.name)}
+                            variant="default"
+                            size="md"
+                            onClick={() => {
+                              setOpenMobile(false);
+                              navigateToTable(navigate, item);
+                            }}
+                          >
+                            <Switch>
+                              <Match when={type === "view"}>
+                                <TbOutlineEye />
+                              </Match>
+
+                              <Match when={type === "virtualTable"}>
+                                <TbOutlineWand />
+                              </Match>
+
+                              <Match when={type === "table"}>
+                                <TbOutlineTable />
+                              </Match>
+                            </Switch>
+
+                            <span class="truncate">{name}</span>
+                            {hidden && <TbOutlineLock />}
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
                     }}
-                  >
-                    <Switch>
-                      <Match when={type === "view"}>
-                        <TbOutlineEye />
-                      </Match>
-
-                      <Match when={type === "virtualTable"}>
-                        <TbOutlineWand />
-                      </Match>
-
-                      <Match when={type === "table"}>
-                        <TbOutlineTable />
-                      </Match>
-                    </Switch>
-
-                    <span class="truncate">{name}</span>
-                    {hidden && <TbOutlineLock />}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            }}
-          </For>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </div>
+                  </For>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          )}
+        </For>
+      </SidebarContent>
+    </>
   );
 }
 
@@ -235,24 +297,17 @@ function TableSplitView(props: {
 }) {
   const navigate = useNavigate();
   const isMobile = createIsMobile();
-  const settings = useStore($explorerSettings);
-  const showHidden = () => settings().showHidden ?? false;
   const [createTableDialog, setCreateTableDialog] = createSignal(false);
 
   const allTables = createMemo(() => props.schemas.tables.map(([t, _]) => t));
-  const filteredTablesAndViews = createMemo(() => {
-    const all = [...props.schemas.tables, ...props.schemas.views];
-
-    const show = showHidden();
-    if (show) {
-      return all.sort(tableCompare);
-    }
-    return all.filter(([t, _]) => !hiddenTable(t)).sort(tableCompare);
-  });
+  const allTablesAndView = createMemo(() => [
+    ...props.schemas.tables.map(([t, _]) => t),
+    ...props.schemas.views.map(([v, _]) => v),
+  ]);
 
   const params = useParams<{ table: string | undefined }>();
   const selectedTable = createMemo(() => {
-    const filteredTables = filteredTablesAndViews();
+    const all = [...props.schemas.tables, ...props.schemas.views];
 
     // NOTE: useParams used to return undefined as a "undefined" string. Does no longer seem to be the case.
     // We can probably simplify this.
@@ -261,7 +316,7 @@ function TableSplitView(props: {
         ? undefined
         : decodeURIComponent(params.table);
 
-    return pickInitiallySelectedTable(filteredTables, table);
+    return pickInitiallySelectedTable(all, table);
   });
 
   const systemInfo = createSystemInfoQuery();
@@ -280,11 +335,11 @@ function TableSplitView(props: {
                 schemaRefetch={props.schemaRefetch}
                 allTables={allTables()}
                 setSelected={(tableName: QualifiedName) => {
-                  const table = filteredTablesAndViews().find(([t, _]) =>
+                  const table = allTablesAndView().find((t) =>
                     equalQualifiedNames(t.name, tableName),
                   );
                   if (table) {
-                    navigateToTable(navigate, table[0]);
+                    navigateToTable(navigate, table);
                   }
                 }}
                 {...sheet}
@@ -298,24 +353,14 @@ function TableSplitView(props: {
                 side="left"
                 collapsible="offcanvas"
               >
-                <SidebarContent>
-                  {/* <SidebarHeader /> */}
-
-                  <SidebarGroup>
-                    <TablePickerSidebar
-                      tablesAndViews={filteredTablesAndViews().map(
-                        ([t, _]) => t,
-                      )}
-                      allTables={allTables()}
-                      selectedTable={selectedTable()?.[0]}
-                      schemaRefetch={props.schemaRefetch}
-                      openCreateTableDialog={() => setCreateTableDialog(true)}
-                      postgres={isPostgres()}
-                    />
-                  </SidebarGroup>
-
-                  {/* <SidebarFooter /> */}
-                </SidebarContent>
+                <TablePickerSidebar
+                  tablesAndViews={allTablesAndView()}
+                  allTables={allTables()}
+                  selectedTable={selectedTable()?.[0]}
+                  schemaRefetch={props.schemaRefetch}
+                  openCreateTableDialog={() => setCreateTableDialog(true)}
+                  postgres={isPostgres()}
+                />
 
                 <SidebarRail />
               </Sidebar>

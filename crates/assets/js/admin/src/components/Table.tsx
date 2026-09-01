@@ -376,7 +376,7 @@ function TableHeaderRow<TData>(props: {
       </Match>
 
       <Match when={true}>
-        <TableHead class="relative pr-5 pl-4" onClick={toggleSorting()}>
+        <TableHead class="relative pr-4" onClick={toggleSorting()}>
           <HeadContents />
 
           {/* Sorting arrow */}

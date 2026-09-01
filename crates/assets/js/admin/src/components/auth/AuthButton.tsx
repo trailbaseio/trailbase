@@ -103,7 +103,7 @@ export function AuthButton(props: { iconSize: number }) {
         </Show>
 
         <DialogFooter>
-          <div class="flex justify-end gap-4">
+          <div class="flex w-full justify-between gap-4">
             <Show when={user()}>
               <TotpToggleButton client={client} user={user()!} />
             </Show>

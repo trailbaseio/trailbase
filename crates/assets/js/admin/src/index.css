@@ -271,16 +271,17 @@
 
 @layer base {
   h1 {
-    @apply text-xl;
-    font-weight: 700;
-  }
-
-  h2 {
     @apply text-lg;
     font-weight: 700;
   }
 
+  h2 {
+    /* @apply text-md; */
+    font-weight: 700;
+  }
+
   h3 {
+    @apply text-sm;
     font-weight: 700;
   }
 

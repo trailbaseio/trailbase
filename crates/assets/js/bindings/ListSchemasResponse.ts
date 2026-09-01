@@ -4,4 +4,20 @@ import type { TableIndex } from "./TableIndex";
 import type { TableTrigger } from "./TableTrigger";
 import type { View } from "./View";
 
-export type ListSchemasResponse = { tables: Array<[Table, string]>, indexes: Array<[TableIndex, string]>, triggers: Array<[TableTrigger, string]>, views: Array<[View, string]>, };
+export type ListSchemasResponse = { 
+/**
+ * List of tuples of `Table` schema + `CREATE TABLE` query.
+ */
+tables: Array<[Table, string]>, 
+/**
+ * List of tuples of `TableIndex` schema + `CREATE INDEX` query.
+ */
+indexes: Array<[TableIndex, string]>, 
+/**
+ * List of tuples of `TableTrigger` schema + `CREATE Trigger` query.
+ */
+triggers: Array<[TableTrigger, string]>, 
+/**
+ * List of tuples of `View` schema + `CREATE View` query.
+ */
+views: Array<[View, string]>, };

@@ -41,7 +41,6 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 
@@ -545,7 +544,6 @@ export function SettingsPage() {
       <Header
         title="Settings"
         titleSelect={activeSite().label}
-        leading={<SidebarTrigger />}
         left={
           <IconButton onClick={() => invalidateConfig(queryClient)}>
             <TbOutlineRefresh />

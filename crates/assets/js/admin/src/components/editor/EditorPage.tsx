@@ -56,13 +56,13 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import {
@@ -275,66 +275,86 @@ function EditorSidebar(props: {
   const addNewScript = () => props.setSelected(createNewScript());
 
   return (
-    <div class="p-2">
-      <SidebarGroupContent>
-        <SidebarMenu>
-          <Button
-            class="flex gap-2"
-            variant="secondary"
-            onClick={() => {
-              setOpenMobile(false);
-              addNewScript();
-            }}
-          >
-            <TbOutlinePencilPlus /> New
-          </Button>
+    <>
+      <SidebarHeader>
+        <div class="flex justify-between gap-2 p-2">
+          <div>
+            <h3>Saved queries</h3>
+            <span class="text-xs">{scripts().length} saved</span>
+          </div>
 
-          <For each={scripts()}>
-            {(script: Script, i: Accessor<number>) => {
-              const scriptName = () => scripts()[i()].name;
-              const showStar = () => props.selected === i() && props.dirty;
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button
+                class="flex gap-2"
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setOpenMobile(false);
+                  addNewScript();
+                }}
+              >
+                <TbOutlinePencilPlus />
+              </Button>
+            </TooltipTrigger>
 
-              return (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    isActive={props.selected === i()}
-                    tooltip={scriptName()}
-                    class="pr-0"
-                    variant="default"
-                    size="md"
-                    onClick={() => {
-                      setOpenMobile(false);
-                      props.setSelected(i());
-                    }}
-                  >
-                    <div class="flex w-full items-center justify-between">
-                      <span class="truncate">
-                        {`${scriptName()}${showStar() ? "*" : ""}`}
-                      </span>
+            <TooltipContent>Add new script.</TooltipContent>
+          </Tooltip>
+        </div>
+      </SidebarHeader>
 
-                      <div class="flex">
-                        <RenameDialog selected={i()} script={script} />
+      <SidebarContent class="px-2">
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <For each={scripts()}>
+                {(script: Script, i: Accessor<number>) => {
+                  const scriptName = () => scripts()[i()].name;
+                  const showStar = () => props.selected === i() && props.dirty;
 
-                        <IconButton
-                          class="hover:bg-border"
-                          tooltip="Delete this script"
-                          onClick={(e) => {
-                            props.deleteScriptByIdx(i());
-                            e.stopPropagation();
-                          }}
-                        >
-                          <TbOutlineTrash />
-                        </IconButton>
-                      </div>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            }}
-          </For>
-        </SidebarMenu>
-      </SidebarGroupContent>
-    </div>
+                  return (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton
+                        isActive={props.selected === i()}
+                        tooltip={scriptName()}
+                        class="pr-0"
+                        variant="default"
+                        size="md"
+                        onClick={() => {
+                          setOpenMobile(false);
+                          props.setSelected(i());
+                        }}
+                      >
+                        <div class="flex w-full items-center justify-between">
+                          <span class="truncate">
+                            {`${scriptName()}${showStar() ? "*" : ""}`}
+                          </span>
+
+                          <div class="flex">
+                            <RenameDialog selected={i()} script={script} />
+
+                            <IconButton
+                              class="hover:bg-border"
+                              tooltip="Delete this script"
+                              onClick={(e) => {
+                                props.deleteScriptByIdx(i());
+                                e.stopPropagation();
+                              }}
+                            >
+                              <TbOutlineTrash />
+                            </IconButton>
+                          </div>
+                        </div>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                }}
+              </For>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </>
   );
 }
 
@@ -620,7 +640,6 @@ function EditorPanel(props: {
 
       <Header
         title="Editor"
-        leading={<SidebarTrigger />}
         titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
         right={
           <div class="flex items-center">
@@ -780,19 +799,13 @@ export function EditorPage() {
         side="left"
         collapsible="offcanvas"
       >
-        <SidebarContent>
-          <SidebarGroup>
-            <EditorSidebar
-              selected={selected()}
-              setSelected={switchToScript}
-              dirty={dirty()}
-              horizontal={true}
-              deleteScriptByIdx={deleteScriptByIdx}
-            />
-          </SidebarGroup>
-
-          {/* <SidebarFooter /> */}
-        </SidebarContent>
+        <EditorSidebar
+          selected={selected()}
+          setSelected={switchToScript}
+          dirty={dirty()}
+          horizontal={true}
+          deleteScriptByIdx={deleteScriptByIdx}
+        />
 
         <SidebarRail />
       </Sidebar>

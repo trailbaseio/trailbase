@@ -23,9 +23,13 @@ pub struct TableTrigger {
 #[derive(Clone, Default, Debug, Serialize, TS, utoipa::ToSchema)]
 #[ts(export)]
 pub struct ListSchemasResponse {
+  /// List of tuples of `Table` schema + `CREATE TABLE` query.
   pub tables: Vec<(Table, String)>,
+  /// List of tuples of `TableIndex` schema + `CREATE INDEX` query.
   pub indexes: Vec<(TableIndex, String)>,
+  /// List of tuples of `TableTrigger` schema + `CREATE Trigger` query.
   pub triggers: Vec<(TableTrigger, String)>,
+  /// List of tuples of `View` schema + `CREATE View` query.
   pub views: Vec<(View, String)>,
 }
 
