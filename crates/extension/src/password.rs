@@ -1,4 +1,3 @@
-use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use rusqlite::Error;
 use rusqlite::functions::{Context, FunctionFlags};
@@ -21,10 +20,15 @@ pub enum PasswordError {
 impl From<argon2::password_hash::Error> for PasswordError {
   fn from(value: argon2::password_hash::Error) -> Self {
     return match value {
-      argon2::password_hash::Error::Password => Self::InvalidPassword,
-      argon2::password_hash::Error::PhcStringTrailingData => Self::InvalidHash,
-      argon2::password_hash::Error::PhcStringField => Self::InvalidHash,
-      _err => Self::Other,
+      argon2::password_hash::Error::PasswordInvalid => Self::InvalidPassword,
+      argon2::password_hash::Error::Algorithm
+      | argon2::password_hash::Error::EncodingInvalid
+      | argon2::password_hash::Error::OutputSize
+      | argon2::password_hash::Error::ParamInvalid { .. }
+      | argon2::password_hash::Error::ParamsInvalid
+      | argon2::password_hash::Error::SaltInvalid
+      | argon2::password_hash::Error::Version => Self::InvalidHash,
+      _ => Self::Other,
     };
   }
 }
@@ -41,8 +45,7 @@ impl From<bcrypt::BcryptError> for PasswordError {
 static ARGON2: LazyLock<Argon2<'static>> = LazyLock::new(Argon2::default);
 
 pub fn hash_password(password: &str) -> Result<String, PasswordError> {
-  let salt = SaltString::generate(&mut OsRng);
-  let hash = ARGON2.hash_password(password.as_bytes(), &salt)?;
+  let hash = ARGON2.hash_password(password.as_bytes())?;
   return Ok(hash.to_string());
 }
 

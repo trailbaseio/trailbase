@@ -55,6 +55,7 @@ strip = "debuginfo" # ("symbols", "debuginfo", "none")
 opt-level = 1
 
 [workspace.dependencies]
+argon2 = { version = "^0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash"] }
 askama = { version = "0.16.0", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.9", default-features = false, features = ["multipart"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc", "std"] }
@@ -68,7 +69,7 @@ flume = { version = "0.12.0", default-features = false, features = ["select", "a
 futures-util = { version = "0.3.34", default-features = false, features = ["alloc", "spin"] }
 http = { version = "1.5.0", default-features = false }
 http-body-util = { version = "0.1.5", default-features = false }
-hyper = { version = "1.11.0", default-features = false }
+hyper = { version = "1.11.1", default-features = false }
 itertools = { version = "0.15.0", default-features = false, features = ["use_std"] }
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 libsqlite3-sys = { version = "0.38.2", default-features = false, features = ["bundled", "preupdate_hook"] }

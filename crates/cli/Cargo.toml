@@ -29,7 +29,7 @@ jsonwebtoken = { workspace = true }
 log = { workspace = true }
 mimalloc = { version = "^0.1.52", default-features = false }
 reqwest = { workspace = true }
-rmcp = { version = "^3.1.4", default-features = false, features = ["server", "transport-io"], optional = true }
+rmcp = { version = "^3.2.0", default-features = false, features = ["server", "transport-io"], optional = true }
 rmcp-openapi = { workspace = true, optional = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }

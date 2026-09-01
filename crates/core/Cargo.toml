@@ -36,7 +36,7 @@ ws = ["axum/ws"]
 
 [dependencies]
 aes-gcm-siv = "0.12.1"
-argon2 = { version = "^0.5.3", default-features = false, features = ["alloc", "password-hash"] }
+argon2 = { workspace = true }
 askama = { workspace = true }
 async-channel = "2.5.0"
 async-trait = "0.1.92"
@@ -60,10 +60,10 @@ governor = "0.10.4"
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = "0.1.20"
-indexmap = "2.14.0"
+indexmap = "2.14.1"
 init-tracing-opentelemetry = { version = "0.38.1", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.52.0", default-features = false }
+jsonschema = { version = "0.52.1", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.0"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
@@ -100,11 +100,11 @@ tokio-rustls = { workspace = true }
 totp-rs = { version = "^6.0.0", features = ["gen_secret", "qr", "otpauth"] }
 tower = "0.5.3"
 tower-cookies = "0.11.0"
-tower-http = { version = "^0.7.0", default-features = false, features = ["cors", "trace", "fs", "limit"] }
+tower-http = { version = "^0.7.1", default-features = false, features = ["cors", "trace", "fs", "limit"] }
 tower-service = { version = "0.3.3", default-features = false }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tracing = { workspace = true }
-tracing-opentelemetry-instrumentation-sdk = "0.38.1"
+tracing-opentelemetry-instrumentation-sdk = "0.38.3"
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-auth-config = { workspace = true }
@@ -140,9 +140,9 @@ env_logger = { workspace = true }
 indoc = "2.0.7"
 pglite-oxide = "0.5.1"
 quoted_printable = "0.5.2"
-rcgen = "0.14.9"
+rcgen = "0.14.10"
 schemars = "1.2.2"
 temp-dir = "0.2.0"
-tokio-metrics = "0.5.1"
+tokio-metrics = "0.5.2"
 tower = { version = "0.5.3", features = ["util"] }
 trailbase-extension = { workspace = true }
