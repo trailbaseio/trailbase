@@ -41,7 +41,7 @@ askama = { workspace = true }
 async-channel = "2.5.0"
 async-trait = "0.1.92"
 axum = { workspace = true }
-axum-tracing-opentelemetry = { version = "0.38.0", optional = true }
+axum-tracing-opentelemetry = { version = "0.39.1", optional = true }
 base32 = "0.5.1"
 base64 = { workspace = true }
 bytes = { workspace = true }
@@ -61,7 +61,7 @@ http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = "0.1.20"
 indexmap = "2.14.1"
-init-tracing-opentelemetry = { version = "0.38.1", features = ["tracing_subscriber_ext", "metrics"], optional = true }
+init-tracing-opentelemetry = { version = "0.41.1", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
 jsonschema = { version = "0.52.1", default-features = false }
 jsonwebtoken = { workspace = true }

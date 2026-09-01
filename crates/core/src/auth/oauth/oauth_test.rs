@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 use crate::api::AuthTokenClaims;
 use crate::app_state::{AppState, TestStateOptions, test_state};
+use crate::auth::AuthError;
 use crate::auth::api::token::{
   AuthCodeToTokenRequest, TokenResponse as TokenHandlerResponse, auth_code_to_token_handler,
 };
@@ -20,7 +21,6 @@ use crate::auth::oauth::providers::test::{TestOAuthProvider, TestUser};
 use crate::auth::oauth::state::OAuthStateClaims;
 use crate::auth::oauth::{callback, list_providers, login};
 use crate::auth::user::DbUser;
-use crate::auth::AuthError;
 use crate::auth::util::derive_pkce_code_challenge;
 use crate::config::proto;
 use crate::constants::{

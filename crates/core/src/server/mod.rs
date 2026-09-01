@@ -125,7 +125,7 @@ impl Server {
       date = version_info.git_commit_date.unwrap_or_default(),
     );
 
-    Self::build_tracing(&state, log_responses).init();
+    Self::setup_tracing(&state, log_responses);
 
     let mut custom_routers: Vec<OpenApiRouter<AppState>> =
       custom_router.into_iter().map(|r| r.into()).collect();
@@ -232,10 +232,7 @@ impl Server {
     };
   }
 
-  fn build_tracing(
-    state: &AppState,
-    log_responses: bool,
-  ) -> impl tracing_subscriber::layer::SubscriberExt {
+  fn setup_tracing(state: &AppState, log_responses: bool) {
     // Initialize tracing subscribers/layers.
     //
     // A few notes in case initialization below panics. The `log` and `tracing` crates/systems are
@@ -256,34 +253,42 @@ impl Server {
     // `SqliteLogLayer`.
     //
     // Response log events are emitted at the INFO level, see `logging.rs`
-    #[cfg(not(feature = "otel"))]
-    let subscriber = tracing_subscriber::Registry::default();
-
-    #[cfg(feature = "otel")]
-    let subscriber = {
-      let (subscriber, otel_guard) =
-        init_tracing_opentelemetry::tracing_subscriber_ext::regiter_otel_layers(
-          tracing_subscriber::Registry::default(),
-        )
-        .expect("startup");
-
-      // TODO: We have to keep this alive. Let's find something better than a singleton.
-      static SINGLETON: OnceLock<init_tracing_opentelemetry::Guard> = OnceLock::new();
-      SINGLETON.get_or_init(move || init_tracing_opentelemetry::Guard::global(Some(otel_guard)));
-
-      subscriber
-    };
 
     let filter_layer = filter::Targets::new()
       .with_default(filter::LevelFilter::OFF)
       .with_target(crate::logging::EVENT_TARGET, crate::logging::LEVEL);
 
-    return subscriber
+    #[cfg(not(feature = "otel"))]
+    tracing_subscriber::Registry::default()
       .with(filter_layer)
       .with(logging::SqliteLogLayer::new(
         state,
         /* log-to-stdout= */ log_responses,
-      ));
+      ))
+      .init();
+
+    #[cfg(feature = "otel")]
+    {
+      let otel_guard = if state.dev_mode() {
+        init_tracing_opentelemetry::TracingConfig::development()
+      } else {
+        init_tracing_opentelemetry::TracingConfig::production()
+      }
+      .init_subscriber_ext(|subscriber| {
+        subscriber
+          .with(filter_layer)
+          .with(logging::SqliteLogLayer::new(
+            state,
+            /* log-to-stdout= */ log_responses,
+          ))
+      })
+      // .init_subscriber()
+      .expect("startup");
+
+      // TODO: We have to keep this alive. Let's find something better than a singleton.
+      static SINGLETON: OnceLock<init_tracing_opentelemetry::Guard> = OnceLock::new();
+      SINGLETON.get_or_init(move || otel_guard);
+    };
   }
 
   pub async fn serve(self) -> Result<(), AnyError> {
