@@ -1,3 +1,8 @@
+## v0.33.9
+
+- Admin UI: Integrate ERD graph UI from #283. Thanks @burggraf 🙏
+- Admin UI: Add descriptions to some of the page headers.
+
 ## v0.33.8
 
 - Many admin UI feature and style improvements inspired by #283. Thanks @burggraf 🙏
