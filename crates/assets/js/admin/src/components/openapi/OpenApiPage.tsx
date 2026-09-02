@@ -103,11 +103,7 @@ export default function Page() {
     <>
       <Header
         title="OpenApi Explorer"
-        left={
-          <div class="text-muted-foreground flex items-baseline-last text-xs">
-            {version()}
-          </div>
-        }
+        description={version()}
         right={
           <Popover id="test">
             <PopoverTrigger as={Button<"button">} variant="outline">

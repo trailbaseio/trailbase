@@ -260,9 +260,16 @@ export function WasmComponentDetails(props: {
 
       <Match when={true}>
         <Header
-          title={props.component.display_name ?? props.component.name}
           leading={BackButton()}
-          left={props.component.version && `@${props.component.version}`}
+          title={props.component.display_name ?? props.component.name}
+          description={
+            <span>
+              {props.component.name}
+              <Show when={props.component.version}>
+                {(version) => `@${version()}`}
+              </Show>
+            </span>
+          }
           right={
             <Show when={import.meta.env.DEV}>
               <SandboxButton

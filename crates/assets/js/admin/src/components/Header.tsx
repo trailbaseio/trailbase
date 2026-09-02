@@ -6,6 +6,7 @@ import { SidebarContext, SidebarTrigger } from "@/components/ui/sidebar";
 export function Header(props: {
   title: string;
   titleSelect?: JSX.Element;
+  description?: JSX.Element;
   left?: JSX.Element;
   right?: JSX.Element;
   leading?: JSX.Element;
@@ -37,14 +38,22 @@ export function Header(props: {
         </Show>
 
         <div class="flex min-h-[40px] flex-nowrap items-center gap-2">
-          <h1 class="m-0">
-            <span class="text-accent-600">{props.title}</span>
+          <div class="min-w-0">
+            <h1 class="m-0">
+              <span class="text-accent-600">{props.title}</span>
 
-            <Show when={props.titleSelect}>
-              <span class="text-muted-foreground mx-2">‣</span>
-              <span class="font-normal">{props.titleSelect}</span>
+              <Show when={props.titleSelect}>
+                <span class="text-muted-foreground mx-2">‣</span>
+                <span class="font-normal">{props.titleSelect}</span>
+              </Show>
+            </h1>
+
+            <Show when={props.description}>
+              <p class="text-muted-foreground m-0 text-xs">
+                {props.description}
+              </p>
             </Show>
-          </h1>
+          </div>
 
           {/* left */}
           <Show when={props.left !== undefined}>{props.left}</Show>

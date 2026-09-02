@@ -165,7 +165,18 @@ export function WasmComponentsList() {
 
   return (
     <div>
-      <Header title="WASM Components" />
+      <Header
+        title="WASM Components"
+        description={
+          <Show when={wasmComponents.data}>
+            {(data) => (
+              <span>
+                {data().components.filter((c) => c.installed).length} installed
+              </span>
+            )}
+          </Show>
+        }
+      />
 
       <div class="flex flex-col gap-3 p-4">
         <Callout class="text-sm">

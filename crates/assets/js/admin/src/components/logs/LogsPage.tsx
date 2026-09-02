@@ -354,6 +354,11 @@ function LogsPage() {
     <div class="h-full">
       <Header
         title="Logs"
+        description={
+          <Show when={logsFetch.data}>
+            {(data) => <span>{Number(data().total_row_count)} records</span>}
+          </Show>
+        }
         left={
           <IconButton onClick={refetch} tooltip="Refresh Logs">
             <TbOutlineRefresh />

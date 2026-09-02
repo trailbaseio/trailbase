@@ -482,6 +482,11 @@ export function AccountsPage() {
     <div>
       <Header
         title="Accounts"
+        description={
+          <Show when={users.data}>
+            {(data) => <span>{Number(data().total_row_count)} accounts</span>}
+          </Show>
+        }
         left={
           <IconButton onClick={refetch}>
             <TbOutlineRefresh />
