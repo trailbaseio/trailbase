@@ -3,16 +3,13 @@ import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 
-import { TablePane } from "@/components/tables/TablePane";
+import { TablePane, SchemaIcon } from "@/components/tables/TablePane";
 import { Button } from "@/components/ui/button";
 import { SheetContent } from "@/components/ui/sheet";
 import {
-  TbOutlineEye,
   TbOutlineLock,
   TbOutlineLockOpen,
-  TbOutlineTable,
   TbOutlineTablePlus,
-  TbOutlineWand,
 } from "solid-icons/tb";
 
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
@@ -246,21 +243,10 @@ function TablePickerSidebar(props: {
                               navigateToTable(navigate, item);
                             }}
                           >
-                            <Switch>
-                              <Match when={type === "view"}>
-                                <TbOutlineEye />
-                              </Match>
-
-                              <Match when={type === "virtualTable"}>
-                                <TbOutlineWand />
-                              </Match>
-
-                              <Match when={type === "table"}>
-                                <TbOutlineTable />
-                              </Match>
-                            </Switch>
+                            <SchemaIcon type={type} />
 
                             <span class="truncate">{name}</span>
+
                             {hidden && <TbOutlineLock />}
                           </SidebarMenuButton>
                         </SidebarMenuItem>

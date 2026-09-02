@@ -9,10 +9,12 @@ import {
 } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import {
+  TbOutlineColumns,
+  TbOutlineEye,
   TbOutlineRefresh,
   TbOutlineTable,
   TbOutlineTrash,
-  TbOutlineColumns,
+  TbOutlineWand,
 } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
@@ -50,6 +52,7 @@ import {
 } from "@/components/ui/select";
 import { showToast } from "@/components/ui/toast";
 
+import { Badge } from "@/components/ui/badge";
 import { DebugDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
@@ -247,9 +250,15 @@ function Uuid(props: {
   return (
     <Tooltip>
       <TooltipTrigger as="div">
-        {props.blobEncoding === "mixed"
-          ? urlSafeBase64ToUuid(props.base64UrlSafeBlob)
-          : render()}
+        <div class="font-mono text-xs">
+          <Switch>
+            <Match when={props.blobEncoding === "mixed"}>
+              {urlSafeBase64ToUuid(props.base64UrlSafeBlob)}
+            </Match>
+
+            <Match when={true}>{render()}</Match>
+          </Switch>
+        </div>
       </TooltipTrigger>
 
       <TooltipContent>
@@ -431,24 +440,19 @@ function TableHeader(props: {
 }) {
   const allTables = createMemo(() => props.allTables.map(([t, _]) => t));
   const selectedSchema = () => props.table[0];
-
-  const headerTitle = () => {
-    switch (tableType(selectedSchema())) {
-      case "view":
-        return "View";
-      case "virtualTable":
-        return "Virtual Table";
-      default:
-        return "Table";
-    }
-  };
+  const type = () => tableType(selectedSchema());
 
   return (
     <Header
-      title={headerTitle()}
-      titleSelect={prettyFormatQualifiedName(selectedSchema().name)}
+      title={selectedSchema().name.database_schema ?? "main"}
+      titleSelect={selectedSchema().name.name}
       left={
         <div class="flex items-center">
+          <Badge variant="outline" class="flex gap-1">
+            <SchemaIcon type={type()} />
+            {typeName(type())}
+          </Badge>
+
           <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
             <TbOutlineRefresh />
           </IconButton>
@@ -983,10 +987,22 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
 
       <p class="text-sm">
         The admin dashboard currently does not support modifying triggers.
-        Please use the editor to{" "}
-        <a href="https://www.sqlite.org/lang_createtrigger.html">create</a> new
-        triggers or <a href="https://sqlite.org/lang_droptrigger.html">drop</a>{" "}
-        existing ones.
+        Please use the{" "}
+        <a class="underline" href="/_/admin/editor">
+          editor
+        </a>{" "}
+        to{" "}
+        <a
+          class="underline"
+          href="https://www.sqlite.org/lang_createtrigger.html"
+        >
+          create
+        </a>{" "}
+        new or{" "}
+        <a class="underline" href="https://sqlite.org/lang_droptrigger.html">
+          drop
+        </a>{" "}
+        existing triggers.
       </p>
 
       <div class="mt-4">
@@ -1185,6 +1201,35 @@ function UnsatisfiedApiRequirementsTooltip(props: {
       </div>
     </div>
   );
+}
+
+export function SchemaIcon(props: { type: TableType }) {
+  return (
+    <Switch>
+      <Match when={props.type === "view"}>
+        <TbOutlineEye />
+      </Match>
+
+      <Match when={props.type === "virtualTable"}>
+        <TbOutlineWand />
+      </Match>
+
+      <Match when={props.type === "table"}>
+        <TbOutlineTable />
+      </Match>
+    </Switch>
+  );
+}
+
+function typeName(type: TableType): string {
+  switch (type) {
+    case "view":
+      return "View";
+    case "virtualTable":
+      return "Virtual Table";
+    default:
+      return "Table";
+  }
 }
 
 const sheetMaxWidth = "sm:max-w-[520px]";
