@@ -333,8 +333,8 @@ function TableHeaderRightHandButtons(props: {
 
       {/* Record API settings*/}
       {(type() === "table" || type() === "view") && !hidden() && (
-        <SafeSheet
-          children={(sheet) => {
+        <SafeSheet>
+          {(sheet) => {
             return (
               <>
                 <SheetContent class={sheetMaxWidth}>
@@ -383,13 +383,13 @@ function TableHeaderRightHandButtons(props: {
               </>
             );
           }}
-        />
+        </SafeSheet>
       )}
 
       {/* Alter table schema */}
       {type() === "table" && !hidden() && !props.postgres && (
-        <SafeSheet
-          children={(sheet) => {
+        <SafeSheet>
+          {(sheet) => {
             return (
               <>
                 <SheetContent class={sheetMaxWidth}>
@@ -416,7 +416,7 @@ function TableHeaderRightHandButtons(props: {
               </>
             );
           }}
-        />
+        </SafeSheet>
       )}
     </div>
   );
@@ -654,7 +654,8 @@ function RecordTable(props: {
             }
           },
         ]}
-        children={(sheet) => {
+      >
+        {(sheet) => {
           return (
             <>
               <SheetContent class={sheetMaxWidth}>
@@ -694,14 +695,14 @@ function RecordTable(props: {
             </>
           );
         }}
-      />
+      </SafeSheet>
 
       <div class="my-2 flex flex-wrap justify-between gap-2">
         {mutable() && (
           <div class="flex gap-2">
             {/* Insert Rows */}
-            <SafeSheet
-              children={(sheet) => {
+            <SafeSheet>
+              {(sheet) => {
                 return (
                   <>
                     <SheetContent class={sheetMaxWidth}>
@@ -722,7 +723,7 @@ function RecordTable(props: {
                   </>
                 );
               }}
-            />
+            </SafeSheet>
 
             {/* Delete rows */}
             <Button

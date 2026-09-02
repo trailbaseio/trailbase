@@ -68,10 +68,12 @@ export function BackupSettings(_props: {
             <div class="rounded-md border">
               <Table>
                 <TableHeader>
-                  <TableHead>Time</TableHead>
-                  <TableHead class="w-[120px]">
-                    <span class="flex justify-center">Actions</span>
-                  </TableHead>
+                  <TableRow>
+                    <TableHead>Time</TableHead>
+                    <TableHead class="w-[120px]">
+                      <span class="flex justify-center">Actions</span>
+                    </TableHead>
+                  </TableRow>
                 </TableHeader>
 
                 <TableBody>
@@ -82,6 +84,7 @@ export function BackupSettings(_props: {
                           <TableCell>
                             <Timestamp timestamp={item.timestamp} />
                           </TableCell>
+
                           <TableCell>
                             <div class="flex gap-2">
                               <IconButton

@@ -1,4 +1,6 @@
 import {
+  JSX,
+  For,
   Match,
   Switch,
   Show,
@@ -25,6 +27,7 @@ import {
   TbOutlineRefresh,
   TbOutlineWorld,
   TbOutlineCaretUp,
+  TbOutlineUser,
 } from "solid-icons/tb";
 import { numericToAlpha2, getAlpha2Codes } from "i18n-iso-countries";
 import type { FeatureCollection } from "geojson";
@@ -40,6 +43,7 @@ import {
   AccordionContent,
   AccordionItem,
 } from "@/components/ui/accordion";
+import { FilterBar } from "@/components/FilterBar";
 import { Header } from "@/components/Header";
 import { IconButton } from "@/components/IconButton";
 import {
@@ -53,9 +57,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Table, buildTable } from "@/components/Table";
+import { Table as TableComponent, buildTable } from "@/components/Table";
+import { Table, TableBody, TableRow, TableCell } from "@/components/ui/table";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import type { Updater } from "@/components/Table";
-import { FilterBar } from "@/components/FilterBar";
 
 import { fetchLogs, fetchStats } from "@/lib/api/logs";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
@@ -103,24 +114,7 @@ const columns: ColumnDef<LogJson>[] = [
   {
     accessorKey: "status",
     size: 60,
-    cell: (ctx) => {
-      const { status } = ctx.row.original;
-      return (
-        <Switch>
-          <Match when={status < 300}>
-            <Badge variant="success">{status}</Badge>
-          </Match>
-
-          <Match when={status < 400}>
-            <Badge variant="default">{status}</Badge>
-          </Match>
-
-          <Match when={true}>
-            <Badge variant="warning">{status}</Badge>
-          </Match>
-        </Switch>
-      );
-    },
+    cell: (ctx) => <StatusBadge status={ctx.row.original.status} />,
   },
   {
     accessorKey: "method",
@@ -130,7 +124,12 @@ const columns: ColumnDef<LogJson>[] = [
   },
   {
     accessorKey: "url",
-    size: 340,
+    size: 300,
+    cell: (ctx) => (
+      <div class="line-clamp-2 text-left text-ellipsis">
+        {ctx.row.original.url}
+      </div>
+    ),
   },
   {
     // Used for sorting.
@@ -146,53 +145,60 @@ const columns: ColumnDef<LogJson>[] = [
     size: 120,
   },
   {
-    header: "GeoIP",
+    id: "GeoIp",
+    header: () => <TbOutlineWorld />,
+    size: -1,
     enableSorting: false,
     cell: (ctx) => {
-      const city = ctx.row.original.client_geoip_city;
-      if (city) {
-        return `${city.name} (${city.country_code})`;
-      }
-      return ctx.row.original.client_geoip_cc;
+      const contents = () => {
+        const city = ctx.row.original.client_geoip_city;
+        if (city) {
+          return `${city.name} (${city.country_code})`;
+        }
+        return ctx.row.original.client_geoip_cc;
+      };
+
+      return (
+        <Show when={contents()}>
+          {(c) => <div class="line-clamp-1 text-left text-ellipsis">{c()}</div>}
+        </Show>
+      );
     },
-    size: -1,
   },
   {
     accessorKey: "referer",
     size: 200,
-  },
-  {
-    accessorKey: "user_agent",
-    size: 200,
     cell: (ctx) => {
       return (
-        <div class="flex items-center">
-          <Tooltip>
-            <TooltipTrigger>
-              <div class="line-clamp-2 text-left text-ellipsis">
-                {ctx.row.original.user_agent}
-              </div>
-            </TooltipTrigger>
-
-            <TooltipContent>{ctx.row.original.user_agent}</TooltipContent>
-          </Tooltip>
+        <div class="line-clamp-2 text-left text-ellipsis">
+          {ctx.row.original.referer}
         </div>
       );
     },
   },
   {
     accessorKey: "user_id",
-    size: 300,
+    size: 60,
     cell: (ctx) => {
       const userId = () => ctx.row.original.user_id;
       return (
         <Show when={userId()}>
-          <div
-            class="hover:text-gray-600"
-            onClick={() => copyToClipboard(userId() ?? "")}
-          >
-            {userId()}
-          </div>
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyToClipboard(userId() ?? "", true);
+                }}
+              >
+                <TbOutlineUser />
+              </Button>
+            </TooltipTrigger>
+
+            <TooltipContent>{userId()}</TooltipContent>
+          </Tooltip>
         </Show>
       );
     },
@@ -315,6 +321,7 @@ function LogsPage() {
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
   const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [showLog, setShowLog] = createSignal<LogJson | undefined>();
 
   const logsTable = createMemo(() => {
     return buildTable(
@@ -449,11 +456,136 @@ function LogsPage() {
               placeholder={`Filter, e.g.: '(latency > 2 || status >= 400) && method = "GET"'`}
             />
 
-            <Table table={logsTable()} loading={logsFetch.isLoading} />
+            <TableComponent
+              table={logsTable()}
+              loading={logsFetch.isLoading}
+              onRowClick={(_idx: number, row: LogJson) => {
+                setShowLog(row);
+              }}
+            />
+
+            <Sheet
+              open={showLog() !== undefined}
+              onOpenChange={(isOpen: boolean) => {
+                if (!isOpen) {
+                  setShowLog(undefined);
+                }
+              }}
+            >
+              <Show when={showLog()}>
+                {(log) => <LogDetailsSheet log={log()} />}
+              </Show>
+            </Sheet>
           </Match>
         </Switch>
       </div>
     </div>
+  );
+}
+
+function LogDetailsSheet(props: { log: LogJson }) {
+  return (
+    <SheetContent class="min-w-[600px]">
+      <SheetHeader>
+        <SheetTitle class="text-ellipsis">
+          {`${props.log.method} ${props.log.url}`}
+        </SheetTitle>
+
+        <SheetDescription>Log details</SheetDescription>
+      </SheetHeader>
+
+      <div class="flex flex-col gap-4 pt-4">
+        <LogDetailsTable
+          title="Request"
+          data={[
+            ["id", Number(props.log.id)],
+            ["method", <Badge variant="outline">{props.log.method}</Badge>],
+            ["url", props.log.url],
+            ["status", <StatusBadge status={props.log.status} />],
+          ]}
+        />
+
+        <LogDetailsTable
+          title="Timing"
+          data={[
+            [
+              "created",
+              (() => {
+                const secondsSinceEpoch = props.log.created;
+                const timestamp = new Date(secondsSinceEpoch * 1000);
+                return timestamp.toLocaleString(undefined, {
+                  timeZoneName: "short",
+                  hour12: false,
+                });
+              })(),
+            ],
+            ["latency_ms", `${props.log.latency_ms.toFixed(4)}ms`],
+          ]}
+        />
+
+        <LogDetailsTable
+          title="Client"
+          data={[
+            ["user_id", props.log.user_id],
+            ["client_ip", props.log.client_ip],
+            ["client_ip_cc", props.log.client_geoip_cc],
+            ["client_ip_city", props.log.client_geoip_city?.name],
+          ]}
+        />
+
+        <LogDetailsTable
+          title="Metadata"
+          data={[
+            ["referer", props.log.referer],
+            ["user_agent", props.log.user_agent],
+          ]}
+        />
+      </div>
+    </SheetContent>
+  );
+}
+
+function LogDetailsTable(props: {
+  title: string;
+  data: [string, JSX.Element][];
+}) {
+  return (
+    <div class="flex flex-col gap-1 p-1">
+      <span class="text-sm font-medium">{props.title}</span>
+
+      <div class="rounded-md text-sm outline">
+        <Table>
+          <TableBody>
+            <For each={props.data}>
+              {(el) => (
+                <TableRow>
+                  <TableCell class="text-muted-foreground">{el[0]}</TableCell>
+                  <TableCell class="text-right">{el[1]}</TableCell>
+                </TableRow>
+              )}
+            </For>
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge(props: { status: number }) {
+  return (
+    <Switch>
+      <Match when={props.status < 300}>
+        <Badge variant="success">{props.status}</Badge>
+      </Match>
+
+      <Match when={props.status < 400}>
+        <Badge variant="default">{props.status}</Badge>
+      </Match>
+
+      <Match when={true}>
+        <Badge variant="warning">{props.status}</Badge>
+      </Match>
+    </Switch>
   );
 }
 
@@ -669,6 +801,7 @@ function MapOverlay(props: {
   );
 }
 
+// TODO: It would be cool if clicking a country would filter the logs.
 function WorldMap(props: { countryCodes: CountryCodes }) {
   const [mapDialog, setMapDialog] = createSignal<string | undefined>();
   const countryCodes = createMemo(
