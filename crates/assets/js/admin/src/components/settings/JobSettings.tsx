@@ -179,30 +179,30 @@ function JobSettingsImpl(props: {
           <div class="rounded-md border">
             <Table>
               <TableHeader>
-                {/*
-              <TableHead>Id</TableHead>
-              */}
-                <TableHead>Name</TableHead>
-                <TableHead>
-                  <Tooltip>
-                    <TooltipTrigger as="div">
-                      <div class="flex items-center gap-2">
-                        Schedule <TbOutlineInfoCircle />
-                      </div>
-                    </TooltipTrigger>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>
+                    <Tooltip>
+                      <TooltipTrigger as="div">
+                        <div class="flex items-center gap-2">
+                          Schedule <TbOutlineInfoCircle />
+                        </div>
+                      </TooltipTrigger>
 
-                    <TooltipContent>
-                      <p>6/7-component cron spec:</p>
-                      <p class="font-bold break-keep">
-                        second minute hour day-of-month month day-of-week [year]
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TableHead>
-                <TableHead>Next Run</TableHead>
-                <TableHead>Last Run</TableHead>
-                <TableHead>Enabled</TableHead>
-                <TableHead>Action</TableHead>
+                      <TooltipContent>
+                        <p>6/7-component cron spec:</p>
+                        <p class="font-bold break-keep">
+                          second minute hour day-of-month month day-of-week
+                          [year]
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TableHead>
+                  <TableHead>Next Run</TableHead>
+                  <TableHead>Last Run</TableHead>
+                  <TableHead>Enabled</TableHead>
+                  <TableHead>Action</TableHead>
+                </TableRow>
               </TableHeader>
 
               <TableBody>
