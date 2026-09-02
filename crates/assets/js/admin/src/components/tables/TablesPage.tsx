@@ -29,6 +29,7 @@ import {
   SidebarProvider,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { TextField, TextFieldInput } from "@/components/ui/text-field";
 import {
   Tooltip,
   TooltipContent,
@@ -119,19 +120,28 @@ function TablePickerSidebar(props: {
   const selectedTable = () => props.selectedTable;
   const navigate = useNavigate();
 
+  const [search, setSearch] = createSignal("");
+
   const tablesAndViewsBySchema = createMemo((): (Table | View)[][] => {
     const show = showHidden();
+    const filtered = props.tablesAndViews.filter((t) => {
+      if (search() !== "") {
+        return t.name.name.search(search()) !== -1;
+      }
+
+      return show || !hiddenTable(t) || t === selectedTable();
+    });
+
     const bySchema = groupBy(
-      show
-        ? props.tablesAndViews
-        : props.tablesAndViews.filter(
-            (t) => !hiddenTable(t) || t === selectedTable(),
-          ),
+      filtered,
       (table) => table.name.database_schema ?? "main",
     );
+
+    // Sort by name and visibility.
     for (const tables of bySchema) {
       tables.sort(tableCompare);
     }
+
     return bySchema;
   });
 
@@ -201,6 +211,16 @@ function TablePickerSidebar(props: {
             </Tooltip>
           </div>
         </div>
+
+        <TextField>
+          <TextFieldInput
+            type="text"
+            placeholder="search"
+            onInput={(e: InputEvent) => {
+              setSearch((e.target as HTMLInputElement).value);
+            }}
+          />
+        </TextField>
       </SidebarHeader>
 
       <SidebarContent class="px-2">
