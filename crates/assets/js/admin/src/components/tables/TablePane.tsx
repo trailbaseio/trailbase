@@ -9,7 +9,6 @@ import {
 } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import {
-  TbOutlineColumns,
   TbOutlineEye,
   TbOutlineRefresh,
   TbOutlineTable,
@@ -33,14 +32,14 @@ import { urlSafeBase64Decode } from "trailbase";
 
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  Card,
+  CardContent,
+  CardTitle,
+  CardHeader,
+  CardDescription,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -50,6 +49,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showToast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +57,14 @@ import { DebugDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
 import { Table as TableComponent, buildTable } from "@/components/Table";
+import {
+  Table as TableUi,
+  TableHeader,
+  TableHead,
+  TableBody,
+  TableRow,
+  TableCell,
+} from "@/components/ui/table";
 import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
@@ -106,6 +114,7 @@ import {
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
+import type { ColumnOption } from "@bindings/ColumnOption";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { QualifiedName } from "@bindings/QualifiedName";
@@ -431,7 +440,7 @@ function TableHeaderRightHandButtons(props: {
   );
 }
 
-function TableHeader(props: {
+function TablePaneHeader(props: {
   table: [Table, string] | [View, string];
   allTables: [Table, string][];
   schemaRefetch: () => Promise<void>;
@@ -456,24 +465,6 @@ function TableHeader(props: {
           <IconButton tooltip="Refresh Data" onClick={props.rowsRefetch}>
             <TbOutlineRefresh />
           </IconButton>
-
-          <Dialog id="sql-schema">
-            <DialogTrigger>
-              <IconButton tooltip="SQL Schema">
-                <TbOutlineColumns />
-              </IconButton>
-            </DialogTrigger>
-
-            <DialogContent class="max-w-[80dvw]">
-              <DialogHeader>
-                <DialogTitle>SQL Schema</DialogTitle>
-              </DialogHeader>
-
-              <span class="font-mono text-sm whitespace-pre-wrap">
-                {props.table[1]}
-              </span>
-            </DialogContent>
-          </Dialog>
         </div>
       }
       right={
@@ -846,113 +837,117 @@ function IndexTable(props: {
   });
 
   return (
-    <div id="indexes">
-      <h2>
-        Indexes
-        <Show when={import.meta.env.DEV}>
-          <DebugDialogButton title="Indexes" data={indexes()} />
-        </Show>
-      </h2>
+    <Card id="indexes">
+      <CardHeader>
+        <CardTitle>
+          Indexes
+          <Show when={import.meta.env.DEV}>
+            <DebugDialogButton title="Indexes" data={indexes()} />
+          </Show>
+        </CardTitle>
+      </CardHeader>
 
-      <SafeSheet
-        open={[
-          () => editIndex() !== undefined,
-          (isOpen: boolean | ((value: boolean) => boolean)) => {
-            if (!isOpen) {
-              setEditIndex(undefined);
-            }
-          },
-        ]}
-      >
-        {(sheet) => {
-          return (
-            <>
-              <SheetContent class={sheetMaxWidth}>
-                <CreateAlterIndexForm
-                  schema={editIndex()}
-                  table={props.table}
-                  schemaRefetch={props.schemaRefetch}
-                  {...sheet}
-                />
-              </SheetContent>
-
-              <div class="space-y-2.5 overflow-x-auto">
-                <TableComponent
-                  table={indexesTable()}
-                  loading={false}
-                  onRowClick={
-                    hidden()
-                      ? undefined
-                      : (_idx: number, index: TableIndex) => {
-                          setEditIndex(index);
-                        }
-                  }
-                />
-              </div>
-            </>
-          );
-        }}
-      </SafeSheet>
-
-      <Show when={!hidden()}>
-        <div class="mt-2 flex gap-2">
-          <SafeSheet>
-            {(sheet) => {
-              return (
-                <>
-                  <SheetContent class={sheetMaxWidth}>
-                    <CreateAlterIndexForm
-                      schemaRefetch={props.schemaRefetch}
-                      table={props.table}
-                      {...sheet}
-                    />
-                  </SheetContent>
-
-                  <SheetTrigger
-                    as={(props: DialogTriggerProps) => (
-                      <Button variant="default" {...props}>
-                        Add Index
-                      </Button>
-                    )}
-                  />
-                </>
-              );
-            }}
-          </SafeSheet>
-
-          <Button
-            variant="destructive"
-            disabled={selectedIndexes().size == 0}
-            onClick={() => {
-              const names = Array.from(selectedIndexes());
-              if (names.length == 0) {
-                return;
+      <CardContent>
+        <SafeSheet
+          open={[
+            () => editIndex() !== undefined,
+            (isOpen: boolean | ((value: boolean) => boolean)) => {
+              if (!isOpen) {
+                setEditIndex(undefined);
               }
+            },
+          ]}
+        >
+          {(sheet) => {
+            return (
+              <>
+                <SheetContent class={sheetMaxWidth}>
+                  <CreateAlterIndexForm
+                    schema={editIndex()}
+                    table={props.table}
+                    schemaRefetch={props.schemaRefetch}
+                    {...sheet}
+                  />
+                </SheetContent>
 
-              (async () => {
-                try {
-                  for (const name of names) {
-                    await dropIndex({ name, dry_run: null });
-                  }
+                <div class="space-y-2.5 overflow-x-auto">
+                  <TableComponent
+                    table={indexesTable()}
+                    loading={false}
+                    onRowClick={
+                      hidden()
+                        ? undefined
+                        : (_idx: number, index: TableIndex) => {
+                            setEditIndex(index);
+                          }
+                    }
+                  />
+                </div>
+              </>
+            );
+          }}
+        </SafeSheet>
 
-                  setSelectedIndexes(new Set<string>());
-                } catch (err) {
-                  showToast({
-                    title: "Deletion Error",
-                    description: `${err}`,
-                    variant: "error",
-                  });
-                } finally {
-                  props.schemaRefetch();
+        <Show when={!hidden()}>
+          <div class="mt-2 flex gap-2">
+            <SafeSheet>
+              {(sheet) => {
+                return (
+                  <>
+                    <SheetContent class={sheetMaxWidth}>
+                      <CreateAlterIndexForm
+                        schemaRefetch={props.schemaRefetch}
+                        table={props.table}
+                        {...sheet}
+                      />
+                    </SheetContent>
+
+                    <SheetTrigger
+                      as={(props: DialogTriggerProps) => (
+                        <Button variant="default" {...props}>
+                          Add Index
+                        </Button>
+                      )}
+                    />
+                  </>
+                );
+              }}
+            </SafeSheet>
+
+            <Button
+              variant="destructive"
+              disabled={selectedIndexes().size == 0}
+              onClick={() => {
+                const names = Array.from(selectedIndexes());
+                if (names.length == 0) {
+                  return;
                 }
-              })();
-            }}
-          >
-            Delete indexes
-          </Button>
-        </div>
-      </Show>
-    </div>
+
+                (async () => {
+                  try {
+                    for (const name of names) {
+                      await dropIndex({ name, dry_run: null });
+                    }
+
+                    setSelectedIndexes(new Set<string>());
+                  } catch (err) {
+                    showToast({
+                      title: "Deletion Error",
+                      description: `${err}`,
+                      variant: "error",
+                    });
+                  } finally {
+                    props.schemaRefetch();
+                  }
+                })();
+              }}
+            >
+              Delete indexes
+            </Button>
+          </div>
+        </Show>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -977,38 +972,42 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
   });
 
   return (
-    <div id="triggers">
-      <h2>
-        Triggers
-        <Show when={import.meta.env.DEV}>
-          <DebugDialogButton title="Triggers" data={triggers()} />
-        </Show>
-      </h2>
+    <Card id="triggers">
+      <CardHeader>
+        <CardTitle>
+          Triggers
+          <Show when={import.meta.env.DEV}>
+            <DebugDialogButton title="Triggers" data={triggers()} />
+          </Show>
+        </CardTitle>
+      </CardHeader>
 
-      <p class="text-sm">
-        The admin dashboard currently does not support modifying triggers.
-        Please use the{" "}
-        <a class="underline" href="/_/admin/editor">
-          editor
-        </a>{" "}
-        to{" "}
-        <a
-          class="underline"
-          href="https://www.sqlite.org/lang_createtrigger.html"
-        >
-          create
-        </a>{" "}
-        new or{" "}
-        <a class="underline" href="https://sqlite.org/lang_droptrigger.html">
-          drop
-        </a>{" "}
-        existing triggers.
-      </p>
+      <CardContent>
+        <p class="text-sm">
+          The admin dashboard currently does not support modifying triggers.
+          Please use the{" "}
+          <a class="underline" href="/_/admin/editor">
+            editor
+          </a>{" "}
+          to{" "}
+          <a
+            class="underline"
+            href="https://www.sqlite.org/lang_createtrigger.html"
+          >
+            create
+          </a>{" "}
+          new or{" "}
+          <a class="underline" href="https://sqlite.org/lang_droptrigger.html">
+            drop
+          </a>{" "}
+          existing triggers.
+        </p>
 
-      <div class="mt-4">
-        <TableComponent loading={false} table={triggersTable()} />
-      </div>
-    </div>
+        <div class="mt-4">
+          <TableComponent loading={false} table={triggersTable()} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1025,7 +1024,7 @@ export function TablePane(props: {
   postgres: boolean;
 }) {
   const selectedSchema = () => props.selectedTable[0];
-  const isTable = () => tableType(selectedSchema()) === "table";
+  const type = () => tableType(selectedSchema());
 
   // IMPORTANT: We need to memo the downstream search params use to treat absence and defaults
   // consistently, otherwise `undefined`->`default` may invalidate the cursors.
@@ -1132,7 +1131,7 @@ export function TablePane(props: {
 
   return (
     <>
-      <TableHeader
+      <TablePaneHeader
         table={props.selectedTable}
         allTables={props.schemas.tables}
         schemaRefetch={schemaRefetch}
@@ -1140,45 +1139,317 @@ export function TablePane(props: {
         postgres={props.postgres}
       />
 
-      <div class="flex flex-col gap-8 p-4">
+      <Tabs defaultValue="data">
         <Switch>
-          <Match when={records.isError}>
-            <div class="my-2 flex flex-col gap-4">
-              Failed to fetch rows: {`${records.error}`}
-              <div>
-                <Button onClick={() => window.location.reload()}>Reload</Button>
-              </div>
-            </div>
+          <Match when={type() === "table"}>
+            <TabsList class="mx-4 my-2 grid grid-cols-3">
+              <TabsTrigger value="data">Data</TabsTrigger>
+              <TabsTrigger value="schema">Schema</TabsTrigger>
+              <TabsTrigger value="indexes">Indexes {"&"} Triggers</TabsTrigger>
+            </TabsList>
           </Match>
 
           <Match when={true}>
-            <RecordTable
-              selectedSchema={selectedSchema()}
-              records={records.isSuccess ? records.data : undefined}
-              pagination={[pagination, setPagination]}
-              filter={[filter, setFilter]}
-              columnPinningState={[columnPinningState, setColumnPinningState]}
-              sorting={[sorting, setSorting]}
-              rowsRefetch={rowsRefetch}
-            />
+            <TabsList class="mx-4 my-2 grid grid-cols-2">
+              <TabsTrigger value="data">Data</TabsTrigger>
+              <TabsTrigger value="schema">Schema</TabsTrigger>
+            </TabsList>
           </Match>
         </Switch>
 
-        <Show when={isTable()}>
-          <IndexTable
-            table={selectedSchema() as Table}
-            schemas={props.schemas}
-            schemaRefetch={props.schemaRefetch}
-          />
-        </Show>
+        <TabsContent value="data" class="flex flex-col gap-8 p-4">
+          <Switch>
+            <Match when={records.isError}>
+              <div class="my-2 flex flex-col gap-4">
+                Failed to fetch rows: {`${records.error}`}
+                <div>
+                  <Button onClick={() => window.location.reload()}>
+                    Reload
+                  </Button>
+                </div>
+              </div>
+            </Match>
 
-        <Show when={isTable()}>
-          <TriggerTable
-            table={selectedSchema() as Table}
-            schemas={props.schemas}
-          />
+            {/* Covers both, loading and success states */}
+            <Match when={true}>
+              <RecordTable
+                selectedSchema={selectedSchema()}
+                records={records.isSuccess ? records.data : undefined}
+                pagination={[pagination, setPagination]}
+                filter={[filter, setFilter]}
+                columnPinningState={[columnPinningState, setColumnPinningState]}
+                sorting={[sorting, setSorting]}
+                rowsRefetch={rowsRefetch}
+              />
+            </Match>
+          </Switch>
+        </TabsContent>
+
+        <TabsContent value="schema" class="flex flex-col gap-8 p-4">
+          <Switch>
+            <Match when={type() === "table"}>
+              <TableSchema
+                table={selectedSchema() as Table}
+                createTable={props.selectedTable[1]}
+                schemas={props.schemas}
+                schemaRefetch={props.schemaRefetch}
+              />
+            </Match>
+
+            <Match when={type() === "view"}>
+              <ViewSchema
+                view={selectedSchema() as View}
+                createView={props.selectedTable[1]}
+              />
+            </Match>
+          </Switch>
+        </TabsContent>
+
+        <Show when={type() === "table"}>
+          <TabsContent value="indexes" class="flex flex-col gap-8 p-4">
+            <IndexTable
+              table={selectedSchema() as Table}
+              schemas={props.schemas}
+              schemaRefetch={props.schemaRefetch}
+            />
+
+            <TriggerTable
+              table={selectedSchema() as Table}
+              schemas={props.schemas}
+            />
+          </TabsContent>
         </Show>
-      </div>
+      </Tabs>
+    </>
+  );
+}
+
+function TableSchema(props: {
+  table: Table;
+  createTable: string;
+  schemas: ListSchemasResponse;
+  schemaRefetch: () => Promise<void>;
+}) {
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Columns</CardTitle>
+
+          <CardDescription>{props.table.columns.length} total</CardDescription>
+        </CardHeader>
+
+        <CardContent>
+          <div class="rounded-md border">
+            <TableUi>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>name</TableHead>
+                  <TableHead>type</TableHead>
+                  <TableHead>options</TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                <For each={props.table.columns}>
+                  {(col) => {
+                    return (
+                      <TableRow>
+                        <TableCell>{col.name}</TableCell>
+
+                        <TableCell>{col.type_name}</TableCell>
+
+                        <TableCell>
+                          <div class="flex max-w-[200px] gap-1">
+                            <For each={col.options}>
+                              {(opt) => (
+                                <div class="text-nowrap">
+                                  <ColumnOptionBadge opt={opt} />
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  }}
+                </For>
+              </TableBody>
+            </TableUi>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Create Table</CardTitle>
+        </CardHeader>
+
+        <CardContent class="font-mono text-sm text-wrap">
+          {props.createTable}
+        </CardContent>
+      </Card>
+    </>
+  );
+}
+
+function ColumnOptionBadge(props: { opt: ColumnOption }) {
+  return (
+    <Switch>
+      <Match when={typeof props.opt === "string"}>
+        <Badge variant="outline">{props.opt as string}</Badge>
+      </Match>
+
+      <Match when={"Default" in (props.opt as object)}>
+        <Badge variant="outline">
+          Default: {(props.opt as { Default: string }).Default}
+        </Badge>
+      </Match>
+
+      <Match when={"Unique" in (props.opt as object)}>
+        <Switch>
+          <Match
+            when={
+              (props.opt as { Unique: { is_primary: boolean } }).Unique
+                .is_primary
+            }
+          >
+            <Badge variant="outline">PK</Badge>
+          </Match>
+
+          <Match when={true}>
+            <Badge variant="outline">Unique</Badge>
+          </Match>
+        </Switch>
+      </Match>
+
+      <Match when={"ForeignKey" in (props.opt as object)}>
+        {(() => {
+          const fk = (
+            props.opt as {
+              ForeignKey: {
+                foreign_table: string;
+                referred_columns: Array<string>;
+              };
+            }
+          ).ForeignKey;
+
+          return (
+            <Switch>
+              <Match when={fk.referred_columns.length > 0}>
+                <Badge variant="outline">
+                  {`FK: ${fk.foreign_table}(${fk.referred_columns.join(", ")})`}
+                </Badge>
+              </Match>
+
+              <Match when={true}>
+                <Badge variant="outline">{`FK: ${fk.foreign_table}`}</Badge>
+              </Match>
+            </Switch>
+          );
+        })()}
+      </Match>
+
+      <Match when={"Check" in (props.opt as object)}>
+        <Badge variant="outline">
+          Check: {(props.opt as { Check: string }).Check}
+        </Badge>
+      </Match>
+
+      <Match when={"OnUpdate" in (props.opt as object)}>
+        <Badge variant="outline">
+          OnUpdate: {(props.opt as { OnUpdate: string }).OnUpdate}
+        </Badge>
+      </Match>
+
+      <Match when={"Collate" in (props.opt as object)}>
+        <Badge variant="outline">
+          Collate: {(props.opt as { Collate: string }).Collate}
+        </Badge>
+      </Match>
+
+      <Match when={"Generated" in (props.opt as object)}>
+        <Badge variant="outline">
+          Generated:{" "}
+          {(props.opt as { Generated: { expr: string } }).Generated.expr}
+        </Badge>
+      </Match>
+
+      <Match when={true}>
+        <Badge variant="outline">{JSON.stringify(props.opt)}</Badge>
+      </Match>
+    </Switch>
+  );
+}
+
+function ViewSchema(props: { view: View; createView: string }) {
+  const columnMapping = () => props.view.column_mapping;
+
+  return (
+    <>
+      <Show when={columnMapping()}>
+        {(mapping) => (
+          <Card>
+            <CardHeader>
+              <CardTitle>Columns</CardTitle>
+
+              <CardDescription>
+                {props.view.column_mapping?.columns.length ?? "??"} total
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent class="font-mono text-sm text-wrap">
+              <div class="rounded-md border">
+                <TableUi>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>name</TableHead>
+                      <TableHead>type</TableHead>
+                      <TableHead>options</TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    <For each={mapping().columns}>
+                      {(col) => {
+                        return (
+                          <TableRow>
+                            <TableCell>{col.column.name}</TableCell>
+
+                            <TableCell>{col.column.data_type}</TableCell>
+
+                            <TableCell>
+                              <div class="flex max-w-[200px] gap-1">
+                                <For each={col.column.options}>
+                                  {(opt) => (
+                                    <div class="text-nowrap">
+                                      <ColumnOptionBadge opt={opt} />
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }}
+                    </For>
+                  </TableBody>
+                </TableUi>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </Show>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Create View</CardTitle>
+        </CardHeader>
+
+        <CardContent class="font-mono text-sm text-wrap">
+          {props.createView}
+        </CardContent>
+      </Card>
     </>
   );
 }
