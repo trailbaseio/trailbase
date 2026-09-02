@@ -160,7 +160,7 @@ function ColumnOptionCheckField(props: {
         <TbOutlineInfoCircle />
       </HoverCardTrigger>
 
-      <HoverCardContent class="w-80">
+      <HoverCardContent class="ui-expanded:shadow-md w-80">
         <div class="flex justify-between space-x-4">
           <div class="space-y-1">
             <h4 class="text-sm font-semibold">Column Constraint</h4>

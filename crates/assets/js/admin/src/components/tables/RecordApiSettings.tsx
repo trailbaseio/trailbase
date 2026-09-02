@@ -321,7 +321,7 @@ function StyledHoverCard(props: { children: JSXElement }) {
         <TbOutlineInfoCircle />
       </HoverCardTrigger>
 
-      <HoverCardContent class="w-80 space-y-1 space-x-4 text-sm">
+      <HoverCardContent class="ui-expanded:shadow-md w-80 space-y-1 space-x-4 text-sm">
         {props.children}
       </HoverCardContent>
     </HoverCard>

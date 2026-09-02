@@ -1,6 +1,5 @@
-import { onMount, JSX } from "solid-js";
+import { onMount, JSX, createSignal } from "solid-js";
 import type { Tokens } from "trailbase";
-import { TbOutlineInfoCircle } from "solid-icons/tb";
 
 // Import with side-effects for the custom web component.
 import "rapidoc";
@@ -9,16 +8,15 @@ import { adminFetch } from "@/lib/fetch";
 import { createTheme } from "@/lib/theme";
 import { $tokens } from "@/lib/client";
 
+import { Button } from "@/components/ui/button";
+import { Header } from "@/components/Header";
 import {
-  TextField,
-  TextFieldLabel,
-  TextFieldInput,
-} from "@/components/ui/text-field";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  usePopoverContext,
+} from "@/components/ui/popover";
+import { TextField, TextFieldInput } from "@/components/ui/text-field";
 
 declare module "solid-js" {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -40,8 +38,9 @@ type RapiDoc = JSX.IntrinsicElements["rapi-doc"];
 
 export default function Page() {
   let ref: RapiDoc | undefined;
-  let tokensRef: HTMLInputElement | undefined;
 
+  const [version, setVersion] = createSignal<string | undefined>();
+  const [tokens, setTokens] = createSignal<string>("");
   const theme = createTheme();
 
   onMount(async () => {
@@ -51,6 +50,11 @@ export default function Page() {
     if (!ref) {
       return;
     }
+
+    // Remove info to keep output clean.
+    const info = spec["info"];
+    spec["info"] = {};
+    setVersion(info["version"]);
 
     // Lazy load the actual OpenApi spec.
     ref.loadSpec(spec);
@@ -72,7 +76,7 @@ export default function Page() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ref.addEventListener("before-try", (e: any) => {
       function getTokens(): Tokens | null {
-        const inputTokens = tokensRef?.value;
+        const inputTokens = tokens();
         if (inputTokens) {
           return JSON.parse(atob(inputTokens)) as Tokens;
         }
@@ -80,64 +84,102 @@ export default function Page() {
         return $tokens.get();
       }
 
-      const tokens = getTokens();
-      if (tokens) {
+      const inputTokens = getTokens();
+      if (inputTokens) {
         e.detail.request.headers.append(
           "Authorization",
-          `Bearer ${tokens.auth_token}`,
+          `Bearer ${inputTokens.auth_token}`,
         );
-        e.detail.request.headers.append("Refresh-Token", tokens.refresh_token);
-        e.detail.request.headers.append("CSRF-Token", tokens.csrf_token);
+        e.detail.request.headers.append(
+          "Refresh-Token",
+          inputTokens.refresh_token,
+        );
+        e.detail.request.headers.append("CSRF-Token", inputTokens.csrf_token);
       }
     });
   });
 
   return (
-    <rapi-doc
-      ref={
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ref as any
-      }
-      load-fonts="false"
-      sort-tags="true"
-      theme={theme()} // "light" | "dark"
-      bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
-      primary-color={primary}
-      render-style="view" // "read" | "view" | "focused"
-      layout="row" // "row" | "column"
-      schema-style="table" // "tree" | "table"
-      show-header="false" // removes the top bar: logo + title
-      allow-try="true"
-      persist-auth="false"
-      allow-authentication="false"
-      allow-server-selection="false"
-    >
-      {/* Contents */}
-      <div class="m-4 lg:mx-8">
-        <TextField class="flex items-center gap-2">
-          <TextFieldLabel>
-            <Tooltip>
-              <TooltipTrigger class="flex gap-2">
-                <span class="underline">Tokens:</span>
-                <TbOutlineInfoCircle class="inline-block" />
-              </TooltipTrigger>
+    <>
+      <Header
+        title="OpenApi Explorer"
+        left={
+          <div class="text-muted-foreground flex items-baseline-last text-xs">
+            {version()}
+          </div>
+        }
+        right={
+          <Popover id="test">
+            <PopoverTrigger as={Button<"button">} variant="outline">
+              Tokens
+            </PopoverTrigger>
 
-              <TooltipContent>
-                You can optionally provide explicit tokens to impersonate
-                another user. To get the tokens of verified, non-admin users,
-                click a user on the accounts page.
-              </TooltipContent>
-            </Tooltip>
-          </TextFieldLabel>
+            <PopoverContent class="ui-expanded:shadow-md">
+              <TokenPopoverContent tokens={tokens} setTokens={setTokens} />
+            </PopoverContent>
+          </Popover>
+        }
+      />
 
-          <TextFieldInput
-            ref={tokensRef}
-            type="password"
-            autocomplete="new-password"
-          />
-        </TextField>
-      </div>
-    </rapi-doc>
+      <rapi-doc
+        ref={
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ref as any
+        }
+        load-fonts="false"
+        sort-tags="true"
+        theme={theme()} // "light" | "dark"
+        bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
+        primary-color={primary}
+        render-style="view" // "read" | "view" | "focused"
+        layout="row" // "row" | "column"
+        schema-style="table" // "tree" | "table"
+        show-header="false" // removes the top bar: logo + title
+        allow-try="true"
+        persist-auth="false"
+        allow-authentication="false"
+        allow-server-selection="false"
+      >
+        {/* Contents */}
+      </rapi-doc>
+    </>
+  );
+}
+
+function TokenPopoverContent(props: {
+  tokens: () => string;
+  setTokens: (v: string) => void;
+}) {
+  const context = usePopoverContext();
+
+  return (
+    <div class="flex flex-col gap-4">
+      <p class="text-xs">
+        You can optionally provide explicit tokens to impersonate another user.
+        To get the tokens of a verified, non-admin user, click the "cookie"
+        button in the user details on the accounts page or use the CLI.
+      </p>
+
+      <TextField>
+        <TextFieldInput
+          type="text"
+          autocomplete="new-password"
+          value={props.tokens()}
+          onChange={() => {
+            console.debug("close");
+            context.close();
+          }}
+          onInput={(e) => {
+            const value = (e.target as HTMLInputElement).value;
+            if (value) {
+              props.setTokens(value);
+            } else {
+              props.setTokens("");
+            }
+          }}
+        />
+      </TextField>
+    </div>
   );
 }
 
