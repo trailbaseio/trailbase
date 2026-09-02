@@ -1,3 +1,14 @@
+## v0.33.8
+
+- Many admin UI feature and style improvements inspired by #283. Thanks @burggraf 🙏
+  - Organize tables/views by DB.
+  - Split table explorer page into data, schema & indexes/triggers.
+  - Add a "log-details" sheet and thin down table representation.
+  - Tidy up accounts page.
+  - Visually less cluttered `rapidoc` integration.
+  - Clean up sidebar headers and add ability to search for tables/views.
+- Update dependencies.
+
 ## v0.33.7
 
 - Add username to support admin `CreateUser` endpoint.
