@@ -9,11 +9,12 @@ import {
 } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import {
-  TbOutlineRefresh,
-  TbOutlineCrown,
+  TbOutlineBroadcast,
   TbOutlineClipboardCopy,
   TbOutlineCookie,
+  TbOutlineCrown,
   TbOutlineQuestionMark,
+  TbOutlineRefresh,
   TbOutlineUser,
 } from "solid-icons/tb";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
@@ -41,6 +42,11 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { Callout } from "@/components/ui/callout";
 import { Header } from "@/components/Header";
@@ -67,11 +73,11 @@ function buildColumns(): ColumnDef<UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
+      accessorKey: "id",
       header: () => {
         return <div class="ml-3">id</div>;
       },
-      accessorKey: "id",
-      size: 350,
+      size: 320,
       cell: (ctx) => {
         const { id } = ctx.row.original;
         return (
@@ -87,7 +93,7 @@ function buildColumns(): ColumnDef<UserJson>[] {
               <TbOutlineClipboardCopy />
             </Button>
 
-            <span>{id}</span>
+            <span class="font-mono text-xs">{id}</span>
           </div>
         );
       },
@@ -97,15 +103,15 @@ function buildColumns(): ColumnDef<UserJson>[] {
       minSize: 180,
       cell: (ctx) => {
         return (
-          <span class="w-full text-wrap">
-            {ctx.row.original.username ?? "NULL"}
+          <span class="line-clamp-2 text-left text-ellipsis">
+            {ctx.row.original.username}
           </span>
         );
       },
     },
     {
-      header: "email (? = 'unverified_email')",
       accessorKey: "email",
+      header: "email (? = 'unverified_email')",
       minSize: 260,
       cell: (ctx) => {
         const { email, unverified_email } = ctx.row.original;
@@ -137,7 +143,18 @@ function buildColumns(): ColumnDef<UserJson>[] {
       ),
     },
     {
-      header: "OAuth",
+      id: "OAuth",
+      header: () => (
+        <div class="ml-3 flex items-center">
+          <Tooltip>
+            <TooltipTrigger>
+              <TbOutlineBroadcast />
+            </TooltipTrigger>
+
+            <TooltipContent>OAuth provider</TooltipContent>
+          </Tooltip>
+        </div>
+      ),
       size: 60,
       enableSorting: false,
       cell: (ctx) => {
@@ -159,13 +176,13 @@ function buildColumns(): ColumnDef<UserJson>[] {
       },
     },
     {
-      header: "updated",
+      accessorKey: "updated",
       cell: (ctx) => {
         return new Date(Number(ctx.row.original.updated) * 1000).toUTCString();
       },
     },
     {
-      header: "created",
+      accessorKey: "created",
       cell: (ctx) => {
         return new Date(Number(ctx.row.original.created) * 1000).toUTCString();
       },

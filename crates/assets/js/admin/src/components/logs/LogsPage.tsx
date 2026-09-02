@@ -84,7 +84,6 @@ maplibregl.setWorkerUrl(workerUrl);
 const columns: ColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
   {
-    header: "created",
     accessorKey: "created",
     size: 120,
     cell: (ctx) => {
@@ -132,9 +131,6 @@ const columns: ColumnDef<LogJson>[] = [
     ),
   },
   {
-    // Used for sorting.
-    id: "latency",
-    header: "latency",
     // Used for accessing the request (there's a rename from latency in DB to latency_ms in response)
     accessorKey: "latency_ms",
     size: 80,
@@ -146,7 +142,17 @@ const columns: ColumnDef<LogJson>[] = [
   },
   {
     id: "GeoIp",
-    header: () => <TbOutlineWorld />,
+    header: () => (
+      <div class="flex items-center">
+        <Tooltip>
+          <TooltipTrigger>
+            <TbOutlineWorld />
+          </TooltipTrigger>
+
+          <TooltipContent>Geo IP</TooltipContent>
+        </Tooltip>
+      </div>
+    ),
     size: -1,
     enableSorting: false,
     cell: (ctx) => {
