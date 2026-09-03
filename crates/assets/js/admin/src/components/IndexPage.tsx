@@ -150,7 +150,7 @@ async function fetchDashboardData(): Promise<Data> {
       (SELECT COUNT(*) AS num_views FROM sqlite_master WHERE type = 'view'),
       (SELECT COUNT(*) AS num_users FROM _user);`;
 
-  const response = await executeSql(sql, null);
+  const response = await executeSql(sql, null, false);
   const error = response.error;
   if (error) {
     throw Error(JSON.stringify(error));

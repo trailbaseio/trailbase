@@ -24,15 +24,17 @@ pub enum AdminError {
   AlreadyExists(&'static str),
   #[error("Bad request: {0}")]
   BadRequest(Box<dyn std::error::Error + Send + Sync>),
-  #[error("precondition failed: {0}")]
+  #[error("Precondition: {0}")]
   Precondition(String),
+  #[error("Forbidden: {0}")]
+  Forbidden(String),
   #[error("Internal: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
   #[error("Schema: {0}")]
   Schema(#[from] trailbase_schema::sqlite::SchemaError),
   #[error("TableLookup: {0}")]
   TableLookup(#[from] crate::schema_metadata::SchemaLookupError),
-  #[error("DbMigration: {0}")]
+  #[error("DBMigration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
   #[error("SQL -> Json: {0}")]
   Json(#[from] trailbase_schema::json::JsonError),
@@ -73,6 +75,7 @@ impl IntoResponse for AdminError {
       Self::Record(err) => return err.into_response(),
       Self::Deserialization(err) => (StatusCode::BAD_REQUEST, err.to_string()),
       Self::Precondition(_) => (StatusCode::PRECONDITION_FAILED, self.to_string()),
+      Self::Forbidden(_) => (StatusCode::FORBIDDEN, self.to_string()),
       Self::BadRequest(err) => (StatusCode::BAD_REQUEST, err.to_string()),
       Self::Internal(err) => (StatusCode::INTERNAL_SERVER_ERROR, err.to_string()),
       Self::AlreadyExists(_) => (StatusCode::CONFLICT, self.to_string()),

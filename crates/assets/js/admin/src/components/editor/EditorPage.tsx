@@ -515,6 +515,7 @@ function EditorPanel(props: {
         const response = await executeSql(
           query,
           attachedDbs.length > 0 ? attachedDbs : null,
+          /* allowSchemaAlteration= */ true,
         );
         const error = response.error;
         if (error) {

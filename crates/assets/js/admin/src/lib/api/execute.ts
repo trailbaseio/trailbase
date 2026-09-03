@@ -19,13 +19,15 @@ export type ExecutionResult = {
 export async function executeSql(
   sql: string,
   attachedDbs: string[] | null,
+  allowSchemaAlteration: boolean,
 ): Promise<ExecutionResult> {
   const response = await adminFetch("/query", {
     method: "POST",
     body: JSON.stringify({
       query: sql,
       attached_databases: attachedDbs,
-    } as QueryRequest),
+      allow_schema_alteration: allowSchemaAlteration,
+    } satisfies QueryRequest),
     throwOnError: false,
   });
 
@@ -34,7 +36,7 @@ export async function executeSql(
       query: sql,
       timestamp: Date.now(),
       data: await response.json(),
-    } as ExecutionResult;
+    } satisfies ExecutionResult;
   }
 
   return {
@@ -43,6 +45,6 @@ export async function executeSql(
     error: {
       code: response.status,
       message: await response.text(),
-    } as ExecutionError,
-  } as ExecutionResult;
+    } satisfies ExecutionError,
+  } satisfies ExecutionResult;
 }

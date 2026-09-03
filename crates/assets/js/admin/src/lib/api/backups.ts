@@ -16,7 +16,7 @@ export async function deleteBackups(timestamps: bigint[]): Promise<void> {
     method: "DELETE",
     body: JSON.stringify({
       timestamps,
-    } as DeleteBackupsRequest),
+    } satisfies DeleteBackupsRequest),
   });
 }
 
@@ -31,6 +31,6 @@ export async function restoreBackup(timestamp: bigint): Promise<void> {
     method: "PATCH",
     body: JSON.stringify({
       timestamp,
-    } as RestoreBackupRequest),
+    } satisfies RestoreBackupRequest),
   });
 }
