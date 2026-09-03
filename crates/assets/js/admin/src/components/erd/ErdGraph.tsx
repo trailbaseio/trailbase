@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, untrack } from "solid-js";
+import { createEffect, onCleanup } from "solid-js";
 import { Graph, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 import type { ResolvedTheme } from "@/lib/theme";
 
@@ -264,7 +264,7 @@ export function ErdGraph(props: {
     const g = (graph = new Graph({
       container: ref,
       grid: { visible: true },
-      autoResize: false,
+      autoResize: true,
       interacting: { edgeLabelMovable: false, magnetConnectable: false },
       connecting: {
         connector: "rounded",
@@ -275,17 +275,8 @@ export function ErdGraph(props: {
       mousewheel: { enabled: true, minScale: 0.5, maxScale: 2 },
     }));
 
-    // NOTE: Trigger resize. Using `autoResize: true` triggers uncaught exceptions.
-    const container = document.getElementById("container")!;
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => {
-        graph?.resize(container.clientWidth, container.clientHeight);
-      });
-    });
-    resizeObserver.observe(container);
-
     g.resetCells([
-      ...layoutErdNodes(props.nodes, graphAspect(container)).map((node) =>
+      ...layoutErdNodes(props.nodes, graphAspect(ref)).map((node) =>
         g.createNode(node),
       ),
       ...props.edges.map((edge) => g.createEdge(edge)),
@@ -299,14 +290,12 @@ export function ErdGraph(props: {
       zoomOut: () => g.zoomTo(g.zoom() / 2),
       fit: () => g.zoomToFit({ padding: 20 }),
       reset: () => {
-        layoutErdNodes(props.nodes, graphAspect(container)).forEach(
-          (node, index) => {
-            const position = node.position;
-            if (position) {
-              g.getNodes()[index]?.position(position.x, position.y);
-            }
-          },
-        );
+        layoutErdNodes(props.nodes, graphAspect(ref)).forEach((node, index) => {
+          const position = node.position;
+          if (position) {
+            g.getNodes()[index]?.position(position.x, position.y);
+          }
+        });
         g.zoomToFit({ padding: 20 });
       },
       focus: (id) => {
@@ -327,11 +316,9 @@ export function ErdGraph(props: {
     onCleanup(() => {
       if (graph === g) {
         graph = undefined;
+        props.onGraph?.(undefined);
       }
 
-      untrack(applySelection);
-      resizeObserver.disconnect();
-      props.onGraph?.(undefined);
       g.dispose();
     });
 
@@ -341,15 +328,16 @@ export function ErdGraph(props: {
   // NOTE: Order matters. Needs to run after graph init above.
   createEffect(applySelection);
 
+  // NOTE: The outer container is necessary for auto-resize to work.
   return (
-    <div id="container" class="size-full">
-      <div ref={ref} class="size-full overflow-clip" />
+    <div class="size-full overflow-clip">
+      <div ref={ref} class="size-full" />
     </div>
   );
 }
 
-function graphAspect(el: HTMLElement) {
-  const width = el.clientWidth;
-  const height = el.clientHeight;
+function graphAspect(el: HTMLElement | undefined) {
+  const width = el?.clientWidth ?? window.innerWidth;
+  const height = el?.clientHeight ?? window.innerHeight;
   return width > 0 && height > 0 ? width / height : 1;
 }

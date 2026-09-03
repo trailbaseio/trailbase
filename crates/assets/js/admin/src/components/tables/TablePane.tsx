@@ -1130,7 +1130,7 @@ export function TablePane(props: {
   const [columnPinningState, setColumnPinningState] = createSignal({});
 
   return (
-    <>
+    <div>
       <TablePaneHeader
         table={props.selectedTable}
         allTables={props.schemas.tables}
@@ -1220,7 +1220,7 @@ export function TablePane(props: {
           </TabsContent>
         </Show>
       </Tabs>
-    </>
+    </div>
   );
 }
 

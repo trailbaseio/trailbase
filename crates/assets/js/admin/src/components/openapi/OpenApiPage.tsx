@@ -100,7 +100,7 @@ export default function Page() {
   });
 
   return (
-    <>
+    <div class="flex size-full flex-col">
       <Header
         title="OpenApi Explorer"
         description={version()}
@@ -138,7 +138,7 @@ export default function Page() {
       >
         {/* Contents */}
       </rapi-doc>
-    </>
+    </div>
   );
 }
 

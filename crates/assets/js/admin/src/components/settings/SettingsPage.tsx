@@ -71,7 +71,6 @@ import {
   invalidateConfig,
 } from "@/lib/api/config";
 import { createSystemInfoQuery } from "@/lib/api/info";
-import { createIsMobile } from "@/lib/signals";
 
 function ServerSettings(props: CommonProps) {
   const config = createConfigQuery();
@@ -479,7 +478,6 @@ export function SettingsPage() {
   const [dirtyDialog, setDirtyDialog] = createSignal<
     DirtyDialogState | undefined
   >();
-  const isMobile = createIsMobile();
 
   const activeSite = () => {
     const g = params?.group;
@@ -579,17 +577,7 @@ export function SettingsPage() {
       </Sidebar>
 
       <SidebarInset>
-        <Switch>
-          <Match when={isMobile()}>
-            <Body />
-          </Match>
-
-          <Match when={!isMobile()}>
-            <div class="h-dvh overflow-y-auto">
-              <Body />
-            </div>
-          </Match>
-        </Switch>
+        <Body />
       </SidebarInset>
     </SidebarProvider>
   );

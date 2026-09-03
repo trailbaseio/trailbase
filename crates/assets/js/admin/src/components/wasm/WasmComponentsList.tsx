@@ -164,7 +164,7 @@ export function WasmComponentsList() {
   };
 
   return (
-    <div>
+    <div class="flex size-full flex-col">
       <Header
         title="WASM Components"
         description={

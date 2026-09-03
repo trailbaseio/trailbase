@@ -696,7 +696,9 @@ function EditorPanel(props: {
         )}
 
         {/* Editor */}
-        <div class="min-h-24 shrink" ref={ref} />
+        <div class="min-h-24 shrink">
+          <div ref={ref} />
+        </div>
 
         <div class="flex items-center justify-between">
           <Tooltip>
@@ -743,7 +745,6 @@ export function EditorPage() {
   // FIXME: Note that the state isn't persistent enough. E.g. resizing to
   // mobile rebuild EditorPage and reset the dirty state.
   const scripts = useStore($scripts);
-  const isMobile = createIsMobile();
   const [dirty, setDirty] = createSignal<boolean>(false);
 
   const [selected, setSelectedImpl] = createSignal<number>(
@@ -816,19 +817,8 @@ export function EditorPage() {
             <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
           </Match>
 
-          <Match when={schemaFetch.data && isMobile()}>
-            <EditorPanel
-              schemas={schemaFetch.data!}
-              selected={[selected, setSelected]}
-              script={script()}
-              dirty={[dirty, setDirty]}
-              dirtyDialog={[dirtyDialog, setDirtyDialog]}
-              deleteScript={() => deleteScriptByIdx()}
-            />
-          </Match>
-
-          <Match when={schemaFetch.data && !isMobile()}>
-            <div class="h-dvh overflow-y-auto">
+          <Match when={schemaFetch.data}>
+            <div class="flex size-full flex-col">
               <EditorPanel
                 schemas={schemaFetch.data!}
                 selected={[selected, setSelected]}

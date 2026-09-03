@@ -16,10 +16,8 @@ import {
 } from "@/components/ui/switch";
 
 import { client, hostAddress } from "@/lib/client";
-import { createIsMobile } from "@/lib/signals";
 import { $tokens } from "@/lib/client";
 import { type ResolvedTheme, currentTheme } from "@/lib/theme";
-import { getSpareHeaderStyle } from "@/lib/header";
 import { cn } from "@/lib/utils";
 
 function SandboxedIframe(props: { component: WasmComponent }) {
@@ -247,7 +245,6 @@ export function WasmComponentDetails(props: {
   component: WasmComponent;
   sandboxed: boolean;
 }) {
-  const isMobile = createIsMobile();
   const [sandboxed, setSandboxed] = createWritableMemo<boolean>(
     () => props.sandboxed,
   );
@@ -259,28 +256,28 @@ export function WasmComponentDetails(props: {
       </Match>
 
       <Match when={true}>
-        <Header
-          leading={BackButton()}
-          title={props.component.display_name ?? props.component.name}
-          description={
-            <span>
-              {props.component.name}
-              <Show when={props.component.version}>
-                {(version) => `@${version()}`}
+        <div class="flex size-full flex-col">
+          <Header
+            leading={BackButton()}
+            title={props.component.display_name ?? props.component.name}
+            description={
+              <span>
+                {props.component.name}
+                <Show when={props.component.version}>
+                  {(version) => `@${version()}`}
+                </Show>
+              </span>
+            }
+            right={
+              <Show when={import.meta.env.DEV}>
+                <SandboxButton
+                  sandboxed={sandboxed()}
+                  setSandboxed={setSandboxed}
+                />
               </Show>
-            </span>
-          }
-          right={
-            <Show when={import.meta.env.DEV}>
-              <SandboxButton
-                sandboxed={sandboxed()}
-                setSandboxed={setSandboxed}
-              />
-            </Show>
-          }
-        />
+            }
+          />
 
-        <div class={getSpareHeaderStyle(isMobile())}>
           <Switch>
             <Match when={!sandboxed()}>
               <YoloIframe component={props.component} />

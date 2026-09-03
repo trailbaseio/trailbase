@@ -180,7 +180,7 @@ export function HorizontalNavbar(props: {
   return (
     <nav
       style={{ height: `${props.height}px` }}
-      class="border-border bg-sidebar text-sidebar-foreground flex w-screen items-center justify-between gap-2 overflow-x-auto overflow-y-hidden border-b p-2"
+      class="border-border bg-sidebar text-sidebar-foreground flex w-full items-center justify-between gap-2 overflow-x-auto overflow-y-hidden border-b p-2"
     >
       <NavbarItems location={props.location} horizontal={true} />
 

@@ -528,10 +528,6 @@ function emptyErdModel(): ErdModel {
   };
 }
 
-function countLabel(count: number, singular: string): string {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`;
-}
-
 export function ErdPage() {
   const schemaFetch = createTableSchemaQuery();
   const theme = createTheme();
@@ -550,9 +546,14 @@ export function ErdPage() {
       ? buildErdModel(schemaFetch.data, visibility(), theme())
       : emptyErdModel(),
   );
+
   const description = createMemo(() => {
     if (!schemaFetch.data) {
       return undefined;
+    }
+
+    function countLabel(count: number, singular: string): string {
+      return `${count} ${count === 1 ? singular : `${singular}s`}`;
     }
 
     const current = allModel();
@@ -578,7 +579,7 @@ export function ErdPage() {
   });
 
   return (
-    <div class="flex size-full min-h-0 flex-col">
+    <div class="flex size-full flex-col">
       <Header title="ERD" description={description()} />
 
       <ErdToolbar
@@ -602,77 +603,75 @@ export function ErdPage() {
         }}
       />
 
-      <div class="relative min-h-0 flex-1">
-        <Switch>
-          <Match when={schemaFetch.isError}>
-            <Callout
-              variant="error"
-              role="alert"
-              class="absolute inset-x-4 top-4"
-            >
-              <CalloutTitle>Unable to load schema</CalloutTitle>
-              <CalloutContent class="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span>TrailBase couldn't load the database schema.</span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => schemaFetch.refetch()}
-                >
-                  Retry
-                </Button>
-              </CalloutContent>
-            </Callout>
-          </Match>
-
-          <Match when={schemaFetch.isPending}>
-            <div class="text-muted-foreground flex size-full items-center justify-center gap-3 text-sm">
-              <Spinner size={20} />
-              <span>Loading schema</span>
-            </div>
-          </Match>
-
-          <Match when={schemaFetch.data && allModel().entities.length === 0}>
-            <div class="flex size-full flex-col items-center justify-center gap-1 p-6 text-center">
-              <h2 class="text-sm font-medium">No schema entities</h2>
-              <p class="text-muted-foreground max-w-sm text-xs">
-                Create a table or view to start exploring relationships.
-              </p>
-            </div>
-          </Match>
-
-          <Match when={schemaFetch.data && model().entities.length === 0}>
-            <div class="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
-              <div>
-                <h2 class="text-sm font-medium">
-                  No entities match these filters
-                </h2>
-                <p class="text-muted-foreground mt-1 text-xs">
-                  Enable tables or views to restore the diagram.
-                </p>
-              </div>
-
+      <Switch>
+        <Match when={schemaFetch.isError}>
+          <Callout
+            variant="error"
+            role="alert"
+            class="absolute inset-x-4 top-4"
+          >
+            <CalloutTitle>Unable to load schema</CalloutTitle>
+            <CalloutContent class="flex flex-wrap items-center justify-between gap-3 text-sm">
+              <span>TrailBase couldn't load the database schema.</span>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setVisibility({ tables: true, views: true })}
+                onClick={() => schemaFetch.refetch()}
               >
-                Show all entities
+                Retry
               </Button>
-            </div>
-          </Match>
+            </CalloutContent>
+          </Callout>
+        </Match>
 
-          <Match when={schemaFetch.data}>
-            <ErdGraph
-              nodes={model().nodes}
-              edges={model().edges}
-              relations={model().relations}
-              selectedId={selectedId()}
-              onSelect={select}
-              onGraph={(handle) => (graph = handle)}
-            />
-          </Match>
-        </Switch>
-      </div>
+        <Match when={schemaFetch.isPending}>
+          <div class="text-muted-foreground flex size-full items-center justify-center gap-3 text-sm">
+            <Spinner size={20} />
+            <span>Loading schema</span>
+          </div>
+        </Match>
+
+        <Match when={schemaFetch.data && allModel().entities.length === 0}>
+          <div class="flex size-full flex-col items-center justify-center gap-1 p-6 text-center">
+            <h2 class="text-sm font-medium">No schema entities</h2>
+            <p class="text-muted-foreground max-w-sm text-xs">
+              Create a table or view to start exploring relationships.
+            </p>
+          </div>
+        </Match>
+
+        <Match when={schemaFetch.data && model().entities.length === 0}>
+          <div class="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
+            <div>
+              <h2 class="text-sm font-medium">
+                No entities match these filters
+              </h2>
+              <p class="text-muted-foreground mt-1 text-xs">
+                Enable tables or views to restore the diagram.
+              </p>
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setVisibility({ tables: true, views: true })}
+            >
+              Show all
+            </Button>
+          </div>
+        </Match>
+
+        <Match when={schemaFetch.data}>
+          <ErdGraph
+            nodes={model().nodes}
+            edges={model().edges}
+            relations={model().relations}
+            selectedId={selectedId()}
+            onSelect={select}
+            onGraph={(handle) => (graph = handle)}
+          />
+        </Match>
+      </Switch>
     </div>
   );
 }

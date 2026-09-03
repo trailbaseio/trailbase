@@ -26,12 +26,15 @@ const queryClient = new QueryClient();
 function LeftNav(props: RouteSectionProps) {
   return (
     <>
-      <div class="hide-scrollbars sticky h-dvh w-[58px] overflow-hidden">
+      {/* Big-z to draw navbar over collapsed sidebar */}
+      <div class="hide-scrollbars sticky z-50 h-dvh w-[58px] overflow-hidden">
         <VerticalNavbar location={props.location} />
       </div>
 
-      <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100vw-58px)] overflow-x-hidden overflow-y-auto">
-        <ErrorBoundary>{props.children}</ErrorBoundary>
+      <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100dvw-58px)]">
+        <div class="size-full overflow-y-auto">
+          <ErrorBoundary>{props.children}</ErrorBoundary>
+        </div>
       </main>
     </>
   );
@@ -39,13 +42,11 @@ function LeftNav(props: RouteSectionProps) {
 
 function TopNav(props: RouteSectionProps) {
   return (
-    <>
+    <div class="h-dvh max-w-dvw overflow-x-hidden overflow-y-auto">
       <HorizontalNavbar height={48} location={props.location} />
 
-      <main class="max-h-[calc(100vh-48px)] w-screen overflow-y-auto">
-        <ErrorBoundary>{props.children}</ErrorBoundary>
-      </main>
-    </>
+      <div class="h-[calc(100dvh-48px)]">{props.children}</div>
+    </div>
   );
 }
 

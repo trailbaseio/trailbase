@@ -44,7 +44,6 @@ import {
   prettyFormatQualifiedName,
   equalQualifiedNames,
 } from "@/lib/schema";
-import { createIsMobile } from "@/lib/signals";
 
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { Table } from "@bindings/Table";
@@ -145,6 +144,9 @@ function TablePickerSidebar(props: {
     return bySchema;
   });
 
+  const count = () =>
+    tablesAndViewsBySchema().reduce((c, s) => c + s.length, 0);
+
   return (
     <>
       {/* Add table & show hidden tables buttons */}
@@ -152,7 +154,7 @@ function TablePickerSidebar(props: {
         <div class="flex justify-between gap-2 p-2">
           <div>
             <h3>Schemas</h3>
-            <span class="text-xs">{props.tablesAndViews.length} visible</span>
+            <span class="text-xs">{count()} visible</span>
           </div>
 
           <div class="flex gap-1">
@@ -302,7 +304,6 @@ function TableSplitView(props: {
   schemaRefetch: () => Promise<void>;
 }) {
   const navigate = useNavigate();
-  const isMobile = createIsMobile();
   const [createTableDialog, setCreateTableDialog] = createSignal(false);
 
   const allTables = createMemo(() => props.schemas.tables.map(([t, _]) => t));
@@ -373,24 +374,13 @@ function TableSplitView(props: {
 
               <SidebarInset>
                 <Switch>
-                  <Match when={selectedTable() !== undefined && isMobile()}>
+                  <Match when={selectedTable()}>
                     <TablePane
                       selectedTable={selectedTable()!}
                       schemas={props.schemas}
                       schemaRefetch={props.schemaRefetch}
                       postgres={isPostgres()}
                     />
-                  </Match>
-
-                  <Match when={selectedTable() !== undefined && !isMobile()}>
-                    <div class="h-dvh overflow-y-auto">
-                      <TablePane
-                        selectedTable={selectedTable()!}
-                        schemas={props.schemas}
-                        schemaRefetch={props.schemaRefetch}
-                        postgres={isPostgres()}
-                      />
-                    </div>
                   </Match>
 
                   <Match when={true}>
