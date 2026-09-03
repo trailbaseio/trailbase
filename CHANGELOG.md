@@ -1,3 +1,8 @@
+## v0.33.10
+
+- Admin UI: fix ERD on small screens.
+- Generally improve appearance on small screens.
+
 ## v0.33.9
 
 - Admin UI: Integrate ERD graph UI from #283. Thanks @burggraf 🙏
