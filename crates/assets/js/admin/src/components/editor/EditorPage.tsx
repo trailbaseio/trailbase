@@ -12,7 +12,6 @@ import {
 import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
-import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import {
@@ -72,6 +71,7 @@ import {
 } from "@/components/ui/tooltip";
 import { showToast } from "@/components/ui/toast";
 import { Table, buildTable } from "@/components/Table";
+import type { TableColumnDef, TableColumnPinningState } from "@/components/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
 
 import type { QueryResponse } from "@bindings/QueryResponse";
@@ -204,9 +204,12 @@ function ResultViewImpl(props: {
   isCached: boolean;
   timestamp?: number;
 }) {
-  const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [columnPinningState, setColumnPinningState] =
+    createSignal<TableColumnPinningState>({ start: [], end: [] });
 
-  function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
+  function columnDefs(
+    data: QueryResponse,
+  ): TableColumnDef<ArrayRecord, SqlValue>[] {
     return (data.columns ?? []).map((col, idx) => {
       const notNull = isNotNull(col.options);
 

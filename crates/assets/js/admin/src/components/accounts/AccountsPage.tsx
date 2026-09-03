@@ -20,11 +20,7 @@ import {
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { createForm } from "@tanstack/solid-form";
 import { useQuery, useQueryClient } from "@tanstack/solid-query";
-import type {
-  ColumnDef,
-  PaginationState,
-  SortingState,
-} from "@tanstack/solid-table";
+import type { PaginationState, SortingState } from "@tanstack/solid-table";
 
 import {
   Dialog,
@@ -51,6 +47,7 @@ import {
 import { Callout } from "@/components/ui/callout";
 import { Header } from "@/components/Header";
 import { Table, buildTable } from "@/components/Table";
+import type { TableColumnDef } from "@/components/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
@@ -69,7 +66,7 @@ import { formatSortingAsOrder } from "@/lib/list";
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 
-function buildColumns(): ColumnDef<UserJson>[] {
+function buildColumns(): TableColumnDef<UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {

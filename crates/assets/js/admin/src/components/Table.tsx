@@ -1,22 +1,26 @@
 import { Index, For, Match, Show, Switch } from "solid-js";
 import type { Accessor } from "solid-js";
-import {
-  flexRender,
-  createSolidTable,
-  getCoreRowModel,
-  createColumnHelper,
-} from "@tanstack/solid-table";
 import type {
-  ColumnDef,
   ColumnPinningState,
-  Header,
   PaginationState,
-  Row,
-  Table as SolidTable,
-  TableOptions as SolidTableOptions,
   SortingState,
   Updater,
 } from "@tanstack/solid-table";
+import { flexRender, createTable } from "@tanstack/solid-table";
+import {
+  createColumnHelper,
+  stockFeatures,
+  tableFeatures,
+} from "@tanstack/table-core";
+import type {
+  CellContext,
+  ColumnDef as TanStackColumnDef,
+  Header as TanStackHeader,
+  Row as TanStackRow,
+  RowData,
+  Table as TanStackTable,
+  TableOptions as TanStackTableOptions,
+} from "@tanstack/table-core";
 import {
   TbOutlinePin,
   TbFillPin,
@@ -46,35 +50,61 @@ import { createIsMobile } from "@/lib/signals";
 
 export type { Updater } from "@tanstack/solid-table";
 
-type TableOptions<TData, TValue> = {
+const adminTableFeatures = tableFeatures({
+  ...stockFeatures,
+});
+
+type AdminTableFeatures = typeof adminTableFeatures;
+
+export type TableColumnDef<TData extends RowData, TValue = unknown> =
+  TanStackColumnDef<AdminTableFeatures, TData, TValue>;
+export type TableCellContext<TData extends RowData, TValue = unknown> =
+  CellContext<AdminTableFeatures, TData, TValue>;
+export type TableColumnPinningState = ColumnPinningState;
+export type TableHeader<TData extends RowData, TValue = unknown> =
+  TanStackHeader<AdminTableFeatures, TData, TValue>;
+export type TableInstance<TData extends RowData> = TanStackTable<
+  AdminTableFeatures,
+  TData
+>;
+export type TableRow<TData extends RowData> = TanStackRow<
+  AdminTableFeatures,
+  TData
+>;
+
+export function createTableColumnHelper<TData extends RowData>() {
+  return createColumnHelper<AdminTableFeatures, TData>();
+}
+
+type TableOptions<TData extends RowData, TValue = unknown> = {
   data: TData[] | undefined;
-  columns: ColumnDef<TData, TValue>[];
+  columns: TableColumnDef<TData, TValue>[];
 
   rowCount?: number;
   pagination?: PaginationState;
   onPaginationChange?: (state: PaginationState) => void;
 
-  onRowSelection?: (rows: Row<TData>[], value: boolean) => void;
+  onRowSelection?: (rows: TableRow<TData>[], value: boolean) => void;
 
   columnPinning?: Accessor<ColumnPinningState>;
   onColumnPinningChange?: (state: ColumnPinningState) => void;
 };
 
-export function buildTable<TData, TValue>(
+export function buildTable<TData extends RowData, TValue>(
   opts: TableOptions<TData, TValue>,
-  overrides?: Partial<SolidTableOptions<TData>>,
+  overrides?: Partial<TanStackTableOptions<AdminTableFeatures, TData>>,
 ) {
   console.debug(
     `buildTable(): columns=${opts.columns.length}, rows=${opts.data?.length}`,
   );
 
-  function buildColumns() {
+  function buildColumns(): TableColumnDef<TData>[] {
     const onRowSelection = opts.onRowSelection;
     if (!onRowSelection) {
-      return opts.columns;
+      return opts.columns as TableColumnDef<TData>[];
     }
 
-    const helper = createColumnHelper<TData>();
+    const helper = createTableColumnHelper<TData>();
 
     return [
       helper.display({
@@ -115,24 +145,25 @@ export function buildTable<TData, TValue>(
         ),
       }),
       // Custom/Domain-provided columns
-      ...opts.columns,
+      ...(opts.columns as TableColumnDef<TData>[]),
     ];
   }
 
   function buildColumnPinningState(): ColumnPinningState {
-    const state = {
-      ...opts.columnPinning?.(),
+    const state = opts.columnPinning?.();
+    const start = state?.start ?? [];
+
+    return {
+      start: start[0] === "__select__" ? start : ["__select__", ...start],
+      end: state?.end ?? [],
     };
-    if (state.left?.[0] !== "__select__") {
-      state.left = ["__select__", ...(state.left ?? [])];
-    }
-    return state;
   }
 
   const enableColumnPinning =
     opts.columnPinning !== undefined && opts.columns.length > 1;
 
-  const t = createSolidTable({
+  const t = createTable<AdminTableFeatures, TData>({
+    features: adminTableFeatures,
     data: opts.data ?? [],
     state: {
       pagination:
@@ -148,7 +179,6 @@ export function buildTable<TData, TValue>(
       ...(overrides?.state ?? {}),
     },
     columns: buildColumns(),
-    getCoreRowModel: getCoreRowModel(),
 
     // Column default sizing
     defaultColumn: {
@@ -168,7 +198,7 @@ export function buildTable<TData, TValue>(
         ? (updater) => {
             const newState =
               typeof updater === "function"
-                ? updater(t.getState().pagination)
+                ? updater(t.atoms.pagination.get())
                 : updater;
 
             opts.onPaginationChange!(newState);
@@ -195,7 +225,7 @@ export function buildTable<TData, TValue>(
         ? (updater) => {
             const newState =
               typeof updater === "function"
-                ? updater(t.getState().columnPinning)
+                ? updater(t.atoms.columnPinning.get())
                 : updater;
 
             opts.onColumnPinningChange!(newState);
@@ -213,13 +243,13 @@ function omit<T, K extends keyof T>(object: T, key: K): Omit<T, K> {
   return otherKeys;
 }
 
-export function Table<TData>(props: {
-  table: SolidTable<TData>;
+export function Table<TData extends RowData>(props: {
+  table: TableInstance<TData>;
   loading: boolean;
   onRowClick?: (idx: number, row: TData) => void;
 }) {
   const paginationEnabled = () => props.table.options.manualPagination ?? false;
-  const paginationState = () => props.table.getState().pagination;
+  const paginationState = () => props.table.atoms.pagination.get();
   const columns = () => props.table.options.columns;
   const numRows = (): number => props.table.getRowModel().rows.length;
   const enableSorting = () =>
@@ -312,8 +342,8 @@ export function Table<TData>(props: {
   );
 }
 
-function TableHeaderRow<TData>(props: {
-  header: Header<TData, unknown>;
+function TableHeaderRow<TData extends RowData>(props: {
+  header: TableHeader<TData, unknown>;
   enabledColumnPinning: boolean;
   updateSorting?: (updater: Updater<SortingState>) => void;
 }) {
@@ -407,7 +437,7 @@ function TableHeaderRow<TData>(props: {
                   if (props.header.column.getIsPinned()) {
                     props.header.column.pin(false);
                   } else {
-                    props.header.column.pin("left");
+                    props.header.column.pin("start");
                   }
                 }}
               >
@@ -425,8 +455,8 @@ function TableHeaderRow<TData>(props: {
   );
 }
 
-function TableDataRow<TData>(props: {
-  row: Row<TData>;
+function TableDataRow<TData extends RowData>(props: {
+  row: TableRow<TData>;
   onRowClick?: (idx: number, row: TData) => void;
 }) {
   const onClick = () => {
@@ -480,8 +510,8 @@ function TableDataRow<TData>(props: {
   );
 }
 
-function PaginationControl<TData>(props: {
-  table: SolidTable<TData>;
+function PaginationControl<TData extends RowData>(props: {
+  table: TableInstance<TData>;
   rowCount?: number;
 }) {
   const table = () => props.table;
@@ -490,7 +520,7 @@ function PaginationControl<TData>(props: {
     <div class="flex items-center space-x-2 py-1">
       <Select
         multiple={false}
-        value={table().getState().pagination.pageSize}
+        value={table().atoms.pagination.get().pageSize}
         onChange={(value) => {
           table().setPageSize(value ?? 20);
         }}
@@ -511,7 +541,7 @@ function PaginationControl<TData>(props: {
   const PaginationInfoText = () => {
     const isMobile = createIsMobile();
 
-    const pageIndex = () => table().getState().pagination.pageIndex;
+    const pageIndex = () => table().atoms.pagination.get().pageIndex;
     const pageCount = () => table().getPageCount();
     const rowCount = () => props.rowCount;
 

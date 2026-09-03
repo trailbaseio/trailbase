@@ -18,15 +18,8 @@ import {
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
-import type {
-  CellContext,
-  ColumnDef,
-  ColumnPinningState,
-  PaginationState,
-  Row,
-  SortingState,
-} from "@tanstack/solid-table";
-import { createColumnHelper } from "@tanstack/solid-table";
+import type { PaginationState, SortingState } from "@tanstack/solid-table";
+import { sortFn_alphanumeric } from "@tanstack/table-core";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 import { urlSafeBase64Decode } from "trailbase";
 
@@ -56,7 +49,11 @@ import { Badge } from "@/components/ui/badge";
 import { DebugDialogButton } from "@/components/tables/SchemaDownload";
 import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
 import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
-import { Table as TableComponent, buildTable } from "@/components/Table";
+import {
+  Table as TableComponent,
+  buildTable,
+  createTableColumnHelper,
+} from "@/components/Table";
 import {
   Table as TableUi,
   TableHeader,
@@ -65,7 +62,13 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import type { Updater } from "@/components/Table";
+import type {
+  TableCellContext,
+  TableColumnDef,
+  TableColumnPinningState,
+  TableRow as DataTableRow,
+  Updater,
+} from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
@@ -139,7 +142,7 @@ function rowDataToRow(columns: Column[], row: ArrayRecord): Record {
 }
 
 function renderCell(
-  context: CellContext<ArrayRecord, SqlValue>,
+  context: TableCellContext<ArrayRecord, SqlValue>,
   tableName: QualifiedName,
   columns: Column[],
   pkIndex: number,
@@ -509,7 +512,7 @@ function buildColumnDefs(
   pkColumnIndex: number,
   blobEncoding: BlobEncoding,
   rowsRefetch: () => void,
-): ColumnDef<ArrayRecord, SqlValue>[] {
+): TableColumnDef<ArrayRecord, SqlValue>[] {
   if (columns === undefined) {
     // Fallback to schema (rather than response) column defintions.
     if (tableType(selectedSchema) === "table") {
@@ -528,7 +531,7 @@ function buildColumnDefs(
     ];
   }
 
-  return columns.map((col, idx): ColumnDef<ArrayRecord, SqlValue> => {
+  return columns.map((col, idx): TableColumnDef<ArrayRecord, SqlValue> => {
     const fk = getForeignKey(col.options);
     const notNull = isNotNull(col.options);
     const type = deriveCellType(col);
@@ -541,7 +544,7 @@ function buildColumnDefs(
       id: col.name,
       header,
       enableSorting: true,
-      sortingFn: "alphanumeric",
+      sortFn: sortFn_alphanumeric,
       cell: (context) =>
         renderCell(
           context,
@@ -565,7 +568,7 @@ function RecordTable(props: {
   records: ListRowsResponse | undefined;
   pagination: SimpleSignal<PaginationState>;
   filter: SimpleSignal<string | undefined>;
-  columnPinningState: Signal<ColumnPinningState>;
+  columnPinningState: Signal<TableColumnPinningState>;
   sorting: Signal<SortingState>;
   rowsRefetch: () => void;
 }) {
@@ -611,7 +614,7 @@ function RecordTable(props: {
         },
         onRowSelection: mutable()
           ? // eslint-disable-next-line solid/reactivity
-            (rows: Row<ArrayRecord>[], value: boolean) => {
+            (rows: DataTableRow<ArrayRecord>[], value: boolean) => {
               const newSelection = new Map<string, SqlValue>(selectedRows());
 
               for (const row of rows) {
@@ -818,7 +821,7 @@ function IndexTable(props: {
       onRowSelection: hidden()
         ? undefined
         : // eslint-disable-next-line solid/reactivity
-          (rows: Row<TableIndex>[], value: boolean) => {
+          (rows: DataTableRow<TableIndex>[], value: boolean) => {
             const newSelection = new Set(selectedIndexes());
 
             for (const row of rows) {
@@ -1127,7 +1130,8 @@ export function TablePane(props: {
     rowsRefetch();
   };
 
-  const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [columnPinningState, setColumnPinningState] =
+    createSignal<TableColumnPinningState>({ start: [], end: [] });
 
   return (
     <>
@@ -1526,13 +1530,13 @@ const indexColumns = [
       return index.predicate?.replaceAll("<>", "!=");
     },
   },
-] as ColumnDef<TableIndex>[];
+] as TableColumnDef<TableIndex>[];
 
 type TableTriggerAndSql = TableTrigger & {
   sql: string;
 };
 
-const triggerColumnHelper = createColumnHelper<TableTriggerAndSql>();
+const triggerColumnHelper = createTableColumnHelper<TableTriggerAndSql>();
 const triggerColumns = [
   triggerColumnHelper.accessor("name", {
     header: "name",
@@ -1542,4 +1546,4 @@ const triggerColumns = [
     header: "statement",
     cell: (props) => <p class="max-w-[20dvw]">{props.getValue()}</p>,
   }),
-] as ColumnDef<TableTriggerAndSql>[];
+] as TableColumnDef<TableTriggerAndSql>[];

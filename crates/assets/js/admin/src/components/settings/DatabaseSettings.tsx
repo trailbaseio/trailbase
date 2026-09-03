@@ -1,6 +1,5 @@
 import { createSignal, Switch, Match, createMemo } from "solid-js";
 import { useQueryClient } from "@tanstack/solid-query";
-import type { Row, ColumnDef } from "@tanstack/solid-table";
 import { TbOutlineLink, TbOutlineUnlink } from "solid-icons/tb";
 
 import { createConfigQuery, setConfig } from "@/lib/api/config";
@@ -13,6 +12,7 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { Table, buildTable } from "@/components/Table";
+import type { TableColumnDef, TableRow } from "@/components/Table";
 import {
   Dialog,
   DialogContent,
@@ -100,7 +100,7 @@ function DatabaseSettingsForm(props: {
       columns: buildColumns(),
       data: props.config.databases,
       rowCount: props.config.databases.length,
-      onRowSelection: (rows: Row<DatabaseConfig>[], value: boolean) => {
+      onRowSelection: (rows: TableRow<DatabaseConfig>[], value: boolean) => {
         const newSelection = new Set<string>(selectedRows());
 
         for (const row of rows) {
@@ -286,7 +286,7 @@ function ImportExportCard() {
   );
 }
 
-function buildColumns(): ColumnDef<DatabaseConfig>[] {
+function buildColumns(): TableColumnDef<DatabaseConfig>[] {
   return [
     {
       header: "name",

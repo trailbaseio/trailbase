@@ -11,11 +11,7 @@ import {
 } from "solid-js";
 import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
-import type {
-  ColumnDef,
-  PaginationState,
-  SortingState,
-} from "@tanstack/solid-table";
+import type { PaginationState, SortingState } from "@tanstack/solid-table";
 import { useQuery } from "@tanstack/solid-query";
 import { Chart } from "chart.js/auto";
 import type {
@@ -58,6 +54,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Table as TableComponent, buildTable } from "@/components/Table";
+import type { TableColumnDef, TableColumnPinningState } from "@/components/Table";
 import { Table, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import {
   Sheet,
@@ -81,7 +78,7 @@ import type { StatsResponse } from "@bindings/StatsResponse";
 // Needed for bundlers like vite: https://github.com/maplibre/maplibre-gl-js/blob/main/docs/index.md#installation
 maplibregl.setWorkerUrl(workerUrl);
 
-const columns: ColumnDef<LogJson>[] = [
+const columns: TableColumnDef<LogJson>[] = [
   // NOTE: ISO string contains milliseconds.
   {
     accessorKey: "created",
@@ -326,7 +323,8 @@ function LogsPage() {
   const [accordion, setAccordion] = createSignal(true);
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
-  const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [columnPinningState, setColumnPinningState] =
+    createSignal<TableColumnPinningState>({ start: [], end: [] });
   const [showLog, setShowLog] = createSignal<LogJson | undefined>();
 
   const logsTable = createMemo(() => {
