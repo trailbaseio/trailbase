@@ -11,10 +11,12 @@ function avatarUrl(user: User): string {
 }
 
 export function Avatar(props: { user: User | undefined; size: number }) {
+  const Fallback = () => <TbFillUser size={props.size} class="text-primary" />;
+
   return (
     <Switch>
       <Match when={props.user === undefined}>
-        <TbFillUser size={props.size} color="#0073aa" />
+        <Fallback />
       </Match>
 
       <Match when={props.user !== undefined}>
@@ -26,8 +28,7 @@ export function Avatar(props: { user: User | undefined; size: number }) {
           height={props.size}
           aria-label="Avatar image"
         >
-          {/* Fallback */}
-          <TbFillUser size={props.size} color="#0073aa" />
+          <Fallback />
         </object>
       </Match>
     </Switch>

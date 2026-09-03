@@ -25,10 +25,12 @@ import {
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { EditorView, lineNumbers, keymap } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { minimalSetup } from "codemirror";
 import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
+import { tags } from "@lezer/highlight";
 
 import { IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
@@ -79,7 +81,7 @@ import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
 import type { SqlValue } from "@bindings/SqlValue";
 
 import { createConfigQuery } from "@/lib/api/config";
-import { currentTheme } from "@/lib/theme";
+import { createTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
@@ -475,6 +477,7 @@ function EditorPanel(props: {
   const config = createConfigQuery();
 
   const isMobile = createIsMobile();
+  const theme = createTheme();
 
   const databases = () =>
     config.data?.config?.databases
@@ -537,6 +540,7 @@ function EditorPanel(props: {
   let editor: EditorView | undefined;
 
   onCleanup(() => editor?.destroy());
+
   createEffect(() => {
     const newEditorState = (contents: string) => {
       const customKeymap = keymap.of([
@@ -561,7 +565,8 @@ function EditorPanel(props: {
       return EditorState.create({
         doc: contents,
         extensions: [
-          editorTheme(currentTheme() === "dark"),
+          editorTheme(theme() === "dark"),
+          theme() === "dark" ? darkSqlSyntaxHighlighting : [],
           customKeymap,
           lineNumbers(),
           // Let's you define your own custom CSS style for the line number gutter.
@@ -898,6 +903,49 @@ function createNewScript(): number {
 function deleteScript(idx: number) {
   $scripts.set($scripts.get().toSpliced(idx, 1));
 }
+
+export const DARK_SQL_COLORS = {
+  keyword: "#7dd3fc",
+  string: "#86efac",
+  number: "#fde68a",
+  comment: "#a1a1aa",
+  name: "#e4e4e7",
+  operator: "#f9a8d4",
+  punctuation: "#cbd5e1",
+  invalid: "#fca5a5",
+} as const;
+
+const darkSqlSyntaxHighlighting = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.keyword, color: DARK_SQL_COLORS.keyword, fontWeight: "600" },
+    {
+      tag: [tags.string, tags.special(tags.string)],
+      color: DARK_SQL_COLORS.string,
+    },
+    {
+      tag: [tags.number, tags.bool, tags.atom],
+      color: DARK_SQL_COLORS.number,
+    },
+    {
+      tag: [tags.comment, tags.lineComment, tags.blockComment],
+      color: DARK_SQL_COLORS.comment,
+      fontStyle: "italic",
+    },
+    {
+      tag: [tags.variableName, tags.propertyName, tags.typeName],
+      color: DARK_SQL_COLORS.name,
+    },
+    {
+      tag: [tags.operator, tags.compareOperator],
+      color: DARK_SQL_COLORS.operator,
+    },
+    {
+      tag: [tags.punctuation, tags.separator],
+      color: DARK_SQL_COLORS.punctuation,
+    },
+    { tag: tags.invalid, color: DARK_SQL_COLORS.invalid },
+  ]),
+);
 
 const $scripts = persistentAtom<Script[]>("scripts", [defaultScript], {
   encode: JSON.stringify,

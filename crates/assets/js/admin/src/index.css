@@ -7,8 +7,7 @@
 @custom-variant dark (&:where(.dark, .dark *, [data-kb-theme=dark], [data-kb-theme=dark] *));
 
 :root {
-  /* --background: hsl(0 0% 100%); */
-  --background: #f8fafc;
+  --background: hsl(210 40% 98%);
   --foreground: hsl(240 10% 3.9%);
 
   --muted: hsl(240 4.8% 95.9%);
@@ -58,14 +57,17 @@
 
 .dark,
 [data-kb-theme="dark"] {
-  --background: hsl(240 10% 3.9%);
+  /* --background: hsl(240 10% 3.9%); */
+  --background: hsl(215 28% 10%);
   --foreground: hsl(0 0% 98%);
 
   --muted: hsl(240 3.7% 15.9%);
   --muted-foreground: hsl(240 5% 64.9%);
 
-  --accent: hsl(240 3.7% 15.9%);
-  --accent-foreground: hsl(0 0% 98%);
+  /* --accent: hsl(240 3.7% 15.9%); */
+  /* --accent-foreground: hsl(0 0% 98%); */
+  --accent: hsl(215 25% 16%);
+  --accent-foreground: hsl(210 40% 98%);
 
   --popover: hsl(240 10% 3.9%);
   --popover-foreground: hsl(0 0% 98%);
@@ -77,14 +79,15 @@
   --card-foreground: hsl(0 0% 98%);
 
   /* --primary: hsl(0 0% 98%); */
-  --primary: hsl(199 100% 33%);
-  /* --primary: #92d1fe; */
+  /* --primary: hsl(199 100% 33%); */
+  --primary: #34b7f4;
   --primary-foreground: hsl(240 5.9% 10%);
 
   --secondary: hsl(240 3.7% 15.9%);
   --secondary-foreground: hsl(0 0% 98%);
 
-  --destructive: hsl(0 62.8% 30.6%);
+  /* --destructive: hsl(0 62.8% 30.6%); */
+  --destructive: #9d2525;
   --destructive-foreground: hsl(0 0% 98%);
 
   --info: hsl(204 94% 94%);
@@ -254,10 +257,11 @@
 
 @theme {
   /* Generated accent color palettes for "Ocean AA". */
-  --color-accent-200: #92d1fe;
-  --color-accent-600: #0073aa;
-  --color-accent-900: #003653;
-  --color-accent-950: #00273d;
+  /* --color-accent-200: #92d1fe; */
+  /* --color-accent-600: #0073aa; */
+  /* --color-accent-900: #003653; */
+  /* --color-accent-950: #00273d; */
+
   /* Generated gray color palettes "Ocean AA". */
   --color-gray-100: #f3f7f9;
   --color-gray-200: #e7eff2;

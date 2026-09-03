@@ -288,7 +288,7 @@ export function SwitchThemeButton(props: { horizontal: boolean }) {
 }
 
 function iconSize(horizontal: boolean) {
-  return horizontal ? 18 : 22;
+  return horizontal ? 17 : 22;
 }
 
 export const navbarIconStyle =

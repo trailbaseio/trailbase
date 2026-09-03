@@ -1260,13 +1260,9 @@ function TableSchema(props: {
                         <TableCell>{col.type_name}</TableCell>
 
                         <TableCell>
-                          <div class="flex max-w-[200px] gap-1">
+                          <div class="flex max-w-[200px] flex-wrap gap-1">
                             <For each={col.options}>
-                              {(opt) => (
-                                <div class="text-nowrap">
-                                  <ColumnOptionBadge opt={opt} />
-                                </div>
-                              )}
+                              {(opt) => <ColumnOptionBadge opt={opt} />}
                             </For>
                           </div>
                         </TableCell>
@@ -1295,90 +1291,92 @@ function TableSchema(props: {
 
 function ColumnOptionBadge(props: { opt: ColumnOption }) {
   return (
-    <Switch>
-      <Match when={typeof props.opt === "string"}>
-        <Badge variant="outline">{props.opt as string}</Badge>
-      </Match>
+    <div class="max-w-[180px] text-wrap text-ellipsis">
+      <Switch>
+        <Match when={typeof props.opt === "string"}>
+          <Badge variant="outline">{props.opt as string}</Badge>
+        </Match>
 
-      <Match when={"Default" in (props.opt as object)}>
-        <Badge variant="outline">
-          Default: {(props.opt as { Default: string }).Default}
-        </Badge>
-      </Match>
+        <Match when={"Default" in (props.opt as object)}>
+          <Badge variant="outline">
+            Default: {(props.opt as { Default: string }).Default}
+          </Badge>
+        </Match>
 
-      <Match when={"Unique" in (props.opt as object)}>
-        <Switch>
-          <Match
-            when={
-              (props.opt as { Unique: { is_primary: boolean } }).Unique
-                .is_primary
-            }
-          >
-            <Badge variant="outline">PK</Badge>
-          </Match>
+        <Match when={"Unique" in (props.opt as object)}>
+          <Switch>
+            <Match
+              when={
+                (props.opt as { Unique: { is_primary: boolean } }).Unique
+                  .is_primary
+              }
+            >
+              <Badge variant="outline">PK</Badge>
+            </Match>
 
-          <Match when={true}>
-            <Badge variant="outline">Unique</Badge>
-          </Match>
-        </Switch>
-      </Match>
+            <Match when={true}>
+              <Badge variant="outline">Unique</Badge>
+            </Match>
+          </Switch>
+        </Match>
 
-      <Match when={"ForeignKey" in (props.opt as object)}>
-        {(() => {
-          const fk = (
-            props.opt as {
-              ForeignKey: {
-                foreign_table: string;
-                referred_columns: Array<string>;
-              };
-            }
-          ).ForeignKey;
+        <Match when={"ForeignKey" in (props.opt as object)}>
+          {(() => {
+            const fk = (
+              props.opt as {
+                ForeignKey: {
+                  foreign_table: string;
+                  referred_columns: Array<string>;
+                };
+              }
+            ).ForeignKey;
 
-          return (
-            <Switch>
-              <Match when={fk.referred_columns.length > 0}>
-                <Badge variant="outline">
-                  {`FK: ${fk.foreign_table}(${fk.referred_columns.join(", ")})`}
-                </Badge>
-              </Match>
+            return (
+              <Switch>
+                <Match when={fk.referred_columns.length > 0}>
+                  <Badge variant="outline">
+                    {`FK: ${fk.foreign_table}(${fk.referred_columns.join(", ")})`}
+                  </Badge>
+                </Match>
 
-              <Match when={true}>
-                <Badge variant="outline">{`FK: ${fk.foreign_table}`}</Badge>
-              </Match>
-            </Switch>
-          );
-        })()}
-      </Match>
+                <Match when={true}>
+                  <Badge variant="outline">{`FK: ${fk.foreign_table}`}</Badge>
+                </Match>
+              </Switch>
+            );
+          })()}
+        </Match>
 
-      <Match when={"Check" in (props.opt as object)}>
-        <Badge variant="outline">
-          Check: {(props.opt as { Check: string }).Check}
-        </Badge>
-      </Match>
+        <Match when={"Check" in (props.opt as object)}>
+          <Badge variant="outline">
+            Check: {(props.opt as { Check: string }).Check}
+          </Badge>
+        </Match>
 
-      <Match when={"OnUpdate" in (props.opt as object)}>
-        <Badge variant="outline">
-          OnUpdate: {(props.opt as { OnUpdate: string }).OnUpdate}
-        </Badge>
-      </Match>
+        <Match when={"OnUpdate" in (props.opt as object)}>
+          <Badge variant="outline">
+            OnUpdate: {(props.opt as { OnUpdate: string }).OnUpdate}
+          </Badge>
+        </Match>
 
-      <Match when={"Collate" in (props.opt as object)}>
-        <Badge variant="outline">
-          Collate: {(props.opt as { Collate: string }).Collate}
-        </Badge>
-      </Match>
+        <Match when={"Collate" in (props.opt as object)}>
+          <Badge variant="outline">
+            Collate: {(props.opt as { Collate: string }).Collate}
+          </Badge>
+        </Match>
 
-      <Match when={"Generated" in (props.opt as object)}>
-        <Badge variant="outline">
-          Generated:{" "}
-          {(props.opt as { Generated: { expr: string } }).Generated.expr}
-        </Badge>
-      </Match>
+        <Match when={"Generated" in (props.opt as object)}>
+          <Badge variant="outline">
+            Generated:{" "}
+            {(props.opt as { Generated: { expr: string } }).Generated.expr}
+          </Badge>
+        </Match>
 
-      <Match when={true}>
-        <Badge variant="outline">{JSON.stringify(props.opt)}</Badge>
-      </Match>
-    </Switch>
+        <Match when={true}>
+          <Badge variant="outline">{JSON.stringify(props.opt)}</Badge>
+        </Match>
+      </Switch>
+    </div>
   );
 }
 
@@ -1419,13 +1417,9 @@ function ViewSchema(props: { view: View; createView: string }) {
                             <TableCell>{col.column.data_type}</TableCell>
 
                             <TableCell>
-                              <div class="flex max-w-[200px] gap-1">
+                              <div class="flex w-[200px] flex-wrap gap-1">
                                 <For each={col.column.options}>
-                                  {(opt) => (
-                                    <div class="text-nowrap">
-                                      <ColumnOptionBadge opt={opt} />
-                                    </div>
-                                  )}
+                                  {(opt) => <ColumnOptionBadge opt={opt} />}
                                 </For>
                               </div>
                             </TableCell>

@@ -29,7 +29,7 @@ export function Header(props: {
 
           <Show when={!props.leading && context}>
             <div
-              class="hover:bg-accent hover:text-accent-foreground flex h-10 w-9 items-center justify-center rounded-r-lg"
+              class="hover:bg-accent flex h-10 w-9 items-center justify-center rounded-r-lg"
               onClick={() => {
                 context?.toggleSidebar();
               }}
@@ -41,7 +41,7 @@ export function Header(props: {
           {/* Title + description */}
           <div class="min-w-0">
             <h1 class="m-0 flex">
-              <span class="text-accent-600">{props.title}</span>
+              <span class="text-primary">{props.title}</span>
 
               <Show when={props.titleSelect}>
                 <div class="line-clamp-1 text-ellipsis">
