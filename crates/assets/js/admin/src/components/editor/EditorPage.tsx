@@ -22,7 +22,6 @@ import {
   TbOutlineEdit,
   TbOutlineHelp,
   TbOutlinePencilPlus,
-  TbOutlineCopy,
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
@@ -76,6 +75,7 @@ import {
 import { showToast } from "@/components/ui/toast";
 import { Table, buildTable } from "@/components/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
+import { ExportMenu } from "@/components/editor/Export";
 
 import type { QueryResponse } from "@bindings/QueryResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -86,7 +86,6 @@ import { createTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
 import { isNotNull } from "@/lib/schema";
-import { copyToClipboard } from "@/lib/utils";
 import { sqlValueToString } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
@@ -118,29 +117,10 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
-function buildCsv(response: QueryResponse): string {
-  function escapeCsv(v: string): string {
-    return `"${v.replaceAll('"', '""')}"`;
-  }
-
-  const lines: string[] = [];
-
-  const columns = response.columns;
-  if (columns !== null) {
-    lines.push(columns.map((c) => escapeCsv(c.name)).join(", "));
-  }
-
-  for (const row of response.rows) {
-    lines.push(row.map((v) => escapeCsv(sqlValueToString(v))).join(", "));
-  }
-
-  return lines.join("\n");
-}
-
 function ResultsHeader(props: {
+  script: Script;
   query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
 }) {
-  const data = () => props.query?.data?.data;
   const timestamp = () => props.query?.data?.timestamp;
 
   return (
@@ -160,19 +140,10 @@ function ResultsHeader(props: {
           </Match>
         </Switch>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={data() === undefined}
-          onClick={() => {
-            const current = data();
-            if (current !== undefined) {
-              copyToClipboard(buildCsv(current));
-            }
-          }}
-        >
-          <TbOutlineCopy />
-        </Button>
+        <ExportMenu
+          data={props.query.data?.data}
+          scriptName={props.script.name}
+        />
       </div>
 
       <ExecutionTime timestamp={timestamp()} />
@@ -189,7 +160,7 @@ function ResultView(props: {
 
   return (
     <div class="flex flex-col gap-2 p-4">
-      <ResultsHeader query={props.query} />
+      <ResultsHeader script={props.script} query={props.query} />
 
       <Switch>
         <Match when={response()?.error}>

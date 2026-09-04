@@ -34,17 +34,18 @@ assert<
   >
 >(); // no error
 
-export function sqlValueToString(value: SqlValue): string {
+export function unpackSqlValue(value: SqlValue): null | number | string {
   if (value === "Null") {
-    return "NULL";
+    return null;
   }
 
   if ("Integer" in value) {
-    return value.Integer.toString();
+    const number = Number(value.Integer);
+    return Number.isSafeInteger(number) ? number : value.Integer.toString();
   }
 
   if ("Real" in value) {
-    return value.Real.toString();
+    return value.Real;
   }
 
   if ("Blob" in value) {
@@ -52,6 +53,10 @@ export function sqlValueToString(value: SqlValue): string {
   }
 
   return value.Text;
+}
+
+export function sqlValueToString(value: SqlValue): string {
+  return unpackSqlValue(value)?.toString() ?? "NULL";
 }
 
 export function getReal(value: SqlValue | undefined): number | undefined {
