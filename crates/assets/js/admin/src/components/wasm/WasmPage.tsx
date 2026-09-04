@@ -21,26 +21,32 @@ export function WasmPage() {
   );
 
   return (
-    <Switch>
-      <Match when={wasmComponents.isLoading}>
-        <div class="flex h-64 items-center justify-center">
-          <Spinner size={32} class="text-muted-foreground" />
-        </div>
-      </Match>
+    <div class="size-full overflow-y-auto">
+      <Switch>
+        <Match when={wasmComponents.isLoading}>
+          <div class="flex h-64 items-center justify-center">
+            <Spinner size={32} class="text-muted-foreground" />
+          </div>
+        </Match>
 
-      <Match when={wasmComponents.isError}>{`${wasmComponents.error}`}</Match>
+        <Match when={wasmComponents.isError}>{`${wasmComponents.error}`}</Match>
 
-      <Match when={params.name !== undefined && findComponent() !== undefined}>
-        <WasmComponentDetails component={findComponent()!} sandboxed={true} />
-      </Match>
+        <Match
+          when={params.name !== undefined && findComponent() !== undefined}
+        >
+          <WasmComponentDetails component={findComponent()!} sandboxed={true} />
+        </Match>
 
-      <Match when={params.name !== undefined && findComponent() === undefined}>
-        A component with name "{params.name}" is not installed.
-      </Match>
+        <Match
+          when={params.name !== undefined && findComponent() === undefined}
+        >
+          A component with name "{params.name}" is not installed.
+        </Match>
 
-      <Match when={true}>
-        <WasmComponentsList />
-      </Match>
-    </Switch>
+        <Match when={true}>
+          <WasmComponentsList />
+        </Match>
+      </Switch>
+    </div>
   );
 }

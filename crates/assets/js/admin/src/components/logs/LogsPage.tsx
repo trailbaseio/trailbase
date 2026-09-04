@@ -351,7 +351,7 @@ function LogsPage() {
   });
 
   return (
-    <div class="h-full">
+    <div class="size-full overflow-y-auto">
       <Header
         title="Logs"
         description={

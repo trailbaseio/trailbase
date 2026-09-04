@@ -45,6 +45,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Resizable,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -117,6 +122,13 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
+function isCached(
+  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>,
+): boolean {
+  // We currently have two caching systems. Tanstack query and we store results with the scripts :/.
+  return !query.isFetchedAfterMount || query.data === undefined;
+}
+
 function ResultsHeader(props: {
   script: Script;
   query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
@@ -127,12 +139,16 @@ function ResultsHeader(props: {
     <div class="flex items-center justify-between gap-2 text-sm">
       <div class="flex items-center gap-2">
         <Switch>
-          <Match when={props.query.isPending}>
+          <Match when={props.query.isFetching}>
             <Badge variant="warning">Running...</Badge>
           </Match>
 
           <Match when={props.query.isError || props.query.data?.error}>
             <Badge variant="error">Error</Badge>
+          </Match>
+
+          <Match when={isCached(props.query)}>
+            <Badge variant="success">Cached</Badge>
           </Match>
 
           <Match when={true}>
@@ -155,7 +171,7 @@ function ResultView(props: {
   script: Script;
   query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
 }) {
-  const isCached = () => props.query?.data === undefined;
+  // NOTE: We have two layers of caching :/. From Tanstack and from the scripts.
   const response = () => props.query?.data ?? props.script.result;
 
   return (
@@ -173,7 +189,7 @@ function ResultView(props: {
           <ResultViewImpl
             data={response()!.data!}
             timestamp={response()?.timestamp}
-            isCached={isCached()}
+            isCached={isCached(props.query)}
           />
         </Match>
       </Switch>
@@ -725,46 +741,50 @@ function EditorPanel(props: {
           }
         />
 
-        <div class="mx-4 my-2 flex flex-col gap-2">
-          {/* Editor container */}
-          <div class="min-h-24 shrink">
-            <div ref={ref} />
-          </div>
+        <Resizable orientation="vertical">
+          <ResizablePanel class="min-h-38 overflow-y-auto">
+            <div class="mx-4 my-2 flex min-h-20 flex-col gap-2">
+              {/* Editor container */}
+              <div ref={ref} />
 
-          <div class="flex items-center justify-between">
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <Button variant="secondary" onClick={() => saveScript()}>
-                  <Show when={!isMobile()} fallback="Save">
-                    Save ({`${modKey}+S`})
-                  </Show>
-                </Button>
-              </TooltipTrigger>
+              <div class="flex items-center justify-between">
+                <Tooltip>
+                  <TooltipTrigger as="div">
+                    <Button variant="secondary" onClick={() => saveScript()}>
+                      <Show when={!isMobile()} fallback="Save">
+                        Save ({`${modKey}+S`})
+                      </Show>
+                    </Button>
+                  </TooltipTrigger>
 
-              <TooltipContent>
-                Save script to browser local storage.
-              </TooltipContent>
-            </Tooltip>
+                  <TooltipContent>
+                    Save script to browser local storage.
+                  </TooltipContent>
+                </Tooltip>
 
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <Button variant="destructive" onClick={execute}>
-                  <Show when={!isMobile()} fallback="Execute">
-                    Execute ({`${modKey}+Enter`})
-                  </Show>
-                </Button>
-              </TooltipTrigger>
+                <Tooltip>
+                  <TooltipTrigger as="div">
+                    <Button variant="destructive" onClick={execute}>
+                      <Show when={!isMobile()} fallback="Execute">
+                        Execute ({`${modKey}+Enter`})
+                      </Show>
+                    </Button>
+                  </TooltipTrigger>
 
-              <TooltipContent>
-                Execute script on the server. No turning back.
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
+                  <TooltipContent>
+                    Execute script on the server. No turning back.
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </div>
+          </ResizablePanel>
 
-        <Separator />
+          <ResizableHandle withHandle />
 
-        <ResultView script={props.script} query={executionResult} />
+          <ResizablePanel class="overflow-y-auto">
+            <ResultView script={props.script} query={executionResult} />
+          </ResizablePanel>
+        </Resizable>
       </Dialog>
     </Dialog>
   );
@@ -822,7 +842,7 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider class="h-full">
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -847,7 +867,7 @@ export function EditorPage() {
           </Match>
 
           <Match when={schemaFetch.data}>
-            <div class="flex size-full flex-col">
+            <div class="flex h-dvh flex-col">
               <EditorPanel
                 schemas={schemaFetch.data!}
                 selected={[selected, setSelected]}

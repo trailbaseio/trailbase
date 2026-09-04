@@ -404,18 +404,20 @@ export function TablePage() {
   };
 
   return (
-    <Switch>
-      <Match when={schemaFetch.isError}>
-        <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
-      </Match>
+    <div class="size-full overflow-y-auto">
+      <Switch>
+        <Match when={schemaFetch.isError}>
+          <span>Schema fetch error: {JSON.stringify(schemaFetch.error)}</span>
+        </Match>
 
-      <Match when={schemaFetch.data}>
-        <TableSplitView
-          schemas={schemaFetch.data!}
-          schemaRefetch={schemaRefetch}
-        />
-      </Match>
-    </Switch>
+        <Match when={schemaFetch.data}>
+          <TableSplitView
+            schemas={schemaFetch.data!}
+            schemaRefetch={schemaRefetch}
+          />
+        </Match>
+      </Switch>
+    </div>
   );
 }
 

@@ -554,32 +554,34 @@ export function SettingsPage() {
   );
 
   return (
-    <SidebarProvider>
-      <Sidebar
-        class="absolute"
-        variant="sidebar"
-        side="left"
-        collapsible="offcanvas"
-      >
-        <SidebarContent>
-          <SidebarGroup>
-            <SettingsSidebar
-              activeRoute={activeSite().route}
-              dirty={dirty()}
-              openDirtyDialog={setDirtyDialog}
-            />
-          </SidebarGroup>
+    <div class="size-full overflow-y-auto">
+      <SidebarProvider>
+        <Sidebar
+          class="absolute"
+          variant="sidebar"
+          side="left"
+          collapsible="offcanvas"
+        >
+          <SidebarContent>
+            <SidebarGroup>
+              <SettingsSidebar
+                activeRoute={activeSite().route}
+                dirty={dirty()}
+                openDirtyDialog={setDirtyDialog}
+              />
+            </SidebarGroup>
 
-          {/* <SidebarFooter /> */}
-        </SidebarContent>
+            {/* <SidebarFooter /> */}
+          </SidebarContent>
 
-        <SidebarRail />
-      </Sidebar>
+          <SidebarRail />
+        </Sidebar>
 
-      <SidebarInset>
-        <Body />
-      </SidebarInset>
-    </SidebarProvider>
+        <SidebarInset>
+          <Body />
+        </SidebarInset>
+      </SidebarProvider>
+    </div>
   );
 }
 

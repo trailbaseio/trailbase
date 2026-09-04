@@ -176,7 +176,7 @@ export function IndexPage() {
   }));
 
   return (
-    <div>
+    <div class="size-full overflow-y-auto">
       <Header title="TrailBase" />
 
       <div class="prose dark:prose-invert flex grow flex-col gap-4 p-4">
