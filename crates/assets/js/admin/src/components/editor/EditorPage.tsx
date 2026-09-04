@@ -493,7 +493,7 @@ function EditorPanel(props: {
   };
   const [schemaChanges, setSchemaChanges] = createWritableMemo<SchemaChanges>(
     () => {
-      const def = (): SchemaChanges => ({ allow: false, showDialog: true });
+      const def = (): SchemaChanges => ({ allow: false, showDialog: false });
       // Reset whenever script changes.
       return selected() ? def() : def();
     },
@@ -515,10 +515,14 @@ function EditorPanel(props: {
           return null;
         }
 
+        const allowSchemaAlterations = untrack(() => schemaChanges().allow);
+        if (!allowSchemaAlterations) {
+          setSchemaChanges((s) => ({ ...s, showDialog: true }));
+        }
         const response = await executeSql(
           query,
           attachedDbs.length > 0 ? attachedDbs : null,
-          /* allowSchemaAlteration= */ untrack(() => schemaChanges().allow),
+          allowSchemaAlterations,
         );
 
         const error = response.error;
