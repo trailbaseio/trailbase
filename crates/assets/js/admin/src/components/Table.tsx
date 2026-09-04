@@ -43,6 +43,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { createIsMobile } from "@/lib/signals";
+import { cn } from "@/lib/utils";
 
 export type { Updater } from "@tanstack/solid-table";
 
@@ -376,7 +377,10 @@ function TableHeaderRow<TData>(props: {
       </Match>
 
       <Match when={true}>
-        <TableHead class="relative pr-4" onClick={toggleSorting()}>
+        <TableHead
+          class={cn("relative", props.enabledColumnPinning && "pr-5")}
+          onClick={toggleSorting()}
+        >
           <HeadContents />
 
           {/* Sorting arrow */}

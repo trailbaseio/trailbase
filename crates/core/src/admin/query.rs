@@ -19,6 +19,7 @@ pub struct QueryRequest {
   /// Databases to attach.
   attached_databases: Option<Vec<String>>,
   /// Whether queries altering the schema should be rejected.
+  #[serde(default)]
   allow_schema_alteration: bool,
 }
 

@@ -8,9 +8,11 @@ import {
   createEffect,
   createSignal,
   onCleanup,
+  untrack,
 } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
+import type { DefinedUseQueryResult } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
 import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
@@ -20,7 +22,6 @@ import {
   TbOutlineEdit,
   TbOutlineHelp,
   TbOutlinePencilPlus,
-  TbOutlineX,
   TbOutlineCopy,
 } from "solid-icons/tb";
 
@@ -34,7 +35,7 @@ import { tags } from "@lezer/highlight";
 
 import { IconButton } from "@/components/IconButton";
 import { Header } from "@/components/Header";
-import { Callout } from "@/components/ui/callout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -137,67 +138,75 @@ function buildCsv(response: QueryResponse): string {
 }
 
 function ResultsHeader(props: {
-  data: QueryResponse | undefined;
-  timestamp: number | undefined;
+  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
 }) {
-  return (
-    <div class="flex items-center justify-between text-sm">
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={props.data === undefined}
-        onClick={() => {
-          const data = props.data;
-          if (data !== undefined) {
-            copyToClipboard(buildCsv(data));
-          }
-        }}
-      >
-        <TbOutlineCopy />
-      </Button>
+  const data = () => props.query?.data?.data;
+  const timestamp = () => props.query?.data?.timestamp;
 
-      <ExecutionTime timestamp={props.timestamp} />
+  return (
+    <div class="flex items-center justify-between gap-2 text-sm">
+      <div class="flex items-center gap-2">
+        <Switch>
+          <Match when={props.query.isPending}>
+            <Badge variant="warning">Running...</Badge>
+          </Match>
+
+          <Match when={props.query.isError || props.query.data?.error}>
+            <Badge variant="error">Error</Badge>
+          </Match>
+
+          <Match when={true}>
+            <Badge variant="success">Ok</Badge>
+          </Match>
+        </Switch>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={data() === undefined}
+          onClick={() => {
+            const current = data();
+            if (current !== undefined) {
+              copyToClipboard(buildCsv(current));
+            }
+          }}
+        >
+          <TbOutlineCopy />
+        </Button>
+      </div>
+
+      <ExecutionTime timestamp={timestamp()} />
     </div>
   );
 }
 
 function ResultView(props: {
   script: Script;
-  response: ExecutionResult | undefined;
+  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
 }) {
-  const isCached = () => props.response === undefined;
-  const response = () => props.response ?? props.script.result;
+  const isCached = () => props.query?.data === undefined;
+  const response = () => props.query?.data ?? props.script.result;
 
   return (
-    <Switch>
-      <Match when={response()?.error}>
-        <div class="flex flex-col gap-2 p-4">
-          <ResultsHeader
-            data={response()?.data}
-            timestamp={response()?.timestamp}
-          />
+    <div class="flex flex-col gap-2 p-4">
+      <ResultsHeader query={props.query} />
+
+      <Switch>
+        <Match when={response()?.error}>
           Error: {response()?.error?.message}
-        </div>
-      </Match>
+        </Match>
 
-      <Match when={response()?.data === undefined}>
-        <div class="flex flex-col gap-2 p-4">
-          <ResultsHeader
-            data={response()?.data}
+        <Match when={response()?.data === undefined}>No data</Match>
+
+        <Match when={response()?.data !== undefined}>
+          <ResultViewImpl
+            data={response()!.data!}
             timestamp={response()?.timestamp}
+            isCached={isCached()}
           />
-          No data
-        </div>
-      </Match>
-
-      <Match when={response()?.data !== undefined}>
-        <ResultViewImpl
-          data={response()!.data!}
-          timestamp={response()?.timestamp}
-          isCached={isCached()}
-        />
-      </Match>
-    </Switch>
+        </Match>
+      </Switch>
+    </div>
   );
 }
 
@@ -249,11 +258,7 @@ function ResultViewImpl(props: {
         );
       }}
     >
-      <div class="flex flex-col gap-2 p-4">
-        <ResultsHeader data={props.data} timestamp={props.timestamp} />
-
-        <Table table={dataTable()} loading={false} />
-      </div>
+      <Table table={dataTable()} loading={false} />
     </ErrorBoundary>
   );
 }
@@ -473,7 +478,6 @@ function EditorPanel(props: {
   // eslint-disable-next-line solid/reactivity
   const [selected, setSelected] = props.selected;
 
-  const uiState = useStore($uiState);
   const config = createConfigQuery();
 
   const isMobile = createIsMobile();
@@ -496,6 +500,18 @@ function EditorPanel(props: {
     },
   );
 
+  type SchemaChanges = {
+    allow: boolean;
+    showDialog: boolean;
+  };
+  const [schemaChanges, setSchemaChanges] = createWritableMemo<SchemaChanges>(
+    () => {
+      const def = (): SchemaChanges => ({ allow: false, showDialog: true });
+      // Reset whenever script changes.
+      return selected() ? def() : def();
+    },
+  );
+
   const executionResult = useQuery(() => {
     return {
       // Consider initial data fresh enough.
@@ -515,12 +531,13 @@ function EditorPanel(props: {
         const response = await executeSql(
           query,
           attachedDbs.length > 0 ? attachedDbs : null,
-          /* allowSchemaAlteration= */ true,
+          /* allowSchemaAlteration= */ untrack(() => schemaChanges().allow),
         );
+
         const error = response.error;
-        if (error) {
+        if (error && error.code !== 412) {
           showToast({
-            title: "Execution Error",
+            title: `Execution Error (${error.code})`,
             description: error.message,
             variant: "error",
           });
@@ -546,7 +563,7 @@ function EditorPanel(props: {
     const newEditorState = (contents: string) => {
       const customKeymap = keymap.of([
         {
-          key: "Ctrl-Enter",
+          key: "Mod-Enter",
           run: () => {
             execute();
             return true;
@@ -554,7 +571,7 @@ function EditorPanel(props: {
           preventDefault: true,
         },
         {
-          key: "Ctrl-s",
+          key: "Mod-s",
           run: () => {
             saveScript();
             return true;
@@ -603,8 +620,16 @@ function EditorPanel(props: {
   const execute = () => {
     const query = editor?.state.doc.toString();
     if (query !== undefined) {
+      // Reset.
       setQueryString(query);
-      executionResult.refetch();
+
+      // Then execute.
+      (async () => {
+        await executionResult.refetch();
+
+        // Allow showing the dialog again if the user refused the first time.
+        setSchemaChanges((s) => ({ ...s, showDialog: true }));
+      })();
     }
   };
 
@@ -644,105 +669,132 @@ function EditorPanel(props: {
         save={saveScript}
       />
 
-      <Header
-        title="Editor"
-        titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-        right={
-          <div class="flex items-center">
-            <Select<string>
-              multiple={true}
-              options={[...(databases() ?? [])]}
-              value={attachedDbs()}
-              itemComponent={(props) => (
-                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-              )}
-              onChange={(value: string[]) => setAttachedDbs(value)}
-            >
-              <div class="flex items-center gap-2">
-                Attached
-                <SelectTrigger>
-                  <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
-                    {(state) => {
-                      const selected = state.selectedOptions();
-                      if (selected.length === 0) {
-                        // FIXME: state callback never gets called when empty.
-                        return "none";
-                      }
-                      return selected.join(", ");
-                    }}
-                  </SelectValue>
-                </SelectTrigger>
-              </div>
-
-              <SelectContent />
-            </Select>
-
-            <HelpDialog />
-          </div>
+      {/* nested dialog for schema changes */}
+      <Dialog
+        id="allow-schema-changes-dialog"
+        open={
+          executionResult.data?.error?.code === 412 &&
+          schemaChanges().showDialog
         }
-      />
+        onOpenChange={(isOpen) => {
+          if (!isOpen) {
+            setSchemaChanges((s) => ({ ...s, showDialog: false }));
+          }
+        }}
+        modal={true}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Schema Change Detected</DialogTitle>
+          </DialogHeader>
 
-      <div class="mx-4 my-2 flex flex-col gap-2">
-        {(uiState().showMigrationWarning ?? true) && (
-          <Callout
-            class="flex items-center text-sm hover:opacity-80"
-            onClick={() => {
-              $uiState.set({
-                ...uiState(),
-                showMigrationWarning: false,
-              });
-            }}
-          >
-            <p>{migrationWarning}</p>
+          <p>{migrationWarning}</p>
 
-            <div class="p-2">
-              <TbOutlineX size={20} />
+          <p>Do you want to continue w/o a migration?</p>
+
+          <div class="flex justify-between gap-2">
+            <Button
+              variant="outline"
+              onClick={() =>
+                setSchemaChanges((s) => ({ ...s, showDialog: false }))
+              }
+            >
+              back
+            </Button>
+
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setSchemaChanges({ showDialog: false, allow: true });
+                execute();
+              }}
+            >
+              Proceed
+            </Button>
+          </div>
+        </DialogContent>
+
+        <Header
+          title="SQL Edit"
+          titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
+          right={
+            <div class="flex items-center">
+              <Select<string>
+                multiple={true}
+                options={[...(databases() ?? [])]}
+                value={attachedDbs()}
+                itemComponent={(props) => (
+                  <SelectItem item={props.item}>
+                    {props.item.rawValue}
+                  </SelectItem>
+                )}
+                onChange={(value: string[]) => setAttachedDbs(value)}
+              >
+                <div class="flex items-center gap-2">
+                  Attached
+                  <SelectTrigger>
+                    <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
+                      {(state) => {
+                        const selected = state.selectedOptions();
+                        if (selected.length === 0) {
+                          // FIXME: state callback never gets called when empty.
+                          return "none";
+                        }
+                        return selected.join(", ");
+                      }}
+                    </SelectValue>
+                  </SelectTrigger>
+                </div>
+
+                <SelectContent />
+              </Select>
+
+              <HelpDialog />
             </div>
-          </Callout>
-        )}
+          }
+        />
 
-        {/* Editor */}
-        <div class="min-h-24 shrink">
-          <div ref={ref} />
+        <div class="mx-4 my-2 flex flex-col gap-2">
+          {/* Editor container */}
+          <div class="min-h-24 shrink">
+            <div ref={ref} />
+          </div>
+
+          <div class="flex items-center justify-between">
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <Button variant="secondary" onClick={() => saveScript()}>
+                  <Show when={!isMobile()} fallback="Save">
+                    Save ({`${modKey}+S`})
+                  </Show>
+                </Button>
+              </TooltipTrigger>
+
+              <TooltipContent>
+                Save script to browser local storage.
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <Button variant="destructive" onClick={execute}>
+                  <Show when={!isMobile()} fallback="Execute">
+                    Execute ({`${modKey}+Enter`})
+                  </Show>
+                </Button>
+              </TooltipTrigger>
+
+              <TooltipContent>
+                Execute script on the server. No turning back.
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
 
-        <div class="flex items-center justify-between">
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button variant="secondary" onClick={() => saveScript()}>
-                <Show when={!isMobile()} fallback="Save">
-                  Save (Ctrl+S)
-                </Show>
-              </Button>
-            </TooltipTrigger>
+        <Separator />
 
-            <TooltipContent>
-              Save script to browser local storage.
-            </TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button variant="destructive" onClick={execute}>
-                <Show when={!isMobile()} fallback="Execute">
-                  Execute (Ctrl+Enter)
-                </Show>
-              </Button>
-            </TooltipTrigger>
-
-            <TooltipContent>
-              Execute script on the server. No turning back.
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </div>
-
-      <Separator />
-
-      <ResultView
-        script={props.script}
-        response={executionResult.data ?? undefined}
-      />
+        <ResultView script={props.script} query={executionResult} />
+      </Dialog>
     </Dialog>
   );
 }
@@ -954,7 +1006,6 @@ const $scripts = persistentAtom<Script[]>("scripts", [defaultScript], {
 });
 
 type UiState = {
-  showMigrationWarning?: boolean;
   selected?: number;
 };
 
@@ -967,6 +1018,7 @@ const $uiState = persistentAtom<UiState>(
   },
 );
 
+const modKey = "Ctrl/⌘";
 const migrationWarning =
   "\
 When changing schemas, consider using migrations for \
