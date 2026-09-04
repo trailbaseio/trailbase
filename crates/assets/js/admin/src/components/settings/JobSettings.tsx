@@ -219,11 +219,8 @@ function JobSettingsImpl(props: {
                           return (
                             <Tooltip>
                               <TooltipTrigger as="div">
-                                <div class="flex items-center gap-2">
-                                  <TbOutlineInfoCircle />
-                                  <div class="w-[128px] text-sm">
-                                    {t.toUTCString()}
-                                  </div>
+                                <div class="flex w-[134px] items-center gap-1 text-sm">
+                                  {t.toUTCString()} <TbOutlineInfoCircle />
                                 </div>
                               </TooltipTrigger>
 
@@ -250,12 +247,8 @@ function JobSettingsImpl(props: {
                             >
                               <Tooltip>
                                 <TooltipTrigger as="div">
-                                  <div class="flex items-center gap-2">
-                                    <TbOutlineInfoCircle />
-                                    <div class="w-[128px] text-sm">
-                                      {" "}
-                                      {t.toUTCString()}{" "}
-                                    </div>
+                                  <div class="flex w-[134px] items-center gap-1 text-sm">
+                                    {t.toUTCString()} <TbOutlineInfoCircle />
                                   </div>
                                 </TooltipTrigger>
 

@@ -40,10 +40,10 @@ function LeftNav(props: RouteSectionProps) {
 
 function TopNav(props: RouteSectionProps) {
   return (
-    <div class="h-dvh max-w-dvw overflow-x-hidden overflow-y-auto">
+    <div class="flex h-dvh flex-col">
       <HorizontalNavbar height={48} location={props.location} />
 
-      <main class="h-[calc(100dvh-48px)]">
+      <main class="grow">
         <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </div>

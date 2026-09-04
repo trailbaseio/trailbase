@@ -123,14 +123,14 @@ function NavbarItems(props: { location: Location; horizontal: boolean }) {
       <For each={options}>
         {([pathname, Icon, tooltip]) => {
           const active = () => props.location.pathname === pathname;
-          const style = () =>
-            active() ? navbarIconActiveStyle : navbarIconStyle;
 
           return (
             <Tooltip>
               <TooltipTrigger as="div">
                 <a href={pathname} onClick={(e) => onClick(e, pathname)}>
-                  <div class={style()}>
+                  <div
+                    class={active() ? navbarIconActiveStyle : navbarIconStyle}
+                  >
                     <Icon size={iconSize(props.horizontal)} />
                   </div>
                 </a>
@@ -179,14 +179,15 @@ export function HorizontalNavbar(props: {
 }) {
   return (
     <nav
-      style={{ height: `${props.height}px` }}
-      class="border-border bg-sidebar text-sidebar-foreground flex w-full items-center justify-between gap-2 overflow-x-auto overflow-y-hidden border-b p-2"
+      style={{
+        "min-height": `${props.height}px`,
+        "max-height": `${props.height}px`,
+      }}
+      class="border-border bg-sidebar text-sidebar-foreground hide-scrollbars flex w-full items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-b p-2"
     >
       <NavbarItems location={props.location} horizontal={true} />
 
-      <div class="flex items-center gap-2">
-        <NavFooterItems horizontal={true} />
-      </div>
+      <NavFooterItems horizontal={true} />
     </nav>
   );
 }
