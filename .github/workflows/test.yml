@@ -8,7 +8,7 @@ on:
       - dev
 
 env:
-  TOOLCHAIN_VERSION: 1.98.0
+  TOOLCHAIN_VERSION: 1.98.1
 
 permissions:
   contents: read
