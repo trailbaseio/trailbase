@@ -105,11 +105,7 @@ export function ConfirmCloseDialog(props: {
 
 export function SheetContainer(props: { children: JSXElement }) {
   const resolved = children(() => props.children);
-  return (
-    <div class="hide-scrollbars mt-4 grow overflow-x-hidden overflow-y-auto px-1">
-      {resolved()}
-    </div>
-  );
+  return <div class="mt-4 grow px-1">{resolved()}</div>;
 }
 
 const DEFAULT_MESSAGE =

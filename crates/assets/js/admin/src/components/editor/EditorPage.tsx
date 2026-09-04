@@ -45,6 +45,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Resizable,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -117,6 +122,13 @@ function buildSchema(schemas: ListSchemasResponse): SQLNamespace {
   return schema;
 }
 
+function isCached(
+  query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>,
+): boolean {
+  // We currently have two caching systems. Tanstack query and we store results with the scripts :/.
+  return !query.isFetchedAfterMount || query.data === undefined;
+}
+
 function ResultsHeader(props: {
   script: Script;
   query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
@@ -127,12 +139,16 @@ function ResultsHeader(props: {
     <div class="flex items-center justify-between gap-2 text-sm">
       <div class="flex items-center gap-2">
         <Switch>
-          <Match when={props.query.isPending}>
+          <Match when={props.query.isFetching}>
             <Badge variant="warning">Running...</Badge>
           </Match>
 
           <Match when={props.query.isError || props.query.data?.error}>
             <Badge variant="error">Error</Badge>
+          </Match>
+
+          <Match when={isCached(props.query)}>
+            <Badge variant="success">Cached</Badge>
           </Match>
 
           <Match when={true}>
@@ -151,11 +167,11 @@ function ResultsHeader(props: {
   );
 }
 
-function ResultView(props: {
+function ResultComponent(props: {
   script: Script;
   query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
 }) {
-  const isCached = () => props.query?.data === undefined;
+  // NOTE: We have two layers of caching :/. From Tanstack and from the scripts.
   const response = () => props.query?.data ?? props.script.result;
 
   return (
@@ -170,10 +186,10 @@ function ResultView(props: {
         <Match when={response()?.data === undefined}>No data</Match>
 
         <Match when={response()?.data !== undefined}>
-          <ResultViewImpl
+          <ResultComponentImpl
             data={response()!.data!}
             timestamp={response()?.timestamp}
-            isCached={isCached()}
+            isCached={isCached(props.query)}
           />
         </Match>
       </Switch>
@@ -181,7 +197,7 @@ function ResultView(props: {
   );
 }
 
-function ResultViewImpl(props: {
+function ResultComponentImpl(props: {
   data: QueryResponse;
   isCached: boolean;
   timestamp?: number;
@@ -615,6 +631,47 @@ function EditorPanel(props: {
     showToast({ title: "saved" });
   };
 
+  const EditorComponent = () => {
+    return (
+      <div class="flex h-full flex-col justify-between">
+        {/* Editor container */}
+        <div class="min-h-24 shrink overflow-y-auto">
+          <div ref={ref} />
+        </div>
+
+        <div class="flex items-center justify-between p-2">
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button variant="secondary" onClick={() => saveScript()}>
+                <Show when={!isMobile()} fallback="Save">
+                  Save ({`${modKey}+S`})
+                </Show>
+              </Button>
+            </TooltipTrigger>
+
+            <TooltipContent>
+              Save script to browser local storage.
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger as="div">
+              <Button variant="destructive" onClick={execute}>
+                <Show when={!isMobile()} fallback="Execute">
+                  Execute ({`${modKey}+Enter`})
+                </Show>
+              </Button>
+            </TooltipTrigger>
+
+            <TooltipContent>
+              Execute script on the server. No turning back.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Dialog
       id="switch-script-dialog"
@@ -725,46 +782,30 @@ function EditorPanel(props: {
           }
         />
 
-        <div class="mx-4 my-2 flex flex-col gap-2">
-          {/* Editor container */}
-          <div class="min-h-24 shrink">
-            <div ref={ref} />
-          </div>
+        <Switch>
+          <Match when={isMobile()}>
+            <EditorComponent />
+            <Separator />
+            <ResultComponent script={props.script} query={executionResult} />
+          </Match>
 
-          <div class="flex items-center justify-between">
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <Button variant="secondary" onClick={() => saveScript()}>
-                  <Show when={!isMobile()} fallback="Save">
-                    Save ({`${modKey}+S`})
-                  </Show>
-                </Button>
-              </TooltipTrigger>
+          <Match when={true}>
+            <Resizable orientation="vertical">
+              <ResizablePanel minSize={0.2} class="overflow-y-auto">
+                <EditorComponent />
+              </ResizablePanel>
 
-              <TooltipContent>
-                Save script to browser local storage.
-              </TooltipContent>
-            </Tooltip>
+              <ResizableHandle withHandle />
 
-            <Tooltip>
-              <TooltipTrigger as="div">
-                <Button variant="destructive" onClick={execute}>
-                  <Show when={!isMobile()} fallback="Execute">
-                    Execute ({`${modKey}+Enter`})
-                  </Show>
-                </Button>
-              </TooltipTrigger>
-
-              <TooltipContent>
-                Execute script on the server. No turning back.
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </div>
-
-        <Separator />
-
-        <ResultView script={props.script} query={executionResult} />
+              <ResizablePanel minSize={0.2} class="overflow-y-auto">
+                <ResultComponent
+                  script={props.script}
+                  query={executionResult}
+                />
+              </ResizablePanel>
+            </Resizable>
+          </Match>
+        </Switch>
       </Dialog>
     </Dialog>
   );
@@ -822,7 +863,7 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider>
+    <SidebarProvider class="size-full">
       <Sidebar
         class="absolute"
         variant="sidebar"
@@ -847,16 +888,14 @@ export function EditorPage() {
           </Match>
 
           <Match when={schemaFetch.data}>
-            <div class="flex size-full flex-col">
-              <EditorPanel
-                schemas={schemaFetch.data!}
-                selected={[selected, setSelected]}
-                script={script()}
-                dirty={[dirty, setDirty]}
-                dirtyDialog={[dirtyDialog, setDirtyDialog]}
-                deleteScript={() => deleteScriptByIdx()}
-              />
-            </div>
+            <EditorPanel
+              schemas={schemaFetch.data!}
+              selected={[selected, setSelected]}
+              script={script()}
+              dirty={[dirty, setDirty]}
+              dirtyDialog={[dirtyDialog, setDirtyDialog]}
+              deleteScript={() => deleteScriptByIdx()}
+            />
           </Match>
         </Switch>
       </SidebarInset>
@@ -874,8 +913,8 @@ function editorTheme(dark: boolean) {
         borderRadius: "8px 0px 0px 8px",
       },
       "&.cm-editor": {
-        outline: "1px solid #e4e4e7",
-        borderRadius: "8px",
+        outline: "0px solid #e4e4e7",
+        borderRadius: "0px",
       },
       // "&.cm-editor.cm-focused": {
       //   outline: "1px solid gray",

@@ -1130,7 +1130,7 @@ export function TablePane(props: {
   const [columnPinningState, setColumnPinningState] = createSignal({});
 
   return (
-    <div>
+    <div class="h-full overflow-y-auto">
       <TablePaneHeader
         table={props.selectedTable}
         allTables={props.schemas.tables}

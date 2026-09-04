@@ -32,9 +32,7 @@ function LeftNav(props: RouteSectionProps) {
       </div>
 
       <main class="absolute inset-0 left-[58px] h-dvh w-[calc(100dvw-58px)]">
-        <div class="size-full overflow-y-auto">
-          <ErrorBoundary>{props.children}</ErrorBoundary>
-        </div>
+        <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </>
   );
@@ -42,10 +40,12 @@ function LeftNav(props: RouteSectionProps) {
 
 function TopNav(props: RouteSectionProps) {
   return (
-    <div class="h-dvh max-w-dvw overflow-x-hidden overflow-y-auto">
+    <div class="flex h-dvh flex-col">
       <HorizontalNavbar height={48} location={props.location} />
 
-      <div class="h-[calc(100dvh-48px)]">{props.children}</div>
+      <main class="grow">
+        <ErrorBoundary>{props.children}</ErrorBoundary>
+      </main>
     </div>
   );
 }
