@@ -98,12 +98,20 @@ jobs:
       - id: setup_clients
         uses: ./.github/actions/setup_clients
 
+      # - name: "Build & Run Tests"
+      #   uses: j178/prek-action@v3.0.0
+      #   env:
+      #     RUST_BACKTRACE: 1
+      #   with:
+      #     cache: true
+      #     extra-args: "--all-files --verbose"
+
       - name: "Build & Run Tests"
-        uses: j178/prek-action@v3.0.0
+        uses: pre-commit/action@v3.0.1
         env:
           RUST_BACKTRACE: 1
         with:
-          extra-args: "--all-files"
+          extra_args: "--all-files --verbose"
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)

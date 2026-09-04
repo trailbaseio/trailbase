@@ -1,3 +1,12 @@
+## v0.33.11
+
+- Require explicit schema alteration opt-in in the SQL editor. Instead of always showing a warning and `<Callout>` we detect schema changes and prompt the user.
+- Multi-format result exporter in SQL editor. Thanks @burggraf 🙏
+- More admin UI styling:
+  - Improve dark mode and editor's syntax highlight colors. Thanks @burggraf 🙏
+  - Improve column option rendering.
+- Update dependencies.
+
 ## v0.33.10
 
 - Admin UI: fix ERD on small screens.
