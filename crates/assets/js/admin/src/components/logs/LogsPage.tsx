@@ -351,7 +351,7 @@ function LogsPage() {
   });
 
   return (
-    <div class="size-full overflow-y-auto">
+    <div class="size-full scrollbar-thin overflow-y-auto">
       <Header
         title="Logs"
         description={
@@ -415,17 +415,17 @@ function LogsPage() {
               >
                 <AccordionItem value="item0">
                   <AccordionContent>
-                    <div class="mb-4 flex w-full flex-col gap-4 md:h-[300px] md:flex-row">
+                    <div class="mb-4 flex h-[580px] w-full flex-col gap-10 md:h-[300px] md:flex-row md:gap-4">
                       <Switch>
                         <Match
                           when={showMap() && statsFetch.data?.country_codes}
                         >
-                          <div class="md:w-1/2">
+                          <div class="h-[260px] md:h-[300px] md:w-1/2">
                             <WorldMap
                               countryCodes={statsFetch.data!.country_codes!}
                             />
                           </div>
-                          <div class="md:w-1/2">
+                          <div class="h-[260px] md:h-[300px] md:w-1/2">
                             <LogsGraph rates={statsFetch.data?.rates ?? []} />
                           </div>
                         </Match>

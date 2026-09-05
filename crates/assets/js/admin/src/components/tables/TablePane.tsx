@@ -674,7 +674,7 @@ function RecordTable(props: {
                 placeholder={`Filter, e.g.: '(col0 > 5 || col0 = 0) || col1 ~ "%like"'`}
               />
 
-              <div class="overflow-x-auto pt-4">
+              <div class="scrollbar-thin overflow-x-auto pt-4">
                 <TableComponent
                   table={table()}
                   loading={props.records === undefined}
@@ -870,7 +870,7 @@ function IndexTable(props: {
                   />
                 </SheetContent>
 
-                <div class="space-y-2.5 overflow-x-auto">
+                <div class="scrollbar-thin space-y-2.5 overflow-x-auto">
                   <TableComponent
                     table={indexesTable()}
                     loading={false}
@@ -1130,7 +1130,7 @@ export function TablePane(props: {
   const [columnPinningState, setColumnPinningState] = createSignal({});
 
   return (
-    <div class="h-full overflow-y-auto">
+    <div class="h-full scrollbar-thin overflow-y-auto">
       <TablePaneHeader
         table={props.selectedTable}
         allTables={props.schemas.tables}

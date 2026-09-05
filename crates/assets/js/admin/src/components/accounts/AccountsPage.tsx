@@ -479,7 +479,7 @@ export function AccountsPage() {
   });
 
   return (
-    <div class="size-full overflow-y-auto">
+    <div class="size-full scrollbar-thin overflow-y-auto">
       <Header
         title="Accounts"
         description={

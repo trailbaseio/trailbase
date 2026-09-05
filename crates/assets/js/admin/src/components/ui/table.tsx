@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 const Table: Component<ComponentProps<"table">> = (props) => {
   const [local, others] = splitProps(props, ["class"])
   return (
-    <div class="relative w-full overflow-auto">
+    <div class="relative w-full overflow-auto scrollbar-thin">
       <table class={cn("w-full caption-bottom text-sm", local.class)} {...others} />
     </div>
   )

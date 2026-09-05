@@ -94,6 +94,7 @@ import { isNotNull } from "@/lib/schema";
 import { sqlValueToString } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
+import { cn } from "@/lib/utils";
 import type { ArrayRecord } from "@/lib/record";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
@@ -361,7 +362,7 @@ function HelpDialog() {
         </IconButton>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent id="edit-help">
         <DialogHeader>
           <DialogTitle>Editor Help</DialogTitle>
         </DialogHeader>
@@ -406,7 +407,7 @@ function RenameDialog(props: { selected: number; script: Script }) {
         </IconButton>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent id="script-rename-dialog">
         <DialogHeader>
           <DialogTitle>Rename</DialogTitle>
         </DialogHeader>
@@ -637,9 +638,14 @@ function EditorPanel(props: {
 
   const EditorComponent = () => {
     return (
-      <div class="flex h-full flex-col justify-between">
+      <div
+        class={cn(
+          "flex flex-col justify-between",
+          isMobile() ? "max-h-[70dvh]" : "h-full",
+        )}
+      >
         {/* Editor container */}
-        <div class="min-h-24 shrink overflow-y-auto">
+        <div class="hide-scrollbars min-h-24 shrink overflow-y-auto">
           <div ref={ref} />
         </div>
 
@@ -715,7 +721,7 @@ function EditorPanel(props: {
         }}
         modal={true}
       >
-        <DialogContent>
+        <DialogContent id="allow-schema-changes-dialog">
           <DialogHeader>
             <DialogTitle>Schema Change Detected</DialogTitle>
           </DialogHeader>
@@ -788,20 +794,28 @@ function EditorPanel(props: {
 
         <Switch>
           <Match when={isMobile()}>
-            <EditorComponent />
-            <Separator />
-            <ResultComponent script={props.script} query={executionResult} />
+            <div class="flex size-full scrollbar-thin flex-col overflow-y-auto">
+              <EditorComponent />
+              <Separator />
+              <ResultComponent script={props.script} query={executionResult} />
+            </div>
           </Match>
 
           <Match when={true}>
             <Resizable orientation="vertical">
-              <ResizablePanel minSize={0.2} class="overflow-y-auto">
+              <ResizablePanel
+                minSize={0.2}
+                class="scrollbar-thin overflow-y-auto"
+              >
                 <EditorComponent />
               </ResizablePanel>
 
               <ResizableHandle withHandle />
 
-              <ResizablePanel minSize={0.2} class="overflow-y-auto">
+              <ResizablePanel
+                minSize={0.2}
+                class="scrollbar-thin overflow-y-auto"
+              >
                 <ResultComponent
                   script={props.script}
                   query={executionResult}

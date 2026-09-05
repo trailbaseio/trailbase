@@ -21,7 +21,7 @@ export function WasmPage() {
   );
 
   return (
-    <div class="size-full overflow-y-auto">
+    <div class="size-full scrollbar-thin overflow-y-auto">
       <Switch>
         <Match when={wasmComponents.isLoading}>
           <div class="flex h-64 items-center justify-center">
