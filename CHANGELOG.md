@@ -1,3 +1,11 @@
+## v0.33.12
+
+- More admin UI styling
+  - Make top nav sticky. I don't love the use of space but the jank when pages have scrollbars and the nav resizes is worse.
+  - Use thin scrollbars.
+  - Make editor pane resizable on desktop.
+  - Many more tweaks.
+
 ## v0.33.11
 
 - Require explicit schema alteration opt-in in the SQL editor. Instead of always showing a warning and `<Callout>` we detect schema changes and prompt the user.
