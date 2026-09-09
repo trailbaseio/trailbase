@@ -51,10 +51,7 @@ export default function Page() {
       return;
     }
 
-    // Remove info to keep output clean.
-    const info = spec["info"];
-    spec["info"] = {};
-    setVersion(info["version"]);
+    setVersion(spec["info"]["version"]);
 
     // Lazy load the actual OpenApi spec.
     ref.loadSpec(spec);
@@ -107,17 +104,18 @@ export default function Page() {
       }
       load-fonts="false"
       sort-tags="true"
-      theme={theme()} // "light" | "dark"
-      bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
-      primary-color={primary}
       render-style="view" // "read" | "view" | "focused"
       layout="row" // "row" | "column"
       schema-style="table" // "tree" | "table"
+      schema-expand-level="0"
       show-header="false" // removes the top bar: logo + title
+      show-side-nav="false"
+      show-info="false"
       allow-try="true"
       persist-auth="false"
       allow-authentication="false"
       allow-server-selection="false"
+      {...(theme() === "light" ? lightTheme : darkTheme)}
     >
       {/* Contents */}
       <Header
@@ -175,6 +173,26 @@ function TokenPopoverContent(props: {
     </div>
   );
 }
+
+type Theme = {
+  theme: "light" | "dark";
+  "bg-color": string;
+  "primary-color": string;
+  "text-color"?: string;
+  "header-color"?: string;
+};
+
+const lightTheme: Theme = {
+  theme: "light",
+  "bg-color": "#f8fafc",
+  "primary-color": "#0073a8",
+};
+
+const darkTheme: Theme = {
+  theme: "dark",
+  "bg-color": "#121821",
+  "primary-color": "#34b7f4",
+};
 
 const serverUrl = () =>
   import.meta.env.DEV ? "http://localhost:4000" : undefined;
