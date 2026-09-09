@@ -210,6 +210,12 @@ function JobSettingsImpl(props: {
                   {(field) => (
                     <Index each={field().state.value}>
                       {(proxy: () => JobProxy, i: number) => {
+                        // Custom jobs cannot have their schedule changed or disabled, since they're not in the config.
+                        const isCustom = () => {
+                          // Custom (WASM) jobs start at ids of 1024.
+                          return (proxy().job?.id ?? Number.MAX_VALUE) >= 1024;
+                        };
+
                         const next = () => {
                           const timestamp = proxy().job?.next;
                           if (!timestamp) return null;
@@ -285,6 +291,7 @@ function JobSettingsImpl(props: {
                                       <TextField>
                                         <TextFieldInput
                                           type="text"
+                                          disabled={isCustom()}
                                           value={field().state.value}
                                           onBlur={field().handleBlur}
                                           autocomplete="off"
@@ -317,6 +324,7 @@ function JobSettingsImpl(props: {
                                     <div class="flex items-center justify-center">
                                       <Checkbox
                                         checked={enabled()}
+                                        disabled={isCustom()}
                                         onBlur={field().handleBlur}
                                         onChange={(enabled: boolean) =>
                                           field().handleChange(!enabled)
@@ -390,8 +398,6 @@ function JobSettingsImpl(props: {
   );
 }
 
-const listJobsKey = ["admin", "jobs"];
-
 export function JobSettings(props: {
   markDirty: () => void;
   postSubmit: () => void;
@@ -423,3 +429,5 @@ export function JobSettings(props: {
     </Switch>
   );
 }
+
+const listJobsKey = ["admin", "jobs"];
