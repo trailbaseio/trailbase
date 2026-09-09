@@ -75,6 +75,14 @@ message OAuthProviderConfig {
   /// provider's user-info endpoint, e.g. dropping the "email" scope requires a
   /// username-based `UserIdentifier`.
   repeated string scopes = 15;
+
+  /// Apple only: expected `aud` of identity tokens issued by the native
+  /// Sign in with Apple flow (ASAuthorizationController). Native tokens are
+  /// audience-bound to the App ID (bundle identifier), while the web OAuth
+  /// flow validates against `client_id` (the Services ID). The two audiences
+  /// differ, so the native one needs its own config entry. When unset, the
+  /// native login endpoint fails closed.
+  optional string native_client_id = 16;
 }
 
 // What user identifier to use for new user registrations as well as
