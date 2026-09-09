@@ -682,6 +682,47 @@ function EditorPanel(props: {
     );
   };
 
+  const PageHeader = () => (
+    <Header
+      title="SQL Edit"
+      titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
+      wrap={isMobile()}
+      right={
+        <div class="flex items-center">
+          <Select<string>
+            multiple={true}
+            options={[...(databases() ?? [])]}
+            value={attachedDbs()}
+            itemComponent={(props) => (
+              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+            )}
+            onChange={(value: string[]) => setAttachedDbs(value)}
+          >
+            <div class="flex items-center gap-2">
+              Attached
+              <SelectTrigger>
+                <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
+                  {(state) => {
+                    const selected = state.selectedOptions();
+                    if (selected.length === 0) {
+                      // FIXME: state callback never gets called when empty.
+                      return "none";
+                    }
+                    return selected.join(", ");
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+            </div>
+
+            <SelectContent />
+          </Select>
+
+          <HelpDialog />
+        </div>
+      }
+    />
+  );
+
   return (
     <Dialog
       id="switch-script-dialog"
@@ -752,49 +793,10 @@ function EditorPanel(props: {
           </div>
         </DialogContent>
 
-        <Header
-          title="SQL Edit"
-          titleSelect={dirty() ? `${props.script.name}*` : props.script.name}
-          right={
-            <div class="flex items-center">
-              <Select<string>
-                multiple={true}
-                options={[...(databases() ?? [])]}
-                value={attachedDbs()}
-                itemComponent={(props) => (
-                  <SelectItem item={props.item}>
-                    {props.item.rawValue}
-                  </SelectItem>
-                )}
-                onChange={(value: string[]) => setAttachedDbs(value)}
-              >
-                <div class="flex items-center gap-2">
-                  Attached
-                  <SelectTrigger>
-                    <SelectValue class="max-w-[50%] min-w-[32px] text-ellipsis">
-                      {(state) => {
-                        const selected = state.selectedOptions();
-                        if (selected.length === 0) {
-                          // FIXME: state callback never gets called when empty.
-                          return "none";
-                        }
-                        return selected.join(", ");
-                      }}
-                    </SelectValue>
-                  </SelectTrigger>
-                </div>
-
-                <SelectContent />
-              </Select>
-
-              <HelpDialog />
-            </div>
-          }
-        />
-
         <Switch>
           <Match when={isMobile()}>
             <div class="flex size-full scrollbar-thin flex-col overflow-y-auto">
+              <PageHeader />
               <EditorComponent />
               <Separator />
               <ResultComponent script={props.script} query={executionResult} />
@@ -802,26 +804,35 @@ function EditorPanel(props: {
           </Match>
 
           <Match when={true}>
-            <Resizable orientation="vertical">
-              <ResizablePanel
-                minSize={0.2}
-                class="scrollbar-thin overflow-y-auto"
-              >
-                <EditorComponent />
-              </ResizablePanel>
+            <div class="flex h-dvh max-h-dvh flex-col">
+              <div class="max-h-[65px]">
+                <PageHeader />
+              </div>
 
-              <ResizableHandle withHandle />
+              {/* <Resizable orientation="vertical" class="h-[calc(100dvh-65px)]"> */}
+              <Resizable orientation="vertical" class="h-[calc(100dvh-65px)]">
+                <ResizablePanel
+                  minSize={0.2}
+                  maxSize={0.8}
+                  class="scrollbar-thin overflow-y-auto"
+                >
+                  <EditorComponent />
+                </ResizablePanel>
 
-              <ResizablePanel
-                minSize={0.2}
-                class="scrollbar-thin overflow-y-auto"
-              >
-                <ResultComponent
-                  script={props.script}
-                  query={executionResult}
-                />
-              </ResizablePanel>
-            </Resizable>
+                <ResizableHandle withHandle />
+
+                <ResizablePanel
+                  minSize={0.2}
+                  maxSize={0.8}
+                  class="scrollbar-thin overflow-y-auto"
+                >
+                  <ResultComponent
+                    script={props.script}
+                    query={executionResult}
+                  />
+                </ResizablePanel>
+              </Resizable>
+            </div>
           </Match>
         </Switch>
       </Dialog>

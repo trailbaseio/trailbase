@@ -759,35 +759,11 @@ function RecordTable(props: {
           </div>
         )}
 
-        <div class="flex items-center gap-2">
-          <Label>Blobs:</Label>
+        <Show when={import.meta.env.DEV}>
+          <DebugDialogButton title="Schema" data={data() ?? []} />
+        </Show>
 
-          <Select
-            multiple={false}
-            options={[...blobEncodings]}
-            value={blobEncoding()}
-            itemComponent={(props) => (
-              <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-            )}
-            onChange={(encoding: BlobEncoding | null) => {
-              if (encoding !== null) {
-                setBlobEncoding(encoding);
-              }
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue<string>>
-                {(state) => state.selectedOption()}
-              </SelectValue>
-            </SelectTrigger>
-
-            <SelectContent />
-          </Select>
-
-          <Show when={import.meta.env.DEV}>
-            <DebugDialogButton title="Schema" data={data() ?? []} />
-          </Show>
-        </div>
+        <BlobEncodingSelector signal={[blobEncoding, setBlobEncoding]} />
       </div>
     </div>
   );
@@ -1483,6 +1459,36 @@ export function SchemaIcon(props: { type: TableType }) {
         <TbOutlineTable />
       </Match>
     </Switch>
+  );
+}
+
+function BlobEncodingSelector(props: { signal: SimpleSignal<BlobEncoding> }) {
+  const [blobEncoding, setBlobEncoding] = props.signal;
+
+  return (
+    <div class="flex items-center gap-2">
+      <Label>Blobs:</Label>
+
+      <Select
+        multiple={false}
+        options={[...blobEncodings]}
+        value={blobEncoding()}
+        itemComponent={(props) => (
+          <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+        )}
+        onChange={(encoding: BlobEncoding | null) => {
+          if (encoding !== null) {
+            setBlobEncoding(encoding);
+          }
+        }}
+      >
+        <SelectTrigger>
+          <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
+        </SelectTrigger>
+
+        <SelectContent />
+      </Select>
+    </div>
   );
 }
 
