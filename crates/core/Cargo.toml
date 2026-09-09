@@ -60,10 +60,10 @@ governor = "0.10.4"
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = "0.1.20"
-indexmap = "2.14.1"
+indexmap = "2.14.2"
 init-tracing-opentelemetry = { version = "0.41.1", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.53.0", default-features = false }
+jsonschema = { version = "0.55.1", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.0"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }

@@ -24,7 +24,7 @@ http = { workspace = true }
 http-body-util = { workspace = true }
 jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 parking_lot = { workspace = true }
-reqwest = { version = "0.13.4", features = ["stream"] }
+reqwest = { version = "0.13.5", features = ["stream"] }
 reqwest-websocket = { version = "0.6.0", features = ["json"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -39,7 +39,7 @@ env_logger = { workspace = true }
 futures-util = { workspace = true }
 lazy_static = "1.5.0"
 log = { workspace = true }
-reqwest = { version = "0.13.4", features = ["stream", "multipart", "json"] }
+reqwest = { version = "0.13.5", features = ["stream", "multipart", "json"] }
 rustix = { version = "1.1.4", features = ["process"] }
 temp-dir = "0.2.0"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "process"] }
