@@ -100,7 +100,26 @@ export default function Page() {
   });
 
   return (
-    <div class="flex size-full flex-col">
+    <rapi-doc
+      ref={
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ref as any
+      }
+      load-fonts="false"
+      sort-tags="true"
+      theme={theme()} // "light" | "dark"
+      bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
+      primary-color={primary}
+      render-style="view" // "read" | "view" | "focused"
+      layout="row" // "row" | "column"
+      schema-style="table" // "tree" | "table"
+      show-header="false" // removes the top bar: logo + title
+      allow-try="true"
+      persist-auth="false"
+      allow-authentication="false"
+      allow-server-selection="false"
+    >
+      {/* Contents */}
       <Header
         title="OpenApi Explorer"
         description={version()}
@@ -116,29 +135,7 @@ export default function Page() {
           </Popover>
         }
       />
-
-      <rapi-doc
-        ref={
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ref as any
-        }
-        load-fonts="false"
-        sort-tags="true"
-        theme={theme()} // "light" | "dark"
-        bg-color={theme() === "light" ? "#FFFFFF" : "#09090B"}
-        primary-color={primary}
-        render-style="view" // "read" | "view" | "focused"
-        layout="row" // "row" | "column"
-        schema-style="table" // "tree" | "table"
-        show-header="false" // removes the top bar: logo + title
-        allow-try="true"
-        persist-auth="false"
-        allow-authentication="false"
-        allow-server-selection="false"
-      >
-        {/* Contents */}
-      </rapi-doc>
-    </div>
+    </rapi-doc>
   );
 }
 
