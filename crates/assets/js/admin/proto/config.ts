@@ -451,6 +451,15 @@ export interface OAuthProviderConfig {
    * / username-based `UserIdentifier`.
    */
   scopes: string[];
+  /**
+   * / Apple only: expected `aud` of identity tokens issued by the native
+   * / Sign in with Apple flow (ASAuthorizationController). Native tokens are
+   * / audience-bound to the App ID (bundle identifier), while the web OAuth
+   * / flow validates against `client_id` (the Services ID). The two audiences
+   * / differ, so the native one needs its own config entry. When unset, the
+   * / native login endpoint fails closed.
+   */
+  nativeClientId?: string | undefined;
 }
 
 export interface AuthConfig {
@@ -1137,6 +1146,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     for (const v of message.scopes) {
       writer.uint32(122).string(v!);
     }
+    if (message.nativeClientId !== undefined && message.nativeClientId !== "") {
+      writer.uint32(130).string(message.nativeClientId);
+    }
     return writer;
   },
 
@@ -1217,6 +1229,14 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
             message.scopes.push(reader.string());
             continue;
           }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.nativeClientId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1269,6 +1289,11 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
       scopes: globalThis.Array.isArray(object?.scopes)
         ? object.scopes.map((e: any) => globalThis.String(e))
         : [],
+      nativeClientId: isSet(object.nativeClientId)
+        ? globalThis.String(object.nativeClientId)
+        : isSet(object.native_client_id)
+        ? globalThis.String(object.native_client_id)
+        : undefined,
     };
   },
 
@@ -1298,6 +1323,9 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     if (message.scopes?.length) {
       obj.scopes = message.scopes;
     }
+    if (message.nativeClientId !== undefined && message.nativeClientId !== "") {
+      obj.nativeClientId = message.nativeClientId;
+    }
     return obj;
   },
 
@@ -1314,6 +1342,7 @@ export const OAuthProviderConfig: MessageFns<OAuthProviderConfig> = {
     message.tokenUrl = object.tokenUrl ?? "";
     message.userApiUrl = object.userApiUrl ?? "";
     message.scopes = object.scopes?.map((e) => e) || [];
+    message.nativeClientId = object.nativeClientId ?? "";
     return message;
   },
 };

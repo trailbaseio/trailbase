@@ -1,4 +1,4 @@
-mod apple;
+pub(crate) mod apple;
 mod discord;
 mod facebook;
 mod github;
