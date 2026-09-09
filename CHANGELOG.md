@@ -1,3 +1,11 @@
+## v0.33.13
+
+- Fix `Resizable` size in admin UI's desktop SQL editor.
+- Fix `maplibregl` attribution styling in mobile browsers.
+- Minor: make admin UI's OpenApi browser header non-sticky.
+- Disable job configuration for custom, i.e. WASM, jobs.
+- Update JS and Rust dependencies.
+
 ## v0.33.12
 
 - More admin UI styling
