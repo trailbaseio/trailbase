@@ -9,11 +9,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.2.0",
-    "eslint": "^10.9.0",
+    "@types/node": "^26.5.0",
+    "eslint": "^10.10.0",
     "prettier": "^3.9.6",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.68.0",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11"
   },
   "dependencies": {

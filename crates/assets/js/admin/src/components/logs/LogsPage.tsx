@@ -635,6 +635,26 @@ function buildMap(opts: {
     },
   });
 
+  // Hide attribution on first load.
+  const attributionControl = map
+    .getContainer()
+    .querySelector(".maplibregl-ctrl-attrib");
+  if (attributionControl) {
+    const observer = new MutationObserver(() => {
+      if (attributionControl.classList.contains("maplibregl-compact-show")) {
+        attributionControl.classList.remove("maplibregl-compact-show");
+
+        // Stop watching.
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(attributionControl, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+  }
+
   map.addControl(
     new maplibregl.NavigationControl({
       visualizePitch: true,
@@ -770,7 +790,7 @@ function MapOverlay(props: {
   return (
     <>
       {/* request scale */}
-      <div class="absolute top-2 left-2 w-[100px] rounded-sm bg-white/70 p-1 text-sm dark:bg-transparent">
+      <div class="border-border absolute top-2 left-2 w-[100px] rounded-sm border-2 bg-white p-1 text-sm dark:bg-transparent">
         <div class="flex h-[20px] w-full">
           <div class="h-full w-px bg-gray-600" />
           <div class="to-primary flex h-full grow justify-center bg-linear-to-r from-emerald-100" />
@@ -797,14 +817,14 @@ function MapOverlay(props: {
       </div>
 
       {/* hover label */}
-      <div class="absolute bottom-2 left-2 min-w-[120px] shrink rounded-sm bg-white/70 p-1 text-center text-sm dark:bg-transparent">
+      <div class="border-border absolute bottom-2 left-2 min-w-[120px] shrink rounded-sm border-2 bg-white p-1 text-center text-sm dark:bg-transparent">
         <Switch>
           <Match when={props.mapDialog !== undefined}>
             <p class="min-h-4 text-wrap">{props.mapDialog}</p>
           </Match>
 
           <Match when={true}>
-            <p class="min-h-4 text-wrap text-gray-600">{"hover country"}</p>
+            <p class="min-h-4 text-wrap text-gray-600">hover country</p>
           </Match>
         </Switch>
       </div>

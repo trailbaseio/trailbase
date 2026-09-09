@@ -19,8 +19,8 @@
     "@bytecodealliance/jco": "^1.32.1",
     "@eslint/js": "^10.0.1",
     "commander": "^15.0.0",
-    "eslint": "^10.9.0",
-    "globals": "^17.11.0",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
     "nano-spawn": "^2.1.0",
     "prettier": "^3.9.6",
     "vite": "^8.2.2"

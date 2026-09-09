@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Define explicit layer order for tailwind not to stomp maplibregl's styling speficically on mobile */
+@import "maplibre-gl/dist/maplibre-gl.css" layer(maplibre);
+@layer base, maplibre, components, utilities;
+
 @plugin "@kobalte/tailwindcss";
 @plugin "@tailwindcss/typography";
 
