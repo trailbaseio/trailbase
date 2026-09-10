@@ -1,25 +1,14 @@
-import {
-  For,
-  Match,
-  Show,
-  Switch,
-  createMemo,
-  createSignal,
-  JSX,
-} from "solid-js";
+import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
 import type { Accessor, Signal } from "solid-js";
 import {
-  TbOutlineEye,
   TbOutlineRefresh,
   TbOutlineTable,
   TbOutlineTrash,
-  TbOutlineWand,
 } from "solid-icons/tb";
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
 import type {
-  CellContext,
   ColumnDef,
   ColumnPinningState,
   PaginationState,
@@ -28,7 +17,6 @@ import type {
 } from "@tanstack/solid-table";
 import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
-import { urlSafeBase64Decode } from "trailbase";
 
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -40,23 +28,21 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { showToast } from "@/components/ui/toast";
 
 import { Badge } from "@/components/ui/badge";
-import { DebugDialogButton } from "@/components/tables/SchemaDownload";
-import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
-import { CreateAlterIndexForm } from "@/components/tables/CreateAlterIndex";
-import { Table as TableComponent, buildTable } from "@/components/Table";
+import { DebugDialogButton } from "@/components/explorer/SchemaDownload";
+import { CreateAlterTableForm } from "@/components/explorer/CreateAlterTable";
+import { CreateAlterIndexForm } from "@/components/explorer/CreateAlterIndex";
+import { SchemaIcon } from "@/components/explorer/SchemaIcon";
+import {
+  BlobEncodingSelector,
+  type BlobEncoding,
+} from "@/components/table/BlobEncoding";
+import { Table as TableComponent, buildTable } from "@/components/table/Table";
+import type { Updater } from "@/components/table/Table";
 import {
   Table as TableUi,
   TableHeader,
@@ -65,33 +51,26 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import type { Updater } from "@/components/Table";
 import { FilterBar } from "@/components/FilterBar";
 import { DestructiveActionButton } from "@/components/DestructiveActionButton";
 import { IconButton } from "@/components/IconButton";
-import { InsertUpdateRowForm } from "@/components/tables/InsertUpdateRow";
+import { InsertUpdateRowForm } from "@/components/explorer/InsertUpdateRow";
 import {
   RecordApiSettingsForm,
   hasRecordApis,
-} from "@/components/tables/RecordApiSettings";
+} from "@/components/explorer/RecordApiSettings";
 import { SafeSheet } from "@/components/SafeSheet";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  type FileUpload,
-  type FileUploads,
-  UploadedFile,
-  UploadedFiles,
-} from "@/components/tables/Files";
+import { renderCell, deriveCellType } from "@/components/table/SqlCell";
 
 import { createConfigQuery } from "@/lib/api/config";
-import { wkbToWkt } from "@/lib/geometry";
 import type { Record, ArrayRecord } from "@/lib/record";
 import { hashSqlValue } from "@/lib/value";
-import { urlSafeBase64ToUuid, toHex, safeParseInt } from "@/lib/utils";
+import { safeParseInt } from "@/lib/utils";
 import { equalQualifiedNames, TableType } from "@/lib/schema";
 import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
@@ -99,12 +78,7 @@ import { formatSortingAsOrder } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
   getForeignKey,
-  isFileUploadColumn,
-  isGeometryColumn,
-  isFileUploadsColumn,
-  isJSONColumn,
   isNotNull,
-  isUUIDColumn,
   hiddenTable,
   tableType,
   validateViewRecordApiRequirements,
@@ -113,11 +87,9 @@ import {
 } from "@/lib/schema";
 
 import type { Column } from "@bindings/Column";
-import type { ColumnDataType } from "@bindings/ColumnDataType";
 import type { ColumnOption } from "@bindings/ColumnOption";
 import type { ListRowsResponse } from "@bindings/ListRowsResponse";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
-import type { QualifiedName } from "@bindings/QualifiedName";
 import type { SqlValue } from "@bindings/SqlValue";
 import type { Table } from "@bindings/Table";
 import type { TableIndex } from "@bindings/TableIndex";
@@ -127,167 +99,12 @@ import { createWritableMemo } from "@solid-primitives/memo";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
 
-const blobEncodings = ["base64", "hex", "mixed"] as const;
-type BlobEncoding = (typeof blobEncodings)[number];
-
 function rowDataToRow(columns: Column[], row: ArrayRecord): Record {
   const result: Record = {};
   for (let i = 0; i < row.length; ++i) {
     result[columns[i].name] = row[i];
   }
   return result;
-}
-
-function renderCell(
-  context: CellContext<ArrayRecord, SqlValue>,
-  tableName: QualifiedName,
-  columns: Column[],
-  pkIndex: number,
-  cell: {
-    column: Column;
-    type: CellType;
-  },
-  blobEncoding: BlobEncoding,
-  rowsRefetch: () => void,
-): JSX.Element {
-  const value: SqlValue = context.getValue();
-
-  // Special handling for file columns.
-  if (cell.type === "File") {
-    let file: FileUpload | null;
-    if (value === "Null") {
-      file = null;
-    } else if ("Text" in value) {
-      file = JSON.parse(value.Text) as FileUpload;
-    } else {
-      throw new Error("expected JSON text");
-    }
-
-    const pkCol = columns[pkIndex].name;
-    const pkVal = context.row.original[pkIndex];
-
-    return (
-      <UploadedFile
-        file={file}
-        tableName={tableName}
-        columns={columns}
-        columnName={cell.column.name}
-        pk={{ columnName: pkCol, value: pkVal }}
-        rowsRefetch={rowsRefetch}
-      />
-    );
-  } else if (cell.type === "File[]") {
-    let files: FileUploads;
-    if (value === "Null") {
-      files = [];
-    } else if ("Text" in value) {
-      files = JSON.parse(value.Text) as FileUploads;
-    } else {
-      throw new Error("expected JSON text");
-    }
-
-    const pkCol = columns[pkIndex].name;
-    const pkVal = context.row.original[pkIndex];
-
-    return (
-      <UploadedFiles
-        files={files}
-        tableName={tableName}
-        columns={columns}
-        columnName={cell.column.name}
-        pk={{ columnName: pkCol, value: pkVal }}
-        rowsRefetch={rowsRefetch}
-      />
-    );
-  }
-
-  if (value === "Null") {
-    return "NULL";
-  }
-
-  if ("Integer" in value) {
-    return value.Integer.toString();
-  }
-
-  if ("Real" in value) {
-    return value.Real.toString();
-  }
-
-  if ("Blob" in value) {
-    const blob = value.Blob;
-    if ("Base64UrlSafe" in blob) {
-      switch (cell.type) {
-        case "UUID": {
-          return (
-            <Uuid
-              base64UrlSafeBlob={blob.Base64UrlSafe}
-              blobEncoding={blobEncoding}
-            />
-          );
-        }
-        case "Geometry": {
-          return wkbToWkt(urlSafeBase64Decode(blob.Base64UrlSafe));
-        }
-      }
-
-      if (blobEncoding === "hex") {
-        return toHex(urlSafeBase64Decode(blob.Base64UrlSafe));
-      }
-      return blob.Base64UrlSafe;
-    }
-    throw Error("Expected Base64UrlSafe");
-  }
-
-  if ("Text" in value) {
-    return value.Text;
-  }
-
-  throw Error("Unhandled value type");
-}
-
-function Uuid(props: {
-  base64UrlSafeBlob: string;
-  blobEncoding: BlobEncoding;
-}) {
-  const render = () => {
-    if (props.blobEncoding === "hex") {
-      return toHex(urlSafeBase64Decode(props.base64UrlSafeBlob));
-    }
-    return props.base64UrlSafeBlob;
-  };
-
-  return (
-    <Tooltip>
-      <TooltipTrigger as="div">
-        <div class="font-mono text-xs">
-          <Switch>
-            <Match when={props.blobEncoding === "mixed"}>
-              {urlSafeBase64ToUuid(props.base64UrlSafeBlob)}
-            </Match>
-
-            <Match when={true}>{render()}</Match>
-          </Switch>
-        </div>
-      </TooltipTrigger>
-
-      <TooltipContent>
-        <div>
-          <ul>
-            <li>
-              UUID:{" "}
-              <span class="font-bold">
-                {urlSafeBase64ToUuid(props.base64UrlSafeBlob)}
-              </span>
-            </li>
-            <li>
-              Url-safe base64:{" "}
-              <span class="font-bold">{props.base64UrlSafeBlob}</span>
-            </li>
-          </ul>
-        </div>
-      </TooltipContent>
-    </Tooltip>
-  );
 }
 
 function validateTableOrViewRecordApiRequirements(
@@ -479,30 +296,6 @@ function TablePaneHeader(props: {
   );
 }
 
-type CellType =
-  "UUID" | "JSON" | "File" | "File[]" | "Geometry" | ColumnDataType;
-
-function deriveCellType(column: Column): CellType {
-  if (isUUIDColumn(column)) {
-    return "UUID";
-  }
-  if (isGeometryColumn(column)) {
-    return "Geometry";
-  }
-  if (isFileUploadColumn(column)) {
-    return "File";
-  }
-  if (isFileUploadsColumn(column)) {
-    return "File[]";
-  }
-
-  if (isJSONColumn(column)) {
-    return "JSON";
-  }
-
-  return column.data_type;
-}
-
 function buildColumnDefs(
   selectedSchema: Table | View,
   columns: Column[] | undefined,
@@ -511,7 +304,7 @@ function buildColumnDefs(
   rowsRefetch: () => void,
 ): ColumnDef<ArrayRecord, SqlValue>[] {
   if (columns === undefined) {
-    // Fallback to schema (rather than response) column defintions.
+    // Fallback to schema (rather than response) column definitions.
     if (tableType(selectedSchema) === "table") {
       return (selectedSchema as Table).columns.map((c) => ({
         id: c.name,
@@ -529,17 +322,24 @@ function buildColumnDefs(
   }
 
   return columns.map((col, idx): ColumnDef<ArrayRecord, SqlValue> => {
-    const fk = getForeignKey(col.options);
-    const notNull = isNotNull(col.options);
     const type = deriveCellType(col);
 
-    const typeName = notNull ? type : type + "?";
-    const fkSuffix = fk ? ` ‣ ${fk.foreign_table}[${fk.referred_columns}]` : "";
-    const header = `${col.name} [${typeName}] ${fkSuffix}`;
+    const header = () => {
+      const notNull = isNotNull(col.options);
+      const typeName = notNull ? type : `${type}?`;
+
+      const fk = getForeignKey(col.options);
+      const fkSuffix = fk
+        ? ` ‣ ${fk.foreign_table}[${fk.referred_columns}]`
+        : "";
+
+      return `${col.name} [${typeName}] ${fkSuffix}`;
+    };
 
     return {
       id: col.name,
-      header,
+      accessorFn: (row: ArrayRecord) => row[idx],
+      header: header(),
       enableSorting: true,
       sortingFn: "alphanumeric",
       cell: (context) =>
@@ -555,7 +355,6 @@ function buildColumnDefs(
           blobEncoding,
           rowsRefetch,
         ),
-      accessorFn: (row: ArrayRecord) => row[idx],
     };
   });
 }
@@ -763,7 +562,10 @@ function RecordTable(props: {
           <DebugDialogButton title="Schema" data={data() ?? []} />
         </Show>
 
-        <BlobEncodingSelector signal={[blobEncoding, setBlobEncoding]} />
+        <BlobEncodingSelector
+          encoding={blobEncoding()}
+          setEncoding={setBlobEncoding}
+        />
       </div>
     </div>
   );
@@ -1440,54 +1242,6 @@ function UnsatisfiedApiRequirementsTooltip(props: {
           <For each={props.errors}>{(err) => <li>{err}</li>}</For>
         </ul>
       </div>
-    </div>
-  );
-}
-
-export function SchemaIcon(props: { type: TableType }) {
-  return (
-    <Switch>
-      <Match when={props.type === "view"}>
-        <TbOutlineEye />
-      </Match>
-
-      <Match when={props.type === "virtualTable"}>
-        <TbOutlineWand />
-      </Match>
-
-      <Match when={props.type === "table"}>
-        <TbOutlineTable />
-      </Match>
-    </Switch>
-  );
-}
-
-function BlobEncodingSelector(props: { signal: SimpleSignal<BlobEncoding> }) {
-  const [blobEncoding, setBlobEncoding] = props.signal;
-
-  return (
-    <div class="flex items-center gap-2">
-      <Label>Blobs:</Label>
-
-      <Select
-        multiple={false}
-        options={[...blobEncodings]}
-        value={blobEncoding()}
-        itemComponent={(props) => (
-          <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-        )}
-        onChange={(encoding: BlobEncoding | null) => {
-          if (encoding !== null) {
-            setBlobEncoding(encoding);
-          }
-        }}
-      >
-        <SelectTrigger>
-          <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
-        </SelectTrigger>
-
-        <SelectContent />
-      </Select>
     </div>
   );
 }

@@ -12,7 +12,7 @@ import {
   CardFooter,
   CardHeader,
 } from "@/components/ui/card";
-import { Table, buildTable } from "@/components/Table";
+import { Table, buildTable } from "@/components/table/Table";
 import {
   Dialog,
   DialogContent,

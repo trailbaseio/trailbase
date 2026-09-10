@@ -78,7 +78,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { showToast } from "@/components/ui/toast";
-import { Table, buildTable } from "@/components/Table";
+import { Table, buildTable } from "@/components/table/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
 import { ExportMenu } from "@/components/editor/Export";
 

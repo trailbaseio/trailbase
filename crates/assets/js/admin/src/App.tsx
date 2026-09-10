@@ -4,7 +4,7 @@ import { Router, Route, type RouteSectionProps } from "@solidjs/router";
 import { useStore } from "@nanostores/solid";
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query";
 
-import { TablePage } from "@/components/tables/TablesPage";
+import { TablePage } from "@/components/explorer/TablesPage";
 import { AccountsPage } from "@/components/accounts/AccountsPage";
 import { WasmPage } from "@/components/wasm/WasmPage";
 import { LoginPage } from "@/components/auth/LoginPage";

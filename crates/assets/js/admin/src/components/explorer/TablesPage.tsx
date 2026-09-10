@@ -2,18 +2,19 @@ import { For, Match, Show, Switch, createMemo, createSignal } from "solid-js";
 import { useNavigate, useParams, type Navigator } from "@solidjs/router";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
-
-import { TablePane, SchemaIcon } from "@/components/tables/TablePane";
-import { Button } from "@/components/ui/button";
-import { SheetContent } from "@/components/ui/sheet";
 import {
   TbOutlineLock,
   TbOutlineLockOpen,
   TbOutlineTablePlus,
 } from "solid-icons/tb";
 
-import { CreateAlterTableForm } from "@/components/tables/CreateAlterTable";
+import { TablePane } from "@/components/explorer/TablePane";
+import { SchemaIcon } from "@/components/explorer/SchemaIcon";
+import { CreateAlterTableForm } from "@/components/explorer/CreateAlterTable";
 import { SafeSheet } from "@/components/SafeSheet";
+
+import { Button } from "@/components/ui/button";
+import { SheetContent } from "@/components/ui/sheet";
 import {
   useSidebar,
   Sidebar,

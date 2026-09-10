@@ -57,7 +57,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Table as TableComponent, buildTable } from "@/components/Table";
+import { Table as TableComponent, buildTable } from "@/components/table/Table";
+import type { Updater } from "@/components/table/Table";
 import { Table, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import {
   Sheet,
@@ -66,7 +67,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import type { Updater } from "@/components/Table";
 
 import { fetchLogs, fetchStats } from "@/lib/api/logs";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";

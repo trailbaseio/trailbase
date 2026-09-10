@@ -33,7 +33,7 @@ import {
   ColumnSubForm,
   newDefaultColumn,
   primaryKeyPresets,
-} from "@/components/tables/CreateAlterColumnForm";
+} from "@/components/explorer/CreateAlterColumnForm";
 
 import { createTable, alterTable } from "@/lib/api/table";
 import { generateRandomName } from "@/lib/name";

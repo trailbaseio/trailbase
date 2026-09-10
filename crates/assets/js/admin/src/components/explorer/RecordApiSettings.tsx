@@ -42,7 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SchemaCard } from "@/components/tables/SchemaDownload";
+import { SchemaCard } from "@/components/explorer/SchemaDownload";
 import { SheetFooter } from "@/components/ui/sheet";
 import { SheetContainer } from "@/components/SafeSheet";
 import { showToast } from "@/components/ui/toast";

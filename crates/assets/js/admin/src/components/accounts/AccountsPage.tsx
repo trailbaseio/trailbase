@@ -50,7 +50,7 @@ import {
 
 import { Callout } from "@/components/ui/callout";
 import { Header } from "@/components/Header";
-import { Table, buildTable } from "@/components/Table";
+import { Table, buildTable } from "@/components/table/Table";
 import { IconButton } from "@/components/IconButton";
 import { Label } from "@/components/ui/label";
 import { AddUser } from "@/components/accounts/AddUser";
