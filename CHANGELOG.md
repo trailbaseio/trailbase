@@ -1,3 +1,9 @@
+## v0.33.14
+
+- Allow picking the Blob encoding the admin SQL editor.
+- Better match theming of `rapidoc` and the admin UI.
+- Rebuild the ERD graph on window resize.
+
 ## v0.33.13
 
 - Fix `Resizable` size in admin UI's desktop SQL editor.
