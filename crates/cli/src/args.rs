@@ -267,7 +267,7 @@ pub enum UserSubCommands {
     /// User in question, either email, username or UUID.
     user: String,
   },
-  // Import users from a file.
+  /// Import users from a file.
   Import {
     /// In dry-run mode users will only be validated and not imported.
     #[arg(long, short = 'n', default_value_t = false)]
@@ -276,6 +276,8 @@ pub enum UserSubCommands {
     #[arg(long)]
     auth0_json: Option<String>,
   },
+  /// Export users to stdout.
+  Export,
 }
 
 #[derive(Subcommand, Debug, Clone)]

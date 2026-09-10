@@ -47,7 +47,7 @@ mod wasm {
 mod test;
 
 pub use app_state::{AppState, InitArgs};
-pub use auth::User;
+pub use auth::{DbUser, User};
 pub use data_dir::DataDir;
 pub use init_error::InitError;
 pub use server::{Server, ServerOptions};

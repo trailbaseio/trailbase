@@ -7,13 +7,13 @@ use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use itertools::Itertools;
-use serde::Deserialize;
+use serde::Serialize;
 use std::io::Write;
 use trailbase::api::cli::{AuthTokens, UserReference};
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::config::proto::Config;
 use trailbase::constants::USER_TABLE;
-use trailbase::{AppState, DataDir, InitArgs, Server, ServerOptions, SocketAddr};
+use trailbase::{AppState, DataDir, DbUser, InitArgs, Server, ServerOptions, SocketAddr};
 use trailbase_wasm_component_repo::{
   ComponentReference, download_component, find_component, find_component_by_filename,
   install_wasm_component, list_installed_wasm_components, repo,
@@ -39,20 +39,6 @@ fn init_logger(dev: bool, base_level: Option<&str>) {
   })
   .format_timestamp_micros()
   .init();
-}
-
-#[derive(Deserialize)]
-struct DbUser {
-  id: [u8; 16],
-  email: String,
-  created: i64,
-  updated: i64,
-}
-
-impl DbUser {
-  fn uuid(&self) -> uuid::Uuid {
-    uuid::Uuid::from_bytes(self.id)
-  }
 }
 
 async fn async_main(
@@ -169,13 +155,14 @@ async fn async_main(
             .read_query_values::<DbUser>(format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
             .await?;
 
-          println!("{: >36}\temail\tcreated\tupdated", "id");
+          println!("{: >36}\temail\tusername\tcreated\tupdated", "id");
           for user in users {
             let id = user.uuid();
 
             println!(
-              "{id}\t{}\t{created:?}\t{updated:?}",
-              user.email,
+              "{id}\t{email}\t{username}\t{created:?}\t{updated:?}",
+              email = user.email.as_deref().unwrap_or("-"),
+              username = user.username.as_deref().unwrap_or("-"),
               created = chrono::Utc.timestamp_opt(user.created, 0),
               updated = chrono::Utc.timestamp_opt(user.updated, 0),
             );
@@ -300,6 +287,79 @@ async fn async_main(
             }
           } else {
             return Err("Missing '--auth0_json' path".into());
+          }
+        }
+        Some(UserSubCommands::Export) => {
+          let users: Vec<DbUser> = state
+            .user_conn()
+            .read_query_values("SELECT * FROM _user WHERE password_hash IS NOT NULL", ())
+            .await?;
+
+          eprintln!("Found {} users.", users.len());
+
+          #[derive(Serialize)]
+          struct ExportUserCommon {
+            id: uuid::Uuid,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            username: Option<String>,
+            password_hash: String,
+            admin: bool,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            totp_secret: Option<String>,
+            created: i64,
+            updated: i64,
+          }
+
+          #[derive(Serialize)]
+          struct WithEmail {
+            email: String,
+            verified: bool,
+            #[serde(flatten)]
+            common: ExportUserCommon,
+          }
+
+          for user in users {
+            let DbUser {
+              id,
+              email,
+              unverified_email,
+              username,
+              password_hash,
+              admin,
+              totp_secret,
+              created,
+              updated,
+              ..
+            } = user;
+
+            let Some(password_hash) = password_hash else {
+              continue;
+            };
+
+            let common = ExportUserCommon {
+              id: uuid::Uuid::from_bytes(id),
+              username,
+              password_hash,
+              admin,
+              totp_secret,
+              created,
+              updated,
+            };
+
+            // Write as JSONL (List), i.e. newline separated "array".
+            let verified = unverified_email.is_none();
+            if let Some(email) = email.or(unverified_email) {
+              println!(
+                "{}",
+                serde_json::to_string(&WithEmail {
+                  email,
+                  verified,
+                  common,
+                })?
+              );
+            } else {
+              println!("{}", serde_json::to_string(&common)?);
+            }
           }
         }
         None => {

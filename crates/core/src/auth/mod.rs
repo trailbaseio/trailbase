@@ -16,8 +16,7 @@ mod error;
 
 pub use error::AuthError;
 pub use jwt::{AuthTokenClaims, JwtHelper};
-// pub(crate) use ui::auth_ui_router;
-pub use user::User;
+pub use user::{DbUser, User};
 
 use crate::AppState;
 use crate::config::proto;

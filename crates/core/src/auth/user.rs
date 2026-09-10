@@ -11,7 +11,7 @@ use crate::auth::tokens::extract_tokens_from_request_parts;
 use crate::{app_state::AppState, util::b64_to_uuid};
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
-pub(crate) struct DbUser {
+pub struct DbUser {
   pub id: [u8; 16],
   pub email: Option<String>,
   pub unverified_email: Option<String>,
@@ -34,7 +34,7 @@ pub(crate) struct DbUser {
 }
 
 impl DbUser {
-  pub(crate) fn uuid(&self) -> Uuid {
+  pub fn uuid(&self) -> Uuid {
     let uuid = Uuid::from_bytes(self.id);
     return uuid;
   }
