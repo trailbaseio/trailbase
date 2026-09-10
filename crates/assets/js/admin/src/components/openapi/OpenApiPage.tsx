@@ -196,4 +196,3 @@ const darkTheme: Theme = {
 
 const serverUrl = () =>
   import.meta.env.DEV ? "http://localhost:4000" : undefined;
-const primary = "#0073a8" as const;

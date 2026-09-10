@@ -3,20 +3,23 @@ import type { Accessor } from "solid-js";
 
 import { MOBILE_BREAKPOINT } from "@/components/ui/sidebar";
 
-export function createWindowWidth(): Accessor<number> {
-  const [width, setWidth] = createSignal(window.innerWidth);
+export function createWindowSize(): Accessor<[number, number]> {
+  const current = (): [number, number] => [
+    window.innerWidth,
+    window.innerHeight,
+  ];
+  const [size, setSize] = createSignal(current());
+  const update = () => setSize(current());
 
-  const handler = (_event: Event) => setWidth(window.innerWidth);
+  onMount(() => window.addEventListener("resize", update));
+  onCleanup(() => window.removeEventListener("resize", update));
 
-  onMount(() => window.addEventListener("resize", handler));
-  onCleanup(() => window.removeEventListener("resize", handler));
-
-  return width;
+  return size;
 }
 
 export function createIsMobile(): Accessor<boolean> {
-  const width = createWindowWidth();
-  return () => width() < MOBILE_BREAKPOINT;
+  const size = createWindowSize();
+  return () => size()[0] < MOBILE_BREAKPOINT;
 }
 
 export function createSetOnce<T>(initial: T): [

@@ -1,6 +1,7 @@
 import { createEffect, onCleanup } from "solid-js";
 import { Graph, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
 import type { ResolvedTheme } from "@/lib/theme";
+import { createWindowSize } from "@/lib/signals";
 
 export const LINE_HEIGHT = 24;
 export const NODE_WIDTH = 250;
@@ -259,6 +260,9 @@ export function ErdGraph(props: {
   };
 
   createEffect(() => {
+    // Force rebuild when window size changes.
+    const _ = createWindowSize()();
+
     graph?.dispose();
 
     const g = (graph = new Graph({
@@ -330,8 +334,8 @@ export function ErdGraph(props: {
 
   // NOTE: The outer container is necessary for auto-resize to work.
   return (
-    <div class="size-full overflow-clip">
-      <div ref={ref} class="size-full" />
+    <div class="grow overflow-clip">
+      <div ref={ref} />
     </div>
   );
 }

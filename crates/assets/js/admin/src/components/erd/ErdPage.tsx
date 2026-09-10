@@ -12,10 +12,10 @@ import { prettyFormatQualifiedName } from "@/lib/schema";
 import { NodeMetadata, EdgeMetadata } from "@antv/x6";
 import { PortMetadata } from "@antv/x6/lib/model/port";
 import {
-  TbOutlinePlus,
-  TbOutlineMinus,
+  TbOutlineArrowBackUp,
   TbOutlineMaximize,
-  TbOutlineRefresh,
+  TbOutlineMinus,
+  TbOutlinePlus,
 } from "solid-icons/tb";
 
 import { Button } from "@/components/ui/button";
@@ -507,10 +507,10 @@ export function ErdToolbar(props: ErdToolbarProps) {
           class="h-10"
           variant="outline"
           aria-label="Reset layout"
-          title="Reset layout"
+          title="Reset"
           onClick={props.onReset}
         >
-          <TbOutlineRefresh /> <span class="hidden md:inline">Reset</span>
+          <TbOutlineArrowBackUp /> <span class="hidden md:inline">Reset</span>
         </Button>
       </div>
     </div>
@@ -580,7 +580,7 @@ export function ErdPage() {
 
   return (
     <div class="flex size-full flex-col">
-      <Header title="ERD" description={description()} />
+      <Header title="ERD" description={description()} wrap={false} />
 
       <ErdToolbar
         entities={model().entities}
@@ -604,6 +604,7 @@ export function ErdPage() {
       />
 
       <Switch>
+        {/* Error */}
         <Match when={schemaFetch.isError}>
           <Callout
             variant="error"
@@ -624,6 +625,7 @@ export function ErdPage() {
           </Callout>
         </Match>
 
+        {/* Waiting */}
         <Match when={schemaFetch.isPending}>
           <div class="text-muted-foreground flex size-full items-center justify-center gap-3 text-sm">
             <Spinner size={20} />
@@ -631,6 +633,7 @@ export function ErdPage() {
           </div>
         </Match>
 
+        {/* Generally no data */}
         <Match when={schemaFetch.data && allModel().entities.length === 0}>
           <div class="flex size-full flex-col items-center justify-center gap-1 p-6 text-center">
             <h2 class="text-sm font-medium">No schema entities</h2>
@@ -640,6 +643,7 @@ export function ErdPage() {
           </div>
         </Match>
 
+        {/* All data filtered out */}
         <Match when={schemaFetch.data && model().entities.length === 0}>
           <div class="flex size-full flex-col items-center justify-center gap-3 p-6 text-center">
             <div>
@@ -661,6 +665,7 @@ export function ErdPage() {
           </div>
         </Match>
 
+        {/* Render the graph */}
         <Match when={schemaFetch.data}>
           <ErdGraph
             nodes={model().nodes}
