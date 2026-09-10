@@ -113,3 +113,74 @@ test("WASM runtime calling sqlite-vec", async () => {
     }),
   );
 });
+
+test("WASM runtime attaching/detaching multi DB", async () => {
+  {
+    // Invalid db name:
+    const resp0 = await fetch(`http://${serverAddress()}/attach_db/session`);
+    const body0 = await resp0.text();
+    expect(resp0.status, `Got: ${body0}`).toBe(500);
+    expect(body0).toContain("invalid db name");
+  }
+
+  const dbName = "foo";
+  const tableName = `'${dbName}'.'test'`;
+
+  {
+    const resp = await fetch(`http://${serverAddress()}/attach_db/${dbName}`);
+    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+  }
+
+  {
+    const sql = `DROP TABLE IF EXISTS ${tableName};`;
+    const resp = await fetch(
+      `http://${serverAddress()}/execute_db/${btoa(sql)}`,
+    );
+    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+  }
+
+  {
+    const sql = `CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY)`;
+    const resp = await fetch(
+      `http://${serverAddress()}/execute_db/${btoa(sql)}`,
+    );
+    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+  }
+
+  for (let i = 0; i < 100; ++i) {
+    const sql = `INSERT INTO ${tableName} (id) VALUES (${i * 3 + 0}), (${i * 3 + 1}), (${i * 3 + 2});`;
+    const resp = await fetch(
+      `http://${serverAddress()}/execute_db/${btoa(sql)}`,
+    );
+    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+  }
+
+  {
+    const resp0 = await fetch(`http://${serverAddress()}/detach_db/${dbName}`);
+    expect(resp0.status, `Got: ${await resp0.text()}`).toBe(200);
+
+    const resp1 = await fetch(`http://${serverAddress()}/detach_db/${dbName}`);
+    expect(resp1.status, `Got: ${await resp1.text()}`).toBe(500);
+  }
+
+  {
+    // COUNT fails after detach
+    const sql = `SELECT COUNT(*) FROM ${tableName};`;
+    const resp = await fetch(`http://${serverAddress()}/query_db/${btoa(sql)}`);
+    const body = await resp.text();
+    expect(resp.status, `Got: ${body}`).toBe(500);
+  }
+
+  {
+    const resp = await fetch(`http://${serverAddress()}/attach_db/${dbName}`);
+    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+  }
+
+  {
+    const sql = `SELECT COUNT(*) FROM ${tableName};`;
+    const resp = await fetch(`http://${serverAddress()}/query_db/${btoa(sql)}`);
+    const body = await resp.text();
+    expect(resp.status, `Got: ${body}`).toBe(200);
+    expect(body, `Got: ${body}`).toEqual("300");
+  }
+});

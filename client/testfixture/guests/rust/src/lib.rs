@@ -142,16 +142,72 @@ impl Guest for Endpoints {
 
         return Ok(());
       }),
-      routing::get("/attach_db", async |_req| {
-        let _ = execute("ATTACH DATABASE foo.db AS foo", vec![])
-          .await
-          .map_err(internal)?;
+      routing::get("/attach_db/{name}", async |req| {
+        let db_name = req
+          .path_param("name")
+          .ok_or_else(|| internal("missing name"))?;
+
+        let _ = execute(
+          format!("ATTACH DATABASE '{db_name}.db' AS '{db_name}'"),
+          vec![],
+        )
+        .await
+        .map_err(internal)?;
+
         return Ok(());
       }),
-      routing::get("/detach_db", async |_req| {
-        let _ = query("DETACH DATABASE foo", vec![])
+      routing::get("/detach_db/{name}", async |req| {
+        let db_name = req
+          .path_param("name")
+          .ok_or_else(|| internal("missing name"))?;
+
+        let _ = query(format!("DETACH DATABASE '{db_name}'"), vec![])
           .await
           .map_err(internal)?;
+
+        return Ok(());
+      }),
+      routing::get("/query_db/{sql}", async |req| {
+        let sql = BASE64_STANDARD
+          .decode(
+            req
+              .path_param("sql")
+              .ok_or_else(|| internal("missing query"))?,
+          )
+          .unwrap();
+
+        let sql = String::from_utf8_lossy(&sql);
+        let rows = query(sql, vec![]).await.map_err(internal)?;
+
+        if let Some(first) = rows.first().and_then(|row| row.first()) {
+          match first {
+            Value::Integer(i) => {
+              return Ok(i.to_string());
+            }
+            Value::Real(f) => {
+              return Ok(f.to_string());
+            }
+            Value::Text(t) => {
+              return Ok(t.clone());
+            }
+            _ => {}
+          }
+        }
+
+        return Ok("".to_string());
+      }),
+      routing::get("/execute_db/{sql}", async |req| {
+        let sql = BASE64_STANDARD
+          .decode(
+            req
+              .path_param("sql")
+              .ok_or_else(|| internal("missing query"))?,
+          )
+          .unwrap();
+
+        let sql = String::from_utf8_lossy(&sql);
+        let _ = execute(sql, vec![]).await.map_err(internal)?;
+
         return Ok(());
       }),
       // Benchmark runtime performance.

@@ -45,51 +45,20 @@ async fn handle_sqlite_execute(
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
-  // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
-  // apply to all internal read and write connections.
-  enum StatementKind {
-    Attach { expr: String, db_name: String },
-    Detach { db_name: String },
-    PlainExecute,
-  }
-
-  let kind = {
-    // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
-    // this to more intelligently schedule requests based on whether they're reads or writes w/o
-    // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
-    // we believe it's worth it to allow cheap reads.
-    let allocator = Bump::new();
-    let statement = match parse_into_statement(&allocator, &request.query) {
-      Ok(stmt) => stmt,
-      Err(err) => {
-        return Ok(SqliteResponse::Error(err.to_string()));
+  let rows_affected = match Parsed::single_from_query(&request.query)? {
+    Parsed::Attach { path, db_name } => {
+      if let Err(err) = validate_attach_statement(&path, &db_name) {
+        return Ok(SqliteResponse::Error(err));
       }
-    };
 
-    match statement.as_ref() {
-      Some(Stmt::Attach { expr, db_name, .. }) => StatementKind::Attach {
-        expr: unquote_expr(expr),
-        db_name: unquote_expr(db_name),
-      },
-      Some(Stmt::Detach(name)) => StatementKind::Detach {
-        db_name: unquote_expr(name),
-      },
-      _ => StatementKind::PlainExecute,
-    }
-  };
-
-  let rows_affected = match kind {
-    // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
-    // apply to all internal read and write connections.
-    StatementKind::Attach { expr, db_name } => {
-      conn.attach(&expr, &db_name).await.map_err(sqlite_err)?;
+      conn.attach(&path, &db_name).await.map_err(sqlite_err)?;
       0
     }
-    StatementKind::Detach { db_name } => {
+    Parsed::Detach { db_name } => {
       conn.detach(&db_name).await.map_err(sqlite_err)?;
       0
     }
-    StatementKind::PlainExecute => {
+    Parsed::WriteQuery | Parsed::ReadQuery => {
       match conn
         .execute(
           request.query.clone(),
@@ -112,41 +81,6 @@ async fn handle_sqlite_query(
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
-  // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
-  // apply to all internal read and write connections.
-  enum StatementKind {
-    Attach { expr: String, db_name: String },
-    Detach { db_name: String },
-    ReadQuery,
-    WriteQuery,
-  }
-
-  let kind = {
-    // NOTE: We're doing redundant work here: first we parse and then SQLite parses again. We do
-    // this to more intelligently schedule requests based on whether they're reads or writes w/o
-    // requiring users to use two separate entry points and possibly making a mistake. Ultimately,
-    // we believe it's worth it to allow cheap reads.
-    let allocator = Bump::new();
-    let statement = match parse_into_statement(&allocator, &request.query) {
-      Ok(stmt) => stmt,
-      Err(err) => {
-        return Ok(SqliteResponse::Error(err.to_string()));
-      }
-    };
-
-    match statement.as_ref() {
-      Some(Stmt::Attach { expr, db_name, .. }) => StatementKind::Attach {
-        expr: unquote_expr(expr),
-        db_name: unquote_expr(db_name),
-      },
-      Some(Stmt::Detach(name)) => StatementKind::Detach {
-        db_name: unquote_expr(name),
-      },
-      Some(Stmt::Select(select)) if is_readonly_select(select) => StatementKind::ReadQuery,
-      _ => StatementKind::WriteQuery,
-    }
-  };
-
   // Handles write queries.
   async fn write(
     conn: trailbase_sqlite::Connection,
@@ -175,42 +109,32 @@ async fn handle_sqlite_query(
       .map_err(sqlite_err);
   }
 
-  fn build_query_response(rows: Option<Rows>) -> Result<SqliteResponse, String> {
-    if let Some(rows) = rows {
-      let json_rows = rows
-        .iter()
-        .map(convert_values)
-        .collect::<Result<Vec<_>, _>>()?;
+  fn build_query_response(rows: Rows) -> Result<SqliteResponse, String> {
+    let json_rows = rows
+      .iter()
+      .map(convert_values)
+      .collect::<Result<Vec<_>, _>>()?;
 
-      return Ok(SqliteResponse::Query { rows: json_rows });
-    }
-
-    return Ok(SqliteResponse::Query { rows: vec![] });
+    return Ok(SqliteResponse::Query { rows: json_rows });
   }
 
-  return match kind {
+  return match Parsed::single_from_query(&request.query)? {
     // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
     // apply to all internal read and write connections.
-    StatementKind::Attach { expr, db_name } => {
-      conn.attach(&expr, &db_name).await.map_err(sqlite_err)?;
-      build_query_response(None)
+    Parsed::Attach { path, db_name } => {
+      if let Err(err) = validate_attach_statement(&path, &db_name) {
+        return Ok(SqliteResponse::Error(err));
+      }
+
+      conn.attach(&path, &db_name).await.map_err(sqlite_err)?;
+      Ok(SqliteResponse::Query { rows: vec![] })
     }
-    StatementKind::Detach { db_name } => {
+    Parsed::Detach { db_name } => {
       conn.detach(&db_name).await.map_err(sqlite_err)?;
-      build_query_response(None)
+      Ok(SqliteResponse::Query { rows: vec![] })
     }
-    StatementKind::ReadQuery => match read(conn, request).await {
-      Ok(rows) => build_query_response(Some(rows)),
-      Err(err) => {
-        return Ok(SqliteResponse::Error(err));
-      }
-    },
-    StatementKind::WriteQuery => match write(conn, request).await {
-      Ok(rows) => build_query_response(Some(rows)),
-      Err(err) => {
-        return Ok(SqliteResponse::Error(err));
-      }
-    },
+    Parsed::ReadQuery => build_query_response(read(conn, request).await?),
+    Parsed::WriteQuery => build_query_response(write(conn, request).await?),
   };
 }
 
@@ -241,6 +165,35 @@ pub(crate) async fn handle_sqlite_request(
     Ok(response) => to_response(response),
     Err(err) => to_response(SqliteResponse::Error(err)),
   };
+}
+
+// NOTE: We need to handle connection mutations (attach, detach, pragmas) specially, so that they
+// apply to all internal connections (write & readers).
+// NOTE: Unlike `execute` we handle `query`s as potentially read-only or rw. We parse the
+// statement below to determine that and allow for cheaper, concurrent reads.
+enum Parsed {
+  Attach { path: String, db_name: String },
+  Detach { db_name: String },
+  ReadQuery,
+  WriteQuery,
+}
+
+impl Parsed {
+  fn single_from_query(query: &str) -> Result<Parsed, String> {
+    let allocator = Bump::new();
+    return match parse_into_statement(&allocator, query).map_err(|err| err.to_string())? {
+      Some(Stmt::Pragma(_, _)) => Err("pragmas not supported".into()),
+      Some(Stmt::Attach { expr, db_name, .. }) => Ok(Parsed::Attach {
+        path: unquote_expr(&expr),
+        db_name: unquote_expr(&db_name),
+      }),
+      Some(Stmt::Detach(name)) => Ok(Parsed::Detach {
+        db_name: unquote_expr(&name),
+      }),
+      Some(Stmt::Select(select)) if is_readonly_select(select) => Ok(Parsed::ReadQuery),
+      _ => Ok(Parsed::WriteQuery),
+    };
+  }
 }
 
 async fn to_request(
@@ -281,6 +234,29 @@ pub fn convert_values(row: &trailbase_sqlite::Row) -> Result<Vec<SqlValue>, Stri
       return Ok(value.into());
     })
     .collect();
+}
+
+/// Validates statements like `ATTACH DATABASE {path} AS {db_name}`.
+fn validate_attach_statement(path: &str, db_name: &str) -> Result<(), String> {
+  const INVALID_NAMES: &[&str] = &["main", "public", "logs", "session"];
+
+  if INVALID_NAMES.contains(&db_name) || db_name.is_empty() {
+    return Err(format!("invalid db name: {db_name}"));
+  }
+
+  // QUESTION: Should we further validate or constraint the path, e.g. it's not
+  // /etc/shadow? At the moment WASM components are pretty trusted.
+  if path.is_empty() {
+    return Err("path is empty".into());
+  }
+
+  for name in INVALID_NAMES {
+    if path.contains(&format!("{name}.db")) {
+      return Err(format!("invalid path: {path}"));
+    }
+  }
+
+  return Ok(());
 }
 
 #[inline]
@@ -404,7 +380,7 @@ mod tests {
     .unwrap();
 
     // Error
-    let response = handle_sqlite_execute(
+    let err = handle_sqlite_execute(
       conn.clone(),
       SqliteRequest {
         query: "NOT A VALID QUERY :)".to_string(),
@@ -412,11 +388,8 @@ mod tests {
       },
     )
     .await
+    .err()
     .unwrap();
-
-    let SqliteResponse::Error(err) = response else {
-      panic!("expected error, got: {response:?}");
-    };
 
     assert!(err.contains("near \"NOT\": syntax error"), "Got: {err:?}");
   }
@@ -476,7 +449,7 @@ mod tests {
     .unwrap();
 
     // Error
-    let response = handle_sqlite_query(
+    let err = handle_sqlite_query(
       conn.clone(),
       SqliteRequest {
         query: "NOT A VALID QUERY :)".to_string(),
@@ -484,11 +457,8 @@ mod tests {
       },
     )
     .await
+    .err()
     .unwrap();
-
-    let SqliteResponse::Error(err) = response else {
-      panic!("expected error, got: {response:?}");
-    };
 
     assert!(err.contains("near \"NOT\": syntax error"), "Got: {err:?}");
   }
@@ -506,5 +476,16 @@ mod tests {
     let allocator = Bump::new();
     let select = parse_select(&allocator, "SELECT * FROM test;");
     assert!(is_readonly_select(select));
+  }
+
+  #[test]
+  fn validate_attach_statement_test() {
+    validate_attach_statement("foo.db", "foo").unwrap();
+
+    assert!(validate_attach_statement("", "foo").is_err());
+    assert!(validate_attach_statement("foo.db", "main").is_err());
+    assert!(validate_attach_statement("foo.db", "").is_err());
+    assert!(validate_attach_statement("../session.db", "foo").is_err());
+    assert!(validate_attach_statement("foo.db", "session").is_err());
   }
 }
