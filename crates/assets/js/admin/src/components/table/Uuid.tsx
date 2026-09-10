@@ -24,10 +24,12 @@ export function Uuid(props: {
   return (
     <Tooltip>
       <TooltipTrigger as="div">
-        <div class="font-mono text-xs">
+        <div class="font-mono text-xs text-wrap">
           <Switch>
             <Match when={props.blobEncoding === "mixed"}>
-              {urlSafeBase64ToUuid(props.base64UrlSafeBlob)}
+              <div class="md:w-[260px]">
+                {urlSafeBase64ToUuid(props.base64UrlSafeBlob)}
+              </div>
             </Match>
 
             <Match when={true}>{render()}</Match>

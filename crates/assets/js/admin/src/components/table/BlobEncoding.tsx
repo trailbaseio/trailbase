@@ -12,29 +12,28 @@ export function BlobEncodingSelector(props: {
   setEncoding: (v: BlobEncoding) => void;
 }) {
   return (
-    <div class="flex items-center gap-2">
-      <Label>Blobs:</Label>
+    <Select
+      class="max-w-[140px]"
+      multiple={false}
+      options={[...blobEncodings]}
+      value={props.encoding}
+      itemComponent={(props) => (
+        <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+      )}
+      onChange={(encoding: BlobEncoding | null) => {
+        if (encoding !== null) {
+          props.setEncoding(encoding);
+        }
+      }}
+    >
+      <SelectTrigger>
+        <SelectValue class="text-xs text-nowrap text-ellipsis">
+          {(state) => `Blob: ${state.selectedOption()}`}
+        </SelectValue>
+      </SelectTrigger>
 
-      <Select
-        multiple={false}
-        options={[...blobEncodings]}
-        value={props.encoding}
-        itemComponent={(props) => (
-          <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
-        )}
-        onChange={(encoding: BlobEncoding | null) => {
-          if (encoding !== null) {
-            props.setEncoding(encoding);
-          }
-        }}
-      >
-        <SelectTrigger>
-          <SelectValue<string>>{(state) => state.selectedOption()}</SelectValue>
-        </SelectTrigger>
-
-        <SelectContent />
-      </Select>
-    </div>
+      <SelectContent />
+    </Select>
   );
 }
 

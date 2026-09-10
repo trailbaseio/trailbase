@@ -18,10 +18,11 @@ import type { ColumnDef } from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import {
-  TbOutlineTrash,
+  TbOutlineClockHour5,
   TbOutlineEdit,
   TbOutlineHelp,
   TbOutlinePencilPlus,
+  TbOutlineTrash,
 } from "solid-icons/tb";
 
 import { autocompletion } from "@codemirror/autocomplete";
@@ -33,6 +34,8 @@ import { sql, SQLConfig, SQLNamespace, SQLite } from "@codemirror/lang-sql";
 import { tags } from "@lezer/highlight";
 
 import { IconButton } from "@/components/IconButton";
+import { BlobEncodingSelector } from "@/components/table/BlobEncoding";
+import type { BlobEncoding } from "@/components/table/BlobEncoding";
 import { Header } from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,21 +83,22 @@ import {
 import { showToast } from "@/components/ui/toast";
 import { Table, buildTable } from "@/components/table/Table";
 import { useNavbar, DirtyDialog } from "@/components/Navbar";
+import { renderCell, deriveCellType } from "@/components/table/SqlCell";
 import { ExportMenu } from "@/components/editor/Export";
 
-import type { QueryResponse } from "@bindings/QueryResponse";
+import type { Column } from "@bindings/Column";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import type { QueryResponse } from "@bindings/QueryResponse";
 import type { SqlValue } from "@bindings/SqlValue";
 
 import { createConfigQuery } from "@/lib/api/config";
 import { createTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 import { executeSql, type ExecutionResult } from "@/lib/api/execute";
-import { isNotNull } from "@/lib/schema";
-import { sqlValueToString } from "@/lib/value";
 import { prettyFormatQualifiedName } from "@/lib/schema";
 import { createIsMobile } from "@/lib/signals";
-import { cn } from "@/lib/utils";
+import { cn, urlSafeBase64ToUuid } from "@/lib/utils";
+import { getBlob } from "@/lib/value";
 import type { ArrayRecord } from "@/lib/record";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];
@@ -133,6 +137,8 @@ function isCached(
 function ResultsHeader(props: {
   script: Script;
   query: DefinedUseQueryResult<ExecutionResult | null | undefined, Error>;
+  encoding: BlobEncoding;
+  setEncoding: (v: BlobEncoding) => void;
 }) {
   const timestamp = () => props.query?.data?.timestamp;
 
@@ -163,7 +169,14 @@ function ResultsHeader(props: {
         />
       </div>
 
-      <ExecutionTime timestamp={timestamp()} />
+      <div class="flex items-center gap-2">
+        <BlobEncodingSelector
+          encoding={props.encoding}
+          setEncoding={props.setEncoding}
+        />
+
+        <ExecutionTime timestamp={timestamp()} />
+      </div>
     </div>
   );
 }
@@ -175,9 +188,17 @@ function ResultComponent(props: {
   // NOTE: We have two layers of caching :/. From Tanstack and from the scripts.
   const response = () => props.query?.data ?? props.script.result;
 
+  // TODO: encoding setting should probably be persisted.
+  const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
+
   return (
     <div class="flex flex-col gap-2 p-4">
-      <ResultsHeader script={props.script} query={props.query} />
+      <ResultsHeader
+        script={props.script}
+        query={props.query}
+        encoding={blobEncoding()}
+        setEncoding={setBlobEncoding}
+      />
 
       <Switch>
         <Match when={response()?.error}>
@@ -191,6 +212,7 @@ function ResultComponent(props: {
             data={response()!.data!}
             timestamp={response()?.timestamp}
             isCached={isCached(props.query)}
+            encoding={blobEncoding()}
           />
         </Match>
       </Switch>
@@ -202,27 +224,63 @@ function ResultComponentImpl(props: {
   data: QueryResponse;
   isCached: boolean;
   timestamp?: number;
+  encoding: BlobEncoding;
 }) {
   const [columnPinningState, setColumnPinningState] = createSignal({});
 
-  function columnDefs(data: QueryResponse): ColumnDef<ArrayRecord, SqlValue>[] {
-    return (data.columns ?? []).map((col, idx) => {
-      const notNull = isNotNull(col.options);
-
-      const header = `${col.name} [${col.data_type}${notNull ? "" : "?"}]`;
-      return {
-        accessorFn: (row: ArrayRecord) => {
-          return sqlValueToString(row[idx]);
-        },
-        header,
-      };
-    });
-  }
-
   const dataTable = createMemo(() => {
+    const columnDefs = (props.data.columns ?? []).map(
+      (col, idx): ColumnDef<ArrayRecord, SqlValue> => {
+        // The query endpoint doesn't return a proper schema, e.g. we won't
+        // have ColumnOptions when there's an underlying table. Thus we have
+        // our own best-effort inference logic here.
+        function customCellType(col: Column) {
+          const type = deriveCellType(col);
+          if (type === "Blob") {
+            try {
+              if (
+                props.data.rows.every((row) => {
+                  const blob = getBlob(row[idx]);
+                  if (blob === undefined) {
+                    return true;
+                  }
+                  return urlSafeBase64ToUuid(blob) !== "";
+                })
+              ) {
+                return "UUID";
+              }
+            } catch {
+              // fall-through
+            }
+          }
+          return type;
+        }
+
+        const cellType = customCellType(col);
+        // NOTE: we cannot determine NotNull, since we don't actually have ColumnOptions.
+        const header = `${col.name} [${cellType}]`;
+        const blobEncoding = props.encoding;
+
+        return {
+          id: col.name,
+          accessorFn: (row: ArrayRecord) => row[idx],
+          header,
+          enableSorting: false,
+          cell: (context) =>
+            renderCell(
+              context,
+              col,
+              blobEncoding,
+              /* fileColumnSupport= */ undefined,
+              cellType,
+            ),
+        };
+      },
+    );
+
     // TODO: Enable pagination
     return buildTable({
-      columns: columnDefs(props.data),
+      columns: columnDefs,
       data: props.data.rows,
       columnPinning: columnPinningState,
       onColumnPinningChange: setColumnPinningState,
@@ -254,7 +312,11 @@ function ResultComponentImpl(props: {
 function ExecutionTime(props: { timestamp: number | undefined }) {
   const time = () => new Date(props.timestamp ?? 0);
 
-  return <div class="text-sm">{`Executed: ${time().toLocaleString()}`}</div>;
+  return (
+    <div class="flex items-center gap-2 text-sm">
+      <TbOutlineClockHour5 /> {time().toLocaleString()}
+    </div>
+  );
 }
 
 function EditorSidebar(props: {

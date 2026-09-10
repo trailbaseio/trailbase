@@ -65,7 +65,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { renderCell, deriveCellType } from "@/components/table/SqlCell";
+import { renderCell, defaultHeader } from "@/components/table/SqlCell";
 
 import { createConfigQuery } from "@/lib/api/config";
 import type { Record, ArrayRecord } from "@/lib/record";
@@ -77,8 +77,6 @@ import { deleteRows, fetchRows } from "@/lib/api/row";
 import { formatSortingAsOrder } from "@/lib/list";
 import {
   findPrimaryKeyColumnIndex,
-  getForeignKey,
-  isNotNull,
   hiddenTable,
   tableType,
   validateViewRecordApiRequirements,
@@ -322,38 +320,23 @@ function buildColumnDefs(
   }
 
   return columns.map((col, idx): ColumnDef<ArrayRecord, SqlValue> => {
-    const type = deriveCellType(col);
-
-    const header = () => {
-      const notNull = isNotNull(col.options);
-      const typeName = notNull ? type : `${type}?`;
-
-      const fk = getForeignKey(col.options);
-      const fkSuffix = fk
-        ? ` ‣ ${fk.foreign_table}[${fk.referred_columns}]`
-        : "";
-
-      return `${col.name} [${typeName}] ${fkSuffix}`;
-    };
-
     return {
       id: col.name,
       accessorFn: (row: ArrayRecord) => row[idx],
-      header: header(),
+      header: defaultHeader(col),
       enableSorting: true,
       sortingFn: "alphanumeric",
       cell: (context) =>
         renderCell(
           context,
-          selectedSchema.name,
-          columns,
-          pkColumnIndex,
-          {
-            column: col,
-            type,
-          },
+          col,
           blobEncoding,
-          rowsRefetch,
+          /* fileColumnSupport= */ {
+            tableName: selectedSchema.name,
+            columns,
+            pkIndex: pkColumnIndex,
+            rowsRefetch,
+          },
         ),
     };
   });
@@ -368,6 +351,7 @@ function RecordTable(props: {
   sorting: Signal<SortingState>;
   rowsRefetch: () => void;
 }) {
+  // TODO: encoding setting should probably be persisted.
   const [blobEncoding, setBlobEncoding] = createSignal<BlobEncoding>("mixed");
   const [editRow, setEditRow] = createSignal<Record | undefined>();
   const [selectedRows, setSelectedRows] = createSignal(

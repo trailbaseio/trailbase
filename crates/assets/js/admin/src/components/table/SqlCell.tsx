@@ -6,10 +6,12 @@ import { wkbToWkt } from "@/lib/geometry";
 import { toHex } from "@/lib/utils";
 import type { ArrayRecord } from "@/lib/record";
 import {
+  getForeignKey,
   isFileUploadColumn,
-  isGeometryColumn,
   isFileUploadsColumn,
+  isGeometryColumn,
   isJSONColumn,
+  isNotNull,
   isUUIDColumn,
 } from "@/lib/schema";
 
@@ -27,7 +29,7 @@ import {
 } from "@/components/table/Files";
 import { Uuid } from "@/components/table/Uuid";
 
-type CellType =
+export type CellType =
   "UUID" | "JSON" | "File" | "File[]" | "Geometry" | ColumnDataType;
 
 export function deriveCellType(column: Column): CellType {
@@ -51,67 +53,83 @@ export function deriveCellType(column: Column): CellType {
   return column.data_type;
 }
 
+export function defaultHeader(column: Column): string {
+  const cellType = deriveCellType(column);
+  const notNull = isNotNull(column.options);
+  const typeName = notNull ? cellType : `${cellType}?`;
+
+  const fk = getForeignKey(column.options);
+  const fkSuffix = fk ? ` ‣ ${fk.foreign_table}[${fk.referred_columns}]` : "";
+
+  return `${column.name} [${typeName}] ${fkSuffix}`;
+}
+
 export function renderCell(
   context: CellContext<ArrayRecord, SqlValue>,
-  tableName: QualifiedName,
-  columns: Column[],
-  pkIndex: number,
-  cell: {
-    column: Column;
-    type: CellType;
-  },
+  column: Column,
   blobEncoding: BlobEncoding,
-  rowsRefetch: () => void,
+  fileColumnSupport?: {
+    tableName: QualifiedName;
+    columns: Column[];
+    pkIndex: number;
+    rowsRefetch: () => void;
+  },
+  type?: CellType,
 ): JSX.Element {
+  const cellType = type ?? deriveCellType(column);
   const value: SqlValue = context.getValue();
 
   // Special handling for file columns.
-  if (cell.type === "File") {
-    let file: FileUpload | null;
-    if (value === "Null") {
-      file = null;
-    } else if ("Text" in value) {
-      file = JSON.parse(value.Text) as FileUpload;
-    } else {
-      throw new Error("expected JSON text");
+  if (fileColumnSupport !== undefined) {
+    const { tableName, columns, pkIndex, rowsRefetch } = fileColumnSupport;
+
+    if (cellType === "File") {
+      let file: FileUpload | null;
+      if (value === "Null") {
+        file = null;
+      } else if ("Text" in value) {
+        file = JSON.parse(value.Text) as FileUpload;
+      } else {
+        throw new Error("expected JSON text");
+      }
+
+      const pkCol = columns[pkIndex].name;
+      const pkVal = context.row.original[pkIndex];
+
+      return (
+        <UploadedFile
+          file={file}
+          tableName={tableName}
+          columnName={column.name}
+          columns={columns}
+          pk={{ columnName: pkCol, value: pkVal }}
+          rowsRefetch={rowsRefetch}
+        />
+      );
+    } else if (cellType === "File[]") {
+      let files: FileUploads;
+      if (value === "Null") {
+        files = [];
+      } else if ("Text" in value) {
+        files = JSON.parse(value.Text) as FileUploads;
+      } else {
+        throw new Error("expected JSON text");
+      }
+
+      const pkCol = columns[pkIndex].name;
+      const pkVal = context.row.original[pkIndex];
+
+      return (
+        <UploadedFiles
+          files={files}
+          tableName={tableName}
+          columnName={column.name}
+          columns={columns}
+          pk={{ columnName: pkCol, value: pkVal }}
+          rowsRefetch={rowsRefetch}
+        />
+      );
     }
-
-    const pkCol = columns[pkIndex].name;
-    const pkVal = context.row.original[pkIndex];
-
-    return (
-      <UploadedFile
-        file={file}
-        tableName={tableName}
-        columns={columns}
-        columnName={cell.column.name}
-        pk={{ columnName: pkCol, value: pkVal }}
-        rowsRefetch={rowsRefetch}
-      />
-    );
-  } else if (cell.type === "File[]") {
-    let files: FileUploads;
-    if (value === "Null") {
-      files = [];
-    } else if ("Text" in value) {
-      files = JSON.parse(value.Text) as FileUploads;
-    } else {
-      throw new Error("expected JSON text");
-    }
-
-    const pkCol = columns[pkIndex].name;
-    const pkVal = context.row.original[pkIndex];
-
-    return (
-      <UploadedFiles
-        files={files}
-        tableName={tableName}
-        columns={columns}
-        columnName={cell.column.name}
-        pk={{ columnName: pkCol, value: pkVal }}
-        rowsRefetch={rowsRefetch}
-      />
-    );
   }
 
   if (value === "Null") {
@@ -129,7 +147,7 @@ export function renderCell(
   if ("Blob" in value) {
     const blob = value.Blob;
     if ("Base64UrlSafe" in blob) {
-      switch (cell.type) {
+      switch (cellType) {
         case "UUID": {
           return (
             <Uuid
