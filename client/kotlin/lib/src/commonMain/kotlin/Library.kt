@@ -748,12 +748,7 @@ private fun initClient(): HttpClient {
     install(SSE)
     install(ContentNegotiation) {
       // Register Kotlinx.serialization converter
-      json(
-              Json {
-                ignoreUnknownKeys = true
-                isLenient = true
-              }
-      )
+      json(jsonSerializer)
     }
   }
 }
@@ -780,6 +775,7 @@ private fun buildHeaders(tokens: Tokens?): Map<String, List<String>> {
 
 val jsonSerializer = Json {
   ignoreUnknownKeys = true
+  encodeDefaults = true
   isLenient = true
 }
 
