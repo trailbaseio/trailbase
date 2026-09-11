@@ -4,10 +4,10 @@
 
 use base64::prelude::*;
 use std::sync::atomic::{AtomicI64, Ordering};
-use trailbase_wasm::db::{Transaction, Value, execute, query};
+use trailbase_wasm::db::{Transaction, Value, execute, execute_batch, query};
 use trailbase_wasm::fetch::{Uri, get};
 use trailbase_wasm::fs::read_file;
-use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
+use trailbase_wasm::http::{HttpError, HttpRoute, Json, Request, StatusCode, routing};
 use trailbase_wasm::job::Job;
 use trailbase_wasm::sqlite::SqliteFunctionFlag;
 use trailbase_wasm::time::{Duration, SystemTime, Timer};
@@ -142,41 +142,8 @@ impl Guest for Endpoints {
 
         return Ok(());
       }),
-      routing::get("/attach_db/{name}", async |req| {
-        let db_name = req
-          .path_param("name")
-          .ok_or_else(|| internal("missing name"))?;
-
-        let _ = execute(
-          format!("ATTACH DATABASE '{db_name}.db' AS '{db_name}'"),
-          vec![],
-        )
-        .await
-        .map_err(internal)?;
-
-        return Ok(());
-      }),
-      routing::get("/detach_db/{name}", async |req| {
-        let db_name = req
-          .path_param("name")
-          .ok_or_else(|| internal("missing name"))?;
-
-        let _ = query(format!("DETACH DATABASE '{db_name}'"), vec![])
-          .await
-          .map_err(internal)?;
-
-        return Ok(());
-      }),
       routing::get("/query_db/{sql}", async |req| {
-        let sql = BASE64_STANDARD
-          .decode(
-            req
-              .path_param("sql")
-              .ok_or_else(|| internal("missing query"))?,
-          )
-          .unwrap();
-
-        let sql = String::from_utf8_lossy(&sql);
+        let sql = get_base64_path_param(&req, "sql")?;
         let rows = query(sql, vec![]).await.map_err(internal)?;
 
         if let Some(first) = rows.first().and_then(|row| row.first()) {
@@ -197,18 +164,13 @@ impl Guest for Endpoints {
         return Ok("".to_string());
       }),
       routing::get("/execute_db/{sql}", async |req| {
-        let sql = BASE64_STANDARD
-          .decode(
-            req
-              .path_param("sql")
-              .ok_or_else(|| internal("missing query"))?,
-          )
-          .unwrap();
-
-        let sql = String::from_utf8_lossy(&sql);
-        let _ = execute(sql, vec![]).await.map_err(internal)?;
-
-        return Ok(());
+        let sql = get_base64_path_param(&req, "sql")?;
+        let rows_affected = execute(sql, vec![]).await.map_err(internal)?;
+        return Ok(format!("{rows_affected}"));
+      }),
+      routing::get("/execute_batch_db/{sql}", async |req| {
+        let sql = get_base64_path_param(&req, "sql")?;
+        return execute_batch(sql).await.map_err(internal);
       }),
       // Benchmark runtime performance.
       routing::get("/fibonacci", async |req| {
@@ -320,6 +282,18 @@ fn fibonacci(n: usize) -> usize {
     1 => 1,
     n => fibonacci(n - 1) + fibonacci(n - 2),
   };
+}
+
+fn get_base64_path_param(req: &Request, name: &str) -> Result<String, HttpError> {
+  let value = BASE64_STANDARD
+    .decode(
+      req
+        .path_param(name)
+        .ok_or_else(|| internal("missing query"))?,
+    )
+    .map_err(|err| internal(format!("invalid b64: {err}")))?;
+
+  return Ok(String::from_utf8_lossy(&value).into());
 }
 
 fn internal(err: impl std::string::ToString) -> HttpError {

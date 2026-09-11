@@ -165,6 +165,36 @@ pub async fn execute(
   };
 }
 
+pub async fn execute_batch(query: impl std::string::ToString) -> Result<(), Error> {
+  let r = SqliteRequest {
+    query: query.to_string(),
+    params: vec![],
+  };
+  let request = Request::builder()
+    .uri("http://__sqlite/batch")
+    .method("POST")
+    .body(serde_json::to_vec(&r)?.into_body())
+    .map_err(|err| Error::Other(err.into()))?;
+
+  let client = Client::new();
+  let (_parts, mut body) = client
+    .send(request)
+    .await
+    .map_err(|err| Error::Other(err.into()))?
+    .into_parts();
+
+  let bytes = body.bytes().await.map_err(|err| Error::Other(err.into()))?;
+
+  return match serde_json::from_slice(&bytes) {
+    Ok(SqliteResponse::ExecuteBatch) => Ok(()),
+    Ok(SqliteResponse::Error(err)) => Err(Error::Other(err.into())),
+    Ok(resp) => Err(Error::UnexpectedType(
+      format!("Expected ExecuteResponse, got: {resp:?}").into(),
+    )),
+    Err(err) => Err(Error::Other(err.into())),
+  };
+}
+
 fn from_sql_value(value: SqlValue) -> Result<Value, DecodeError> {
   return match value {
     SqlValue::Null => Ok(Value::Null),

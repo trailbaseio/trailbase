@@ -3,7 +3,7 @@ use http::Uri;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use sqlite3_parser::ast::{OneSelect, Select, Stmt};
 use tokio::time::Duration;
-use trailbase_schema::parse::{Bump, parse_into_statement};
+use trailbase_schema::parse::{Bump, parse_into_statement, parse_into_statements};
 use trailbase_schema::sqlite::unquote_expr;
 use trailbase_sqlite::{LockError, Rows};
 use trailbase_sqlvalue::{DecodeError, SqlValue};
@@ -45,36 +45,55 @@ async fn handle_sqlite_execute(
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
-  let rows_affected = match Parsed::single_from_query(&request.query)? {
+  return match Parsed::single_from_query(&request.query)? {
     Parsed::Attach { path, db_name } => {
-      if let Err(err) = validate_attach_statement(&path, &db_name) {
-        return Ok(SqliteResponse::Error(err));
-      }
+      validate_attach_statement(&path, &db_name)?;
 
       conn.attach(&path, &db_name).await.map_err(sqlite_err)?;
-      0
+      Ok(SqliteResponse::Execute { rows_affected: 0 })
     }
     Parsed::Detach { db_name } => {
       conn.detach(&db_name).await.map_err(sqlite_err)?;
-      0
+      Ok(SqliteResponse::Execute { rows_affected: 0 })
     }
-    Parsed::WriteQuery | Parsed::ReadQuery => {
-      match conn
+    Parsed::Empty => Ok(SqliteResponse::Execute { rows_affected: 0 }),
+    Parsed::WriteQuery | Parsed::ReadQuery => Ok(SqliteResponse::Execute {
+      rows_affected: conn
         .execute(
           request.query.clone(),
           sql_values_to_sqlite_params(request.params).map_err(sqlite_err)?,
         )
         .await
-      {
-        Ok(rows_affected) => rows_affected,
-        Err(err) => {
-          return Ok(SqliteResponse::Error(err.to_string()));
-        }
-      }
-    }
+        .map_err(sqlite_err)?,
+    }),
   };
+}
 
-  Ok(SqliteResponse::Execute { rows_affected })
+async fn handle_sqlite_execute_batch(
+  conn: trailbase_sqlite::Connection,
+  request: SqliteRequest,
+) -> Result<SqliteResponse, String> {
+  if !request.params.is_empty() {
+    return Err("bind not supported".to_string());
+  }
+
+  let stmts = Parsed::list_from_query(&request.query)?
+    .into_iter()
+    .flat_map(|stmt| match stmt {
+      Parsed::Attach { .. } | Parsed::Detach { .. } => Some(Err("not supported".to_string())),
+      Parsed::Empty => None,
+      stmt => Some(Ok(stmt)),
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+
+  if !stmts.is_empty() {
+    conn
+      .execute_batch(request.query)
+      .await
+      .map_err(sqlite_err)?;
+  }
+
+  return Ok(SqliteResponse::ExecuteBatch);
 }
 
 async fn handle_sqlite_query(
@@ -133,6 +152,7 @@ async fn handle_sqlite_query(
       conn.detach(&db_name).await.map_err(sqlite_err)?;
       Ok(SqliteResponse::Query { rows: vec![] })
     }
+    Parsed::Empty => Ok(SqliteResponse::Query { rows: vec![] }),
     Parsed::ReadQuery => build_query_response(read(conn, request).await?),
     Parsed::WriteQuery => build_query_response(write(conn, request).await?),
   };
@@ -151,6 +171,7 @@ pub(crate) async fn handle_sqlite_request(
 
   let response = match uri.path() {
     "/execute" => handle_sqlite_execute(conn, sqlite_request).await,
+    "/batch" => handle_sqlite_execute_batch(conn, sqlite_request).await,
     "/query" => handle_sqlite_query(conn, sqlite_request).await,
     _ => {
       // NOTE: Should not happen and doesn't need to be handled by the client as
@@ -176,12 +197,30 @@ enum Parsed {
   Detach { db_name: String },
   ReadQuery,
   WriteQuery,
+  Empty,
 }
 
 impl Parsed {
   fn single_from_query(query: &str) -> Result<Parsed, String> {
     let allocator = Bump::new();
-    return match parse_into_statement(&allocator, query).map_err(|err| err.to_string())? {
+    return Parsed::from_statement(
+      parse_into_statement(&allocator, query).map_err(|err| err.to_string())?,
+    );
+  }
+
+  fn list_from_query(query: &str) -> Result<Vec<Parsed>, String> {
+    let allocator = Bump::new();
+    let stmts = parse_into_statements(&allocator, query).map_err(|err| err.to_string())?;
+
+    return stmts
+      .into_iter()
+      .map(|stmt| Parsed::from_statement(Some(stmt)))
+      .collect();
+  }
+
+  fn from_statement(stmt: Option<Stmt>) -> Result<Parsed, String> {
+    return match stmt {
+      None => Ok(Parsed::Empty),
       Some(Stmt::Pragma(_, _)) => Err("pragmas not supported".into()),
       Some(Stmt::Attach { expr, db_name, .. }) => Ok(Parsed::Attach {
         path: unquote_expr(&expr),
@@ -392,6 +431,72 @@ mod tests {
     .unwrap();
 
     assert!(err.contains("near \"NOT\": syntax error"), "Got: {err:?}");
+  }
+
+  #[tokio::test]
+  async fn handle_sqlite_execute_batch_test() {
+    let conn = Connection::open_in_memory().unwrap();
+
+    let query = "CREATE TABLE IF NOT EXISTS 'test' (id INTEGER PRIMARY KEY)";
+
+    assert!(
+      handle_sqlite_execute_batch(
+        conn.clone(),
+        SqliteRequest {
+          query: query.to_string(),
+          params: vec![SqlValue::Null],
+        },
+      )
+      .await
+      .is_err()
+    );
+
+    handle_sqlite_execute_batch(
+      conn.clone(),
+      SqliteRequest {
+        query: format!("{query};{query}"),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Empty
+    handle_sqlite_execute_batch(
+      conn.clone(),
+      SqliteRequest {
+        query: "".to_string(),
+        params: vec![],
+      },
+    )
+    .await
+    .unwrap();
+
+    // Invalid query.
+    assert!(
+      handle_sqlite_execute_batch(
+        conn.clone(),
+        SqliteRequest {
+          query: format!("{query}; NOT A VALID QUERY;"),
+          params: vec![],
+        },
+      )
+      .await
+      .is_err()
+    );
+
+    // Connection mutations not allowed
+    assert!(
+      handle_sqlite_execute_batch(
+        conn.clone(),
+        SqliteRequest {
+          query: format!("{query}; ATTACH DATABASE 'foo.db' AS 'foo';"),
+          params: vec![],
+        },
+      )
+      .await
+      .is_err()
+    );
   }
 
   #[tokio::test]

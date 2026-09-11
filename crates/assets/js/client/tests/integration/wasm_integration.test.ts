@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, describe } from "vitest";
 import { status } from "http-status";
 
 import { serverAddress } from "../setup";
@@ -114,73 +114,90 @@ test("WASM runtime calling sqlite-vec", async () => {
   );
 });
 
-test("WASM runtime attaching/detaching multi DB", async () => {
-  {
-    // Invalid db name:
-    const resp0 = await fetch(`http://${serverAddress()}/attach_db/session`);
-    const body0 = await resp0.text();
-    expect(resp0.status, `Got: ${body0}`).toBe(500);
-    expect(body0).toContain("invalid db name");
-  }
-
-  const dbName = "foo";
-  const tableName = `'${dbName}'.'test'`;
-
-  {
-    const resp = await fetch(`http://${serverAddress()}/attach_db/${dbName}`);
-    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
-  }
-
-  {
-    const sql = `DROP TABLE IF EXISTS ${tableName};`;
+describe("WASM runtime sqlite", () => {
+  async function execute(sql: string) {
     const resp = await fetch(
       `http://${serverAddress()}/execute_db/${btoa(sql)}`,
     );
-    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+    if (!resp.ok) {
+      throw new Error(await resp.text());
+    }
   }
 
-  {
-    const sql = `CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY)`;
+  async function execute_batch(sql: string) {
     const resp = await fetch(
-      `http://${serverAddress()}/execute_db/${btoa(sql)}`,
+      `http://${serverAddress()}/execute_batch_db/${btoa(sql)}`,
     );
-    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+    if (!resp.ok) {
+      throw new Error(await resp.text());
+    }
   }
 
-  for (let i = 0; i < 100; ++i) {
-    const sql = `INSERT INTO ${tableName} (id) VALUES (${i * 3 + 0}), (${i * 3 + 1}), (${i * 3 + 2});`;
-    const resp = await fetch(
-      `http://${serverAddress()}/execute_db/${btoa(sql)}`,
-    );
-    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
+  async function query(sql: string): Promise<string> {
+    const resp = await fetch(`http://${serverAddress()}/query_db/${btoa(sql)}`);
+    if (resp.ok) {
+      return await resp.text();
+    }
+    throw new Error(await resp.text());
   }
 
-  {
-    const resp0 = await fetch(`http://${serverAddress()}/detach_db/${dbName}`);
-    expect(resp0.status, `Got: ${await resp0.text()}`).toBe(200);
-
-    const resp1 = await fetch(`http://${serverAddress()}/detach_db/${dbName}`);
-    expect(resp1.status, `Got: ${await resp1.text()}`).toBe(500);
+  async function attach(name: string) {
+    await execute(`ATTACH DATABASE '${name}.db' AS '${name}';`);
   }
 
-  {
+  async function detach(name: string) {
+    await execute(`DETACH DATABASE '${name}';`);
+  }
+
+  test("simple statements", async () => {
+    const countSql = "SELECT COUNT(*) FROM '_user'";
+    await query(countSql);
+    // Multiple statements throws.
+    await expect(
+      async () => await query(`${countSql};${countSql};`),
+    ).rejects.toThrow();
+
+    const createTableSql =
+      "CREATE TABLE IF NOT EXISTS 'test-table' (id INTEGER PRIMARY KEY) STRICT";
+    await execute(createTableSql);
+    // Multiple statements throws.
+    await expect(
+      async () => await execute(`${createTableSql};${createTableSql};`),
+    ).rejects.toThrow();
+
+    // Test batch
+    await execute_batch(countSql);
+    await execute_batch(`${createTableSql};${createTableSql};${countSql}`);
+  });
+
+  test("attaching/detaching multi DB", async () => {
+    // Attach db with invalid name fails
+    await expect(async () => await attach("session")).rejects.toThrow();
+
+    const dbName = "foo";
+    const tableName = `'${dbName}'.'test'`;
+
+    await attach(dbName);
+    await execute(`DROP TABLE IF EXISTS ${tableName};`);
+    await execute(`CREATE TABLE ${tableName} (id INTEGER PRIMARY KEY)`);
+
+    for (let i = 0; i < 100; ++i) {
+      await execute(
+        `INSERT INTO ${tableName} (id) VALUES (${i * 3 + 0}), (${i * 3 + 1}), (${i * 3 + 2});`,
+      );
+    }
+
+    await detach(dbName);
+    // Repeat detach fails:
+    await expect(async () => await detach(dbName)).rejects.toThrow();
+
     // COUNT fails after detach
-    const sql = `SELECT COUNT(*) FROM ${tableName};`;
-    const resp = await fetch(`http://${serverAddress()}/query_db/${btoa(sql)}`);
-    const body = await resp.text();
-    expect(resp.status, `Got: ${body}`).toBe(500);
-  }
+    await expect(
+      async () => await query(`SELECT COUNT(*) FROM ${tableName};`),
+    ).rejects.toThrow();
 
-  {
-    const resp = await fetch(`http://${serverAddress()}/attach_db/${dbName}`);
-    expect(resp.status, `Got: ${await resp.text()}`).toBe(200);
-  }
-
-  {
-    const sql = `SELECT COUNT(*) FROM ${tableName};`;
-    const resp = await fetch(`http://${serverAddress()}/query_db/${btoa(sql)}`);
-    const body = await resp.text();
-    expect(resp.status, `Got: ${body}`).toBe(200);
-    expect(body, `Got: ${body}`).toEqual("300");
-  }
+    // And succeeds after re-attach.
+    await attach(dbName);
+    expect(await query(`SELECT COUNT(*) FROM ${tableName};`)).toEqual("300");
+  });
 });

@@ -20,6 +20,7 @@ pub struct SqliteRequest {
 pub enum SqliteResponse {
   Query { rows: Vec<Vec<SqlValue>> },
   Execute { rows_affected: usize },
+  ExecuteBatch,
   Error(String),
   TxBegin,
   TxCommit,
