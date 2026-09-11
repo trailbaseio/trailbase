@@ -1,6 +1,15 @@
+## v0.33.15
+
+- Add `trail user export` sub-command for data take-out.
+- Add `execute_batch` support for WASM guests.
+- Make FKs in table explorer followable, i.e. link to foreign record.
+- Add transaction/batch support to Python client.
+- Fix Kotlin client's JSON serialization for default values. Thanks @Bnyro 🙏
+- Constrain DBs attachable by WASM guests.
+
 ## v0.33.14
 
-- Allow picking the Blob encoding the admin SQL editor.
+- Allow picking the Blob encoding in the admin SQL editor.
 - Better match theming of `rapidoc` and the admin UI.
 - Rebuild the ERD graph on window resize.
 
