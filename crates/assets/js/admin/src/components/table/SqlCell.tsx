@@ -1,4 +1,4 @@
-import { JSX } from "solid-js";
+import { Switch, Match, JSX } from "solid-js";
 import type { CellContext } from "@tanstack/solid-table";
 import { urlSafeBase64Decode } from "trailbase";
 
@@ -17,8 +17,8 @@ import {
 
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
-import type { SqlValue } from "@bindings/SqlValue";
 import type { QualifiedName } from "@bindings/QualifiedName";
+import type { SqlValue } from "@bindings/SqlValue";
 
 import type { BlobEncoding } from "@/components/table/BlobEncoding";
 import {
@@ -28,6 +28,8 @@ import {
   UploadedFiles,
 } from "@/components/table/Files";
 import { Uuid } from "@/components/table/Uuid";
+import { Link } from "@kobalte/core";
+import { ForeignKey } from "@bindings/ForeignKey";
 
 export type CellType =
   "UUID" | "JSON" | "File" | "File[]" | "Geometry" | ColumnDataType;
@@ -45,7 +47,6 @@ export function deriveCellType(column: Column): CellType {
   if (isFileUploadsColumn(column)) {
     return "File[]";
   }
-
   if (isJSONColumn(column)) {
     return "JSON";
   }
@@ -83,22 +84,23 @@ export function renderCell(
   if (fileColumnSupport !== undefined) {
     const { tableName, columns, pkIndex, rowsRefetch } = fileColumnSupport;
 
+    const pkCol = columns[pkIndex].name;
+    const pkVal = context.row.original[pkIndex];
+
     if (cellType === "File") {
-      let file: FileUpload | null;
-      if (value === "Null") {
-        file = null;
-      } else if ("Text" in value) {
-        file = JSON.parse(value.Text) as FileUpload;
-      } else {
+      function contents(): FileUpload | null {
+        if (value === "Null") {
+          return null;
+        } else if ("Text" in value) {
+          return JSON.parse(value.Text) as FileUpload;
+        }
+
         throw new Error("expected JSON text");
       }
 
-      const pkCol = columns[pkIndex].name;
-      const pkVal = context.row.original[pkIndex];
-
       return (
         <UploadedFile
-          file={file}
+          file={contents()}
           tableName={tableName}
           columnName={column.name}
           columns={columns}
@@ -107,21 +109,18 @@ export function renderCell(
         />
       );
     } else if (cellType === "File[]") {
-      let files: FileUploads;
-      if (value === "Null") {
-        files = [];
-      } else if ("Text" in value) {
-        files = JSON.parse(value.Text) as FileUploads;
-      } else {
+      function contents(): FileUploads {
+        if (value === "Null") {
+          return [];
+        } else if ("Text" in value) {
+          return JSON.parse(value.Text) as FileUploads;
+        }
         throw new Error("expected JSON text");
       }
 
-      const pkCol = columns[pkIndex].name;
-      const pkVal = context.row.original[pkIndex];
-
       return (
         <UploadedFiles
-          files={files}
+          files={contents()}
           tableName={tableName}
           columnName={column.name}
           columns={columns}
@@ -137,7 +136,12 @@ export function renderCell(
   }
 
   if ("Integer" in value) {
-    return value.Integer.toString();
+    const v = value.Integer.toString();
+    return (
+      <LinkForeignKey column={column} pk={v}>
+        {v}
+      </LinkForeignKey>
+    );
   }
 
   if ("Real" in value) {
@@ -146,32 +150,105 @@ export function renderCell(
 
   if ("Blob" in value) {
     const blob = value.Blob;
-    if ("Base64UrlSafe" in blob) {
-      switch (cellType) {
-        case "UUID": {
-          return (
+    if (!("Base64UrlSafe" in blob)) {
+      throw Error("Expected Base64UrlSafe");
+    }
+
+    switch (cellType) {
+      case "UUID": {
+        return (
+          <LinkForeignKey column={column} pk={blob.Base64UrlSafe}>
             <Uuid
               base64UrlSafeBlob={blob.Base64UrlSafe}
               blobEncoding={blobEncoding}
             />
-          );
-        }
-        case "Geometry": {
-          return wkbToWkt(urlSafeBase64Decode(blob.Base64UrlSafe));
-        }
+          </LinkForeignKey>
+        );
       }
-
-      if (blobEncoding === "hex") {
-        return toHex(urlSafeBase64Decode(blob.Base64UrlSafe));
+      case "Geometry": {
+        return (
+          <LinkForeignKey column={column} pk={blob.Base64UrlSafe}>
+            {wkbToWkt(urlSafeBase64Decode(blob.Base64UrlSafe))}
+          </LinkForeignKey>
+        );
       }
-      return blob.Base64UrlSafe;
+      default: {
+        return (
+          <LinkForeignKey column={column} pk={blob.Base64UrlSafe}>
+            {blobEncoding === "hex"
+              ? toHex(urlSafeBase64Decode(blob.Base64UrlSafe))
+              : blob.Base64UrlSafe}
+          </LinkForeignKey>
+        );
+      }
     }
-    throw Error("Expected Base64UrlSafe");
   }
 
   if ("Text" in value) {
-    return value.Text;
+    return (
+      <LinkForeignKey column={column} pk={value.Text}>
+        {value.Text}
+      </LinkForeignKey>
+    );
   }
 
   throw Error("Unhandled value type");
+}
+
+function LinkForeignKey(props: {
+  pk: string;
+  column: Column;
+  children: JSX.Element;
+}) {
+  function getFkTableAndCol():
+    | {
+        table: string;
+        col: string;
+      }
+    | undefined {
+    const fk = getForeignKey(props.column.options);
+    if (fk) {
+      if (fk.referred_columns.length === 1) {
+        return {
+          table: fk.foreign_table,
+          col: fk.referred_columns[0],
+        };
+      }
+
+      if (fk.foreign_table === "_user") {
+        return {
+          table: "_user",
+          col: "id",
+        };
+      }
+
+      // TODO: We should look up the pk based on `ForeignKey` :/.
+    }
+
+    return undefined;
+  }
+
+  return (
+    <Switch>
+      <Match when={getFkTableAndCol()}>
+        {(tc) => {
+          return (
+            <a
+              href={encodeURI(
+                `/_/admin/table/${tc().table}/?filter=${tc().col}="${props.pk}"`,
+              )}
+              onClick={(e) => {
+                // Prevent sheet from opening.
+                e.stopPropagation();
+              }}
+            >
+              {props.children}
+            </a>
+          );
+        }}
+      </Match>
+
+      <Match when={true}>{props.children}</Match>
+    </Switch>
+  );
 }
