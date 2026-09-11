@@ -751,6 +751,7 @@ private fun initClient(): HttpClient {
       json(
               Json {
                 ignoreUnknownKeys = true
+                encodeDefaults = true
                 isLenient = true
               }
       )
