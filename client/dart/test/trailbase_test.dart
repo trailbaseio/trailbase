@@ -498,7 +498,7 @@ Future<void> main() async {
 
       {
         // Test delete transaction.
-        final msg = 'dart transaction update test original: =?&${now}';
+        final msg = 'dart transaction delete test: =?&${now}';
         final id = await api.create({'text_not_null': msg});
 
         final results =

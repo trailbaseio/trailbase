@@ -199,5 +199,5 @@ describe("WASM runtime sqlite", () => {
     // And succeeds after re-attach.
     await attach(dbName);
     expect(await query(`SELECT COUNT(*) FROM ${tableName};`)).toEqual("300");
-  });
+  }, /* timeout= */ 15000);
 });

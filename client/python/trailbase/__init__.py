@@ -47,7 +47,7 @@ def record_ids_from_json(json: JSON_OBJECT) -> list[RecordId]:
         assert isinstance(value, str)
         return RecordId(value)
 
-    return list([convert(id) for id in ids])
+    return [convert(id) for id in ids]
 
 
 class User:
@@ -213,14 +213,14 @@ class TokenState:
         return base
 
 
-class Event:
+class EventBase:
     seq: int | None
 
     def __init__(self, seq: int | None):
         self.seq = seq
 
 
-class InsertEvent(Event):
+class InsertEvent(EventBase):
     value: JSON_OBJECT
 
     def __init__(self, seq: int | None, value: JSON_OBJECT):
@@ -228,7 +228,7 @@ class InsertEvent(Event):
         self.value = value
 
 
-class UpdateEvent(Event):
+class UpdateEvent(EventBase):
     value: JSON_OBJECT
 
     def __init__(self, seq: int | None, value: JSON_OBJECT):
@@ -236,7 +236,7 @@ class UpdateEvent(Event):
         self.value = value
 
 
-class DeleteEvent(Event):
+class DeleteEvent(EventBase):
     value: JSON_OBJECT
 
     def __init__(self, seq: int | None, value: JSON_OBJECT):
@@ -244,7 +244,7 @@ class DeleteEvent(Event):
         self.value = value
 
 
-class ErrorEvent(Event):
+class ErrorEvent(EventBase):
     status: int
     message: str | None
 
@@ -259,10 +259,10 @@ EVENT_ERROR_STATUS_FORBIDDEN = 1
 EVENT_ERROR_STATUS_LOSS = 2
 
 
-EVENT: TypeAlias = UpdateEvent | InsertEvent | DeleteEvent | ErrorEvent
+Event: TypeAlias = UpdateEvent | InsertEvent | DeleteEvent | ErrorEvent
 
 
-def parseEvent(obj: JSON_OBJECT) -> EVENT | None:
+def parseEvent(obj: JSON_OBJECT) -> Event | None:
     seq = cast(int | None, obj["seq"])
 
     insert = obj.get("Insert")
@@ -282,6 +282,96 @@ def parseEvent(obj: JSON_OBJECT) -> EVENT | None:
         return ErrorEvent(seq, cast(int, error["status"]), cast(str | None, error.get("message")))
 
     raise Exception(f"Failed to parse event: {obj}")
+
+
+class OperationBase:
+    api_name: str
+
+    def __init__(self, api_name: str):
+        self.api_name = api_name
+
+    @abstractmethod
+    def to_json(self) -> JSON_OBJECT:
+        pass
+
+
+class CreateOperation(OperationBase):
+    value: JSON_OBJECT
+
+    def __init__(self, api_name: str, value: JSON_OBJECT):
+        super().__init__(api_name)
+        self.value = value
+
+    def to_json(self) -> JSON_OBJECT:
+        return {
+            "Create": {
+                "api_name": self.api_name,
+                "value": self.value,
+            }
+        }
+
+
+class UpdateOperation(OperationBase):
+    id: str
+    value: JSON_OBJECT
+
+    def __init__(self, api_name: str, id: str, value: JSON_OBJECT):
+        super().__init__(api_name)
+        self.id = id
+        self.value = value
+
+    def to_json(self) -> JSON_OBJECT:
+        return {
+            "Update": {
+                "api_name": self.api_name,
+                "record_id": self.id,
+                "value": self.value,
+            },
+        }
+
+
+class DeleteOperation(OperationBase):
+    id: str
+
+    def __init__(self, api_name: str, id: str):
+        super().__init__(api_name)
+        self.id = id
+
+    def to_json(self) -> JSON_OBJECT:
+        return {
+            "Delete": {
+                "api_name": self.api_name,
+                "record_id": self.id,
+            },
+        }
+
+
+Operation: TypeAlias = CreateOperation | UpdateOperation | DeleteOperation
+
+
+class TransactionResponse:
+    results: list[RecordId | str]
+
+    def __init__(self, results: list[RecordId | str]):
+        self.results = results
+
+    @staticmethod
+    def from_json(json: JSON_OBJECT) -> "TransactionResponse":
+        results = json["results"]
+        assert isinstance(results, list)
+
+        def convert(obj: JSON) -> RecordId | str:
+            assert isinstance(obj, dict)
+            error = obj.get("Error")
+            if error is not None:
+                assert isinstance(error, str)
+                return error
+
+            id = obj["Id"]
+            assert isinstance(id, str)
+            return RecordId(id)
+
+        return TransactionResponse([convert(obj) for obj in results])
 
 
 class Transport(ABC):
@@ -524,6 +614,17 @@ class Client:
     def records(self, name: str) -> "RecordApi":
         return RecordApi(name, self)
 
+    def execute(self, ops: list[Operation], transaction: bool = True) -> TransactionResponse:
+        response = self.fetch(
+            _TRANSACTION_BASE_PATH,
+            method="POST",
+            data={
+                "operations": [op.to_json() for op in ops],
+                "transaction": transaction,
+            },
+        )
+        return TransactionResponse.from_json(response.json())
+
     def refresh_auth_tokens(self, force: bool = False) -> bool:
         state = self._token_state.state
         refresh_token = (
@@ -692,8 +793,6 @@ FilterOrComposite: TypeAlias = Filter | And | Or
 
 
 class RecordApi:
-    _recordApi: str = "api/records/v1"
-
     _name: str
     _client: Client
 
@@ -749,7 +848,7 @@ class RecordApi:
             for filter in filters:
                 traverse_filters("filter", filter)
 
-        response = self._client.fetch(f"{self._recordApi}/{self._name}", query_params=params)
+        response = self._client.fetch(f"{_RECORD_API}/{self._name}", query_params=params)
         return ListResponse.from_json(response.json())
 
     def read(
@@ -761,13 +860,13 @@ class RecordApi:
         params = {"expand": ",".join(expand)} if expand is not None else None
 
         return self._client.fetch(
-            f"{self._recordApi}/{self._name}/{id}",
+            f"{_RECORD_API}/{self._name}/{id}",
             query_params=params,
         ).json()
 
     def create(self, record: JSON_OBJECT) -> RecordId:
         response = self._client.fetch(
-            f"{self._recordApi}/{self._name}",
+            f"{_RECORD_API}/{self._name}",
             method="POST",
             data=record,
         )
@@ -775,34 +874,45 @@ class RecordApi:
 
     def create_bulk(self, records: JSON_ARRAY):
         response = self._client.fetch(
-            f"{self._recordApi}/{self._name}",
+            f"{_RECORD_API}/{self._name}",
             method="POST",
             data=records,
         )
         return record_ids_from_json(response.json())
 
+    def create_op(self, record: JSON_OBJECT) -> CreateOperation:
+        return CreateOperation(self._name, record)
+
     def update(self, record_id: RecordId | str | int, record: JSON_OBJECT) -> None:
         id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         self._client.fetch(
-            f"{self._recordApi}/{self._name}/{id}",
+            f"{_RECORD_API}/{self._name}/{id}",
             method="PATCH",
             data=record,
         )
 
+    def update_op(self, record_id: RecordId | str | int, record: JSON_OBJECT) -> UpdateOperation:
+        id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
+        return UpdateOperation(self._name, id, record)
+
     def delete(self, record_id: RecordId | str | int) -> None:
         id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         self._client.fetch(
-            f"{self._recordApi}/{self._name}/{id}",
+            f"{_RECORD_API}/{self._name}/{id}",
             method="DELETE",
         )
 
-    def subscribe(self, record_id: RecordId | str | int) -> typing.Generator[EVENT]:
+    def delete_op(self, record_id: RecordId | str | int) -> DeleteOperation:
+        id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
+        return DeleteOperation(self._name, id)
+
+    def subscribe(self, record_id: RecordId | str | int) -> typing.Generator[Event]:
         id = repr(record_id) if isinstance(record_id, RecordId) else f"{record_id}"
         context = self._client.stream(
-            f"{self._recordApi}/{self._name}/subscribe/{id}", timeout=httpx.Timeout(None)
+            f"{_RECORD_API}/{self._name}/subscribe/{id}", timeout=httpx.Timeout(None)
         )
 
-        def impl() -> typing.Generator[EVENT]:
+        def impl() -> typing.Generator[Event]:
             with context as response:
                 if response.status_code > 200:
                     raise FetchException(response.status_code, response.text)
@@ -815,7 +925,7 @@ class RecordApi:
 
         return impl()
 
-    def subscribe_all(self) -> typing.Generator[EVENT]:
+    def subscribe_all(self) -> typing.Generator[Event]:
         return self.subscribe("*")
 
 
@@ -843,4 +953,7 @@ def _refresh_tokens_impl(transport: Transport, refresh_token: str) -> TokenState
 
 
 _logger = logging.getLogger(__name__)
+
 _AUTH_API: str = "api/auth/v1"
+_RECORD_API: str = "api/records/v1"
+_TRANSACTION_BASE_PATH: str = "api/transaction/v1/execute"

@@ -1,18 +1,19 @@
 from trailbase import (
-    EVENT_ERROR_STATUS_FORBIDDEN,
-    ErrorEvent,
-    parseEvent,
     Client,
     CompareOp,
+    Operation,
+    DeleteEvent,
+    EVENT_ERROR_STATUS_FORBIDDEN,
+    ErrorEvent,
+    Event,
     FetchException,
     Filter,
     InsertEvent,
-    UpdateEvent,
-    DeleteEvent,
-    RecordId,
     JSON,
     JSON_OBJECT,
-    EVENT,
+    RecordId,
+    UpdateEvent,
+    parseEvent,
 )
 
 import httpx
@@ -410,7 +411,7 @@ def test_subscriptions(trailbase: TrailBaseFixture):
 
     api.delete(id)
 
-    events: List[EVENT] = []
+    events: List[Event] = []
     for ev in table_subscription:
         events.append(ev)
         if len(events) == 3:
@@ -432,6 +433,60 @@ def test_subscriptions(trailbase: TrailBaseFixture):
     assert type(ev2) is DeleteEvent
     assert ev2.seq == 3
     assert ev2.value["text_not_null"] == update_message
+
+
+def test_transactions(trailbase: TrailBaseFixture):
+    assert trailbase.isUp()
+
+    client = connect()
+    api = client.records("simple_strict_table")
+    now = int(time())
+
+    # Create
+    if True:
+        msg = f"python transaction create test: =?&{now}"
+        ops: list[Operation] = [
+            api.create_op(
+                {
+                    "text_not_null": msg,
+                }
+            )
+        ]
+
+        result = client.execute(ops, True)
+        assert len(result.results) == 1
+
+        record = api.read(result.results[0])
+        assert record["text_not_null"] == msg
+
+    # update
+    if True:
+        msg = f"python transaction update test original: =?&{now}"
+        id = api.create({"text_not_null": msg})
+
+        updated_msg = f"python transaction update test modified: =?&{now}"
+        ops: list[Operation] = [
+            api.update_op(
+                id,
+                {
+                    "text_not_null": updated_msg,
+                },
+            )
+        ]
+        result = client.execute(ops, True)
+        assert len(result.results) == 1
+
+        record = api.read(result.results[0])
+        assert record["text_not_null"] == updated_msg
+
+    # Delete
+    if True:
+        msg = f"python transaction delete test: =?&{now}"
+        id = api.create({"text_not_null": msg})
+
+        ops: list[Operation] = [api.delete_op(id)]
+        result = client.execute(ops, False)
+        assert len(result.results) == 1
 
 
 def test_filter_is_null_repr():
