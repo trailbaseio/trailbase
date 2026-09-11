@@ -43,7 +43,7 @@ tasks { named<Test>("jvmTest") { useJUnitPlatform() } }
 
 group = "io.trailbase"
 
-version = "0.7.2"
+version = "0.7.3"
 
 mavenPublishing {
     publishToMavenCentral()
