@@ -13,7 +13,6 @@ use crate::config::proto;
 pub(crate) struct AppleOAuthProvider {
   client_id: String,
   client_secret: String,
-  native_client_id: Option<String>,
 }
 
 #[allow(unused)]
@@ -85,7 +84,6 @@ impl AppleOAuthProvider {
     return Ok(Self {
       client_id,
       client_secret,
-      native_client_id: config.native_client_id.clone(),
     });
   }
 
@@ -98,16 +96,6 @@ impl AppleOAuthProvider {
         Ok(Box::new(Self::new(config)?))
       }),
     }
-  }
-
-  async fn verify_apple_id_token(
-    &self,
-    http_client: &reqwest::Client,
-    id_token: &str,
-  ) -> Result<AppleIdToken, AuthError> {
-    // TODO: Should maybe cache the JWK responses.
-    let public_keys = fetch_apple_public_keys(http_client).await?;
-    return decode_id_token_with_keys(&public_keys, id_token, &self.client_id);
   }
 }
 
@@ -220,10 +208,6 @@ impl OAuthProvider for AppleOAuthProvider {
     return oauth2::AuthType::RequestBody;
   }
 
-  fn native_client_id(&self) -> Option<&str> {
-    return self.native_client_id.as_deref();
-  }
-
   fn provider(&self) -> proto::OAuthProviderId {
     return proto::OAuthProviderId::Apple;
   }
@@ -269,7 +253,8 @@ impl OAuthProvider for AppleOAuthProvider {
       return Err(AuthError::BadRequest("missing id token"));
     };
 
-    let apple_id_token = self.verify_apple_id_token(http_client, id_token).await?;
+    let public_keys = fetch_apple_public_keys(http_client).await?;
+    let apple_id_token = decode_id_token_with_keys(&public_keys, id_token, &self.client_id)?;
 
     let Some(email) = apple_id_token.email else {
       return Err(AuthError::BadRequest("missing email"));
@@ -286,6 +271,8 @@ impl OAuthProvider for AppleOAuthProvider {
   }
 }
 
+// TODO: Should maybe cache the JWK responses.
+#[cfg(not(test))]
 pub(crate) async fn fetch_apple_public_keys(
   http_client: &reqwest::Client,
 ) -> Result<ApplePublicKeys, AuthError> {
@@ -304,6 +291,13 @@ pub(crate) async fn fetch_apple_public_keys(
 }
 
 #[cfg(test)]
+pub(crate) async fn fetch_apple_public_keys(
+  _http_client: &reqwest::Client,
+) -> Result<ApplePublicKeys, AuthError> {
+  return Ok(test_support::fixture_keys());
+}
+
+#[cfg(test)]
 mod tests {
   use serde_json::{from_value, json};
 
@@ -314,7 +308,6 @@ mod tests {
     let provider = AppleOAuthProvider {
       client_id: "12345".to_string(),
       client_secret: "s3cre7".to_string(),
-      native_client_id: None,
     };
 
     let settings = provider.settings().unwrap();
@@ -360,7 +353,6 @@ mod tests {
     let provider = AppleOAuthProvider {
       client_id: "12345".to_string(),
       client_secret: "s3cre7".to_string(),
-      native_client_id: None,
     };
 
     assert!(matches!(

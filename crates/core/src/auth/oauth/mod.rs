@@ -1,4 +1,3 @@
-mod apple_native;
 mod callback;
 mod list_providers;
 mod login;
@@ -32,6 +31,5 @@ pub fn oauth_router() -> OpenApiRouter<AppState> {
       callback::callback_from_external_auth_provider_get,
       // We re-register the GET callback as POST, for apple which calls by POST.
       callback::callback_from_external_auth_provider_post
-    ))
-    .routes(routes!(apple_native::native_apple_login_handler));
+    ));
 }

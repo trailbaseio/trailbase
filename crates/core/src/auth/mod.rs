@@ -89,6 +89,10 @@ pub(super) fn router(config: &proto::Config) -> OpenApiRouter<AppState> {
     // OAuth flows: list providers, login+callback
     .merge(oauth::oauth_router());
 
+  if config.auth.apple_native_client_id.is_some() {
+    router = router.routes(routes!(api::apple_native::native_apple_login_handler));
+  }
+
   if config.auth.enable_anonymous_signin() {
     router = router
       .routes(routes!(api::login_anonymous::login_anonymous_user_handler))
