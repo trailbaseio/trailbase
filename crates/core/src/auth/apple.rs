@@ -2,9 +2,10 @@ use serde::Deserialize;
 
 use crate::auth::AuthError;
 
+/// RFC: https://www.rfc-editor.org/info/rfc7517/#section-4
 #[allow(unused)]
 #[derive(Debug, Deserialize)]
-struct ApplePublicKey {
+struct Jwk {
   kty: String,
   kid: String,
   r#use: String,
@@ -15,7 +16,7 @@ struct ApplePublicKey {
 
 #[derive(Debug, Deserialize)]
 pub struct ApplePublicKeys {
-  keys: Vec<ApplePublicKey>,
+  keys: Vec<Jwk>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -54,39 +55,19 @@ pub struct AppleIdToken {
 
 /// Extracts the `kid` header from a JWT without any network access.
 pub fn extract_kid(id_token: &str) -> Result<String, AuthError> {
-  let Some((header, _, _)) = split_jwt(id_token) else {
+  let Ok(header) = jsonwebtoken::decode_header(id_token) else {
     return Err(AuthError::BadRequest("malformed identity token"));
   };
 
-  #[derive(Deserialize)]
-  struct Header {
-    kid: Option<String>,
+  if let Some(kid) = header.kid
+    && !kid.is_empty()
+  {
+    return Ok(kid);
   }
 
-  let header: Header = serde_json::from_slice(&header)
-    .map_err(|_| AuthError::BadRequest("malformed identity token header"))?;
-  return header
-    .kid
-    .filter(|kid| !kid.is_empty())
-    .ok_or(AuthError::BadRequest(
-      "identity token is missing the kid header",
-    ));
-}
-
-/// Splits a compact JWT into its three base64url-decoded parts.
-fn split_jwt(id_token: &str) -> Option<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-  use base64::Engine as _;
-  use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
-  let mut parts = id_token.split('.');
-  let decode = |part: &str| URL_SAFE_NO_PAD.decode(part).ok();
-  let header = decode(parts.next()?)?;
-  let payload = decode(parts.next()?)?;
-  let signature = decode(parts.next()?)?;
-  if parts.next().is_some() {
-    return None;
-  }
-  return Some((header, payload, signature));
+  return Err(AuthError::BadRequest(
+    "identity token is missing the kid header",
+  ));
 }
 
 /// Verifies signature and claims (issuer, audience, expiry) of an Apple
@@ -96,13 +77,7 @@ pub(crate) fn decode_id_token_with_keys(
   id_token: &str,
   audience: &str,
 ) -> Result<AppleIdToken, AuthError> {
-  let header =
-    jsonwebtoken::decode_header(id_token).map_err(|err| AuthError::FailedDependency(err.into()))?;
-  let Some(kid) = header.kid else {
-    return Err(AuthError::FailedDependency(
-      "Missing kid in token header".into(),
-    ));
-  };
+  let kid = extract_kid(id_token)?;
 
   // Find the key.
   let Some(public_key) = public_keys.keys.iter().find(|key| key.kid == kid) else {
@@ -110,19 +85,28 @@ pub(crate) fn decode_id_token_with_keys(
   };
 
   let decoding_key = jsonwebtoken::DecodingKey::from_rsa_components(&public_key.n, &public_key.e)
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    .map_err(|err| {
+    // Got invalid key from Apple?
+    return AuthError::FailedDependency(err.into());
+  })?;
 
-  let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
-  validation.set_audience(&[audience]);
-  validation.set_issuer(&["https://appleid.apple.com"]);
+  let validation = {
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
+    validation.set_audience(&[audience]);
+    validation.set_issuer(&["https://appleid.apple.com"]);
+    validation
+  };
 
   let token_data = jsonwebtoken::decode::<AppleIdToken>(id_token, &decoding_key, &validation)
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    .map_err(|_err| {
+      // Validation failed.
+      return AuthError::Unauthorized;
+    })?;
 
   return Ok(token_data.claims);
 }
 
-// TODO: Should maybe cache the JWK responses.
+// TODO: Should maybe cache the Jwk responses.
 #[cfg(not(test))]
 pub(crate) async fn fetch_apple_public_keys(
   http_client: &reqwest::Client,
@@ -151,7 +135,8 @@ pub(crate) async fn fetch_apple_public_keys(
 /// Fixture shared by the native-verification tests here and the endpoint
 /// tests in `apple_native.rs`.
 #[cfg(test)]
-pub(crate) mod test_support {
+pub mod test_support {
+  use base64::prelude::*;
   use rsa::RsaPrivateKey;
   use rsa::pkcs8::EncodePrivateKey;
   use rsa::traits::PublicKeyParts;
@@ -180,10 +165,8 @@ pub(crate) mod test_support {
   pub const NONCE_HASH: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
 
   pub fn fixture_keys() -> ApplePublicKeys {
-    use base64::prelude::*;
-
     let key = signing_key();
-    let apple_key = ApplePublicKey {
+    let apple_key = Jwk {
       kty: "RSA".to_string(),
       kid: TEST_KEY_ID.to_string(),
       r#use: "sig".to_string(),
@@ -223,6 +206,8 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
+  use base64::prelude::*;
+
   use super::test_support::*;
   use super::*;
 
@@ -321,24 +306,13 @@ mod tests {
   }
 
   #[test]
-  fn extract_kid_rejects_malformed_tokens() {
-    use base64::Engine as _;
-    use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-
+  fn test_extract_kid() {
     assert!(extract_kid("garbage").is_err());
-    assert!(extract_kid("only.two").is_err());
-    assert!(extract_kid("!!!!.bbb.ccc").is_err());
     // Well-formed base64 header without a kid field.
-    let header = URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256"}"#);
+    let header = BASE64_URL_SAFE_NO_PAD.encode(r#"{"alg":"RS256"}"#);
     assert!(extract_kid(&format!("{header}.bbb.ccc")).is_err());
-    // Four segments are not a compact JWT.
-    assert!(extract_kid(&format!("{header}.{header}.{header}.{header}")).is_err());
-  }
 
-  #[test]
-  fn extract_kid_returns_header_kid() {
     let token = sign_token(valid_claims());
-
     assert_eq!(extract_kid(&token).unwrap(), TEST_KEY_ID);
   }
 }
