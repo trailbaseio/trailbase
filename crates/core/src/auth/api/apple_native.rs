@@ -15,13 +15,14 @@
 //!   therefore succeed without it: users are matched by Apple's team-stable `sub` and the minted
 //!   auth token carries the stored email from the database.
 use axum::extract::{Json, State};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::LazyLock;
 use utoipa::ToSchema;
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::api::login::LoginResponse;
 use crate::auth::apple::{decode_id_token_with_keys, extract_kid, fetch_apple_public_keys};
 use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::oauth::OAuthUser;
@@ -37,22 +38,14 @@ pub struct AppleNativeLoginRequest {
   pub nonce: String,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-pub struct AppleNativeTokenResponse {
-  pub auth_token: String,
-  pub refresh_token: String,
-  pub csrf_token: String,
-}
-
-/// Logs users in with a native Sign in with Apple identity token.
+/// Logs users with Apple's native sign-in, i.e. a token-exchange Apple for TrailBase.
 #[utoipa::path(
   post,
-  // QUESTION: Should this really be `/oauth/...`? What's the best practice here?
-  path = "/oauth/apple/native",
+  path = "/apple/authorize",
   tag = "auth",
   request_body = AppleNativeLoginRequest,
   responses(
-    (status = 200, description = "Converts a verified identity token to auth tokens.", body = AppleNativeTokenResponse),
+    (status = 200, description = "Converts a verified identity token to auth tokens.", body = LoginResponse),
     (status = 400, description = "Malformed token or nonce mismatch."),
     (status = 401, description = "Missing client id or token failed signature/issuer/audience/expiry verification."),
     (status = 424, description = "First-time login without a (verified) email claim under the configured user-identifier policy.")
@@ -61,7 +54,7 @@ pub struct AppleNativeTokenResponse {
 pub(crate) async fn native_apple_login_handler(
   State(state): State<AppState>,
   Json(request): Json<AppleNativeLoginRequest>,
-) -> Result<Json<AppleNativeTokenResponse>, AuthError> {
+) -> Result<Json<LoginResponse>, AuthError> {
   // Input validation: check token.
   let _ = extract_kid(&request.identity_token)?;
 
@@ -133,7 +126,7 @@ pub(crate) async fn native_apple_login_handler(
     .encode(&auth_token_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
-  return Ok(Json(AppleNativeTokenResponse {
+  return Ok(Json(LoginResponse {
     auth_token,
     refresh_token,
     csrf_token: auth_token_claims.csrf_token,
@@ -328,7 +321,7 @@ mod tests {
     let server = TestServer::new(router);
 
     let response = server
-      .post("/oauth/apple/native")
+      .post("/apple/authorize")
       .json(&serde_json::json!({
         "identity_token": "garbage",
         "nonce": "test",
