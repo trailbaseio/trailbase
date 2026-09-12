@@ -16,19 +16,17 @@
 //!   therefore succeed without it: users are matched by Apple's team-stable `sub` and the minted
 //!   auth token carries the stored email from the database.
 
-use std::sync::LazyLock;
-
 use axum::extract::{Json, State};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::sync::LazyLock;
 use utoipa::ToSchema;
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::apple::{decode_id_token_with_keys, extract_kid, fetch_apple_public_keys};
+use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::oauth::OAuthUser;
-use crate::auth::oauth::providers::apple::{
-  decode_id_token_with_keys, extract_kid, fetch_apple_public_keys, verify_nonce_claim,
-};
-use crate::auth::oauth::users::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::config::proto;
 
@@ -58,7 +56,7 @@ pub struct AppleNativeTokenResponse {
   responses(
     (status = 200, description = "Converts a verified identity token to auth tokens.", body = AppleNativeTokenResponse),
     (status = 400, description = "Malformed token or nonce mismatch."),
-    (status = 401, description = "Token failed signature/issuer/audience/expiry verification."),
+    (status = 401, description = "Missing client id or token failed signature/issuer/audience/expiry verification."),
     (status = 424, description = "First-time login without a (verified) email claim under the configured user-identifier policy.")
   )
 )]
@@ -71,13 +69,11 @@ pub(crate) async fn native_apple_login_handler(
   // not a client error.
   let native_client_id = state
     .access_config(|c| c.auth.apple_native_client_id.clone())
-    .ok_or(AuthError::Internal(
-      "native sign-in is not configured for this provider".into(),
-    ))?;
+    .ok_or(AuthError::Unauthorized)?;
 
   // Structural pre-parse: rejects malformed tokens locally, before any
   // outbound request towards Apple's keys endpoint.
-  extract_kid(&request.identity_token)?;
+  let _ = extract_kid(&request.identity_token)?;
 
   /// Shared HTTP client for Apple's endpoints: connection pooling instead of a
   /// TLS handshake per login. Redirects stay disabled like everywhere else in
@@ -94,6 +90,7 @@ pub(crate) async fn native_apple_login_handler(
   // presented token did not authenticate.
   let claims = decode_id_token_with_keys(&public_keys, &request.identity_token, &native_client_id)
     .map_err(|_| AuthError::Unauthorized)?;
+
   verify_nonce_claim(claims.nonce.as_deref(), &request.nonce)?;
 
   // Users are matched by Apple's team-stable `sub` — the same identity space
@@ -155,6 +152,30 @@ pub(crate) async fn native_apple_login_handler(
   }));
 }
 
+/// Checks the anti-replay nonce: the claim must be present and equal the
+/// lowercase-hex SHA-256 of the client's raw nonce (the hash the client sent
+/// with the authorization request).
+fn verify_nonce_claim(claims_nonce: Option<&str>, client_nonce: &str) -> Result<(), AuthError> {
+  let Some(claims_nonce) = claims_nonce else {
+    return Err(AuthError::BadRequest("identity token carries no nonce"));
+  };
+
+  if claims_nonce != sha256_hex(client_nonce) {
+    return Err(AuthError::BadRequest("nonce mismatch"));
+  }
+  return Ok(());
+}
+
+fn sha256_hex(value: &str) -> String {
+  let mut hasher = Sha256::new();
+  hasher.update(value.as_bytes());
+  return hasher
+    .finalize()
+    .iter()
+    .map(|byte| format!("{byte:02x}"))
+    .collect();
+}
+
 #[cfg(test)]
 mod tests {
   use axum::Router;
@@ -163,11 +184,9 @@ mod tests {
 
   use super::*;
   use crate::app_state::{AppState, TestStateOptions, test_state};
-  use crate::auth::oauth::providers::apple::test_support::{
-    APP_ID, WEB_SERVICES_ID, sign_token, valid_claims,
-  };
+  use crate::auth::apple::test_support::{APP_ID, WEB_SERVICES_ID, sign_token, valid_claims};
 
-  async fn apple_state_with(
+  async fn apple_state(
     native_client_id: Option<&str>,
     user_identifier: Option<proto::UserIdentifier>,
   ) -> AppState {
@@ -183,10 +202,6 @@ mod tests {
     .unwrap();
   }
 
-  async fn apple_state(native_client_id: Option<&str>) -> AppState {
-    return apple_state_with(native_client_id, None).await;
-  }
-
   fn login_request(identity_token: &str, nonce: &str) -> AppleNativeLoginRequest {
     return AppleNativeLoginRequest {
       identity_token: identity_token.to_string(),
@@ -196,7 +211,7 @@ mod tests {
 
   #[tokio::test]
   async fn valid_native_token_logs_in_and_creates_the_user() {
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     let token = sign_token(valid_claims());
     let response =
@@ -225,7 +240,7 @@ mod tests {
 
   #[tokio::test]
   async fn web_services_id_audience_is_unauthorized() {
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     let mut claims = valid_claims();
     claims["aud"] = serde_json::json!(WEB_SERVICES_ID);
@@ -241,7 +256,7 @@ mod tests {
 
   #[tokio::test]
   async fn nonce_mismatch_is_bad_request() {
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     let result = native_apple_login_handler(
       State(state),
@@ -257,7 +272,7 @@ mod tests {
 
   #[tokio::test]
   async fn first_login_without_email_is_failed_dependency_under_email_policy() {
-    let state = apple_state_with(Some(APP_ID), Some(proto::UserIdentifier::RequireEmail)).await;
+    let state = apple_state(Some(APP_ID), Some(proto::UserIdentifier::RequireEmail)).await;
 
     let mut claims = valid_claims();
     claims.as_object_mut().unwrap().remove("email");
@@ -275,7 +290,7 @@ mod tests {
   async fn first_login_without_email_is_created_under_permissive_policy() {
     // Without a user-identifier policy, the shared creation path behaves
     // exactly like the web flow for a token without an email claim.
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     let mut claims = valid_claims();
     claims.as_object_mut().unwrap().remove("email");
@@ -294,7 +309,7 @@ mod tests {
 
   #[tokio::test]
   async fn missing_native_client_id_fails_closed_as_server_error() {
-    let state = apple_state(None).await;
+    let state = apple_state(None, None).await;
 
     let result = native_apple_login_handler(
       State(state),
@@ -302,7 +317,7 @@ mod tests {
     )
     .await;
 
-    assert!(matches!(result, Err(AuthError::Internal(_))));
+    assert!(matches!(result, Err(AuthError::Unauthorized)));
   }
 
   /// The route is mounted and answers through the real OAuth router: a
@@ -310,7 +325,7 @@ mod tests {
   /// exists at all.
   #[tokio::test]
   async fn native_login_route_is_mounted_and_rejects_garbage_locally() {
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     let router: Router = Router::from(crate::auth::router(&state.get_config()))
       .layer(CookieManagerLayer::new())
@@ -333,19 +348,18 @@ mod tests {
   /// vector is referenced in the macOS (Rust) and iOS (Swift) clients.
   #[test]
   fn nonce_claim_matches_sha256_of_test_vector() {
-    // sha256("test") in lowercase hex.
-    const EXPECTED: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
+    let expected = sha256_hex("test").to_ascii_lowercase();
 
-    assert!(verify_nonce_claim(Some(EXPECTED), "test").is_ok());
+    assert!(verify_nonce_claim(Some(&expected), "test").is_ok());
     assert!(verify_nonce_claim(Some("deadbeef"), "test").is_err());
     assert!(verify_nonce_claim(None, "test").is_err());
     // Self-check that the fixture claims carry the same hash.
-    assert_eq!(valid_claims()["nonce"].as_str().unwrap(), EXPECTED);
+    assert_eq!(valid_claims()["nonce"].as_str().unwrap(), expected);
   }
 
   #[tokio::test]
   async fn existing_apple_user_logs_in_without_email_claim() {
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     // First login: Apple includes the email claim only on first
     // authorization.
@@ -388,7 +402,7 @@ mod tests {
 
   #[tokio::test]
   async fn new_user_with_unverified_email_is_rejected() {
-    let state = apple_state(Some(APP_ID)).await;
+    let state = apple_state(Some(APP_ID), None).await;
 
     let mut claims = valid_claims();
     claims["email_verified"] = serde_json::json!(false);

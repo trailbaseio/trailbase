@@ -5,6 +5,8 @@ pub mod jwt;
 pub mod user;
 
 pub(crate) mod api;
+pub(crate) mod apple;
+pub(crate) mod create_external_user;
 pub(crate) mod login_params;
 pub(crate) mod oauth;
 pub(crate) mod options;

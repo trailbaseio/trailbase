@@ -6,7 +6,6 @@ pub(crate) mod providers;
 mod reqwest_client;
 pub(crate) mod simple_provider;
 mod state;
-pub(crate) mod users;
 
 #[cfg(test)]
 mod oauth_test;
