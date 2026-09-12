@@ -811,10 +811,10 @@ export function TablePane(props: {
     });
   };
   const setFilter = (filter: string | undefined) => {
-    // Reset pagination.
+    // Reset pagination index, but keep the user's chosen page size.
     setSearchParams({
+      ...searchParams,
       pageIndex: undefined,
-      pageSize: undefined,
       filter,
     });
   };
@@ -827,11 +827,10 @@ export function TablePane(props: {
     return [];
   });
   const setSorting = (s: Updater<SortingState>) => {
-    // Reset pagination.
+    // Reset pagination index, but keep the user's chosen page size.
     setSearchParams({
       ...searchParams,
       pageIndex: undefined,
-      pageSize: undefined,
     });
     setSortingImpl(s);
   };
