@@ -4,7 +4,7 @@ use crate::auth::AuthError;
 
 /// RFC: https://www.rfc-editor.org/info/rfc7517/#section-4
 #[allow(unused)]
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct Jwk {
   kty: String,
   kid: String,
@@ -14,7 +14,7 @@ struct Jwk {
   e: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct ApplePublicKeys {
   keys: Vec<Jwk>,
 }
@@ -106,21 +106,58 @@ pub(crate) fn decode_id_token_with_keys(
   return Ok(token_data.claims);
 }
 
-// TODO: Should maybe cache the Jwk responses.
 #[cfg(not(test))]
 pub(crate) async fn fetch_apple_public_keys(
   http_client: &reqwest::Client,
 ) -> Result<ApplePublicKeys, AuthError> {
+  use futures_util::FutureExt;
+  use futures_util::future::{BoxFuture, Shared};
+  use parking_lot::RwLock;
+  use std::sync::LazyLock;
+  use std::time::{Duration, SystemTime};
+
+  type Cached = Option<(
+    SystemTime,
+    Shared<BoxFuture<'static, Result<ApplePublicKeys, String>>>,
+  )>;
+
   const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
+  static CACHE: LazyLock<RwLock<Cached>> = LazyLock::new(|| RwLock::new(None));
 
-  let response = http_client
-    .get(JWK_URL)
-    .send()
-    .await
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+  let future = {
+    let now = SystemTime::now();
+    let mut lock = CACHE.upgradable_read();
 
-  return response
-    .json()
+    if let Some((ref ts, ref future)) = *lock
+      && now
+        .duration_since(*ts)
+        .unwrap_or_else(|_| Duration::from_hours(24))
+        < Duration::from_mins(15)
+    {
+      future.clone()
+    } else {
+      lock.with_upgraded(|m| {
+        let http_client = http_client.clone();
+        let future = async move {
+          let response = http_client
+            .get(JWK_URL)
+            .send()
+            .await
+            .map_err(|err| err.to_string())?;
+
+          response.json().await.map_err(|err| err.to_string())
+        }
+        .boxed()
+        .shared();
+
+        *m = Some((now, future.clone()));
+
+        future
+      })
+    }
+  };
+
+  return future
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()));
 }
