@@ -383,7 +383,7 @@ class ClientTest {
 
     // Test simple create.
     val msg0 = "kotlin transaction create test: =?&${now}"
-    val results0= client.execute(listOf(api.createOp(SimpleStrictInsert(msg0))), true)
+    val results0 = client.execute(listOf(api.createOp(SimpleStrictInsert(msg0))), true)
     assertEquals(1, results0.count())
 
     val record0: SimpleStrict = api.read((results0[0] as OperationResult.Id).id)
@@ -400,7 +400,7 @@ class ClientTest {
     assertEquals(updatedMsg1, record1.text_not_null)
 
     // Test delete transaction.
-    val results2 =  client.execute(listOf(api.deleteOp(id1)), true)
+    val results2 = client.execute(listOf(api.deleteOp(id1)), true)
     assertEquals(1, results2.count())
 
     assertThrows<HttpException>({ api.read<SimpleStrict>(id1) })
@@ -425,16 +425,26 @@ class ClientTest {
     assertEquals(2, result.count())
 
     val insert: SimpleStrict =
-            localJsonSerializer.decodeFromJsonElement((result[0] as ChangeEvent.Insert).obj)
+            jsonSerializer.decodeFromJsonElement((result[0] as ChangeEvent.Insert).obj)
     assertEquals(insert.id, id.id())
 
     val delete: SimpleStrict =
-            localJsonSerializer.decodeFromJsonElement((result[1] as ChangeEvent.Delete).obj)
+            jsonSerializer.decodeFromJsonElement((result[1] as ChangeEvent.Delete).obj)
     assertEquals(delete.id, id.id())
   }
 }
 
-val localJsonSerializer = Json {
-  ignoreUnknownKeys = true
-  isLenient = true
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
+// @TestClassOrder(ClassOrderer.OrderAnnotation.class)
+class SerializationTest {
+  @Test
+  fun `nulls are skipped during JSON serialization`() {
+    @Serializable
+    data class MyRecordType(
+            val id: String? = null,
+    )
+
+    assertEquals("{}", jsonSerializer.encodeToString(MyRecordType()))
+  }
 }

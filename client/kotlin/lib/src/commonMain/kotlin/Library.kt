@@ -540,9 +540,9 @@ class Client(
                     throwOnError = true
             )
 
-   @Serializable data class Response(val results: List<JsonObject>)
+    @Serializable data class Response(val results: List<JsonObject>)
 
-    val r : Response = response.body()
+    val r: Response = response.body()
     return r.results.map { OperationResult.fromJson(it) }
   }
 
@@ -775,8 +775,9 @@ private fun buildHeaders(tokens: Tokens?): Map<String, List<String>> {
 
 val jsonSerializer = Json {
   ignoreUnknownKeys = true
-  encodeDefaults = true
   isLenient = true
+  // Make sure that `val member: T?` is skipped.
+  encodeDefaults = false
 }
 
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
