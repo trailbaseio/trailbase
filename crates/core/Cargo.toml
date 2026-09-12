@@ -57,6 +57,7 @@ futures-util = { workspace = true }
 geos = { version = "11.1.1", default-features = false, features = ["geo", "json"], optional = true }
 getrandom = "0.4.3"
 governor = "0.10.4"
+hex = "0.4.3"
 http-body-util = { workspace = true }
 hyper = { workspace = true }
 hyper-util = "0.1.20"
