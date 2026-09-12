@@ -1,10 +1,15 @@
+use futures_util::FutureExt;
+use futures_util::future::{BoxFuture, Shared};
+use parking_lot::Mutex;
 use serde::Deserialize;
+use std::sync::LazyLock;
+use std::time::{Duration, SystemTime};
 
 use crate::auth::AuthError;
 
 /// RFC: https://www.rfc-editor.org/info/rfc7517/#section-4
 #[allow(unused)]
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct Jwk {
   kty: String,
   kid: String,
@@ -14,7 +19,7 @@ struct Jwk {
   e: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct ApplePublicKeys {
   keys: Vec<Jwk>,
 }
@@ -106,21 +111,75 @@ pub(crate) fn decode_id_token_with_keys(
   return Ok(token_data.claims);
 }
 
-// TODO: Should maybe cache the Jwk responses.
+async fn fetch_cached<F, Fut>(
+  fetch: F,
+  http_client: &reqwest::Client,
+) -> Result<ApplePublicKeys, String>
+where
+  F: (Fn(reqwest::Client) -> Fut) + Send + 'static,
+  Fut: Future<Output = Result<ApplePublicKeys, String>> + Send,
+{
+  type Cached = Option<(
+    SystemTime,
+    Shared<BoxFuture<'static, Result<ApplePublicKeys, String>>>,
+  )>;
+
+  static CACHE: LazyLock<Mutex<Cached>> = LazyLock::new(|| Mutex::new(None));
+
+  let now = SystemTime::now();
+  let is_valid = |ts: SystemTime| -> bool {
+    return now
+      .duration_since(ts)
+      .is_ok_and(|d| d < Duration::from_mins(15));
+  };
+
+  let future = {
+    let mut lock = CACHE.lock();
+    if let Some((ref ts, ref future)) = *lock
+      && is_valid(*ts)
+    {
+      future.clone()
+    } else {
+      let http_client = http_client.clone();
+      let future = async move {
+        fetch(http_client).await.map_err(|err| {
+          // Invalidate cache. Defensively avoid deadlocking even if `fetch` returns synchronously.
+          if let Some(mut lock) = CACHE.try_lock_for(Duration::from_millis(10)) {
+            *lock = None;
+          }
+
+          return err;
+        })
+      }
+      .boxed()
+      .shared();
+
+      *lock = Some((now, future.clone()));
+
+      future
+    }
+  };
+
+  // Await w/o holding the lock.
+  return future.await;
+}
+
 #[cfg(not(test))]
 pub(crate) async fn fetch_apple_public_keys(
   http_client: &reqwest::Client,
 ) -> Result<ApplePublicKeys, AuthError> {
-  const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
+  async fn fetch(http_client: reqwest::Client) -> Result<ApplePublicKeys, String> {
+    const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
+    let response = http_client
+      .get(JWK_URL)
+      .send()
+      .await
+      .map_err(|err| err.to_string())?;
 
-  let response = http_client
-    .get(JWK_URL)
-    .send()
-    .await
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+    return response.json().await.map_err(|err| err.to_string());
+  }
 
-  return response
-    .json()
+  return fetch_cached(fetch, http_client)
     .await
     .map_err(|err| AuthError::FailedDependency(err.into()));
 }
@@ -206,6 +265,8 @@ pub mod test_support {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::atomic::{AtomicUsize, Ordering};
+
   use base64::prelude::*;
 
   use super::test_support::*;
@@ -314,5 +375,40 @@ mod tests {
 
     let token = sign_token(valid_claims());
     assert_eq!(extract_kid(&token).unwrap(), TEST_KEY_ID);
+  }
+
+  #[tokio::test]
+  async fn test_cache() {
+    let http_client = reqwest::Client::new();
+
+    type ResultType = Result<ApplePublicKeys, String>;
+
+    static CALLED: AtomicUsize = AtomicUsize::new(0);
+    static RESULT: LazyLock<parking_lot::Mutex<ResultType>> =
+      LazyLock::new(|| parking_lot::Mutex::new(Err("default".to_string())));
+
+    async fn fetch(_: reqwest::Client) -> ResultType {
+      CALLED.fetch_add(1, Ordering::SeqCst);
+      return RESULT.lock().clone();
+    }
+
+    // Make sure, errors are not cached.
+    let f0 = fetch_cached(fetch, &http_client);
+    let f1 = fetch_cached(fetch, &http_client);
+    assert!(f0.await.is_err());
+    assert!(f1.await.is_err());
+    assert_eq!(2, CALLED.load(Ordering::SeqCst));
+
+    assert!(fetch_cached(fetch, &http_client).await.is_err());
+    assert_eq!(3, CALLED.load(Ordering::SeqCst));
+
+    *RESULT.lock() = Ok(ApplePublicKeys { keys: vec![] });
+
+    // Make sure success is cached.
+    assert!(fetch_cached(fetch, &http_client).await.is_ok());
+    assert_eq!(4, CALLED.load(Ordering::SeqCst));
+
+    assert!(fetch_cached(fetch, &http_client).await.is_ok());
+    assert_eq!(4, CALLED.load(Ordering::SeqCst));
   }
 }
