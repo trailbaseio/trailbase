@@ -11,9 +11,9 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
-use crate::auth::oauth::users::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;

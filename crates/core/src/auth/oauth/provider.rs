@@ -69,15 +69,6 @@ pub trait OAuthProvider {
     AuthType::BasicAuth
   }
 
-  /// Apple only: the `aud` that native Sign in with Apple identity tokens
-  /// (ASAuthorizationController) are bound to — the App ID, distinct from the
-  /// web flow's `client_id` (the Services ID). `None` for every other provider
-  /// and for an Apple provider without the field configured; the native login
-  /// endpoint fails closed in that case.
-  fn native_client_id(&self) -> Option<&str> {
-    return None;
-  }
-
   fn settings(&self) -> Result<OAuthClientSettings, AuthError>;
 
   fn oauth_scopes(&self, user_identifier: proto::UserIdentifier) -> Vec<String>;

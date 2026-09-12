@@ -5,6 +5,8 @@ pub mod jwt;
 pub mod user;
 
 pub(crate) mod api;
+pub(crate) mod apple;
+pub(crate) mod create_external_user;
 pub(crate) mod login_params;
 pub(crate) mod oauth;
 pub(crate) mod options;
@@ -88,6 +90,10 @@ pub(super) fn router(config: &proto::Config) -> OpenApiRouter<AppState> {
     .routes(routes!(api::delete::delete_handler))
     // OAuth flows: list providers, login+callback
     .merge(oauth::oauth_router());
+
+  if config.auth.apple_native_client_id.is_some() {
+    router = router.routes(routes!(api::apple_native::native_apple_login_handler));
+  }
 
   if config.auth.enable_anonymous_signin() {
     router = router
