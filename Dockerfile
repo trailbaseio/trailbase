@@ -6,14 +6,14 @@ ARG TARGETARCH
 # libclang.so, alpine's `clang-dev` package won't work :/.
 FROM messense/rust-musl-cross:x86_64-musl AS builder-amd64
 
-ARG RUST_TOOLCHAIN_VERSION=1.95
+ARG RUST_TOOLCHAIN_VERSION=1.98.1
 RUN rustup default ${RUST_TOOLCHAIN_VERSION}
 RUN rustup target add x86_64-unknown-linux-musl
 
 
 FROM messense/rust-musl-cross:aarch64-musl AS builder-arm64
 
-ARG RUST_TOOLCHAIN_VERSION=1.95
+ARG RUST_TOOLCHAIN_VERSION=1.98.1
 RUN rustup default ${RUST_TOOLCHAIN_VERSION}
 RUN rustup target add aarch64-unknown-linux-musl
 
