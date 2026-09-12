@@ -8555,6 +8555,7 @@ dependencies = [
  "geos",
  "getrandom 0.4.3",
  "governor",
+ "hex",
  "http-body-util",
  "hyper",
  "hyper-util",

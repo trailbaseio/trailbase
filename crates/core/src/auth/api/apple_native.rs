@@ -4,10 +4,9 @@
 //! `ASAuthorizationController` sheet (App Review Guideline 4: "without leaving
 //! the app"). The native flow produces an identity token directly — no
 //! authorization code, no browser round-trip — so this endpoint verifies the
-//! token against Apple's public keys and mints TrailBase tokens through the
-//! same session path as the web OAuth callback.
+//! token against Apple's public keys and mints TrailBase tokens.
 //!
-//! Key differences from the web flow:
+//! Key differences from the OAuth/web flow:
 //! - The token's `aud` is the App ID (`native_client_id`), not the Services ID used by the web flow
 //!   — the audiences differ, hence the separate config.
 //! - Replay protection is the `nonce` claim: the client sent `sha256(raw_nonce)` with the
@@ -15,7 +14,6 @@
 //! - Email is only included by Apple on the FIRST authorization of the app. Repeat logins must
 //!   therefore succeed without it: users are matched by Apple's team-stable `sub` and the minted
 //!   auth token carries the stored email from the database.
-
 use axum::extract::{Json, State};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -64,34 +62,24 @@ pub(crate) async fn native_apple_login_handler(
   State(state): State<AppState>,
   Json(request): Json<AppleNativeLoginRequest>,
 ) -> Result<Json<AppleNativeTokenResponse>, AuthError> {
-  // Fail closed when the native audience isn't configured (see
-  // `OAuthProviderConfig.native_client_id`). Server-side misconfiguration,
-  // not a client error.
+  // Input validation: check token.
+  let _ = extract_kid(&request.identity_token)?;
+
+  // Make sure native_client_id is configured.
   let native_client_id = state
     .access_config(|c| c.auth.apple_native_client_id.clone())
     .ok_or(AuthError::Unauthorized)?;
 
-  // Structural pre-parse: rejects malformed tokens locally, before any
-  // outbound request towards Apple's keys endpoint.
-  let _ = extract_kid(&request.identity_token)?;
+  // Decode and validate the token.
+  let claims = {
+    let public_keys = fetch_apple_public_keys(&APPLE_HTTP_CLIENT).await?;
+    let claims =
+      decode_id_token_with_keys(&public_keys, &request.identity_token, &native_client_id)
+        .map_err(|_| AuthError::Unauthorized)?;
 
-  /// Shared HTTP client for Apple's endpoints: connection pooling instead of a
-  /// TLS handshake per login. Redirects stay disabled like everywhere else in
-  /// the OAuth paths (SSRF posture), even though the JWKS URL is a constant.
-  static APPLE_HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::ClientBuilder::new()
-      .redirect(reqwest::redirect::Policy::none())
-      .build()
-      .expect("reqwest client with disabled redirects always builds")
-  });
-
-  let public_keys = fetch_apple_public_keys(&APPLE_HTTP_CLIENT).await?;
-  // Signature, kid, issuer, audience and expiry failures all mean the
-  // presented token did not authenticate.
-  let claims = decode_id_token_with_keys(&public_keys, &request.identity_token, &native_client_id)
-    .map_err(|_| AuthError::Unauthorized)?;
-
-  verify_nonce_claim(claims.nonce.as_deref(), &request.nonce)?;
+    verify_nonce_claim(claims.nonce.as_deref(), &request.nonce)?;
+    claims
+  };
 
   // Users are matched by Apple's team-stable `sub` — the same identity space
   // as the web OAuth flow, so a web-created account and a native login resolve
@@ -152,29 +140,36 @@ pub(crate) async fn native_apple_login_handler(
   }));
 }
 
-/// Checks the anti-replay nonce: the claim must be present and equal the
-/// lowercase-hex SHA-256 of the client's raw nonce (the hash the client sent
-/// with the authorization request).
+/// Checks the anti-replay nonce (sha256 hex-encoded) in the claims against the client's raw nonce
+/// (the hash the client sent with the authorization request).
 fn verify_nonce_claim(claims_nonce: Option<&str>, client_nonce: &str) -> Result<(), AuthError> {
-  let Some(claims_nonce) = claims_nonce else {
-    return Err(AuthError::BadRequest("identity token carries no nonce"));
+  let Some(claims_nonce) = claims_nonce.and_then(|n| hex::decode(n).ok()) else {
+    return Err(AuthError::BadRequest("identity token misses valid nonce"));
   };
 
-  if claims_nonce != sha256_hex(client_nonce) {
-    return Err(AuthError::BadRequest("nonce mismatch"));
+  let hash = {
+    let mut hasher = Sha256::new();
+    hasher.update(client_nonce.as_bytes());
+    hasher.finalize()
+  };
+
+  if claims_nonce == hash.as_slice() {
+    return Ok(());
   }
-  return Ok(());
+  return Err(AuthError::BadRequest("nonce mismatch"));
 }
 
-fn sha256_hex(value: &str) -> String {
-  let mut hasher = Sha256::new();
-  hasher.update(value.as_bytes());
-  return hasher
-    .finalize()
-    .iter()
-    .map(|byte| format!("{byte:02x}"))
-    .collect();
-}
+/// Shared HTTP client for Apple's endpoints: connection pooling instead of a
+/// TLS handshake per login. Redirects stay disabled like everywhere else in
+/// the OAuth paths (SSRF posture), even though the JWKS URL is a constant.
+///
+/// Question: Should we provide a truly shared auth http client through AppState?
+static APPLE_HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+  reqwest::ClientBuilder::new()
+    .redirect(reqwest::redirect::Policy::none())
+    .build()
+    .expect("reqwest client with disabled redirects always builds")
+});
 
 #[cfg(test)]
 mod tests {
@@ -348,7 +343,11 @@ mod tests {
   /// vector is referenced in the macOS (Rust) and iOS (Swift) clients.
   #[test]
   fn nonce_claim_matches_sha256_of_test_vector() {
-    let expected = sha256_hex("test").to_ascii_lowercase();
+    let expected = hex::encode({
+      let mut hasher = Sha256::new();
+      hasher.update(b"test");
+      hasher.finalize()
+    });
 
     assert!(verify_nonce_claim(Some(&expected), "test").is_ok());
     assert!(verify_nonce_claim(Some("deadbeef"), "test").is_err());
