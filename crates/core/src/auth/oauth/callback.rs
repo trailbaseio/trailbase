@@ -6,23 +6,22 @@ use const_format::formatcp;
 use oauth2::{AuthorizationCode, PkceCodeVerifier};
 use serde::Deserialize;
 use tower_cookies::Cookies;
-use trailbase_sqlite::{named_params, params};
+use trailbase_sqlite::params;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
+use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
-use crate::auth::oauth::{OAuthUser, ReqwestClient};
 use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
-use crate::auth::util::{
-  SameSite, new_cookie, remove_cookie, validate_and_normalize_username, validate_redirect,
-};
+use crate::auth::util::{SameSite, new_cookie, remove_cookie, validate_redirect};
 use crate::config::proto;
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN,
-  DEFAULT_AUTHORIZATION_CODE_TTL, USER_TABLE, VERIFICATION_CODE_LENGTH,
+  DEFAULT_AUTHORIZATION_CODE_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::extract::HasRoot;
 use crate::rand::random_alphanumeric;
@@ -362,220 +361,9 @@ async fn get_or_create_user(
   return Ok(db_user);
 }
 
-async fn create_user_for_external_provider(
-  conn: &trailbase_sqlite::Connection,
-  user_identifier: proto::UserIdentifier,
-  user: OAuthUser,
-) -> Result<DbUser, AuthError> {
-  use crate::config::proto::UserIdentifier;
-
-  let OAuthUser {
-    provider_user_id,
-    provider_id,
-    email,
-    username,
-    verified,
-    avatar,
-  } = user;
-
-  let email: Option<String> = match (user_identifier, email) {
-    (
-      UserIdentifier::OnlyEmail
-      | UserIdentifier::RequireEmail
-      | UserIdentifier::RequireEmailAndUsername,
-      None,
-    ) => {
-      return Err(AuthError::FailedDependency("missing email address".into()));
-    }
-    (_, None) => None,
-    (UserIdentifier::OnlyUsername, Some(_)) => {
-      // Drop the email even if present.
-      None
-    }
-    (_, Some(email)) => {
-      // Otherwise make sure it's verified.
-      if !verified {
-        return Err(AuthError::FailedDependency(
-          "email address not verified".into(),
-        ));
-      }
-      Some(email)
-    }
-  };
-
-  let mut username: Option<String> = match (user_identifier, username) {
-    (UserIdentifier::OnlyEmail | UserIdentifier::Undefined, _) => None,
-    (
-      UserIdentifier::OnlyUsername
-      | UserIdentifier::RequireUsername
-      | UserIdentifier::RequireEmailAndUsername,
-      username,
-    ) => Some(
-      username
-        .and_then(|u| validate_and_normalize_username(&u).ok())
-        .unwrap_or_else(|| {
-          // Since we strictly need a username, make one up. Users can change it later.
-          format!(
-            "user{suffix}",
-            suffix = crate::rand::random_numeric_and_lowercase(6)
-          )
-        }),
-    ),
-    (UserIdentifier::RequireEmail, username) => username,
-  };
-
-  if let Some(username) = username.as_mut() {
-    // Check availability and potentially append randomness.
-    const EXISTS_QUERY: &str =
-      formatcp!("SELECT EXISTS(SELECT 1 FROM \"{USER_TABLE}\" WHERE username = $1)");
-
-    // To be pedantic we check for collisions in a loop.
-    let mut i = 0;
-    while conn
-      .read_query_row_get::<bool>(EXISTS_QUERY, params!(username.clone()), 0)
-      .await?
-      .unwrap_or(false)
-      && i < 5
-    {
-      *username = format!(
-        "{username}{suffix}",
-        suffix = crate::rand::random_numeric_and_lowercase(6)
-      );
-      i += 1;
-    }
-
-    debug_assert!(validate_and_normalize_username(username).is_ok());
-  }
-
-  const QUERY: &str = formatcp!(
-    "\
-      INSERT INTO \"{USER_TABLE}\" ( \
-        provider_id, provider_user_id, email, username, provider_avatar_url \
-      ) VALUES ( \
-        :provider_id, :provider_user_id, :email, :username, :avatar \
-      ) RETURNING * \
-    "
-  );
-
-  let db_user: DbUser = conn
-    .write_query_value(
-      QUERY,
-      named_params! {
-          ":provider_id": provider_id as i64,
-          ":provider_user_id": provider_user_id,
-          ":email": email,
-          ":username": username,
-          ":avatar": avatar,
-      },
-    )
-    .await?
-    .ok_or_else(|| AuthError::Internal("insertion issue".into()))?;
-
-  return Ok(db_user);
-}
-
-async fn user_by_provider_id(
-  conn: &trailbase_sqlite::Connection,
-  provider_id: proto::OAuthProviderId,
-  provider_user_id: String,
-) -> Result<Option<DbUser>, AuthError> {
-  const QUERY: &str =
-    formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE provider_id = $1 AND provider_user_id = $2"#);
-
-  return Ok(
-    conn
-      .read_query_value::<DbUser>(QUERY, params!(provider_id as i64, provider_user_id))
-      .await?,
-  );
-}
-
 // Unset the "Referer" on final redirect to not leak a user's provider to an arbitrary redirect
 // target.
 const NO_REFERER_HEADER: [(HeaderName, HeaderValue); 1] = [(
   http::header::REFERRER_POLICY,
   HeaderValue::from_static("no-referrer"),
 )];
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::app_state::test_state;
-  use crate::config::proto::UserIdentifier;
-
-  #[tokio::test]
-  async fn test_oauth_create_user() {
-    let state = test_state(None).await.unwrap();
-
-    fn user(username: Option<String>) -> OAuthUser {
-      let rand = crate::rand::random_numeric_and_lowercase(20);
-      return OAuthUser {
-        provider_user_id: rand.clone(),
-        provider_id: proto::OAuthProviderId::Test,
-        email: Some(format!("email_{rand}@test.org")),
-        username,
-        verified: true,
-        avatar: None,
-      };
-    }
-
-    {
-      let created = create_user_for_external_provider(
-        state.user_conn(),
-        UserIdentifier::RequireEmail,
-        user(None),
-      )
-      .await
-      .unwrap();
-
-      assert!(created.username.is_none());
-    }
-
-    {
-      let created = create_user_for_external_provider(
-        state.user_conn(),
-        UserIdentifier::OnlyEmail,
-        user(Some("test".to_string())),
-      )
-      .await
-      .unwrap();
-
-      assert!(created.username.is_none());
-    }
-
-    {
-      let created = create_user_for_external_provider(
-        state.user_conn(),
-        UserIdentifier::RequireUsername,
-        user(None),
-      )
-      .await
-      .unwrap();
-
-      assert!(created.username.is_some());
-    }
-
-    {
-      let username = "duplicate".to_string();
-      let created0 = create_user_for_external_provider(
-        state.user_conn(),
-        UserIdentifier::RequireUsername,
-        user(Some(username.clone())),
-      )
-      .await
-      .unwrap();
-
-      assert!(created0.username.is_some());
-
-      let created1 = create_user_for_external_provider(
-        state.user_conn(),
-        UserIdentifier::RequireUsername,
-        user(Some(username.clone())),
-      )
-      .await
-      .unwrap();
-
-      assert!(created1.username.is_some());
-      assert_ne!(created0.username, created1.username);
-    }
-  }
-}

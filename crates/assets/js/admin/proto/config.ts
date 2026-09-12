@@ -527,7 +527,18 @@ export interface AuthConfig {
    * / Policy covering user registration and change (username|email) flows around
    * / what user identifier is expected and accepted. [Default: ONLY_EMAIL]
    */
-  userIdentifier?: UserIdentifier | undefined;
+  userIdentifier?:
+    | UserIdentifier
+    | undefined;
+  /**
+   * / Apple only: expected `aud` of identity tokens issued by the native
+   * / Sign in with Apple flow (ASAuthorizationController). Native tokens are
+   * / audience-bound to the App ID (bundle identifier), while the web OAuth
+   * / flow validates against `client_id` (the Services ID). The two audiences
+   * / differ, so the native one needs its own config entry. When unset, the
+   * / native login endpoint fails closed.
+   */
+  appleNativeClientId?: string | undefined;
 }
 
 export interface AuthConfig_OauthProvidersEntry {
@@ -1383,6 +1394,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
       writer.uint32(248).int32(message.userIdentifier);
     }
+    if (message.appleNativeClientId !== undefined && message.appleNativeClientId !== "") {
+      writer.uint32(258).string(message.appleNativeClientId);
+    }
     return writer;
   },
 
@@ -1514,6 +1528,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
             message.userIdentifier = reader.int32() as any;
             continue;
           }
+          case 32: {
+            if (tag !== 258) {
+              break;
+            }
+
+            message.appleNativeClientId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1620,6 +1642,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : isSet(object.user_identifier)
         ? userIdentifierFromJSON(object.user_identifier)
         : undefined,
+      appleNativeClientId: isSet(object.appleNativeClientId)
+        ? globalThis.String(object.appleNativeClientId)
+        : isSet(object.apple_native_client_id)
+        ? globalThis.String(object.apple_native_client_id)
+        : undefined,
     };
   },
 
@@ -1679,6 +1706,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
       obj.userIdentifier = userIdentifierToJSON(message.userIdentifier);
     }
+    if (message.appleNativeClientId !== undefined && message.appleNativeClientId !== "") {
+      obj.appleNativeClientId = message.appleNativeClientId;
+    }
     return obj;
   },
 
@@ -1714,6 +1744,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.customUriSchemes = object.customUriSchemes?.map((e) => e) || [];
     message.redirectUriAllowlist = object.redirectUriAllowlist?.map((e) => e) || [];
     message.userIdentifier = object.userIdentifier ?? 0;
+    message.appleNativeClientId = object.appleNativeClientId ?? "";
     return message;
   },
 };
