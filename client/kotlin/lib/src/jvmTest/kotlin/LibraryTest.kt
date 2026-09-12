@@ -435,16 +435,19 @@ class ClientTest {
 }
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@TestMethodOrder(MethodOrderer.OrderAnnotation::class)
-// @TestClassOrder(ClassOrderer.OrderAnnotation.class)
 class SerializationTest {
   @Test
   fun `nulls are skipped during JSON serialization`() {
     @Serializable
     data class MyRecordType(
-            val id: String? = null,
+            val a: String?,
+            val b: String? = null,
+            val c: Int = 5,
     )
 
-    assertEquals("{}", jsonSerializer.encodeToString(MyRecordType()))
+    // We need to make sure that "absent" null values are actually absent so table schema defaults
+    // can kick in.
+    assertEquals("{\"c\":1}", jsonSerializer.encodeToString(MyRecordType(null, null, 1)))
+    assertEquals("{\"c\":5}", jsonSerializer.encodeToString(MyRecordType(null)))
   }
 }

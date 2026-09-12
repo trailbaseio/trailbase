@@ -775,9 +775,13 @@ private fun buildHeaders(tokens: Tokens?): Map<String, List<String>> {
 
 val jsonSerializer = Json {
   ignoreUnknownKeys = true
-  isLenient = true
-  // Make sure that `val member: T?` is skipped.
-  encodeDefaults = false
+  isLenient = false
+  // Make sure that non-null default values for kotlin data classes are encoded. The DB has no clue
+  // what the client thinks should be the default.
+  encodeDefaults = true
+  // Make sure that `val member: T? = null` is skipped to allow representing "absent" values and for
+  // TABLE schema defaults to kick in.
+  explicitNulls = false
 }
 
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
