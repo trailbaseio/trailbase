@@ -558,12 +558,19 @@ Record APIs can also support file uploads and downloads. There's some special
 handling in place so that only metadata is stored in the underlying table while
 the actual files are kept in an object store.
 
-By adding a `TEXT` column with a `CHECK(jsonschema('std.FileUpload'))`
+export const fileUploadInput = githubCodeReference({ path: "crates/schema/src/file.rs", match: "pub struct FileUploadInput"});
+
+By adding a `TEXT` column with a `CHECK(jsonschema('std.FileUpload', <column_name>))`
 constrained to your table definition, you instruct TrailBase to store file
 metadata as defined by the "std.FileUpload" JSON schema while keeping the contents
 in a separate object store.
-Files can then be upload by sending their contents as part of your JSON
-requests or `multipart/form-data` POST requests.
+Files can then be uploaded by sending their contents as part of your JSON
+requests or `multipart/form-data` POST requests. To upload files with as part of a
+JSON request, send a JSON object with the <a href={fileUploadInput}>`FileUploadInput`</a>
+layout as value of `<column_name>`. The `data` field should be set to the content of the file
+you want to upload, encoded as Base64. For example, a minimal request for uploading a file
+looks like `{<column_name>: {"data": "<base64>"}}`.
+
 Downloading files is slightly different, since reading the column through
 record APIs will only yield the metadata. There's a dedicated GET API endpoint
 for file downloads:
