@@ -554,19 +554,25 @@ can be useful for driving external code generation or introspection in general.
 
 ## File Uploads
 
-Record APIs can also support file uploads and downloads. There's some special
-handling in place so that only metadata is stored in the underlying table while
-the actual files are kept in an object store.
+export const fileUploadInput = githubCodeReference({ path: "crates/schema/src/file.rs", match: "pub struct FileUploadInput"});
 
-By adding a `TEXT` column with a `CHECK(jsonschema('std.FileUpload'))`
-constrained to your table definition, you instruct TrailBase to store file
-metadata as defined by the "std.FileUpload" JSON schema while keeping the contents
-in a separate object store.
-Files can then be upload by sending their contents as part of your JSON
-requests or `multipart/form-data` POST requests.
-Downloading files is slightly different, since reading the column through
-record APIs will only yield the metadata. There's a dedicated GET API endpoint
-for file downloads:
+Record APIs can also support file uploads and downloads. There's some special
+handling in place to only store metadata in the underlying table while the files
+themselves are kept in an object store - S3 or simply in your local
+file-system.
+
+By adding a `TEXT` column to your table with a `std.FileUpload` or
+`std.FileUploads` JSON schema constraint, e.g.
+`CHECK(jsonschema('std.FileUpload', <column_name>))`, you instruct TrailBase to
+accept files and where to keep the metadata.
+
+Files can then be uploaded via `multipart/form-data` POST requests - recommended
+for larger files - or simply by sending the content as <a
+href={fileUploadInput}>JSON payload</a>, e.g.: `{<column_name>: {"data": "<base64-contents>"}}`.
+
+Downloading files is different form reading records, since the column only
+contain the files' metadata.
+Instead use the dedicated GET endpoint for files:
 <code>
 {apiPath({name: recordApiNamePlaceholder, suffix:`${recordApiIdPlaceholder}/file/<column_name>`})}
 </code>
