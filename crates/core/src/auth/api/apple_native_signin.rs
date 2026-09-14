@@ -7,7 +7,7 @@ use utoipa::ToSchema;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::api::login::LoginResponse;
-use crate::auth::apple::{decode_and_validate_apple_id_token, fetch_apple_public_keys};
+use crate::auth::apple::decode_and_validate_apple_id_token;
 use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::oauth::OAuthUser;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
@@ -47,9 +47,12 @@ pub(crate) async fn apple_native_signin_handler(
 
   // Decode and validate the token.
   let claims = {
-    let public_keys = fetch_apple_public_keys(&APPLE_HTTP_CLIENT).await?;
-    let claims =
-      decode_and_validate_apple_id_token(&public_keys, &request.identity_token, &native_client_id)?;
+    let claims = decode_and_validate_apple_id_token(
+      &APPLE_HTTP_CLIENT,
+      &request.identity_token,
+      &native_client_id,
+    )
+    .await?;
 
     verify_nonce_claim(claims.nonce.as_deref(), &request.nonce)?;
 

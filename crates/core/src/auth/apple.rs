@@ -21,7 +21,7 @@ struct Jwk {
 
 /// RFC: https://www.rfc-editor.org/info/rfc7517/#section-5
 #[derive(Clone, Debug, Deserialize)]
-pub(crate) struct JwkSet {
+struct JwkSet {
   keys: Vec<Jwk>,
 }
 
@@ -81,7 +81,7 @@ pub fn extract_kid(id_token: &str) -> Result<String, AuthError> {
 ///
 /// Required validation documented here:
 ///   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
-pub(crate) fn decode_and_validate_apple_id_token(
+fn decode_and_validate_apple_id_token_impl(
   public_keys: &JwkSet,
   id_token: &str,
   audience: &str,
@@ -113,6 +113,40 @@ pub(crate) fn decode_and_validate_apple_id_token(
     })?;
 
   return Ok(token_data.claims);
+}
+
+#[cfg(not(test))]
+pub(crate) async fn decode_and_validate_apple_id_token(
+  http_client: &reqwest::Client,
+  id_token: &str,
+  audience: &str,
+) -> Result<AppleIdToken, AuthError> {
+  async fn fetch(http_client: reqwest::Client) -> Result<JwkSet, String> {
+    const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
+    let response = http_client
+      .get(JWK_URL)
+      .send()
+      .await
+      .map_err(|err| err.to_string())?;
+
+    return response.json().await.map_err(|err| err.to_string());
+  }
+
+  let keys = fetch_cached(fetch, http_client)
+    .await
+    .map_err(|err| AuthError::FailedDependency(err.into()))?;
+
+  return decode_and_validate_apple_id_token_impl(&keys, id_token, audience);
+}
+
+#[cfg(test)]
+pub(crate) async fn decode_and_validate_apple_id_token(
+  _http_client: &reqwest::Client,
+  id_token: &str,
+  audience: &str,
+) -> Result<AppleIdToken, AuthError> {
+  let keys = test_support::fixture_keys();
+  return decode_and_validate_apple_id_token_impl(&keys, id_token, audience);
 }
 
 async fn fetch_cached<F, Fut>(fetch: F, http_client: &reqwest::Client) -> Result<JwkSet, String>
@@ -165,33 +199,6 @@ where
   return future.await;
 }
 
-#[cfg(not(test))]
-pub(crate) async fn fetch_apple_public_keys(
-  http_client: &reqwest::Client,
-) -> Result<JwkSet, AuthError> {
-  async fn fetch(http_client: reqwest::Client) -> Result<JwkSet, String> {
-    const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
-    let response = http_client
-      .get(JWK_URL)
-      .send()
-      .await
-      .map_err(|err| err.to_string())?;
-
-    return response.json().await.map_err(|err| err.to_string());
-  }
-
-  return fetch_cached(fetch, http_client)
-    .await
-    .map_err(|err| AuthError::FailedDependency(err.into()));
-}
-
-#[cfg(test)]
-pub(crate) async fn fetch_apple_public_keys(
-  _http_client: &reqwest::Client,
-) -> Result<JwkSet, AuthError> {
-  return Ok(test_support::fixture_keys());
-}
-
 /// Fixture shared by the native-verification tests here and the endpoint
 /// tests in `apple_native.rs`.
 #[cfg(test)]
@@ -228,7 +235,7 @@ pub mod test_support {
     return jsonwebtoken::EncodingKey::from_rsa_pem(pem.as_bytes()).unwrap();
   }
 
-  pub fn fixture_keys() -> JwkSet {
+  pub(super) fn fixture_keys() -> JwkSet {
     let key = signing_key();
     let apple_key = Jwk {
       kty: "RSA".to_string(),
@@ -314,7 +321,7 @@ mod tests {
   #[test]
   fn well_formed_native_token_verifies() {
     let claims =
-      decode_and_validate_apple_id_token(&fixture_keys(), &sign_token(valid_claims()), APP_ID)
+      decode_and_validate_apple_id_token_impl(&fixture_keys(), &sign_token(valid_claims()), APP_ID)
         .unwrap();
 
     assert_eq!(claims.sub, "001234.abcdef.1234");
@@ -332,7 +339,8 @@ mod tests {
     claims["iss"] = serde_json::json!("https://evil.example.com");
 
     assert!(
-      decode_and_validate_apple_id_token(&fixture_keys(), &sign_token(claims), APP_ID).is_err()
+      decode_and_validate_apple_id_token_impl(&fixture_keys(), &sign_token(claims), APP_ID)
+        .is_err()
     );
   }
 
@@ -343,7 +351,8 @@ mod tests {
       serde_json::json!((chrono::Utc::now() - chrono::Duration::minutes(5)).timestamp());
 
     assert!(
-      decode_and_validate_apple_id_token(&fixture_keys(), &sign_token(claims), APP_ID).is_err()
+      decode_and_validate_apple_id_token_impl(&fixture_keys(), &sign_token(claims), APP_ID)
+        .is_err()
     );
   }
 
@@ -358,7 +367,7 @@ mod tests {
     let token = jsonwebtoken::encode(&header, &valid_claims(), &key).unwrap();
 
     assert!(matches!(
-      decode_and_validate_apple_id_token(&fixture_keys(), &token, APP_ID),
+      decode_and_validate_apple_id_token_impl(&fixture_keys(), &token, APP_ID),
       Err(AuthError::Unauthorized)
     ));
   }
