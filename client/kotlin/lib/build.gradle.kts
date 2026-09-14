@@ -76,6 +76,6 @@ mavenPublishing {
                 email = "contact@trailbase.io"
             }
         }
-        scm { url = "https://github.com/trailbaseio/trailbase" }
+        scm { url = "https://github.com/trailbaseio/trailbase/tree/main/client/kotlin" }
     }
 }
