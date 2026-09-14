@@ -540,9 +540,9 @@ class Client(
                     throwOnError = true
             )
 
-   @Serializable data class Response(val results: List<JsonObject>)
+    @Serializable data class Response(val results: List<JsonObject>)
 
-    val r : Response = response.body()
+    val r: Response = response.body()
     return r.results.map { OperationResult.fromJson(it) }
   }
 
@@ -775,8 +775,13 @@ private fun buildHeaders(tokens: Tokens?): Map<String, List<String>> {
 
 val jsonSerializer = Json {
   ignoreUnknownKeys = true
+  isLenient = false
+  // Make sure that non-null default values for kotlin data classes are encoded. The DB has no clue
+  // what the client thinks should be the default.
   encodeDefaults = true
-  isLenient = true
+  // Make sure that `val member: T? = null` is skipped to allow representing "absent" values and for
+  // TABLE schema defaults to kick in.
+  explicitNulls = false
 }
 
 @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)

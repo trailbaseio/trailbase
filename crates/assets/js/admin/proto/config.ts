@@ -154,6 +154,7 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
  * NOTE: W/o email there's no way to contact users.
  */
 export enum UserIdentifier {
+  /** USER_IDENTIFIER_UNDEFINED - / Behaves like ONLY_EMAIL for legacy reasons. */
   USER_IDENTIFIER_UNDEFINED = 0,
   /** ONLY_EMAIL - / Only email. Doesn't work for anonymous login. */
   ONLY_EMAIL = 1,
@@ -527,7 +528,28 @@ export interface AuthConfig {
    * / Policy covering user registration and change (username|email) flows around
    * / what user identifier is expected and accepted. [Default: ONLY_EMAIL]
    */
-  userIdentifier?: UserIdentifier | undefined;
+  userIdentifier?:
+    | UserIdentifier
+    | undefined;
+  /**
+   * / When using "Sign-in with Apple" in native Mac or iOS apps, the auth flow
+   * / differs significantly from the web-based OAuth flows. The client signs in
+   * / with Apple directly using the user's iCloud account. The client then
+   * / forwards an apple-signed JWT identity token that can be exchanged for
+   * / TrailBase tokens:
+   * /   https://developer.apple.com/documentation/signinwithapple/authenticating-users-with-sign-in-with-apple
+   * /
+   * / The tokens audience (`aud`) is validated against the "client id", which
+   * / unlike for OAuth is the app `Bundle ID` instead of the `Service ID` (i.e.
+   * / only configuring the Apple OAuth flow is insufficient for native sign-in):
+   * /   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
+   * /
+   * / NOTE: while not explicitly required, Apple may reject apps from their
+   * / stores if they provide a social login w/o also providing an Apple option
+   * / using their native `AuthenticationServices`:
+   * /   https://acceptmy.app/guides/sign-in-with-apple-rejection.
+   */
+  appleNativeClientId?: string | undefined;
 }
 
 export interface AuthConfig_OauthProvidersEntry {
@@ -1383,6 +1405,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
       writer.uint32(248).int32(message.userIdentifier);
     }
+    if (message.appleNativeClientId !== undefined && message.appleNativeClientId !== "") {
+      writer.uint32(258).string(message.appleNativeClientId);
+    }
     return writer;
   },
 
@@ -1514,6 +1539,14 @@ export const AuthConfig: MessageFns<AuthConfig> = {
             message.userIdentifier = reader.int32() as any;
             continue;
           }
+          case 32: {
+            if (tag !== 258) {
+              break;
+            }
+
+            message.appleNativeClientId = reader.string();
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -1620,6 +1653,11 @@ export const AuthConfig: MessageFns<AuthConfig> = {
         : isSet(object.user_identifier)
         ? userIdentifierFromJSON(object.user_identifier)
         : undefined,
+      appleNativeClientId: isSet(object.appleNativeClientId)
+        ? globalThis.String(object.appleNativeClientId)
+        : isSet(object.apple_native_client_id)
+        ? globalThis.String(object.apple_native_client_id)
+        : undefined,
     };
   },
 
@@ -1679,6 +1717,9 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     if (message.userIdentifier !== undefined && message.userIdentifier !== 0) {
       obj.userIdentifier = userIdentifierToJSON(message.userIdentifier);
     }
+    if (message.appleNativeClientId !== undefined && message.appleNativeClientId !== "") {
+      obj.appleNativeClientId = message.appleNativeClientId;
+    }
     return obj;
   },
 
@@ -1714,6 +1755,7 @@ export const AuthConfig: MessageFns<AuthConfig> = {
     message.customUriSchemes = object.customUriSchemes?.map((e) => e) || [];
     message.redirectUriAllowlist = object.redirectUriAllowlist?.map((e) => e) || [];
     message.userIdentifier = object.userIdentifier ?? 0;
+    message.appleNativeClientId = object.appleNativeClientId ?? "";
     return message;
   },
 };
