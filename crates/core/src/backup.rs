@@ -59,7 +59,7 @@ pub async fn backup_all(
   let mut errors = vec![];
   for db in dbs {
     let src_path = data_dir.data_path().join(format!("{db}.db"));
-    let conn = match connect_db(src_path.clone()) {
+    let conn = match connect_backup_db(src_path.clone()) {
       Ok(conn) => conn,
       Err(err) => {
         log::warn!("Failed open '{db}' for backup: {err}");
@@ -127,7 +127,7 @@ pub async fn restore_all(data_dir: &DataDir, backup: &Backup) -> Result<(), Back
       .ok_or_else(|| BackupError::Other("missing filename".into()))?;
 
     let target_path = data_dir.data_path().join(filename);
-    let target_conn = match connect_db(target_path.clone()) {
+    let target_conn = match connect_backup_db(target_path.clone()) {
       Ok(conn) => conn,
       Err(err) => {
         log::warn!("Failed open '{target_path:?}' for restore: {err}");
@@ -199,7 +199,7 @@ pub async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError
   return Ok(backups);
 }
 
-fn connect_db(path: PathBuf) -> Result<trailbase_sqlite::Connection, ConnectionError> {
+fn connect_backup_db(path: PathBuf) -> Result<trailbase_sqlite::Connection, ConnectionError> {
   return trailbase_sqlite::Connection::with_opts(
     || -> Result<_, trailbase_sqlite::Error> {
       let conn = crate::connection::connect_rusqlite_without_default_extensions_and_schemas(Some(

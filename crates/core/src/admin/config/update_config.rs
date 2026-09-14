@@ -30,6 +30,10 @@ pub async fn update_config_handler(
   if state.demo_mode() {
     return Err(Error::Precondition("Disallowed in demo".into()));
   }
+  if state.read_only() {
+    return Err(Error::Precondition("Disallowed in read-only".into()));
+  }
+
   let Some(hash) = request.hash else {
     return Err(Error::Precondition("Missing hash".to_string()));
   };

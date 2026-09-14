@@ -30,6 +30,7 @@ enum WriterMessage {
 pub struct Options {
   pub busy_timeout: Option<std::time::Duration>,
   pub num_threads: Option<usize>,
+  pub read_only: Option<bool>,
 }
 
 type MpmcSender<T> = crossfire::MTx<crossfire::mpmc::List<T>>;
@@ -63,6 +64,7 @@ impl Executor {
     let Options {
       busy_timeout,
       num_threads,
+      read_only,
     } = opt;
 
     let new_conn = |read_only: bool| -> Result<rusqlite::Connection, Error> {
@@ -76,7 +78,7 @@ impl Executor {
       return Ok(conn);
     };
 
-    let write_conn = new_conn(/* read_only= */ false)?;
+    let write_conn = new_conn(/* read_only= */ read_only.unwrap_or(false))?;
     let path = write_conn.path().map(|p| p.to_string());
     let in_memory = path.as_ref().is_none_or(|s| {
       // Returns empty string for in-memory databases.

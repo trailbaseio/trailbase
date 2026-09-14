@@ -9,7 +9,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::connection::{BuildOptions, ConnectionEntry};
+use crate::connection::ConnectionEntry;
 use crate::constants::SQLITE_SCHEMA_TABLE;
 
 // TODO: Rudimentary unparsed trigger representation, since sqlparser didn't currently support
@@ -60,7 +60,12 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
   } = state.connection_manager().main_entry();
 
   let trailbase_schema::metadata::ConnectionMetadata { tables, views } =
-    crate::schema_metadata::build_metadata(&conn, state.json_schema_registry()).await?;
+    crate::schema_metadata::build_metadata_and_maybe_file_deletions(
+      &conn,
+      state.json_schema_registry(),
+      /* setup_file_deletions = */ false,
+    )
+    .await?;
 
   let (indexes, triggers) = conn
     .call_writer(|mut conn| -> Result<_, trailbase_sqlite::Error> {
@@ -151,11 +156,7 @@ async fn list_tables_handler_sqlite_impl(
       connection: conn, ..
     } = state
       .connection_manager()
-      .get_entry(BuildOptions {
-        is_main: true,
-        attached_databases: Some(attached_dbs),
-        ..Default::default()
-      })
+      .get_entry(/* is_main= */ true, Some(attached_dbs))
       .await?;
 
     let databases = conn.list_databases().await?;
