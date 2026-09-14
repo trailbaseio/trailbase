@@ -2,13 +2,14 @@ import { For } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import type { IconTypes } from "solid-icons";
 import {
+  TbOutlineChartDots3,
   TbOutlineDatabase,
   TbOutlineEdit,
-  TbOutlineChartDots3,
-  TbOutlineUsers,
   TbOutlinePackage,
-  TbOutlineTimeline,
   TbOutlineSettings,
+  TbOutlineTimeline,
+  TbOutlineUsers,
+  TbOutlineApi,
 } from "solid-icons/tb";
 
 import { executeSql } from "@/lib/api/execute";
@@ -68,40 +69,46 @@ type Element = {
 };
 
 const BASE = import.meta.env.BASE_URL;
+// TODO: We should probably unify this with Navbar.options to avoid getting stale.
 const elements = [
   {
     icon: TbOutlineDatabase,
-    content: "Browse, create or alter your Tables, Indexes, and Views.",
+    content: "Explore, create and alter your data, schemas and indexes.",
     href: `${BASE}/table`,
   },
   {
     icon: TbOutlineEdit,
-    content: "Untethered script access letting you execute arbitrary SQL.",
+    content: "Execute arbitrary SQL giving you untethered access to your DB.",
     href: `${BASE}/editor`,
   },
   {
     icon: TbOutlineChartDots3,
-    content: "Visualize Database Schema as Entity-Relationship-Diagram",
+    content: "Visualize your DB as an Entity-Relationship-Diagram (ERD).",
     href: `${BASE}/erd`,
   },
   {
     icon: TbOutlineUsers,
-    content: "Browse and manage your application's user registry.",
+    content: "Manage your application's user accounts.",
     href: `${BASE}/auth`,
   },
   {
     icon: TbOutlinePackage,
-    content: "Loaded WASM modules",
-    href: `${BASE}/wasm-modules`,
+    content: "Manage your installed WASM components.",
+    href: `${BASE}/wasm`,
   },
   {
     icon: TbOutlineTimeline,
-    content: "Access logs for your application",
+    content: "Inspect the HTTP access logs for your application.",
     href: `${BASE}/logs`,
   },
   {
+    icon: TbOutlineApi,
+    content: "Explore and probe your server's APIs.",
+    href: `${BASE}/openapi`,
+  },
+  {
     icon: TbOutlineSettings,
-    content: "Server settings",
+    content: "Adjust your server's settings.",
     href: `${BASE}/settings`,
   },
 ] as Element[];
