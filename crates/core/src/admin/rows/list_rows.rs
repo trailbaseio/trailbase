@@ -71,8 +71,12 @@ pub async fn list_rows_handler(
     .await?;
 
   // Build fresh metadata rather than relying on cache.
-  let metadata =
-    crate::schema_metadata::build_metadata(&conn, state.json_schema_registry()).await?;
+  let metadata = crate::schema_metadata::build_metadata(
+    &conn,
+    state.json_schema_registry(),
+    /*read_only=*/ true,
+  )
+  .await?;
   let Some(table_or_view) = metadata.get_table_or_view(&qualified_name) else {
     return Err(Error::Precondition(format!(
       "Table or view '{table_name:?}' not found"

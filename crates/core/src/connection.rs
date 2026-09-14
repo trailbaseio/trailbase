@@ -100,13 +100,15 @@ pub struct Options {
   pub json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   pub pg_uri: Option<String>,
+  pub read_only: Option<bool>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct BuildOptions {
   pub is_main: bool,
   pub attached_databases: Option<BTreeSet<String>>,
   pub num_threads: Option<usize>,
+  pub read_only: Option<bool>,
 }
 
 impl ConnectionManager {
@@ -116,6 +118,7 @@ impl ConnectionManager {
       json_schema_registry,
       sqlite_function_runtimes,
       pg_uri,
+      read_only,
     } = opts;
 
     let (main_conn, main_metadata, new_db) = if let Some(ref pg_uri) = pg_uri {
@@ -132,6 +135,7 @@ impl ConnectionManager {
           runtimes: &sqlite_function_runtimes,
           attach: vec![],
           num_threads: None,
+          read_only,
         },
         pg_uri.clone(),
       )
@@ -145,6 +149,7 @@ impl ConnectionManager {
         runtimes: &sqlite_function_runtimes,
         attach: vec![],
         num_threads: None,
+        read_only,
       })
       .await?
     };
@@ -185,6 +190,7 @@ impl ConnectionManager {
             runtimes: &sqlite_function_runtimes,
             attach: vec![],
             num_threads: None,
+            read_only: Some(false),
           },
           pg_uri.as_ref().expect("test").clone(),
         )
@@ -199,6 +205,7 @@ impl ConnectionManager {
           runtimes: &sqlite_function_runtimes,
           attach: vec![],
           num_threads: None,
+          read_only: Some(false),
         })
         .await
       }
@@ -264,7 +271,8 @@ impl ConnectionManager {
           .get_entry(BuildOptions {
             is_main: false,
             attached_databases: Some([db.to_string()].into()),
-            ..Default::default()
+            num_threads: None,
+            read_only: Some(false),
           })
           .await
       }
@@ -328,6 +336,7 @@ impl ConnectionManager {
           runtimes: &self.state.sqlite_function_runtimes,
           attach,
           num_threads: opts.num_threads,
+          read_only: opts.read_only,
         },
         pg_uri.clone(),
       )
@@ -341,6 +350,7 @@ impl ConnectionManager {
         runtimes: &self.state.sqlite_function_runtimes,
         attach,
         num_threads: opts.num_threads,
+        read_only: opts.read_only,
       })
       .await?
     };
@@ -357,7 +367,12 @@ impl ConnectionManager {
     {
       let new_metadata = Arc::new({
         let conn = self.state.main.read().connection.clone();
-        build_metadata(&conn, &self.state.json_schema_registry).await?
+        build_metadata(
+          &conn,
+          &self.state.json_schema_registry,
+          /*read_only=*/ false,
+        )
+        .await?
       });
 
       self.state.main.write().metadata = new_metadata;
@@ -365,8 +380,14 @@ impl ConnectionManager {
 
     // Others:
     for (key, entry) in self.state.connections.iter() {
-      let new_metadata =
-        Arc::new(build_metadata(&entry.connection, &self.state.json_schema_registry).await?);
+      let new_metadata = Arc::new(
+        build_metadata(
+          &entry.connection,
+          &self.state.json_schema_registry,
+          /*read_only=*/ false,
+        )
+        .await?,
+      );
 
       let _ = self.state.connections.replace(
         key,
@@ -390,6 +411,7 @@ struct InitDbOptions<'a> {
   runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
   attach: Vec<AttachedDatabase>,
   num_threads: Option<usize>,
+  read_only: Option<bool>,
 }
 
 #[cfg(feature = "pg")]
@@ -416,7 +438,8 @@ async fn init_db_pg<'a>(
     false
   };
 
-  let metadata = build_metadata(&conn, opts.json_registry).await?;
+  // NOTE: read_only not supported for PG.
+  let metadata = build_metadata(&conn, opts.json_registry, /* read_only= */ false).await?;
 
   return Ok((conn, metadata, init_schema));
 }
@@ -480,6 +503,7 @@ async fn init_db_sqlite<'a>(
       }
     },
     trailbase_sqlite::Options {
+      read_only: opts.read_only,
       num_threads: Some(opts.num_threads.unwrap_or_else(|| {
         // Fallback if not explicitly set.
         match (opts.data_path, std::thread::available_parallelism()) {
@@ -534,7 +558,7 @@ async fn init_db_sqlite<'a>(
   }
 
   // Lastly, after attaching all DBs, build connection metadata.
-  let metadata = build_metadata(&conn, opts.json_registry).await?;
+  let metadata = build_metadata(&conn, opts.json_registry, opts.read_only.unwrap_or(false)).await?;
 
   return Ok((conn, metadata, init_schema));
 }
@@ -565,7 +589,10 @@ pub(super) fn init_logs_db(
   );
 }
 
-pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, trailbase_sqlite::Error> {
+pub fn init_session_db(
+  data_dir: Option<&DataDir>,
+  read_only: bool,
+) -> Result<Connection, trailbase_sqlite::Error> {
   let path = data_dir.map(|d| d.session_db_path());
 
   return trailbase_sqlite::Connection::with_opts(
@@ -579,7 +606,10 @@ pub fn init_session_db(data_dir: Option<&DataDir>) -> Result<Connection, trailba
 
       return Ok(conn);
     },
-    Default::default(),
+    trailbase_sqlite::Options {
+      read_only: Some(read_only),
+      ..Default::default()
+    },
   );
 }
 

@@ -452,6 +452,7 @@ fn build_job(
                         is_main: false,
                         attached_databases: Some([db_name.clone()].into()),
                         num_threads: Some(1),
+                        read_only: Some(false),
                       })
                       .await
                     else {

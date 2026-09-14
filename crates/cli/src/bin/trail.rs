@@ -60,6 +60,7 @@ async fn async_main(
         public_url: public_url.clone(),
         runtime_root_fs: cmd.runtime_root_fs.as_ref().map(|p| p.into()),
         geoip_db_path: cmd.geoip_db_path.as_ref().map(|p| p.into()),
+        read_only: cmd.read_only,
         dev: cmd.dev,
         demo: cmd.demo,
         wasm_tokio_runtime,

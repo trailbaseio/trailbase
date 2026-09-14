@@ -128,6 +128,7 @@ pub async fn query_handler(
       is_main: true,
       attached_databases: attached_databases.map(|v| v.into_iter().collect()),
       num_threads: Some(1),
+      read_only: Some(false),
     })
     .await?;
 

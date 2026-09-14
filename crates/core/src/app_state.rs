@@ -30,6 +30,8 @@ pub struct InitArgs {
   pub runtime_root_fs: Option<PathBuf>,
   pub geoip_db_path: Option<PathBuf>,
 
+  /// SQLite DBs in read-only mode (including session but excluding logs).
+  pub read_only: bool,
   pub dev: bool,
   pub demo: bool,
   pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
@@ -44,6 +46,7 @@ struct InternalState {
   start_time: std::time::SystemTime,
 
   site_url: Reactive<Arc<Option<url::Url>>>,
+  read_only: bool,
   dev: bool,
   demo: bool,
 
@@ -94,7 +97,10 @@ impl AppState {
 
     // Then open or init new databases.
     let logs_conn = crate::connection::init_logs_db(Some(&args.data_dir))?;
-    let session_conn = crate::connection::init_session_db(Some(&args.data_dir))?;
+    let session_conn = crate::connection::init_session_db(
+      Some(&args.data_dir),
+      /* read_only= */ args.read_only,
+    )?;
 
     let json_schema_registry = Arc::new(parking_lot::RwLock::new(
       trailbase_schema::registry::build_json_schema_registry(vec![])?,
@@ -124,6 +130,7 @@ impl AppState {
         feature = "pg" => args.pg_uri,
         _ => None,
       },
+      read_only: Some(args.read_only),
     })
     .await?;
 
@@ -175,6 +182,7 @@ impl AppState {
       let record_apis = build_record_apis(
         connection_manager.clone(),
         config.derive(|c| c.record_apis.clone()),
+        /*read_only=*/ args.read_only,
       )
       .await;
 
@@ -185,6 +193,7 @@ impl AppState {
           data_dir: args.data_dir.clone(),
           start_time: std::time::SystemTime::now(),
           site_url,
+          read_only: args.read_only,
           dev: args.dev,
           demo: args.demo,
           auth: config.derive_unchecked(|c| {
@@ -250,7 +259,7 @@ impl AppState {
       }
     };
 
-    if new_db {
+    if new_db && !args.read_only {
       let num_admins: i64 = app_state
         .user_conn()
         .read_query_row_get(
@@ -302,6 +311,10 @@ impl AppState {
 
   pub fn start_time(&self) -> std::time::SystemTime {
     return self.state.start_time;
+  }
+
+  pub(crate) fn read_only(&self) -> bool {
+    return self.state.read_only;
   }
 
   pub(crate) fn dev_mode(&self) -> bool {
@@ -366,11 +379,15 @@ impl AppState {
     // Rebuild RecordApi including schemas. This is necessary e.g. after schema changes.
     let connection_manager = self.state.connection_manager.clone();
     let record_api_config = Arc::new(config.record_apis.clone());
+    let read_only = self.state.read_only;
+
     self
       .state
       .record_apis
-      .update_unchecked(async |prev| {
-        let next = build_record_apis_impl(connection_manager, Some(prev), record_api_config).await;
+      .update_unchecked(async move |prev| {
+        let next =
+          build_record_apis_impl(connection_manager, Some(prev), record_api_config, read_only)
+            .await;
 
         return next;
       })
@@ -521,10 +538,16 @@ pub(crate) fn update_json_schema_registry(
 async fn build_record_apis(
   connection_manager: ConnectionManager,
   record_api_configs: Reactive<Vec<proto::RecordApiConfig>>,
+  read_only: bool,
 ) -> AsyncReactive<HashMap<String, RecordApi>> {
   return record_api_configs
     .derive_unchecked_async(move |DeriveInput { prev, dep: configs }| {
-      return build_record_apis_impl(connection_manager.clone(), prev.cloned(), configs.clone());
+      return build_record_apis_impl(
+        connection_manager.clone(),
+        prev.cloned(),
+        configs.clone(),
+        read_only,
+      );
     })
     .await;
 }
@@ -533,6 +556,7 @@ async fn build_record_apis_impl(
   connection_manager: ConnectionManager,
   prev: Option<Arc<HashMap<String, RecordApi>>>,
   record_api_configs: Arc<Vec<proto::RecordApiConfig>>,
+  read_only: bool,
 ) -> HashMap<String, RecordApi> {
   // Re-use existing connection when possible to keep subscriptions alive.
   //
@@ -551,8 +575,9 @@ async fn build_record_apis_impl(
         connection_manager
           .get_entry(BuildOptions {
             is_main: true,
+            num_threads: None,
+            read_only: Some(read_only),
             attached_databases: Some(attached_databases.iter().cloned().collect()),
-            ..Default::default()
           })
           .await?
       };
@@ -786,7 +811,7 @@ mod test_utils {
     update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
 
     let logs_conn = crate::connection::init_logs_db(None)?;
-    let session_conn = crate::connection::init_session_db(None)?;
+    let session_conn = crate::connection::init_session_db(None, /* read_only= */ false)?;
 
     let connection_manager = ConnectionManager::new_for_test(
       data_dir.clone(),
@@ -820,6 +845,7 @@ mod test_utils {
     let record_apis = build_record_apis(
       connection_manager.clone(),
       config.derive(|c| c.record_apis.clone()),
+      /* read_only= */ false,
     )
     .await;
 
@@ -828,6 +854,7 @@ mod test_utils {
         data_dir,
         start_time: std::time::SystemTime::now(),
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
+        read_only: false,
         dev: true,
         demo: false,
         auth: config.derive_unchecked(|c| {

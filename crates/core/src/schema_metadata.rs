@@ -40,6 +40,7 @@ pub enum SchemaLookupError {
 pub(crate) async fn build_metadata(
   conn: &trailbase_sqlite::Connection,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  read_only: bool,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let json_schema_registry = json_schema_registry.clone();
 
@@ -48,6 +49,7 @@ pub(crate) async fn build_metadata(
     conn: &mut trailbase_sqlite::SyncConnection,
     connection_type: ConnectionType,
     json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+    read_only: bool,
   ) -> Result<ConnectionMetadata, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn, connection_type)?;
     let views = lookup_and_parse_all_view_schemas(conn, connection_type, &tables)?;
@@ -58,13 +60,14 @@ pub(crate) async fn build_metadata(
       tables,
       views,
       json_schema_registry,
+      read_only,
     );
   }
 
   let connection_type = conn.connection_type();
   return conn
     .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-      return build_metadata_impl(&mut conn, connection_type, &json_schema_registry)
+      return build_metadata_impl(&mut conn, connection_type, &json_schema_registry, read_only)
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
     })
     .await
@@ -156,10 +159,13 @@ fn build_connection_metadata_and_install_file_deletion_triggers(
   tables: Vec<Table>,
   views: Vec<View>,
   registry: &RwLock<JsonSchemaRegistry>,
+  read_only: bool,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
 
-  setup_file_deletion_triggers(conn, connection_type, &metadata)?;
+  if !read_only {
+    setup_file_deletion_triggers(conn, connection_type, &metadata)?;
+  }
 
   return Ok(metadata);
 }

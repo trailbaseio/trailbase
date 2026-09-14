@@ -60,7 +60,12 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
   } = state.connection_manager().main_entry();
 
   let trailbase_schema::metadata::ConnectionMetadata { tables, views } =
-    crate::schema_metadata::build_metadata(&conn, state.json_schema_registry()).await?;
+    crate::schema_metadata::build_metadata(
+      &conn,
+      state.json_schema_registry(),
+      /*read_only=*/ false,
+    )
+    .await?;
 
   let (indexes, triggers) = conn
     .call_writer(|mut conn| -> Result<_, trailbase_sqlite::Error> {
@@ -154,7 +159,8 @@ async fn list_tables_handler_sqlite_impl(
       .get_entry(BuildOptions {
         is_main: true,
         attached_databases: Some(attached_dbs),
-        ..Default::default()
+        num_threads: None,
+        read_only: Some(state.read_only()),
       })
       .await?;
 
