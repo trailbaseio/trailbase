@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use url::Url;
 
 use crate::auth::AuthError;
-use crate::auth::apple::{decode_id_token_with_keys, fetch_apple_public_keys};
+use crate::auth::apple::{decode_and_validate_apple_id_token, fetch_apple_public_keys};
 use crate::auth::oauth::provider::TokenResponse;
 use crate::auth::oauth::providers::{OAuthProviderError, OAuthProviderRegistryEntry};
 use crate::auth::oauth::{OAuthClientSettings, OAuthProvider, OAuthUser};
@@ -105,7 +105,8 @@ impl OAuthProvider for AppleOAuthProvider {
     };
 
     let public_keys = fetch_apple_public_keys(http_client).await?;
-    let apple_id_token = decode_id_token_with_keys(&public_keys, id_token, &self.client_id)?;
+    let apple_id_token =
+      decode_and_validate_apple_id_token(&public_keys, id_token, &self.client_id)?;
 
     let Some(email) = apple_id_token.email else {
       return Err(AuthError::BadRequest("missing email"));

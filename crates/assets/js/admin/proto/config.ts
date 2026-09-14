@@ -154,6 +154,7 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
  * NOTE: W/o email there's no way to contact users.
  */
 export enum UserIdentifier {
+  /** USER_IDENTIFIER_UNDEFINED - / Behaves like ONLY_EMAIL for legacy reasons. */
   USER_IDENTIFIER_UNDEFINED = 0,
   /** ONLY_EMAIL - / Only email. Doesn't work for anonymous login. */
   ONLY_EMAIL = 1,
@@ -531,12 +532,22 @@ export interface AuthConfig {
     | UserIdentifier
     | undefined;
   /**
-   * / Apple only: expected `aud` of identity tokens issued by the native
-   * / Sign in with Apple flow (ASAuthorizationController). Native tokens are
-   * / audience-bound to the App ID (bundle identifier), while the web OAuth
-   * / flow validates against `client_id` (the Services ID). The two audiences
-   * / differ, so the native one needs its own config entry. When unset, the
-   * / native login endpoint fails closed.
+   * / When using "Sign-in with Apple" in native Mac or iOS apps, the auth flow
+   * / differs significantly from the web-based OAuth flows. The client signs in
+   * / with Apple directly using the user's iCloud account. The client then
+   * / forwards an apple-signed JWT identity token that can be exchanged for
+   * / TrailBase tokens:
+   * /   https://developer.apple.com/documentation/signinwithapple/authenticating-users-with-sign-in-with-apple
+   * /
+   * / The tokens audience (`aud`) is validated against the "client id", which
+   * / unlike for OAuth is the app `Bundle ID` instead of the `Service ID` (i.e.
+   * / only configuring the Apple OAuth flow is insufficient for native sign-in):
+   * /   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
+   * /
+   * / NOTE: while not explicitly required, Apple may reject apps from their
+   * / stores if they provide a social login w/o also providing an Apple option
+   * / using their native `AuthenticationServices`:
+   * /   https://acceptmy.app/guides/sign-in-with-apple-rejection.
    */
   appleNativeClientId?: string | undefined;
 }

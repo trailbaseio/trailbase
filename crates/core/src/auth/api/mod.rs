@@ -1,4 +1,4 @@
-pub(super) mod apple_native;
+pub(super) mod apple_native_signin;
 pub(super) mod avatar;
 pub(super) mod change_email;
 pub(super) mod change_password;

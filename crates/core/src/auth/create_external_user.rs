@@ -32,7 +32,8 @@ pub(crate) async fn create_user_for_external_provider(
 
   let email: Option<String> = match (user_identifier, email) {
     (
-      UserIdentifier::OnlyEmail
+      UserIdentifier::Undefined
+      | UserIdentifier::OnlyEmail
       | UserIdentifier::RequireEmail
       | UserIdentifier::RequireEmailAndUsername,
       None,

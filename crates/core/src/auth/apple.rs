@@ -4,7 +4,7 @@ use crate::auth::AuthError;
 
 /// RFC: https://www.rfc-editor.org/info/rfc7517/#section-4
 #[allow(unused)]
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct Jwk {
   kty: String,
   kid: String,
@@ -14,8 +14,9 @@ struct Jwk {
   e: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct ApplePublicKeys {
+/// RFC: https://www.rfc-editor.org/info/rfc7517/#section-5
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct JwkSet {
   keys: Vec<Jwk>,
 }
 
@@ -72,8 +73,11 @@ pub fn extract_kid(id_token: &str) -> Result<String, AuthError> {
 
 /// Verifies signature and claims (issuer, audience, expiry) of an Apple
 /// identity token against the given public keys, selecting the key by `kid`.
-pub(crate) fn decode_id_token_with_keys(
-  public_keys: &ApplePublicKeys,
+///
+/// Required validation documented here:
+///   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
+pub(crate) fn decode_and_validate_apple_id_token(
+  public_keys: &JwkSet,
   id_token: &str,
   audience: &str,
 ) -> Result<AppleIdToken, AuthError> {
@@ -110,7 +114,7 @@ pub(crate) fn decode_id_token_with_keys(
 #[cfg(not(test))]
 pub(crate) async fn fetch_apple_public_keys(
   http_client: &reqwest::Client,
-) -> Result<ApplePublicKeys, AuthError> {
+) -> Result<JwkSet, AuthError> {
   const JWK_URL: &str = "https://appleid.apple.com/auth/keys";
 
   let response = http_client
@@ -128,7 +132,7 @@ pub(crate) async fn fetch_apple_public_keys(
 #[cfg(test)]
 pub(crate) async fn fetch_apple_public_keys(
   _http_client: &reqwest::Client,
-) -> Result<ApplePublicKeys, AuthError> {
+) -> Result<JwkSet, AuthError> {
   return Ok(test_support::fixture_keys());
 }
 
@@ -143,6 +147,15 @@ pub mod test_support {
   use std::sync::LazyLock;
 
   use super::*;
+
+  pub const TEST_KEY_ID: &str = "test-apple-key-1";
+  pub const APP_ID: &str = "org.test";
+  pub static NONCE_HASH: LazyLock<String> = LazyLock::new(|| {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(b"test");
+    return hex::encode(hasher.finalize());
+  });
 
   /// RSA private key standing in for Apple's signing key.
   fn signing_key() -> &'static RsaPrivateKey {
@@ -159,12 +172,7 @@ pub mod test_support {
     return jsonwebtoken::EncodingKey::from_rsa_pem(pem.as_bytes()).unwrap();
   }
 
-  pub const TEST_KEY_ID: &str = "test-apple-key-1";
-  pub const WEB_SERVICES_ID: &str = "net.uwuwu.origa.web";
-  pub const APP_ID: &str = "net.uwuwu.origa";
-  pub const NONCE_HASH: &str = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08";
-
-  pub fn fixture_keys() -> ApplePublicKeys {
+  pub fn fixture_keys() -> JwkSet {
     let key = signing_key();
     let apple_key = Jwk {
       kty: "RSA".to_string(),
@@ -175,7 +183,7 @@ pub mod test_support {
       e: BASE64_URL_SAFE_NO_PAD.encode(key.e().to_be_bytes()),
     };
 
-    return ApplePublicKeys {
+    return JwkSet {
       keys: vec![apple_key],
     };
   }
@@ -199,7 +207,7 @@ pub mod test_support {
       "sub": "001234.abcdef.1234",
       "email": "user@privaterelay.appleid.com",
       "email_verified": true,
-      "nonce": NONCE_HASH,
+      "nonce": *NONCE_HASH,
     });
   }
 }
@@ -248,7 +256,8 @@ mod tests {
   #[test]
   fn well_formed_native_token_verifies() {
     let claims =
-      decode_id_token_with_keys(&fixture_keys(), &sign_token(valid_claims()), APP_ID).unwrap();
+      decode_and_validate_apple_id_token(&fixture_keys(), &sign_token(valid_claims()), APP_ID)
+        .unwrap();
 
     assert_eq!(claims.sub, "001234.abcdef.1234");
     assert_eq!(
@@ -256,17 +265,7 @@ mod tests {
       Some("user@privaterelay.appleid.com")
     );
     assert!(claims.email_verified.is_some_and(|v| v.value()));
-    assert_eq!(claims.nonce.as_deref(), Some(NONCE_HASH));
-  }
-
-  #[test]
-  fn web_services_id_audience_is_rejected_for_native_verification() {
-    let mut claims = valid_claims();
-    claims["aud"] = serde_json::json!(WEB_SERVICES_ID);
-
-    let result = decode_id_token_with_keys(&fixture_keys(), &sign_token(claims), APP_ID);
-
-    assert!(result.is_err());
+    assert_eq!(claims.nonce.as_deref(), Some(NONCE_HASH.as_str()));
   }
 
   #[test]
@@ -274,9 +273,9 @@ mod tests {
     let mut claims = valid_claims();
     claims["iss"] = serde_json::json!("https://evil.example.com");
 
-    let result = decode_id_token_with_keys(&fixture_keys(), &sign_token(claims), APP_ID);
-
-    assert!(result.is_err());
+    assert!(
+      decode_and_validate_apple_id_token(&fixture_keys(), &sign_token(claims), APP_ID).is_err()
+    );
   }
 
   #[test]
@@ -285,9 +284,9 @@ mod tests {
     claims["exp"] =
       serde_json::json!((chrono::Utc::now() - chrono::Duration::minutes(5)).timestamp());
 
-    let result = decode_id_token_with_keys(&fixture_keys(), &sign_token(claims), APP_ID);
-
-    assert!(result.is_err());
+    assert!(
+      decode_and_validate_apple_id_token(&fixture_keys(), &sign_token(claims), APP_ID).is_err()
+    );
   }
 
   #[test]
@@ -300,9 +299,10 @@ mod tests {
     };
     let token = jsonwebtoken::encode(&header, &valid_claims(), &key).unwrap();
 
-    let result = decode_id_token_with_keys(&fixture_keys(), &token, APP_ID);
-
-    assert!(matches!(result, Err(AuthError::Unauthorized)));
+    assert!(matches!(
+      decode_and_validate_apple_id_token(&fixture_keys(), &token, APP_ID),
+      Err(AuthError::Unauthorized)
+    ));
   }
 
   #[test]
