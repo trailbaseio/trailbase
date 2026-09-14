@@ -1,3 +1,11 @@
+## v0.33.16
+
+- Add "Sign-in with Apple" support for native Mac/iOS applications. Thanks @yurvon-screamo 🙏
+- Fix policy fallback for `UserIdenfier::UNDEFINED`. Now treat it as `ONLY_EMAIL` consistently. If you were relying on the behavior of the implicit fallback policy, i.e. to allow external users w/o an email address, simply set an explicit policy like `REQUIRE_USERNAME`.
+- Fix Apple OAuth flow. Thanks @yurvon-screamo 🙏
+- Fix `pageSize` persistence in admin UI's table explorer. Thanks @brigon-dev 🙏
+- Update dependencies.
+
 ## v0.33.15
 
 - Add `trail user export` sub-command for data take-out.
