@@ -9,7 +9,7 @@ use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
-use crate::connection::{BuildOptions, ConnectionEntry};
+use crate::connection::ConnectionEntry;
 use crate::constants::SQLITE_SCHEMA_TABLE;
 
 // TODO: Rudimentary unparsed trigger representation, since sqlparser didn't currently support
@@ -63,7 +63,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
     crate::schema_metadata::build_metadata(
       &conn,
       state.json_schema_registry(),
-      /*read_only=*/ false,
+      /* read_only= */ false,
     )
     .await?;
 
@@ -156,12 +156,7 @@ async fn list_tables_handler_sqlite_impl(
       connection: conn, ..
     } = state
       .connection_manager()
-      .get_entry(BuildOptions {
-        is_main: true,
-        attached_databases: Some(attached_dbs),
-        num_threads: None,
-        read_only: Some(state.read_only()),
-      })
+      .get_entry(/* is_main= */ true, Some(attached_dbs))
       .await?;
 
     let databases = conn.list_databases().await?;

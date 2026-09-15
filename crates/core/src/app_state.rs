@@ -12,7 +12,7 @@ use crate::config::{
   ConfigError, Textproto, load_or_init_config_textproto, proto, validate_config,
   write_config_and_vault_textproto,
 };
-use crate::connection::{BuildOptions, ConnectionEntry, ConnectionError, ConnectionManager};
+use crate::connection::{ConnectionEntry, ConnectionError, ConnectionManager};
 use crate::constants::USER_TABLE;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
@@ -21,7 +21,7 @@ use crate::metadata::load_check_and_update_metadata_textproto;
 use crate::rand::random_alphanumeric;
 use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
-use crate::scheduler::{JobRegistry, build_job_registry_from_config};
+use crate::scheduler::{BuildJobOptions, JobRegistry, build_job_registry_from_config};
 
 #[derive(Default)]
 pub struct InitArgs {
@@ -46,7 +46,6 @@ struct InternalState {
   start_time: std::time::SystemTime,
 
   site_url: Reactive<Arc<Option<url::Url>>>,
-  read_only: bool,
   dev: bool,
   demo: bool,
 
@@ -182,7 +181,6 @@ impl AppState {
       let record_apis = build_record_apis(
         connection_manager.clone(),
         config.derive(|c| c.record_apis.clone()),
-        /*read_only=*/ args.read_only,
       )
       .await;
 
@@ -193,7 +191,6 @@ impl AppState {
           data_dir: args.data_dir.clone(),
           start_time: std::time::SystemTime::now(),
           site_url,
-          read_only: args.read_only,
           dev: args.dev,
           demo: args.demo,
           auth: config.derive_unchecked(|c| {
@@ -216,14 +213,15 @@ impl AppState {
               let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
 
               return Arc::new(
-                build_job_registry_from_config(
-                  c,
+                build_job_registry_from_config(BuildJobOptions {
+                  config: c,
                   data_dir,
-                  conn_mgr,
+                  read_only: args.read_only,
+                  connection_manager: conn_mgr,
                   logs_conn,
                   session_conn,
-                  object_store.clone(),
-                )
+                  object_store: object_store.clone(),
+                })
                 .unwrap_or_else(|err| {
                   error!("Failed to build JobRegistry for cron jobs: {err}");
                   return JobRegistry::new();
@@ -313,10 +311,6 @@ impl AppState {
     return self.state.start_time;
   }
 
-  pub(crate) fn read_only(&self) -> bool {
-    return self.state.read_only;
-  }
-
   pub(crate) fn dev_mode(&self) -> bool {
     return self.state.dev;
   }
@@ -379,15 +373,12 @@ impl AppState {
     // Rebuild RecordApi including schemas. This is necessary e.g. after schema changes.
     let connection_manager = self.state.connection_manager.clone();
     let record_api_config = Arc::new(config.record_apis.clone());
-    let read_only = self.state.read_only;
 
     self
       .state
       .record_apis
       .update_unchecked(async move |prev| {
-        let next =
-          build_record_apis_impl(connection_manager, Some(prev), record_api_config, read_only)
-            .await;
+        let next = build_record_apis_impl(connection_manager, Some(prev), record_api_config).await;
 
         return next;
       })
@@ -538,16 +529,10 @@ pub(crate) fn update_json_schema_registry(
 async fn build_record_apis(
   connection_manager: ConnectionManager,
   record_api_configs: Reactive<Vec<proto::RecordApiConfig>>,
-  read_only: bool,
 ) -> AsyncReactive<HashMap<String, RecordApi>> {
   return record_api_configs
     .derive_unchecked_async(move |DeriveInput { prev, dep: configs }| {
-      return build_record_apis_impl(
-        connection_manager.clone(),
-        prev.cloned(),
-        configs.clone(),
-        read_only,
-      );
+      return build_record_apis_impl(connection_manager.clone(), prev.cloned(), configs.clone());
     })
     .await;
 }
@@ -556,7 +541,6 @@ async fn build_record_apis_impl(
   connection_manager: ConnectionManager,
   prev: Option<Arc<HashMap<String, RecordApi>>>,
   record_api_configs: Arc<Vec<proto::RecordApiConfig>>,
-  read_only: bool,
 ) -> HashMap<String, RecordApi> {
   // Re-use existing connection when possible to keep subscriptions alive.
   //
@@ -573,12 +557,10 @@ async fn build_record_apis_impl(
         connection_manager.main_entry()
       } else {
         connection_manager
-          .get_entry(BuildOptions {
-            is_main: true,
-            num_threads: None,
-            read_only: Some(read_only),
-            attached_databases: Some(attached_databases.iter().cloned().collect()),
-          })
+          .get_entry(
+            /* is_main= */ true,
+            Some(attached_databases.iter().cloned().collect()),
+          )
           .await?
       };
 
@@ -590,7 +572,7 @@ async fn build_record_apis_impl(
           })
         && candidate.attached_databases() == attached_databases
       {
-        // NOTE: We must use latest metadata to work recorrectly on schema changes.
+        // NOTE: We must use latest metadata to work correctly on schema changes.
         return Ok((candidate.conn().clone(), metadata));
       };
 
@@ -845,7 +827,6 @@ mod test_utils {
     let record_apis = build_record_apis(
       connection_manager.clone(),
       config.derive(|c| c.record_apis.clone()),
-      /* read_only= */ false,
     )
     .await;
 
@@ -854,7 +835,6 @@ mod test_utils {
         data_dir,
         start_time: std::time::SystemTime::now(),
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
-        read_only: false,
         dev: true,
         demo: false,
         auth: config.derive_unchecked(|c| {

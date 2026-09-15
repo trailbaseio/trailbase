@@ -77,6 +77,7 @@ struct ConnectionManagerState {
   data_dir: DataDir,
   json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
   sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+  read_only: bool,
 
   // Properties for caching connections:
   main: RwLock<ConnectionEntry>,
@@ -103,12 +104,11 @@ pub struct Options {
   pub read_only: Option<bool>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct BuildOptions {
   pub is_main: bool,
   pub attached_databases: Option<BTreeSet<String>>,
   pub num_threads: Option<usize>,
-  pub read_only: Option<bool>,
 }
 
 impl ConnectionManager {
@@ -160,6 +160,7 @@ impl ConnectionManager {
           data_dir,
           json_schema_registry,
           sqlite_function_runtimes,
+          read_only: read_only.unwrap_or(false),
           main: RwLock::new(ConnectionEntry {
             connection: Arc::new(main_conn),
             metadata: Arc::new(main_metadata),
@@ -179,6 +180,7 @@ impl ConnectionManager {
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
     pg_uri: Option<String>,
   ) -> Self {
+    const READ_ONLY: bool = false;
     let (main_conn, main_metadata, new_db) = cfg_select! {
       feature = "pg-test" => {
         init_db_pg(
@@ -190,7 +192,7 @@ impl ConnectionManager {
             runtimes: &sqlite_function_runtimes,
             attach: vec![],
             num_threads: None,
-            read_only: Some(false),
+            read_only: Some(READ_ONLY),
           },
           pg_uri.as_ref().expect("test").clone(),
         )
@@ -205,7 +207,7 @@ impl ConnectionManager {
           runtimes: &sqlite_function_runtimes,
           attach: vec![],
           num_threads: None,
-          read_only: Some(false),
+          read_only: Some(READ_ONLY),
         })
         .await
       }
@@ -221,6 +223,7 @@ impl ConnectionManager {
         data_dir,
         json_schema_registry,
         sqlite_function_runtimes,
+        read_only: READ_ONLY,
         main: RwLock::new(ConnectionEntry {
           connection: Arc::new(main_conn),
           metadata: Arc::new(main_metadata),
@@ -235,20 +238,30 @@ impl ConnectionManager {
     return self.state.main.read().clone();
   }
 
-  pub async fn get_entry(&self, opts: BuildOptions) -> Result<ConnectionEntry, ConnectionError> {
-    if opts.is_main && opts.attached_databases.is_none() {
+  pub async fn get_entry(
+    &self,
+    is_main: bool,
+    attached_databases: Option<BTreeSet<String>>,
+  ) -> Result<ConnectionEntry, ConnectionError> {
+    if is_main && attached_databases.is_none() {
       return Ok(self.state.main.read().clone());
     }
 
     let key = ConnectionKey {
-      main: opts.is_main,
-      attached_databases: opts.attached_databases.clone().unwrap_or_default(),
+      main: is_main,
+      attached_databases: attached_databases.clone().unwrap_or_default(),
     };
 
     return match self.state.connections.get_value_or_guard(&key, None) {
       GuardResult::Value(entry) => Ok(entry.clone()),
       GuardResult::Guard(placeholder) => {
-        let entry = self.build(opts).await?;
+        let entry = self
+          .build(BuildOptions {
+            is_main,
+            attached_databases,
+            num_threads: None,
+          })
+          .await?;
         let _ = placeholder.insert(entry.clone());
         Ok(entry)
       }
@@ -268,12 +281,7 @@ impl ConnectionManager {
         // QUESTION: Should we disallow access to "logs", "auth", etc? Currently, this is not
         // exposed to WASM, i.e. there's no sanctioned way to interact with this.
         self
-          .get_entry(BuildOptions {
-            is_main: false,
-            attached_databases: Some([db.to_string()].into()),
-            num_threads: None,
-            read_only: Some(false),
-          })
+          .get_entry(/* is_main= */ false, Some([db.to_string()].into()))
           .await
       }
     };
@@ -336,7 +344,7 @@ impl ConnectionManager {
           runtimes: &self.state.sqlite_function_runtimes,
           attach,
           num_threads: opts.num_threads,
-          read_only: opts.read_only,
+          read_only: Some(self.state.read_only),
         },
         pg_uri.clone(),
       )
@@ -350,7 +358,7 @@ impl ConnectionManager {
         runtimes: &self.state.sqlite_function_runtimes,
         attach,
         num_threads: opts.num_threads,
-        read_only: opts.read_only,
+        read_only: Some(self.state.read_only),
       })
       .await?
     };
@@ -370,7 +378,7 @@ impl ConnectionManager {
         build_metadata(
           &conn,
           &self.state.json_schema_registry,
-          /*read_only=*/ false,
+          /* read_only= */ false,
         )
         .await?
       });
@@ -384,7 +392,7 @@ impl ConnectionManager {
         build_metadata(
           &entry.connection,
           &self.state.json_schema_registry,
-          /*read_only=*/ false,
+          /* read_only= */ false,
         )
         .await?,
       );

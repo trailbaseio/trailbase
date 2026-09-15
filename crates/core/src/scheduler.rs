@@ -17,7 +17,7 @@ use trailbase_sqlite::{Connection, named_params, params};
 
 use crate::DataDir;
 use crate::config::proto;
-use crate::connection::{BuildOptions, ConnectionManager};
+use crate::connection::ConnectionManager;
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, LOGS_RETENTION_DEFAULT,
   OTP_CODE_TABLE, SESSION_TABLE, USER_TABLE,
@@ -261,31 +261,23 @@ struct DefaultSystemJob {
   callback: Box<CallbackFunction>,
 }
 
-fn build_job(
-  id: proto::SystemJobId,
-  data_dir: &DataDir,
-  config: &proto::Config,
-  connection_manager: &ConnectionManager,
-  logs_conn: &Connection,
-  session_conn: &Connection,
-  object_store: Arc<dyn ObjectStore>,
-) -> DefaultSystemJob {
-  use crate::config::proto::SystemJobId;
+fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob {
+  let read_only = opts.read_only;
 
   return match id {
-    SystemJobId::Undefined => DefaultSystemJob {
-      name: "",
+    proto::SystemJobId::Undefined => DefaultSystemJob {
+      name: "??",
       default_config: proto::SystemJob::default(),
       #[allow(unreachable_code)]
-      callback: build_callback(move || {
-        panic!("undefined job");
-        async {}
+      callback: build_callback(|| async {
+        debug_assert!(false, "undefined job");
+        return Err("undefined job");
       }),
     },
-    SystemJobId::Backup => {
-      let data_dir = data_dir.clone();
-      let mgr = connection_manager.clone();
-      let config = config.clone();
+    proto::SystemJobId::Backup => {
+      let data_dir = opts.data_dir.clone();
+      let mgr = opts.connection_manager.clone();
+      let config = opts.config.clone();
 
       DefaultSystemJob {
         name: "Backup",
@@ -313,7 +305,7 @@ fn build_job(
         }),
       }
     }
-    SystemJobId::Heartbeat => DefaultSystemJob {
+    proto::SystemJobId::Heartbeat => DefaultSystemJob {
       name: "Heartbeat",
       default_config: proto::SystemJob {
         id: Some(id as i32),
@@ -326,9 +318,10 @@ fn build_job(
         debug!("alive");
       }),
     },
-    SystemJobId::LogCleaner => {
-      let logs_conn = logs_conn.clone();
-      let retention = config
+    proto::SystemJobId::LogCleaner => {
+      let logs_conn = opts.logs_conn.clone();
+      let retention = opts
+        .config
         .server
         .logs_retention_sec
         .map_or(LOGS_RETENTION_DEFAULT, Duration::seconds);
@@ -359,15 +352,15 @@ fn build_job(
         }),
       }
     }
-    SystemJobId::AuthCleaner => {
-      let session_conn = session_conn.clone();
+    proto::SystemJobId::AuthCleaner => {
+      let session_conn = opts.session_conn.clone();
 
       DefaultSystemJob {
         name: "Session Cleanup",
         default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
-          disabled: Some(false),
+          disabled: Some(read_only),
 
           timeout: None,
         },
@@ -388,13 +381,13 @@ fn build_job(
               err
             })?;
 
-            Ok::<(), trailbase_sqlite::Error>(())
+            return Ok::<(), trailbase_sqlite::Error>(());
           };
         }),
       }
     }
-    SystemJobId::QueryOptimizer => {
-      let main_conn = connection_manager.main_entry().connection.clone();
+    proto::SystemJobId::QueryOptimizer => {
+      let main_conn = opts.connection_manager.main_entry().connection.clone();
 
       DefaultSystemJob {
         name: "Query Optimizer",
@@ -418,16 +411,17 @@ fn build_job(
         }),
       }
     }
-    SystemJobId::FileDeletions => {
-      let connection_manager = connection_manager.clone();
-      let databases = config.databases.clone();
+    proto::SystemJobId::FileDeletions => {
+      let connection_manager = opts.connection_manager.clone();
+      let databases = opts.config.databases.clone();
+      let object_store = opts.object_store.clone();
 
       DefaultSystemJob {
         name: "File Deletions",
         default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
-          disabled: Some(false),
+          disabled: Some(read_only),
           timeout: None,
         },
         callback: build_callback(move || {
@@ -448,12 +442,7 @@ fn build_job(
                   None => connection_manager.main_entry().connection,
                   Some(ref db_name) => {
                     let Ok(entry) = connection_manager
-                      .get_entry(BuildOptions {
-                        is_main: false,
-                        attached_databases: Some([db_name.clone()].into()),
-                        num_threads: Some(1),
-                        read_only: Some(false),
-                      })
+                      .get_entry(/* is_main= */ false, Some([db_name.clone()].into()))
                       .await
                     else {
                       continue;
@@ -473,9 +462,10 @@ fn build_job(
         }),
       }
     }
-    SystemJobId::AnonymousCleaner => {
-      let main_conn = connection_manager.main_entry().connection.clone();
-      let anonymous_refresh_token_ttl = config
+    proto::SystemJobId::AnonymousCleaner => {
+      let main_conn = opts.connection_manager.main_entry().connection.clone();
+      let anonymous_refresh_token_ttl = opts
+        .config
         .auth
         .anonymous_refresh_token_ttl_sec
         .map_or(DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, Duration::seconds);
@@ -485,7 +475,7 @@ fn build_job(
         default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@daily".into()),
-          disabled: Some(false),
+          disabled: Some(read_only),
           timeout: None,
         },
         callback: build_callback(move || {
@@ -530,23 +520,26 @@ async fn delete_pending_files_job(
   return Ok(());
 }
 
-pub fn build_job_registry_from_config(
-  config: &proto::Config,
-  data_dir: &DataDir,
-  connection_manager: &ConnectionManager,
-  logs_conn: &Connection,
-  session_conn: &Connection,
-  object_store: Arc<dyn ObjectStore>,
-) -> Result<JobRegistry, CallbackError> {
-  use crate::config::proto::SystemJobId;
+pub(crate) struct BuildJobOptions<'a> {
+  pub config: &'a proto::Config,
+  pub data_dir: &'a DataDir,
+  pub read_only: bool,
+  pub connection_manager: &'a ConnectionManager,
+  pub logs_conn: &'a Connection,
+  pub session_conn: &'a Connection,
+  pub object_store: Arc<dyn ObjectStore>,
+}
 
+pub(crate) fn build_job_registry_from_config(
+  opts: BuildJobOptions,
+) -> Result<JobRegistry, CallbackError> {
   let job_ids = [
-    SystemJobId::Backup,
-    SystemJobId::Heartbeat,
-    SystemJobId::LogCleaner,
-    SystemJobId::AuthCleaner,
-    SystemJobId::QueryOptimizer,
-    SystemJobId::FileDeletions,
+    proto::SystemJobId::Backup,
+    proto::SystemJobId::Heartbeat,
+    proto::SystemJobId::LogCleaner,
+    proto::SystemJobId::AuthCleaner,
+    proto::SystemJobId::QueryOptimizer,
+    proto::SystemJobId::FileDeletions,
   ];
 
   let jobs = JobRegistry::new();
@@ -555,17 +548,10 @@ pub fn build_job_registry_from_config(
       name,
       default_config,
       callback,
-    } = build_job(
-      job_id,
-      data_dir,
-      config,
-      connection_manager,
-      logs_conn,
-      session_conn,
-      object_store.clone(),
-    );
+    } = build_job(job_id, &opts);
 
-    let config = config
+    let config = opts
+      .config
       .jobs
       .system_jobs
       .iter()

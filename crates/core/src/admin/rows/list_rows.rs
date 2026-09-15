@@ -74,7 +74,7 @@ pub async fn list_rows_handler(
   let metadata = crate::schema_metadata::build_metadata(
     &conn,
     state.json_schema_registry(),
-    /*read_only=*/ true,
+    /* read_only= */ true,
   )
   .await?;
   let Some(table_or_view) = metadata.get_table_or_view(&qualified_name) else {

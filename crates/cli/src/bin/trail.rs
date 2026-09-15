@@ -55,6 +55,10 @@ async fn async_main(
         return Err("Failed to load extensions".into());
       }
 
+      if cmd.read_only && cmd.experimental_pg.is_some() {
+        return Err("--read-only + PG is not supported".into());
+      }
+
       let (_new, state) = AppState::init(InitArgs {
         data_dir: data_dir.clone(),
         public_url: public_url.clone(),
