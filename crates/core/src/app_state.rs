@@ -46,6 +46,7 @@ struct InternalState {
   start_time: std::time::SystemTime,
 
   site_url: Reactive<Arc<Option<url::Url>>>,
+  read_only: bool,
   dev: bool,
   demo: bool,
 
@@ -191,6 +192,7 @@ impl AppState {
           data_dir: args.data_dir.clone(),
           start_time: std::time::SystemTime::now(),
           site_url,
+          read_only: args.read_only,
           dev: args.dev,
           demo: args.demo,
           auth: config.derive_unchecked(|c| {
@@ -309,6 +311,10 @@ impl AppState {
 
   pub fn start_time(&self) -> std::time::SystemTime {
     return self.state.start_time;
+  }
+
+  pub(crate) fn read_only(&self) -> bool {
+    return self.state.read_only;
   }
 
   pub(crate) fn dev_mode(&self) -> bool {
@@ -835,6 +841,7 @@ mod test_utils {
         data_dir,
         start_time: std::time::SystemTime::now(),
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
+        read_only: false,
         dev: true,
         demo: false,
         auth: config.derive_unchecked(|c| {

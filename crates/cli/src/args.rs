@@ -138,8 +138,8 @@ pub struct ServerArgs {
   #[arg(long, env)]
   pub geoip_db_path: Option<String>,
 
-  /// Start with SQLite DBs in read-only mode, i.e. all writes will fail. Includes sessions but
-  /// excludes logs.
+  /// Start with DBs and config in read-only mode, i.e. all writes will fail. Only supported with
+  /// SQLite. Writes to the HTTP access logs DB are excluded.
   #[arg(long)]
   pub read_only: bool,
 
