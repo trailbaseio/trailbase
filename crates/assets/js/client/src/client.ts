@@ -73,7 +73,7 @@ type TokenState = {
     tokens: Tokens;
     claims: TokenClaims;
   };
-  headers: HeadersInit;
+  headers: Record<string, string>;
 };
 
 type PromotionOptions = {
@@ -199,7 +199,7 @@ export interface Client {
   user(): User | undefined;
 
   /// Provides current user.
-  headers(): HeadersInit;
+  headers(): Record<string, string>;
 
   /// Construct accessor for Record API with given name.
   records<T = Record<string, unknown>>(name: string): RecordApi<T>;
@@ -318,7 +318,7 @@ class ClientImpl implements Client {
   public user = (): User | undefined => buildUser(this._tokenState);
 
   /// Provides current user.
-  public headers = (): HeadersInit => this._tokenState.headers;
+  public headers = (): Record<string, string> => this._tokenState.headers;
 
   /// Construct accessor for Record API with given name.
   public records<T = Record<string, unknown>>(name: string): RecordApi<T> {
@@ -721,7 +721,7 @@ async function refreshTokensImpl(
   }
 }
 
-function headers(tokens?: Tokens): HeadersInit {
+function headers(tokens?: Tokens): Record<string, string> {
   if (tokens) {
     const { auth_token, refresh_token, csrf_token } = tokens;
     return {

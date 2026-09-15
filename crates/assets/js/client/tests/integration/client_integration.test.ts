@@ -132,7 +132,7 @@ test("Multi-factor auth integration tests", async () => {
   expect(client.user()?.email).toBe("alice@trailbase.io");
 });
 
-test("Record integration tests", async () => {
+test("Record read integration tests", async () => {
   const client = await connect();
   const apiName = "simple_strict_table";
   const api = client.records<NewSimpleStrict>(apiName);
@@ -237,35 +237,66 @@ test("Record integration tests", async () => {
   expect(subset_view_record.id).toStrictEqual(ids[0]);
   expect(subset_view_record.t_not_null).toStrictEqual(messages[0]);
 
-  // Test Record updates.
-  const updated_value: Partial<SimpleStrict> = {
-    text_not_null: "updated not null",
-    text_null: "updated null",
-  };
-  await api.update(ids[1], updated_value);
-
-  const updated_record = await api.read(ids[1]);
-  expect(updated_record).toEqual(
-    expect.objectContaining({
-      id: ids[1],
-      ...updated_value,
-    }),
-  );
-
-  await api.delete(ids[1]);
-
-  await expect(async () => await api.read(ids[1])).rejects.toThrow(
-    expect.objectContaining({
-      status: status.NOT_FOUND,
-    }),
-  );
-
+  // Check FORBIDDEN after logout.
   expect(await client.logout()).toBe(true);
   expect(client.user()).toBe(undefined);
 
   await expect(async () => await api.read(ids[0])).rejects.toThrow(
     expect.objectContaining({
       status: status.FORBIDDEN,
+    }),
+  );
+});
+
+test("Record update & delete integration tests", async () => {
+  const client = await connect();
+  const apiName = "simple_strict_table";
+  const api = client.records<NewSimpleStrict>(apiName);
+
+  // Milliseconds since epoch.
+  const now = new Date().getTime();
+
+  const id = (await api.create({
+    text_not_null: `ts client test 4: =?&/`,
+    text_default: `prefix ts ${now}`,
+  })) as string;
+
+  // Test Record updates.
+  const updated_value0: Partial<SimpleStrict> = {
+    text_not_null: "ts client test 4 updated",
+    text_null: "updated null",
+  };
+  await api.update(id, updated_value0);
+
+  const updated_record0 = await api.read(id);
+  expect(updated_record0).toEqual(
+    expect.objectContaining({
+      id: id,
+      ...updated_value0,
+    }),
+  );
+
+  // Make sure un-setting nullable values works correctly with JSON serialization.
+  const updated_value1: Partial<SimpleStrict> = {
+    text_not_null: "ts client test 4 updated",
+    text_null: null,
+  };
+  await api.update(id, updated_value1);
+
+  const updated_record1 = await api.read(id);
+  expect(updated_record1).toEqual(
+    expect.objectContaining({
+      id: id,
+      ...updated_value1,
+    }),
+  );
+  expect(updated_record1.text_null).toBeNull();
+
+  await api.delete(id);
+
+  await expect(async () => await api.read(id)).rejects.toThrow(
+    expect.objectContaining({
+      status: status.NOT_FOUND,
     }),
   );
 });
