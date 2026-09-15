@@ -12,6 +12,9 @@ import 'package:totp_authenticator/totp_authenticator.dart';
 const port = 4006;
 const address = '127.0.0.1:${port}';
 
+Matcher isSupersetOf(Map expected) => predicate<Map>((m) =>
+    expected.entries.every((e) => m.containsKey(e.key) && m[e.key] == e.value));
+
 class SimpleStrict {
   final String id;
 
@@ -355,7 +358,7 @@ Future<void> main() async {
       await client.requestOtp('invalidUsername');
     });
 
-    test('records', () async {
+    test('read records', () async {
       final client = await connect();
       final api = client.records('simple_strict_table');
 
@@ -444,14 +447,47 @@ Future<void> main() async {
       expect(RecordId.uuid(record.id) == ids[0], isTrue);
 
       expect(record.textNotNull, messages[0]);
+    });
 
-      final updatedMessage = 'dart client updated test 0: ${now}';
-      await api.update(ids[0], {'text_not_null': updatedMessage});
-      final updatedRecord = SimpleStrict.fromJson(await api.read(ids[0]));
-      expect(updatedRecord.textNotNull, updatedMessage);
+    test('update & delete records', () async {
+      final client = await connect();
+      final api = client.records('simple_strict_table');
 
-      await api.delete(ids[0]);
-      expect(() async => await api.read(ids[0]), throwsException);
+      final int now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final msg = 'dart client test 4: =?&${now}';
+      final record = {
+        'text_not_null': msg,
+        'text_null': msg,
+      };
+
+      final id = await api.create(record);
+
+      final updateRecord0 = {
+        'text_not_null': 'dart client updated test 0: ${now}',
+      };
+      await api.update(id, updateRecord0);
+      final updatedRecord0 = await api.read(id);
+      expect(
+          updatedRecord0,
+          isSupersetOf({
+            ...record,
+            ...updateRecord0,
+          }));
+
+      final updateRecord1 = {
+        'text_null': null,
+      };
+      await api.update(id, updateRecord1);
+      final updatedRecord1 = await api.read(id);
+      expect(
+          updatedRecord1,
+          isSupersetOf({
+            ...updateRecord0,
+            ...updateRecord1,
+          }));
+
+      await api.delete(id);
+      expect(() async => await api.read(id), throwsException);
     });
 
     test('transactions', () async {
