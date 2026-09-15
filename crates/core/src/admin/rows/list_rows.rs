@@ -71,10 +71,10 @@ pub async fn list_rows_handler(
     .await?;
 
   // Build fresh metadata rather than relying on cache.
-  let metadata = crate::schema_metadata::build_metadata(
+  let metadata = crate::schema_metadata::build_metadata_and_maybe_file_deletions(
     &conn,
     state.json_schema_registry(),
-    /* read_only= */ true,
+    /* setup_file_deletions= */ false,
   )
   .await?;
   let Some(table_or_view) = metadata.get_table_or_view(&qualified_name) else {

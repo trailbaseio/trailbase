@@ -13,7 +13,7 @@ use crate::data_dir::DataDir;
 use crate::migrations::{
   apply_base_migrations, apply_logs_migrations, apply_main_migrations, apply_session_migrations,
 };
-use crate::schema_metadata::build_metadata;
+use crate::schema_metadata::build_metadata_and_maybe_file_deletions;
 use crate::wasm::{SqliteFunctions, SqliteStore};
 
 #[derive(Debug, Error)]
@@ -375,10 +375,10 @@ impl ConnectionManager {
     {
       let new_metadata = Arc::new({
         let conn = self.state.main.read().connection.clone();
-        build_metadata(
+        build_metadata_and_maybe_file_deletions(
           &conn,
           &self.state.json_schema_registry,
-          /* read_only= */ false,
+          /* setup_file_deletions= */ !self.state.read_only,
         )
         .await?
       });
@@ -389,10 +389,10 @@ impl ConnectionManager {
     // Others:
     for (key, entry) in self.state.connections.iter() {
       let new_metadata = Arc::new(
-        build_metadata(
+        build_metadata_and_maybe_file_deletions(
           &entry.connection,
           &self.state.json_schema_registry,
-          /* read_only= */ false,
+          /* setup_file_deletions = */ !self.state.read_only,
         )
         .await?,
       );
@@ -447,7 +447,12 @@ async fn init_db_pg<'a>(
   };
 
   // NOTE: read_only not supported for PG.
-  let metadata = build_metadata(&conn, opts.json_registry, /* read_only= */ false).await?;
+  let metadata = build_metadata_and_maybe_file_deletions(
+    &conn,
+    opts.json_registry,
+    /* setup_file_deletions= */ true, // PG does not support RO.
+  )
+  .await?;
 
   return Ok((conn, metadata, init_schema));
 }
@@ -566,7 +571,12 @@ async fn init_db_sqlite<'a>(
   }
 
   // Lastly, after attaching all DBs, build connection metadata.
-  let metadata = build_metadata(&conn, opts.json_registry, opts.read_only.unwrap_or(false)).await?;
+  let metadata = build_metadata_and_maybe_file_deletions(
+    &conn,
+    opts.json_registry,
+    /* setup_file_deletions= */ !opts.read_only.unwrap_or(false),
+  )
+  .await?;
 
   return Ok((conn, metadata, init_schema));
 }

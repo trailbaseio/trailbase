@@ -3,7 +3,6 @@ use log::*;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::parse::parse_into_statement;
 use trailbase_schema::sqlite::{Table, View};
 use trailbase_sqlite::{ConnectionType, params, unpack_other_error};
@@ -37,10 +36,10 @@ pub enum SchemaLookupError {
   PgSchema(#[from] trailbase_pg_schema::Error),
 }
 
-pub(crate) async fn build_metadata(
+pub(crate) async fn build_metadata_and_maybe_file_deletions(
   conn: &trailbase_sqlite::Connection,
   json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-  read_only: bool,
+  setup_file_deletions: bool,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let json_schema_registry = json_schema_registry.clone();
 
@@ -49,26 +48,28 @@ pub(crate) async fn build_metadata(
     conn: &mut trailbase_sqlite::SyncConnection,
     connection_type: ConnectionType,
     json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
-    read_only: bool,
   ) -> Result<ConnectionMetadata, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn, connection_type)?;
     let views = lookup_and_parse_all_view_schemas(conn, connection_type, &tables)?;
 
-    return build_connection_metadata_and_install_file_deletion_triggers(
-      conn,
-      connection_type,
+    return Ok(ConnectionMetadata::from_schemas(
       tables,
       views,
-      json_schema_registry,
-      read_only,
-    );
+      &json_schema_registry.read(),
+    )?);
   }
 
   let connection_type = conn.connection_type();
   return conn
     .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-      return build_metadata_impl(&mut conn, connection_type, &json_schema_registry, read_only)
-        .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
+      let metadata = build_metadata_impl(&mut conn, connection_type, &json_schema_registry)
+        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
+      if setup_file_deletions {
+        setup_file_deletion_triggers(&mut conn, connection_type, &metadata)?;
+      }
+
+      return Ok(metadata);
     })
     .await
     .map_err(|err| {
@@ -145,29 +146,6 @@ async fn lookup_and_parse_table_schema_pg(
     .into_iter()
     .find(|t| t.name.name == table_name)
     .ok_or(SchemaLookupError::NotFound);
-}
-
-/// (Re-)build the connections schema representation *with* the side-effect of (re-)installing file
-/// deletion triggers.
-///
-/// Tying the construction of schema metadata and the (re-)installing of file deletion triggers so
-/// closely together is a necessary evil. For example, whenever a schema changes, e.g. a new file
-/// column is added, we need to rebuild the metadata and update or install missing triggers.
-fn build_connection_metadata_and_install_file_deletion_triggers(
-  conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
-  connection_type: ConnectionType,
-  tables: Vec<Table>,
-  views: Vec<View>,
-  registry: &RwLock<JsonSchemaRegistry>,
-  read_only: bool,
-) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let metadata = ConnectionMetadata::from_schemas(tables, views, &registry.read())?;
-
-  if !read_only {
-    setup_file_deletion_triggers(conn, connection_type, &metadata)?;
-  }
-
-  return Ok(metadata);
 }
 
 // Install file column triggers. This ain't pretty, this might be better on construction and

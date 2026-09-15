@@ -60,10 +60,10 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
   } = state.connection_manager().main_entry();
 
   let trailbase_schema::metadata::ConnectionMetadata { tables, views } =
-    crate::schema_metadata::build_metadata(
+    crate::schema_metadata::build_metadata_and_maybe_file_deletions(
       &conn,
       state.json_schema_registry(),
-      /* read_only= */ false,
+      /* setup_file_deletions = */ false,
     )
     .await?;
 
