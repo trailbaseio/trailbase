@@ -14,6 +14,7 @@ import { useParams, useNavigate } from "@solidjs/router";
 import { createForm } from "@tanstack/solid-form";
 import {
   TbOutlineBriefcase,
+  TbOutlineCloudUpload,
   TbOutlineDatabaseExport,
   TbOutlineDeviceFloppy,
   TbOutlineMail,
@@ -60,6 +61,7 @@ import { AuthSettings } from "@/components/settings/AuthSettings";
 import { DatabaseSettings } from "@/components/settings/DatabaseSettings";
 import { SchemaSettings } from "@/components/settings/SchemaSettings";
 import { EmailSettings } from "@/components/settings/EmailSettings";
+import { FileSettings } from "@/components/settings/FileSettings";
 import { JobSettings } from "@/components/settings/JobSettings";
 import { BackupSettings } from "@/components/settings/BackupSettings";
 import { IconButton } from "@/components/IconButton";
@@ -460,6 +462,12 @@ const sites = [
     label: "Databases",
     child: DatabaseSettings,
     icon: TbOutlineDatabaseExport,
+  },
+  {
+    route: "files",
+    label: "Files",
+    child: FileSettings,
+    icon: TbOutlineCloudUpload,
   },
   {
     route: "schema",

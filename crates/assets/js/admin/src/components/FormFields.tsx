@@ -50,6 +50,7 @@ export type FormApiT<TFormData> = ReturnType<typeof formApiTHelper<TFormData>>;
 type TextFieldOptions = {
   disabled?: boolean;
   type?: TextFieldType;
+  pattern?: string | RegExp;
 
   label: () => JSX.Element;
   info?: JSX.Element;
@@ -76,6 +77,7 @@ export function buildTextFormField(opts: TextFieldOptions) {
           <TextFieldInput
             disabled={externDisable}
             type={opts.type ?? "text"}
+            pattern={opts.pattern}
             value={field().state.value ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
@@ -112,6 +114,7 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
           <TextFieldInput
             disabled={opts.disabled ?? false}
             type={opts.type ?? "text"}
+            pattern={opts.pattern}
             value={field().state.value ?? ""}
             placeholder={opts.placeholder}
             onBlur={field().handleBlur}
@@ -134,7 +137,9 @@ export function buildOptionalTextFormField(opts: TextFieldOptions) {
 }
 
 /// Used for repeated proto string fields, entered as a whitespace-separated list.
-export function buildStringListFormField(opts: Omit<TextFieldOptions, "type">) {
+export function buildStringListFormField(
+  opts: Omit<TextFieldOptions, "type" | "pattern">,
+) {
   return function builder(field: () => FieldApiT<string[]>) {
     return (
       <TextField class="w-full">
@@ -167,7 +172,9 @@ export function buildStringListFormField(opts: Omit<TextFieldOptions, "type">) {
   };
 }
 
-export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
+export function buildSecretFormField(
+  opts: Omit<TextFieldOptions, "type" | "pattern">,
+) {
   const [type, setType] = createSignal<TextFieldType>("password");
 
   return function builder(field: () => FieldApiT<string>) {
@@ -214,7 +221,7 @@ export function buildSecretFormField(opts: Omit<TextFieldOptions, "type">) {
 
 /// Used for proto Settings. Empty field is the same as absent.
 export function buildOptionalSecretFormField(
-  opts: Omit<TextFieldOptions, "type">,
+  opts: Omit<TextFieldOptions, "type" | "pattern">,
 ) {
   const [type, setType] = createSignal<TextFieldType>("password");
 
@@ -262,7 +269,7 @@ export function buildOptionalSecretFormField(
   };
 }
 
-type TextAreaOptions = Omit<TextFieldOptions, "type"> & {
+type TextAreaOptions = Omit<TextFieldOptions, "type" | "pattern"> & {
   class?: string;
   // Height in number of lines of the text area.
   rows?: number;
