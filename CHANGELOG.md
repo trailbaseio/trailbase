@@ -1,3 +1,10 @@
+## v0.33.17
+
+- Add a `trail run --read-only` flag to disable all config and SQLite DB writes (logs DB excluded). This will not be a useful flag for most folks. It is explicitly meant for experimenting with read replicas.
+- Add object storage (S3) settings to admin UI.
+- Minor: update admin UI's quick reference.
+- Update dependencies.
+
 ## v0.33.16
 
 - Add "Sign-in with Apple" support for native Mac/iOS applications. Thanks @yurvon-screamo 🙏
