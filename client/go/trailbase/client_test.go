@@ -283,9 +283,7 @@ func TestRecordApi(t *testing.T) {
 
 		second, err := api.List(&ListArguments{
 			Filters: filters,
-			Pagination: Pagination{
-				Cursor: first.Cursor,
-			},
+			Cursor:  first.Cursor,
 		})
 		assertFine(t, err)
 		assert(t, len(second.Records) == 0, fmt.Sprint("expected 0, got ", second))
@@ -354,7 +352,7 @@ func TestRecordApiSubscriptions(t *testing.T) {
 	allCh, allCancel, err := api.SubscribeAll()
 	assertFine(t, err)
 	go func() {
-		for i := 0; i < 100; i += 1 {
+		for range 100 {
 			ev, ok := <-allCh
 			if !ok {
 				break

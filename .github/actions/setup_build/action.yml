@@ -33,6 +33,10 @@ runs:
       with:
         shared-key: ${{ inputs.cache-key-suffix }}
 
+    - uses: actions/setup-go@v6
+      with:
+        go-version: '1.27.1'
+
     - name: Install fake sendmail
       shell: bash
       run: |

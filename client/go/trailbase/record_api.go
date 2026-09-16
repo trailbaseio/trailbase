@@ -310,8 +310,11 @@ func (r *RecordApi[T]) List(args *ListArguments) (*ListResponse[T], error) {
 	return &listResponse, nil
 }
 
-func NewRecordApi[T any](c *Client, name string) *RecordApi[T] {
-	return &RecordApi[T]{
+// Instantiates a RecordApi given the client and RecordApi name.
+//
+// Deprecated: Use `client.Record(name)` instead.
+func NewRecordApi[T any](c *Client, name string) RecordApi[T] {
+	return RecordApi[T]{
 		client: c,
 		name:   name,
 	}

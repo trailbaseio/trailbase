@@ -153,6 +153,11 @@ func (c *Client) User() *User {
 	return nil
 }
 
+func (c *Client) Records[T any](name string) RecordApi[T] {
+	// Go 1.27 finally introduced generic methods. We keep the old function constructor around for migration.
+	return NewRecordApi[T](c, name)
+}
+
 type RegisterOptions struct {
 	Password string
 	Email    *string
