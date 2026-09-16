@@ -3,6 +3,7 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
+use trailbase_sqlite::unpack_other_error;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
@@ -111,7 +112,14 @@ pub async fn record_transactions_handler(
           return Ok(results);
         }
       })
-      .await?
+      .await
+      .map_err(|err| {
+        // Unpack potentially packed RecordError.
+        return match unpack_other_error::<RecordError>(err) {
+          Ok(schema_lookup_err) => schema_lookup_err,
+          Err(sql_err) => sql_err.into(),
+        };
+      })?
   } else {
     conn
       .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
@@ -126,7 +134,14 @@ pub async fn record_transactions_handler(
 
         return Ok(results);
       })
-      .await?
+      .await
+      .map_err(|err| {
+        // Unpack potentially packed RecordError.
+        return match unpack_other_error::<RecordError>(err) {
+          Ok(schema_lookup_err) => schema_lookup_err,
+          Err(sql_err) => sql_err.into(),
+        };
+      })?
   };
 
   return Ok(Json(TransactionResponse { results }));
@@ -331,6 +346,8 @@ fn apply_ops<T: SyncConnection>(
 
 #[cfg(test)]
 mod tests {
+  use std::assert_matches;
+
   use serde_json::json;
 
   use super::*;
@@ -385,6 +402,27 @@ mod tests {
     )
     .await
     .unwrap();
+
+    // Make sure invalid input gets mapped to BAD_REQUEST even though evaluated on the SQLite
+    // executor.
+    for tx in [true, false] {
+      assert_matches!(
+        record_transactions_handler(
+          State(state.clone()),
+          None,
+          Json(TransactionRequest {
+            operations: vec![Operation::Create {
+              api_name: "test_api".to_string(),
+              // Invalid input.
+              value: serde_json::Value::Null,
+            }],
+            transaction: Some(tx),
+          }),
+        )
+        .await,
+        Err(RecordError::BadRequest(_))
+      );
+    }
 
     let response = record_transactions_handler(
       State(state.clone()),
