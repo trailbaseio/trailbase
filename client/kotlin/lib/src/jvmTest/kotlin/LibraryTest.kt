@@ -29,11 +29,14 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.TestMethodOrder
 import org.junit.jupiter.api.assertThrows
 
-@Serializable data class SimpleStrict(val id: String, val text_not_null: String)
+@Serializable
+data class SimpleStrict(val id: String, val text_not_null: String, val text_null: String?)
 
-@Serializable data class SimpleStrictInsert(val text_not_null: String)
+@Serializable
+data class SimpleStrictInsert(val text_not_null: String, val text_null: String? = null)
 
-@Serializable data class SimpleStrictUpdate(val text_not_null: String?)
+@Serializable
+data class SimpleStrictUpdate(val text_not_null: String?, val text_null: String? = null)
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
@@ -293,7 +296,7 @@ class ClientTest {
 
     val ids: MutableList<RecordId> = mutableListOf()
     for (msg in messages) {
-      ids.add(api.create(SimpleStrictInsert(msg)))
+      ids.add(api.create(SimpleStrictInsert(msg, text_null = msg)))
     }
 
     val record0: SimpleStrict = api.read(ids[0])
@@ -364,9 +367,17 @@ class ClientTest {
     }
 
     val updateMessage = "kotlin client update test 0: =?&${now}"
-    api.update(ids[0], SimpleStrictUpdate(text_not_null = updateMessage))
-    val updatedRecord: SimpleStrict = api.read(ids[0])
-    assertEquals(updateMessage, updatedRecord.text_not_null)
+    api.update(ids[0], SimpleStrictUpdate(text_not_null = updateMessage, text_null = null))
+    val updatedRecord0: SimpleStrict = api.read(ids[0])
+    assertEquals(updateMessage, updatedRecord0.text_not_null)
+    // WARN: The update currently fails to override `text_null` with a null, since the serializer is
+    // set up to skip nulls.
+    assertEquals(messages[0], updatedRecord0.text_null)
+
+    // Current available workaround: build an explicit JsonObject.
+    api.update(ids[0], buildJsonObject { put("text_null", null) })
+    val updatedRecord1: SimpleStrict = api.read(ids[0])
+    assertNull(updatedRecord1.text_null)
 
     api.delete(ids[0])
     assertThrows<HttpException>({ api.read<SimpleStrict>(ids[0]) })
