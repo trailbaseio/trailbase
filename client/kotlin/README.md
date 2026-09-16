@@ -1,77 +1,110 @@
 # TrailBase Kotlin client
 
-This is the first-party client for hooking up your Kotlin applications
-with TrailBase.
+[TrailBase](https://trailbase.io) is an open, [sub-millisecond](https://trailbase.io/reference/benchmarks/), single-executable Firebase alternative with type-safe APIs, built-in WebAssembly runtime, realtime, auth, admin UI, ... built on Rust & SQLite (PG exp).
 
-You can find an example how to use the Kotlin client in under [`client/kotlin/examples/record_api`](https://github.com/trailbaseio/trailbase/tree/main/client/kotlin/examples/record_api).
+You can use this first-party multi-platform client to hook up your Kotlin applications: mobile, desktop and server.
+More examples can be found [here](https://github.com/trailbaseio/trailbase/tree/main/client/kotlin/examples/record_api).
 
-## Client Setup and Authentication 
-To get started, construct a TrailBase client
-```kotlin
-val client = Client()
-```
+## Quick start
 
-You can use `Client::register` for creating new accounts. To log in with the user's credentials,
-use `Client::login` and the other login-related methods.
+To get started, connect a client and sign-in:
 
 ```kotlin
+val client = Client("https://mydomain.org:4000")
 client.login(username, password)
 ```
 
-## Accessing records
-The TrailBase client can automatically deserialize the record API's JSON responses to Kotlin object.
-To do so, the Kotlin classes must be annotated with `@Serializable` from [`kotlinx.serialization`](https://github.com/kotlin/kotlinx.serialization).
+You can also use `Client::register()` to create a new account first, which depending on your setup may send a email address verification email.
 
-For example, this would look like
+### Accessing records
+
+To access data (a.k.a. records) in your database tables or views via configured APIs, you can either loosely work with `JsonObject`s or let the client automatically (de)serialize records from and to Kotlin objects.
+For the latter, you'll need to provide the language bindings, either by generating them from JSON schemas or by rolling your own data classes annotated with [`@Serializable`](https://github.com/kotlin/kotlinx.serialization), e.g.:
+
 ```kotlin
 @Serializable
-data class MyPerson(
+data class Person(
     var id: Int? = null,
     var name: String,
     var age: Int?,
 )
+
+// access the "people" API:
+val people = client.records("people")
+
+// get everyone:
+val persons = people.list<Person>().records
+
+// create a new entry and read it back:
+val person = Person(name = "foo", age = null)
+val id = people.create(person)
+val personFromDb = people.read(id)
 ```
 
-You can now access database table and views by using `Client::records`.
-This returns a `RecordApi` which supports all CRUD operations.
-```kotlin
-val myRecordApi = client.records("<TABLE_NAME>")
-
-// get all persons
-val persons = myRecordApi.list<MyPerson>().records
-
-// create new person
-val person = MyPerson(name = "foo", age = null)
-val newPersonId = myRecordApi.create(person)
-
-// update existing person
-person.age = 42
-myRecordApi.update(newPersonId, person)
-
-// delete person
-myRecordApi.delete(newPersonId)
-```
-
-## Kotlinx Serialization tradeoffs
-To avoid issues, please always make sure that your Kotlin classes are as close as possible to the database scheme.
-For example, you can use [online tools](https://github.com/wuseal/JsonToKotlinClass) to automatically generate Kotlin classes from the database's JSON schema.
-
-By default, the Kotlin client does not send the value of fields that are `null`. For example, in the above example in the `myRecordApi.create(person)` call above, the `id` and `age` fields are not sent to the server. As a result, the Trailbase server uses the default values for the fields (e.g. automatically generated an `id`).
-That behavior has various advantages, but also comes with some caveats. See [here](https://github.com/trailbaseio/trailbase/pull/287) for the discussion about it.
-
-### Updating columns to a `null` value
-
-In some cases, you do want to explicitly send fields with `null` as value, for example to update a record and set one if its fields to `null`. In that case, you have to use a custom `kotlinx` serializer that distincts between `null` and unset (i.e. not sending a value so that it remains unchanged). For example, the [Omittable library](https://github.com/Osmerion/Omittable) provides one. To use it, wrap the field's type into the generic `Omittable` type and annotate field with `@EncodeDefaults(EncodeDefault.Mode.NEVER)`.
+Note that the schema requirements for reads, inserts and updates may all differ.
+Above, we required `Person` to have a name but updates are differential allowing changes to individual fields:
 
 ```kotlin
 @Serializable
-data class MyPerson(
+data class PersonUpdate(
     var id: Int? = null,
     var name: String? = null,
+    var age: Int? = null,
+)
+
+// update an existing person:
+people.update(id, PersonUpdate(age = 42))
+
+// alternatively untyped:
+// people.update(id, buildJsonObject { put("age", 42) })
+
+// and finally clean up:
+people.delete(id)
+```
+
+## Strict-typing trade-offs
+
+Whenever you strictly type database records, you need to be mindful of skew between your clients and your server: columns may be altered, removed or added on a schedule independent from your client rollouts. This is especially true for applications that run on users' devices where you have limited control like mobile or desktop.
+
+Looking back at the example above, imagine the `name` column was removed. W/o changing the code first and rolling the changes out consistently, serialization will start failing.
+
+If you have full control over your release cycle, you can consider generating strong types from JSON schema, e.g. using tools like [this](https://github.com/wuseal/JsonToKotlinClass). Alternatively, consider a looser [protobuf-like](https://protobuf.dev/best-practices/dos-donts/#add-required) approach where all fields should be consider optional, e.g.:
+
+```kotlin
+@Serializable
+data class Person(
+    var id: Int? = null,
+    var name: String? = null,
+    var age: Int? = null,
+)
+```
+
+### Overriding fields with `null` values
+
+The serialization is set up to skip fields that are `null`.[^1]
+For example, the `people.create()` call does not put the `id` and `age` fields on the wire.
+Instead, the server uses table defaults to derive these values like auto-generating the `id`.
+
+While this may be a sensible default in most situations, sometimes you may want to explicitly write a `null` value, e.g.:
+
+- to null a field of an existing record, or
+- to create a record with a null value for a column with a non-null default.
+
+If so, you can use a wrapper like [Omittable](https://github.com/Osmerion/Omittable) to explicitly distinguish between `null` and absent.
+Simply wrap your field and annotate it with `@EncodeDefaults(EncodeDefault.Mode.NEVER)`:
+
+```kotlin
+@Serializable
+data class Person(
+    var id: Int? = null,
+    var name: String? = null,
+
     @EncodeDefaults(EncodeDefault.Mode.NEVER)
     var age: Omittable<Int?> = Omittable.absent(),
 )
 
 // sets the age to `null`
-myRecordApi.update(newPersonId, Person(age = Omittable.of(null)))
+people.update(id, Person(age = Omittable.Present(null)))
 ```
+
+[^1]: This does not apply when working with `JsonObject`s directly.
