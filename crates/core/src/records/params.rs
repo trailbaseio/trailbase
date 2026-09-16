@@ -18,29 +18,31 @@ use crate::schema_metadata::{self, JsonColumnMetadata, TableMetadata};
 pub enum ParamsError {
   #[error("Not a Number")]
   NotANumber,
-  #[error("Column error: {0}")]
+  #[error("Column: {0}")]
   Column(&'static str),
   #[error("Value not found")]
   ValueNotFound,
+  #[error("Column not found")]
+  ColumnNotFound,
   #[error("Unexpected type: {0}, expected {1}")]
   UnexpectedType(&'static str, String),
-  #[error("Decoding error: {0}")]
+  #[error("Decoding: {0}")]
   Base64Decode(base64::DecodeError),
   #[error("Nested object: {0}")]
   NestedObject(String),
   #[error("Nested array: {0}")]
   NestedArray(String),
-  #[error("Parse int error: {0}")]
+  #[error("Parse int: {0}")]
   ParseInt(#[from] std::num::ParseIntError),
-  #[error("Parse float error: {0}")]
+  #[error("Parse float: {0}")]
   ParseFloat(#[from] std::num::ParseFloatError),
-  #[error("Json validation error: {0}")]
+  #[error("Json validation: {0}")]
   JsonValidation(#[from] schema_metadata::JsonSchemaError),
-  #[error("Json serialization error: {0}")]
+  #[error("Json serialization: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
-  #[error("Json schema error: {0}")]
+  #[error("Json schema: {0}")]
   Schema(#[from] trailbase_schema::Error),
-  #[error("ObjectStore error: {0}")]
+  #[error("ObjectStore: {0}")]
   Storage(Arc<object_store::Error>),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
@@ -153,8 +155,8 @@ impl Params {
 
     // Insert parameters case.
     for (key, value) in row {
-      // We simply skip unknown columns, this could simply be malformed input or version skew. This
-      // is similar in spirit to protobuf's unknown fields behavior.
+      // We simply skip unknown columns, this could simply be malformed input or client version
+      // skew. This is similar in spirit to protobuf's unknown fields behavior.
       let Some(ColumnMetadata {
         index,
         column,
@@ -213,8 +215,7 @@ impl Params {
 
     // Insert parameters case.
     for (key, value) in row {
-      // We simply skip unknown columns, this could simply be malformed input or version skew. This
-      // is similar in spirit to protobuf's unknown fields behavior.
+      // For admin operations we don't skip. There should not be client version skew.
       let Some(ColumnMetadata {
         index,
         column: _,
@@ -223,7 +224,7 @@ impl Params {
         is_geometry: _,
       }) = accessor.column_by_name(&key)
       else {
-        continue;
+        return Err(ParamsError::ColumnNotFound);
       };
 
       named_params.push((named_placeholder(&key).into(), value.try_into()?));
@@ -255,8 +256,8 @@ impl Params {
 
     // Update parameters case.
     for (key, value) in row {
-      // We simply skip unknown columns, this could simply be malformed input or version skew. This
-      // is similar in spirit to protobuf's unknown fields behavior.
+      // We simply skip unknown columns, this could simply be malformed input or client version
+      // skew. This is similar in spirit to protobuf's unknown fields behavior.
       let Some(ColumnMetadata {
         index,
         column,
@@ -290,6 +291,12 @@ impl Params {
       named_params.push((named_placeholder(&key).into(), param));
       column_names.push(key);
       column_indexes.push(*index);
+    }
+
+    // Make sure not everything was skipped, otherwise we'll yield an invalid query leading to
+    // a server-error.
+    if column_indexes.is_empty() {
+      return Err(ParamsError::Column("no valid columns to update found"));
     }
 
     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
@@ -333,8 +340,7 @@ impl Params {
 
     // Update parameters case.
     for (key, value) in row {
-      // We simply skip unknown columns, this could simply be malformed input or version skew. This
-      // is similar in spirit to protobuf's unknown fields behavior.
+      // For admin operations we don't skip. There should not be client version skew.
       let Some(ColumnMetadata {
         index,
         column,
@@ -343,7 +349,7 @@ impl Params {
         is_geometry,
       }) = accessor.column_by_name(&key)
       else {
-        continue;
+        return Err(ParamsError::ColumnNotFound);
       };
 
       let param: Value = if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
@@ -388,6 +394,12 @@ impl Params {
       named_params.push((named_placeholder(&key).into(), param));
       column_names.push(key);
       column_indexes.push(*index);
+    }
+
+    // Make sure not everything was skipped, otherwise we'll yield an invalid query leading to
+    // a server-error.
+    if column_indexes.is_empty() {
+      return Err(ParamsError::Column("no valid columns to update found"));
     }
 
     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
@@ -679,14 +691,99 @@ mod tests {
   use serde_json::json;
   use trailbase_schema::parse::{Bump, parse_into_statement};
   use trailbase_schema::sqlite::Table;
+  use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
 
   use super::*;
+  use crate::config::proto;
   use crate::records::test_utils::json_row_from_value;
+  use crate::records::write_queries::WriteQuery;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
 
-  #[tokio::test]
-  async fn test_params() {
+  #[test]
+  fn test_empty_insert_params() {
+    let table_name = "test_table".to_string();
+
+    let allocator = Bump::new();
+    let table: Table = (&parse_into_statement(
+      &allocator,
+      &format!(
+        "CREATE TABLE {table_name} (
+          id      INTEGER PRIMARY KEY,
+          data    TEXT
+        ) STRICT;"
+      ),
+    )
+    .unwrap()
+    .unwrap())
+      .try_into()
+      .unwrap();
+
+    let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
+    let qualified_name = QualifiedNameEscaped::new(&QualifiedName {
+      name: table_name.clone(),
+      database_schema: None,
+    });
+
+    struct Input {
+      input: serde_json::Value,
+      expected_params: usize,
+    }
+
+    for i in [
+      Input {
+        input: json!({}),
+        expected_params: 0,
+      },
+      Input {
+        input: json!({"unknown_column": 5}),
+        expected_params: 0,
+      },
+      Input {
+        input: json!({"data": "test"}),
+        expected_params: 1,
+      },
+      Input {
+        input: json!({"id": 5, "data": "test"}),
+        expected_params: 2,
+      },
+    ] {
+      let params = Params::for_insert(
+        &metadata,
+        &registry,
+        json_row_from_value(i.input).unwrap(),
+        None,
+      )
+      .unwrap();
+
+      let (query, _file_metadata) = WriteQuery::new_insert_or_replace(
+        trailbase_sqlite::ConnectionType::Sqlite,
+        &qualified_name,
+        &metadata.column_metadata,
+        "id",
+        proto::ConflictResolutionStrategy::Replace,
+        params,
+      )
+      .unwrap();
+
+      let WriteQuery::Insert {
+        query,
+        named_params,
+      } = query
+      else {
+        panic!("not an insert");
+      };
+
+      assert_eq!(i.expected_params, named_params.iter().count());
+
+      // Make sure it's a valid query
+      assert!(parse_into_statement(&allocator, &query).is_ok(), "{query}")
+    }
+  }
+
+  #[test]
+  fn test_non_trivial_insert_params() {
     #[allow(unused)]
     #[derive(JsonSchema)]
     struct TestSchema {
@@ -951,8 +1048,59 @@ mod tests {
     }
   }
 
-  #[tokio::test]
-  async fn test_for_update_skips_stored_file_upload() {
+  #[test]
+  fn test_empty_update_yields_err() {
+    let allocator = Bump::new();
+    let table: Table = (&parse_into_statement(
+      &allocator,
+      "
+      CREATE TABLE records (
+        id      INTEGER PRIMARY KEY,
+        data    TEXT
+      ) STRICT;
+      ",
+    )
+    .unwrap()
+    .unwrap())
+      .try_into()
+      .unwrap();
+
+    let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
+
+    let id: i64 = 5;
+
+    let empty = json!({});
+    assert!(
+      Params::for_update(
+        &metadata,
+        &registry,
+        json_row_from_value(empty).unwrap(),
+        None,
+        "id".to_string(),
+        Value::Integer(id),
+      )
+      .is_err()
+    );
+
+    let unknown_column = json!({
+        "unknown_column": 5,
+    });
+    assert!(
+      Params::for_update(
+        &metadata,
+        &registry,
+        json_row_from_value(unknown_column).unwrap(),
+        None,
+        "id".to_string(),
+        Value::Integer(id),
+      )
+      .is_err()
+    );
+  }
+
+  #[test]
+  fn test_for_update_skips_stored_file_upload() {
     let allocator = Bump::new();
     let table: Table = (&parse_into_statement(
       &allocator,

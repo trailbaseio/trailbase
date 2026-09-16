@@ -1,3 +1,4 @@
+use std::assert_matches;
 use std::os::unix::process::CommandExt;
 
 use base64::prelude::*;
@@ -6,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use temp_dir::TempDir;
 use trailbase_client::{
-  Client, CompareOp, EventPayload, Filter, ListArguments, ListResponse, OperationResult,
-  Pagination, ReadArguments,
+  Client, CompareOp, Error, EventPayload, Filter, ListArguments, ListResponse, OperationResult,
+  Pagination, ReadArguments, StatusCode,
 };
 
 struct Server {
@@ -146,6 +147,8 @@ struct SimpleStrict {
   text_null: Option<String>,
   text_default: Option<String>,
   text_not_null: String,
+
+  int_default: i64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -229,12 +232,10 @@ async fn register_test() {
     .unwrap();
   assert!(client.user().is_none());
 
-  assert!(matches!(
+  assert_matches!(
     client.login(&email, &password).await,
-    Err(trailbase_client::Error::HttpStatus(
-      reqwest::StatusCode::UNAUTHORIZED
-    ))
-  ));
+    Err(Error::HttpStatus(StatusCode::UNAUTHORIZED, _))
+  );
 }
 
 async fn login_anonymous_test() {
@@ -408,12 +409,36 @@ async fn records_test() {
     // Update
     let updated_message = format!("rust client updated test 0: {now}");
     api
-      .update(&ids[0], json!({"text_not_null": updated_message}))
+      .update(
+        &ids[0],
+        json!({
+            "text_null": updated_message,
+            "text_not_null": updated_message,
+        }),
+      )
       .await
       .unwrap();
 
     let record: SimpleStrict = api.read(&ids[0]).await.unwrap();
     assert_eq!(record.text_not_null, updated_message);
+    assert_eq!(record.int_default, 5);
+    assert_eq!(record.text_null.as_ref(), Some(&updated_message));
+
+    // Explicitly Test overriding a column with a null value.
+    api
+      .update(&ids[0], json!({ "text_null": &serde_json::Value::Null }))
+      .await
+      .unwrap();
+
+    let record: SimpleStrict = api.read(&ids[0]).await.unwrap();
+    assert_eq!(record.text_not_null, updated_message);
+    assert!(record.text_null.is_none());
+
+    // Updating a non-column is an error.
+    assert_matches!(
+      api.update(&ids[0], json!({ "not_a_column": 4 }),).await,
+      Err(Error::HttpStatus(StatusCode::BAD_REQUEST, _))
+    );
   }
 
   {

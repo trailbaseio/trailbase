@@ -9,7 +9,6 @@ INSERT INTO {{ table_name }}
     {%- if !loop.first %}, {% endif %}{{ crate::records::util::named_placeholder(name) }}
   {%- endfor -%}
 )
-{%- endif -%}
 
 {%- if !ignore_conflict && !column_metadata.is_empty() %}
   ON CONFLICT ("{{ pk_column_name }}") DO UPDATE SET
@@ -18,6 +17,7 @@ INSERT INTO {{ table_name }}
   {%- endfor -%}
 {%- elif ignore_conflict %}
   ON CONFLICT ("{{ pk_column_name }}") DO NOTHING
+{%- endif -%}
 {%- endif -%}
 
 {%- for col in returning -%}

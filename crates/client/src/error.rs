@@ -1,10 +1,12 @@
 use thiserror::Error;
 
+pub use reqwest::StatusCode;
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
   #[error("HttpStatus: {0}")]
-  HttpStatus(reqwest::StatusCode),
+  HttpStatus(StatusCode, Option<String>),
 
   #[error("RecordSerialization: {0}")]
   RecordSerialization(serde_json::Error),
@@ -36,7 +38,7 @@ impl From<std::convert::Infallible> for Error {
 impl From<reqwest::Error> for Error {
   fn from(err: reqwest::Error) -> Self {
     match err.status() {
-      Some(code) => Self::HttpStatus(code),
+      Some(code) => Self::HttpStatus(code, Some(err.to_string())),
       _ => Self::OtherReqwest(err),
     }
   }

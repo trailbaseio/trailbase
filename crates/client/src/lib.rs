@@ -12,7 +12,7 @@ mod record_api;
 mod transport;
 
 pub use crate::client::*;
-pub use crate::error::Error;
+pub use crate::error::{Error, StatusCode};
 pub use crate::record_api::*;
 pub use crate::transport::{DefaultTransport, Transport};
 pub use futures_lite::Stream;

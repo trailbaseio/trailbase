@@ -627,7 +627,13 @@ async fn refresh_tokens_impl(
       })))
     }
     StatusCode::UNAUTHORIZED => Ok(TokenState::build(None)),
-    status => Err(Error::HttpStatus(status)),
+    status => Err(Error::HttpStatus(
+      status,
+      response
+        .body()
+        .as_bytes()
+        .map(|b| String::from_utf8_lossy(b).into()),
+    )),
   };
 }
 
@@ -643,7 +649,11 @@ fn error_for_status_unpack(
 ) -> Result<http::Response<reqwest::Body>, Error> {
   let status = resp.status();
   if status.is_client_error() || status.is_server_error() {
-    return Err(Error::HttpStatus(status));
+    let body = resp.body().as_bytes();
+    return Err(Error::HttpStatus(
+      status,
+      body.map(|b| String::from_utf8_lossy(b).into()),
+    ));
   }
   return Ok(resp);
 }
