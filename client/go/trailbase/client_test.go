@@ -243,7 +243,7 @@ type SimpleStrict struct {
 
 func TestRecordApi(t *testing.T) {
 	client := connect(t)
-	api := NewRecordApi[SimpleStrict](client, "simple_strict_table")
+	api := client.Records[SimpleStrict]("simple_strict_table")
 
 	now := time.Now().Unix()
 	messages := []string{
@@ -342,9 +342,84 @@ func TestRecordApi(t *testing.T) {
 	assert(t, r == nil, "expected nil value reading delete record")
 }
 
+func TestRecordApiTransactions(t *testing.T) {
+	client := connect(t)
+	api := client.Records[SimpleStrict]("simple_strict_table")
+
+	now := time.Now().Unix()
+
+	{
+		// Test simple create.
+		msg := fmt.Sprint("go client transaction test 0: =?&", now)
+		response, err := client.Execute(
+			[]Operation{
+				api.CreateOp(SimpleStrict{
+					TextNotNull: msg,
+				}),
+			},
+			false)
+
+		assertFine(t, err)
+		assertEqual(t, 1, len(response))
+
+		record, err := api.Read(*response[0].Id)
+		assertFine(t, err)
+		assertEqual(t, msg, record.TextNotNull)
+	}
+
+	{
+		// Test update transaction
+		msg := fmt.Sprint("go client transaction test orig: =?&", now)
+		id, err := api.Create(SimpleStrict{
+			TextNotNull: msg,
+		})
+		assertFine(t, err)
+
+		updatedMsg := fmt.Sprint("go client transaction modified: =?&", now)
+		response, err := client.Execute(
+			[]Operation{
+				api.UpdateOp(id, SimpleStrict{
+					TextNotNull: updatedMsg,
+				}),
+			},
+			true)
+
+		assertFine(t, err)
+		assertEqual(t, 1, len(response))
+
+		record, err := api.Read(*response[0].Id)
+		assertFine(t, err)
+		assertEqual(t, updatedMsg, record.TextNotNull)
+	}
+
+	{
+		// Test delete transaction
+		msg := fmt.Sprint("go client transaction test delete: =?&", now)
+		id, err := api.Create(SimpleStrict{
+			TextNotNull: msg,
+		})
+		assertFine(t, err)
+
+		response, err := client.Execute(
+			[]Operation{api.DeleteOp(id)},
+			true)
+
+		assertFine(t, err)
+		assertEqual(t, 1, len(response))
+
+		_, err = api.Read(id)
+		ferr, ok := err.(*FetchError)
+		if ok && ferr != nil {
+			assertEqual(t, ferr.StatusCode, 404)
+		} else {
+			panic(err)
+		}
+	}
+}
+
 func TestRecordApiSubscriptions(t *testing.T) {
 	client := connect(t)
-	api := NewRecordApi[SimpleStrict](client, "simple_strict_table")
+	api := client.Records[SimpleStrict]("simple_strict_table")
 
 	done := make(chan bool)
 

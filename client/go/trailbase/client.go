@@ -158,6 +158,48 @@ func (c *Client) Records[T any](name string) RecordApi[T] {
 	return NewRecordApi[T](c, name)
 }
 
+func (c *Client) Execute(operations []Operation, transaction bool) ([]OperationResult, error) {
+	type Request struct {
+		Ops         []map[string]jsonOp `json:"operations"`
+		Transaction bool                `json:"transaction"`
+	}
+
+	ops := make([]map[string]jsonOp, len(operations))
+	for i, v := range operations {
+		ops[i] = v.json()
+	}
+
+	reqBody, err := json.Marshal(Request{
+		Ops:         ops,
+		Transaction: transaction,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.do("POST", transactionBasePath, reqBody, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	type TransactionResponse struct {
+		Results []OperationResult `json:"results"`
+	}
+
+	var response TransactionResponse
+	err = json.Unmarshal(respBody, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Results, nil
+}
+
 type RegisterOptions struct {
 	Password string
 	Email    *string
@@ -679,3 +721,4 @@ func sseSplitter(data []byte, atEOF bool) (advance int, token []byte, err error)
 var jsonHeader Header = Header{key: "Content-Type", value: "application/json"}
 
 const authApi string = "api/auth/v1"
+const transactionBasePath string = "api/transaction/v1/execute"

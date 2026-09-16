@@ -40,6 +40,13 @@ type RecordApi[T any] struct {
 	name   string
 }
 
+func (r *RecordApi[T]) CreateOp(record T) CreateOperation[T] {
+	return CreateOperation[T]{
+		ApiName: r.name,
+		Value:   record,
+	}
+}
+
 func (r *RecordApi[T]) Create(record T) (RecordId, error) {
 	reqBody, err := json.Marshal(record)
 	if err != nil {
@@ -93,6 +100,14 @@ func (r *RecordApi[T]) Subscribe(id RecordId) (<-chan Event, func(), error) {
 	return r.client.stream("GET", fmt.Sprintf("%s/%s/subscribe/%s", recordApi, r.name, id.ToString()), []byte{}, []QueryParam{})
 }
 
+func (r *RecordApi[T]) UpdateOp(id RecordId, record T) UpdateOperation[T] {
+	return UpdateOperation[T]{
+		ApiName: r.name,
+		Id:      id,
+		Value:   record,
+	}
+}
+
 func (r *RecordApi[T]) Update(id RecordId, record T) error {
 	reqBody, err := json.Marshal(record)
 	if err != nil {
@@ -103,6 +118,13 @@ func (r *RecordApi[T]) Update(id RecordId, record T) error {
 		return err
 	}
 	return nil
+}
+
+func (r *RecordApi[T]) DeleteOp(id RecordId) DeleteOperation[T] {
+	return DeleteOperation[T]{
+		ApiName: r.name,
+		Id:      id,
+	}
 }
 
 func (r *RecordApi[T]) Delete(id RecordId) error {
