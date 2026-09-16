@@ -236,7 +236,7 @@ func TestOtpLogin(t *testing.T) {
 type SimpleStrict struct {
 	Id *string `json:"id,omitempty"`
 
-	TextNull    *string `json:"text_null,omitempty"`
+	TextNull    *string `json:"text_null"`
 	TextDefault *string `json:"text_default,omitempty"`
 	TextNotNull string  `json:"text_not_null"`
 }
@@ -255,6 +255,7 @@ func TestRecordApi(t *testing.T) {
 	for _, message := range messages {
 		id, err := api.Create(SimpleStrict{
 			TextNotNull: message,
+			TextNull:    &message,
 		})
 		assertFine(t, err)
 		ids = append(ids, id)
@@ -264,6 +265,7 @@ func TestRecordApi(t *testing.T) {
 	simpleStrict0, err := api.Read(ids[0])
 	assertFine(t, err)
 	assertEqual(t, messages[0], simpleStrict0.TextNotNull)
+	assertEqual(t, messages[0], *simpleStrict0.TextNull)
 
 	// List specific message
 	{
@@ -326,11 +328,13 @@ func TestRecordApi(t *testing.T) {
 	updatedMessage := fmt.Sprint("go client updated test 0: =?&", now)
 	err = api.Update(ids[0], SimpleStrict{
 		TextNotNull: updatedMessage,
+		TextNull:    nil,
 	})
 	assertFine(t, err)
 	simpleStrict1, err := api.Read(ids[0])
 	assertFine(t, err)
 	assertEqual(t, updatedMessage, simpleStrict1.TextNotNull)
+	assertEqual(t, nil, simpleStrict1.TextNull)
 
 	// Delete
 	err = api.Delete(ids[0])
