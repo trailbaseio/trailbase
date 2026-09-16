@@ -1,3 +1,11 @@
+## v0.33.18
+
+- Fix edge cases for empty/all-default inserts and empty updates.
+- Fix error propagation in batch/transactions. 400s were mapped to 500.
+- Disable git versions in debug builds to reduce rebuilds.
+- Add batch/transaction support to Go client.
+- Test explicitly overriding nullable columns with nulls for all clients.
+
 ## v0.33.17
 
 - Add a `trail run --read-only` flag to disable all config and SQLite DB writes (logs DB excluded). This will not be a useful flag for most folks. It is explicitly meant for experimenting with read replicas.
