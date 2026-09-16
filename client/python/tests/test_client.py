@@ -220,22 +220,21 @@ def test_records(trailbase: TrailBaseFixture):
     api = client.records("simple_strict_table")
 
     now = int(time())
+
     messages = [
         f"python client test 0: =?&{now}",
         f"python client test 1: =?&{now}",
     ]
     ids: List[RecordId] = []
     for msg in messages:
-        ids.append(api.create({"text_not_null": msg}))
-
-    if True:
-        bulk_ids = api.create_bulk(
-            [
-                {"text_not_null": "python bulk test 0"},
-                {"text_not_null": "python bulk test 1"},
-            ]
+        ids.append(
+            api.create(
+                {
+                    "text_null": msg,
+                    "text_not_null": msg,
+                }
+            )
         )
-        assert len(bulk_ids) == 2
 
     if True:
         response = api.list(
@@ -271,8 +270,16 @@ def test_records(trailbase: TrailBaseFixture):
 
     if True:
         updatedMessage = f"python client updated test 0: {now}"
-        api.update(ids[0], {"text_not_null": updatedMessage})
+        api.update(
+            ids[0],
+            {
+                "text_null": None,
+                "text_not_null": updatedMessage,
+            },
+        )
+
         record = api.read(ids[0])
+        assert record["text_null"] is None
         assert record["text_not_null"] == updatedMessage
 
     if True:
@@ -280,6 +287,15 @@ def test_records(trailbase: TrailBaseFixture):
 
         with pytest.raises(FetchException):
             api.read(ids[0])
+
+    if True:
+        bulk_ids = api.create_bulk(
+            [
+                {"text_not_null": f"python bulk test 0: {now}"},
+                {"text_not_null": f"python bulk test 1: {now}"},
+            ]
+        )
+        assert len(bulk_ids) == 2
 
 
 def test_expand_foreign_records(trailbase: TrailBaseFixture):
