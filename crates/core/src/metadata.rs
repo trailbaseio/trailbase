@@ -51,31 +51,46 @@ pub async fn load_check_and_update_metadata_textproto(
 ) -> Result<(), ConfigError> {
   let metadata_path = data_dir.config_path().join(METADATA_FILENAME);
 
-  let loaded = match fs::read_to_string(&metadata_path).await {
-    Ok(contents) => proto::Metadata::from_text(&contents)?,
-    Err(err) => match err.kind() {
-      std::io::ErrorKind::NotFound => proto::Metadata::new_with_custom_defaults(),
-      _ => return Err(err.into()),
-    },
+  let loaded_version: Option<GitVersion> = {
+    let loaded: Option<proto::Metadata> = match fs::read_to_string(&metadata_path).await {
+      Ok(contents) => Some(proto::Metadata::from_text(&contents)?),
+      Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+      Err(err) => return Err(err.into()),
+    };
+
+    loaded.and_then(|l| GitVersion::parse(l.last_executed_version()))
   };
-  let loaded_version = GitVersion::parse(loaded.last_executed_version())
-    .ok_or_else(|| ConfigError::Invalid("failed to parse version".into()))?;
 
   let current = proto::Metadata::new_with_custom_defaults();
-  let current_version = GitVersion::parse(current.last_executed_version())
-    .ok_or_else(|| ConfigError::Invalid("failed to parse version".into()))?;
+  let Some(current_version) = GitVersion::parse(current.last_executed_version()) else {
+    // Git versions are disabled for dev builds, thus short-circuit here. Otherwise
+    // make sure to error.
+    return cfg_select! {
+      debug_assertions => Ok(()),
+      _ => Err(ConfigError::Invalid("failed to parse version".into())),
+    };
+  };
 
-  if (loaded_version.major == 0 && loaded_version.minor > current_version.minor)
-    || loaded_version.major > current_version.major
-  {
-    warn!(
-      "Running a potentially incompatible version version: {current_version} (previously: {loaded_version})"
-    );
-  }
-
-  if current_version >= loaded_version {
+  let update = async || -> Result<(), ConfigError> {
     debug!("Update metadata.textproto: {metadata_path:?}");
     fs::write(&metadata_path, current.to_text()?.as_bytes()).await?;
+    return Ok(());
+  };
+
+  if let Some(loaded_version) = loaded_version {
+    if (loaded_version.major == 0 && loaded_version.minor > current_version.minor)
+      || loaded_version.major > current_version.major
+    {
+      warn!(
+        "Running a potentially incompatible version version: {current_version} (previously: {loaded_version})"
+      );
+    }
+
+    if current_version >= loaded_version {
+      update().await?;
+    }
+  } else {
+    update().await?;
   }
 
   return Ok(());

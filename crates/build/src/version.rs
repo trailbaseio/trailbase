@@ -40,23 +40,41 @@ macro_rules! get_version_info {
 #[macro_export]
 macro_rules! setup_version_info {
   () => {{
-    let _ = $crate::version::rerun_if_git_changes();
+    // Avoid rebuilding dev builds just to get the latest git version. During development, we run
+    // tests before commit and want to avoid the subsequent commit to immediately invalidate the
+    // otherwise identical build.
+    let profile = std::env::var("PROFILE").unwrap_or_default();
+    if profile != "debug" {
+      let _ = $crate::version::rerun_if_git_changes();
+    }
+
+    let format_git = |v: Option<String>| -> String {
+      return match (profile.as_str(), v) {
+        ("debug", Some(v)) => format!("stale-{v}"),
+        (_, Some(v)) => v,
+        _ => "??".to_string(),
+      };
+    };
+
+    // Git metadata.
     println!(
       "cargo:rustc-env=GIT_HASH={}",
-      $crate::version::get_commit_hash().unwrap_or_default()
+      format_git($crate::version::get_commit_hash())
     );
     println!(
       "cargo:rustc-env=GIT_COMMIT_DATE={}",
-      $crate::version::get_commit_date().unwrap_or_default()
+      format_git($crate::version::get_commit_date())
     );
     println!(
       "cargo:rustc-env=GIT_VERSION_TAG={}",
-      $crate::version::get_version_tag().unwrap_or_default()
+      format_git($crate::version::get_version_tag())
     );
+
+    // Rust toolchain metadata.
     let compiler_version = $crate::version::get_compiler_version();
     println!(
       "cargo:rustc-env=RUSTC_RELEASE_CHANNEL={}",
-      $crate::version::get_channel(compiler_version)
+      $crate::version::get_rustc_release_channel(compiler_version)
     );
   }};
 }
@@ -79,9 +97,10 @@ pub struct GitVersion {
 
 impl GitVersion {
   pub fn parse(version_tag: &str) -> Option<Self> {
-    // NOTE: We're not currently parsing the hash.
+    // Versions look like v0.33.17-2-gc5aa95b7a". We're not currently parsing the trailing commit
+    // hash.
     let re =
-      regex::Regex::new(r#"v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)-(?P<since>[0-9a-z]+)"#)
+      regex::Regex::new(r#"^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)-(?P<since>[0-9a-z]+)"#)
         .expect("static");
 
     let cap = re.captures(version_tag)?;
@@ -226,7 +245,6 @@ pub fn rerun_if_git_changes() -> Option<()> {
   // Make sure we get rerun when the git commit changes.
   // We want to watch two files: HEAD, which tracks which branch we are on,
   // and the file for that branch that tracks which commit is checked out.
-
   // First, find the `HEAD` file. This should work even with worktrees.
   let git_head_file = PathBuf::from(get_output("git", &["rev-parse", "--git-path", "HEAD"])?);
   if git_head_file.exists() {
@@ -271,7 +289,7 @@ pub fn get_compiler_version() -> Option<String> {
 }
 
 #[must_use]
-pub fn get_channel(compiler_version: Option<String>) -> String {
+pub fn get_rustc_release_channel(compiler_version: Option<String>) -> String {
   if let Ok(channel) = std::env::var("CFG_RELEASE_CHANNEL") {
     return channel;
   }
