@@ -34,6 +34,7 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.junit.jupiter)
             implementation(libs.totp)
+            implementation("com.osmerion.omittable:omittable:1.0.0")
             runtimeOnly(libs.junit.jupiter.engine)
         }
     }

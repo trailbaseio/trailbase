@@ -1,5 +1,6 @@
 package io.trailbase.client
 
+import com.osmerion.omittable.Omittable
 import dev.samstevens.totp.code.*
 import dev.samstevens.totp.time.SystemTimeProvider
 import io.ktor.client.*
@@ -19,6 +20,7 @@ import kotlin.time.Clock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.test.*
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.AfterAll
@@ -36,7 +38,16 @@ data class SimpleStrict(val id: String, val text_not_null: String, val text_null
 data class SimpleStrictInsert(val text_not_null: String, val text_null: String? = null)
 
 @Serializable
-data class SimpleStrictUpdate(val text_not_null: String?, val text_null: String? = null)
+data class SimpleStrictUpdate(
+        val text_not_null: String?,
+        // NOTE: By default TrailBase's serializer will skip nullable members on `@Serializable`
+        /// classes. If you explicitly want to override a record's column with null, we need to use
+        // a wrapper type like `Omittable` to represent: present and null. However, all wrapper
+        // types don't play well with `encodeDefault = true` - which is the only sensible default -
+        // and thus need to be annotated with `NEVER`.
+        @EncodeDefault(mode = EncodeDefault.Mode.NEVER)
+        val text_null: Omittable<String?> = Omittable.absent(),
+)
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
@@ -367,17 +378,20 @@ class ClientTest {
     }
 
     val updateMessage = "kotlin client update test 0: =?&${now}"
-    api.update(ids[0], SimpleStrictUpdate(text_not_null = updateMessage, text_null = null))
+
+    // NOTE: if we didn't use a wrapper like `Omittable` here, the `text_null = null` would not get
+    // serialized and respectively not updated.
+    // Alternatively, we could serialize a type-erased JsonObject like:
+    //   `buildJsonObject { put("text_null", null) }`
+    api.update(
+            ids[0],
+            SimpleStrictUpdate(text_not_null = updateMessage, text_null = Omittable.Present(null))
+    )
     val updatedRecord0: SimpleStrict = api.read(ids[0])
     assertEquals(updateMessage, updatedRecord0.text_not_null)
     // WARN: The update currently fails to override `text_null` with a null, since the serializer is
     // set up to skip nulls.
-    assertEquals(messages[0], updatedRecord0.text_null)
-
-    // Current available workaround: build an explicit JsonObject.
-    api.update(ids[0], buildJsonObject { put("text_null", null) })
-    val updatedRecord1: SimpleStrict = api.read(ids[0])
-    assertNull(updatedRecord1.text_null)
+    assertNull(updatedRecord0.text_null)
 
     api.delete(ids[0])
     assertThrows<HttpException>({ api.read<SimpleStrict>(ids[0]) })
@@ -460,5 +474,20 @@ class SerializationTest {
     // can kick in.
     assertEquals("{\"c\":1}", jsonSerializer.encodeToString(MyRecordType(null, null, 1)))
     assertEquals("{\"c\":5}", jsonSerializer.encodeToString(MyRecordType(null)))
+  }
+
+  @Test
+  fun `nulls can be preserved JSON serialization using omittable`() {
+    @Serializable
+    data class MyRecordType(
+            @EncodeDefault(mode = EncodeDefault.Mode.NEVER)
+            val a: Omittable<String?> = Omittable.absent(),
+    )
+
+    assertEquals("{}", jsonSerializer.encodeToString(MyRecordType()))
+    assertEquals(
+            "{\"a\":null}",
+            jsonSerializer.encodeToString(MyRecordType(Omittable.Present(null)))
+    )
   }
 }
