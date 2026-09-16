@@ -15,7 +15,17 @@ static class Constants {
 class SimpleStrict {
   public string? id { get; }
 
+  // NOTE: TrailBase sets up the JSON serializer to skip null values. This is useful for:
+  //  * inserts to fall back to defaults
+  //  * updates to not update certain columns.
+  //
+  // However, it becomes an issue when you want to explicitly override
+  // non-null default on insert or override a cell with a null value.
+  // In which, case you need to tell the serializer explicitly to preseve the
+  // nulls.
+  [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
   public string? text_null { get; }
+
   public string? text_default { get; }
   public string text_not_null { get; }
 
@@ -349,7 +359,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
 
     List<RecordId> ids = [];
     foreach (var msg in messages) {
-      ids.Add(await api.Create(new SimpleStrict(null, null, null, msg), SerializeSimpleStrictContext.Default.SimpleStrict));
+      ids.Add(await api.Create(new SimpleStrict(null, msg, null, msg), SerializeSimpleStrictContext.Default.SimpleStrict));
     }
 
     {
@@ -388,6 +398,7 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       var record = await api.Read(id, SerializeSimpleStrictContext.Default.SimpleStrict);
 
       Assert.Equal(msg, record!.text_not_null);
+      Assert.Equal(msg, record!.text_null);
       Assert.NotNull(record.id);
 
       var uuidId = new UuidRecordId(record.id!);
@@ -397,6 +408,8 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
     {
       var id = ids[0];
       var msg = $"{messages[0]} - updated";
+
+      // Override `text_not_null` with updated msg and `text_null` with an explicit null.
       await api.Update(
         id,
         new SimpleStrict(null, null, null, msg),
@@ -404,7 +417,9 @@ public class ClientTest : IClassFixture<ClientTestFixture> {
       );
       var record = await api.Read(id, SerializeSimpleStrictContext.Default.SimpleStrict);
 
-      Assert.Equal(msg, record!.text_not_null);
+      Assert.NotNull(record);
+      Assert.Equal(msg, record.text_not_null);
+      Assert.Null(record.text_null);
     }
 
     {
