@@ -204,7 +204,9 @@ extension Trait where Self == SetupTrailBaseTrait {
     var ids: [RecordId] = []
 
     for message in messages {
-      ids.append(try await api.create(record: SimpleStrict(text_not_null: message)))
+      ids.append(
+        try await api.create(
+          record: SimpleStrict(text_null: message, text_not_null: message)))
     }
 
     // Read
@@ -248,9 +250,19 @@ extension Trait where Self == SetupTrailBaseTrait {
 
     // Update
     let updatedMessage = "swift client updated test 0: =?&\(now)"
-    try await api.update(recordId: ids[0], record: SimpleStrict(text_not_null: updatedMessage))
-    let record0Update: SimpleStrict = try await api.read(recordId: ids[0])
-    assert(record0Update.text_not_null == updatedMessage)
+    try await api.update(
+      recordId: ids[0], record: SimpleStrict(text_null: nil, text_not_null: updatedMessage))
+    let record0Update0: SimpleStrict = try await api.read(recordId: ids[0])
+
+    assert(record0Update0.text_not_null == updatedMessage)
+    // WARN: text_null wasn't updated because the serializer will skip null values.
+    assert(record0Update0.text_null == messages[0])
+
+    // Override with explicit null.
+    try await api.update(
+      recordId: ids[0], record: JSON.object(["text_null": JSON.null]))
+    let record0Update1: SimpleStrict = try await api.read(recordId: ids[0])
+    assert(record0Update1.text_null == nil)
 
     // Delete
     try await api.delete(recordId: ids[0])
