@@ -522,14 +522,11 @@ function RecordTable(props: {
 
                 (async () => {
                   try {
-                    await deleteRows(
-                      prettyFormatQualifiedName(selectedSchema().name),
-                      {
-                        primary_key_column:
-                          columns()?.[pkColumnIndex()].name ?? "??",
-                        values: ids,
-                      },
-                    );
+                    await deleteRows(selectedSchema().name, {
+                      primary_key_column:
+                        columns()?.[pkColumnIndex()].name ?? "??",
+                      values: ids,
+                    });
 
                     setSelectedRows(new Map<string, SqlValue>());
                   } catch (err) {
