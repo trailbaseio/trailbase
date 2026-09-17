@@ -1,6 +1,7 @@
 # Ignore Gradle/Kotlin project-specific cache directory
 .gradle
 .kotlin
+local.properties
 
 *.jar
 !gradle/wrapper/gradle-wrapper.jar

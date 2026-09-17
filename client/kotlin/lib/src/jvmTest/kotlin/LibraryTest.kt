@@ -5,9 +5,7 @@ import dev.samstevens.totp.code.*
 import dev.samstevens.totp.time.SystemTimeProvider
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
-import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.Url
 import io.ktor.http.isSuccess
 import java.lang.Process
@@ -22,6 +20,7 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.test.*
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
@@ -489,5 +488,71 @@ class SerializationTest {
             "{\"a\":null}",
             jsonSerializer.encodeToString(MyRecordType(Omittable.Present(null)))
     )
+  }
+}
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class ExpandableTypeTest {
+  @Serializable
+  private data class ParentRecord(
+          val a: Int,
+  )
+  private typealias ParentRecordType = Expandable<ParentRecord>
+  private val id = RecordId.string("abc")
+
+  @Test
+  fun `Expandable types are serialized to a single ID string`() {
+    val serialized = jsonSerializer.encodeToString(Expandable.id<ParentRecord>(id))
+    assert(serialized == """"abc"""") { serialized }
+  }
+
+  @Test
+  fun `Expandable types can be deserialized normally`() {
+    val decoded = Json.decodeFromString<ParentRecordType>("""{"id": "abc", "data":  {"a":  3}}""")
+    assert(decoded == Expandable.withData(id, ParentRecord(3)))
+  }
+
+  @Test
+  fun `Expandable types can be deserialized with out of order JSON objects`() {
+    val decoded = Json.decodeFromString<ParentRecordType>("""{"data":  {"a":  3}, "id": "abc"}""")
+    assert(decoded == Expandable.withData(id, ParentRecord(3)))
+  }
+
+  @Test
+  fun `Expandable parsing fails if column is not expanded`() {
+    assertThrows<SerializationException> {
+      // only the ID is returned, i.e. the column is not expanded
+      Json.decodeFromString<ParentRecordType>("4")
+    }
+
+    val exception =
+            assertThrows<SerializationException> {
+              // only the ID is returned, i.e. the column is not expanded
+              Json.decodeFromString<ParentRecordType>("{}")
+            }
+    assertContains(exception.message.toString(), "Failed to parse Expandable")
+  }
+
+  @Serializable
+  private data class ChildRecord(
+          val id: Int? = null,
+          val parent: Expandable<ParentRecord>? = null,
+  )
+
+  @Test
+  fun `Expandable types work nested as fields`() {
+    val decoded =
+            Json.decodeFromString<ChildRecord>(
+                    """
+    {
+      "id": 5,
+      "parent": {
+        "id": "abc",
+        "data":  {"a":  3}
+      }
+    }
+    """
+            )
+    assert(decoded.parent == Expandable.withData(id, ParentRecord(3)))
   }
 }
