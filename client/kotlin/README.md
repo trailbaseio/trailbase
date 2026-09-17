@@ -108,3 +108,25 @@ people.update(id, Person(age = Omittable.Present(null)))
 ```
 
 [^1]: This does not apply when working with `JsonObject`s directly.
+
+## Foreign-keys and expanded relations
+
+If you use foreign-keys in your data model to reference other records, your API can be configured to optionally inline or expand the referenced data in read and list operations.[^2]
+To represent this in your bindings, simply wrap the respective field in an `Expandable<...>`.
+Finally, when you pass `expand=listOf("<column_name>")` in your `read` and `list` calls, the referenced data will be included and not just the foreign-key.
+
+```kotlin
+@Serializable
+data class Parent(val id: String, val name: String)
+
+@Serializable
+data class Child(val parent: Expandable<Parent>)
+
+children.create(Child(parent = Expandable.id<Parent>(parentId)))
+
+val child = children.read<Child>(expand = listOf("parent"))
+// `child.parent.data` now holds the parent row's data
+val parent = child.parent.data
+```
+
+[^2]: https://trailbase.io/documentation/models_and_relations/
