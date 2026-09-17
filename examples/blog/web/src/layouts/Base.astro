@@ -32,7 +32,6 @@ const description = "TrailBase Example Blog Application";
       // Runs on view transitions navigation
       document.addEventListener("astro:after-swap", setDarkMode);
     </script>
-
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="view-transition" content="same-origin" />
@@ -47,9 +46,7 @@ const description = "TrailBase Example Blog Application";
     <ClientRouter />
   </head>
 
-  <body
-    class="flex min-h-dvh flex-col bg-white font-pacamara-inter transition-all duration-300 dark:bg-pacamara-dark"
-  >
+  <body class="flex min-h-dvh flex-col bg-white font-pacamara-inter transition-all duration-300 dark:bg-pacamara-dark">
     <Header />
 
     <div class="grow">

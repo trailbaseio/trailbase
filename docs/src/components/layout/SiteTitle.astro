@@ -92,8 +92,7 @@ const href = pathWithBase(Astro.props.locale || "/");
   <a {href} class="site-title sl-flex">
     <Image src={nut} alt="Nut logo" />
 
-    {
-      /*
+    {/*
       config.logo && logos.dark && (
         <>
           <img
@@ -113,39 +112,36 @@ const href = pathWithBase(Astro.props.locale || "/");
             />
           )}
         </>
-      )*/
-    }
+      )*/}
 
     <span class:list={{ "sr-only": config.logo?.replacesTitle }}>
       {config.title[Astro.props.locale ?? "en"] ?? config.title["en"]}
     </span>
   </a>
 
-  {
-    actions.length > 0 && (
-      <div class="hidden lg:block">
-        <div class="flex items-center gap-4">
-          {actions.map(
-            ({
-              // attrs: { class: className, ...attrs } = {},
-              // icon,
-              // variant,
-              link: href,
-              text,
-            }) => (
-              <a class="site-title-link" href={href}>
-                {text}
-              </a>
-            ),
-          )}
+  {actions.length > 0 && (
+    <div class="hidden lg:block">
+      <div class="flex items-center gap-4">
+        {actions.map(
+          ({
+            // attrs: { class: className, ...attrs } = {},
+            // icon,
+            // variant,
+            link: href,
+            text,
+          }) => (
+            <a class="site-title-link" href={href}>
+              {text}
+            </a>
+          ),
+        )}
 
-          <a class="site-title-link" href="/blog">
-            Blog
-          </a>
-        </div>
+        <a class="site-title-link" href="/blog">
+          Blog
+        </a>
       </div>
-    )
-  }
+    </div>
+  )}
 </div>
 
 <style>

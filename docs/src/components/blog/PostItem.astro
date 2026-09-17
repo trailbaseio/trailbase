@@ -31,20 +31,18 @@ const isOdd = num % 2;
   >
     <div>
       <a href={"/blog/" + postData.id}>
-        {
-          postData?.data?.image && (
-            <Image
-              src={postData?.data?.image}
-              width="750"
-              alt={postData.data.title + "Thumbnail"}
-              loading="eager"
-              class:list={[
-                "image-shine h-[200px] rounded-[15px] object-cover",
-                { "rotate-2": isOdd, "-rotate-2": !isOdd },
-              ]}
-            />
-          )
-        }
+        {postData?.data?.image && (
+          <Image
+            src={postData?.data?.image}
+            width="750"
+            alt={postData.data.title + "Thumbnail"}
+            loading="eager"
+            class:list={[
+              "image-shine h-[200px] rounded-[15px] object-cover",
+              { "rotate-2": isOdd, "-rotate-2": !isOdd },
+            ]}
+          />
+        )}
       </a>
     </div>
 
@@ -53,9 +51,7 @@ const isOdd = num % 2;
         <h2>{postData.data.title}</h2>
       </a>
 
-      <p>
-        {postData.data.intro}
-      </p>
+      <p>{postData.data.intro}</p>
 
       <div class="flex flex-col gap-4">
         <div class="flex w-full flex-wrap items-center gap-4">

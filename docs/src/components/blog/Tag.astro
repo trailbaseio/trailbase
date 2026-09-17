@@ -6,23 +6,21 @@ interface Props {
 const { tags }: Props = Astro.props;
 ---
 
-{
-  tags && (
-    <div class="m-0 flex flex-row items-center gap-2">
-      {tags.map((tag) => (
-        <span
-          class:list={[
-            "px-3",
-            "py-2",
-            "rounded-full",
-            "border",
-            "bg-transparent",
-            "leading-none",
-          ]}
-        >
-          {tag}
-        </span>
-      ))}
-    </div>
-  )
-}
+{tags && (
+  <div class="m-0 flex flex-row items-center gap-2">
+    {tags.map((tag) => (
+      <span
+        class:list={[
+          "px-3",
+          "py-2",
+          "rounded-full",
+          "border",
+          "bg-transparent",
+          "leading-none",
+        ]}
+      >
+        {tag}
+      </span>
+    ))}
+  </div>
+)}

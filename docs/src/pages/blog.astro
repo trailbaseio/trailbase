@@ -33,28 +33,26 @@ const posts = blogPosts ?? (await getPosts());
 
 <Base title="Updates">
   <section class="container mx-auto mb-10 max-w-5xl px-7 py-4">
-    {
-      posts.map((post, index: number) => {
-        return (
-          <>
-            <PostItem postData={post} num={index} />
+    {posts.map((post, index: number) => {
+      return (
+        <>
+          <PostItem postData={post} num={index} />
 
-            {/* Dashed line spacer */}
-            {index < posts.length - 1 && (
-              <div
-                class:list={[
-                  "my-10",
-                  "h-px",
-                  "w-full",
-                  "overflow-hidden",
-                  "group-last:hidden",
-                  "lg:my-12",
-                ]}
-              />
-            )}
-          </>
-        );
-      })
-    }
+          {/* Dashed line spacer */}
+          {index < posts.length - 1 && (
+            <div
+              class:list={[
+                "my-10",
+                "h-px",
+                "w-full",
+                "overflow-hidden",
+                "group-last:hidden",
+                "lg:my-12",
+              ]}
+            />
+          )}
+        </>
+      );
+    })}
   </section>
 </Base>

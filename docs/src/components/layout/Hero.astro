@@ -34,20 +34,16 @@ if (image) {
 ---
 
 <div class="hero">
-  {
-    darkImage && (
-      <Image
-        src={darkImage}
-        {...imageAttrs}
-        class:list={{ "light:sl-hidden": Boolean(lightImage) }}
-      />
-    )
-  }
-  {
-    lightImage && (
-      <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />
-    )
-  }
+  {darkImage && (
+    <Image
+      src={darkImage}
+      {...imageAttrs}
+      class:list={{ "light:sl-hidden": Boolean(lightImage) }}
+    />
+  )}
+  {lightImage && (
+    <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />
+  )}
 
   {rawHtml && <div class="hero-html sl-flex" set:html={rawHtml} />}
 
@@ -104,32 +100,30 @@ if (image) {
       </div>
     </div>
 
-    {
-      actions.length > 0 && (
-        <div class="sl-flex actions">
-          {actions.map(
-            ({
-              attrs: { class: className, ...attrs } = {},
-              icon,
-              link: href,
-              text,
-              variant,
-            }) => (
-              <LinkButton
-                {href}
-                {variant}
-                icon={icon?.name}
-                class:list={[className]}
-                {...attrs}
-              >
-                {text}
-                {icon?.html && <Fragment set:html={icon.html} />}
-              </LinkButton>
-            ),
-          )}
-        </div>
-      )
-    }
+    {actions.length > 0 && (
+      <div class="sl-flex actions">
+        {actions.map(
+          ({
+            attrs: { class: className, ...attrs } = {},
+            icon,
+            link: href,
+            text,
+            variant,
+          }) => (
+            <LinkButton
+              {href}
+              {variant}
+              icon={icon?.name}
+              class:list={[className]}
+              {...attrs}
+            >
+              {text}
+              {icon?.html && <Fragment set:html={icon.html} />}
+            </LinkButton>
+          ),
+        )}
+      </div>
+    )}
   </div>
 </div>
 

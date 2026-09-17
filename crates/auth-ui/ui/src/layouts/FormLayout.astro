@@ -14,24 +14,20 @@ const { title, level, hasTitle } = Astro.props;
 ---
 
 <BaseLayout title={title}>
-  <div
-    class="mx-auto flex h-dvh w-screen flex-col items-center justify-center gap-4"
-  >
-    {
-      hasTitle ? (
-        <div class="my-4 flex items-center justify-center gap-4">
-          {"{% if let Some(title) = title -%}"}
-          <h1>{`{{ title }}`}</h1>
-          {"{%- endif %}"}
+  <div class="mx-auto flex h-dvh w-screen flex-col items-center justify-center gap-4">
+    {hasTitle ? (
+      <div class="my-4 flex items-center justify-center gap-4">
+        {"{% if let Some(title) = title -%}"}
+        <h1>{`{{ title }}`}</h1>
+        {"{%- endif %}"}
 
-          {"{% if let Some(icon_url) = icon_url -%}"}
-          <div class="size-10">
-            <img src={`{{ icon_url }}`} alt="logo" />
-          </div>
-          {"{%- endif %}"}
+        {"{% if let Some(icon_url) = icon_url -%}"}
+        <div class="size-10">
+          <img src={`{{ icon_url }}`} alt="logo" />
         </div>
-      ) : null
-    }
+        {"{%- endif %}"}
+      </div>
+    ) : null}
 
     <FormCard title={title}>
       <slot name="header" slot="header" />
