@@ -31,7 +31,7 @@ export function Version(props: { info: InfoResponse | undefined }) {
         }}
       </Match>
 
-      <Match when={true}>{props.info?.commit_hash}</Match>
+      <Match when={true}>{props.info?.commit_hash?.substring(0, 10)}</Match>
     </Switch>
   );
 }

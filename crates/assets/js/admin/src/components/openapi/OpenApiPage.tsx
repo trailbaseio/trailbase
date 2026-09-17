@@ -97,43 +97,45 @@ export default function Page() {
   });
 
   return (
-    <rapi-doc
-      ref={
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ref as any
-      }
-      load-fonts="false"
-      sort-tags="true"
-      render-style="view" // "read" | "view" | "focused"
-      layout="row" // "row" | "column"
-      schema-style="table" // "tree" | "table"
-      schema-expand-level="0"
-      show-header="false" // removes the top bar: logo + title
-      show-side-nav="false"
-      show-info="false"
-      allow-try="true"
-      persist-auth="false"
-      allow-authentication="false"
-      allow-server-selection="false"
-      {...(theme() === "light" ? lightTheme : darkTheme)}
-    >
-      {/* Contents */}
-      <Header
-        title="OpenApi Explorer"
-        description={version()}
-        right={
-          <Popover id="test">
-            <PopoverTrigger as={Button<"button">} variant="outline">
-              Tokens
-            </PopoverTrigger>
-
-            <PopoverContent class="ui-expanded:shadow-md">
-              <TokenPopoverContent tokens={tokens} setTokens={setTokens} />
-            </PopoverContent>
-          </Popover>
+    <div class="max-md:min-h-dvh">
+      <rapi-doc
+        ref={
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ref as any
         }
-      />
-    </rapi-doc>
+        load-fonts="false"
+        sort-tags="true"
+        render-style="view" // "read" | "view" | "focused"
+        layout="row" // "row" | "column"
+        schema-style="table" // "tree" | "table"
+        schema-expand-level="0"
+        show-header="false" // removes the top bar: logo + title
+        show-side-nav="false"
+        show-info="false"
+        allow-try="true"
+        persist-auth="false"
+        allow-authentication="false"
+        allow-server-selection="false"
+        {...(theme() === "light" ? lightTheme : darkTheme)}
+      >
+        {/* Contents */}
+        <Header
+          title="OpenApi Explorer"
+          description={version()}
+          right={
+            <Popover id="test">
+              <PopoverTrigger as={Button<"button">} variant="outline">
+                Tokens
+              </PopoverTrigger>
+
+              <PopoverContent class="ui-expanded:shadow-md">
+                <TokenPopoverContent tokens={tokens} setTokens={setTokens} />
+              </PopoverContent>
+            </Popover>
+          }
+        />
+      </rapi-doc>
+    </div>
   );
 }
 

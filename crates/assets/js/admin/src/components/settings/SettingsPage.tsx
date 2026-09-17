@@ -562,7 +562,7 @@ export function SettingsPage() {
   );
 
   return (
-    <div class="size-full scrollbar-thin overflow-y-auto">
+    <div class="size-full scrollbar-thin md:overflow-y-auto">
       <SidebarProvider>
         <Sidebar
           class="absolute"

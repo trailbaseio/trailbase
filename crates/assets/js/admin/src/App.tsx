@@ -27,7 +27,7 @@ function LeftNav(props: RouteSectionProps) {
   return (
     <>
       {/* Big-z to draw navbar over collapsed sidebar */}
-      <div class="hide-scrollbars sticky z-50 h-dvh w-[58px] overflow-hidden">
+      <div class="sticky left-0 z-50 max-h-dvh w-[58px]">
         <VerticalNavbar location={props.location} />
       </div>
 
@@ -40,12 +40,12 @@ function LeftNav(props: RouteSectionProps) {
 
 function TopNav(props: RouteSectionProps) {
   return (
-    <div class="flex h-dvh flex-col">
-      <div class="hide-scrollbars sticky z-50 scrollbar-thin overflow-x-auto overflow-y-hidden">
+    <div class="relative flex min-h-dvh w-full flex-col">
+      <div class="sticky top-0 z-50">
         <HorizontalNavbar height={48} location={props.location} />
       </div>
 
-      <main class="absolute inset-0 top-[48px] h-[calc(100dvh-48px)] w-dvw">
+      <main class="absolute inset-0 pt-[48px]">
         <ErrorBoundary>{props.children}</ErrorBoundary>
       </main>
     </div>

@@ -183,7 +183,7 @@ export function HorizontalNavbar(props: {
         "min-height": `${props.height}px`,
         "max-height": `${props.height}px`,
       }}
-      class="border-border bg-sidebar text-sidebar-foreground hide-scrollbars flex w-full items-center justify-between gap-1 overflow-x-auto overflow-y-hidden border-b p-2"
+      class="border-border bg-sidebar/80 text-sidebar-foreground hide-scrollbars flex w-full items-center justify-between gap-1 overflow-x-auto border-b p-2 backdrop-blur-md"
     >
       <NavbarItems location={props.location} horizontal={true} />
 
@@ -196,7 +196,7 @@ export function VerticalNavbar(props: { location: Location }) {
   return (
     <nav
       class={
-        "border-border bg-sidebar text-sidebar-foreground flex h-dvh grow flex-col items-center justify-between gap-4 border-r py-2"
+        "hide-scrollbars border-border bg-sidebar text-sidebar-foreground flex h-dvh flex-col items-center justify-between gap-4 overflow-y-auto border-r py-2"
       }
     >
       <div class="flex flex-col items-center gap-4">

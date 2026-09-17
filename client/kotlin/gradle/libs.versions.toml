@@ -31,6 +31,7 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 
 totp = { module = "dev.samstevens.totp:totp", version.ref = "totp" }
 
+
 [plugins]
 android-kotlin-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }

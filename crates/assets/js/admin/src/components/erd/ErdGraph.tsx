@@ -268,7 +268,7 @@ export function ErdGraph(props: {
     const g = (graph = new Graph({
       container: ref,
       grid: { visible: true },
-      autoResize: true,
+      autoResize: false,
       interacting: { edgeLabelMovable: false, magnetConnectable: false },
       connecting: {
         connector: "rounded",
@@ -278,6 +278,17 @@ export function ErdGraph(props: {
       panning: { enabled: true },
       mousewheel: { enabled: true, minScale: 0.5, maxScale: 2 },
     }));
+
+    // NOTE: Trigger resize. Using `autoResize: true` triggers uncaught exceptions,
+    // for example on mobile firefox when the url-bar fades out.
+    const container = document.getElementById("erd-container")!;
+    const resizeObserver = new ResizeObserver(() => {
+      // Delay the resize.
+      requestAnimationFrame(() => {
+        graph?.resize(container.clientWidth, container.clientHeight);
+      });
+    });
+    resizeObserver.observe(container);
 
     g.resetCells([
       ...layoutErdNodes(props.nodes, graphAspect(ref)).map((node) =>
@@ -334,8 +345,8 @@ export function ErdGraph(props: {
 
   // NOTE: The outer container is necessary for auto-resize to work.
   return (
-    <div class="grow overflow-clip">
-      <div ref={ref} />
+    <div id="erd-container" class="grow overflow-clip">
+      <div ref={ref} class="size-full" />
     </div>
   );
 }

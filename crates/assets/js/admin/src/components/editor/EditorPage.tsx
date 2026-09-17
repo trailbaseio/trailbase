@@ -707,10 +707,11 @@ function EditorPanel(props: {
         )}
       >
         {/* Editor container */}
-        <div class="hide-scrollbars min-h-24 shrink overflow-y-auto">
+        <div class="hide-scrollbars min-h-0 shrink overflow-y-auto">
           <div ref={ref} />
         </div>
 
+        {/* Buttons */}
         <div class="flex items-center justify-between p-2">
           <Tooltip>
             <TooltipTrigger as="div">
@@ -857,7 +858,7 @@ function EditorPanel(props: {
 
         <Switch>
           <Match when={isMobile()}>
-            <div class="flex size-full scrollbar-thin flex-col overflow-y-auto">
+            <div class="flex size-full scrollbar-thin flex-col">
               <PageHeader />
               <EditorComponent />
               <Separator />
@@ -873,11 +874,7 @@ function EditorPanel(props: {
 
               {/* <Resizable orientation="vertical" class="h-[calc(100dvh-65px)]"> */}
               <Resizable orientation="vertical" class="h-[calc(100dvh-65px)]">
-                <ResizablePanel
-                  minSize={0.2}
-                  maxSize={0.8}
-                  class="scrollbar-thin overflow-y-auto"
-                >
+                <ResizablePanel minSize={0.3} maxSize={0.8}>
                   <EditorComponent />
                 </ResizablePanel>
 
@@ -885,7 +882,7 @@ function EditorPanel(props: {
 
                 <ResizablePanel
                   minSize={0.2}
-                  maxSize={0.8}
+                  maxSize={0.7}
                   class="scrollbar-thin overflow-y-auto"
                 >
                   <ResultComponent
@@ -954,7 +951,7 @@ export function EditorPage() {
   };
 
   return (
-    <SidebarProvider class="size-full">
+    <SidebarProvider>
       <Sidebar
         class="absolute"
         variant="sidebar"
