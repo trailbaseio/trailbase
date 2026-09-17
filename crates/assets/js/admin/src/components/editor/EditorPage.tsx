@@ -14,7 +14,11 @@ import type { Accessor, Signal } from "solid-js";
 import { useQuery } from "@tanstack/solid-query";
 import type { DefinedUseQueryResult } from "@tanstack/solid-query";
 import { createWritableMemo } from "@solid-primitives/memo";
-import type { ColumnDef } from "@tanstack/solid-table";
+import type {
+  ColumnDef,
+  ColumnPinningState,
+  StockFeatures,
+} from "@tanstack/solid-table";
 import { persistentAtom } from "@nanostores/persistent";
 import { useStore } from "@nanostores/solid";
 import {
@@ -226,11 +230,12 @@ function ResultComponentImpl(props: {
   timestamp?: number;
   encoding: BlobEncoding;
 }) {
-  const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [columnPinningState, setColumnPinningState] =
+    createSignal<ColumnPinningState>({ start: [], end: [] });
 
-  const dataTable = createMemo(() => {
-    const columnDefs = (props.data.columns ?? []).map(
-      (col, idx): ColumnDef<ArrayRecord, SqlValue> => {
+  const columnDefs = createMemo(() =>
+    (props.data.columns ?? []).map(
+      (col, idx): ColumnDef<StockFeatures, ArrayRecord, SqlValue> => {
         // The query endpoint doesn't return a proper schema, e.g. we won't
         // have ColumnOptions when there's an underlying table. Thus we have
         // our own best-effort inference logic here.
@@ -276,15 +281,15 @@ function ResultComponentImpl(props: {
             ),
         };
       },
-    );
+    ),
+  );
 
-    // TODO: Enable pagination
-    return buildTable({
-      columns: columnDefs,
-      data: props.data.rows,
-      columnPinning: columnPinningState,
-      onColumnPinningChange: setColumnPinningState,
-    });
+  // TODO: Enable pagination
+  const dataTable = buildTable({
+    columns: columnDefs,
+    data: () => props.data.rows,
+    columnPinning: columnPinningState,
+    onColumnPinningChange: setColumnPinningState,
   });
 
   return (
@@ -304,7 +309,7 @@ function ResultComponentImpl(props: {
         );
       }}
     >
-      <Table table={dataTable()} loading={false} />
+      <Table table={dataTable} loading={false} />
     </ErrorBoundary>
   );
 }

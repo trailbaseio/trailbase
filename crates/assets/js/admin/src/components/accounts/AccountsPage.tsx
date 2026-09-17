@@ -24,6 +24,7 @@ import type {
   ColumnDef,
   PaginationState,
   SortingState,
+  StockFeatures,
 } from "@tanstack/solid-table";
 
 import {
@@ -69,7 +70,7 @@ import { formatSortingAsOrder } from "@/lib/list";
 import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
 import type { UserJson } from "@bindings/UserJson";
 
-function buildColumns(): ColumnDef<UserJson>[] {
+function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.
   return [
     {
@@ -452,31 +453,29 @@ export function AccountsPage() {
   };
 
   const [editUser, setEditUser] = createSignal<UserJson | undefined>();
-
-  const accountsTable = createMemo(() => {
-    return buildTable(
-      {
-        columns: buildColumns(),
-        data: users.data?.users ?? [],
-        rowCount: Number(users.data?.total_row_count ?? -1),
-        pagination: pagination(),
-        onPaginationChange: (s: PaginationState) => {
-          setSearchParams({
-            ...searchParams,
-            pageIndex: s.pageIndex,
-            pageSize: s.pageSize,
-          });
-        },
+  const columns = createMemo(buildColumns);
+  const accountsTable = buildTable(
+    {
+      columns,
+      data: () => users.data?.users ?? [],
+      rowCount: () => Number(users.data?.total_row_count ?? -1),
+      pagination,
+      onPaginationChange: (s: PaginationState) => {
+        setSearchParams({
+          ...searchParams,
+          pageIndex: s.pageIndex,
+          pageSize: s.pageSize,
+        });
       },
-      {
-        manualSorting: true,
-        state: {
-          sorting: sorting(),
-        },
-        onSortingChange: setSorting,
+    },
+    {
+      manualSorting: true,
+      state: {
+        sorting,
       },
-    );
-  });
+      onSortingChange: setSorting,
+    },
+  );
 
   return (
     <div class="size-full scrollbar-thin md:overflow-y-auto">
@@ -543,7 +542,7 @@ export function AccountsPage() {
             <Match when={true}>
               <div class="w-full space-y-2.5">
                 <Table
-                  table={accountsTable()}
+                  table={accountsTable}
                   loading={users.isLoading}
                   onRowClick={(_idx: number, row: UserJson) => {
                     setEditUser(row);

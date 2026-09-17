@@ -1,5 +1,5 @@
 import { Switch, Match, JSX } from "solid-js";
-import type { CellContext } from "@tanstack/solid-table";
+import type { CellContext, StockFeatures } from "@tanstack/solid-table";
 import { urlSafeBase64Decode } from "trailbase";
 
 import { wkbToWkt } from "@/lib/geometry";
@@ -66,7 +66,7 @@ export function defaultHeader(column: Column): string {
 }
 
 export function renderCell(
-  context: CellContext<ArrayRecord, SqlValue>,
+  context: CellContext<StockFeatures, ArrayRecord, SqlValue>,
   column: Column,
   blobEncoding: BlobEncoding,
   fileColumnSupport?: {

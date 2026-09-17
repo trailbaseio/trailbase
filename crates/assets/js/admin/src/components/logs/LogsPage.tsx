@@ -13,8 +13,11 @@ import type { Setter } from "solid-js";
 import { useSearchParams } from "@solidjs/router";
 import type {
   ColumnDef,
+  ColumnPinningState,
   PaginationState,
   SortingState,
+  StockFeatures,
+  Updater,
 } from "@tanstack/solid-table";
 import { useQuery } from "@tanstack/solid-query";
 import { Chart } from "chart.js/auto";
@@ -58,7 +61,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Table as TableComponent, buildTable } from "@/components/table/Table";
-import type { Updater } from "@/components/table/Table";
 import { Table, TableBody, TableRow, TableCell } from "@/components/ui/table";
 import {
   Sheet,
@@ -81,135 +83,139 @@ import type { StatsResponse } from "@bindings/StatsResponse";
 // Needed for bundlers like vite: https://github.com/maplibre/maplibre-gl-js/blob/main/docs/index.md#installation
 maplibregl.setWorkerUrl(workerUrl);
 
-const columns: ColumnDef<LogJson>[] = [
-  // NOTE: ISO string contains milliseconds.
-  {
-    accessorKey: "created",
-    size: 120,
-    cell: (ctx) => {
-      const secondsSinceEpoch = ctx.row.original.created;
-      const timestamp = new Date(secondsSinceEpoch * 1000);
-      return (
+function buildColumnDefs(): ColumnDef<StockFeatures, LogJson>[] {
+  return [
+    // NOTE: ISO string contains milliseconds.
+    {
+      accessorKey: "created",
+      size: 120,
+      cell: (ctx) => {
+        const secondsSinceEpoch = ctx.row.original.created;
+        const timestamp = new Date(secondsSinceEpoch * 1000);
+        return (
+          <div class="flex items-center">
+            <Tooltip>
+              <TooltipTrigger as="div">
+                {timestamp.toISOString().replace(/T/, " ")}
+              </TooltipTrigger>
+
+              <TooltipContent>
+                <p>
+                  {timestamp.toLocaleString(undefined, {
+                    timeZoneName: "short",
+                    hour12: false,
+                  })}
+                </p>
+                <p>{secondsSinceEpoch.toFixed(0)}s since epoch</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "status",
+      size: 60,
+      cell: (ctx) => <StatusBadge status={ctx.row.original.status} />,
+    },
+    {
+      accessorKey: "method",
+      minSize: 80,
+
+      cell: (ctx) => <Badge variant="outline">{ctx.row.original.method}</Badge>,
+    },
+    {
+      accessorKey: "url",
+      size: 300,
+      cell: (ctx) => (
+        <div class="line-clamp-2 text-left text-ellipsis">
+          {ctx.row.original.url}
+        </div>
+      ),
+    },
+    {
+      // Used for accessing the request (there's a rename from latency in DB to latency_ms in response)
+      accessorKey: "latency",
+      size: 80,
+      cell: (ctx) => `${ctx.row.original.latency_ms.toFixed(2)}ms`,
+    },
+    {
+      accessorKey: "client_ip",
+      size: 120,
+    },
+    {
+      id: "GeoIp",
+      header: () => (
         <div class="flex items-center">
           <Tooltip>
-            <TooltipTrigger as="div">
-              {timestamp.toISOString().replace(/T/, " ")}
+            <TooltipTrigger>
+              <TbOutlineWorld />
             </TooltipTrigger>
 
-            <TooltipContent>
-              <p>
-                {timestamp.toLocaleString(undefined, {
-                  timeZoneName: "short",
-                  hour12: false,
-                })}
-              </p>
-              <p>{secondsSinceEpoch.toFixed(0)}s since epoch</p>
-            </TooltipContent>
+            <TooltipContent>Geo IP</TooltipContent>
           </Tooltip>
         </div>
-      );
-    },
-  },
-  {
-    accessorKey: "status",
-    size: 60,
-    cell: (ctx) => <StatusBadge status={ctx.row.original.status} />,
-  },
-  {
-    accessorKey: "method",
-    minSize: 80,
+      ),
+      size: -1,
+      enableSorting: false,
+      cell: (ctx) => {
+        const contents = () => {
+          const city = ctx.row.original.client_geoip_city;
+          if (city) {
+            return `${city.name} (${city.country_code})`;
+          }
+          return ctx.row.original.client_geoip_cc;
+        };
 
-    cell: (ctx) => <Badge variant="outline">{ctx.row.original.method}</Badge>,
-  },
-  {
-    accessorKey: "url",
-    size: 300,
-    cell: (ctx) => (
-      <div class="line-clamp-2 text-left text-ellipsis">
-        {ctx.row.original.url}
-      </div>
-    ),
-  },
-  {
-    // Used for accessing the request (there's a rename from latency in DB to latency_ms in response)
-    accessorKey: "latency_ms",
-    size: 80,
-    cell: (ctx) => `${ctx.row.original.latency_ms.toFixed(2)}ms`,
-  },
-  {
-    accessorKey: "client_ip",
-    size: 120,
-  },
-  {
-    id: "GeoIp",
-    header: () => (
-      <div class="flex items-center">
-        <Tooltip>
-          <TooltipTrigger>
-            <TbOutlineWorld />
-          </TooltipTrigger>
-
-          <TooltipContent>Geo IP</TooltipContent>
-        </Tooltip>
-      </div>
-    ),
-    size: -1,
-    enableSorting: false,
-    cell: (ctx) => {
-      const contents = () => {
-        const city = ctx.row.original.client_geoip_city;
-        if (city) {
-          return `${city.name} (${city.country_code})`;
-        }
-        return ctx.row.original.client_geoip_cc;
-      };
-
-      return (
-        <Show when={contents()}>
-          {(c) => <div class="line-clamp-1 text-left text-ellipsis">{c()}</div>}
-        </Show>
-      );
+        return (
+          <Show when={contents()}>
+            {(c) => (
+              <div class="line-clamp-1 text-left text-ellipsis">{c()}</div>
+            )}
+          </Show>
+        );
+      },
     },
-  },
-  {
-    accessorKey: "referer",
-    size: 200,
-    cell: (ctx) => {
-      return (
-        <div class="line-clamp-2 text-left text-ellipsis">
-          {ctx.row.original.referer}
-        </div>
-      );
+    {
+      accessorKey: "referer",
+      size: 200,
+      cell: (ctx) => {
+        return (
+          <div class="line-clamp-2 text-left text-ellipsis">
+            {ctx.row.original.referer}
+          </div>
+        );
+      },
     },
-  },
-  {
-    accessorKey: "user_id",
-    size: 60,
-    cell: (ctx) => {
-      const userId = () => ctx.row.original.user_id;
-      return (
-        <Show when={userId()}>
-          <Tooltip>
-            <TooltipTrigger as="div">
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  copyToClipboard(userId() ?? "", true);
-                }}
-              >
-                <TbOutlineUser />
-              </Button>
-            </TooltipTrigger>
+    {
+      accessorKey: "user_id",
+      size: 60,
+      cell: (ctx) => {
+        const userId = () => ctx.row.original.user_id;
+        return (
+          <Show when={userId()}>
+            <Tooltip>
+              <TooltipTrigger as="div">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    copyToClipboard(userId() ?? "", true);
+                  }}
+                >
+                  <TbOutlineUser />
+                </Button>
+              </TooltipTrigger>
 
-            <TooltipContent>{userId()}</TooltipContent>
-          </Tooltip>
-        </Show>
-      );
+              <TooltipContent>{userId()}</TooltipContent>
+            </Tooltip>
+          </Show>
+        );
+      },
     },
-  },
-];
+  ];
+}
 
 type SearchParams = {
   filter?: string;
@@ -326,29 +332,29 @@ function LogsPage() {
   const [accordion, setAccordion] = createSignal(true);
   const [showMap, setShowMap] = createSignal(true);
   const [showGeoipDialog, setShowGeoipDialog] = createSignal(false);
-  const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [columnPinningState, setColumnPinningState] =
+    createSignal<ColumnPinningState>({ start: [], end: [] });
   const [showLog, setShowLog] = createSignal<LogJson | undefined>();
 
-  const logsTable = createMemo(() => {
-    return buildTable(
-      {
-        columns,
-        data: logsFetch.data?.entries ?? [],
-        columnPinning: columnPinningState,
-        onColumnPinningChange: setColumnPinningState,
-        rowCount: Number(logsFetch.data?.total_row_count ?? -1),
-        pagination: pagination(),
-        onPaginationChange: setPagination,
+  const columns = createMemo(buildColumnDefs);
+  const logsTable = buildTable(
+    {
+      columns,
+      data: () => logsFetch.data?.entries ?? [],
+      columnPinning: columnPinningState,
+      onColumnPinningChange: setColumnPinningState,
+      rowCount: () => Number(logsFetch.data?.total_row_count ?? -1),
+      pagination,
+      onPaginationChange: setPagination,
+    },
+    {
+      manualSorting: true,
+      state: {
+        sorting,
       },
-      {
-        manualSorting: true,
-        state: {
-          sorting: sorting(),
-        },
-        onSortingChange: setSorting,
-      },
-    );
-  });
+      onSortingChange: setSorting,
+    },
+  );
 
   return (
     <div class="size-full scrollbar-thin md:overflow-y-auto">
@@ -468,7 +474,7 @@ function LogsPage() {
             />
 
             <TableComponent
-              table={logsTable()}
+              table={logsTable}
               loading={logsFetch.isLoading}
               onRowClick={(_idx: number, row: LogJson) => {
                 setShowLog(row);
@@ -530,7 +536,7 @@ function LogDetailsSheet(props: { log: LogJson }) {
                 });
               })(),
             ],
-            ["latency_ms", `${props.log.latency_ms.toFixed(4)}ms`],
+            ["latency", `${props.log.latency_ms.toFixed(4)}ms`],
           ]}
         />
 

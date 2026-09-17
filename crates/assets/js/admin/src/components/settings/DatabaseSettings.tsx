@@ -1,6 +1,6 @@
 import { createSignal, Switch, Match, createMemo } from "solid-js";
 import { useQueryClient } from "@tanstack/solid-query";
-import type { Row, ColumnDef } from "@tanstack/solid-table";
+import type { Row, ColumnDef, StockFeatures } from "@tanstack/solid-table";
 import { TbOutlineLink, TbOutlineUnlink } from "solid-icons/tb";
 
 import { createConfigQuery, setConfig } from "@/lib/api/config";
@@ -95,29 +95,31 @@ function DatabaseSettingsForm(props: {
     });
   };
 
-  const dbTable = createMemo(() => {
-    return buildTable({
-      columns: buildColumns(),
-      data: props.config.databases,
-      rowCount: props.config.databases.length,
-      onRowSelection: (rows: Row<DatabaseConfig>[], value: boolean) => {
-        const newSelection = new Set<string>(selectedRows());
+  const columns = createMemo(buildColumns);
+  const dbTable = buildTable({
+    columns,
+    data: () => props.config.databases,
+    rowCount: () => props.config.databases.length,
+    onRowSelection: (
+      rows: Row<StockFeatures, DatabaseConfig>[],
+      value: boolean,
+    ) => {
+      const newSelection = new Set<string>(selectedRows());
 
-        for (const row of rows) {
-          const key = row.original.name;
-          if (!key) {
-            continue;
-          }
-
-          if (value) {
-            newSelection.add(key);
-          } else {
-            newSelection.delete(key);
-          }
+      for (const row of rows) {
+        const key = row.original.name;
+        if (!key) {
+          continue;
         }
-        setSelectedRows(newSelection);
-      },
-    });
+
+        if (value) {
+          newSelection.add(key);
+        } else {
+          newSelection.delete(key);
+        }
+      }
+      setSelectedRows(newSelection);
+    },
   });
 
   let ref: HTMLInputElement | undefined;
@@ -209,7 +211,7 @@ function DatabaseSettingsForm(props: {
               </p>
 
               <div class="max-h-[500px] overflow-auto">
-                <Table table={dbTable()} loading={false} />
+                <Table table={dbTable} loading={false} />
               </div>
             </CardContent>
 
@@ -286,7 +288,7 @@ function ImportExportCard() {
   );
 }
 
-function buildColumns(): ColumnDef<DatabaseConfig>[] {
+function buildColumns(): ColumnDef<StockFeatures, DatabaseConfig>[] {
   return [
     {
       header: "name",

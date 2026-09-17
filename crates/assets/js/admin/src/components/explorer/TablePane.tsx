@@ -8,14 +8,16 @@ import {
 import { useSearchParams } from "@solidjs/router";
 import { useQuery } from "@tanstack/solid-query";
 import type { QueryObserverResult } from "@tanstack/solid-query";
+import { createColumnHelper, sortFn_alphanumeric } from "@tanstack/solid-table";
 import type {
   ColumnDef,
   ColumnPinningState,
   PaginationState,
   Row,
   SortingState,
+  StockFeatures,
+  Updater,
 } from "@tanstack/solid-table";
-import { createColumnHelper } from "@tanstack/solid-table";
 import type { DialogTriggerProps } from "@kobalte/core/dialog";
 
 import { Header } from "@/components/Header";
@@ -42,7 +44,6 @@ import {
   type BlobEncoding,
 } from "@/components/table/BlobEncoding";
 import { Table as TableComponent, buildTable } from "@/components/table/Table";
-import type { Updater } from "@/components/table/Table";
 import {
   Table as TableUi,
   TableHeader,
@@ -304,7 +305,7 @@ function buildColumnDefs(
   pkColumnIndex: number,
   blobEncoding: BlobEncoding,
   rowsRefetch: () => void,
-): ColumnDef<ArrayRecord, SqlValue>[] {
+): ColumnDef<StockFeatures, ArrayRecord, SqlValue>[] {
   if (columns === undefined) {
     // Fallback to schema (rather than response) column definitions.
     if (tableType(selectedSchema) === "table") {
@@ -323,27 +324,29 @@ function buildColumnDefs(
     ];
   }
 
-  return columns.map((col, idx): ColumnDef<ArrayRecord, SqlValue> => {
-    return {
-      id: col.name,
-      accessorFn: (row: ArrayRecord) => row[idx],
-      header: defaultHeader(col),
-      enableSorting: true,
-      sortingFn: "alphanumeric",
-      cell: (context) =>
-        renderCell(
-          context,
-          col,
-          blobEncoding,
-          /* fileColumnSupport= */ {
-            tableName: selectedSchema.name,
-            columns,
-            pkIndex: pkColumnIndex,
-            rowsRefetch,
-          },
-        ),
-    };
-  });
+  return columns.map(
+    (col, idx): ColumnDef<StockFeatures, ArrayRecord, SqlValue> => {
+      return {
+        id: col.name,
+        accessorFn: (row: ArrayRecord) => row[idx],
+        header: defaultHeader(col),
+        enableSorting: true,
+        sortFn: sortFn_alphanumeric,
+        cell: (context) =>
+          renderCell(
+            context,
+            col,
+            blobEncoding,
+            /* fileColumnSupport= */ {
+              tableName: selectedSchema.name,
+              columns,
+              pkIndex: pkColumnIndex,
+              rowsRefetch,
+            },
+          ),
+      };
+    },
+  );
 }
 
 function RecordTable(props: {
@@ -375,55 +378,55 @@ function RecordTable(props: {
     () => findPrimaryKeyColumnIndex(columns() ?? []) ?? 0,
   );
 
-  const table = createMemo(() => {
-    const columnDefs = buildColumnDefs(
+  const columnDefs = createMemo(() =>
+    buildColumnDefs(
       selectedSchema(),
       columns(),
       pkColumnIndex(),
       blobEncoding(),
       props.rowsRefetch,
-    );
+    ),
+  );
 
-    return buildTable(
-      {
-        // NOTE: The cell rendering is controlled via the columnsDefs.
-        columns: columnDefs,
-        data: data(),
-        columnPinning: props.columnPinningState[0],
-        onColumnPinningChange: props.columnPinningState[1],
-        rowCount: Number(totalRowCount()),
-        pagination: props.pagination[0](),
-        onPaginationChange: (s: PaginationState) => {
-          props.pagination[1](s);
-        },
-        onRowSelection: mutable()
-          ? // eslint-disable-next-line solid/reactivity
-            (rows: Row<ArrayRecord>[], value: boolean) => {
-              const newSelection = new Map<string, SqlValue>(selectedRows());
+  const table = buildTable(
+    {
+      // NOTE: The cell rendering is controlled via the columnsDefs.
+      columns: columnDefs,
+      data,
+      columnPinning: props.columnPinningState[0],
+      onColumnPinningChange: props.columnPinningState[1],
+      rowCount: () => Number(totalRowCount()),
+      pagination: props.pagination[0],
+      onPaginationChange: (s: PaginationState) => {
+        props.pagination[1](s);
+      },
+      onRowSelection: mutable()
+        ? // eslint-disable-next-line solid/reactivity
+          (rows: Row<StockFeatures, ArrayRecord>[], value: boolean) => {
+            const newSelection = new Map<string, SqlValue>(selectedRows());
 
-              for (const row of rows) {
-                const pkValue: SqlValue = row.original[pkColumnIndex()];
-                const key = hashSqlValue(pkValue);
+            for (const row of rows) {
+              const pkValue: SqlValue = row.original[pkColumnIndex()];
+              const key = hashSqlValue(pkValue);
 
-                if (value) {
-                  newSelection.set(key, pkValue);
-                } else {
-                  newSelection.delete(key);
-                }
+              if (value) {
+                newSelection.set(key, pkValue);
+              } else {
+                newSelection.delete(key);
               }
-              setSelectedRows(newSelection);
             }
-          : undefined,
+            setSelectedRows(newSelection);
+          }
+        : undefined,
+    },
+    {
+      manualSorting: true,
+      state: {
+        sorting: () => props.sorting[0](),
       },
-      {
-        manualSorting: true,
-        state: {
-          sorting: props.sorting[0](),
-        },
-        onSortingChange: props.sorting[1],
-      },
-    );
-  });
+      onSortingChange: props.sorting[1],
+    },
+  );
 
   return (
     <div id="data">
@@ -463,7 +466,7 @@ function RecordTable(props: {
 
               <div class="scrollbar-thin overflow-x-auto pt-4">
                 <TableComponent
-                  table={table()}
+                  table={table}
                   loading={props.records === undefined}
                   onRowClick={
                     mutable()
@@ -577,29 +580,27 @@ function IndexTable(props: {
     );
   });
 
-  const indexesTable = createMemo(() => {
-    return buildTable({
-      columns: indexColumns,
-      data: indexes().map(([index, _]) => index),
-      onRowSelection: hidden()
-        ? undefined
-        : // eslint-disable-next-line solid/reactivity
-          (rows: Row<TableIndex>[], value: boolean) => {
-            const newSelection = new Set(selectedIndexes());
+  const columns = createMemo(buildIndexColumns);
+  const data = createMemo(() => indexes().map(([index, _]) => index));
+  const indexesTable = buildTable({
+    columns,
+    data,
+    onRowSelection: hidden()
+      ? undefined
+      : // eslint-disable-next-line solid/reactivity
+        (rows: Row<StockFeatures, TableIndex>[], value: boolean) => {
+          const newSelection = new Set(selectedIndexes());
 
-            for (const row of rows) {
-              const qualifiedName = prettyFormatQualifiedName(
-                row.original.name,
-              );
-              if (value) {
-                newSelection.add(qualifiedName);
-              } else {
-                newSelection.delete(qualifiedName);
-              }
+          for (const row of rows) {
+            const qualifiedName = prettyFormatQualifiedName(row.original.name);
+            if (value) {
+              newSelection.add(qualifiedName);
+            } else {
+              newSelection.delete(qualifiedName);
             }
-            setSelectedIndexes(newSelection);
-          },
-    });
+          }
+          setSelectedIndexes(newSelection);
+        },
   });
 
   return (
@@ -638,7 +639,7 @@ function IndexTable(props: {
 
                 <div class="scrollbar-thin space-y-2.5 overflow-x-auto">
                   <TableComponent
-                    table={indexesTable()}
+                    table={indexesTable}
                     loading={false}
                     onRowClick={
                       hidden()
@@ -727,14 +728,13 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
     );
   });
 
-  const triggersTable = createMemo(() => {
-    return buildTable({
-      columns: triggerColumns,
-      data: triggers().map(([trig, sql]) => ({
-        ...trig,
-        sql,
-      })),
-    });
+  const columns = createMemo(buildTriggerColumns);
+  const data = createMemo(() =>
+    triggers().map(([trig, sql]) => ({ ...trig, sql })),
+  );
+  const triggersTable = buildTable({
+    columns,
+    data,
   });
 
   return (
@@ -770,7 +770,7 @@ function TriggerTable(props: { table: Table; schemas: ListSchemasResponse }) {
         </p>
 
         <div class="mt-4">
-          <TableComponent loading={false} table={triggersTable()} />
+          <TableComponent loading={false} table={triggersTable} />
         </div>
       </CardContent>
     </Card>
@@ -892,7 +892,8 @@ export function TablePane(props: {
     rowsRefetch();
   };
 
-  const [columnPinningState, setColumnPinningState] = createSignal({});
+  const [columnPinningState, setColumnPinningState] =
+    createSignal<ColumnPinningState>({ start: [], end: [] });
 
   return (
     <div class="h-full scrollbar-thin overflow-y-auto">
@@ -1230,41 +1231,48 @@ function typeName(type: TableType): string {
 
 const sheetMaxWidth = "sm:max-w-[520px]";
 
-const indexColumns = [
-  {
-    header: "name",
-    accessorFn: (index: TableIndex) => index.name.name,
-  },
-  {
-    header: "columns",
-    accessorFn: (index: TableIndex) => {
-      return index.columns.map((c) => c.column_name).join(", ");
+function buildIndexColumns(): ColumnDef<StockFeatures, TableIndex>[] {
+  return [
+    {
+      header: "name",
+      accessorFn: (index: TableIndex) => index.name.name,
     },
-  },
-  {
-    header: "unique",
-    accessorKey: "unique",
-  },
-  {
-    header: "predicate",
-    accessorFn: (index: TableIndex) => {
-      return index.predicate?.replaceAll("<>", "!=");
+    {
+      header: "columns",
+      accessorFn: (index: TableIndex) => {
+        return index.columns.map((c) => c.column_name).join(", ");
+      },
     },
-  },
-] as ColumnDef<TableIndex>[];
+    {
+      header: "unique",
+      accessorKey: "unique",
+    },
+    {
+      header: "predicate",
+      accessorFn: (index: TableIndex) => {
+        return index.predicate?.replaceAll("<>", "!=");
+      },
+    },
+  ];
+}
 
 type TableTriggerAndSql = TableTrigger & {
   sql: string;
 };
 
-const triggerColumnHelper = createColumnHelper<TableTriggerAndSql>();
-const triggerColumns = [
-  triggerColumnHelper.accessor("name", {
-    header: "name",
-    cell: (props) => <p class="max-w-[20dvw]">{props.getValue().name}</p>,
-  }),
-  triggerColumnHelper.accessor("sql", {
-    header: "statement",
-    cell: (props) => <p class="max-w-[20dvw]">{props.getValue()}</p>,
-  }),
-] as ColumnDef<TableTriggerAndSql>[];
+function buildTriggerColumns(): ColumnDef<StockFeatures, TableTriggerAndSql>[] {
+  const triggerColumnHelper = createColumnHelper<
+    StockFeatures,
+    TableTriggerAndSql
+  >();
+  return [
+    triggerColumnHelper.accessor("name", {
+      header: "name",
+      cell: (props) => <p class="max-w-[20dvw]">{props.getValue().name}</p>,
+    }) as ColumnDef<StockFeatures, TableTriggerAndSql>,
+    triggerColumnHelper.accessor("sql", {
+      header: "statement",
+      cell: (props) => <p class="max-w-[20dvw]">{props.getValue()}</p>,
+    }) as ColumnDef<StockFeatures, TableTriggerAndSql>,
+  ];
+}
