@@ -1,3 +1,12 @@
+## v0.33.19
+
+- Glow up navigation-bar on mobile with background blur and fix URL-bar fade.
+- Fix fringe ERD resize exceptions on mobile when URL-bar fades.
+- Table explorer: fix edge-case ambiguous parse for table names containing ".".
+- Logs: fix sorting by latency.
+- Upgrade TanStack tables to v9.
+- Update Rust and JavaScript dependencies.
+
 ## v0.33.18
 
 - Fix edge cases for empty/all-default inserts and empty updates.
