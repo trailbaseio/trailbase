@@ -1110,10 +1110,11 @@ mod tests {
       .execute_batch(format!(
         r#"
           CREATE TABLE parent (
-            id           INTEGER PRIMARY KEY NOT NULL,
-            value        TEXT NOT NULL
+            pk           INTEGER PRIMARY KEY NOT NULL,
+            value        TEXT NOT NULL,
+            other        TEXT NOT NULL
           ) {strict};
-          INSERT INTO parent (id, value) VALUES (1, 'first'), (2, 'second');
+          INSERT INTO parent (pk, value, other) VALUES (1, 'first', '1st'), (2, 'second', '2nd');
 
           CREATE TABLE child (
             id           INTEGER PRIMARY KEY NOT NULL,
@@ -1148,8 +1149,9 @@ mod tests {
       "parent": {
         "id": 1,
         "data": {
-          "id": 1,
+          "pk": 1,
           "value":"first",
+          "other":"1st",
         },
       },
     });
