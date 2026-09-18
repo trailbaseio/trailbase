@@ -51,9 +51,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn test_qualified_name() {
-    assert!(QualifiedName::parse(r#"test"; DROP TABLE students;""#).is_err());
-
+  fn test_qualified_name_escaped() {
     let simple = QualifiedName::parse("test").unwrap();
     assert_eq!(
       simple,
@@ -64,7 +62,7 @@ mod tests {
     );
     assert_eq!(QualifiedNameEscaped::new(&simple).0, r#""test""#);
 
-    let composite = QualifiedName::parse("db.test.bar").unwrap();
+    let composite = QualifiedName::parse("db.'test.bar'").unwrap();
     assert_eq!(
       composite,
       QualifiedName {
@@ -75,15 +73,6 @@ mod tests {
     assert_eq!(
       QualifiedNameEscaped::new(&composite).0,
       r#""db"."test.bar""#
-    );
-
-    let unescape = QualifiedName::parse("[db].'test'").unwrap();
-    assert_eq!(
-      unescape,
-      QualifiedName {
-        name: "test".to_string(),
-        database_schema: Some("db".to_string()),
-      }
     );
   }
 }

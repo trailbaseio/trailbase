@@ -513,36 +513,7 @@ impl std::fmt::Display for QualifiedName {
 
 impl QualifiedName {
   pub fn parse(name: &str) -> Result<Self, SchemaError> {
-    if name.contains(';') {
-      return Err(SchemaError::Precondition("Invalid name".into()));
-    }
-
-    if let Some((db, name)) = name.split_once('.') {
-      let name = unquote_string(name);
-      if name.is_empty() {
-        return Err(SchemaError::Precondition("Invalid empty name".into()));
-      }
-
-      let database_schema = unquote_string(db);
-      if database_schema.is_empty() {
-        return Err(SchemaError::Precondition("Invalid empty db".into()));
-      }
-
-      return Ok(Self {
-        name,
-        database_schema: Some(database_schema),
-      });
-    } else {
-      let name = unquote_string(name);
-      if name.is_empty() {
-        return Err(SchemaError::Precondition("Invalid empty name".into()));
-      }
-
-      return Ok(Self {
-        name,
-        database_schema: None,
-      });
-    }
+    return NameParser::new(name).parse_qualified();
   }
 
   pub fn escaped_string(&self) -> String {
@@ -613,6 +584,117 @@ impl<'b> From<AstQualifiedName<'b>> for QualifiedName {
       database_schema: unquote_db_name(&qn),
       name: unquote_qualified(&qn),
     };
+  }
+}
+
+struct NameParser<'a> {
+  input: &'a str,
+  iter: std::iter::Peekable<std::str::Chars<'a>>,
+}
+
+impl<'a> NameParser<'a> {
+  pub fn new(input: &'a str) -> Self {
+    let input = input.trim();
+    return Self {
+      input,
+      iter: input.chars().peekable(),
+    };
+  }
+
+  #[inline]
+  fn peek(&mut self) -> Option<char> {
+    return self.iter.peek().copied();
+  }
+
+  #[inline]
+  fn next(&mut self) -> Option<char> {
+    return self.iter.next();
+  }
+
+  /// Parse a qualified name: `[schema.]name`.
+  pub fn parse_qualified(mut self) -> Result<QualifiedName, SchemaError> {
+    let first = self.parse_name()?;
+
+    let (database_schema, name) = match self.next() {
+      Some(c) if c == '.' => (Some(first), self.parse_name()?),
+      _ => (None, first),
+    };
+
+    // Check that we consumed the entire input.
+    if let Some(c) = self.next() {
+      return Err(SchemaError::Precondition(
+        format!("unparsed trailing input '{c}': {}", self.input).into(),
+      ));
+    }
+
+    return Ok(QualifiedName {
+      database_schema,
+      name,
+    });
+  }
+
+  fn parse_name(&mut self) -> Result<String, SchemaError> {
+    // If there's escaping, expected the respective terminator.
+    let terminator = match self.peek() {
+      Some('"') => Some('"'),
+      Some('`') => Some('`'),
+      Some('\'') => Some('\''),
+      Some('[') => Some(']'),
+      Some(c) if c.is_alphabetic() || c == '_' => {
+        // Valid unescaped name identifier character.
+        None
+      }
+      p => {
+        return Err(SchemaError::Precondition(
+          format!("expected identifier, got {p:?}").into(),
+        ));
+      }
+    };
+
+    // Consume the opening delimiter, if any.
+    if terminator.is_some() {
+      let _ = self.next();
+    }
+
+    let mut out = String::with_capacity(self.input.len());
+    match terminator {
+      // Unescaped case, scanning until end-of-input or first non-identifier character.
+      None => loop {
+        match self.peek() {
+          // Note: we're pretty greedy here to also allow things like unicode. Realistically this
+          // should probably be something like:
+          //   c.is_alphanumeric() || c.is_emoji || c == '_' || c == '$' || c == ' '
+          Some(c) if c != ';' && c != '.' => {
+            out.push(c);
+            // Only advance iterator if character was part of the name.
+            let _ = self.next();
+          }
+          Some(_) | None => {
+            // Stop consuming at first non-valid identifier or end-of-input
+            return Ok(out);
+          }
+        };
+      },
+      // Escaped case, scanning for terminator.
+      Some(t) => loop {
+        match self.next() {
+          Some(c) if c != t => {
+            // Continue until we reach terminator.
+            out.push(c);
+          }
+          Some(_) => {
+            // We reached the terminator.
+            return Ok(out);
+          }
+          None => {
+            // We reached the end-of-input w/o finding the terminator.
+            return Err(SchemaError::Precondition(
+              "unterminated quoted identifier".into(),
+            ));
+          }
+        }
+      },
+    }
   }
 }
 
@@ -1705,6 +1787,93 @@ mod tests {
     assert_eq!(unquote_name(&Name("".into())), "");
     assert_eq!(unquote_name(&Name("['``']".into())), "'``'");
     assert_eq!(unquote_name(&Name("\"[]\"".into())), "[]");
+  }
+
+  #[test]
+  fn qualified_name_parsing() {
+    // Test injections fail.
+    assert!(QualifiedName::parse(r#"name; injection"#).is_err());
+    assert!(QualifiedName::parse("test\"; DROP TABLE students;\"").is_err());
+
+    // We'll even parse emojis
+    assert_eq!(
+      QualifiedName {
+        name: "table 😍".to_string(),
+        database_schema: None,
+      },
+      QualifiedName::parse("'table 😍'").unwrap()
+    );
+    // We'll even parse whitespaces in unqualified names, pretending they were escaped.
+    assert_eq!(
+      QualifiedName {
+        name: "table 😍".to_string(),
+        database_schema: None,
+      },
+      QualifiedName::parse("table 😍").unwrap()
+    );
+    assert_eq!(
+      QualifiedName {
+        name: "foo".to_string(),
+        database_schema: None,
+      },
+      QualifiedName::parse("'foo'").unwrap()
+    );
+
+    assert_eq!(
+      QualifiedName {
+        name: "test".to_string(),
+        database_schema: Some("db".to_string()),
+      },
+      QualifiedName::parse("[db].test").unwrap()
+    );
+
+    assert_eq!(
+      QualifiedName {
+        name: "name".to_string(),
+        database_schema: Some("db".to_string()),
+      },
+      QualifiedName::parse("db.\"name\"").unwrap()
+    );
+    assert_eq!(
+      QualifiedName {
+        name: "name".to_string(),
+        database_schema: Some("db".to_string()),
+      },
+      QualifiedName::parse("`db`.`name`").unwrap()
+    );
+
+    // With escaped "."
+    assert_eq!(
+      QualifiedName {
+        name: "foo.test".to_string(),
+        database_schema: None,
+      },
+      QualifiedName::parse("'foo.test'").unwrap()
+    );
+    assert_eq!(
+      QualifiedName {
+        name: "foo.test".to_string(),
+        database_schema: Some("db".to_string()),
+      },
+      QualifiedName::parse("'db'.'foo.test'").unwrap()
+    );
+
+    // Mixed escaping.
+    assert_eq!(
+      QualifiedName {
+        name: "test".to_string(),
+        database_schema: Some("db".to_string()),
+      },
+      QualifiedName::parse("[db].'test'").unwrap()
+    );
+
+    // Only two identifiers
+    assert!(QualifiedName::parse("a.b.c").is_err());
+
+    // NOTE: we currently don't support escaping the escape character by doubling up, i.e. """foo"
+    // is technically valid but we choose to be overly restrictive, you can always use a different
+    // escape, e.g. '"foo'.
+    assert!(QualifiedName::parse("db.'''foo'").is_err());
   }
 
   #[test]
