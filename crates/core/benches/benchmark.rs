@@ -208,39 +208,71 @@ async fn check_health(router: &mut axum::Router<()>) -> Result<(), anyhow::Error
 }
 
 fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
-  let (body, user_x_token) = {
+  let authorization = format!("Bearer {}", setup.user_x_token);
+  let body = {
     let request = serde_json::json!({
       "_owner": BASE64_URL_SAFE.encode(setup.user_x),
       "room": BASE64_URL_SAFE.encode(setup.room),
       "data": "user_x message to room",
     });
 
-    let body = serde_json::to_vec(&request).unwrap();
+    serde_json::to_vec(&request).unwrap()
+  };
 
-    (body, setup.user_x_token.clone())
+  let request = move || {
+    return Request::builder()
+      .method(http::Method::POST)
+      .uri(&format!("/{RECORD_API_PATH}/messages_api"))
+      .header(http::header::CONTENT_TYPE, "application/json")
+      .header(http::header::AUTHORIZATION, &authorization)
+      .body(Body::from(body.clone()))
+      .unwrap();
   };
 
   b.to_async(runtime).iter_custom(async |iters| {
     let start = Instant::now();
 
     let tasks = (0..iters).map(|_i| {
-      let body = body.clone();
-      let auth = format!("Bearer {user_x_token}");
+      let request = request.clone();
       let mut router = setup.app.main_router.1.clone();
 
       return runtime.spawn(async move {
-        let response = router
-          .call(
-            Request::builder()
-              .method(http::Method::POST)
-              .uri(&format!("/{RECORD_API_PATH}/messages_api"))
-              .header(http::header::CONTENT_TYPE, "application/json")
-              .header(http::header::AUTHORIZATION, &auth)
-              .body(Body::from(body))
-              .unwrap(),
-          )
-          .await
-          .unwrap();
+        let response = router.call(request()).await.unwrap();
+
+        if response.status() != http::StatusCode::OK {
+          panic!("Got non-Ok response");
+        }
+      });
+    });
+
+    futures_util::future::join_all(tasks).await;
+
+    return start.elapsed();
+  });
+}
+
+fn list_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
+  let authorization = format!("Bearer {}", setup.user_x_token);
+
+  let request = move || {
+    return Request::builder()
+      .method(http::Method::GET)
+      .uri(&format!("/{RECORD_API_PATH}/messages_api?limit=50"))
+      .header(http::header::CONTENT_TYPE, "application/json")
+      .header(http::header::AUTHORIZATION, &authorization)
+      .body(Body::empty())
+      .unwrap();
+  };
+
+  b.to_async(runtime).iter_custom(async |iters| {
+    let start = Instant::now();
+
+    let tasks = (0..iters).map(|_i| {
+      let request = request.clone();
+      let mut router = setup.app.main_router.1.clone();
+
+      return runtime.spawn(async move {
+        let response = router.call(request()).await.unwrap();
 
         if response.status() != http::StatusCode::OK {
           panic!("Got non-Ok response");
@@ -275,23 +307,34 @@ fn benchmark_group(c: &mut Criterion) {
     setup
   });
 
-  let mut group = c.benchmark_group("ChatCreateMessages");
-  group.measurement_time(Duration::from_secs(20));
-  group.sample_size(100);
-  group.throughput(Throughput::Elements(1));
+  {
+    let mut group = c.benchmark_group("ChatCreateMessages");
+    group.measurement_time(Duration::from_secs(20));
+    group.sample_size(100);
+    group.throughput(Throughput::Elements(1));
 
-  group.bench_function("single-threaded", |b| {
-    let current_thread_runtime = tokio::runtime::Builder::new_current_thread()
-      .enable_all()
-      .build()
-      .unwrap();
+    group.bench_function("single-threaded", |b| {
+      let current_thread_runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
-    create_message_benchmark(b, &current_thread_runtime, &setup)
-  });
+      create_message_benchmark(b, &current_thread_runtime, &setup)
+    });
 
-  group.bench_function("parallel", |b| {
-    create_message_benchmark(b, &runtime, &setup)
-  });
+    group.bench_function("parallel", |b| {
+      create_message_benchmark(b, &runtime, &setup)
+    });
+  }
+
+  {
+    let mut group = c.benchmark_group("ChatListMessages");
+    group.measurement_time(Duration::from_secs(20));
+    group.sample_size(100);
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("parallel", |b| list_message_benchmark(b, &runtime, &setup));
+  }
 }
 
 criterion_group!(benches, benchmark_group);
