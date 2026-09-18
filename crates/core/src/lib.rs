@@ -11,7 +11,7 @@ pub mod openapi;
 pub mod records;
 pub mod util;
 
-#[cfg(debug_assertions)]
+#[cfg(any(test, debug_assertions))]
 pub mod test_utils;
 
 mod admin;

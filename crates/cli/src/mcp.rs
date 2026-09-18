@@ -103,7 +103,7 @@ impl McpServer {
 }
 
 impl ServerHandler for McpServer {
-  fn get_info(&self) -> ServerInfo {
+  fn get_info(&self) -> ServerConfig {
     self.inner.blocking_lock().get_info()
   }
 
