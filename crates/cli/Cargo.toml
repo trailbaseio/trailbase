@@ -27,7 +27,7 @@ env_logger = { workspace = true }
 itertools = { workspace = true }
 jsonwebtoken = { workspace = true }
 log = { workspace = true }
-mimalloc = { version = "^0.1.52", default-features = false }
+mimalloc = { workspace = true }
 reqwest = { workspace = true }
 rmcp = { version = "^3.4.0", default-features = false, features = ["server", "transport-io"], optional = true }
 rmcp-openapi = { workspace = true, optional = true }

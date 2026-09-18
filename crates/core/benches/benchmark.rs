@@ -1,5 +1,8 @@
 #![allow(clippy::needless_return)]
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 
 use axum::body::Body;
