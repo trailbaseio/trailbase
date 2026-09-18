@@ -65,6 +65,7 @@ import {
 } from "@proto/config";
 
 import { createConfigQuery, setConfig } from "@/lib/api/config";
+import { parseQualifiedName } from "@/lib/qualified_name";
 import { parseSqlExpression } from "@/lib/api/parse";
 import {
   getColumns,
@@ -78,7 +79,7 @@ import {
 } from "@/lib/schema";
 import { client } from "@/lib/client";
 import { fromHex } from "@/lib/utils";
-import { prettyFormatQualifiedName } from "@/lib/schema";
+import { escapeQualifiedName, equalQualifiedNames } from "@/lib/schema";
 
 import type { ForeignKey } from "@bindings/ForeignKey";
 import type { QualifiedName } from "@bindings/QualifiedName";
@@ -239,15 +240,22 @@ function updateRecordApiConfig(
 
 function removeRecordApiConfig(
   config: Config,
-  tableName: string,
+  tableName: QualifiedName,
   apiName: string,
 ): Config {
   const newConfig = Config.fromPartial(config);
 
   while (true) {
-    const index = newConfig.recordApis.findIndex(
-      (api) => api.tableName === tableName && api.name === apiName,
-    );
+    const index = newConfig.recordApis.findIndex((api) => {
+      const configTableName = api.tableName;
+      if (api.name === apiName && configTableName) {
+        return equalQualifiedNames(
+          parseQualifiedName(configTableName),
+          tableName,
+        );
+      }
+      return false;
+    });
     if (index < 0) {
       break;
     }
@@ -277,9 +285,16 @@ export function getRecordApis(
   config: Config | undefined,
   tableName: QualifiedName,
 ): RecordApiConfig[] {
-  return (config?.recordApis ?? []).filter(
-    (api) => api.tableName === prettyFormatQualifiedName(tableName),
-  );
+  return (config?.recordApis ?? []).filter((api) => {
+    const configTableName = api.tableName;
+    if (configTableName) {
+      return equalQualifiedNames(
+        parseQualifiedName(configTableName),
+        tableName,
+      );
+    }
+    return false;
+  });
 }
 
 export function hasRecordApis(
@@ -287,9 +302,16 @@ export function hasRecordApis(
   tableName: QualifiedName,
 ): boolean {
   return (
-    (config?.recordApis ?? []).findIndex(
-      (api) => api.tableName === prettyFormatQualifiedName(tableName),
-    ) !== -1
+    (config?.recordApis ?? []).findIndex((api) => {
+      const configTableName = api.tableName;
+      if (configTableName) {
+        return equalQualifiedNames(
+          parseQualifiedName(configTableName),
+          tableName,
+        );
+      }
+      return false;
+    }) !== -1
   );
 }
 
@@ -301,7 +323,7 @@ function newRecordApiDefault(opts: {
 
   return {
     name: opts.apiName,
-    tableName: prettyFormatQualifiedName(opts.tableName),
+    tableName: escapeQualifiedName(opts.tableName),
     attachedDatabases: db === "main" ? [] : [db],
     aclWorld: [],
     aclAuthenticated: [],
@@ -542,7 +564,10 @@ function AddApiDialog(props: {
             }
           }}
         >
-          <TextField class="flex items-center gap-2">
+          <TextField
+            class="flex items-center gap-2"
+            defaultValue={props.defaultApiName}
+          >
             <TextFieldLabel class="w-[100px]">API Name</TextFieldLabel>
 
             <TextFieldInput
@@ -734,12 +759,14 @@ function IndividualRecordApiSettingsForm(props: {
             throw: true,
           });
 
+          props.reset(value);
+          props.markDirty(false);
+
           showToast({
             title: "Success",
             description: isCreate ? "API Added" : "API Updated",
             variant: "success",
           });
-          props.reset(value);
         } catch (err) {
           showToast({
             title: `${isCreate ? "Creation" : "Update"} Error`,
@@ -1298,7 +1325,7 @@ function DeleteUpdateButtons(props: {
       try {
         await setConfig({
           client: queryClient,
-          config: removeRecordApiConfig(c, tableName.name, apiName),
+          config: removeRecordApiConfig(c, tableName, apiName),
           throw: true,
         });
 

@@ -44,7 +44,7 @@ import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { AlterTableOperation } from "@bindings/AlterTableOperation";
 import type { QualifiedName } from "@bindings/QualifiedName";
-import { equalQualifiedNames, prettyFormatQualifiedName } from "@/lib/schema";
+import { equalQualifiedNames, escapeQualifiedName } from "@/lib/schema";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 export function CreateAlterTableForm(props: {
@@ -442,7 +442,7 @@ function buildAlterTableOperations(
   if (!equalQualifiedNames(original.name, target.name)) {
     operations.push({
       RenameTableTo: {
-        name: prettyFormatQualifiedName(target.name),
+        name: escapeQualifiedName(target.name),
       },
     });
   }

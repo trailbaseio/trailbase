@@ -77,13 +77,13 @@ import { dropTable, dropIndex } from "@/lib/api/table";
 import { deleteRows, fetchRows } from "@/lib/api/row";
 import { formatSortingAsOrder } from "@/lib/list";
 import {
+  escapeQualifiedName,
   findPrimaryKeyColumnIndex,
+  getCheckValue,
+  getDefaultValue,
   getForeignKey,
   getUnique,
-  getDefaultValue,
-  getCheckValue,
   hiddenTable,
-  prettyFormatQualifiedName,
   tableType,
   validateTableRecordApiRequirements,
   validateViewRecordApiRequirements,
@@ -152,7 +152,7 @@ function TableHeaderRightHandButtons(props: {
             return (async () => {
               try {
                 await dropTable({
-                  name: prettyFormatQualifiedName(selectedSchema().name),
+                  name: escapeQualifiedName(selectedSchema().name),
                   dry_run: null,
                 });
               } finally {
@@ -589,7 +589,7 @@ function IndexTable(props: {
           const newSelection = new Set(selectedIndexes());
 
           for (const row of rows) {
-            const qualifiedName = prettyFormatQualifiedName(row.original.name);
+            const qualifiedName = escapeQualifiedName(row.original.name);
             if (value) {
               newSelection.add(qualifiedName);
             } else {

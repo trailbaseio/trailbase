@@ -455,6 +455,12 @@ export function prettyFormatQualifiedName(name: QualifiedName): string {
   return name.name;
 }
 
+// Escapes with single quotes.
+export function escapeQualifiedName(name: QualifiedName): string {
+  const db = name.database_schema;
+  return db ? `'${db}'.'${name.name}'` : `'${name.name}'`;
+}
+
 export function equalQualifiedNames(
   a: QualifiedName,
   b: QualifiedName,

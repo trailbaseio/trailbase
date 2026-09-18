@@ -1,6 +1,6 @@
 import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
-import { findPrimaryKeyColumnIndex } from "@/lib/schema";
+import { findPrimaryKeyColumnIndex, escapeQualifiedName } from "@/lib/schema";
 import type { Record } from "@/lib/record";
 
 import type { Table } from "@bindings/Table";
@@ -18,30 +18,12 @@ function removeUndefined(row: Record): { [key: string]: SqlValue } {
   ) as { [key: string]: SqlValue };
 }
 
-function formatQualifiedName(name: QualifiedName): string {
-  const db = name.database_schema;
-  if (db && db !== "main") {
-    return `${db}.${name.name}`;
-  }
-
-  // Edge case when table name contains ".", e,g. 'main.foo.bar'. To not trip
-  // up server-side parsing, full qualification is necessary.
-  //
-  // NOTE: This may brake for implicit schemas with PG, when the fallback
-  // should be "public".
-  if (name.name.includes(".")) {
-    return `${db ?? "main"}.${name.name}`;
-  }
-
-  return name.name;
-}
-
 export async function insertRow(table: Table, row: Record) {
   const request: InsertRowRequest = {
     row: removeUndefined(row),
   };
 
-  const tableName: string = formatQualifiedName(table.name);
+  const tableName: string = escapeQualifiedName(table.name);
   const response = await adminFetch(`/table/${tableName}`, {
     method: "POST",
     body: JSON.stringify(request),
@@ -59,7 +41,7 @@ export async function updateRowInternal(
   columns: Column[],
   row: Record,
 ) {
-  const tableName: string = formatQualifiedName(qualifiedTableName);
+  const tableName: string = escapeQualifiedName(qualifiedTableName);
   const primaryKeyColumIndex = findPrimaryKeyColumnIndex(columns);
   if (primaryKeyColumIndex === undefined) {
     throw Error("No primary key column found.");
@@ -94,7 +76,7 @@ export async function deleteRows(
   request: DeleteRowsRequest,
 ) {
   const response = await adminFetch(
-    `/table/${formatQualifiedName(tableName)}/rows`,
+    `/table/${escapeQualifiedName(tableName)}/rows`,
     {
       method: "DELETE",
       body: JSON.stringify(request),
@@ -138,7 +120,7 @@ export async function fetchRows(
   });
 
   const response = await adminFetch(
-    `/table/${formatQualifiedName(tableName)}/rows?${params}`,
+    `/table/${escapeQualifiedName(tableName)}/rows?${params}`,
   );
   // IMPORTANT: Use JSON parser that handles i64 correctly.
   return parseJSON(await response.text()) as ListRowsResponse;

@@ -937,17 +937,18 @@ fn filter_excluded_columns(
 fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
   // QUESTION: Should this be disabled in prod? This can only trigger during start and config
   // reload.
-  match name.database_schema.as_deref() {
-    Some(db) if db != "main" && db != "public" => {
-      assert_eq!(
-        config.table_name.as_deref().unwrap_or_default(),
-        format!("{db}.{}", name.name)
-      );
-    }
-    _ => {
-      assert_eq!(config.table_name.as_deref().unwrap_or_default(), &name.name);
-    }
-  }
+  let config_table_name =
+    match QualifiedName::parse(config.table_name.as_deref().unwrap_or_default()) {
+      Ok(name) => name,
+      Err(err) => {
+        panic!("Failed to parse '{:?}': {err}", config.table_name);
+      }
+    };
+
+  debug_assert_eq!(
+    config_table_name, *name,
+    "Expected: {name}, got: {config_table_name}"
+  );
 }
 
 #[cfg(test)]

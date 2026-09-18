@@ -1791,6 +1791,9 @@ mod tests {
 
   #[test]
   fn qualified_name_parsing() {
+    // Empty
+    assert!(QualifiedName::parse("").is_err());
+
     // Test injections fail.
     assert!(QualifiedName::parse(r#"name; injection"#).is_err());
     assert!(QualifiedName::parse("test\"; DROP TABLE students;\"").is_err());
@@ -1824,9 +1827,15 @@ mod tests {
         name: "test".to_string(),
         database_schema: Some("db".to_string()),
       },
+      QualifiedName::parse("db.test").unwrap()
+    );
+    assert_eq!(
+      QualifiedName {
+        name: "test".to_string(),
+        database_schema: Some("db".to_string()),
+      },
       QualifiedName::parse("[db].test").unwrap()
     );
-
     assert_eq!(
       QualifiedName {
         name: "name".to_string(),

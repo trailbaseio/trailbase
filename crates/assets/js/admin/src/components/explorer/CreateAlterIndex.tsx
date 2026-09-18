@@ -16,7 +16,7 @@ import { SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { showToast } from "@/components/ui/toast";
 
 import { alterIndex, createIndex } from "@/lib/api/table";
-import { prettyFormatQualifiedName } from "@/lib/schema";
+import { escapeQualifiedName } from "@/lib/schema";
 import {
   buildTextFormField,
   buildBoolFormField,
@@ -105,7 +105,7 @@ export function CreateAlterIndexForm(props: {
             name: `_${unqualifiedName}__${columns[0].column_name}_index`,
             database_schema: props.table.name.database_schema,
           },
-          table_name: prettyFormatQualifiedName(props.table.name),
+          table_name: escapeQualifiedName(props.table.name),
           columns,
           unique: false,
           predicate: null,

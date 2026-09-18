@@ -8,7 +8,7 @@ import {
 
 import { sqlValueToString } from "@/lib/value";
 import { adminFetch } from "@/lib/fetch";
-import { prettyFormatQualifiedName } from "@/lib/schema";
+import { escapeQualifiedName } from "@/lib/schema";
 import { showSaveFileDialog } from "@/lib/utils";
 import { updateRowInternal } from "@/lib/api/row";
 import { urlSafeBase64EncodeStream } from "@/lib/base64";
@@ -409,7 +409,7 @@ function fileDownloadUrl(opts: {
   tableName: QualifiedName;
   query: ReadFilesQuery;
 }): string {
-  const tableName: string = prettyFormatQualifiedName(opts.tableName);
+  const tableName: string = escapeQualifiedName(opts.tableName);
   const query = opts.query;
 
   if (query.file_name) {
