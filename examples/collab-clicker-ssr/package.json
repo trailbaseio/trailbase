@@ -10,14 +10,17 @@
     "build:server": "vite build --ssr src/entry-server.tsx --outDir dist/server",
     "check:format": "prettier -c *.{ts,js,tsx,jsx}",
     "format": "prettier -w *.{ts,js,tsx,jsx}",
+    "preview": "cross-env NODE_ENV=production node server",
     "check": "tsc --noEmit --skipLibCheck && eslint"
   },
   "dependencies": {
+    "solid-icons": "^1.2.0",
     "solid-js": "^1.9.15",
     "trailbase": "^0.14.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@iconify-json/tabler": "^1.2.38",
     "@tailwindcss/vite": "^4.3.3",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.1",
