@@ -10,24 +10,24 @@ run: assets guest
 
 guest: ${TRAILDEPOT}/wasm/collab_clicker_ssr_rust_guest.wasm
 #guest: ${TRAILDEPOT}/wasm/collab_clicker_ssr_ts_guest.wasm
+
 assets: ${DISTDIR}/server/entry-server.js
 
 ${DISTDIR}/server/entry-server.js: $(shell find ${APPDIR}/src/ -type f)
 	pnpm run build
 
 ${TRAILDEPOT}/wasm/collab_clicker_ssr_rust_guest.wasm: guests/rust/src/*.rs
-	cargo build -p collab-clicker-ssr-guest --target wasm32-wasip2  --release \
-		&& mkdir -p ${TRAILDEPOT}/wasm \
+	cargo build -p collab-clicker-ssr-guest --target wasm32-wasip2 --no-default-features --features=bundle --release \
 		&& rm -rf ${TRAILDEPOT}/wasm/* \
+		&& mkdir -p ${TRAILDEPOT}/wasm/ \
 		&& cp ../../target/wasm32-wasip2/release/collab_clicker_ssr_guest.wasm $@
 
 ${TRAILDEPOT}/wasm/collab_clicker_ssr_ts_guest.wasm: guests/typescript/src/*.ts
 	cd guests/typescript \
-		&& pnpm install \
-		&& pnpm build \
-		&& cd ../.. \
-		&& mkdir -p ${TRAILDEPOT}/wasm \
+		&& pnpm install && pnpm build \
+		&& cd ${PWD} \
 		&& rm -rf ${TRAILDEPOT}/wasm/* \
+		&& mkdir -p ${TRAILDEPOT}/wasm/ \
 		&& cp guests/typescript/dist/component.wasm $@
 
 clean:

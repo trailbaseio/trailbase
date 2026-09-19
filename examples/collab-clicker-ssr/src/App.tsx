@@ -1,4 +1,6 @@
 import { createSignal, onMount } from "solid-js"
+import { TbFillBrandGithub } from "solid-icons/tb";
+
 import logo from "../public/favicon.svg";
 
 export type Clicked = {
@@ -63,8 +65,34 @@ export function App({ initialCount }: { initialCount?: number }) {
         TrailBase Demo
       </h1>
 
-      <a href="https://github.com/trailbaseio/trailbase">
-        If you like the demo, consider leaving a ⭐ on GitHub
+      <div class="flex flex-col min-[560px]:flex-row gap-2 justify-center items-center">
+        <a
+          href="/_/admin?loginMessage=email:%20admin@localhost%20%E2%80%A2%20password:%20secret"
+          class={`${buttonStyle} w-[180px] rounded bg-neutral-100`}
+        >
+          Admin Dashboard
+        </a>
+
+        <ul class="list-none">
+          <li>login: <span class="font-semibold">admin@localhost</span></li>
+          <li>password: <span class="font-semibold">secret</span></li>
+        </ul>
+
+        <a
+          href="/_/auth/login"
+          class={`${buttonStyle} w-[180px] rounded bg-neutral-100 font-bold`}
+        >
+          Auth UI
+        </a>
+      </div>
+
+      <a
+        class="flex gap-2 justify-center items-center"
+        href="https://github.com/trailbaseio/trailbase"
+      >
+        <p>If you like the demo, consider leaving a ⭐ on GitHub </p>
+
+        <TbFillBrandGithub size={20} />
       </a>
 
       <div>
@@ -98,5 +126,5 @@ export function App({ initialCount }: { initialCount?: number }) {
   )
 }
 
-const cardStyle = "m-4 p-4 outline outline-1 outline-natural-200 rounded text-sm max-w-[680px]";
+const cardStyle = "m-2 p-4 outline outline-1 outline-natural-200 rounded text-sm max-w-[680px]";
 const buttonStyle = "p-2 scale-95 hover:scale-100 hover:bg-accent-200 active:scale-90 animate-all font-bold";

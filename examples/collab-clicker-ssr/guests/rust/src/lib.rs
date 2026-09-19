@@ -4,16 +4,22 @@
 
 use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
 use rquickjs::prelude::{Async, Ctx, Func};
-use rquickjs::{AsyncContext, AsyncRuntime, Context, Function, Module, Object, Runtime};
+use rquickjs::{AsyncContext, AsyncRuntime, Function, Module, Object};
 use trailbase_wasm::db::{Value, query};
 use trailbase_wasm::fs::read_file;
 use trailbase_wasm::http::{HttpError, HttpRoute, Json, StatusCode, routing};
 use trailbase_wasm::kv::Store;
-use trailbase_wasm::time::{Duration, FutureExt};
+use trailbase_wasm::time::{Duration, FutureExt, Timer};
 use trailbase_wasm::{Guest, export};
 
 // Implement the function exported in this world (see above).
 struct Endpoints;
+
+#[cfg(feature = "bundle")]
+mod assets {
+  pub const HTML_TEMPLATE: &'static str = include_str!("../../../dist/client/index.html");
+  pub const JS_MODULE: &'static [u8] = include_bytes!("../../../dist/server/entry-server.js");
+}
 
 impl Guest for Endpoints {
   fn http_handlers() -> Vec<HttpRoute> {
@@ -36,20 +42,34 @@ impl Guest for Endpoints {
           .await
           .map_err(internal)?;
 
-        let count = get_count(rows.first())?;
+        let count = match get_count(rows.first()) {
+          Ok(count) => count,
+          Err(err) => {
+            return Ok(format!(
+              "<html><body> \
+                 <p>ERROR: {msg}</p> \
+                 <p>Meanwhile check out the admin UI @<a href=\"{SITE_URL}/_/admin\">{SITE_URL}/_/admin</a>.</p> \
+               </body></html>",
+              msg = err.message.as_deref().unwrap_or(GET_COUNT_ERR)
+            ));
+          }
+        };
 
         // Call the JS render function using embedded QuickJS.
         let result = render(count).await?;
 
-        let template = read_cached_file("/dist/client/index.html")?;
-        let mut template_str = String::from_utf8_lossy(&template).to_string();
+        let mut template = cfg_select! {
+          feature = "bundle" => assets::HTML_TEMPLATE.to_string(),
+          _ => String::from_utf8_lossy(&read_cached_file("/dist/client/index.html")?).to_string(),
+        };
 
-        template_str = template_str.replace("<!--app-head-->", &result.head);
-        template_str = template_str.replace("<!--app-data-->", &result.data);
-        template_str = template_str.replace("<!--app-html-->", &result.html);
+        template = template.replace("<!--app-head-->", &result.head);
+        template = template.replace("<!--app-data-->", &result.data);
+        template = template.replace("<!--app-html-->", &result.html);
 
-        return Ok(template_str);
+        return Ok(template);
       }),
+      #[cfg(feature = "fibonacci")]
       routing::get("/fibonacci", async |req| {
         let n: usize = req
           .query_param("n")
@@ -64,7 +84,7 @@ impl Guest for Endpoints {
 
 fn get_count(row: Option<&Vec<Value>>) -> Result<i64, HttpError> {
   let Some(value) = row.and_then(|r| r.first()) else {
-    return Err(internal("count was deleted - very funny :)"));
+    return Err(internal(GET_COUNT_ERR));
   };
 
   let Value::Integer(count) = value else {
@@ -74,6 +94,7 @@ fn get_count(row: Option<&Vec<Value>>) -> Result<i64, HttpError> {
   return Ok(*count);
 }
 
+#[allow(unused)]
 fn read_cached_file(path: &str) -> Result<Vec<u8>, HttpError> {
   let mut store = Store::open().map_err(internal)?;
 
@@ -100,18 +121,19 @@ async fn set_timeout<'js>(
   callback: Function<'js>,
   // millis: Option<usize>,
 ) -> rquickjs::Result<()> {
-  trailbase_wasm::time::Timer::after(Duration::from_nanos(0))
-    .wait()
-    .await;
+  Timer::after(Duration::from_nanos(0)).wait().await;
   callback.call::<_, ()>(())?;
 
-  Ok(())
+  return Ok(());
 }
 
 async fn render(count: i64) -> Result<RenderResult, HttpError> {
   let resolver = BuiltinResolver::default().with_module("server/entry-server.js");
-  let module = read_cached_file("/dist/server/entry-server.js")?;
-  let loader = BuiltinLoader::default().with_module("server/entry-server.js", module);
+  let js_module = cfg_select! {
+    feature = "bundle" => assets::JS_MODULE,
+    _ => read_cached_file("/dist/server/entry-server.js")?,
+  };
+  let loader = BuiltinLoader::default().with_module("server/entry-server.js", js_module);
 
   let rt = AsyncRuntime::new().map_err(internal)?;
   rt.set_loader(resolver, loader).await;
@@ -160,14 +182,15 @@ async fn render(count: i64) -> Result<RenderResult, HttpError> {
   return result;
 }
 
+#[cfg(feature = "fibonacci")]
 fn fibonacci(n: usize) -> Result<usize, HttpError> {
   let resolver = BuiltinResolver::default();
   let loader = BuiltinLoader::default();
 
-  let rt = Runtime::new().map_err(internal)?;
+  let rt = rquickjs::Runtime::new().map_err(internal)?;
   rt.set_loader(resolver, loader);
 
-  let ctx = Context::full(&rt).map_err(internal)?;
+  let ctx = rquickjs::Context::full(&rt).map_err(internal)?;
   return ctx.with(|ctx| -> Result<usize, HttpError> {
     let (module, promise) = Module::declare(
       ctx,
@@ -202,5 +225,9 @@ fn fibonacci(n: usize) -> Result<usize, HttpError> {
 fn internal(err: impl std::string::ToString) -> HttpError {
   return HttpError::message(StatusCode::INTERNAL_SERVER_ERROR, err);
 }
+
+const SITE_URL: &str = "https://demo.trailbase.io";
+const GET_COUNT_ERR: &str =
+  "Someone deleted the count - very funny :) - Will be fixed by periodic reset";
 
 export!(Endpoints);
