@@ -138,6 +138,7 @@ anyhow = "^1.0.104"
 axum-test = "21.1.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
+eventsource-stream = { version = "0.2.3", default-features = false }
 indoc = "2.0.7"
 mimalloc = { workspace = true }
 pglite-oxide = "0.5.1"

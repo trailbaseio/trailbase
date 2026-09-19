@@ -9,6 +9,8 @@ use axum::body::Body;
 use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
+use eventsource_stream::Eventsource;
+use futures_util::StreamExt;
 use hyper::StatusCode;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
@@ -241,10 +243,7 @@ fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, 
 
       return runtime.spawn(async move {
         let response = router.call(request()).await.unwrap();
-
-        if response.status() != http::StatusCode::OK {
-          panic!("Got non-Ok response");
-        }
+        assert!(response.status().is_success());
       });
     });
 
@@ -276,10 +275,94 @@ fn list_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, se
 
       return runtime.spawn(async move {
         let response = router.call(request()).await.unwrap();
+        assert!(response.status().is_success());
+      });
+    });
 
-        if response.status() != http::StatusCode::OK {
-          panic!("Got non-Ok response");
+    futures_util::future::join_all(tasks).await;
+
+    return start.elapsed();
+  });
+}
+
+fn subscribe_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
+  let authorization = format!("Bearer {}", setup.user_x_token);
+  let create_request_body = {
+    let request = serde_json::json!({
+      "_owner": BASE64_URL_SAFE.encode(setup.user_x),
+      "room": BASE64_URL_SAFE.encode(setup.room),
+      "data": "user_x message to room",
+    });
+
+    serde_json::to_vec(&request).unwrap()
+  };
+
+  let create_request = {
+    let authorization = authorization.clone();
+    move || {
+      return Request::builder()
+        .method(http::Method::POST)
+        .uri(&format!("/{RECORD_API_PATH}/messages_api"))
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::AUTHORIZATION, &authorization)
+        .body(Body::from(create_request_body.clone()))
+        .unwrap();
+    }
+  };
+
+  let subscribe_request = move || {
+    return Request::builder()
+      .method(http::Method::GET)
+      .uri(&format!("/{RECORD_API_PATH}/subscribe/*"))
+      .header(http::header::CONTENT_TYPE, "application/json")
+      .header(http::header::AUTHORIZATION, &authorization)
+      .body(Body::empty())
+      .unwrap();
+  };
+
+  b.to_async(runtime).iter_custom(async |iters| {
+    const N_MESSAGES: usize = 100;
+    const N_SUBSCRIBERS: usize = 10;
+
+    let start = Instant::now();
+
+    let tasks = (0..iters).map(|_i| {
+      let create_request = create_request.clone();
+      let subscribe_request = subscribe_request.clone();
+      let mut router = setup.app.main_router.1.clone();
+
+      return runtime.spawn(async move {
+        let subscriptions: Vec<_> = {
+          let mut subscriptions = vec![];
+          for _ in 0..N_SUBSCRIBERS {
+            subscriptions.push(
+              http_body_util::BodyDataStream::new(
+                router.call(subscribe_request()).await.unwrap().into_body(),
+              )
+              .eventsource(),
+            );
+          }
+
+          subscriptions
+        };
+
+        // First publish messages.
+        for _ in 0..N_MESSAGES {
+          let response = router.call(create_request()).await.unwrap();
+          assert!(response.status().is_success());
         }
+
+        // Then listen on all messages for all subscribers.
+        futures_util::future::join_all(subscriptions.into_iter().map(async |subscription| {
+          let listen_result = tokio::time::timeout(
+            tokio::time::Duration::from_secs(10),
+            subscription.take(N_MESSAGES).collect::<Vec<_>>(),
+          )
+          .await;
+
+          assert!(listen_result.is_ok());
+        }))
+        .await;
       });
     });
 
@@ -337,6 +420,17 @@ fn benchmark_group(c: &mut Criterion) {
     group.throughput(Throughput::Elements(1));
 
     group.bench_function("parallel", |b| list_message_benchmark(b, &runtime, &setup));
+  }
+
+  {
+    let mut group = c.benchmark_group("ChatSubscribeMessages");
+    group.measurement_time(Duration::from_secs(20));
+    group.sample_size(10);
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("parallel", |b| {
+      subscribe_message_benchmark(b, &runtime, &setup)
+    });
   }
 }
 

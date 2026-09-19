@@ -18,7 +18,7 @@ ws = ["dep:reqwest-websocket"]
 [dependencies]
 async-trait = "0.1.92"
 bytes = { workspace = true }
-eventsource-stream = { version = "0.2.3", features = [] }
+eventsource-stream = { version = "0.2.3", default-features = false }
 futures-lite = "2.6.1"
 http = { workspace = true }
 http-body-util = { workspace = true }

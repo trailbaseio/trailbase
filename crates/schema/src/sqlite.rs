@@ -616,7 +616,7 @@ impl<'a> NameParser<'a> {
     let first = self.parse_name()?;
 
     let (database_schema, name) = match self.next() {
-      Some(c) if c == '.' => (Some(first), self.parse_name()?),
+      Some('.') => (Some(first), self.parse_name()?),
       _ => (None, first),
     };
 

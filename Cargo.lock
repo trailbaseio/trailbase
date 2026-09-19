@@ -8526,6 +8526,7 @@ dependencies = [
  "cron",
  "ed25519-dalek 3.0.0",
  "env_logger",
+ "eventsource-stream",
  "fallible-iterator 0.3.0",
  "flume",
  "form_urlencoded",
