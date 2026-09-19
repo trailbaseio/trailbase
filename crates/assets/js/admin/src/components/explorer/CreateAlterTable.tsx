@@ -110,7 +110,7 @@ export function CreateAlterTableForm(props: {
         // Create table
 
         // Remove ephemeral/deleted columns, i.e. columns that were briefly added but then removed again.
-        // value.columns = value.columns.filter((c) => !isDeleted(c));
+        value.columns = value.columns.filter((c) => !isDeleted(c));
 
         const response = await createTable({ schema: value, dry_run: dryRun });
         console.debug(`CreateTableResponse [dry: ${dryRun}]:`, response);
@@ -499,7 +499,7 @@ function TextLabel(props: { text: string }) {
 }
 
 function isDeleted(c: Column) {
-  return c === DELETED_COLUMN_MARKER;
+  return c.name === DELETED_COLUMN_MARKER.name;
 }
 
 // JS' built-in `getOrInsert` not yet widely available: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/getOrInsert

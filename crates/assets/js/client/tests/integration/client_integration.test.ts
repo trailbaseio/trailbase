@@ -251,6 +251,16 @@ describe("records", () => {
     );
   });
 
+  test("list jokes table with unicode name - make sure escaping works", async () => {
+    const tableApiName = "jokes";
+
+    const client = await connect();
+    const api = client.records(tableApiName);
+
+    const response = await api.list();
+    expect(response.records.length).toBe(2);
+  });
+
   test("update & delete", async () => {
     const apiName = "simple_strict_table";
 

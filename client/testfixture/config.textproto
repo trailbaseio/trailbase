@@ -81,6 +81,10 @@ record_apis: [{
   table_name: "geometry"
   acl_world: [READ]
   acl_authenticated: [CREATE, READ, UPDATE, DELETE]
+}, {
+  name: "jokes"
+  table_name: "\'\360\237\220\242.\360\237\222\250\'"
+  acl_authenticated: [READ]
 }]
 schemas: [{
   name: "simple_schema"
