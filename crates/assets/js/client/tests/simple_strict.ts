@@ -14,8 +14,6 @@ export type SimpleStrict = {
 
 export type NewSimpleStrict = Partial<SimpleStrict>;
 
-export type SimpleCompleteView = SimpleStrict;
-
 export type SimpleSubsetView = {
   id: string;
 

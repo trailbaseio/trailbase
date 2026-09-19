@@ -83,7 +83,7 @@ const { subprocess } = await initTrailBase();
 try {
   const nodeEnvTests = (useWs: boolean) => [
     // Auth test needs "node" environment to bring up OIDC test server.
-    "tests/integration/auth_integration.test.ts",
+    "tests/integration/oauth_integration.test.ts",
 
     // WebSocket test cannot run in "jsdom" environment due to `Event` collisions:
     //   https://github.com/nodejs/undici/issues/2663#issuecomment-1936036650

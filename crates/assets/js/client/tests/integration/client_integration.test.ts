@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions */
-import { expect, test } from "vitest";
+import { expect, test, describe } from "vitest";
 import { status } from "http-status";
 import { v7 as uuidv7, parse as uuidParse } from "uuid";
 import { FeatureCollection } from "geojson";
@@ -25,7 +25,6 @@ import { serverAddress, connect } from "../setup";
 import {
   SimpleStrict,
   SimpleSubsetView,
-  SimpleCompleteView,
   NewSimpleStrict,
 } from "../simple_strict";
 
@@ -33,786 +32,856 @@ const { base64Encode } = indexExportForTesting!;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// WARN: this test is not hermetic. I requires an appropriate TrailBase instance to be running.
-test("Auth integration tests", async () => {
-  const client = await connect();
-  expect(client.user()?.email).toBe("admin@localhost");
-  expect(client.user()?.username).toBe("admin");
+describe("auth", () => {
+  test("login+refresh+logout", async () => {
+    const client = await connect();
+    expect(client.user()?.email).toBe("admin@localhost");
+    expect(client.user()?.username).toBe("admin");
 
-  const oldTokens = client.tokens();
-  expect(oldTokens).not.undefined;
+    const oldTokens = client.tokens();
+    expect(oldTokens).not.undefined;
 
-  // We need to wait a little to push the expiry time in seconds to avoid just
-  // getting the same token minted again.
-  await sleep(1500);
+    // We need to wait a little to push the expiry time in seconds to avoid just
+    // getting the same token minted again.
+    await sleep(1500);
 
-  await client.refreshAuthToken();
-  const newTokens = client.tokens();
-  expect(newTokens).not.undefined.and.not.equals(oldTokens!.auth_token);
+    await client.refreshAuthToken();
+    const newTokens = client.tokens();
+    expect(newTokens).not.undefined.and.not.equals(oldTokens!.auth_token);
 
-  const headers0 = client.headers();
-  expect(headers0["Content-Type"]).toBeUndefined();
-  expect(headers0["Authorization"].startsWith("Bearer ")).toBe(true);
+    const headers0 = client.headers();
+    expect(headers0["Content-Type"]).toBeUndefined();
+    expect(headers0["Authorization"].startsWith("Bearer ")).toBe(true);
 
-  expect(await client.refreshAuthToken({ force: true })).toBe(true);
-  expect(await client.refreshAuthToken({ force: true })).toBe(true);
+    expect(await client.refreshAuthToken({ force: true })).toBe(true);
+    expect(await client.refreshAuthToken({ force: true })).toBe(true);
 
-  // Check token-based client initialization.
-  const other0 = initClient(client.base, {
-    tokens: client.tokens(),
-  });
-  expect(await other0.refreshAuthToken({ force: true })).toBe(true);
-
-  const other1 = initClient(client.base, {
-    tokens: btoa(JSON.stringify(client.tokens())),
-  });
-  expect(await other1.refreshAuthToken({ force: true })).toBe(true);
-
-  expect(await client.logout()).toBe(true);
-  expect(client.user()).toBe(undefined);
-  expect(client.tokens()).toBe(undefined);
-
-  await client.refreshAuthToken();
-
-  const headers1 = client.headers();
-  expect(headers1["Authorization"]).toBeUndefined();
-});
-
-test("Register integration tests", async () => {
-  const client = initClient(new URL(`http://${serverAddress()}`));
-
-  const email = `test_${new Date().getTime()}@test.org`;
-  const password = "secret123.";
-
-  // NOTE: The test fixture requires an email address, which has to be verified
-  // before the new account can sign in.
-  await client.register({ email, password });
-  expect(client.user()).toBe(undefined);
-
-  const err = await client.login(email, password).then(
-    () => undefined,
-    (err: unknown) => err,
-  );
-  expect(err).toBeInstanceOf(FetchError);
-  expect((err as FetchError).status).toBe(status.UNAUTHORIZED);
-
-  // A weak password is rejected outright.
-  await expect(
-    async () => await client.register({ email: `x_${email}`, password: "x" }),
-  ).rejects.toThrowError(FetchError);
-});
-
-test("Auth anonymous tests", async () => {
-  const client = initClient(new URL(`http://${serverAddress()}`));
-
-  await client.loginAnonymously();
-  expect(client.user()?.username).not.toBe(undefined);
-
-  const now = new Date().getTime();
-  const password = "secret123.";
-
-  client.promoteAnonymous({
-    password,
-    email: `test_${now}@test.org`,
-  });
-
-  // NOTE: To test login afterwards, we'd have to verify the email first.
-});
-
-test("Multi-factor auth integration tests", async () => {
-  const client = initClient(`http://${serverAddress()}`);
-  const mfaToken = await client.login("alice@trailbase.io", "secret");
-  expect(mfaToken).not.toBeUndefined();
-
-  const secret = "YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5";
-  const code = await generate({ secret });
-
-  await client.loginSecond({ mfaToken: mfaToken!, totpCode: code });
-  expect(client.tokens()).not.toBeUndefined();
-  expect(client.user()?.email).toBe("alice@trailbase.io");
-});
-
-test("Record read integration tests", async () => {
-  const client = await connect();
-  const apiName = "simple_strict_table";
-  const api = client.records<NewSimpleStrict>(apiName);
-
-  // Milliseconds since epoch.
-  const now = new Date().getTime();
-  // Throw in some url-unfriendly characters for good measure.
-  const sortedMessages = [
-    `ts client test 1: =?&/`,
-    `ts client test 2: =?&\\`,
-    `ts client test 3: =?&^`,
-  ].sort();
-
-  // Shuffle the messages to make sure list later on is not just ordering by
-  // insertion order.
-  const messages = [...sortedMessages].sort(() => 0.5 - Math.random());
-
-  const ids: string[] = [];
-  for (const msg of messages) {
-    ids.push(
-      (await api.create({
-        text_not_null: msg,
-        text_default: `prefix ts ${now}`,
-      })) as string,
-    );
-  }
-
-  // Test simple read.
-  const record = await api.read(ids[0]);
-  expect(record.id).toStrictEqual(ids[0]);
-  expect(record.text_not_null).toStrictEqual(messages[0]);
-
-  {
-    // List specific record.
-    const response = await api.list({
-      filters: [
-        {
-          column: "text_not_null",
-          value: messages[0],
-        },
-        {
-          column: "text_default",
-          value: `prefix ts ${now}`,
-        },
-      ],
+    // Check token-based client initialization.
+    const other0 = initClient(client.base, {
+      tokens: client.tokens(),
     });
-    expect(response.total_count).toBeUndefined();
-    expect(response.cursor).not.undefined.and.not.toBe("");
-    const records = response.records;
-    expect(records.length).toBe(1);
-    expect(records[0].text_not_null).toBe(messages[0]);
-  }
+    expect(await other0.refreshAuthToken({ force: true })).toBe(true);
 
-  {
-    const response = await api.list({
-      filters: [
-        {
-          column: "text_default",
-          op: "like",
-          value: `%ts ${now}`,
-        },
-      ],
-      order: ["+text_not_null"],
+    const other1 = initClient(client.base, {
+      tokens: btoa(JSON.stringify(client.tokens())),
+    });
+    expect(await other1.refreshAuthToken({ force: true })).toBe(true);
+
+    expect(await client.logout()).toBe(true);
+    expect(client.user()).toBe(undefined);
+    expect(client.tokens()).toBe(undefined);
+
+    await client.refreshAuthToken();
+
+    const headers1 = client.headers();
+    expect(headers1["Authorization"]).toBeUndefined();
+  });
+
+  test("register user", async () => {
+    const client = initClient(new URL(`http://${serverAddress()}`));
+
+    const email = `test_${new Date().getTime()}@test.org`;
+    const password = "secret123.";
+
+    // NOTE: The test fixture requires an email address, which has to be verified
+    // before the new account can sign in.
+    await client.register({ email, password });
+    expect(client.user()).toBe(undefined);
+
+    const err = await client.login(email, password).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+    expect(err).toBeInstanceOf(FetchError);
+    expect((err as FetchError).status).toBe(status.UNAUTHORIZED);
+
+    // A weak password is rejected outright.
+    await expect(
+      async () => await client.register({ email: `x_${email}`, password: "x" }),
+    ).rejects.toThrow(FetchError);
+  });
+
+  test("anonymous-login", async () => {
+    const client = initClient(new URL(`http://${serverAddress()}`));
+
+    await client.loginAnonymously();
+    expect(client.user()?.username).not.toBe(undefined);
+
+    const now = new Date().getTime();
+    const password = "secret123.";
+
+    client.promoteAnonymous({
+      password,
+      email: `test_${now}@test.org`,
+    });
+
+    // NOTE: To test login afterwards, we'd have to verify the email first.
+  });
+
+  test("multi-factor login", async () => {
+    const client = initClient(`http://${serverAddress()}`);
+    const mfaToken = await client.login("alice@trailbase.io", "secret");
+    expect(mfaToken).not.toBeUndefined();
+
+    const secret = "YCUTAYEZ346ZUEI7FLCG57BOMZQHHRA5";
+    const code = await generate({ secret });
+
+    await client.loginSecond({ mfaToken: mfaToken!, totpCode: code });
+    expect(client.tokens()).not.toBeUndefined();
+    expect(client.user()?.email).toBe("alice@trailbase.io");
+  });
+});
+
+describe("records", () => {
+  test("read & list", async () => {
+    const tableApiName = "simple_strict_table";
+    const client = await connect();
+
+    // Milliseconds since epoch.
+    const now = new Date().getTime();
+    // Throw in some url-unfriendly characters for good measure.
+    const sortedMessages = [
+      `ts client test 1: =?&/`,
+      `ts client test 2: =?&\\`,
+      `ts client test 3: =?&^`,
+    ].sort();
+
+    // Shuffle the messages to make sure list later on is not just ordering by
+    // insertion order.
+    const messages = [...sortedMessages].sort(() => 0.5 - Math.random());
+
+    const api = client.records<NewSimpleStrict>(tableApiName);
+
+    const ids: string[] = [];
+    for (const msg of messages) {
+      ids.push(
+        (await api.create({
+          text_not_null: msg,
+          text_default: `prefix ts ${now}`,
+        })) as string,
+      );
+    }
+
+    // Test view-based record API with column renames.
+    const subset_view_record: SimpleSubsetView = await client
+      .records<SimpleSubsetView>("simple_subset_view")
+      .read(ids[0]);
+    expect(subset_view_record.id).toStrictEqual(ids[0]);
+    expect(subset_view_record.t_not_null).toStrictEqual(messages[0]);
+
+    for (const apiName of [tableApiName, "simple_complete_view"]) {
+      const api = client.records<NewSimpleStrict>(apiName);
+
+      // Test simple read.
+      const record = await api.read(ids[0]);
+      expect(record.id).toStrictEqual(ids[0]);
+      expect(record.text_not_null).toStrictEqual(messages[0]);
+
+      {
+        // List specific record.
+        const response = await api.list({
+          filters: [
+            {
+              column: "text_not_null",
+              value: messages[0],
+            },
+            {
+              column: "text_default",
+              value: `prefix ts ${now}`,
+            },
+          ],
+        });
+
+        expect(response.total_count).toBeUndefined();
+        if (!apiName.includes("view")) {
+          expect(response.cursor).not.undefined.and.not.toBe("");
+        }
+
+        const records = response.records;
+        expect(records.length).toBe(1);
+        expect(records[0].text_not_null).toBe(messages[0]);
+      }
+
+      {
+        const response = await api.list({
+          filters: [
+            {
+              column: "text_default",
+              op: "like",
+              value: `%ts ${now}`,
+            },
+          ],
+          order: ["+text_not_null"],
+          count: true,
+        });
+
+        expect(response.total_count).toBe(sortedMessages.length);
+        expect(response.records.map((el) => el.text_not_null)).toStrictEqual(
+          sortedMessages,
+        );
+      }
+
+      {
+        const response = await api.list({
+          filters: [
+            {
+              column: "text_default",
+              op: "like",
+              value: `%ts ${now}`,
+            },
+          ],
+          order: ["-text_not_null"],
+        });
+
+        expect(response.total_count).toBeUndefined();
+        expect(
+          response.records.map((el) => el.text_not_null).reverse(),
+        ).toStrictEqual(sortedMessages);
+      }
+    }
+
+    // Check FORBIDDEN after logout.
+    expect(await client.logout()).toBe(true);
+    expect(client.user()).toBe(undefined);
+
+    await expect(async () => await api.read(ids[0])).rejects.toThrow(
+      expect.objectContaining({
+        status: status.FORBIDDEN,
+      }),
+    );
+  });
+
+  test("update & delete", async () => {
+    const apiName = "simple_strict_table";
+
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>(apiName);
+
+    // Milliseconds since epoch.
+    const now = new Date().getTime();
+
+    const id = (await api.create({
+      text_not_null: `ts client test 4: =?&/`,
+      text_default: `prefix ts ${now}`,
+    })) as string;
+
+    // Test Record updates.
+    const updated_value0: Partial<SimpleStrict> = {
+      text_not_null: "ts client test 4 updated",
+      text_null: "updated null",
+    };
+    await api.update(id, updated_value0);
+
+    const updated_record0 = await api.read(id);
+    expect(updated_record0).toEqual(
+      expect.objectContaining({
+        id: id,
+        ...updated_value0,
+      }),
+    );
+
+    // Make sure un-setting nullable values works correctly with JSON serialization.
+    const updated_value1: Partial<SimpleStrict> = {
+      text_not_null: "ts client test 4 updated",
+      text_null: null,
+    };
+    await api.update(id, updated_value1);
+
+    const updated_record1 = await api.read(id);
+    expect(updated_record1).toEqual(
+      expect.objectContaining({
+        id: id,
+        ...updated_value1,
+      }),
+    );
+    expect(updated_record1.text_null).toBeNull();
+
+    await api.delete(id);
+
+    await expect(async () => await api.read(id)).rejects.toThrow(
+      expect.objectContaining({
+        status: status.NOT_FOUND,
+      }),
+    );
+  });
+
+  test("batch insertions", async () => {
+    const apiName = "simple_strict_table";
+
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>(apiName);
+
+    {
+      // Test bulk insertion.
+      const bulkIds = await api.createBulk([
+        { text_not_null: "ts bulk create 0" },
+        { text_not_null: "ts bulk create 1" },
+      ]);
+      expect(bulkIds.length).toBe(2);
+    }
+
+    {
+      // Test batch/transaction API.
+      const op: {
+        Create: {
+          api_name: string;
+          value: Record<string, unknown>;
+        };
+      } = JSON.parse(JSON.stringify(api.createOp({ text_not_null: "test" })));
+
+      expect(op.Create.api_name).toBe(apiName);
+      expect(op.Create.value.text_not_null).toBe("test");
+
+      const bulkIds = await client.execute(
+        [
+          api.createOp({ text_not_null: "ts bulk execute 0" }),
+          api.createOp({ text_not_null: "ts bulk execute 1" }),
+        ],
+        false,
+      );
+      expect(bulkIds.length).toBe(2);
+    }
+  });
+
+  test("transactions", async () => {
+    const apiName = "simple_strict_table";
+
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>(apiName);
+
+    const now = new Date().getTime();
+
+    // Test transaction with create operation
+    {
+      const record = {
+        text_not_null: `ts transaction create test: =?&${now}`,
+      };
+      const ids = await client.execute([api.createOp(record)]);
+
+      expect(ids).toHaveLength(1);
+
+      // Verify record was created
+      const createdRecord = await api.read(ids[0].id!);
+      expect(createdRecord.text_not_null).toBe(record.text_not_null);
+    }
+
+    // Test transaction with update operation
+    {
+      const record = {
+        text_not_null: `ts transaction update test original: =?&${now}`,
+      };
+      const id = await api.create(record);
+      const updatedRecord = {
+        text_not_null: `ts transaction update test modified: =?&${now}`,
+      };
+      await client.execute([api.updateOp(id, updatedRecord)]);
+
+      const readRecord = await api.read(id);
+      expect(readRecord.text_not_null).toBe(updatedRecord.text_not_null);
+    }
+
+    // Test transaction with delete operation
+    {
+      const record = {
+        text_not_null: `ts transaction delete test: =?&${now}`,
+      };
+      const id = await api.create(record);
+
+      await client.execute([api.deleteOp(id)]);
+
+      await expect(api.read(id)).rejects.toThrow();
+    }
+  });
+
+  test("large integers", async () => {
+    const apiName = "simple_strict_table";
+
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>(apiName);
+
+    const huge = BigInt("9223372036854775807");
+    expect(huge).toBeGreaterThan(Number.MIN_SAFE_INTEGER);
+
+    const id = await api.create({
+      int_not_null: huge,
+    });
+
+    expect((await api.read(id)).int_not_null).toEqual(huge);
+  });
+
+  type Comment = {
+    id: number;
+    body: string;
+    post: {
+      id: string;
+      data?: {
+        id: string;
+        author: string;
+        title: string;
+        body: string;
+      };
+    };
+    author: {
+      id: string;
+      data?: {
+        id: string;
+        user: string;
+        name: string;
+      };
+    };
+  };
+
+  test("expand foreign records", async () => {
+    const client = await connect();
+    const api = client.records<Comment>("comment");
+
+    const firstComment = await api.read(1);
+    const expectedFirstComment = {
+      id: 1,
+      author: {
+        id: firstComment.author.id,
+        data: undefined,
+      },
+      post: {
+        id: firstComment.post.id,
+        data: undefined,
+      },
+      body: "first comment",
+    };
+
+    // W/o expansion:
+    expect(firstComment).toEqual(expectedFirstComment);
+
+    // Only expanding post in read:
+    const expectedFirstPost = {
+      id: firstComment.post.id,
+      title: "first post",
+      body: "body",
+      author: expect.anything(),
+    };
+    expect(await api.read(1, { expand: ["post"] })).toEqual({
+      ...expectedFirstComment,
+      post: {
+        id: firstComment.post.id,
+        data: expectedFirstPost,
+      },
+    });
+
+    // Expanding author and post during list (LIMIT 1):
+    const listResponse = await api.list({
+      expand: ["author", "post"],
+      order: ["-id"],
+      pagination: {
+        limit: 1,
+      },
       count: true,
     });
 
-    expect(response.total_count).toBe(sortedMessages.length);
-    expect(response.records.map((el) => el.text_not_null)).toStrictEqual(
-      sortedMessages,
-    );
-  }
+    expect(listResponse.records).toHaveLength(1);
+    expect(listResponse.total_count).toBe(2);
 
-  {
-    const response = await api.list({
+    const secondComment = listResponse.records[0];
+    const expectedSecondComment = {
+      id: 2,
+      author: {
+        id: secondComment.author.id,
+        data: {
+          id: secondComment.author.id,
+          name: "SecondUser",
+          user: expect.anything(),
+        },
+      },
+      post: {
+        id: firstComment.post.id,
+        data: expectedFirstPost,
+      },
+      body: "second comment",
+    };
+    expect(secondComment).toStrictEqual(expectedSecondComment);
+
+    // List more (LIMIT 2) and offset listings:
+    {
+      const opts = {
+        expand: ["author", "post"],
+        order: ["-id"],
+        pagination: {
+          limit: 2,
+        },
+      };
+      const response = await api.list(opts);
+      const expectedFirstCommentExpanded = {
+        ...expectedFirstComment,
+        author: {
+          id: expectedFirstComment.author.id,
+          data: expect.anything(),
+        },
+        post: {
+          id: firstComment.post.id,
+          data: expectedFirstPost,
+        },
+      };
+
+      expect(response).toEqual({
+        cursor: expect.anything(),
+        records: [expectedSecondComment, expectedFirstCommentExpanded],
+      });
+
+      const offsetResponse = await api.list({
+        ...opts,
+        pagination: {
+          limit: 1,
+          offset: 1,
+        },
+      });
+
+      expect(offsetResponse.records[0]).toStrictEqual(response.records[1]);
+      expect(offsetResponse).toEqual({
+        cursor: expect.anything(),
+        records: [expectedFirstCommentExpanded],
+      });
+    }
+  });
+
+  test("GeoJson", async ({ expect }) => {
+    const client = await connect();
+    const apiName = "geometry";
+    const api = client.records(apiName);
+
+    {
+      const json: FeatureCollection = await api.listGeoOp("geom").query();
+      expect(json.features).toHaveLength(4);
+    }
+
+    {
+      // Query a bounding box around he Colloseum.
+      const json: FeatureCollection = await api
+        .listGeoOp("geom", {
+          filters: [
+            {
+              column: "geom",
+              op: "@within",
+              value: "POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))",
+            },
+          ],
+        })
+        .query();
+
+      expect(json.features).toHaveLength(1);
+    }
+  });
+
+  test("API errors", async () => {
+    const client = await connect();
+
+    const nonExistentId = urlSafeBase64Encode(uuidParse(uuidv7()));
+    const nonExistentApi = client.records("non-existent");
+    await expect(
+      async () => await nonExistentApi.read(nonExistentId),
+    ).rejects.toThrow(
+      new FetchError(
+        status.METHOD_NOT_ALLOWED,
+        "Method Not Allowed",
+        new URL(
+          `http://${serverAddress()}/api/records/v1/non-existent/${nonExistentId}`,
+        ),
+      ),
+    );
+
+    const api = client.records("simple_strict_table");
+    const invalidId = "InvalidId0123";
+    await expect(async () => await api.read(invalidId)).rejects.toThrow(
+      new FetchError(
+        status.BAD_REQUEST,
+        // Custom error reply by RecordError's IntoResponse impl.
+        "Invalid id",
+        new URL(
+          `http://${serverAddress()}/api/records/v1/simple_strict_table/${invalidId}`,
+        ),
+      ),
+    );
+
+    await expect(async () => await api.read(nonExistentId)).rejects.toThrow(
+      new FetchError(
+        status.NOT_FOUND,
+        "Not Found",
+        new URL(
+          `http://${serverAddress()}/api/records/v1/simple_strict_table/${nonExistentId}`,
+        ),
+      ),
+    );
+  });
+});
+
+describe("record subscriptions", () => {
+  test("subscribe to specific id", async () => {
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>("simple_strict_table");
+
+    const now = new Date().getTime();
+    const createMessage = `ts client realtime test 0: =?&${now}`;
+    const id = (await api.create({
+      text_not_null: createMessage,
+    })) as string;
+
+    const eventStream = await api.subscribe(id);
+
+    const updatedMessage = `ts client updated realtime test 0: ${now}`;
+    const updatedValue: Partial<SimpleStrict> = {
+      text_not_null: updatedMessage,
+    };
+    await api.update(id, updatedValue);
+    await api.delete(id);
+
+    const events: Event[] = [];
+    for await (const event of eventStream) {
+      events.push(event);
+
+      if (events.length === 2) {
+        break;
+      }
+    }
+    await eventStream.cancel();
+
+    expect(events).toHaveLength(2);
+    expect(
+      ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
+        "text_not_null"
+      ],
+    ).equals(updatedMessage);
+    expect(
+      ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
+        "text_not_null"
+      ],
+    ).equals(updatedMessage);
+  });
+
+  test("subscribe to entire table", async () => {
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>("simple_strict_table");
+    const eventStream = await api.subscribeAll();
+
+    const now = new Date().getTime();
+    const createMessage = `ts client realtime test 0: =?&${now}`;
+    const id = (await api.create({
+      text_not_null: createMessage,
+    })) as string;
+
+    const updatedMessage = `ts client updated realtime test 0: ${now}`;
+    const updatedValue: Partial<SimpleStrict> = {
+      text_not_null: updatedMessage,
+    };
+    await api.update(id, updatedValue);
+    await api.delete(id);
+
+    const events: Event[] = [];
+    for await (const event of eventStream) {
+      events.push(event);
+
+      if (events.length === 3) {
+        break;
+      }
+    }
+    await eventStream.cancel();
+
+    expect(events).toHaveLength(3);
+    expect(
+      ((events[0] as ChangeInsertEvent)["Insert"] as SimpleStrict)[
+        "text_not_null"
+      ],
+    ).equals(createMessage);
+    expect(
+      ((events[1] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
+        "text_not_null"
+      ],
+    ).equals(updatedMessage);
+    expect(
+      ((events[2] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
+        "text_not_null"
+      ],
+    ).equals(updatedMessage);
+  });
+
+  test("subscribe to table with record filters", async () => {
+    const client = await connect();
+    const api = client.records<NewSimpleStrict>("simple_strict_table");
+
+    const now = new Date().getTime();
+
+    const updatedMessage = `ts client updated realtime test 42: ${now}`;
+    const eventStream = await api.subscribeAll({
       filters: [
         {
-          column: "text_default",
-          op: "like",
-          value: `%ts ${now}`,
+          column: "text_not_null",
+          op: "equal",
+          value: updatedMessage,
         },
       ],
-      order: ["-text_not_null"],
     });
 
-    expect(response.total_count).toBeUndefined();
+    const createMessage = `ts client realtime test 42: =?&${now}`;
+    const id = (await api.create({
+      text_not_null: createMessage,
+    })) as string;
+
+    const updatedValue: Partial<SimpleStrict> = {
+      text_not_null: updatedMessage,
+    };
+    await api.update(id, updatedValue);
+    await api.delete(id);
+
+    const events: Event[] = [];
+    for await (const event of eventStream) {
+      events.push(event);
+
+      if (events.length === 2) {
+        break;
+      }
+    }
+
+    // We should have skipped the creation.
+    expect(events).toHaveLength(2);
     expect(
-      response.records.map((el) => el.text_not_null).reverse(),
-    ).toStrictEqual(sortedMessages);
-  }
-
-  // Test 1:1 VIEW-based record API.
-  const view_record: SimpleCompleteView = await client
-    .records<SimpleCompleteView>("simple_complete_view")
-    .read(ids[0]);
-  expect(view_record.id).toStrictEqual(ids[0]);
-  expect(view_record.text_not_null).toStrictEqual(messages[0]);
-
-  // Test view-based record API with column renames.
-  const subset_view_record: SimpleSubsetView = await client
-    .records<SimpleSubsetView>("simple_subset_view")
-    .read(ids[0]);
-  expect(subset_view_record.id).toStrictEqual(ids[0]);
-  expect(subset_view_record.t_not_null).toStrictEqual(messages[0]);
-
-  // Check FORBIDDEN after logout.
-  expect(await client.logout()).toBe(true);
-  expect(client.user()).toBe(undefined);
-
-  await expect(async () => await api.read(ids[0])).rejects.toThrow(
-    expect.objectContaining({
-      status: status.FORBIDDEN,
-    }),
-  );
-});
-
-test("Record update & delete integration tests", async () => {
-  const client = await connect();
-  const apiName = "simple_strict_table";
-  const api = client.records<NewSimpleStrict>(apiName);
-
-  // Milliseconds since epoch.
-  const now = new Date().getTime();
-
-  const id = (await api.create({
-    text_not_null: `ts client test 4: =?&/`,
-    text_default: `prefix ts ${now}`,
-  })) as string;
-
-  // Test Record updates.
-  const updated_value0: Partial<SimpleStrict> = {
-    text_not_null: "ts client test 4 updated",
-    text_null: "updated null",
-  };
-  await api.update(id, updated_value0);
-
-  const updated_record0 = await api.read(id);
-  expect(updated_record0).toEqual(
-    expect.objectContaining({
-      id: id,
-      ...updated_value0,
-    }),
-  );
-
-  // Make sure un-setting nullable values works correctly with JSON serialization.
-  const updated_value1: Partial<SimpleStrict> = {
-    text_not_null: "ts client test 4 updated",
-    text_null: null,
-  };
-  await api.update(id, updated_value1);
-
-  const updated_record1 = await api.read(id);
-  expect(updated_record1).toEqual(
-    expect.objectContaining({
-      id: id,
-      ...updated_value1,
-    }),
-  );
-  expect(updated_record1.text_null).toBeNull();
-
-  await api.delete(id);
-
-  await expect(async () => await api.read(id)).rejects.toThrow(
-    expect.objectContaining({
-      status: status.NOT_FOUND,
-    }),
-  );
-});
-
-test("Batch Record Insertion", async () => {
-  const client = await connect();
-  const apiName = "simple_strict_table";
-  const api = client.records<NewSimpleStrict>(apiName);
-
-  {
-    // Test bulk insertion.
-    const bulkIds = await api.createBulk([
-      { text_not_null: "ts bulk create 0" },
-      { text_not_null: "ts bulk create 1" },
-    ]);
-    expect(bulkIds.length).toBe(2);
-  }
-
-  {
-    // Test batch/transaction API.
-    const op: {
-      Create: {
-        api_name: string;
-        value: Record<string, unknown>;
-      };
-    } = JSON.parse(JSON.stringify(api.createOp({ text_not_null: "test" })));
-
-    expect(op.Create.api_name).toBe(apiName);
-    expect(op.Create.value.text_not_null).toBe("test");
-
-    const bulkIds = await client.execute(
-      [
-        api.createOp({ text_not_null: "ts bulk execute 0" }),
-        api.createOp({ text_not_null: "ts bulk execute 1" }),
+      ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
+        "text_not_null"
       ],
-      false,
+    ).equals(updatedMessage);
+    expect(
+      ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
+        "text_not_null"
+      ],
+    ).equals(updatedMessage);
+  });
+});
+
+describe("record file operations", () => {
+  type FileUpload = {
+    // Upload
+    name?: string;
+    data?: string;
+
+    // Both.
+    filename: string;
+    content_type?: string;
+
+    // Download
+    original_filename?: string;
+    mime_type?: string;
+  };
+
+  type FileUploadTable = {
+    name: string | undefined;
+    single_file: FileUpload | undefined;
+    multiple_files: FileUpload[] | undefined;
+  };
+
+  async function testBase64FileUploads(
+    client: Client,
+    apiName: string,
+  ): Promise<void> {
+    const api = client.records<FileUploadTable>(apiName);
+
+    const testBytes1 = new Uint8Array([0, 1, 2, 3, 4, 5]);
+    const testBytes2 = new Uint8Array([42, 5, 42, 5]);
+    const testBytes3 = new Uint8Array([255, 128, 64, 32]);
+
+    // Test creating a record with multiple base64 encoded files
+    const recordId = await api.create({
+      name: "Base64 File Upload Test",
+      single_file: {
+        name: "single_test",
+        filename: "test1.bin",
+        content_type: "application/octet-stream",
+        data: urlSafeBase64Encode(testBytes1),
+      },
+      multiple_files: [
+        {
+          name: "multi_test_1",
+          filename: "test2.bin",
+          content_type: "application/octet-stream",
+          data: urlSafeBase64Encode(testBytes2),
+        },
+        {
+          name: "multi_test_2",
+          filename: "test3.bin",
+          content_type: "application/octet-stream",
+          data: base64Encode(testBytes3), // Standard base64
+        },
+      ],
+    });
+
+    // Read the record back to verify file metadata was stored correctly
+    const record = await api.read(recordId);
+
+    expect(record.single_file).not.toBeUndefined();
+    expect(record.multiple_files).not.toBeUndefined();
+
+    const singleFile = record.single_file!;
+    const multipleFiles = record.multiple_files!;
+
+    // Verify single file metadata
+    expect(singleFile.original_filename).toBe("test1.bin");
+    expect(singleFile.content_type).toBe("application/octet-stream");
+
+    // Verify multiple files metadata
+    expect(multipleFiles.length).toBe(2);
+    expect(multipleFiles[0].original_filename).toBe("test2.bin");
+    expect(multipleFiles[0].filename.startsWith("test2"));
+    expect(multipleFiles[0].filename.endsWith(".bin"));
+    expect(multipleFiles[1].original_filename).toBe("test3.bin");
+
+    // Test file download endpoints to verify actual file content
+    const singleFileResponse = await fetch(
+      `http://${serverAddress()}${filePath(apiName, recordId, "single_file")}`,
     );
-    expect(bulkIds.length).toBe(2);
+    expect(await singleFileResponse.bytes()).toEqual(testBytes1);
+
+    const singleFilesResponse = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
+    );
+    expect(await singleFilesResponse.bytes()).toEqual(testBytes1);
+
+    const multiFile1Response = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
+    );
+    expect(await multiFile1Response.bytes()).toEqual(testBytes2);
+
+    const multiFile2Response = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
+    );
+    expect(await multiFile2Response.bytes()).toEqual(testBytes3);
+
+    const notFoundResponse = await fetch(
+      `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", "non-existent-filename")}`,
+    );
+    expect(notFoundResponse.status).toEqual(status.NOT_FOUND);
+
+    // Clean up
+    await api.delete(recordId);
   }
-});
 
-test("Large Integers", async () => {
-  const client = await connect();
-  const apiName = "simple_strict_table";
-  const api = client.records<NewSimpleStrict>(apiName);
-
-  const huge = BigInt("9223372036854775807");
-  expect(huge).toBeGreaterThan(Number.MIN_SAFE_INTEGER);
-
-  const id = await api.create({
-    int_not_null: huge,
+  test("file upload base64: main DB", async () => {
+    const client = await connect();
+    await testBase64FileUploads(client, "file_upload_table");
   });
 
-  expect((await api.read(id)).int_not_null).toEqual(huge);
-});
-
-type Comment = {
-  id: number;
-  body: string;
-  post: {
-    id: string;
-    data?: {
-      id: string;
-      author: string;
-      title: string;
-      body: string;
-    };
-  };
-  author: {
-    id: string;
-    data?: {
-      id: string;
-      user: string;
-      name: string;
-    };
-  };
-};
-
-test("Expand foreign records", async () => {
-  const client = await connect();
-  const api = client.records<Comment>("comment");
-
-  {
-    const comment = await api.read(1);
-    expect(comment.id).toBe(1);
-    expect(comment.body).toBe("first comment");
-    expect(comment.author.data).toBeUndefined();
-    expect(comment.post.data).toBeUndefined();
-  }
-
-  {
-    const comment = await api.read(1, { expand: ["post"] });
-    expect(comment.id).toBe(1);
-    expect(comment.body).toBe("first comment");
-    expect(comment.author.data).toBeUndefined();
-    expect(comment.post.data?.title).toBe("first post");
-  }
-
-  {
-    const response = await api.list({
-      expand: ["author", "post"],
-      order: ["-id"],
-      pagination: {
-        limit: 1,
-      },
-    });
-
-    expect(response.records).toHaveLength(1);
-    const comment = response.records[0];
-
-    expect(comment.id).toBe(2);
-    expect(comment.body).toBe("second comment");
-    expect(comment.author.data?.name).toBe("SecondUser");
-    expect(comment.post.data?.title).toBe("first post");
-  }
-
-  {
-    const response = await api.list({
-      expand: ["author", "post"],
-      order: ["-id"],
-      pagination: {
-        limit: 2,
-      },
-    });
-
-    expect(response.records.length).toBe(2);
-    const second = response.records[1];
-
-    const offsetResponse = await api.list({
-      expand: ["author", "post"],
-      order: ["-id"],
-      pagination: {
-        limit: 1,
-        offset: 1,
-      },
-    });
-
-    expect(offsetResponse.records.length).toBe(1);
-    const offsetFirst = offsetResponse.records[0];
-
-    expect(second).toStrictEqual(offsetFirst);
-  }
-});
-
-test("API Errors", async () => {
-  const client = await connect();
-
-  await expect(
-    async () => await client.fetch("/nonexistent/api/path"),
-  ).rejects.toThrow(
-    new FetchError(
-      status.NOT_FOUND,
-      "Not Found",
-      new URL(`http://${serverAddress()}/nonexistent/api/path`),
-    ),
-  );
-
-  const nonExistentId = urlSafeBase64Encode(uuidParse(uuidv7()));
-  const nonExistentApi = client.records("non-existent");
-  await expect(
-    async () => await nonExistentApi.read(nonExistentId),
-  ).rejects.toThrow(
-    new FetchError(
-      status.METHOD_NOT_ALLOWED,
-      "Method Not Allowed",
-      new URL(
-        `http://${serverAddress()}/api/records/v1/non-existent/${nonExistentId}`,
-      ),
-    ),
-  );
-
-  const api = client.records("simple_strict_table");
-  const invalidId = "InvalidId0123";
-  await expect(async () => await api.read(invalidId)).rejects.toThrow(
-    new FetchError(
-      status.BAD_REQUEST,
-      // Custom error reply by RecordError's IntoResponse impl.
-      "Invalid id",
-      new URL(
-        `http://${serverAddress()}/api/records/v1/simple_strict_table/${invalidId}`,
-      ),
-    ),
-  );
-
-  await expect(async () => await api.read(nonExistentId)).rejects.toThrow(
-    new FetchError(
-      status.NOT_FOUND,
-      "Not Found",
-      new URL(
-        `http://${serverAddress()}/api/records/v1/simple_strict_table/${nonExistentId}`,
-      ),
-    ),
-  );
-});
-
-test("Record Transactions", async () => {
-  const client = await connect();
-  const api = client.records<NewSimpleStrict>("simple_strict_table");
-  const now = new Date().getTime();
-
-  // Test transaction with create operation
-  {
-    const record = { text_not_null: `ts transaction create test: =?&${now}` };
-    const ids = await client.execute([api.createOp(record)]);
-
-    expect(ids).toHaveLength(1);
-
-    // Verify record was created
-    const createdRecord = await api.read(ids[0].id!);
-    expect(createdRecord.text_not_null).toBe(record.text_not_null);
-  }
-
-  // Test transaction with update operation
-  {
-    const record = {
-      text_not_null: `ts transaction update test original: =?&${now}`,
-    };
-    const id = await api.create(record);
-    const updatedRecord = {
-      text_not_null: `ts transaction update test modified: =?&${now}`,
-    };
-    await client.execute([api.updateOp(id, updatedRecord)]);
-
-    const readRecord = await api.read(id);
-    expect(readRecord.text_not_null).toBe(updatedRecord.text_not_null);
-  }
-
-  // Test transaction with delete operation
-  {
-    const record = { text_not_null: `ts transaction delete test: =?&${now}` };
-    const id = await api.create(record);
-
-    await client.execute([api.deleteOp(id)]);
-
-    await expect(api.read(id)).rejects.toThrow();
-  }
-});
-
-test("Subscribe to Record with specific id", async () => {
-  const client = await connect();
-  const api = client.records<NewSimpleStrict>("simple_strict_table");
-
-  const now = new Date().getTime();
-  const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api.create({
-    text_not_null: createMessage,
-  })) as string;
-
-  const eventStream = await api.subscribe(id);
-
-  const updatedMessage = `ts client updated realtime test 0: ${now}`;
-  const updatedValue: Partial<SimpleStrict> = {
-    text_not_null: updatedMessage,
-  };
-  await api.update(id, updatedValue);
-  await api.delete(id);
-
-  const events: Event[] = [];
-  for await (const event of eventStream) {
-    events.push(event);
-
-    if (events.length === 2) {
-      break;
-    }
-  }
-  await eventStream.cancel();
-
-  expect(events).toHaveLength(2);
-  expect(
-    ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(updatedMessage);
-  expect(
-    ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(updatedMessage);
-});
-
-test("Subscribe to entire table", async () => {
-  const client = await connect();
-  const api = client.records<NewSimpleStrict>("simple_strict_table");
-  const eventStream = await api.subscribeAll();
-
-  const now = new Date().getTime();
-  const createMessage = `ts client realtime test 0: =?&${now}`;
-  const id = (await api.create({
-    text_not_null: createMessage,
-  })) as string;
-
-  const updatedMessage = `ts client updated realtime test 0: ${now}`;
-  const updatedValue: Partial<SimpleStrict> = {
-    text_not_null: updatedMessage,
-  };
-  await api.update(id, updatedValue);
-  await api.delete(id);
-
-  const events: Event[] = [];
-  for await (const event of eventStream) {
-    events.push(event);
-
-    if (events.length === 3) {
-      break;
-    }
-  }
-  await eventStream.cancel();
-
-  expect(events).toHaveLength(3);
-  expect(
-    ((events[0] as ChangeInsertEvent)["Insert"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(createMessage);
-  expect(
-    ((events[1] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(updatedMessage);
-  expect(
-    ((events[2] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(updatedMessage);
-});
-
-test("Subscribe to table with record filters", async () => {
-  const client = await connect();
-  const api = client.records<NewSimpleStrict>("simple_strict_table");
-
-  const now = new Date().getTime();
-
-  const updatedMessage = `ts client updated realtime test 42: ${now}`;
-  const eventStream = await api.subscribeAll({
-    filters: [
-      {
-        column: "text_not_null",
-        op: "equal",
-        value: updatedMessage,
-      },
-    ],
+  test("file upload base64: other DB", async () => {
+    const client = await connect();
+    await testBase64FileUploads(client, "other_file_upload_table");
   });
-
-  const createMessage = `ts client realtime test 42: =?&${now}`;
-  const id = (await api.create({
-    text_not_null: createMessage,
-  })) as string;
-
-  const updatedValue: Partial<SimpleStrict> = {
-    text_not_null: updatedMessage,
-  };
-  await api.update(id, updatedValue);
-  await api.delete(id);
-
-  const events: Event[] = [];
-  for await (const event of eventStream) {
-    events.push(event);
-
-    if (events.length === 2) {
-      break;
-    }
-  }
-
-  // We should have skipped the creation.
-  expect(events).toHaveLength(2);
-  expect(
-    ((events[0] as ChangeUpdateEvent)["Update"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(updatedMessage);
-  expect(
-    ((events[1] as ChangeDeleteEvent)["Delete"] as SimpleStrict)[
-      "text_not_null"
-    ],
-  ).equals(updatedMessage);
 });
 
-type FileUpload = {
-  // Upload
-  name?: string;
-  data?: string;
+describe("generic errors", () => {
+  test("invalid path", async () => {
+    const client = await connect();
 
-  // Both.
-  filename: string;
-  content_type?: string;
-
-  // Download
-  original_filename?: string;
-  mime_type?: string;
-};
-
-type FileUploadTable = {
-  name: string | undefined;
-  single_file: FileUpload | undefined;
-  multiple_files: FileUpload[] | undefined;
-};
-
-async function testBase64FileUploads(
-  client: Client,
-  apiName: string,
-): Promise<void> {
-  const api = client.records<FileUploadTable>(apiName);
-
-  const testBytes1 = new Uint8Array([0, 1, 2, 3, 4, 5]);
-  const testBytes2 = new Uint8Array([42, 5, 42, 5]);
-  const testBytes3 = new Uint8Array([255, 128, 64, 32]);
-
-  // Test creating a record with multiple base64 encoded files
-  const recordId = await api.create({
-    name: "Base64 File Upload Test",
-    single_file: {
-      name: "single_test",
-      filename: "test1.bin",
-      content_type: "application/octet-stream",
-      data: urlSafeBase64Encode(testBytes1),
-    },
-    multiple_files: [
-      {
-        name: "multi_test_1",
-        filename: "test2.bin",
-        content_type: "application/octet-stream",
-        data: urlSafeBase64Encode(testBytes2),
-      },
-      {
-        name: "multi_test_2",
-        filename: "test3.bin",
-        content_type: "application/octet-stream",
-        data: base64Encode(testBytes3), // Standard base64
-      },
-    ],
+    await expect(
+      async () => await client.fetch("/nonexistent/api/path"),
+    ).rejects.toThrow(
+      new FetchError(
+        status.NOT_FOUND,
+        "Not Found",
+        new URL(`http://${serverAddress()}/nonexistent/api/path`),
+      ),
+    );
   });
-
-  // Read the record back to verify file metadata was stored correctly
-  const record = await api.read(recordId);
-
-  expect(record.single_file).not.toBeUndefined();
-  expect(record.multiple_files).not.toBeUndefined();
-
-  const singleFile = record.single_file!;
-  const multipleFiles = record.multiple_files!;
-
-  // Verify single file metadata
-  expect(singleFile.original_filename).toBe("test1.bin");
-  expect(singleFile.content_type).toBe("application/octet-stream");
-
-  // Verify multiple files metadata
-  expect(multipleFiles.length).toBe(2);
-  expect(multipleFiles[0].original_filename).toBe("test2.bin");
-  expect(multipleFiles[0].filename.startsWith("test2"));
-  expect(multipleFiles[0].filename.endsWith(".bin"));
-  expect(multipleFiles[1].original_filename).toBe("test3.bin");
-
-  // Test file download endpoints to verify actual file content
-  const singleFileResponse = await fetch(
-    `http://${serverAddress()}${filePath(apiName, recordId, "single_file")}`,
-  );
-  expect(await singleFileResponse.bytes()).toEqual(testBytes1);
-
-  const singleFilesResponse = await fetch(
-    `http://${serverAddress()}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
-  );
-  expect(await singleFilesResponse.bytes()).toEqual(testBytes1);
-
-  const multiFile1Response = await fetch(
-    `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
-  );
-  expect(await multiFile1Response.bytes()).toEqual(testBytes2);
-
-  const multiFile2Response = await fetch(
-    `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
-  );
-  expect(await multiFile2Response.bytes()).toEqual(testBytes3);
-
-  const notFoundResponse = await fetch(
-    `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", "non-existent-filename")}`,
-  );
-  expect(notFoundResponse.status).toEqual(status.NOT_FOUND);
-
-  // Clean up
-  await api.delete(recordId);
-}
-
-test("File upload base64: main DB", async () => {
-  const client = await connect();
-  await testBase64FileUploads(client, "file_upload_table");
-});
-
-test("File upload base64: other DB", async () => {
-  const client = await connect();
-  await testBase64FileUploads(client, "other_file_upload_table");
-});
-
-test("GeoJson access", async ({ expect }) => {
-  const client = await connect();
-  const apiName = "geometry";
-  const api = client.records(apiName);
-
-  {
-    const json: FeatureCollection = await api.listGeoOp("geom").query();
-    expect(json.features).toHaveLength(4);
-  }
-
-  {
-    // Query a bounding box around he Colloseum.
-    const json: FeatureCollection = await api
-      .listGeoOp("geom", {
-        filters: [
-          {
-            column: "geom",
-            op: "@within",
-            value: "POLYGON ((12 40, 12 42, 13 42, 13 40, 12 40))",
-          },
-        ],
-      })
-      .query();
-
-    expect(json.features).toHaveLength(1);
-  }
 });

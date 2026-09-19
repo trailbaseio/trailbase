@@ -21,9 +21,9 @@ test("error-handling", async ({ expect }) => {
   const client = initClient("http://localhost:34444");
 
   // This is the actual `fetch()` failing to connect, i.e. throwing rather than yielding an error response.
-  await expect(
-    async () => await client.login("foo", "bar"),
-  ).rejects.toThrowError(new TypeError("fetch failed"));
+  await expect(async () => await client.login("foo", "bar")).rejects.toThrow(
+    new TypeError("fetch failed"),
+  );
 });
 
 test("BigInt JSON parsing", ({ expect }) => {
