@@ -563,7 +563,7 @@ async fn get_settings_handler(_req: Request) -> Result<Response, HttpError> {
 }
 
 async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
-  let body = req.body().bytes().await.map_err(internal)?;
+  let body = req.body().contents().await.map_err(internal)?;
 
   let _ = SETTINGS_CACHE.lock().map(|mut guard| *guard = None);
 
@@ -571,7 +571,7 @@ async fn set_settings_handler(mut req: Request) -> Result<Response, HttpError> {
     SETTINGS_KEY,
     Some({
       // Input validation: make sure settings object has the right shape.
-      let settings: AuthUiSettings = serde_json::from_slice(&body).map_err(|_| bad_request())?;
+      let settings: AuthUiSettings = serde_json::from_slice(body).map_err(|_| bad_request())?;
       serde_json::to_string(&settings).map_err(internal)?
     }),
   )

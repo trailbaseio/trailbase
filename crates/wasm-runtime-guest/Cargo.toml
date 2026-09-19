@@ -1,6 +1,6 @@
 [package]
 name = "trailbase-wasm"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
 license = "OSL-3.0"
 description = "WASM runtime for the TrailBase framework"
@@ -9,6 +9,7 @@ repository = "https://github.com/trailbaseio/trailbase"
 readme = "../../README.md"
 
 [dependencies]
+anyhow = "1.0.104"
 base64 = { workspace = true }
 bytes = { version = "1.12.1", default-features = false }
 futures-util = { workspace = true }
@@ -24,4 +25,4 @@ trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.8"
 wit-bindgen = "0.62.0"
-wstd = "=0.5.6"
+wstd = "0.6.8"

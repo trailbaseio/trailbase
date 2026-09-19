@@ -1,13 +1,12 @@
 use futures_util::future::LocalBoxFuture;
 use serde::de::DeserializeOwned;
 use trailbase_wasm_common::HttpContext;
-use wstd::http::server::{Finished, Responder};
-use wstd::io::{Cursor, Empty, empty};
+use wstd::http::server::Responder;
 
 pub use http::{HeaderMap, HeaderValue, Method, StatusCode, Version, header};
 pub use trailbase_wasm_common::HttpContextUser as User;
 
-pub type Response<T = BoundedBody<Vec<u8>>> = http::Response<T>;
+pub type Response<T = wstd::http::Body> = http::Response<T>;
 
 #[derive(Clone, Debug)]
 pub struct HttpError {
@@ -40,9 +39,9 @@ impl From<HttpError> for Response {
 type HttpHandler = Box<
   dyn FnOnce(
     HttpContext,
-    http::Request<wstd::http::body::IncomingBody>,
+    http::Request<wstd::http::Body>,
     wstd::http::server::Responder,
-  ) -> LocalBoxFuture<'static, Finished>,
+  ) -> LocalBoxFuture<'static, Result<(), anyhow::Error>>,
 >;
 
 pub struct HttpRoute {
@@ -58,15 +57,13 @@ impl HttpRoute {
     // start more constraint and see where it takes us.
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return Self {
       method,
       path: path.to_string(),
       handler: Box::new(
-        move |context: HttpContext,
-              req: http::Request<wstd::http::body::IncomingBody>,
-              responder: Responder| {
+        move |context: HttpContext, req: http::Request<wstd::http::Body>, responder: Responder| {
           let (head, body) = req.into_parts();
           let Ok(url) = to_url(head.uri) else {
             return Box::pin(responder.respond(empty_error_response(StatusCode::BAD_REQUEST)));
@@ -90,7 +87,7 @@ impl HttpRoute {
 
             // TODO: Poll tasks.
 
-            response
+            return response;
           });
         },
       ),
@@ -113,9 +110,7 @@ impl HttpRoute {
       path,
       // Wraps the handler in an access check to build a new route.
       handler: Box::new(
-        move |context: HttpContext,
-              req: http::Request<wstd::http::body::IncomingBody>,
-              responder: Responder| {
+        move |context: HttpContext, req: http::Request<wstd::http::Body>, responder: Responder| {
           Box::pin(async move {
             if let Err(err) = crate::auth::require_admin_impl(
               context.user.as_ref(),
@@ -142,7 +137,7 @@ pub mod routing {
   where
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return HttpRoute::new(Method::GET, path, f);
   }
@@ -151,7 +146,7 @@ pub mod routing {
   where
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return HttpRoute::new(Method::POST, path, f);
   }
@@ -160,7 +155,7 @@ pub mod routing {
   where
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return HttpRoute::new(Method::PATCH, path, f);
   }
@@ -169,7 +164,7 @@ pub mod routing {
   where
     F: (AsyncFn(Request) -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return HttpRoute::new(Method::DELETE, path, f);
   }
@@ -201,12 +196,12 @@ pub struct Parts {
 #[derive(Debug)]
 pub struct Request {
   head: Parts,
-  body: wstd::http::body::IncomingBody,
+  body: wstd::http::Body,
 }
 
 impl Request {
   #[inline]
-  pub fn body(&mut self) -> &mut wstd::http::body::IncomingBody {
+  pub fn body(&mut self) -> &mut wstd::http::Body {
     return &mut self.body;
   }
 
@@ -281,66 +276,44 @@ fn to_url(uri: http::Uri) -> Result<url::Url, url::ParseError> {
   };
 }
 
-/// An HTTP body with a known length
-#[derive(Debug, Default)]
-pub struct BoundedBody<T>(Cursor<T>);
-
-impl<T: AsRef<[u8]>> wstd::io::AsyncRead for BoundedBody<T> {
-  async fn read(&mut self, buf: &mut [u8]) -> wstd::io::Result<usize> {
-    self.0.read(buf).await
-  }
-}
-
-impl<T: AsRef<[u8]>> wstd::http::body::Body for BoundedBody<T> {
-  fn len(&self) -> Option<usize> {
-    Some(self.0.get_ref().as_ref().len())
-  }
-}
-
 /// Conversion into a `Body`.
-///
-/// NOTE: We have our own trait over wstd::http::body::IntoBody to avoid possible future conflicts
-/// when implementing IntoResponse for Result<B: IntoBody, HttpError>.
 pub trait IntoBody {
-  /// What type of `Body` are we turning this into?
-  type IntoBody: wstd::http::body::Body;
-  /// Convert into `Body`.
-  fn into_body(self) -> Self::IntoBody;
+  fn into_body(self) -> wstd::http::Body;
 }
 
 impl IntoBody for () {
-  type IntoBody = wstd::io::Empty;
-
-  fn into_body(self) -> Self::IntoBody {
-    return wstd::io::empty();
+  fn into_body(self) -> wstd::http::Body {
+    return self.into();
   }
 }
 
 impl IntoBody for String {
-  type IntoBody = BoundedBody<Vec<u8>>;
-  fn into_body(self) -> Self::IntoBody {
-    BoundedBody(Cursor::new(self.into_bytes()))
+  fn into_body(self) -> wstd::http::Body {
+    return self.into();
   }
 }
 
 impl IntoBody for &str {
-  type IntoBody = BoundedBody<Vec<u8>>;
-  fn into_body(self) -> Self::IntoBody {
-    BoundedBody(Cursor::new(self.to_owned().into_bytes()))
+  fn into_body(self) -> wstd::http::Body {
+    return self.into();
   }
 }
 
 impl IntoBody for Vec<u8> {
-  type IntoBody = BoundedBody<Vec<u8>>;
-  fn into_body(self) -> Self::IntoBody {
-    BoundedBody(Cursor::new(self))
+  fn into_body(self) -> wstd::http::Body {
+    return self.into();
+  }
+}
+
+impl IntoBody for bytes::Bytes {
+  fn into_body(self) -> wstd::http::Body {
+    return self.into();
   }
 }
 
 impl IntoBody for &[u8] {
-  type IntoBody = BoundedBody<Vec<u8>>;
-  fn into_body(self) -> Self::IntoBody {
-    BoundedBody(Cursor::new(self.to_owned()))
+  fn into_body(self) -> wstd::http::Body {
+    return self.into();
   }
 }
 
@@ -348,13 +321,13 @@ pub trait IntoResponse<B> {
   fn into_response(self) -> http::Response<B>;
 }
 
-impl<B: wstd::http::body::Body> IntoResponse<B> for Response<B> {
+impl<B: Into<wstd::http::Body>> IntoResponse<B> for Response<B> {
   fn into_response(self) -> http::Response<B> {
     return self;
   }
 }
 
-impl<B: wstd::http::body::Body, Err: IntoResponse<B>> IntoResponse<B> for Result<Response<B>, Err> {
+impl<B: Into<wstd::http::Body>, Err: IntoResponse<B>> IntoResponse<B> for Result<Response<B>, Err> {
   fn into_response(self) -> http::Response<B> {
     return match self {
       Ok(resp) => resp,
@@ -363,16 +336,14 @@ impl<B: wstd::http::body::Body, Err: IntoResponse<B>> IntoResponse<B> for Result
   }
 }
 
-impl<B: IntoBody> IntoResponse<B::IntoBody> for B {
-  fn into_response(self) -> http::Response<B::IntoBody> {
+impl<B: IntoBody> IntoResponse<wstd::http::Body> for B {
+  fn into_response(self) -> http::Response<wstd::http::Body> {
     return http::Response::new(self.into_body());
   }
 }
 
-impl<B: IntoBody<IntoBody = BoundedBody<Vec<u8>>>> IntoResponse<BoundedBody<Vec<u8>>>
-  for Result<B, HttpError>
-{
-  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+impl<B: IntoBody> IntoResponse<wstd::http::Body> for Result<B, HttpError> {
+  fn into_response(self) -> http::Response<wstd::http::Body> {
     return match self {
       Ok(body) => http::Response::new(body.into_body()),
       Err(err) => build_response(err.status, err.message.unwrap_or_default().into_body()),
@@ -380,18 +351,9 @@ impl<B: IntoBody<IntoBody = BoundedBody<Vec<u8>>>> IntoResponse<BoundedBody<Vec<
   }
 }
 
-impl IntoResponse<BoundedBody<Vec<u8>>> for HttpError {
-  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+impl IntoResponse<wstd::http::Body> for HttpError {
+  fn into_response(self) -> http::Response<wstd::http::Body> {
     return build_response(self.status, self.message.unwrap_or_default().into_body());
-  }
-}
-
-impl IntoResponse<BoundedBody<Vec<u8>>> for Result<(), HttpError> {
-  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
-    return match self {
-      Ok(_) => http::Response::new("".into_body()),
-      Err(err) => err.into_response(),
-    };
   }
 }
 
@@ -399,20 +361,20 @@ impl IntoResponse<BoundedBody<Vec<u8>>> for Result<(), HttpError> {
 #[must_use]
 pub struct Json<T>(pub T);
 
-impl<T> IntoResponse<BoundedBody<Vec<u8>>> for Json<T>
+impl<T> IntoResponse<wstd::http::Body> for Json<T>
 where
   T: serde::Serialize,
 {
-  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+  fn into_response(self) -> http::Response<wstd::http::Body> {
     return build_json_response(StatusCode::OK, self.0);
   }
 }
 
-impl<T> IntoResponse<BoundedBody<Vec<u8>>> for std::result::Result<Json<T>, HttpError>
+impl<T> IntoResponse<wstd::http::Body> for std::result::Result<Json<T>, HttpError>
 where
   T: serde::Serialize,
 {
-  fn into_response(self) -> http::Response<BoundedBody<Vec<u8>>> {
+  fn into_response(self) -> http::Response<wstd::http::Body> {
     return match self {
       Ok(json) => {
         return build_json_response(StatusCode::OK, json.0);
@@ -429,9 +391,9 @@ where
 #[must_use]
 pub struct Html<T>(pub T);
 
-impl<T> IntoResponse<BoundedBody<Vec<u8>>> for Html<T>
+impl<T> IntoResponse<wstd::http::Body> for Html<T>
 where
-  T: IntoResponse<BoundedBody<Vec<u8>>>,
+  T: IntoResponse<wstd::http::Body>,
 {
   fn into_response(self) -> Response {
     let mut r = self.0.into_response();
@@ -476,9 +438,9 @@ impl Redirect {
   }
 }
 
-impl<B: wstd::http::body::Body + Default> IntoResponse<B> for Redirect {
-  fn into_response(self) -> http::Response<B> {
-    let mut response = http::Response::<B>::default();
+impl IntoResponse<wstd::http::Body> for Redirect {
+  fn into_response(self) -> http::Response<wstd::http::Body> {
+    let mut response = http::Response::new(wstd::http::Body::empty());
     *response.status_mut() = self.status_code;
     response
       .headers_mut()
@@ -487,21 +449,18 @@ impl<B: wstd::http::body::Body + Default> IntoResponse<B> for Redirect {
   }
 }
 
-pub(crate) fn empty_error_response(status: StatusCode) -> http::Response<Empty> {
-  let mut response = http::Response::new(empty());
+pub(crate) fn empty_error_response(status: StatusCode) -> http::Response<wstd::http::Body> {
+  let mut response = http::Response::new(wstd::http::Body::empty());
   *response.status_mut() = status;
   return response;
 }
 
-fn internal_error_response() -> http::Response<BoundedBody<Vec<u8>>> {
+fn internal_error_response() -> http::Response<wstd::http::Body> {
   return build_response(StatusCode::INTERNAL_SERVER_ERROR, "".into_body());
 }
 
 #[inline]
-fn build_response(
-  status: StatusCode,
-  body: BoundedBody<Vec<u8>>,
-) -> http::Response<BoundedBody<Vec<u8>>> {
+fn build_response(status: StatusCode, body: wstd::http::Body) -> http::Response<wstd::http::Body> {
   let mut response = http::Response::new(body);
   *response.status_mut() = status;
   return response;
@@ -511,7 +470,7 @@ fn build_response(
 fn build_json_response<T: serde::Serialize>(
   status: StatusCode,
   value: T,
-) -> http::Response<BoundedBody<Vec<u8>>> {
+) -> http::Response<wstd::http::Body> {
   let Ok(bytes) = serde_json::to_vec(&value) else {
     return internal_error_response();
   };

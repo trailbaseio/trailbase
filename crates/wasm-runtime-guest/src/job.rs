@@ -1,5 +1,5 @@
 use futures_util::future::LocalBoxFuture;
-use wstd::http::server::{Finished, Responder};
+use wstd::http::server::Responder;
 
 use crate::http::IntoResponse;
 
@@ -9,7 +9,8 @@ pub enum Error {
   InvalidSpec,
 }
 
-pub type JobHandler = Box<dyn Fn(Responder) -> LocalBoxFuture<'static, Finished>>;
+pub type JobHandler =
+  Box<dyn Fn(Responder) -> LocalBoxFuture<'static, Result<(), wstd::http::Error>>>;
 
 pub struct Job {
   pub name: String,
@@ -29,7 +30,7 @@ impl Job {
   where
     F: (AsyncFn() -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     let spec = spec.to_string();
     validate_spec(&spec)?;
@@ -42,7 +43,7 @@ impl Job {
       timeout: timeout_ms,
       handler: Box::new(move |responder| {
         let f = f.clone();
-        Box::pin(async move { responder.respond(f().await.into_response()).await })
+        return Box::pin(async move { responder.respond(f().await.into_response()).await });
       }),
     });
   }
@@ -51,7 +52,7 @@ impl Job {
   where
     F: (AsyncFn() -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return Self::new(name, "37 * * * * *", Some(60 * 1000), f).expect("valid spec");
   }
@@ -60,7 +61,7 @@ impl Job {
   where
     F: (AsyncFn() -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return Self::new(name, "@hourly", Some(3600 * 1000), f).expect("valid spec");
   }
@@ -69,7 +70,7 @@ impl Job {
   where
     F: (AsyncFn() -> R) + Send + Sync + 'static,
     R: IntoResponse<B>,
-    B: wstd::http::body::Body,
+    B: Into<wstd::http::Body>,
   {
     return Self::new(name, "@daily", Some(24 * 3600 * 1000), f).expect("valid spec");
   }
