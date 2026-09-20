@@ -6,11 +6,11 @@ import type { StarlightUserConfig } from "@astrojs/starlight/types";
 import { repo } from "@/config";
 import nut from "@/assets/nut.svg";
 
-const isHomepage = Astro.locals.starlightRoute.id === "index.mdx";
+const isSplash = Astro.locals.starlightRoute.entry?.data?.template === "splash";
 const columnStyle = "flex flex-col gap-1 items-center justify-start";
 ---
 
-{isHomepage ? (
+{isSplash ? (
   <footer class="pt-[28px]">
     <div class="absolute left-0 w-full">
       <div class="bg-accent-200 h-px" />
@@ -19,7 +19,6 @@ const columnStyle = "flex flex-col gap-1 items-center justify-start";
         <img class="relative top-[-20px] size-[40px]" src={nut.src} />
       </div>
     </div>
-
     <div class="grid grid-cols-3 gap-4 pt-[32px]">
       <div class={columnStyle}>
         <strong>About</strong>
