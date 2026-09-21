@@ -732,45 +732,46 @@ mod test_utils {
 
       // Drop handle to detach watchdog thread. Should only be stopped by its parent test-process
       // terminating.
-      let _ = std::thread::spawn({
-        // NOTE: During CI, we have random tests occasionally time out. This is an attempt
-        // to get ahead of CI's own timeout of 6h.
-        let handle = tokio::runtime::Handle::current();
-        let db = Arc::downgrade(&db);
+      static WATCHDOG_THREAD: std::sync::OnceLock<std::thread::JoinHandle<()>> =
+        std::sync::OnceLock::new();
+      WATCHDOG_THREAD.get_or_init(|| {
+        return std::thread::spawn({
+          // NOTE: During CI, we have random tests occasionally time out. This is an attempt
+          // to get ahead of CI's own timeout of 6h.
+          let handle = tokio::runtime::Handle::current();
+          let db = Arc::downgrade(&db);
 
-        #[allow(unreachable_code)]
-        move || {
-          use std::time::{Duration, SystemTime};
-          let started = SystemTime::now();
+          #[allow(unreachable_code)]
+          move || {
+            use std::time::{Duration, SystemTime};
+            let started = SystemTime::now();
 
-          debug!("WATCHDOG: started");
+            debug!("WATCHDOG: started");
 
-          let mut i = 0;
-          loop {
-            let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-            // NOTE: For some reason iterating the intervals terminates the tests?
-            if i > 0 {
-              info!("WATCHDOG {i}: metrics = {:?}", runtime_monitor.intervals());
-            } else {
-              warn!("WATCHDOG {i}: metrics = {:?}", runtime_monitor.intervals());
-            }
-            i += 1;
+            let mut min = 0;
+            loop {
+              let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+              // NOTE: For some reasons iterating .intervals() bricks the test.
+              info!(
+                "WATCHDOG {min}min: metrics = {:?}",
+                runtime_monitor.intervals()
+              );
 
-            let now = SystemTime::now();
-            if now.duration_since(started).unwrap_or_default() > Duration::from_mins(15) {
-              if let Some(db) = db.upgrade().and_then(|arc| arc.lock().take()) {
-                db.shutdown().unwrap();
+              let now = SystemTime::now();
+              if now.duration_since(started).unwrap_or_default() > Duration::from_mins(15) {
+                if let Some(db) = db.upgrade().and_then(|arc| arc.lock().take()) {
+                  db.shutdown().unwrap();
+                }
+
+                error!("WATCHDOG: terminated");
+                std::process::exit(1);
               }
 
-              error!("WATCHDOG: expired");
-              std::process::exit(1);
+              std::thread::sleep(Duration::from_mins(1));
+              min += 1;
             }
-
-            std::thread::sleep(Duration::from_mins(1));
           }
-
-          unreachable!("WATCHDOG: terminated");
-        }
+        });
       });
 
       // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
