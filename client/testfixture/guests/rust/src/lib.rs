@@ -23,6 +23,7 @@ impl Guest for Endpoints {
     SEQ.fetch_add(1000, Ordering::SeqCst);
 
     return vec![
+      routing::get("/rt", async |_req| Ok("Rust")),
       routing::get("/method", async |_req| Ok("get")),
       routing::post("/method", async |_req| Ok("post")),
       routing::delete("/method", async |_req| Ok("delete")),

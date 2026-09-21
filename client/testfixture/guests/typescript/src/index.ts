@@ -19,6 +19,7 @@ export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
       admin_ui_path: `${PREFIX}/dash`,
     },
     httpHandlers: [
+      HttpHandler.get(`${PREFIX}/rt`, (_: HttpRequest): string => "JS"),
       HttpHandler.get(`${PREFIX}/method`, (_: HttpRequest): string => "get"),
       HttpHandler.post(`${PREFIX}/method`, (_: HttpRequest): string => "post"),
       HttpHandler.delete(

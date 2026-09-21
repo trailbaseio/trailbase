@@ -96,10 +96,11 @@ try {
     const ctx = await createVitest("test", {
       watch: false,
       environment: "jsdom",
+      fileParallelism: isCi ? true : false,
       include: ["tests/integration/*test.ts"],
       exclude: nodeEnvTests(true),
       // No fancy terminal sequences, append everything in order.
-      reporters: [isCi ? "tap" : "default"],
+      reporters: [isCi ? "tap" : "verbose"],
     });
 
     await ctx.start();
@@ -110,9 +111,10 @@ try {
     const ctx = await createVitest("test", {
       watch: false,
       environment: "node",
+      fileParallelism: isCi ? true : false,
       include: nodeEnvTests(useWebSocket()),
       // No fancy terminal sequences, append everything in order.
-      reporters: [isCi ? "tap" : "default"],
+      reporters: [isCi ? "tap" : "verbose"],
     });
 
     await ctx.start();
