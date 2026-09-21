@@ -1,26 +1,31 @@
-import { createSignal, onMount } from "solid-js"
+import { createSignal, onMount, Match, Switch } from "solid-js"
 import { TbFillBrandGithub } from "solid-icons/tb";
 
 import logo from "../public/favicon.svg";
 
-export type Clicked = {
-  count: number
+export type InitialData = {
+  initialClickCount: number;
+  error?: string;
 };
 
 declare global {
   interface Window {
-    __INITIAL_DATA__: Clicked | null;
+    __INITIAL_DATA__: InitialData | null;
   }
 }
 
-export function App({ initialCount }: { initialCount?: number }) {
-  const [count, setCount] = createSignal(initialCount ?? 0)
+type ClickedRequest = {
+  count: number
+};
+
+export function App(props: InitialData) {
+  const [count, setCount] = createSignal(props.initialClickCount)
 
   const onClick = () => {
     setCount((count) => count + 1);
 
     fetch("/clicked").then(async (response) => {
-      const clicked = (await response.json()) as Clicked;
+      const clicked = (await response.json()) as ClickedRequest;
       if (clicked.count > count()) {
         setCount(clicked.count);
       }
@@ -104,10 +109,20 @@ export function App({ initialCount }: { initialCount?: number }) {
         </button>
       </div>
 
-      <div>
-        <button class={`${buttonStyle} w-[200px] rounded bg-neutral-100`} onClick={onClick}>
-          {count()}x clicked globally
-        </button>
+      <div class="flex justify-center">
+        <Switch>
+          <Match when={props.error !== undefined}>
+            <div class={`${cardStyle} bg-red-200 text-lg font-bold`}>
+              Error: {props.error}
+            </div>
+          </Match>
+
+          <Match when={true}>
+            <button class={`${buttonStyle} w-[200px] rounded bg-neutral-100`} onClick={onClick}>
+              {count()}x clicked globally
+            </button>
+          </Match>
+        </Switch>
       </div>
 
       <p>Click the acorn across different tabs, browsers or computers to make everyone's count go 🚀</p>
@@ -122,7 +137,7 @@ export function App({ initialCount }: { initialCount?: number }) {
           someone else presses the acorn.
         </p>
       </div>
-    </div>
+    </div >
   )
 }
 

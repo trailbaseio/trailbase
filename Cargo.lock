@@ -1255,6 +1255,7 @@ dependencies = [
 name = "collab-clicker-ssr-guest"
 version = "0.0.0"
 dependencies = [
+ "regex",
  "rquickjs",
  "serde",
  "serde_json",
