@@ -1,12 +1,22 @@
 import { createEffect, onCleanup } from "solid-js";
-import { Graph, Shape, Edge, NodeMetadata, EdgeMetadata } from "@antv/x6";
+
+import {
+  Graph,
+  Shape,
+  EdgeProperties,
+  NodeMetadata,
+  EdgeMetadata,
+} from "@antv/x6";
+export type { NodeMetadata, EdgeMetadata } from "@antv/x6";
+export type { PortMetadata } from "@antv/x6/lib/model/port";
+
 import type { ResolvedTheme } from "@/lib/theme";
 import { createWindowSize } from "@/lib/signals";
 
+import type { Column } from "@bindings/Column";
+
 export const LINE_HEIGHT = 24;
 export const NODE_WIDTH = 250;
-const EDGE_COLOR = "var(--primary)";
-const RELATED_EDGE_COLOR = "var(--destructive)";
 
 type Theme = {
   fill: string;
@@ -18,19 +28,292 @@ type Theme = {
 const lightTheme: Theme = {
   fill: "var(--card)",
   accent: "var(--border)",
-  edge: EDGE_COLOR,
+  edge: "var(--primary)",
   text: "var(--card-foreground)",
 };
 const darkTheme = lightTheme;
 
+export function getTheme(theme: ResolvedTheme): Theme {
+  return theme === "light" ? lightTheme : darkTheme;
+}
+
 export function nodeName(theme: ResolvedTheme): string {
   return theme === "dark" ? "dark:er-rect" : "light:er-rect";
 }
-export function erdTheme(dark: boolean): Theme {
-  return dark ? darkTheme : lightTheme;
+
+export function portId(
+  tableName: string,
+  column: Column,
+  index: number,
+): string {
+  return `${tableName}-${column.name}-${index}`;
 }
 
-function setupGraph() {
+function layoutErdNodes(nodes: NodeMetadata[], aspect: number): NodeMetadata[] {
+  if (nodes.length === 0) return [];
+
+  const width = NODE_WIDTH + 20;
+  const height = Math.max(
+    34,
+    ...nodes.map(
+      (node) =>
+        ((node.ports instanceof Array ? node.ports.length : 0) + 1) *
+          LINE_HEIGHT +
+        10,
+    ),
+  );
+  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
+  const columns = Math.max(
+    1,
+    Math.ceil(Math.sqrt((safeAspect * nodes.length * height) / width)),
+  );
+
+  return nodes.map((node, index) => ({
+    ...node,
+    position: node.position ?? {
+      x: (index % columns) * width,
+      y: Math.floor(index / columns) * height,
+    },
+  }));
+}
+
+export function edgeProperties(opts?: {
+  /// Whether any node is selected.
+  hasSelection?: boolean;
+  /// If this edge connects to *the* selected node.
+  connected?: boolean;
+}): EdgeProperties {
+  const RELATED_EDGE_COLOR = "var(--destructive)" as const;
+  const EDGE_COLOR = "var(--primary)" as const;
+
+  const hasSelection = opts?.hasSelection ?? false;
+  const connected = opts?.connected ?? false;
+
+  const opacity = () => {
+    if (hasSelection) {
+      return connected ? 1 : 0.3;
+    }
+    return 0.7;
+  };
+
+  return {
+    zIndex: connected ? 100 : 0,
+    line: {
+      opacity: opacity(),
+      stroke: connected ? RELATED_EDGE_COLOR : EDGE_COLOR,
+      strokeWidth: connected ? 2 : 1.5,
+    },
+  };
+}
+
+function focusedErdIds(
+  relations: { sourceId: string; targetId: string }[],
+  selectedId?: string,
+): Set<string> {
+  const focused = new Set<string>();
+  if (!selectedId) {
+    return focused;
+  }
+
+  focused.add(selectedId);
+  for (const relation of relations) {
+    if (relation.sourceId === selectedId) {
+      focused.add(relation.targetId);
+    }
+    if (relation.targetId === selectedId) {
+      focused.add(relation.sourceId);
+    }
+  }
+  return focused;
+}
+
+type ErdOpacityNode = {
+  attr: (attributes: Record<string, { opacity: number }>) => unknown;
+  getPorts: () => { id?: string }[];
+  setPortProp: (id: string, value: Record<string, unknown>) => unknown;
+};
+
+function setErdNodeOpacity(node: ErdOpacityNode, opacity: number): void {
+  node.attr({
+    body: { opacity },
+    label: { opacity },
+    typeLabel: { opacity },
+  });
+
+  for (const port of node.getPorts()) {
+    if (!port.id) {
+      continue;
+    }
+    node.setPortProp(port.id, {
+      attrs: {
+        portBody: { opacity },
+        portNameLabel: { opacity },
+        portTypeLabel: { opacity },
+      },
+    });
+  }
+}
+
+export type ErdGraphHandle = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fit: () => void;
+  reset: () => void;
+  focus: (id?: string) => void;
+};
+
+export function ErdGraph(props: {
+  nodes: NodeMetadata[];
+  edges: EdgeMetadata[];
+  relations: { sourceId: string; targetId: string }[];
+  selectedId?: string;
+  onSelect: (id?: string) => void;
+  onGraph?: (handle?: ErdGraphHandle) => void;
+}) {
+  let ref: HTMLDivElement | undefined;
+  let graph: Graph | undefined;
+
+  // Called when selectedId changes.
+  const applySelection = () => {
+    if (!graph) {
+      return;
+    }
+
+    const focused = focusedErdIds(props.relations, props.selectedId);
+    const hasSelection = props.selectedId !== undefined;
+
+    // Update node styling (opacity).
+    for (const node of graph.getNodes()) {
+      const opacity = hasSelection && !focused.has(node.id) ? 0.3 : 1;
+
+      setErdNodeOpacity(node, opacity);
+      node.attr(
+        "body/stroke",
+        node.id === props.selectedId ? "var(--primary)" : "var(--border)",
+      );
+    }
+
+    // Update edge styling.
+    for (const edge of graph.getEdges()) {
+      const source = edge.getSourceCellId();
+      const target = edge.getTargetCellId();
+
+      const connected =
+        hasSelection &&
+        (source === props.selectedId || target === props.selectedId);
+
+      // Update edges based on selection state.
+      edge.attr(edgeProperties({ connected, hasSelection }));
+    }
+  };
+
+  const buildGraph = (): Graph => {
+    const g = new Graph({
+      container: ref,
+      grid: { visible: true },
+      autoResize: false,
+      interacting: { edgeLabelMovable: false, magnetConnectable: false },
+      connecting: {
+        connector: "rounded",
+        router: { name: "er", args: { offset: 25, direction: "H" } },
+        createEdge: () => new Shape.Edge(edgeProperties()),
+      },
+      panning: { enabled: true },
+      mousewheel: { enabled: true, minScale: 0.5, maxScale: 2 },
+    });
+
+    g.resetCells([
+      ...layoutErdNodes(props.nodes, graphAspect(ref)).map((node) =>
+        g.createNode(node),
+      ),
+      ...props.edges.map((edge) => g.createEdge(edge)),
+    ]);
+
+    const onSelect = props.onSelect;
+    g.on("node:click", ({ node }) => onSelect(node.id));
+    g.on("blank:click", () => onSelect(undefined));
+
+    if (g.getCells().length) {
+      g.zoomToFit({ padding: 20 });
+    }
+
+    return g;
+  };
+
+  createEffect(() => {
+    // Force rebuild when window size changes.
+    const _ = createWindowSize()();
+
+    graph?.dispose();
+
+    const g = (graph = buildGraph());
+
+    // NOTE: Trigger resize. Using `autoResize: true` triggers uncaught exceptions,
+    // for example on mobile firefox when the url-bar fades out.
+    const container = document.getElementById("erd-container")!;
+    const resizeObserver = new ResizeObserver(() => {
+      // Delay the resize.
+      requestAnimationFrame(() => {
+        g.resize(container.clientWidth, container.clientHeight);
+
+        // Needed, since resize seems to change the styling, e.g. edge lines become black.
+        applySelection();
+      });
+    });
+    resizeObserver.observe(container);
+
+    props.onGraph?.({
+      zoomIn: () => g.zoomTo(g.zoom() * 2),
+      zoomOut: () => g.zoomTo(g.zoom() / 2),
+      fit: () => g.zoomToFit({ padding: 20 }),
+      reset: () => {
+        layoutErdNodes(props.nodes, graphAspect(ref)).forEach((node, index) => {
+          const position = node.position;
+          if (position) {
+            g.getNodes()[index]?.position(position.x, position.y);
+          }
+        });
+        g.zoomToFit({ padding: 20 });
+      },
+      focus: (id) => {
+        if (id) {
+          const cell = g.getCellById(id);
+          if (cell) {
+            g.zoomTo(1);
+            g.centerCell(cell);
+          }
+        }
+      },
+    });
+
+    onCleanup(() => {
+      if (graph === g) {
+        graph = undefined;
+        props.onGraph?.(undefined);
+      }
+
+      g.dispose();
+    });
+  });
+
+  // NOTE: Order matters. Needs to run after graph init above.
+  createEffect(applySelection);
+
+  // NOTE: The outer container is necessary for auto-resize to work.
+  return (
+    <div id="erd-container" class="grow overflow-clip">
+      <div ref={ref} class="size-full" />
+    </div>
+  );
+}
+
+function graphAspect(el: HTMLElement | undefined) {
+  const width = el?.clientWidth ?? window.innerWidth;
+  const height = el?.clientHeight ?? window.innerHeight;
+  return width > 0 && height > 0 ? width / height : 1;
+}
+
+(function globalSetup() {
   Graph.registerPortLayout(
     "erPortPosition",
     (ports) =>
@@ -40,6 +323,7 @@ function setupGraph() {
       })),
     true,
   );
+
   for (const themeName of ["light", "dark"] as ResolvedTheme[]) {
     Graph.registerNode(
       nodeName(themeName),
@@ -111,248 +395,4 @@ function setupGraph() {
       true,
     );
   }
-}
-setupGraph();
-
-export function layoutErdNodes(
-  nodes: NodeMetadata[],
-  aspect: number,
-): NodeMetadata[] {
-  if (nodes.length === 0) return [];
-
-  const width = NODE_WIDTH + 20;
-  const height = Math.max(
-    34,
-    ...nodes.map(
-      (node) =>
-        ((node.ports instanceof Array ? node.ports.length : 0) + 1) *
-          LINE_HEIGHT +
-        10,
-    ),
-  );
-  const safeAspect = Number.isFinite(aspect) && aspect > 0 ? aspect : 1;
-  const columns = Math.max(
-    1,
-    Math.ceil(Math.sqrt((safeAspect * nodes.length * height) / width)),
-  );
-
-  return nodes.map((node, index) => ({
-    ...node,
-    position: node.position ?? {
-      x: (index % columns) * width,
-      y: Math.floor(index / columns) * height,
-    },
-  }));
-}
-
-export function focusedErdIds(
-  relations: { sourceId: string; targetId: string }[],
-  selectedId?: string,
-): Set<string> {
-  const focused = new Set<string>();
-  if (!selectedId) {
-    return focused;
-  }
-
-  focused.add(selectedId);
-  for (const relation of relations) {
-    if (relation.sourceId === selectedId) {
-      focused.add(relation.targetId);
-    }
-    if (relation.targetId === selectedId) {
-      focused.add(relation.sourceId);
-    }
-  }
-  return focused;
-}
-
-type ErdOpacityNode = {
-  attr: (attributes: Record<string, { opacity: number }>) => unknown;
-  getPorts: () => { id?: string }[];
-  setPortProp: (id: string, value: Record<string, unknown>) => unknown;
-};
-
-export function setErdNodeOpacity(node: ErdOpacityNode, opacity: number): void {
-  node.attr({
-    body: { opacity },
-    label: { opacity },
-    typeLabel: { opacity },
-  });
-  for (const port of node.getPorts()) {
-    if (!port.id) {
-      continue;
-    }
-    node.setPortProp(port.id, {
-      attrs: {
-        portBody: { opacity },
-        portNameLabel: { opacity },
-        portTypeLabel: { opacity },
-      },
-    });
-  }
-}
-
-export type ErdGraphHandle = {
-  zoomIn: () => void;
-  zoomOut: () => void;
-  fit: () => void;
-  reset: () => void;
-  focus: (id?: string) => void;
-};
-
-function createEdge(): Edge {
-  return new Shape.Edge({
-    attrs: {
-      line: { stroke: EDGE_COLOR, strokeWidth: 1.5, opacity: 0.65 },
-    },
-  });
-}
-
-export function ErdGraph(props: {
-  nodes: NodeMetadata[];
-  edges: EdgeMetadata[];
-  relations: { sourceId: string; targetId: string }[];
-  selectedId?: string;
-  onSelect: (id?: string) => void;
-  onGraph?: (handle?: ErdGraphHandle) => void;
-}) {
-  let ref: HTMLDivElement | undefined;
-  let graph: Graph | undefined;
-
-  // Called when selectedId changes.
-  const applySelection = () => {
-    if (!graph) {
-      return;
-    }
-
-    const focused = focusedErdIds(props.relations, props.selectedId);
-    const hasSelection = props.selectedId !== undefined;
-
-    graph.getNodes().forEach((node) => {
-      const opacity = hasSelection && !focused.has(node.id) ? 0.28 : 1;
-      setErdNodeOpacity(node, opacity);
-      node.attr(
-        "body/stroke",
-        node.id === props.selectedId ? "var(--primary)" : "var(--border)",
-      );
-    });
-
-    graph.getEdges().forEach((edge) => {
-      const source =
-        typeof edge.getSourceCellId === "function"
-          ? edge.getSourceCellId()
-          : undefined;
-      const target =
-        typeof edge.getTargetCellId === "function"
-          ? edge.getTargetCellId()
-          : undefined;
-      const connected =
-        hasSelection &&
-        (source === props.selectedId || target === props.selectedId);
-      edge.attr({
-        line: {
-          opacity: hasSelection ? (connected ? 1 : 0.12) : 0.65,
-          stroke: connected ? RELATED_EDGE_COLOR : EDGE_COLOR,
-          strokeWidth: connected ? 2 : 1.5,
-        },
-      });
-    });
-  };
-
-  createEffect(() => {
-    // Force rebuild when window size changes.
-    const _ = createWindowSize()();
-
-    graph?.dispose();
-
-    const g = (graph = new Graph({
-      container: ref,
-      grid: { visible: true },
-      autoResize: false,
-      interacting: { edgeLabelMovable: false, magnetConnectable: false },
-      connecting: {
-        connector: "rounded",
-        router: { name: "er", args: { offset: 25, direction: "H" } },
-        createEdge,
-      },
-      panning: { enabled: true },
-      mousewheel: { enabled: true, minScale: 0.5, maxScale: 2 },
-    }));
-
-    // NOTE: Trigger resize. Using `autoResize: true` triggers uncaught exceptions,
-    // for example on mobile firefox when the url-bar fades out.
-    const container = document.getElementById("erd-container")!;
-    const resizeObserver = new ResizeObserver(() => {
-      // Delay the resize.
-      requestAnimationFrame(() => {
-        graph?.resize(container.clientWidth, container.clientHeight);
-      });
-    });
-    resizeObserver.observe(container);
-
-    g.resetCells([
-      ...layoutErdNodes(props.nodes, graphAspect(ref)).map((node) =>
-        g.createNode(node),
-      ),
-      ...props.edges.map((edge) => g.createEdge(edge)),
-    ]);
-
-    g.on("node:click", ({ node }) => props.onSelect(node.id));
-    g.on("blank:click", () => props.onSelect(undefined));
-
-    const handle: ErdGraphHandle = {
-      zoomIn: () => g.zoomTo(g.zoom() * 2),
-      zoomOut: () => g.zoomTo(g.zoom() / 2),
-      fit: () => g.zoomToFit({ padding: 20 }),
-      reset: () => {
-        layoutErdNodes(props.nodes, graphAspect(ref)).forEach((node, index) => {
-          const position = node.position;
-          if (position) {
-            g.getNodes()[index]?.position(position.x, position.y);
-          }
-        });
-        g.zoomToFit({ padding: 20 });
-      },
-      focus: (id) => {
-        if (id) {
-          const cell = g.getCellById(id);
-          if (cell) {
-            g.zoomTo(1);
-            g.centerCell(cell);
-          }
-        }
-      },
-    };
-
-    if (g.getCells().length) {
-      g.zoomToFit({ padding: 20 });
-    }
-
-    onCleanup(() => {
-      if (graph === g) {
-        graph = undefined;
-        props.onGraph?.(undefined);
-      }
-
-      g.dispose();
-    });
-
-    props.onGraph?.(handle);
-  });
-
-  // NOTE: Order matters. Needs to run after graph init above.
-  createEffect(applySelection);
-
-  // NOTE: The outer container is necessary for auto-resize to work.
-  return (
-    <div id="erd-container" class="grow overflow-clip">
-      <div ref={ref} class="size-full" />
-    </div>
-  );
-}
-
-function graphAspect(el: HTMLElement | undefined) {
-  const width = el?.clientWidth ?? window.innerWidth;
-  const height = el?.clientHeight ?? window.innerHeight;
-  return width > 0 && height > 0 ? width / height : 1;
-}
+})();

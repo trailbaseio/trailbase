@@ -7,10 +7,6 @@ import {
   createMemo,
   createSignal,
 } from "solid-js";
-import { createTableSchemaQuery } from "@/lib/api/table";
-import { prettyFormatQualifiedName } from "@/lib/schema";
-import { NodeMetadata, EdgeMetadata } from "@antv/x6";
-import { PortMetadata } from "@antv/x6/lib/model/port";
 import {
   TbOutlineArrowBackUp,
   TbOutlineMaximize,
@@ -18,32 +14,41 @@ import {
   TbOutlinePlus,
 } from "solid-icons/tb";
 
-import { Button } from "@/components/ui/button";
-import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
+import { Toggle } from "@/components/ui/toggle";
 import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
+import { Button } from "@/components/ui/button";
+
 import {
-  ErdGraph,
   nodeName,
-  type ErdGraphHandle,
-  NODE_WIDTH,
+  portId,
+  edgeProperties,
+  ErdGraph,
   LINE_HEIGHT,
+  NODE_WIDTH,
+} from "@/components/erd/ErdGraph";
+import type {
+  ErdGraphHandle,
+  NodeMetadata,
+  EdgeMetadata,
+  PortMetadata,
 } from "@/components/erd/ErdGraph";
 
 import {
+  ForeignKey,
+  getColumns,
   getForeignKey,
   getUnique,
-  isNotNull,
   hiddenTable,
+  isNotNull,
+  prettyFormatQualifiedName,
   tableType,
-  getColumns,
-  ForeignKey,
 } from "@/lib/schema";
 import { createTheme, type ResolvedTheme } from "@/lib/theme";
+import { createTableSchemaQuery } from "@/lib/api/table";
 
-import type { Column } from "@bindings/Column";
 import type { Table } from "@bindings/Table";
 import type { View } from "@bindings/View";
 import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
@@ -139,38 +144,6 @@ export function searchErdEntities(
   );
 }
 
-export function relatedEntityIds(
-  relations: ErdRelation[],
-  selectedId?: string,
-): Set<string> {
-  const related = new Set<string>();
-  if (selectedId === undefined) {
-    return related;
-  }
-
-  related.add(selectedId);
-  for (const relation of relations) {
-    if (relation.sourceId === selectedId) {
-      related.add(relation.targetId);
-    }
-    if (relation.targetId === selectedId) {
-      related.add(relation.sourceId);
-    }
-  }
-  return related;
-}
-
-export function selectionStatus(
-  entities: ErdEntity[],
-  relations: ErdRelation[],
-  selectedId?: string,
-): string {
-  if (selectedId === undefined) return "No entity focused";
-  const name =
-    entities.find((entity) => entity.id === selectedId)?.name ?? selectedId;
-  return `${name} focused, ${relatedEntityIds(relations, selectedId).size - 1} direct relationships`;
-}
-
 function edgeCellId(endpoint: EdgeMetadata["source"]): string | undefined {
   if (typeof endpoint === "string") {
     return endpoint;
@@ -181,10 +154,10 @@ function edgeCellId(endpoint: EdgeMetadata["source"]): string | undefined {
   return undefined;
 }
 
-export function buildErdModel(
+function buildErdModel(
   schema: ListSchemasResponse,
   visibility: ErdVisibility,
-  theme?: ResolvedTheme,
+  resolvedTheme: ResolvedTheme,
 ): ErdModel {
   const allTablesAndViews = [
     ...schema.tables.map(([table]) => table),
@@ -207,7 +180,6 @@ export function buildErdModel(
   const visibleIds = new Set(entities.map((entity) => entity.id));
   const nodes: NodeMetadata[] = [];
   const edges: EdgeMetadata[] = [];
-  const resolvedTheme = theme ?? "light";
 
   for (const tableOrView of visibleTablesAndViews) {
     const [node, nodeEdges] = buildErNode(
@@ -215,6 +187,7 @@ export function buildErdModel(
       allTablesAndViews,
       tableOrView,
     );
+
     nodes.push(node);
     edges.push(
       ...nodeEdges.filter((edge) => {
@@ -253,23 +226,14 @@ function buildErNode(
   allTablesAndViews: (Table | View)[],
   tableOrView: Table | View,
 ): [NodeMetadata, EdgeMetadata[]] {
-  const BASE_EDGE = {
-    shape: "edge",
-    // attr: { line: { stroke: edge_color, strokeWidth: 2 } },
-    zIndex: 0,
-  };
-
   const name = prettyFormatQualifiedName(tableOrView.name);
   const columns = getColumns(tableOrView) ?? [];
 
-  const view = tableType(tableOrView) === "view";
-  const portId = (column: Column, index: number) =>
-    `${name}-${column.name}${view ? `-${index}` : ""}`;
   const ports: PortMetadata[] = columns.map((column, index) => {
     const notNull = isNotNull(column.options);
     return {
       // Views can have duplicate column names, so include the stable index.
-      id: portId(column, index),
+      id: portId(name, column, index),
       group: "list",
       attrs: {
         portNameLabel: {
@@ -291,7 +255,7 @@ function buildErNode(
         return {
           source: {
             cell: name,
-            port: portId(column, index),
+            port: portId(name, column, index),
           },
           // FIXME: lookup pk if referred columns are not provided. Otherwise can
           // we just point at the node rather than a specific port?
@@ -306,7 +270,8 @@ function buildErNode(
               tableOrView.name.database_schema,
             ),
           },
-          ...BASE_EDGE,
+          // Add styling.
+          ...edgeProperties(),
         };
       }
     })
@@ -322,7 +287,6 @@ function buildErNode(
     width: NODE_WIDTH,
     height: LINE_HEIGHT,
     ports,
-    // attr: { line: { stroke: edge_color, strokeWidth: 2 } },
   };
 
   return [node, edges];
@@ -444,6 +408,7 @@ export function ErdToolbar(props: ErdToolbarProps) {
           }}
         />
 
+        {/* dropdown */}
         <Show when={popupOpen()}>
           <div
             id="erd-search-results"
@@ -531,11 +496,13 @@ function emptyErdModel(): ErdModel {
 export function ErdPage() {
   const schemaFetch = createTableSchemaQuery();
   const theme = createTheme();
+
   const [visibility, setVisibility] = createSignal<ErdVisibility>({
     tables: true,
     views: true,
   });
   const [selectedId, setSelectedId] = createSignal<string>();
+
   const allModel = createMemo(() =>
     schemaFetch.data
       ? buildErdModel(schemaFetch.data, { tables: true, views: true }, theme())
@@ -568,7 +535,9 @@ export function ErdPage() {
 
   const select = (id?: string) => {
     setSelectedId(id);
-    graph?.focus(id);
+
+    // Focusing the selected node feels rather disruptive.
+    // graph?.focus(id);
   };
 
   createEffect(() => {
