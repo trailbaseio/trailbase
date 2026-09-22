@@ -125,7 +125,7 @@ export default function Page() {
           right={
             <Popover id="test">
               <PopoverTrigger as={Button<"button">} variant="outline">
-                Tokens
+                Impersonate
               </PopoverTrigger>
 
               <PopoverContent class="ui-expanded:shadow-md">
@@ -148,15 +148,17 @@ function TokenPopoverContent(props: {
   return (
     <div class="flex flex-col gap-4">
       <p class="text-xs">
-        You can optionally provide explicit tokens to impersonate another user.
-        To get the tokens of a verified, non-admin user, click the "cookie"
-        button in the user details on the accounts page or use the CLI.
+        You can provide explicit auth tokens to impersonate other users. To get
+        the tokens of a verified, non-admin user from the accounts page, click
+        the "cookie" button on a user's details sheet or use the CLI (
+        <span class="font-mono text-xs">{"trail user mint <id>"}</span>).
       </p>
 
       <TextField>
         <TextFieldInput
           type="text"
           autocomplete="new-password"
+          placeholder="tokens (base64)"
           value={props.tokens()}
           onChange={() => {
             console.debug("close");
