@@ -1,3 +1,13 @@
+## v0.33.21
+
+- AdminUI:
+  - ERD graph: use proper search bar to address usability issues on mobile.
+  - Clean up ERD implementation, fix edge decolorization issues.
+  - OpenApi: rename tokens to impersonation.
+  - Set chrome color in dark mode.
+- Overhaul SSR demo.
+- Update dependencies.
+
 ## v0.33.20
 
 - Implement more robust schema (tables, views, ...) name handling, i.e robustly parse escaped/unescpaed as well as unqualified/qualified names both on the server and in the admin UI.
