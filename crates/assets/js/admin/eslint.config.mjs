@@ -38,7 +38,15 @@ export default [
         },
       ],
       // TODO: recently introduced. Should look for solutions, e.g. ignore components/ui.
-      "better-tailwindcss/enforce-canonical-classes": "warn",
+      "better-tailwindcss/enforce-canonical-classes": [
+        "warn",
+        {
+          ignore: [
+            // Data attribute variants
+            "^data-",
+          ],
+        },
+      ],
       "better-tailwindcss/enforce-consistent-variable-syntax": "warn",
       "better-tailwindcss/enforce-shorthand-classes": "warn",
       "better-tailwindcss/no-deprecated-classes": "warn",

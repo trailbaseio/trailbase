@@ -1,8 +1,6 @@
 import {
   Switch,
   Match,
-  For,
-  Show,
   createEffect,
   createMemo,
   createSignal,
@@ -13,10 +11,11 @@ import {
   TbOutlineMinus,
   TbOutlinePlus,
 } from "solid-icons/tb";
+import { Search } from "@kobalte/core/search";
 
 import { Badge } from "@/components/ui/badge";
-import { Toggle } from "@/components/ui/toggle";
 import { Callout, CalloutContent, CalloutTitle } from "@/components/ui/callout";
+import { Toggle } from "@/components/ui/toggle";
 import { Header } from "@/components/Header";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
@@ -308,24 +307,12 @@ export type ErdToolbarProps = {
 
 export function ErdToolbar(props: ErdToolbarProps) {
   const [query, setQuery] = createSignal("");
-  const [open, setOpen] = createSignal(false);
-  const [activeIndex, setActiveIndex] = createSignal(-1);
-  const results = createMemo(() => searchErdEntities(props.entities, query()));
-  const popupOpen = () => open() && results().length > 0;
+  const options = createMemo(() => searchErdEntities(props.entities, query()));
+
+  const [selected, setSelected] = createSignal<ErdEntity | null>(null);
   createEffect(() => {
-    const length = results().length;
-    setActiveIndex(length === 0 ? -1 : Math.min(activeIndex(), length - 1));
+    props.onSelect(selected()?.id);
   });
-  const choose = (entity: ErdEntity) => {
-    props.onSelect(entity.id);
-    setQuery(entity.name);
-    setOpen(false);
-  };
-  const move = (delta: number) => {
-    setActiveIndex(
-      Math.max(-1, Math.min(results().length - 1, activeIndex() + delta)),
-    );
-  };
 
   return (
     <div class="bg-card flex flex-wrap items-center gap-2 border-b p-2">
@@ -365,74 +352,65 @@ export function ErdToolbar(props: ErdToolbarProps) {
         </Toggle>
       </div>
 
-      {/* Search bar */}
-      <div class="relative order-first w-full sm:order-0 sm:min-w-64 sm:flex-1">
-        <input
-          class="bg-background h-9 w-full rounded-md border px-3 text-sm"
-          type="search"
-          role="combobox"
-          aria-label="Search entities"
-          aria-autocomplete="list"
-          aria-expanded={popupOpen()}
-          aria-controls={popupOpen() ? "erd-search-results" : undefined}
-          aria-activedescendant={
-            popupOpen() && activeIndex() >= 0
-              ? `erd-search-option-${results()[activeIndex()]?.id}`
-              : undefined
-          }
-          value={query()}
-          placeholder="Search entities…"
-          onInput={(event) => {
-            setQuery(event.currentTarget.value);
-            setOpen(true);
-            setActiveIndex(-1);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              move(1);
-            } else if (event.key === "ArrowUp") {
-              event.preventDefault();
-              move(-1);
-            } else if (
-              event.key === "Enter" &&
-              popupOpen() &&
-              results()[activeIndex()]
-            ) {
-              choose(results()[activeIndex()]);
-            } else if (event.key === "Escape") {
-              if (popupOpen()) setOpen(false);
-              else props.onSelect(undefined);
-            }
-          }}
-        />
+      <Search
+        class="relative order-first w-full sm:order-0 sm:min-w-64 sm:flex-1"
+        value={selected()}
+        onChange={setSelected}
+        options={options()}
+        onInputChange={(query: string) => {
+          setQuery(query);
 
-        {/* dropdown */}
-        <Show when={popupOpen()}>
-          <div
-            id="erd-search-results"
-            role="listbox"
+          // Deselect on empty query.
+          if (query === "") {
+            setSelected(null);
+          }
+        }}
+        triggerMode="focus"
+        placeholder="Search entities…"
+        optionValue="id"
+        optionTextValue="name"
+        optionLabel="name"
+        itemComponent={(props) => {
+          return (
+            <Search.Item item={props.item}>
+              <Search.ItemLabel class="data-highlighted:bg-accent data-selected:bg-accent data-selected:text-primary flex w-full items-center justify-between rounded-sm px-2 py-1 text-left text-sm">
+                <span>{props.item.rawValue.name}</span>
+
+                <Badge variant="outline">{props.item.rawValue.type}</Badge>
+              </Search.ItemLabel>
+            </Search.Item>
+          );
+        }}
+      >
+        <Search.Control aria-label="Search Entities">
+          <Search.Input
+            class="bg-background h-9 w-full rounded-md border px-3 text-sm"
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                const entity = options().find((e) => e.name === query());
+                if (entity) {
+                  setSelected(entity);
+                }
+              }
+            }}
+          />
+        </Search.Control>
+
+        <Search.Portal>
+          <Search.Content
             class="bg-card absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-md border p-1 shadow-md"
+            onCloseAutoFocus={(e) => e.preventDefault()}
           >
-            <For each={results()}>
-              {(entity, index) => (
-                <button
-                  id={`erd-search-option-${entity.id}`}
-                  type="button"
-                  role="option"
-                  aria-selected={activeIndex() === index()}
-                  class="hover:bg-accent flex w-full items-center justify-between rounded-sm px-2 py-1 text-left text-sm"
-                  onClick={() => choose(entity)}
-                >
-                  <span>{entity.name}</span>
-                  <Badge variant="outline">{entity.type}</Badge>
-                </button>
-              )}
-            </For>
-          </div>
-        </Show>
-      </div>
+            <Search.Listbox />
+
+            <Search.NoResult>
+              <div class="flex w-full items-center justify-between rounded-sm px-2 py-1 text-left text-sm">
+                not found
+              </div>
+            </Search.NoResult>
+          </Search.Content>
+        </Search.Portal>
+      </Search>
 
       {/* Controls */}
       <div class="ml-auto flex gap-1">
