@@ -5,8 +5,6 @@ import { envVarSet } from "./tests/util.ts";
 const isCi = envVarSet("CI");
 const useWebSocket = envVarSet("USE_WS");
 
-const oauthIntegrationTest = "tests/integration/oauth_integration.test.ts";
-
 const integrationTestTag: TestTagDefinition = {
   name: "integration",
 } as const;
@@ -32,14 +30,12 @@ export default defineConfig({
         test: {
           name: "integration-tests running in jsdom ('browser')",
           tags: [integrationTestTag],
-          // NOTE: We cannot use jsdom due to it having a colliding `Event`
+          // NOTE: We cannot use `jsdom` due to it having a colliding `Event`
           // definition breaking `undici`, which then breaks our WebSocket
           // tests :/
           //   https://github.com/nodejs/undici/issues/2663#issuecomment-1936036650
-          environment: useWebSocket ? "happy-dom" : "jsdom",
+          environment: useWebSocket ? "node" : "jsdom",
           include: ["tests/integration/**/*.test.ts"],
-          // NOTE: happy-dom's mock `undici` messes up `set-cookie` headers breaking our OAuth tests.
-          exclude: useWebSocket ? [oauthIntegrationTest] : [],
           globalSetup: ["tests/start_server.ts", "tests/start_oauth_server.ts"],
           fileParallelism: isCi ? true : false,
         },

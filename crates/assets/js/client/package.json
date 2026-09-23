@@ -46,7 +46,6 @@
     "@microsoft/api-extractor": "^7.59.1",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
-    "happy-dom": "^20.14.5",
     "http-status": "^2.1.0",
     "jsdom": "^30.0.1",
     "nano-spawn": "^2.1.0",
