@@ -88,6 +88,25 @@ describe.for(GUESTS)("WASM HTTP: $runtime", ({ runtime, base }) => {
     );
   });
 
+  // Make sure the everything works and keeps working (e.g. the shared rt pool
+  // doesn't get poisoned) when a component returns a non-http response, e.g.:
+  // traps by panicking.
+  test("incoming HTTP triggers panic", async ({ expect }) => {
+    const panic = async () => {
+      const response = await fetch(`http://${base}/panic`);
+      expect(response.status).equals(status.INTERNAL_SERVER_ERROR);
+    };
+
+    await Promise.all(
+      Array.from({ length: 25 }, async (_v, _i) => await panic()),
+    );
+
+    // Make sure everything is still working.
+    expect(
+      await (await fetch(`http://${base}/method`, { method: "GET" })).text(),
+    ).toBe("get");
+  });
+
   // Make sure that we have TLS and guests can call external HTTPS targets.
   test("outgoing TLS/HTTPS", async ({ expect }) => {
     const TARGET = "https://example.com";
