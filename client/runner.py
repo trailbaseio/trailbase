@@ -44,21 +44,33 @@ def cargo_run(port: str, ws: bool, runtime_threads: str):
         sys.exit(1)
 
     features = ["--features=ws"] if ws or env_bool("USE_WS") else []
+    extra_wasm_component_flag = (
+        [
+            f"--runtime-extra-components={root}/client/testfixture/wasm_lfs/wasm_ts_guest_testfixture.wasm",
+        ]
+        if env_bool("TEST_WASM_JS_GUEST_RUNTIME")
+        else []
+    )
 
     print("Starting dev server...")
     address = f"127.0.0.1:{port}"
 
-    exec_process("cargo", [
-        "run",
-        "--bin=trail",
-        *features,
-        "--",
-        f"--depot={root}/client/testfixture",
-        f"--public-url=http://{address}",
-        "run",
-        f"--address={address}",
-        f"--runtime-threads={runtime_threads}",
-    ], root)
+    exec_process(
+        "cargo",
+        [
+            "run",
+            "--bin=trail",
+            *features,
+            "--",
+            f"--depot={root}/client/testfixture",
+            f"--public-url=http://{address}",
+            "run",
+            f"--address={address}",
+            f"--runtime-threads={runtime_threads}",
+            *extra_wasm_component_flag,
+        ],
+        root,
+    )
 
 
 def main():

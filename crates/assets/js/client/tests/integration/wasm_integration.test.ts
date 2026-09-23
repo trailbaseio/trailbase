@@ -3,7 +3,7 @@ import { status } from "http-status";
 
 import { serverAddress, envVarSet } from "../util";
 
-const includeJsGuest = envVarSet("JS_GUEST_RUNTIME");
+const includeJsGuest = envVarSet("TEST_WASM_JS_GUEST_RUNTIME");
 
 type Runtime = "Rust" | "JS";
 
