@@ -247,6 +247,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
 
     has_root |= method == HttpMethodType::Get && path == "/";
 
+    let component_name = name.clone();
     let registered_path = path.clone();
     let store = store.clone();
 
@@ -292,6 +293,7 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
         );
 
         // Call WASM.
+        let uri = request.uri().clone();
         return match store
           .call_incoming_http_handler(request, Some(Duration::from_secs(20)))
           .await
@@ -305,9 +307,17 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
               axum::body::Body::from_stream(body.into_data_stream()),
             )
           }
-          Err(err) => {
-            warn!("`Error calling WASM component - call_incoming_http_handler` returned: {err}");
-            return internal("component responded unexpectedly");
+          Err(_err) => {
+            // We didn't receive an HTTP response, either something is broken with the
+            // implementation or the WASM component may have trapped (i.e. panicked).
+            warn!("Error calling WASM component '{component_name}': {uri}");
+
+            return cfg_select! {
+              debug_assertions => {
+                internal(format!("component responded unexpectedly\n{_err}"))
+              }
+              _ => internal("component responded unexpectedly"),
+            };
           }
         };
       };
@@ -425,7 +435,7 @@ fn empty() -> UnsyncBoxBody<Bytes, hyper::Error> {
   return UnsyncBoxBody::new(http_body_util::Empty::new().map_err(|_| unreachable!()));
 }
 
-fn internal(msg: &'static str) -> axum::response::Response {
+fn internal(msg: impl Into<axum::body::Body>) -> axum::response::Response {
   return axum::response::Response::builder()
     .status(StatusCode::INTERNAL_SERVER_ERROR)
     .body(msg.into())

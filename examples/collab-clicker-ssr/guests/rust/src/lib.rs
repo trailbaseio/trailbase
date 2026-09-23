@@ -44,7 +44,9 @@ impl Guest for Endpoints {
 
         let template: Cow<'_, str> = cfg_select! {
           feature = "bundle" => assets::HTML_TEMPLATE.into(),
-          _ => String::from_utf8(read_cached_file("/dist/client/index.html")?).map_err(internal)?.into(),
+          _ => String::from_utf8(read_cached_file("/dist/client/index.html")?)
+            .map_err(internal)?
+            .into(),
         };
 
         let template = PLACEHOLDER_RE

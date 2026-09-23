@@ -250,8 +250,9 @@ impl StoreBuilder<State> for Arc<SharedState> {
 
 struct StoreAndBindings {
   store: Store<State>,
-  // bindings: crate::host::Interfaces,
   proxy_bindings: wasmtime_wasi_http::p2::bindings::Proxy,
+  // Can be used to mark an instance as defunct.
+  has_trapped: bool,
 }
 
 struct StoreManager {
@@ -273,14 +274,19 @@ impl deadpool::managed::Manager for StoreManager {
     return Ok(StoreAndBindings {
       store,
       proxy_bindings,
+      has_trapped: false,
     });
   }
 
   async fn recycle(
     &self,
-    _: &mut StoreAndBindings,
+    candidate: &mut StoreAndBindings,
     metrics: &deadpool::managed::Metrics,
   ) -> Result<(), deadpool::managed::RecycleError<Error>> {
+    if candidate.has_trapped {
+      return Err(deadpool::managed::RecycleError::message("defunct"));
+    }
+
     // Limit how often a store gets recycled to avoid persistent ballooning if guests have memory
     // leaks.
     if metrics.recycle_count > 2048 {
@@ -438,8 +444,9 @@ impl HttpStore {
     };
 
     return Self::call(rt, {
-      let timeout = timeout.unwrap_or(DEFAULT_CALL_TIMEOUT);
+      let call_timeout = timeout.unwrap_or(DEFAULT_CALL_TIMEOUT);
       let state = self.state.clone();
+
       async move {
         let uri = request.uri().clone();
         let (sender, receiver) = tokio::sync::oneshot::channel::<
@@ -460,60 +467,65 @@ impl HttpStore {
         // out of scope.
         let handle = tokio::spawn(REQUEST_ID.scope(REQUEST_ID.with(|id| *id), async move {
           let uri = request.uri().clone();
-          let res = match &*state {
-            HttpStoreInternal::Unique { rt } => {
-              // Instantiate a store per request.
-              let (mut store, _bindings) = rt.new_bindings().await?;
-              let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
-                &mut store,
-                &rt.state.component,
-                &rt.state.linker,
-              )
-              .await?;
 
-              let req = store.data_mut().http().new_incoming_request(
-                wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
-                request,
-              )?;
-              let out = store.data_mut().http().new_response_outparam(sender)?;
-              tokio::time::timeout(
-                timeout,
-                proxy_bindings.wasi_http_incoming_handler().call_handle(
-                  store.as_context_mut(),
-                  req,
-                  out,
-                ),
-              )
-              .await
-              .map_err(|_err| Error::Timeout(Some(uri)))?
-            }
-            HttpStoreInternal::Shared { pool, .. } => {
-              // Acquire shared store from pool.
-              let StoreAndBindings {
-                ref mut store,
-                ref proxy_bindings,
-              } = *pool.get().await.map_err(|_err| Error::Timeout(None))?;
+          let dispatch = async || -> Result<(), Error> {
+            match &*state {
+              HttpStoreInternal::Unique { rt } => {
+                // Instantiate a store per request.
+                let (mut store, _bindings) = rt.new_bindings().await?;
+                let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
+                  &mut store,
+                  &rt.state.component,
+                  &rt.state.linker,
+                )
+                .await?;
 
-              let req = store.data_mut().http().new_incoming_request(
-                wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
-                request,
-              )?;
-              let out = store.data_mut().http().new_response_outparam(sender)?;
-              tokio::time::timeout(
-                timeout,
-                proxy_bindings.wasi_http_incoming_handler().call_handle(
-                  store.as_context_mut(),
-                  req,
-                  out,
-                ),
-              )
-              .await
-              .map_err(|_err| {
-                log::warn!("HTTP call to WASM timed out: {uri} ({timeout:?})");
-                return Error::Timeout(Some(uri));
-              })?
-            }
+                let req = store.data_mut().http().new_incoming_request(
+                  wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
+                  request,
+                )?;
+                let out = store.data_mut().http().new_response_outparam(sender)?;
+
+                proxy_bindings
+                  .wasi_http_incoming_handler()
+                  .call_handle(store.as_context_mut(), req, out)
+                  .await?;
+              }
+              HttpStoreInternal::Shared { pool, .. } => {
+                // Acquire shared store from pool.
+                let StoreAndBindings {
+                  ref mut store,
+                  ref proxy_bindings,
+                  ref mut has_trapped,
+                } = *pool.get().await.map_err(|_err| Error::Timeout(None))?;
+
+                debug_assert!(!*has_trapped);
+
+                let req = store.data_mut().http().new_incoming_request(
+                  wasmtime_wasi_http::p2::bindings::http::types::Scheme::Http,
+                  request,
+                )?;
+                let out = store.data_mut().http().new_response_outparam(sender)?;
+
+                proxy_bindings
+                  .wasi_http_incoming_handler()
+                  .call_handle(store.as_context_mut(), req, out)
+                  .await
+                  .map_err(|err| {
+                    // Mark the pool entry as defunct so it won't get recyled.
+                    *has_trapped = true;
+                    return err;
+                  })?;
+              }
+            };
+
+            return Ok(());
           };
+
+          let res = tokio::time::timeout(call_timeout, dispatch())
+            .await
+            .map_err(|_err| Error::Timeout(Some(uri)))
+            .flatten();
 
           #[cfg(debug_assertions)]
           log::debug!(
@@ -522,34 +534,50 @@ impl HttpStore {
             id = REQUEST_ID.with(|id| *id),
           );
 
-          res
+          return res;
         }));
 
-        // NOTE: We have a separate timeout here (besides the call timeout above), since
-        // cancelling the call won't drop the sender to close the receiver (the sender is
-        // leaked via the store). Thus we have to separa timeout the receiving end.
-        return match tokio::time::timeout(WASM_WAIT_TIMEOUT, receiver)
-          .await
-          .map_err(|_err| Error::Timeout(Some(uri)))?
-        {
-          Ok(Ok(resp)) => {
-            // NOTE: We cannot await the completion `call_handle` here with `handle.await?;`, since
-            // we're not consuming the response body, see above.
-            Ok(resp)
-          }
-          Ok(Err(err)) => {
-            handle
-              .await
-              .map_err(|err| Error::Other(err.to_string()))??;
-            Err(Error::HttpErrorCode(err))
-          }
-          Err(_) => {
-            log::debug!("channel closed");
-            handle
-              .await
-              .map_err(|err| Error::Other(err.to_string()))??;
-            Err(Error::ChannelClosed)
-          }
+        return tokio::select! {
+          biased; // Enforces top to bottom order.
+
+          response = receiver => {
+            match response {
+              Ok(maybe_response) => {
+                // Got a proper response from the component via channel - all perfect.
+                maybe_response.map_err(Error::HttpErrorCode)
+              },
+              Err(err) => {
+                // Channel closed: this should not happen. Even if the component instance becomes
+                // defunct, e.g. through a panic, the sender would be kept alive (keeping the
+                // receiver open) and the error would be handled below via the dispatch handle.
+                Err(Error::Other(format!("channel closed: {err}")))
+              },
+            }
+          },
+          dispatch = handle => {
+            match dispatch {
+              Ok(Ok(())) => {
+                debug_assert!(false);
+                // Response should have been delivered via receiver.
+                Err(Error::Other("unreachable".to_string()))
+              },
+              Ok(Err(err)) => {
+                // This can happen when a component instance becomes defunct, e.g. after panic/trap.
+                // We need to get rid of the instance.
+                Err(Error::Other(format!("dispatch failed: {err}")))
+              },
+              Err(err) => {
+                // Tokio should not fail to spawn a new task for dispatch :/.
+                Err(Error::Other(format!("spawn failed: {err}")))
+              },
+            }
+          },
+          // NOTE: We have a separate timeout here (besides the call timeout above), since
+          // cancelling the call won't drop the sender to close the receiver (the sender is
+          // leaked via the store). Thus we have to separately time out the receiving end.
+          _timeout = tokio::time::sleep(WASM_WAIT_TIMEOUT) => {
+            Err(Error::Timeout(Some(uri)))
+          },
         };
       }
     })
