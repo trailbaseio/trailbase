@@ -1,5 +1,6 @@
 import { Transaction as WasiTransaction } from "trailbase:database/sqlite@0.1.1";
 import type { SqliteRequest } from "@common/SqliteRequest";
+import type { SqliteResponse } from "@common/SqliteResponse";
 import { SqlValue } from "@common/SqlValue";
 
 import * as JSON from "../json";
@@ -52,8 +53,8 @@ export async function query(
     body: JSON.stringify(body),
   });
 
-  const json = parseJSON(await reply.text());
-  if ("Error" in json) {
+  const json: SqliteResponse = parseJSON(await reply.text());
+  if (typeof json === "object" && "Error" in json) {
     const response = json as { Error: string };
     throw new Error(response.Error);
   }
@@ -79,8 +80,8 @@ export async function execute(query: string, params: Value[]): Promise<number> {
     body: JSON.stringify(body),
   });
 
-  const json = parseJSON(await reply.text());
-  if ("Error" in json) {
+  const json: SqliteResponse = parseJSON(await reply.text());
+  if (typeof json === "object" && "Error" in json) {
     const response = json as { Error: string };
     throw new Error(response.Error);
   }
@@ -92,6 +93,28 @@ export async function execute(query: string, params: Value[]): Promise<number> {
     throw new Error(`Unexpected response '${JSON.stringify(json)}'`, {
       cause: err,
     });
+  }
+}
+
+export async function executeBatch(query: string): Promise<void> {
+  const body: SqliteRequest = {
+    query,
+    params: [],
+  };
+  const reply = await fetch("http://__sqlite/batch", {
+    method: "POST",
+    headers: [["content-type", "application/json"]],
+    body: JSON.stringify(body),
+  });
+
+  const json: SqliteResponse = parseJSON(await reply.text());
+  if (typeof json === "object" && "Error" in json) {
+    const response = json as { Error: string };
+    throw new Error(response.Error);
+  }
+
+  if (json !== "ExecuteBatch") {
+    throw new Error(`Unexpected response '${JSON.stringify(json)}'`);
   }
 }
 

@@ -6,7 +6,7 @@ import {
   HttpResponse,
   StatusCode,
 } from "trailbase-wasm/http";
-import { execute, query, Transaction } from "trailbase-wasm/db";
+import { execute, executeBatch, query, Transaction } from "trailbase-wasm/db";
 
 //const PREFIX = "";
 const PREFIX = "/js";
@@ -44,6 +44,9 @@ export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
       ),
       HttpHandler.get(`${PREFIX}/error`, () => {
         throw new HttpError(StatusCode.IM_A_TEAPOT, "I'm a teapot");
+      }),
+      HttpHandler.get(`${PREFIX}/panic`, () => {
+        throw `some error`;
       }),
       HttpHandler.get(`${PREFIX}/await`, async (req) => {
         const ms = req.getQueryParam("ms");
@@ -96,6 +99,26 @@ export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
 
         return "Ok";
       }),
+      HttpHandler.get(`${PREFIX}/query_db/{sql}`, async (req: HttpRequest) => {
+        const sql = atob(req.getPathParam("sql") ?? "");
+        const rows = await query(sql, []);
+        return `${rows[0][0]}`;
+      }),
+      HttpHandler.get(
+        `${PREFIX}/execute_db/{sql}`,
+        async (req: HttpRequest) => {
+          const sql = atob(req.getPathParam("sql") ?? "");
+          const rowsAffected = await execute(sql, []);
+          return `${rowsAffected}`;
+        },
+      ),
+      HttpHandler.get(
+        `${PREFIX}/execute_batch_db/{sql}`,
+        async (req: HttpRequest) => {
+          const sql = atob(req.getPathParam("sql") ?? "");
+          await executeBatch(sql);
+        },
+      ),
       HttpHandler.get(`${PREFIX}/set_interval`, async (): Promise<string> => {
         var cnt = 0;
 
@@ -114,7 +137,17 @@ export const { initEndpoint, incomingHandler, sqliteFunctionEndpoint } =
       HttpHandler.get(`${PREFIX}/random`, async (): Promise<string> => {
         return `${Math.random().toString()}\n`;
       }),
+      // Dashboard:
       HttpHandler.get(`${PREFIX}/dash`, (_: HttpRequest): string => dash),
+      // Built-in SQLite extension:
+      HttpHandler.get(
+        `${PREFIX}/test_sqlite-vec`,
+        async (): Promise<string> => {
+          const vec = (await query("SELECT vec_f32('[0, 1, 2, 3]')", []))[0][0];
+
+          return btoa(String.fromCharCode(...(vec as Uint8Array)));
+        },
+      ),
     ],
   });
 

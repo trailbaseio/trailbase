@@ -62,6 +62,12 @@ impl Guest for Endpoints {
           message: Some("I'm a teapot".to_string()),
         });
       }),
+      routing::get("/panic", async |_req| {
+        if true {
+          panic!("/panic called");
+        }
+        return Ok(());
+      }),
       routing::get("/await", async |req| -> Result<Vec<u8>, HttpError> {
         let ms: u64 = req.query_param("ms").map_or(10, |p| p.parse().unwrap());
         eprintln!("waiting {ms}ms");
@@ -178,6 +184,19 @@ impl Guest for Endpoints {
         let n: usize = req.query_param("n").map_or(40, |p| p.parse().unwrap());
         return format!("{}\n", fibonacci(n));
       }),
+      // Dashboard:
+      routing::get("/dash", async |_req| Ok(DASH)),
+      // Built-in SQLite extension:
+      routing::get("/test_sqlite-vec", async |_req| {
+        let Value::Blob(ref vec) = query("SELECT vec_f32('[0, 1, 2, 3]')", vec![])
+          .await
+          .unwrap()[0][0]
+        else {
+          return Err(internal("expected blob"));
+        };
+        return Ok(BASE64_STANDARD.encode(vec));
+      }),
+      // Rust-only: custom sqlite functions.
       routing::get("/sqlite_echo", async |_req| {
         let Value::Integer(i) = &query("SELECT custom_echo(?1)", vec![Value::Integer(5)])
           .await
@@ -189,9 +208,6 @@ impl Guest for Endpoints {
 
         return Ok(format!("{i}\n"));
       }),
-      routing::get("/stateful", async |_req| {
-        return Ok(format!("{}\n", SEQ.fetch_add(1, Ordering::SeqCst)));
-      }),
       routing::get("/sqlite_stateful", async |_req| {
         let Value::Integer(i) = &query("SELECT custom_stateful()", vec![])
           .await
@@ -201,22 +217,6 @@ impl Guest for Endpoints {
         };
         return Ok(format!("{i}\n"));
       }),
-      routing::get("/panic", async |_req| {
-        if true {
-          panic!("/panic called");
-        }
-        return Ok(());
-      }),
-      routing::get("/test_sqlite-vec", async |_req| {
-        let Value::Blob(ref vec) = query("SELECT vec_f32('[0, 1, 2, 3]')", vec![])
-          .await
-          .unwrap()[0][0]
-        else {
-          return Err(internal("expected blob"));
-        };
-        return Ok(BASE64_STANDARD.encode(vec));
-      }),
-      routing::get("/dash", async |_req| Ok(DASH)),
     ];
   }
 
