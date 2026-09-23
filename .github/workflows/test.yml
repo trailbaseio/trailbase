@@ -90,6 +90,7 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
+          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
@@ -112,6 +113,8 @@ jobs:
         uses: nick-fields/retry@v3
         env:
           RUST_BACKTRACE: 1
+          # Run integration test against both: Rust and JS test components.
+          JS_GUEST_RUNTIME: 1
         with:
           timeout_minutes: 60
           max_attempts: 2
@@ -130,6 +133,7 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
+          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
