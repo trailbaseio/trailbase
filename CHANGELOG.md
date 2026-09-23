@@ -1,3 +1,13 @@
+## v0.33.22
+
+- Fix behavior when a Rust WASM guest panics:
+  - Respond respond with the error right away via HTTP, i.e. don't rely on timeout.
+  - Remove trapped component from shared instance pool to avoid poisoning.
+- Add support for SQL `execute_batch` to JS/TS WASM guests.
+- Add integration test coverage for JS/TS WASM components. Still needs to be enabled in CI.
+- Overhaul integration tests.
+- Update dependencies.
+
 ## v0.33.21
 
 - AdminUI:
