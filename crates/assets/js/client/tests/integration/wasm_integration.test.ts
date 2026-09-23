@@ -1,9 +1,9 @@
 import { test, describe } from "vitest";
 import { status } from "http-status";
 
-import { serverAddress } from "../util";
+import { serverAddress, envVarSet } from "../util";
 
-const runJs = process.env.JS_GUEST_RUNTIME === "1";
+const includeJsGuest = envVarSet("JS_GUEST_RUNTIME");
 
 type Runtime = "Rust" | "JS";
 
@@ -22,7 +22,7 @@ const ONLY_JS: Guest = {
   base: `${serverAddress()}/js`,
 };
 
-const GUESTS: Guest[] = runJs ? [ONLY_RUST, ONLY_JS] : [ONLY_RUST];
+const GUESTS: Guest[] = includeJsGuest ? [ONLY_RUST, ONLY_JS] : [ONLY_RUST];
 
 test.for(GUESTS)(
   "WASM sanity: $runtime",
@@ -130,11 +130,7 @@ describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
     await execute(`DETACH DATABASE '${name}';`);
   }
 
-  test("simple statements", async ({ expect, skip }) => {
-    if (runtime === "JS") {
-      skip();
-    }
-
+  test("simple statements", async ({ expect }) => {
     const countSql = "SELECT COUNT(*) FROM '_user'";
     await query(countSql);
     // Multiple statements throws.
@@ -155,11 +151,7 @@ describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
     await execute_batch(`${createTableSql};${createTableSql};${countSql}`);
   });
 
-  test("attaching/detaching multi DB", async ({ expect, skip }) => {
-    if (runtime === "JS") {
-      skip();
-    }
-
+  test("attaching/detaching multi DB", async ({ expect }) => {
     // Attach db with invalid name fails
     await expect(async () => await attach("session")).rejects.toThrow();
 
@@ -215,11 +207,14 @@ describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
   });
 
   test("custom SQLite extension functions", async ({ skip, expect }) => {
+    // Custom SQLite extension functions are only supported by Rust (yet).
+    // However, using JS guests - due to their lack of re-usability - would
+    // probably be prohibitively expensive.
     if (runtime == "JS") {
       skip();
     }
 
-    // We call the stateful count endpoint 100 times concurrently, sort the result and check it's (0..99).
+    // We call the `sqlite_stateful` endpoint 100 times concurrently, sort the result and check it's (0..99).
     async function getCount(): Promise<number> {
       const response = await fetch(`http://${base}/sqlite_stateful`);
 
@@ -235,11 +230,7 @@ describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
     expect(counts).toEqual(Array.from({ length: N }, (_v, i) => i));
   });
 
-  test("calling default sqlite-vec extension", async ({ expect, skip }) => {
-    if (runtime == "JS") {
-      skip();
-    }
-
+  test("calling default sqlite-vec extension", async ({ expect }) => {
     await Promise.all(
       Array.from({ length: 25 }, async (_v, _i) => {
         const response = await fetch(`http://${base}/test_sqlite-vec`);
