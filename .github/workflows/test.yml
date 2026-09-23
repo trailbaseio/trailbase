@@ -85,6 +85,7 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
+          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
@@ -110,6 +111,8 @@ jobs:
         uses: pre-commit/action@v3.0.1
         env:
           RUST_BACKTRACE: 1
+          # Run integration test against both: Rust and JS test components.
+          JS_GUEST_RUNTIME: 1
         with:
           extra_args: "--all-files --verbose"
 
@@ -124,6 +127,7 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
+          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
@@ -173,7 +177,7 @@ jobs:
           max_attempts: 3
           retry_on: any # options: any, timeout, error
           continue_on_error: false
-          command: cargo test --features=geos,otel,pg-test
+          command: cargo test -p trailbase --features=geos,otel,pg-test
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
