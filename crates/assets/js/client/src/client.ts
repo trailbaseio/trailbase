@@ -1,20 +1,20 @@
 import { jwtDecode } from "jwt-decode";
 import * as JSON from "@ungap/raw-json";
 
-import { isDev } from "./constants";
-import { jsonContentTypeHeader } from "./constants";
-import { parseJSON } from "./json";
+import { isDev } from "./constants.ts";
+import { jsonContentTypeHeader } from "./constants.ts";
+import { parseJSON } from "./json.ts";
 import type {
   RecordApi,
   RecordId,
   CreateOperation,
   UpdateOperation,
   DeleteOperation,
-} from "./record_api";
-import { RecordApiImpl } from "./record_api";
-import { DefaultTransport, Transport } from "./transport";
+} from "./record_api.ts";
+import { RecordApiImpl } from "./record_api.ts";
+import { DefaultTransport, Transport } from "./transport.ts";
 
-export type { Transport } from "./transport";
+export type { Transport } from "./transport.ts";
 
 import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
 import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";

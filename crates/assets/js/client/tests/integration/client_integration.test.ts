@@ -21,12 +21,12 @@ import type {
   Event,
 } from "../../src/index";
 
-import { serverAddress, connect } from "../setup";
+import { serverAddress, connect } from "../util";
 import {
   SimpleStrict,
   SimpleSubsetView,
   NewSimpleStrict,
-} from "../simple_strict";
+} from "./simple_strict";
 
 const { base64Encode } = indexExportForTesting!;
 
@@ -843,22 +843,30 @@ describe("record file operations", () => {
     const singleFileResponse = await fetch(
       `http://${serverAddress()}${filePath(apiName, recordId, "single_file")}`,
     );
-    expect(await singleFileResponse.bytes()).toEqual(testBytes1);
+    expect(new Uint8Array(await singleFileResponse.arrayBuffer())).toEqual(
+      testBytes1,
+    );
 
     const singleFilesResponse = await fetch(
       `http://${serverAddress()}${filesPath(apiName, recordId, "single_file", singleFile.filename)}`,
     );
-    expect(await singleFilesResponse.bytes()).toEqual(testBytes1);
+    expect(new Uint8Array(await singleFilesResponse.arrayBuffer())).toEqual(
+      testBytes1,
+    );
 
     const multiFile1Response = await fetch(
       `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[0].filename)}`,
     );
-    expect(await multiFile1Response.bytes()).toEqual(testBytes2);
+    expect(new Uint8Array(await multiFile1Response.arrayBuffer())).toEqual(
+      testBytes2,
+    );
 
     const multiFile2Response = await fetch(
       `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", multipleFiles[1].filename)}`,
     );
-    expect(await multiFile2Response.bytes()).toEqual(testBytes3);
+    expect(new Uint8Array(await multiFile2Response.arrayBuffer())).toEqual(
+      testBytes3,
+    );
 
     const notFoundResponse = await fetch(
       `http://${serverAddress()}${filesPath(apiName, recordId, "multiple_files", "non-existent-filename")}`,

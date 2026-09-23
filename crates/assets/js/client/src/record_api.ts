@@ -1,9 +1,9 @@
 import * as JSON from "@ungap/raw-json";
 import { FeatureCollection } from "geojson";
 
-import { isDev, jsonContentTypeHeader } from "./constants";
-import { parseJSON } from "./json";
-import { Client } from "./client";
+import { isDev, jsonContentTypeHeader } from "./constants.ts";
+import { parseJSON } from "./json.ts";
+import { Client } from "./client.ts";
 
 import type { JsonValue } from "@bindings/serde_json/JsonValue";
 import type { Operation } from "@bindings/Operation";

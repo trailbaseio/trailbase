@@ -1,7 +1,7 @@
 import { test, describe } from "vitest";
 import { status } from "http-status";
 
-import { serverAddress } from "../setup";
+import { serverAddress } from "../util";
 
 const runJs = process.env.JS_GUEST_RUNTIME === "1";
 
@@ -24,12 +24,15 @@ const ONLY_JS: Guest = {
 
 const GUESTS: Guest[] = runJs ? [ONLY_RUST, ONLY_JS] : [ONLY_RUST];
 
-test.for(GUESTS)("WASM sanity: $runtime", async ({ runtime, base }, { expect }) => {
-  // Make sure we're calling the right guest;
-  expect(
-    await (await fetch(`http://${base}/rt`, { method: "GET" })).text(),
-  ).toBe(runtime);
-});
+test.for(GUESTS)(
+  "WASM sanity: $runtime",
+  async ({ runtime, base }, { expect }) => {
+    // Make sure we're calling the right guest;
+    expect(
+      await (await fetch(`http://${base}/rt`, { method: "GET" })).text(),
+    ).toBe(runtime);
+  },
+);
 
 describe.for(GUESTS)("WASM HTTP: $runtime", ({ runtime, base }) => {
   test("sanity", async ({ expect }) => {

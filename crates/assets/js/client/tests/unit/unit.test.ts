@@ -1,15 +1,15 @@
 import { test } from "vitest";
 import { describe, it, expect } from "vitest";
 
-import { FetchError, initClient } from "../src/index";
-import type { Transport } from "../src/index";
-import { parseJSON } from "../src/json";
+import { FetchError, initClient } from "@/index.ts";
+import type { Transport } from "@/index.ts";
+import { parseJSON } from "@/json.ts";
 import {
   exportedForTesting,
   ChangeEventStatusForbidden,
   isNull,
   isNotNull,
-} from "../src/record_api";
+} from "@/record_api.ts";
 
 const { parseChangeEvent } = exportedForTesting!;
 

@@ -1,14 +1,13 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-
-import { createVitest } from "vitest/node";
+import type { TestProject } from "vitest/node";
 import { cwd } from "node:process";
 import { existsSync } from "node:fs";
 import type { ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import spawn from "nano-spawn";
 
-import { serverAddress, serverPort, useWebSocket } from "./setup";
+import { serverAddress, serverPort, envVarSet } from "./util";
 
+const useWebSocket = envVarSet("USE_WS");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
@@ -27,7 +26,7 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
     throw new Error(root);
   }
 
-  const features = useWebSocket() ? ["--features=ws"] : [];
+  const features = useWebSocket ? ["--features=ws"] : [];
   await spawn("cargo", ["build", ...features], { cwd: root });
 
   const args = [
@@ -61,7 +60,7 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
       }
 
       console.log(await response.text());
-    } catch (err) {
+    } catch {
       console.info("Waiting for TrailBase to become healthy");
     }
 
@@ -78,59 +77,30 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
   throw Error("Failed to start TrailBase");
 }
 
-const { subprocess } = await initTrailBase();
+let server: ChildProcess | null = null;
 
-try {
-  const nodeEnvTests = (useWs: boolean) => [
-    // Auth test needs "node" environment to bring up OIDC test server.
-    "tests/integration/oauth_integration.test.ts",
-
-    // WebSocket test cannot run in "jsdom" environment due to `Event` collisions:
-    //   https://github.com/nodejs/undici/issues/2663#issuecomment-1936036650
-    ...(useWs ? ["tests/integration/websocket_integration.test.ts"] : []),
-  ];
-
-  const isCi = process.env.CI === "1";
-
-  {
-    const ctx = await createVitest("test", {
-      watch: false,
-      environment: "jsdom",
-      fileParallelism: isCi ? true : false,
-      include: ["tests/integration/*test.ts"],
-      exclude: nodeEnvTests(true),
-      // No fancy terminal sequences, append everything in order.
-      reporters: [isCi ? "tap" : "verbose"],
-    });
-
-    await ctx.start();
-    await ctx.close();
+export async function setup(_project: TestProject) {
+  if (process.argv.includes("list")) {
+    return; // Skip server startup when listing tests
   }
 
-  {
-    const ctx = await createVitest("test", {
-      watch: false,
-      environment: "node",
-      fileParallelism: isCi ? true : false,
-      include: nodeEnvTests(useWebSocket()),
-      // No fancy terminal sequences, append everything in order.
-      reporters: [isCi ? "tap" : "verbose"],
-    });
+  const { subprocess } = await initTrailBase();
+  server = subprocess;
+}
 
-    await ctx.start();
-    await ctx.close();
+export async function teardown() {
+  if (!server) {
+    return;
   }
-} finally {
-  if (subprocess !== null) {
-    if (subprocess.exitCode === null) {
-      // Still running
-      console.info("Shutting down TrailBase");
-      subprocess.kill();
-    } else {
-      // Otherwise TrailBase terminated. Log output to provide a clue as to why.
-      const { stderr, stdout } = subprocess;
-      console.error(stdout);
-      console.error(stderr);
-    }
+
+  if (server.exitCode === null) {
+    // Still running
+    console.info("Shutting down TrailBase");
+    server.kill();
+  } else {
+    // Otherwise TrailBase terminated. Log output to provide a clue as to why.
+    const { stderr, stdout } = server;
+    console.error(stdout);
+    console.error(stderr);
   }
 }

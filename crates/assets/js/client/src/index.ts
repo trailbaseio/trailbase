@@ -1,7 +1,7 @@
-import { isDev } from "./constants";
+import { isDev } from "./constants.ts";
 
-export * from "./client";
-export * from "./record_api";
+export * from "./client.ts";
+export * from "./record_api.ts";
 
 /// Decode a base64 string to bytes.
 function base64Decode(base64: string): Uint8Array {

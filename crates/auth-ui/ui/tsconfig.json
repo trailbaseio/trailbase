@@ -3,6 +3,7 @@
   "compilerOptions": {
     "jsx": "preserve",
     "jsxImportSource": "solid-js",
+    "allowImportingTsExtensions": true,
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],

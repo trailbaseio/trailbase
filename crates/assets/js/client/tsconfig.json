@@ -3,14 +3,16 @@
     "strict": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "target": "ESNext",
     "module": "ESNext",
     "declaration": true,
     "outDir": "./dist",
     "paths": {
+      "@/*": ["./src/*"],
       "@bindings/*": ["./bindings/*"]
     }
   },
-  "include": ["./src/**/*"]
+  "include": ["./src/**/*", "./tests/**/*"]
 }

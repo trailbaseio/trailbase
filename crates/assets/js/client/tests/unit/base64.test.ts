@@ -3,7 +3,7 @@ import {
   exportedForTesting,
   urlSafeBase64Encode,
   urlSafeBase64Decode,
-} from "../src/index";
+} from "@/index.ts";
 
 const { base64Encode, base64Decode } = exportedForTesting!;
 

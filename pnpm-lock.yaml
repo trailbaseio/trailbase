@@ -168,7 +168,7 @@ importers:
         version: 4.3.3(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       '@testing-library/jest-dom':
         specifier: ^7.0.1
-        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))
+        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))
       '@testing-library/user-event':
         specifier: ^14.6.7
         version: 14.6.7(@testing-library/dom@10.4.2)
@@ -228,13 +228,13 @@ importers:
         version: 4.0.1(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vite-plugin-solid:
         specifier: ^2.11.14
-        version: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+        version: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vite-tsconfig-paths:
         specifier: 6.1.1
         version: 6.1.1(supports-color@10.2.2)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+        version: 4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
 
   crates/assets/js/client:
     dependencies:
@@ -266,6 +266,9 @@ importers:
       globals:
         specifier: ^17.12.0
         version: 17.12.0
+      happy-dom:
+        specifier: ^20.14.5
+        version: 20.14.5
       http-status:
         specifier: ^2.1.0
         version: 2.1.0
@@ -304,7 +307,7 @@ importers:
         version: 5.1.0(@microsoft/api-extractor@7.59.1(@types/node@26.6.1))(esbuild@0.28.2)(rolldown@1.2.8)(rollup@4.63.3)(supports-color@10.2.2)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+        version: 4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
 
   crates/auth-ui/ui:
     dependencies:
@@ -313,7 +316,7 @@ importers:
         version: 0.9.10(prettier-plugin-astro@1.0.0(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(prettier@3.9.7))(prettier@3.9.7)(typescript@6.0.3)
       '@astrojs/solid-js':
         specifier: ^7.0.2
-        version: 7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)
+        version: 7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)
       '@kobalte/core':
         specifier: ^0.13.14
         version: 0.13.14(solid-js@1.9.15)
@@ -468,7 +471,7 @@ importers:
         version: 3.7.4
       '@astrojs/solid-js':
         specifier: ^7.0.2
-        version: 7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)
+        version: 7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))
@@ -535,7 +538,7 @@ importers:
         version: 8.70.0(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+        version: 4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
 
   docs/examples/wasm-guest-ts:
     dependencies:
@@ -606,7 +609,7 @@ importers:
     devDependencies:
       '@astrojs/solid-js':
         specifier: ^7.0.2
-        version: 7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)
+        version: 7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))
@@ -786,7 +789,7 @@ importers:
         version: 8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)
       vite-plugin-solid:
         specifier: ^2.11.14
-        version: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+        version: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
 
   examples/collab-clicker-ssr/guests/typescript:
     dependencies:
@@ -1022,7 +1025,7 @@ importers:
         version: 5.1.0(@microsoft/api-extractor@7.59.1(@types/node@26.6.1))(esbuild@0.28.2)(rolldown@1.2.8)(rollup@4.63.3)(supports-color@10.2.2)(typescript@6.0.3)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+        version: 4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
 
 packages:
 
@@ -3554,8 +3557,14 @@ packages:
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
 
+  '@types/whatwg-mimetype@3.0.2':
+    resolution: {integrity: sha512-c2AKvDT8ToxLIOUlN51gTiHXflsfIFisS4pO7pDPoKouJCESkhZnEy623gwP9laCy5lnLDAw1vAzu2vM2YLOrA==}
+
   '@types/wicg-file-system-access@2023.10.7':
     resolution: {integrity: sha512-g49ijasEJvCd7ifmAY2D0wdEtt1xRjBbA33PJTiv8mKBr7DoMsPeISoJ8oQOTopSRi+FBWPpPW5ouDj2QPKtGA==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript-eslint/eslint-plugin@8.70.0':
     resolution: {integrity: sha512-/v8HZt6RlyIZxB3ntehELOcUcfxKPVGWXnQdJuHRmzrqgF8nQypcC/oxGW+Ot4VGKDq81XugPKxx0n5PBtf9PA==}
@@ -4087,6 +4096,10 @@ packages:
 
   buffer-from@1.1.2:
     resolution: {integrity: sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==}
+
+  buffer-image-size@0.6.4:
+    resolution: {integrity: sha512-nEh+kZOPY1w+gcCMobZ6ETUp9WfibndnosbpwB1iJk/8Gt5ZF2bhS6+B6bPYz424KtwsR6Rflc3tCz1/ghX2dQ==}
+    engines: {node: '>=4.0'}
 
   buffer@5.7.1:
     resolution: {integrity: sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ==}
@@ -4974,6 +4987,10 @@ packages:
 
   h3@1.15.11:
     resolution: {integrity: sha512-L3THSe2MPeBwgIZVSH5zLdBBU90TOxarvhK9d04IDY2AmVS8j2Jz2LIWtwsGOU3lu2I5jCN7FNvVfY2+XyF+mg==}
+
+  happy-dom@20.14.5:
+    resolution: {integrity: sha512-x/RzkpWO40bTjIoT30iQtt64FLLmH/iRcUCN2X//bLx7H3ifkdfPXyqsro/OYtqzIAhiLMMA7mmiOR9C3NOKjQ==}
+    engines: {node: '>=20.0.0'}
 
   har-validator-compiled@1.0.0:
     resolution: {integrity: sha512-dher7nFSx+Ef6OoqVveLClh8itAR3vd8Qx70Lh/hEgP1iGeARAolbci7Y8JBrHIYgFCT6xRdvvL16AR9Zh07Dw==}
@@ -7449,6 +7466,10 @@ packages:
     engines: {node: '>=18'}
     deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
+  whatwg-mimetype@3.0.0:
+    resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
+    engines: {node: '>=12'}
+
   whatwg-mimetype@4.0.0:
     resolution: {integrity: sha512-QaKxh0eNIi2mE9p2vEdzfagOKHCcj1pJ56EEHGQOVxp8r9/iszLUUV7v89x9O1p/T+NlTM5W7jW6+cz4Fq1YVg==}
     engines: {node: '>=18'}
@@ -7507,6 +7528,18 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
+
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
 
   xml-but-prettier@1.0.1:
     resolution: {integrity: sha512-C2CJaadHrZTqESlH03WOyw0oZTtoy2uEg6dSDF6YRg+9GnYNub53RRemLpnvtbHDFelxMx4LajiFsYeR6XJHgQ==}
@@ -7800,11 +7833,11 @@ snapshots:
       sitemap: 9.0.1
       zod: 4.6.5
 
-  '@astrojs/solid-js@7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)':
+  '@astrojs/solid-js@7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)':
     dependencies:
       solid-js: 1.9.15
       vite: 8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)
-      vite-plugin-solid: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+      vite-plugin-solid: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vitefu: 1.1.3(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
@@ -7822,11 +7855,11 @@ snapshots:
       - tsx
       - yaml
 
-  '@astrojs/solid-js@7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)':
+  '@astrojs/solid-js@7.0.2(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(solid-js@1.9.15)(supports-color@10.2.2)(terser@5.48.0)(yaml@2.9.1)':
     dependencies:
       solid-js: 1.9.15
       vite: 8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)
-      vite-plugin-solid: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+      vite-plugin-solid: 2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
       vitefu: 1.1.3(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@testing-library/jest-dom'
@@ -10077,7 +10110,7 @@ snapshots:
       picocolors: 1.1.1
       pretty-format: 27.5.1
 
-  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))':
+  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))':
     dependencies:
       '@adobe/css-tools': 4.5.0
       '@testing-library/dom': 10.4.2
@@ -10087,10 +10120,10 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+      vitest: 4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
     optional: true
 
-  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))':
+  '@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))':
     dependencies:
       '@adobe/css-tools': 4.5.0
       '@testing-library/dom': 10.4.2
@@ -10100,7 +10133,7 @@ snapshots:
       picocolors: 1.1.1
       redent: 3.0.0
     optionalDependencies:
-      vitest: 4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
+      vitest: 4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
 
   '@testing-library/user-event@14.6.7(@testing-library/dom@10.4.2)':
     dependencies:
@@ -10271,7 +10304,13 @@ snapshots:
 
   '@types/unist@3.0.3': {}
 
+  '@types/whatwg-mimetype@3.0.2': {}
+
   '@types/wicg-file-system-access@2023.10.7': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 26.6.1
 
   '@typescript-eslint/eslint-plugin@8.70.0(@typescript-eslint/parser@8.70.0(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3))(eslint@10.10.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)(typescript@6.0.3)':
     dependencies:
@@ -10989,6 +11028,10 @@ snapshots:
 
   buffer-from@1.1.2:
     optional: true
+
+  buffer-image-size@0.6.4:
+    dependencies:
+      '@types/node': 26.6.1
 
   buffer@5.7.1:
     dependencies:
@@ -11954,6 +11997,19 @@ snapshots:
       radix3: 1.1.2
       ufo: 1.6.4
       uncrypto: 0.1.3
+
+  happy-dom@20.14.5:
+    dependencies:
+      '@types/node': 26.6.1
+      '@types/whatwg-mimetype': 3.0.2
+      '@types/ws': 8.18.1
+      buffer-image-size: 0.6.4
+      entities: 7.0.1
+      whatwg-mimetype: 3.0.0
+      ws: 8.21.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   har-validator-compiled@1.0.0: {}
 
@@ -14492,7 +14548,7 @@ snapshots:
       - typescript
       - webpack
 
-  vite-plugin-solid@2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
+  vite-plugin-solid@2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@types/babel__core': 7.20.5
@@ -14503,11 +14559,11 @@ snapshots:
       vite: 8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)
       vitefu: 1.1.3(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
     optionalDependencies:
-      '@testing-library/jest-dom': 7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))
+      '@testing-library/jest-dom': 7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))
     transitivePeerDependencies:
       - supports-color
 
-  vite-plugin-solid@2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
+  vite-plugin-solid@2.11.14(@testing-library/jest-dom@7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))))(solid-js@1.9.15)(supports-color@10.2.2)(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
     dependencies:
       '@babel/core': 7.29.7(supports-color@10.2.2)
       '@types/babel__core': 7.20.5
@@ -14518,7 +14574,7 @@ snapshots:
       vite: 8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)
       vitefu: 1.1.3(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
     optionalDependencies:
-      '@testing-library/jest-dom': 7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))
+      '@testing-library/jest-dom': 7.0.1(@testing-library/dom@10.4.2)(vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)))
     transitivePeerDependencies:
       - supports-color
 
@@ -14570,7 +14626,7 @@ snapshots:
     optionalDependencies:
       vite: 8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)
 
-  vitest@4.1.11(@types/node@16.18.126)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
+  vitest@4.1.11(@types/node@16.18.126)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@8.3.0(@types/node@16.18.126)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
@@ -14594,12 +14650,13 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 16.18.126
+      happy-dom: 20.14.5
       jsdom: 30.0.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - msw
     optional: true
 
-  vitest@4.1.11(@types/node@26.6.1)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
+  vitest@4.1.11(@types/node@26.6.1)(happy-dom@20.14.5)(jsdom@30.0.1(@noble/hashes@2.4.0))(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@8.3.0(@types/node@26.6.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.1))
@@ -14623,6 +14680,7 @@ snapshots:
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 26.6.1
+      happy-dom: 20.14.5
       jsdom: 30.0.1(@noble/hashes@2.4.0)
     transitivePeerDependencies:
       - msw
@@ -14756,6 +14814,8 @@ snapshots:
     dependencies:
       iconv-lite: 0.6.3
 
+  whatwg-mimetype@3.0.0: {}
+
   whatwg-mimetype@4.0.0: {}
 
   whatwg-mimetype@5.0.0: {}
@@ -14824,6 +14884,8 @@ snapshots:
       strip-ansi: 7.2.0
 
   wrappy@1.0.2: {}
+
+  ws@8.21.3: {}
 
   xml-but-prettier@1.0.1:
     dependencies:

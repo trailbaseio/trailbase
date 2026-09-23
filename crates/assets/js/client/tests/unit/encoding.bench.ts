@@ -4,7 +4,7 @@ import {
   urlSafeBase64Encode,
   urlSafeBase64Decode,
   exportedForTesting,
-} from "../src/index";
+} from "@/index.ts";
 
 const { base64Encode, base64Decode } = exportedForTesting!;
 

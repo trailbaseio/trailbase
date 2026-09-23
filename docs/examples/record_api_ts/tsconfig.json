@@ -3,6 +3,7 @@
     "strict": true,
     "strictNullChecks": true,
     "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
     "target": "ESNext",
     "module": "ESNext",

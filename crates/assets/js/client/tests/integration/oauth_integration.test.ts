@@ -1,46 +1,11 @@
-import { expect, test } from "vitest";
-import { OAuth2Server } from "oauth2-mock-server";
+import { expect, test, inject } from "vitest";
 
-import { serverAddress, serverPort } from "../setup";
+import { serverAddress, serverPort } from "../util";
 
-type OpenIdConfig = {
-  issuer: string;
-  token_endpoint: string;
-  authorization_endpoint: string;
-  userinfo_endpoint: string;
-};
-
-// NOTE: Having this server test live alongside the client is a bit odd.
-test("OIDC", async () => {
-  if (serverPort() === 4000) {
-    console.info("Skipping OIDC setup for tests with external TB instances.");
-    return;
-  }
-
-  const server = new OAuth2Server();
-
-  // Generate a new RSA key and add it to the keystore
-  await server.issuer.keys.generate("RS256");
-
-  // NOTE: this port needs to match the client/testfixture/config.textproto.
-  const authPort = 9088;
-  const authAddress = "127.0.0.1";
-  await server.start(authPort, authAddress);
-
-  const response = await fetch(
-    `http://${authAddress}:${authPort}/.well-known/openid-configuration`,
-  );
-  const config: OpenIdConfig = await response.json();
-  expect(config.token_endpoint).toBe(`http://localhost:${authPort}/token`);
-
-  server.service.on("beforeUserinfo", (userInfoResponse, _req) => {
-    userInfoResponse.body = {
-      sub: "joanadoe",
-      email: "joana@doe.org",
-      email_verified: true,
-    };
-    userInfoResponse.statusCode = 200;
-  });
+// Skip oauth/OIDC test for tests against external TB instances, because the
+// server's OIDC provider config, needs to match the test setup.
+test.skipIf(serverPort() === 4000)("OIDC", async () => {
+  const address = inject("oauthServerAddress");
 
   const redirectUri = "/_/auth/expected";
   const login = await fetch(
@@ -52,7 +17,7 @@ test("OIDC", async () => {
 
   expect(login.status).toBe(303);
   const location = login.headers.get("location")!;
-  expect(location).toContain(`http://localhost:${authPort}/authorize`);
+  expect(location).toContain(`http://localhost:${address.port}/authorize`);
   const stateCookie = login.headers.get("set-cookie")!.split(";")[0];
 
   // NOTE: The fake OAuth provider uses a 302, we use 303 which has more consistent semantics across browsers.
@@ -62,8 +27,6 @@ test("OIDC", async () => {
   // The redirect by the Auth-UI is constructed using the `config.server.site_url`, which is set to `localhost.trailbase.io:4000`.
   // Unless we want to change the config for each test setup, we're rewriting the address here.
   const callbackUrl = authorize.headers.get("location")!;
-  console.info("redirects: ", location, callbackUrl);
-
   const expected = "http://localhost.trailbase.io:4000";
   expect(callbackUrl).contains(expected);
 
@@ -85,6 +48,4 @@ test("OIDC", async () => {
   expect(authHeader)
     .to.be.a("string")
     .and.match(new RegExp(".*auth_token=ey.*"));
-
-  await server.stop();
 });
