@@ -203,8 +203,11 @@ async fn fetch_logs(
 
   return Ok(
     conn
-      .read_query_values::<LogEntry>(sql_query, params)
-      .await?,
+      .read_query_rows(sql_query, params)
+      .await?
+      .into_iter()
+      .map(|row| LogEntry::from_row(&row, geoip_db_type))
+      .collect::<Result<Vec<_>, _>>()?,
   );
 }
 
@@ -234,7 +237,7 @@ pub struct LogJson {
   pub user_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 struct LogEntry {
   id: i64,
   created: f64,
@@ -245,19 +248,48 @@ struct LogEntry {
 
   // Latency in fractional milliseconds.
   latency: f64,
+
   client_ip: String,
+  referer: String,
+  user_agent: String,
+
+  user_id: Option<[u8; 16]>,
+  //
+  // data: Option<String>,
+  //
   /// Optional two-letter country code.
   client_geoip_cc: Option<String>,
   /// Optional city JSON.
   client_geoip_city: Option<String>,
-
-  referer: String,
-  user_agent: String,
-  user_id: Option<[u8; 16]>,
-  // data: Option<Vec<u8>>,
 }
 
 impl LogEntry {
+  fn from_row(
+    row: &trailbase_sqlite::Row,
+    geoip_db_type: Option<DatabaseType>,
+  ) -> Result<Self, trailbase_sqlite::Error> {
+    return Ok(Self {
+      id: row.get(0)?,
+      created: row.get(1)?,
+      status: row.get(2)?,
+      method: row.get(3)?,
+      url: row.get(4)?,
+      latency: row.get(5)?,
+      client_ip: row.get(6)?,
+      referer: row.get(7)?,
+      user_agent: row.get(8)?,
+      user_id: row.get(9)?,
+      client_geoip_cc: match geoip_db_type {
+        Some(DatabaseType::GeoLite2Country) => Some(row.get(10)?),
+        _ => None,
+      },
+      client_geoip_city: match geoip_db_type {
+        Some(DatabaseType::GeoLite2City) => Some(row.get(10)?),
+        _ => None,
+      },
+    });
+  }
+
   fn redact(&mut self) {
     fn replace_if_set(field: &mut String) {
       if !field.is_empty() {

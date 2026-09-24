@@ -57,12 +57,13 @@ pub async fn drop_table_handler(
 
   // QUESTION: Should we just have a separate drop_view API rather than multiplexing here?
   let entity_type: String = conn
-    .read_query_value(
+    .read_query_row_get(
       format!(
         "SELECT type FROM main.{SQLITE_SCHEMA_TABLE} WHERE name = {}",
         unqualified_table_name.escaped_string()
       ),
       (),
+      0,
     )
     .await?
     .ok_or_else(|| Error::Precondition(format!("Table or view '{table_name:?}' not found")))?;

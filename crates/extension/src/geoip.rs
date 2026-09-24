@@ -39,7 +39,7 @@ pub fn has_geoip_db() -> bool {
   return READER.load().is_some();
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DatabaseType {
   Unknown,
   GeoLite2Country,
