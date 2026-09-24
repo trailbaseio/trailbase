@@ -262,7 +262,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, sqlite_from_rows).await,
       Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
-      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
+      Executor::Stoolap(ref exec) => exec.db.clone().query_rows(sql, params),
     };
   }
 
@@ -282,7 +282,7 @@ impl Connection {
           .await
       }
       Executor::Pg(_) => self.write_query_row(sql, params).await,
-      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
+      Executor::Stoolap(ref exec) => exec.db.clone().query_row(sql, params),
     };
   }
 
@@ -306,7 +306,18 @@ impl Connection {
           .await
       }
       Executor::Pg(_) => self.write_query_row_get(sql, params, index).await,
-      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
+      Executor::Stoolap(ref exec) => {
+        // use stoolap::FromRow;
+        // let rows = exec
+        //   .db
+        //   .query(sql.as_ref(), crate::stoolap::value::map_params(params)?)?;
+        //
+        // if let Some(row) = rows.next() {
+        //   return T::from_row(row?);
+        // }
+
+        Err(Error::NotImplemented)
+      }
     };
   }
 
@@ -318,7 +329,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.write_query_rows_f(sql, params, sqlite_from_rows).await,
       Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
-      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
+      Executor::Stoolap(ref exec) => exec.db.clone().query_rows(sql, params),
     };
   }
 
@@ -346,7 +357,7 @@ impl Connection {
           })
           .await
       }
-      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
+      Executor::Stoolap(ref exec) => exec.db.clone().query_row(sql, params),
     };
   }
 
@@ -781,9 +792,16 @@ mod tests {
     let conn = Connection::new(Executor::Stoolap(exec));
 
     let _ = conn
-      .execute("CREATE TABLE test (id INTEGER)", ())
+      .execute_batch("CREATE TABLE test (id INTEGER); INSERT INTO test (id) VALUES (1), (2);")
       .await
       .unwrap();
+
+    let row = conn
+      .read_query_row("SELECT COUNT(*) FROM test;", ())
+      .await
+      .unwrap()
+      .unwrap();
+    assert_eq!(2, row.get::<i64>(0).unwrap())
   }
 
   #[tokio::test]
