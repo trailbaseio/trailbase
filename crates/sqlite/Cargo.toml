@@ -21,8 +21,9 @@ harness = false
 
 [features]
 default = []
-generic = ["pg"]
+generic = ["pg", "stoolap"]
 pg = ["dep:postgres", "dep:bytes", "dep:regex", "dep:sqlparser"]
+stoolap = ["dep:stoolap"]
 
 [dependencies]
 bytes = { workspace = true, optional = true }
@@ -38,6 +39,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 smallvec = { version = "1.16.1", features = ["const_generics"] }
 sqlparser = { version = "0.63.0", optional = true }
+stoolap = { version = "0.4.2", default-features = false, features = ["parallel"], optional = true }
 thiserror = "2.0.20"
 tokio = { workspace = true }
 triomphe = "0.1.16"
