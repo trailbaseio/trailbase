@@ -288,12 +288,15 @@ mod tests {
 
     const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
 
-    let db_user = state
-      .user_conn()
-      .read_query_value::<DbUser>(QUERY, (email,))
-      .await
-      .unwrap()
-      .unwrap();
+    let db_user = DbUser::from_row(
+      &state
+        .user_conn()
+        .read_query_row(QUERY, (email,))
+        .await
+        .unwrap()
+        .unwrap(),
+    )
+    .unwrap();
 
     let missing_profile_response =
       get_avatar_handler(State(state.clone()), Path(id_to_b64(&db_user.id)))

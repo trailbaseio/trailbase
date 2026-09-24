@@ -155,10 +155,13 @@ async fn async_main(
 
       match cmd {
         Some(AdminSubCommands::List) => {
-          let users = state
+          let users: Vec<DbUser> = state
             .user_conn()
-            .read_query_values::<DbUser>(format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
-            .await?;
+            .read_query_rows(format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
+            .await?
+            .iter()
+            .map(DbUser::from_row)
+            .collect::<Result<_, _>>()?;
 
           println!("{: >36}\temail\tusername\tcreated\tupdated", "id");
           for user in users {
@@ -297,8 +300,11 @@ async fn async_main(
         Some(UserSubCommands::Export) => {
           let users: Vec<DbUser> = state
             .user_conn()
-            .read_query_values("SELECT * FROM _user WHERE password_hash IS NOT NULL", ())
-            .await?;
+            .read_query_rows("SELECT * FROM _user WHERE password_hash IS NOT NULL", ())
+            .await?
+            .iter()
+            .map(DbUser::from_row)
+            .collect::<Result<_, _>>()?;
 
           eprintln!("Found {} users.", users.len());
 

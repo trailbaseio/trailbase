@@ -1,7 +1,6 @@
-use serde::Deserialize;
-use trailbase_sqlite::Connection;
+use trailbase_sqlite::{Connection, Error};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct Article {
   pub title: String,
   pub body: String,
@@ -26,8 +25,16 @@ async fn main() {
     .unwrap();
 
   let article: Option<Article> = conn
-    .read_query_value("SELECT * FROM articles LIMIT 1", ())
+    .read_query_row("SELECT title, body FROM articles LIMIT 1", ())
     .await
+    .unwrap()
+    .map(|row| -> Result<Article, Error> {
+      Ok(Article {
+        title: row.get(0)?,
+        body: row.get(1)?,
+      })
+    })
+    .transpose()
     .unwrap();
 
   println!("Done! {article:?}");

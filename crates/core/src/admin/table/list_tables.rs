@@ -1,7 +1,7 @@
 use axum::{Json, extract::State};
 use itertools::Itertools;
 use log::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::BTreeSet;
 use trailbase_schema::parse::{Bump, parse_into_statement};
 use trailbase_schema::sqlite::{QualifiedName, Table, TableIndex, View};
@@ -122,17 +122,6 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
 async fn list_tables_handler_sqlite_impl(
   state: AppState,
 ) -> Result<Json<ListSchemasResponse>, Error> {
-  #[derive(Debug, Deserialize)]
-  struct SqliteSchema {
-    pub r#type: String,
-    pub name: String,
-    pub tbl_name: String,
-    /// Create TABLE/VIEW/... query.
-    pub sql: Option<String>,
-    /// Connections schema name, e.g. "main", "other"
-    pub db_schema: String,
-  }
-
   let db_names: BTreeSet<String> = {
     let mut db_names = BTreeSet::from(["main".to_string()]);
     db_names.extend(
@@ -161,10 +150,21 @@ async fn list_tables_handler_sqlite_impl(
 
     let databases = conn.list_databases().await?;
 
+    #[derive(Debug)]
+    struct SqliteSchema {
+      pub r#type: String,
+      pub name: String,
+      pub tbl_name: String,
+      /// Create TABLE/VIEW/... query.
+      pub sql: Option<String>,
+      /// Connections schema name, e.g. "main", "other"
+      pub db_schema: String,
+    }
+
     let mut schemas: Vec<SqliteSchema> = vec![];
     for db in databases {
       let table_and_view_list = conn
-        .read_query_values::<SqliteSchema>(
+        .read_query_rows(
           // NOTE: the "ORDER BY" is a bit sneaky, it ensures that we parse all "table"s before we
           // parse "view"s.
           format!(
@@ -177,7 +177,18 @@ async fn list_tables_handler_sqlite_impl(
           ),
           (),
         )
-        .await?;
+        .await?
+        .into_iter()
+        .map(|row| -> Result<SqliteSchema, trailbase_sqlite::Error> {
+          return Ok(SqliteSchema {
+            r#type: row.get(0)?,
+            name: row.get(1)?,
+            tbl_name: row.get(2)?,
+            sql: row.get(3)?,
+            db_schema: row.get(4)?,
+          });
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
       schemas.extend(table_and_view_list);
     }

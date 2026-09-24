@@ -3,8 +3,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use postgres::fallible_iterator::FallibleIterator;
-
 use crate::Value;
 use crate::database::Database;
 use crate::error::Error;
@@ -289,44 +287,6 @@ impl Connection {
     };
   }
 
-  pub async fn read_query_value<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Option<T>, Error> {
-    return match self.exec {
-      Executor::Sqlite(ref exec) => {
-        exec
-          .read_query_rows_f(sql, params, |rows| {
-            return sqlite_map_first(rows, move |row| {
-              serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
-            });
-          })
-          .await
-      }
-      Executor::Pg(_) => self.write_query_value(sql, params).await,
-    };
-  }
-
-  pub async fn read_query_values<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Vec<T>, Error> {
-    return match self.exec {
-      Executor::Sqlite(ref exec) => {
-        exec
-          .read_query_rows_f(sql, params, |rows| {
-            return serde_rusqlite::from_rows(rows)
-              .collect::<Result<Vec<_>, _>>()
-              .map_err(Error::DeserializeValue);
-          })
-          .await
-      }
-      Executor::Pg(_) => self.write_query_values(sql, params).await,
-    };
-  }
-
   pub async fn write_query_rows(
     &self,
     sql: impl AsRef<str> + Send + 'static,
@@ -391,66 +351,6 @@ impl Connection {
               let value = row.try_get::<'_, usize, Value>(0)?;
               return Ok(T::column_result((&value).into())?);
             });
-          })
-          .await
-      }
-    };
-  }
-
-  pub async fn write_query_value<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Option<T>, Error> {
-    return match self.exec {
-      Executor::Sqlite(ref exec) => {
-        exec
-          .write_query_rows_f(sql, params, |rows| {
-            return sqlite_map_first(rows, |row| {
-              serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
-            });
-          })
-          .await
-      }
-      Executor::Pg(ref exec) => {
-        exec
-          .query_rows_f(sql, params, |row_iter| {
-            return pg_map_first(row_iter, |row| {
-              // TODO: Coming from here, I guess.
-              return trailbase_pgrow2serde::from_row(&row).map_err(|err| Error::Other(err.into()));
-            });
-          })
-          .await
-      }
-    };
-  }
-
-  pub async fn write_query_values<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Vec<T>, Error> {
-    return match self.exec {
-      Executor::Sqlite(ref exec) => {
-        exec
-          .write_query_rows_f(sql, params, |rows| {
-            return serde_rusqlite::from_rows(rows)
-              .collect::<Result<Vec<_>, _>>()
-              .map_err(Error::DeserializeValue);
-          })
-          .await
-      }
-      Executor::Pg(ref exec) => {
-        exec
-          .query_rows_f(sql, params, |row_iter| {
-            return row_iter
-              .iterator()
-              .map(|row| {
-                let row = row.map_err(|err| Error::Other(err.into()))?;
-                return trailbase_pgrow2serde::from_row(&row)
-                  .map_err(|err| Error::Other(err.into()));
-              })
-              .collect();
           })
           .await
       }
@@ -901,7 +801,7 @@ mod tests {
     }
     let query = "
       SELECT
-        CAST('\x05' AS bytea) AS bytes,
+        CAST('\x05\x01\x01\x01' AS bytea) AS bytes,
         CAST('\x03' AS bytea) AS vec,
         'foo' AS text,
         NULL AS text_null,
@@ -910,11 +810,20 @@ mod tests {
         1 AS bool_from_int
       ;";
 
-    let data: Data = conn.read_query_value(query, ()).await.unwrap().unwrap();
+    let row = conn.read_query_row(query, ()).await.unwrap().unwrap();
+    let data = Data {
+      bytes: row.get(0).unwrap(),
+      vec: row.get(1).unwrap(),
+      text: row.get(2).unwrap(),
+      text_null: row.get(3).unwrap(),
+      flag: row.get(4).unwrap(),
+      int_null: row.get(5).unwrap(),
+      bool_from_int: row.get(6).unwrap(),
+    };
 
     assert_eq!(
       Data {
-        bytes: [5, 0, 0, 0],
+        bytes: [5, 1, 1, 1],
         vec: vec![3],
         text: "foo".to_string(),
         text_null: None,
@@ -1139,13 +1048,13 @@ mod tests {
       // Make sure `pglite-oxide`'s RNG works correctly.
       // https://github.com/f0rr0/pglite-oxide/issues/29
       let uuid0: [u8; 16] = conn
-        .read_query_value("SELECT gen_random_uuid()", ())
+        .read_query_row_get("SELECT gen_random_uuid()", (), 0)
         .await
         .unwrap()
         .unwrap();
 
       let uuid1: [u8; 16] = conn
-        .read_query_value("SELECT gen_random_uuid()", ())
+        .read_query_row_get("SELECT gen_random_uuid()", (), 0)
         .await
         .unwrap()
         .unwrap();

@@ -502,13 +502,16 @@ async fn delete_pending_files_job(
 
   // TODO: Update job to delete files for all DBs.
   let rows: Vec<FileDeletionsDb> = match conn
-    .write_query_values(
+    .write_query_rows(
       format!(r#"DELETE FROM {file_deletions} WHERE deleted < (UNIXEPOCH() - 900) RETURNING *"#),
       (),
     )
     .await
   {
-    Ok(rows) => rows,
+    Ok(rows) => rows
+      .iter()
+      .map(FileDeletionsDb::from_row)
+      .collect::<Result<Vec<_>, _>>()?,
     Err(err) => {
       warn!("Failed to delete files: {err}");
       return Err(err.into());

@@ -229,15 +229,18 @@ async fn test_oauth_login_flow_without_pkce() {
   assert_eq!(referrer_policy.as_deref(), Some("no-referrer"));
 
   // Check user exists.
-  let db_user = state
-    .user_conn()
-    .read_query_value::<DbUser>(
-      format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
-      (EXTERNAL_USER_ID,),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+  let db_user = DbUser::from_row(
+    &state
+      .user_conn()
+      .read_query_row(
+        format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+        (EXTERNAL_USER_ID,),
+      )
+      .await
+      .unwrap()
+      .unwrap(),
+  )
+  .unwrap();
   assert_eq!(EXTERNAL_USER_EMAIL, db_user.email.as_deref().unwrap());
 
   // Is logged in.
@@ -346,15 +349,18 @@ async fn test_oauth_login_flow_with_pkce() {
   assert!(!auth_code.is_empty());
 
   // Check user exists.
-  let db_user = state
-    .user_conn()
-    .read_query_value::<DbUser>(
-      format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
-      (EXTERNAL_USER_ID,),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+  let db_user = DbUser::from_row(
+    &state
+      .user_conn()
+      .read_query_row(
+        format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+        (EXTERNAL_USER_ID,),
+      )
+      .await
+      .unwrap()
+      .unwrap(),
+  )
+  .unwrap();
   assert_eq!(EXTERNAL_USER_EMAIL, db_user.email.as_deref().unwrap());
 
   // And session does not yet exist before upgrading auth_code + verifier to tokens.
@@ -537,15 +543,18 @@ async fn test_oauth_login_flow_with_form_post_callback() {
   assert_eq!(referrer_policy.as_deref(), Some("no-referrer"));
 
   // Check user exists and is logged in.
-  let db_user = state
-    .user_conn()
-    .read_query_value::<DbUser>(
-      format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
-      (EXTERNAL_USER_ID,),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+  let db_user = DbUser::from_row(
+    &state
+      .user_conn()
+      .read_query_row(
+        format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+        (EXTERNAL_USER_ID,),
+      )
+      .await
+      .unwrap()
+      .unwrap(),
+  )
+  .unwrap();
   assert_eq!(EXTERNAL_USER_EMAIL, db_user.email.as_deref().unwrap());
 
   // Is logged in.

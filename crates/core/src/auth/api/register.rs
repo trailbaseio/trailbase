@@ -128,7 +128,7 @@ pub async fn register_user_handler(
 
   let user = match state
     .user_conn()
-    .write_query_value::<DbUser>(
+    .write_query_row(
       INSERT_USER_QUERY,
       named_params! {
         ":unverified_email": normalized_email.clone(),
@@ -138,7 +138,7 @@ pub async fn register_user_handler(
     )
     .await
   {
-    Ok(Some(user)) => user,
+    Ok(Some(row)) => DbUser::from_row(&row)?,
     Err(_err) => {
       #[cfg(debug_assertions)]
       log::debug!("Failed to register new user {normalized_email:?}: {_err:?}");

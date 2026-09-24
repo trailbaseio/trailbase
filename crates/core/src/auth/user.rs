@@ -3,6 +3,7 @@ use axum::{
   http::request::Parts,
 };
 use serde::{Deserialize, Serialize};
+use trailbase_sqlite::Row;
 use uuid::Uuid;
 
 use crate::auth::AuthError;
@@ -37,6 +38,27 @@ impl DbUser {
   pub fn uuid(&self) -> Uuid {
     let uuid = Uuid::from_bytes(self.id);
     return uuid;
+  }
+
+  pub fn from_row(row: &Row) -> Result<Self, AuthError> {
+    fn from_row_impl(row: &Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
+      return Ok(DbUser {
+        id: row.get(0)?,
+        email: row.get(1)?,
+        unverified_email: row.get(2)?,
+        username: row.get(3)?,
+        password_hash: row.get(4)?,
+        admin: row.get(5)?,
+        totp_secret: row.get(6)?,
+        created: row.get(7)?,
+        updated: row.get(8)?,
+        provider_id: row.get(9)?,
+        provider_user_id: row.get(10)?,
+        provider_avatar_url: row.get(11)?,
+      });
+    }
+
+    return from_row_impl(row).map_err(|err| AuthError::Internal(err.into()));
   }
 
   #[cfg(test)]

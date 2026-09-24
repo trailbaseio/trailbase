@@ -111,7 +111,7 @@ pub(crate) async fn create_user_for_external_provider(
   );
 
   let db_user: DbUser = conn
-    .write_query_value(
+    .write_query_row(
       QUERY,
       named_params! {
           ":provider_id": provider_id as i64,
@@ -122,6 +122,8 @@ pub(crate) async fn create_user_for_external_provider(
       },
     )
     .await?
+    .map(|row| DbUser::from_row(&row))
+    .transpose()?
     .ok_or_else(|| AuthError::Internal("insertion issue".into()))?;
 
   return Ok(db_user);
@@ -135,11 +137,11 @@ pub(crate) async fn user_by_provider_id(
   const QUERY: &str =
     formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE provider_id = $1 AND provider_user_id = $2"#);
 
-  return Ok(
-    conn
-      .read_query_value::<DbUser>(QUERY, params!(provider_id as i64, provider_user_id))
-      .await?,
-  );
+  return conn
+    .read_query_row(QUERY, params!(provider_id as i64, provider_user_id))
+    .await?
+    .map(|row| DbUser::from_row(&row))
+    .transpose();
 }
 
 #[cfg(test)]

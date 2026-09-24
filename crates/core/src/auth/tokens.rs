@@ -244,8 +244,10 @@ pub(crate) async fn reauth_with_refresh_token(
 
   let Some(db_user) = state
     .user_conn()
-    .read_query_value::<DbUser>(USER_QUERY, params!(user_id))
+    .read_query_row(USER_QUERY, params!(user_id))
     .await?
+    .map(|row| DbUser::from_row(&row))
+    .transpose()?
   else {
     // Row not found case, typically expected in one of 5 cases:
     //  1. Above where clause doesn't match, e.g. refresh token expired.

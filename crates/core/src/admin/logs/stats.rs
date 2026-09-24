@@ -3,7 +3,7 @@ use axum::{
   extract::{RawQuery, State},
 };
 use chrono::{DateTime, Duration, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use trailbase_extension::geoip::DatabaseType;
@@ -162,12 +162,6 @@ async fn fetch_aggregate_stats(
     None
   };
 
-  #[derive(Deserialize)]
-  struct AggRow {
-    interval_end_ts: i64,
-    count: i64,
-  }
-
   // Aggregate rate of all logs in the same :interval_seconds.
   //
   // Note, we're aligning the interval wide grid with the latest `to` timestamp to minimize
@@ -187,27 +181,30 @@ async fn fetch_aggregate_stats(
     ",
   );
 
-  let rates = conn
-    .read_query_values::<AggRow>(qps_query, params)
+  let rates: Vec<(i64, f64)> = conn
+    .read_query_rows(qps_query, params)
     .await?
     .into_iter()
-    .map(|r| {
+    .map(|row| -> Result<_, trailbase_sqlite::Error> {
+      let interval_end_ts: i64 = row.get(0)?;
+      let count: i64 = row.get(1)?;
+
       // The oldest interval may be clipped if "(to-from)/interval" isn't integer. In this case
       // divided by a shorter interval length to reduce artifacting. Otherwise, the clipped
       // interval would appear to have a lower rater.
       let effective_interval_seconds = std::cmp::min(
         interval_seconds,
-        r.interval_end_ts - (from_seconds - interval_seconds),
+        interval_end_ts - (from_seconds - interval_seconds),
       ) as f64;
 
-      return (
+      return Ok((
         // Use interval midpoint as timestamp.
-        r.interval_end_ts - interval_seconds / 2,
+        interval_end_ts - interval_seconds / 2,
         // Compute rate from event count in interval.
-        (r.count as f64) / effective_interval_seconds,
-      );
+        (count as f64) / effective_interval_seconds,
+      ));
     })
-    .collect();
+    .collect::<Result<_, _>>()?;
 
   return Ok(StatsResponse {
     rates,
