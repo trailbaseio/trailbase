@@ -36,6 +36,10 @@ pub enum Error {
   #[error("Postgres: {0}")]
   Postgres(#[from] postgres::Error),
 
+  #[cfg(feature = "stoolap")]
+  #[error("Stoolap: {0}")]
+  Stoolap(#[from] stoolap::Error),
+
   #[error("DeserializeValue: {0}")]
   DeserializeValue(serde_rusqlite::Error),
 

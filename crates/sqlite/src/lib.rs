@@ -25,6 +25,9 @@ mod value;
 #[cfg(feature = "pg")]
 mod pg;
 
+#[cfg(feature = "stoolap")]
+mod stoolap;
+
 #[cfg(feature = "generic")]
 pub mod generic;
 
