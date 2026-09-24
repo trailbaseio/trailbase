@@ -709,7 +709,11 @@ mod test_utils {
     let data_dir = DataDir(temp_dir.path().to_path_buf());
     data_dir.ensure_directory_structure().await.unwrap();
 
-    let (pg_db, pg_uri) = if cfg!(feature = "pg-test") {
+    #[cfg(not(feature = "pg-test"))]
+    let (pg_shutdown, pg_uri) = ((), None);
+
+    #[cfg(feature = "pg-test")]
+    let (pg_shutdown, pg_uri) = {
       let extensions = [
         // Enable case-insensitive text columns.
         pglite_oxide::extensions::CITEXT,
@@ -730,49 +734,7 @@ mod test_utils {
           .start()?,
       )));
 
-      // Drop handle to detach watchdog thread. Should only be stopped by its parent test-process
-      // terminating.
-      static WATCHDOG_THREAD: std::sync::OnceLock<std::thread::JoinHandle<()>> =
-        std::sync::OnceLock::new();
-      WATCHDOG_THREAD.get_or_init(|| {
-        return std::thread::spawn({
-          // NOTE: During CI, we have random tests occasionally time out. This is an attempt
-          // to get ahead of CI's own timeout of 6h.
-          let handle = tokio::runtime::Handle::current();
-          let db = Arc::downgrade(&db);
-
-          #[allow(unreachable_code)]
-          move || {
-            use std::time::{Duration, SystemTime};
-            let started = SystemTime::now();
-
-            debug!("WATCHDOG: started");
-
-            let mut min = 0;
-            loop {
-              let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-              // NOTE: For some reasons iterating .intervals() bricks the test.
-              info!(
-                "WATCHDOG {min}min: metrics = {:?}",
-                runtime_monitor.intervals()
-              );
-
-              let now = SystemTime::now();
-              if now.duration_since(started).unwrap_or_default() > Duration::from_mins(15) {
-                if let Some(db) = db.upgrade().and_then(|arc| arc.lock().take()) {
-                  db.shutdown().unwrap();
-                }
-
-                error!("WATCHDOG: terminated");
-                std::process::exit(1);
-              }
-
-              std::thread::sleep(Duration::from_mins(1));
-              min += 1;
-            }
-          }
-        });
-      });
+      start_watchdog(&db);
 
       // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
       let pg_uri = format!(
@@ -780,9 +742,13 @@ mod test_utils {
         data_dir.main_db_path().to_string_lossy()
       );
 
-      (Some(db), Some(pg_uri))
-    } else {
-      (None, None)
+      let pg_shutdown = scopeguard::guard(db, |db| {
+        if let Some(db) = db.lock().take() {
+          db.shutdown().unwrap();
+        }
+      });
+
+      (pg_shutdown, Some(pg_uri))
     };
 
     let TestStateOptions {
@@ -871,7 +837,7 @@ mod test_utils {
         pg_uri,
         // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
         // write new artifacts to the already deleted dir.
-        test_cleanup: vec![Box::new(pg_db), Box::new(temp_dir)],
+        test_cleanup: vec![Box::new(pg_shutdown), Box::new(temp_dir)],
       }),
     });
   }
@@ -884,6 +850,66 @@ pub(crate) fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
     return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
   }
   return Ok(());
+}
+
+#[cfg(all(feature = "pg-test", test))]
+fn start_watchdog(db: &Arc<parking_lot::Mutex<Option<pglite_oxide::PgliteServer>>>) {
+  use std::sync::OnceLock;
+  use std::thread::{JoinHandle, sleep};
+  use std::time::{Duration, SystemTime};
+
+  let db = Arc::downgrade(&db);
+
+  static WATCHDOG_THREAD: OnceLock<JoinHandle<()>> = OnceLock::new();
+  WATCHDOG_THREAD.get_or_init(|| {
+    return std::thread::spawn({
+      // NOTE: During CI, we have random tests occasionally time out. This is an attempt
+      // to get ahead of CI's own timeout of 6h.
+      let handle = tokio::runtime::Handle::current();
+
+      #[allow(unreachable_code)]
+      move || {
+        let started = SystemTime::now();
+
+        debug!("WATCHDOG: started");
+
+        loop {
+          let now = SystemTime::now();
+          let elapsed = now.duration_since(started).unwrap_or_default();
+
+          let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+          // NOTE: For some reasons iterating .intervals() bricks the test.
+          info!(
+            "WATCHDOG elapsed {elapsed:?}: metrics = {:?}",
+            runtime_monitor.intervals()
+          );
+
+          if elapsed > Duration::from_mins(12) {
+            error!("WATCHDOG: expired");
+
+            if let Some(arc) = db.upgrade() {
+              if let Some(db) = arc.lock().take() {
+                info!("WATCHDOG: shutting down pglite");
+                db.shutdown().unwrap();
+
+                // Give the test a chance to terminate.
+                sleep(Duration::from_secs(15));
+              } else {
+                info!("WATCHDOG: DB already consumed");
+              }
+            } else {
+              info!("WATCHDOG: DB already shut-down");
+            }
+
+            error!("WATCHDOG: terminated");
+            std::process::exit(1);
+          }
+
+          sleep(Duration::from_mins(1));
+        }
+      }
+    });
+  });
 }
 
 #[cfg(test)]
