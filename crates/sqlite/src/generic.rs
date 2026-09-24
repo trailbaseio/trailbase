@@ -19,6 +19,7 @@ use crate::sqlite::util::{
   columns as sqlite_columns, from_row as sqlite_from_row, from_rows as sqlite_from_rows, get_value,
   map_first as sqlite_map_first,
 };
+use crate::stoolap::executor::Executor as StoolapExecutor;
 use crate::traits::{
   SyncConnection as SyncConnectionTrait, SyncTransaction as SyncTransactionTrait,
 };
@@ -49,6 +50,7 @@ pub struct PgOptions {
 enum Executor {
   Sqlite(Arc<SqliteExecutor>),
   Pg(Arc<PgExecutor>),
+  Stoolap(StoolapExecutor),
 }
 
 /// A handle to call functions in background thread.
@@ -141,6 +143,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.threads(),
       Executor::Pg(ref exec) => exec.threads(),
+      Executor::Stoolap(ref exec) => exec.threads(),
     };
   }
 
@@ -148,6 +151,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(_) => ConnectionType::Sqlite,
       Executor::Pg(_) => ConnectionType::Pg,
+      Executor::Stoolap(_) => ConnectionType::Stoolap,
     };
   }
 
@@ -159,7 +163,10 @@ impl Connection {
       // tokio task will make the runtime panic.
       Executor::Pg(_) => {
         log::error!("Not supported: PG write lock");
-
+        Err(LockError::NotSupported)
+      }
+      Executor::Stoolap(_) => {
+        log::error!("Not supported: Stoolap write lock");
         Err(LockError::NotSupported)
       }
     };
@@ -176,7 +183,10 @@ impl Connection {
       // tokio task will make the runtime panic.
       Executor::Pg(_) => {
         log::error!("Not supported: PG arc write lock");
-
+        Err(LockError::NotSupported)
+      }
+      Executor::Stoolap(_) => {
+        log::error!("Not supported: Stoolap arc write lock");
         Err(LockError::NotSupported)
       }
     };
@@ -201,6 +211,13 @@ impl Connection {
         exec
           .call(|client| {
             return function(SyncConnection::Pg(client));
+          })
+          .await
+      }
+      Executor::Stoolap(ref exec) => {
+        exec
+          .call(|db| {
+            return function(SyncConnection::Stoolap(db));
           })
           .await
       }
@@ -231,6 +248,9 @@ impl Connection {
           })
           .await
       }
+      Executor::Stoolap(ref exec) => {
+        return Ok(function(Transaction::Stoolap(exec.db.begin()?))?);
+      }
     };
   }
 
@@ -242,6 +262,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.read_query_rows_f(sql, params, sqlite_from_rows).await,
       Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -261,6 +282,7 @@ impl Connection {
           .await
       }
       Executor::Pg(_) => self.write_query_row(sql, params).await,
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -284,6 +306,7 @@ impl Connection {
           .await
       }
       Executor::Pg(_) => self.write_query_row_get(sql, params, index).await,
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -295,6 +318,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(ref exec) => exec.write_query_rows_f(sql, params, sqlite_from_rows).await,
       Executor::Pg(ref exec) => exec.query_rows_f(sql, params, pg_from_rows).await,
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -322,6 +346,7 @@ impl Connection {
           })
           .await
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -354,6 +379,7 @@ impl Connection {
           })
           .await
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -377,6 +403,13 @@ impl Connection {
           })
           .await
       }
+      Executor::Stoolap(ref exec) => {
+        exec
+          .call(move |db| {
+            return SyncConnectionTrait::execute(&mut db.clone(), sql, params);
+          })
+          .await
+      }
     };
   }
 
@@ -393,6 +426,13 @@ impl Connection {
         exec
           .call(move |client| {
             return SyncConnectionTrait::execute_batch(client, sql);
+          })
+          .await
+      }
+      Executor::Stoolap(ref exec) => {
+        exec
+          .call(move |db| {
+            return SyncConnectionTrait::execute_batch(&mut db.clone(), sql);
           })
           .await
       }
@@ -413,6 +453,7 @@ impl Connection {
 
         Err(Error::NotImplemented)
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -430,6 +471,7 @@ impl Connection {
 
         Err(Error::NotImplemented)
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -454,6 +496,7 @@ impl Connection {
 
         Err(Error::NotImplemented)
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -487,6 +530,7 @@ impl Connection {
 
         Err(Error::NotImplemented)
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -510,6 +554,7 @@ impl Connection {
 
         Err(Error::NotImplemented)
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -521,6 +566,7 @@ impl Connection {
 
         return Err(Error::NotImplemented);
       }
+      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
     };
   }
 
@@ -533,6 +579,7 @@ impl Connection {
     return match self.exec {
       Executor::Sqlite(exec) => exec.close_impl(),
       Executor::Pg(exec) => exec.close_impl(),
+      Executor::Stoolap(ref exec) => exec.close_impl(),
     };
   }
 }
@@ -560,6 +607,7 @@ impl Eq for Connection {}
 pub enum SyncConnection<'a> {
   Sqlite(&'a mut rusqlite::Connection),
   Pg(&'a mut postgres::Client),
+  Stoolap(&'a stoolap::Database),
 }
 
 impl<'a> SyncConnectionTrait for SyncConnection<'a> {
@@ -568,6 +616,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
     return match self {
       Self::Sqlite(_) => ConnectionType::Sqlite,
       Self::Pg(_) => ConnectionType::Pg,
+      Self::Stoolap(_) => ConnectionType::Stoolap,
     };
   }
 
@@ -576,6 +625,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::query_row(*conn, sql, params),
       Self::Pg(client) => SyncConnectionTrait::query_row(*client, sql, params),
+      Self::Stoolap(db) => SyncConnectionTrait::query_row(&mut db.clone(), sql, params),
     };
   }
 
@@ -584,6 +634,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::query_rows(*conn, sql, params),
       Self::Pg(client) => SyncConnectionTrait::query_rows(*client, sql, params),
+      Self::Stoolap(db) => SyncConnectionTrait::query_rows(&mut db.clone(), sql, params),
     };
   }
 
@@ -592,6 +643,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::execute(*conn, sql, params),
       Self::Pg(client) => SyncConnectionTrait::execute(*client, sql, params),
+      Self::Stoolap(db) => SyncConnectionTrait::execute(&mut db.clone(), sql, params),
     };
   }
 
@@ -600,6 +652,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
     return match self {
       Self::Sqlite(conn) => SyncConnectionTrait::execute_batch(*conn, sql),
       Self::Pg(client) => SyncConnectionTrait::execute_batch(*client, sql),
+      Self::Stoolap(db) => SyncConnectionTrait::execute_batch(&mut db.clone(), sql),
     };
   }
 }
@@ -607,6 +660,7 @@ impl<'a> SyncConnectionTrait for SyncConnection<'a> {
 pub enum Transaction<'a> {
   Sqlite(rusqlite::Transaction<'a>),
   Pg(postgres::Transaction<'a>),
+  Stoolap(stoolap::api::Transaction),
 }
 
 #[allow(unused)]
@@ -616,6 +670,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(_) => ConnectionType::Sqlite,
       Self::Pg(_) => ConnectionType::Pg,
+      Self::Stoolap(_) => ConnectionType::Stoolap,
     };
   }
 
@@ -624,6 +679,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::query_row(tx, sql, params),
       Self::Pg(tx) => SyncConnectionTrait::query_row(tx, sql, params),
+      Self::Stoolap(tx) => SyncConnectionTrait::query_row(tx, sql, params),
     };
   }
 
@@ -632,6 +688,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::query_rows(tx, sql, params),
       Self::Pg(tx) => SyncConnectionTrait::query_rows(tx, sql, params),
+      Self::Stoolap(tx) => SyncConnectionTrait::query_rows(tx, sql, params),
     };
   }
 
@@ -640,6 +697,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::execute(tx, sql, params),
       Self::Pg(tx) => SyncConnectionTrait::execute(tx, sql, params),
+      Self::Stoolap(tx) => SyncConnectionTrait::execute(tx, sql, params),
     };
   }
 
@@ -648,6 +706,7 @@ impl<'a> SyncConnectionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(tx) => SyncConnectionTrait::execute_batch(tx, sql),
       Self::Pg(tx) => SyncConnectionTrait::execute_batch(tx, sql),
+      Self::Stoolap(tx) => SyncConnectionTrait::execute_batch(tx, sql),
     };
   }
 }
@@ -658,6 +717,7 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(tx) => crate::sqlite::transaction::Transaction { tx }.commit(),
       Self::Pg(tx) => SyncTransactionTrait::commit(tx),
+      Self::Stoolap(tx) => SyncTransactionTrait::commit(tx),
     };
   }
 
@@ -665,6 +725,7 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
     return match self {
       Self::Sqlite(tx) => crate::sqlite::transaction::Transaction { tx }.rollback(),
       Self::Pg(tx) => SyncTransactionTrait::rollback(tx),
+      Self::Stoolap(tx) => SyncTransactionTrait::rollback(tx),
     };
   }
 
@@ -676,6 +737,7 @@ impl<'a> SyncTransactionTrait for Transaction<'a> {
         return Ok(stmt.expanded_sql());
       }
       Self::Pg(tx) => SyncTransactionTrait::expand_sql(tx, sql, params),
+      Self::Stoolap(tx) => SyncTransactionTrait::expand_sql(tx, sql, params),
     };
   }
 }
@@ -687,6 +749,7 @@ pub async fn execute_batch(
   return match conn.exec {
     Executor::Sqlite(ref exec) => crate::sqlite::batch::execute_batch_impl(exec, sql).await,
     Executor::Pg(ref exec) => crate::pg::util::execute_batch_impl(exec, sql).await,
+    Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
   };
 }
 
@@ -700,6 +763,28 @@ mod tests {
   use super::*;
   use crate::pg::executor::build_pg_test_executor;
   use crate::{named_params, params};
+
+  #[tokio::test]
+  async fn generic_stoolap_poc_test() {
+    use crate::stoolap::executor::{Executor as StoolapExecutor, Options};
+    use stoolap::Database;
+
+    let tmp_dir = tempfile::TempDir::new().unwrap();
+    let path = tmp_dir.path().to_path_buf();
+
+    let exec = StoolapExecutor::new(
+      move || Database::open(&format!("file://{}", path.to_string_lossy())),
+      Options {},
+    )
+    .unwrap();
+
+    let conn = Connection::new(Executor::Stoolap(exec));
+
+    let _ = conn
+      .execute("CREATE TABLE test (id INTEGER)", ())
+      .await
+      .unwrap();
+  }
 
   #[tokio::test]
   async fn generic_pg_poc_test() {

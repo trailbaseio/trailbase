@@ -129,18 +129,6 @@ impl<'a, const N: usize> Params for [ToSqlProxy<'a>; N] {
   }
 }
 
-// impl<T, const N: usize> Params for &[T; N]
-// where
-//   T: rusqlite::ToSql + Send + Sync,
-// {
-//   fn bind<S: Statement>(self, stmt: &mut S) -> Result<(), Error> {
-//     for (idx, v) in self.iter().enumerate() {
-//       stmt.bind_parameter(idx + 1, v)?;
-//     }
-//     return Ok(());
-//   }
-// }
-
 impl<'a, T> Params for (T,)
 where
   T: Into<ToSqlProxy<'a>> + Send,
@@ -149,12 +137,6 @@ where
     return stmt.bind_parameter(1, self.0.into());
   }
 }
-
-// impl<T: Params + Clone> Params for &T {
-//   fn bind(self, stmt: &mut rusqlite::Statement<'_>) -> Result<(), rusqlite::Error> {
-//     return self.clone().bind(stmt);
-//   }
-// }
 
 impl<const N: usize> Params for [Value; N] {
   fn bind<S: Statement>(self, stmt: &mut S) -> Result<(), Error> {
