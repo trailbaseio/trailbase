@@ -65,8 +65,13 @@ pub async fn change_password(
     formatcp!(r#"UPDATE "{USER_TABLE}" SET password_hash = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
-    .write_query_value(UPDATE_PASSWORD_QUERY, params!(hashed_password, db_user.id))
+    .write_query_row_get(
+      UPDATE_PASSWORD_QUERY,
+      params!(hashed_password, db_user.id),
+      0,
+    )
     .await?
+    .map(Uuid::from_bytes)
     .ok_or(AuthError::NotFound);
 }
 
@@ -82,8 +87,9 @@ pub async fn change_email(
     formatcp!(r#"UPDATE "{USER_TABLE}" SET email = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
-    .write_query_value(UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id))
+    .write_query_row_get(UPDATE_EMAIL_QUERY, params!(normalized_email, db_user.id), 0)
     .await?
+    .map(Uuid::from_bytes)
     .ok_or(AuthError::NotFound);
 }
 
@@ -99,11 +105,13 @@ pub async fn change_username(
     formatcp!(r#"UPDATE "{USER_TABLE}" SET username = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
-    .write_query_value(
+    .write_query_row_get(
       UPDATE_USERNAME_QUERY,
       params!(normalized_username, db_user.id),
+      0,
     )
     .await?
+    .map(Uuid::from_bytes)
     .ok_or(AuthError::NotFound);
 }
 
@@ -122,13 +130,15 @@ pub async fn add_user(
   }
   let hashed_password = hash_password(password)?;
 
-  let user: DbUser = user_conn
-    .write_query_value(
-      ADD_USER_QUERY,
-      params!(normalized_email, hashed_password, true),
-    )
-    .await?
-    .ok_or(AuthError::NotFound)?;
+  let user = DbUser::from_row(
+    &user_conn
+      .write_query_row(
+        ADD_USER_QUERY,
+        params!(normalized_email, hashed_password, true),
+      )
+      .await?
+      .ok_or(AuthError::NotFound)?,
+  )?;
 
   return Ok(user.uuid());
 }
@@ -160,8 +170,9 @@ pub async fn set_verified(
     formatcp!(r#"UPDATE "{USER_TABLE}" SET verified = $1 WHERE id = $2 RETURNING id"#);
 
   return user_conn
-    .write_query_value(SET_VERIFIED_QUERY, params!(verified, db_user.id))
+    .write_query_row_get(SET_VERIFIED_QUERY, params!(verified, db_user.id), 0)
     .await?
+    .map(Uuid::from_bytes)
     .ok_or(AuthError::NotFound);
 }
 
@@ -222,8 +233,9 @@ pub async fn promote_user_to_admin(
     formatcp!(r#"UPDATE "{USER_TABLE}" SET admin = TRUE WHERE id = $1 RETURNING id"#);
 
   return user_conn
-    .write_query_value(PROMOTE_ADMIN_QUERY, params!(db_user.id))
+    .write_query_row_get(PROMOTE_ADMIN_QUERY, params!(db_user.id), 0)
     .await?
+    .map(Uuid::from_bytes)
     .ok_or(AuthError::NotFound);
 }
 
@@ -237,8 +249,9 @@ pub async fn demote_admin_to_user(
     formatcp!(r#"UPDATE "{USER_TABLE}" SET admin = FALSE WHERE id = $1 RETURNING id"#);
 
   return user_conn
-    .write_query_value(DEMOTE_ADMIN_QUERY, params!(db_user.id))
+    .write_query_row_get(DEMOTE_ADMIN_QUERY, params!(db_user.id), 0)
     .await?
+    .map(Uuid::from_bytes)
     .ok_or(AuthError::NotFound);
 }
 

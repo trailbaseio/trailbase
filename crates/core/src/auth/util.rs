@@ -308,13 +308,15 @@ pub async fn get_user_by_email(
 ) -> Result<DbUser, AuthError> {
   const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
   let db_user = user_conn
-    .read_query_value::<DbUser>(QUERY, params!(email.to_string()))
+    .read_query_row(QUERY, params!(email.to_string()))
     .await
     .map_err(|err| {
       debug_assert!(false, "GET USER BY EMAIL query failed: {err}");
 
       return AuthError::NotFound;
-    })?;
+    })?
+    .map(|row| DbUser::from_row(&row))
+    .transpose()?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
@@ -329,13 +331,15 @@ pub async fn get_user_by_username(
 ) -> Result<DbUser, AuthError> {
   const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#);
   let db_user = user_conn
-    .read_query_value::<DbUser>(QUERY, params!(username.to_string()))
+    .read_query_row(QUERY, params!(username.to_string()))
     .await
     .map_err(|err| {
       debug_assert!(false, "GET USER BY USERNAME query failed: {err}");
 
       return AuthError::NotFound;
-    })?;
+    })?
+    .map(|row| DbUser::from_row(&row))
+    .transpose()?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
 }
@@ -350,13 +354,15 @@ pub async fn get_user_by_id(
 ) -> Result<DbUser, AuthError> {
   const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1"#);
   let db_user = user_conn
-    .read_query_value::<DbUser>(QUERY, params!(id.into_bytes()))
+    .read_query_row(QUERY, params!(id.into_bytes()))
     .await
     .map_err(|err| {
       debug_assert!(false, "GET USER BY ID query failed: {err}");
 
       return AuthError::NotFound;
-    })?;
+    })?
+    .map(|row| DbUser::from_row(&row))
+    .transpose()?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
 }

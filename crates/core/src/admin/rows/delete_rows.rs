@@ -221,7 +221,7 @@ mod tests {
       .unwrap();
 
       return conn
-        .read_query_value::<TestTable>(
+        .read_query_row(
           format!(
             "SELECT * FROM {table_name} WHERE {} = $1",
             row_id_column(conn)
@@ -229,6 +229,14 @@ mod tests {
           trailbase_sqlite::params!(response.row_id),
         )
         .await
+        .unwrap()
+        .map(|row| -> Result<TestTable, trailbase_sqlite::Error> {
+          return Ok(TestTable {
+            myid: row.get(0)?,
+            col0: row.get(1)?,
+          });
+        })
+        .transpose()
         .unwrap();
     };
 

@@ -507,7 +507,7 @@ mod tests {
     assert_eq!(
       2,
       conn
-        .read_query_value::<i64>("SELECT COUNT(*) FROM test;", ())
+        .read_query_row_get::<i64>("SELECT COUNT(*) FROM test;", (), 0)
         .await
         .unwrap()
         .unwrap()

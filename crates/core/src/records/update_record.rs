@@ -301,9 +301,10 @@ mod tests {
       assert!(update_response.is_ok(), "{b64_id} {update_response:?}");
 
       let message_text: String = conn
-        .read_query_value(
+        .read_query_row_get(
           "SELECT data FROM message WHERE mid = $1",
           params!(b64_to_id(&b64_id).unwrap()),
+          0,
         )
         .await
         .unwrap()

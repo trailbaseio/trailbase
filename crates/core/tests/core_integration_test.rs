@@ -306,11 +306,20 @@ async fn test_record_apis() {
   }
 
   let got: Log = logs_conn
-    .read_query_value(
+    .read_query_row(
       "SELECT client_ip, latency, status FROM _logs WHERE client_ip = $1",
       trailbase_sqlite::params!(client_ip),
     )
     .await
+    .unwrap()
+    .map(|row| -> Result<Log, trailbase_sqlite::Error> {
+      Ok(Log {
+        client_ip: row.get(0)?,
+        latency: row.get(1)?,
+        status: row.get(2)?,
+      })
+    })
+    .transpose()
     .unwrap()
     .unwrap();
 
