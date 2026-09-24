@@ -1,6 +1,20 @@
-use crate::Error;
-use crate::value::Value;
+use std::iter::zip;
 use stoolap::ToParam;
+
+use crate::Error;
+use crate::rows::{ColVec, Column, Rc, Row, Rows, ValueType};
+use crate::value::Value;
+
+// impl<T: stoolap::FromValue> crate::from_sql::FromSql for T {
+//   fn column_result(value: crate::ValueRef<'_>) -> crate::from_sql::FromSqlResult<Self> {}
+// }
+
+// impl<T: crate::from_sql::FromSql> stoolap::FromRow for T {
+//   fn from_row(row: &stoolap::ResultRow) -> stoolap::Result<T> {
+//       T.
+//       row
+//   }
+// }
 
 impl stoolap::ToParam for Value {
   fn to_param(&self) -> stoolap::Value {
@@ -52,4 +66,88 @@ pub fn map_params(params: impl crate::params::Params) -> Result<Params, Error> {
   let mut p = Params::new();
   params.bind(&mut p)?;
   return Ok(p);
+}
+
+pub fn from_rows(mut rows: stoolap::Rows) -> Result<Rows, Error> {
+  let Some(Ok(first_row)) = rows.next() else {
+    return Ok(Rows::default());
+  };
+
+  let columns = Rc::new(columns(&first_row));
+  let mut result = vec![self::from_row(first_row, columns.clone())?];
+  while let Some(row) = rows.next() {
+    result.push(self::from_row(row?, columns.clone())?);
+  }
+
+  return Ok(Rows {
+    rows: result,
+    columns,
+  });
+}
+
+pub fn from_row(row: stoolap::ResultRow, cols: Rc<ColVec<Column>>) -> Result<Row, Error> {
+  use stoolap::Value as SValue;
+  let values = row
+    .into_inner()
+    .into_iter()
+    .map(|v| {
+      return match v {
+        SValue::Null(_) => Value::Null,
+        SValue::Boolean(b) => Value::Integer(if b { 1 } else { 0 }),
+        SValue::Integer(i) => Value::Integer(i),
+        SValue::Float(f) => Value::Real(f),
+        SValue::Text(s) => Value::Text(s.to_string()),
+        SValue::Timestamp(ts) => Value::Integer(ts.timestamp_millis()),
+        SValue::Extension(b) => Value::Blob(b.to_vec()),
+      };
+    })
+    .collect();
+
+  return Ok(Row {
+    values,
+    columns: cols,
+  });
+}
+
+#[inline]
+pub(crate) fn columns(row: &stoolap::ResultRow) -> ColVec<Column> {
+  use stoolap::Value;
+
+  return row
+    .columns()
+    .iter()
+    .enumerate()
+    .map(|(idx, name)| {
+      return match row.get_value(idx) {
+        None | Some(Value::Null(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Null,
+        },
+        Some(Value::Integer(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Integer,
+        },
+        Some(Value::Boolean(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Integer,
+        },
+        Some(Value::Timestamp(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Integer,
+        },
+        Some(Value::Float(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Real,
+        },
+        Some(Value::Text(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Text,
+        },
+        Some(Value::Extension(_)) => Column {
+          name: name.into(),
+          decl_type: ValueType::Blob,
+        },
+      };
+    })
+    .collect();
 }
