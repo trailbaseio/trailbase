@@ -15,6 +15,18 @@ pub struct TableInformationSchema {
   pub is_typed: String,
 }
 
+impl TableInformationSchema {
+  fn from_row(row: &trailbase_sqlite::Row) -> Result<Self, Error> {
+    return Ok(Self {
+      table_catalog: row.get(0)?,
+      table_schema: row.get(1)?,
+      table_name: row.get(2)?,
+      table_type: row.get(3)?,
+      is_typed: row.get(4)?,
+    });
+  }
+}
+
 const QUERY_TABLES_WITH_TABLE_CONSTRAINTS: &str = "
 SELECT
     t.table_catalog,
@@ -49,15 +61,7 @@ fn get_tables(
   return conn
     .query_rows(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())?
     .into_iter()
-    .map(|row| {
-      return Ok(TableInformationSchema {
-        table_catalog: row.get(0)?,
-        table_schema: row.get(1)?,
-        table_name: row.get(2)?,
-        table_type: row.get(3)?,
-        is_typed: row.get(4)?,
-      });
-    })
+    .map(|row| TableInformationSchema::from_row(&row))
     .collect::<Result<_, Error>>();
 }
 
@@ -333,11 +337,12 @@ mod tests {
   use crate::util::test_connection;
 
   async fn get_tables_async(conn: &Connection) -> Result<Vec<TableInformationSchema>, Error> {
-    return Ok(
-      conn
-        .read_query_values(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())
-        .await?,
-    );
+    return conn
+      .read_query_rows(QUERY_TABLES_WITH_TABLE_CONSTRAINTS, ())
+      .await?
+      .into_iter()
+      .map(|row| TableInformationSchema::from_row(&row))
+      .collect::<Result<Vec<_>, Error>>();
   }
 
   async fn get_columns_async(

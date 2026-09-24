@@ -190,7 +190,7 @@ async fn register_test_user(
         assert!(
           state
             .user_conn()
-            .read_query_value::<DbUser>(
+            .read_query_row(
               format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
               params!(email.clone()),
             )
@@ -202,11 +202,14 @@ async fn register_test_user(
         assert!(
           state
             .user_conn()
-            .read_query_value::<DbUser>(
+            .read_query_row(
               format!(r#"SELECT * FROM "{USER_TABLE}" WHERE unverified_email = $1"#),
               params!(email.clone()),
             )
             .await
+            .unwrap()
+            .map(|row| DbUser::from_row(&row))
+            .transpose()
             .unwrap()
             .is_some()
         );
@@ -224,28 +227,34 @@ async fn register_test_user(
 
   let db_user = match identifier {
     Identifier::Email(email) | Identifier::EmailAndUsername(email, _) => {
-      let db_user = state
-        .user_conn()
-        .read_query_value::<DbUser>(
-          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
-          params!(email.clone()),
-        )
-        .await?
-        .unwrap();
+      let db_user = DbUser::from_row(
+        &state
+          .user_conn()
+          .read_query_row(
+            format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+            params!(email.clone()),
+          )
+          .await?
+          .unwrap(),
+      )
+      .unwrap();
 
       // User should now be verified.
       assert!(db_user.unverified_email.is_none());
 
       db_user
     }
-    Identifier::Username(username) => state
-      .user_conn()
-      .read_query_value::<DbUser>(
-        format!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#),
-        params!(username.to_string()),
-      )
-      .await?
-      .unwrap(),
+    Identifier::Username(username) => DbUser::from_row(
+      &state
+        .user_conn()
+        .read_query_row(
+          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#),
+          params!(username.to_string()),
+        )
+        .await?
+        .unwrap(),
+    )
+    .unwrap(),
   };
 
   return Ok(User::from_unverified(

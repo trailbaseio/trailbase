@@ -66,7 +66,7 @@ pub async fn login_anonymous_user_handler(
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
 
-  let create_user = async || -> Result<DbUser, trailbase_sqlite::Error> {
+  let create_user = async || -> Result<DbUser, AuthError> {
     const INSERT_USER_QUERY: &str =
       formatcp!("INSERT INTO \"{USER_TABLE}\" (username) VALUES (:username) RETURNING * ");
 
@@ -77,17 +77,16 @@ pub async fn login_anonymous_user_handler(
 
     return match state
       .user_conn()
-      .write_query_value::<DbUser>(
+      .write_query_row(
         INSERT_USER_QUERY,
         named_params! {
           ":username": username.clone(),
         },
       )
-      .await
+      .await?
     {
-      Ok(Some(user)) => Ok(user),
-      Ok(None) => Err(trailbase_sqlite::Error::Other("Failed to get user".into())),
-      Err(err) => Err(err),
+      Some(row) => DbUser::from_row(&row),
+      None => Err(AuthError::Internal("failed to get user".into())),
     };
   };
 

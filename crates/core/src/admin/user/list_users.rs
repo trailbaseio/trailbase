@@ -182,12 +182,16 @@ async fn fetch_users(
     fq_table_name = USER_TABLE_FQ.escaped_string(),
   );
 
-  let users = conn
-    .read_query_values::<DbUser>(sql_query.clone(), params)
+  let users: Vec<DbUser> = conn
+    .read_query_rows(sql_query.clone(), params)
     .await
     .map_err(|err| {
       log::error!("fetch users failed '{sql_query}': {err:?}");
       return err;
-    })?;
+    })?
+    .iter()
+    .map(DbUser::from_row)
+    .collect::<Result<_, _>>()?;
+
   return Ok(users);
 }

@@ -91,7 +91,7 @@ pub async fn create_user_handler(
 
   let Some(user) = state
     .user_conn()
-    .write_query_value::<DbUser>(
+    .write_query_row(
       INSERT_USER_QUERY,
       named_params! {
         ":email": if request.verified {
@@ -110,6 +110,8 @@ pub async fn create_user_handler(
       },
     )
     .await?
+    .map(|row| DbUser::from_row(&row))
+    .transpose()?
   else {
     return Err(Error::Precondition("Internal".into()));
   };
