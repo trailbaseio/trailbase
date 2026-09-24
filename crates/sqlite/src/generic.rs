@@ -306,18 +306,14 @@ impl Connection {
           .await
       }
       Executor::Pg(_) => self.write_query_row_get(sql, params, index).await,
-      Executor::Stoolap(ref exec) => {
-        // use stoolap::FromRow;
-        // let rows = exec
-        //   .db
-        //   .query(sql.as_ref(), crate::stoolap::value::map_params(params)?)?;
-        //
-        // if let Some(row) = rows.next() {
-        //   return T::from_row(row?);
-        // }
-
-        Err(Error::NotImplemented)
-      }
+      Executor::Stoolap(ref exec) => Ok(
+        exec
+          .db
+          .clone()
+          .query_row(sql, params)?
+          .map(|row| row.get::<T>(index))
+          .transpose()?,
+      ),
     };
   }
 
@@ -390,7 +386,14 @@ impl Connection {
           })
           .await
       }
-      Executor::Stoolap(ref _exec) => Err(Error::NotImplemented),
+      Executor::Stoolap(ref exec) => Ok(
+        exec
+          .db
+          .clone()
+          .query_row(sql, params)?
+          .map(|row| row.get::<T>(index))
+          .transpose()?,
+      ),
     };
   }
 
