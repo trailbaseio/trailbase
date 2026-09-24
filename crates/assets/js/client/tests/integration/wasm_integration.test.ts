@@ -24,7 +24,7 @@ const ONLY_JS: Guest = {
 
 const GUESTS: Guest[] = includeJsGuest ? [ONLY_RUST, ONLY_JS] : [ONLY_RUST];
 
-test.for(GUESTS)(
+test.concurrent.for(GUESTS)(
   "WASM sanity: $runtime",
   async ({ runtime, base }, { expect }) => {
     // Make sure we're calling the right guest;
@@ -34,7 +34,7 @@ test.for(GUESTS)(
   },
 );
 
-describe.for(GUESTS)("WASM HTTP: $runtime", ({ runtime, base }) => {
+describe.concurrent.for(GUESTS)("WASM HTTP: $runtime", ({ runtime, base }) => {
   test("sanity", async ({ expect }) => {
     // Make sure we're calling the right guest;
     expect(
@@ -118,7 +118,7 @@ describe.for(GUESTS)("WASM HTTP: $runtime", ({ runtime, base }) => {
   });
 });
 
-describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
+describe.concurrent.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
   async function execute(sql: string) {
     const resp = await fetch(`http://${base}/execute_db/${btoa(sql)}`);
     if (!resp.ok) {
@@ -174,7 +174,7 @@ describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
     // Attach db with invalid name fails
     await expect(async () => await attach("session")).rejects.toThrow();
 
-    const dbName = "foo";
+    const dbName = `db${runtime}`;
     const tableName = `'${dbName}'.'test'`;
 
     await attach(dbName);
@@ -199,6 +199,9 @@ describe.for(GUESTS)("WASM DB: $runtime", ({ runtime, base }) => {
     // And succeeds after re-attach.
     await attach(dbName);
     expect(await query(`SELECT COUNT(*) FROM ${tableName};`)).toEqual("300");
+
+    // Finally detach to not clobber multiple executions.
+    await detach(dbName);
   }, /* timeout= */ 15000);
 
   test("concurrent query & execute", async ({ expect }) => {
