@@ -36,9 +36,6 @@ pub enum Error {
   #[error("Postgres: {0}")]
   Postgres(#[from] postgres::Error),
 
-  #[error("DeserializeValue: {0}")]
-  DeserializeValue(serde_rusqlite::Error),
-
   #[error("QueryReturnedNoRows")]
   QueryReturnedNoRows,
 

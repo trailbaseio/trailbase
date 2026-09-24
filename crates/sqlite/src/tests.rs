@@ -267,14 +267,6 @@ async fn test_execute_and_query() {
     name: String,
   }
 
-  let person = conn
-    .read_query_value::<Person>("SELECT * FROM person WHERE id = $1", (1,))
-    .await
-    .unwrap()
-    .unwrap();
-  assert_eq!(person.id, 1);
-  assert_eq!(person.name, "baz");
-
   let rows = crate::sqlite::execute_batch(
     &conn,
     r#"

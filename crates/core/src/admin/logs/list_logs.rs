@@ -98,7 +98,7 @@ pub async fn list_logs_handler(
   let geoip_db_type = trailbase_extension::geoip::database_type();
   let mut logs = fetch_logs(
     conn,
-    geoip_db_type.clone(),
+    geoip_db_type,
     filter_where_clause.clone(),
     cursor,
     offset,

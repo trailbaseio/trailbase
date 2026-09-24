@@ -24,8 +24,6 @@ default-members = [
 ]
 exclude = [
   "crates/extension-so",
-  # Fork of pgrow2serde depends on external PG setup.
-  "vendor/pgrow2serde",
 ]
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
@@ -86,7 +84,6 @@ rust-embed = { version = "^8.12.0", default-features = false, features = ["mime-
 serde = { version = "^1.0.229", default-features = false, features = ["derive", "rc", "std"] }
 serde_json = { version = "^1.0.151", default-features = false }
 serde_qs = { version = "1.1.3", default-features = false, features = [] }
-serde_rusqlite = "0.43.0"
 sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-alpha.4-fork", default-features = false }
 sqlite3-parser = "0.17.0"
 tokio = { version = "^1.53.1", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
@@ -101,7 +98,6 @@ trailbase-build = { path = "crates/build", version = "0.1.1" }
 trailbase-client = { path = "crates/client", version = "0.10.1" }
 trailbase-extension = { path = "crates/extension", version = "0.3.0" }
 trailbase-pg-schema = { path = "crates/pg-schema", version = "0.0.1" }
-trailbase-pgrow2serde = { git = "https://github.com/ignatz/pgrow2serde", branch = "main" }
 trailbase-qs = { path = "crates/qs", version = "0.1.0" }
 trailbase-reactive = { path = "crates/reactive", version = "0.1.0" }
 trailbase-refinery = { path = "crates/refinery", version = "0.1.0" }
@@ -131,9 +127,6 @@ wasmtime-wasi-io = { version = "48.0.2", features = [] }
 
 [patch."https://github.com/ignatz/sqlite-vec"]
 sqlite-vec = { path = "vendor/sqlite-vec/bindings/rust" }
-
-[patch."https://github.com/ignatz/pgrow2serde"]
-trailbase-pgrow2serde = { path = "vendor/pgrow2serde" }
 
 [patch."https://github.com/ignatz/rmcp-openapi-minimal.git"]
 rmcp-openapi = { path = "vendor/rmcp-openapi-minimal" }

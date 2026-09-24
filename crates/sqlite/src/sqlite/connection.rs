@@ -190,36 +190,6 @@ impl Connection {
       .await;
   }
 
-  pub async fn read_query_value<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Option<T>, Error> {
-    return self
-      .exec
-      .read_query_rows_f(sql, params, |rows| {
-        return map_first(rows, move |row| {
-          serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
-        });
-      })
-      .await;
-  }
-
-  pub async fn read_query_values<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Vec<T>, Error> {
-    return self
-      .exec
-      .read_query_rows_f(sql, params, |rows| {
-        return serde_rusqlite::from_rows(rows)
-          .collect::<Result<Vec<_>, _>>()
-          .map_err(Error::DeserializeValue);
-      })
-      .await;
-  }
-
   pub async fn write_query_rows(
     &self,
     sql: impl AsRef<str> + Send + 'static,
@@ -258,36 +228,6 @@ impl Connection {
         return map_first(rows, move |row| {
           return get_value(row, index);
         });
-      })
-      .await;
-  }
-
-  pub async fn write_query_value<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Option<T>, Error> {
-    return self
-      .exec
-      .write_query_rows_f(sql, params, |rows| {
-        return map_first(rows, |row| {
-          serde_rusqlite::from_row(row).map_err(Error::DeserializeValue)
-        });
-      })
-      .await;
-  }
-
-  pub async fn write_query_values<T: serde::de::DeserializeOwned + Send + 'static>(
-    &self,
-    sql: impl AsRef<str> + Send + 'static,
-    params: impl Params + Send + 'static,
-  ) -> Result<Vec<T>, Error> {
-    return self
-      .exec
-      .write_query_rows_f(sql, params, |rows| {
-        return serde_rusqlite::from_rows(rows)
-          .collect::<Result<Vec<_>, _>>()
-          .map_err(Error::DeserializeValue);
       })
       .await;
   }

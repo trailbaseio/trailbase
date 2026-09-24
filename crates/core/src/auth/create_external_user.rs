@@ -137,13 +137,11 @@ pub(crate) async fn user_by_provider_id(
   const QUERY: &str =
     formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE provider_id = $1 AND provider_user_id = $2"#);
 
-  return Ok(
-    conn
-      .read_query_row(QUERY, params!(provider_id as i64, provider_user_id))
-      .await?
-      .map(|row| DbUser::from_row(&row))
-      .transpose()?,
-  );
+  return conn
+    .read_query_row(QUERY, params!(provider_id as i64, provider_user_id))
+    .await?
+    .map(|row| DbUser::from_row(&row))
+    .transpose();
 }
 
 #[cfg(test)]
