@@ -117,6 +117,7 @@ impl AppState {
         feature = "wasm" => {
           crate::wasm::build_sync_wasm_runtimes_for_components(
             args.data_dir.root().join("wasm"),
+            args.data_dir.data_path(),
             args.runtime_root_fs.as_deref(),
             args.dev,
           )

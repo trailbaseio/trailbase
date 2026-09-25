@@ -728,6 +728,7 @@ mod tests {
     let shared_state = Arc::new(SharedState {
       conn,
       kv_store: KvStore::new(),
+      db_path: ".".into(),
       fs_root_path: None,
     });
 

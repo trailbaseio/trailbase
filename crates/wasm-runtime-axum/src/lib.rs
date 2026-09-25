@@ -30,6 +30,7 @@ pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
 pub async fn build_sync_wasm_runtimes_for_components(
   path_to_components: PathBuf,
+  db_path: PathBuf,
   fs_root_path: Option<&Path>,
   use_winch: bool,
 ) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
@@ -37,7 +38,8 @@ pub async fn build_sync_wasm_runtimes_for_components(
   let shared_state = Arc::new(SharedState {
     conn: None,
     kv_store: KvStore::new(),
-    fs_root_path: None,
+    db_path,
+    fs_root_path: fs_root_path.map(|p| p.to_owned()),
   });
 
   let mut sync_runtimes: Vec<(SqliteStore, SqliteFunctions)> = vec![];
@@ -104,6 +106,7 @@ pub fn wasm_runtime_builders(
   path_to_components: PathBuf,
   conn: trailbase_sqlite::Connection,
   tokio_runtime: Option<tokio::runtime::Handle>,
+  db_path: PathBuf,
   runtime_root_fs: Option<PathBuf>,
   shared_kv_store: Option<KvStore>,
   dev: bool,
@@ -111,6 +114,7 @@ pub fn wasm_runtime_builders(
   let shared_state = Arc::new(SharedState {
     conn: Some(conn),
     kv_store: shared_kv_store.unwrap_or_default(),
+    db_path,
     fs_root_path: runtime_root_fs.clone(),
   });
 
