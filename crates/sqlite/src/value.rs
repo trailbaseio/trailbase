@@ -1,6 +1,6 @@
 use crate::from_sql::{FromSqlError, FromSqlResult};
 
-pub type Blob = smallvec::SmallVec<[u8; 16]>;
+pub type Blob = Vec<u8>;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {
@@ -62,16 +62,16 @@ impl From<Vec<u8>> for Value {
 impl From<&[u8]> for Value {
   #[inline]
   fn from(v: &[u8]) -> Self {
-    return Self::Blob(Blob::from_slice(v));
+    return Self::Blob(v.to_vec());
   }
 }
 
-impl From<Blob> for Value {
-  #[inline]
-  fn from(v: Blob) -> Self {
-    return Self::Blob(v);
-  }
-}
+// impl From<Blob> for Value {
+//   #[inline]
+//   fn from(v: Blob) -> Self {
+//     return Self::Blob(v);
+//   }
+// }
 
 impl From<[u8; 16]> for Value {
   #[inline]
@@ -83,7 +83,7 @@ impl From<[u8; 16]> for Value {
 impl<const N: usize> From<&[u8; N]> for Value {
   #[inline]
   fn from(v: &[u8; N]) -> Self {
-    return Self::Blob(Blob::from_slice(v));
+    return Self::Blob(v.into());
   }
 }
 
@@ -130,7 +130,7 @@ impl TryFrom<rusqlite::types::ValueRef<'_>> for Value {
       rusqlite::types::ValueRef::Text(s) => std::str::from_utf8(s)
         .map(|s| Self::Text(s.to_string()))
         .map_err(Self::Error::Utf8Error),
-      rusqlite::types::ValueRef::Blob(b) => Ok(Self::Blob(Blob::from_slice(b))),
+      rusqlite::types::ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
     };
   }
 }
@@ -147,7 +147,7 @@ impl TryFrom<ValueRef<'_>> for Value {
       ValueRef::Text(s) => std::str::from_utf8(s)
         .map(|s| Self::Text(s.to_string()))
         .map_err(Self::Error::Utf8Error),
-      ValueRef::Blob(b) => Ok(Self::Blob(Blob::from_slice(b))),
+      ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
     };
   }
 }

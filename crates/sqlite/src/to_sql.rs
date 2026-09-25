@@ -45,11 +45,11 @@ from_value!(f64);
 from_value!(Vec<u8>);
 from_value!(Value);
 
-impl<'a> From<Blob> for ToSqlProxy<'a> {
-  fn from(t: Blob) -> Self {
-    return ToSqlProxy::Owned(t.into());
-  }
-}
+// impl<'a> From<Blob> for ToSqlProxy<'a> {
+//   fn from(t: Blob) -> Self {
+//     return ToSqlProxy::Owned(t.into());
+//   }
+// }
 
 impl<'a> From<[u8; 16]> for ToSqlProxy<'a> {
   fn from(t: [u8; 16]) -> Self {
