@@ -16,6 +16,8 @@ pub enum ValueType {
   Null,
 }
 
+pub(crate) type ColVec<T> = Vec<T>;
+//pub(crate) type ColVec<T> = smallvec::SmallVec<[T; 16]>;
 pub(crate) type Rc<T> = triomphe::Arc<T>;
 // pub(crate) type Rc<T> = std::sync::Arc<T>;
 
@@ -42,44 +44,50 @@ pub struct Column {
 
 // TODO: Vec<Column> and Vec<Value> could be smallvecs. Vec<Row> probably not worth.
 #[derive(Debug, Default)]
-pub struct Rows(pub(crate) Vec<Row>, pub(crate) Rc<Vec<Column>>);
+pub struct Rows {
+  pub(crate) rows: Vec<Row>,
+  pub(crate) columns: Rc<ColVec<Column>>,
+}
 
 impl Rows {
   pub fn empty() -> Self {
-    return Self(Vec::with_capacity(0), Rc::new(Vec::with_capacity(0)));
+    return Self {
+      rows: Vec::with_capacity(0),
+      columns: Rc::new(ColVec::new()),
+    };
   }
 
   pub fn len(&self) -> usize {
-    return self.0.len();
+    return self.rows.len();
   }
 
   pub fn is_empty(&self) -> bool {
-    return self.0.is_empty();
+    return self.rows.is_empty();
   }
 
   pub fn iter(&self) -> std::slice::Iter<'_, Row> {
-    return self.0.iter();
+    return self.rows.iter();
   }
 
   pub fn get(&self, idx: usize) -> Option<&Row> {
-    return self.0.get(idx);
+    return self.rows.get(idx);
   }
 
   pub fn last(&self) -> Option<&Row> {
-    return self.0.last();
+    return self.rows.last();
   }
 
   pub fn column_count(&self) -> usize {
-    return self.1.len();
+    return self.columns.len();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {
-    return self.1.get(idx).map(|c| c.name.as_str());
+    return self.columns.get(idx).map(|c| c.name.as_str());
   }
 
   pub fn column_type(&self, idx: usize) -> Result<ValueType, Error> {
     return self
-      .1
+      .columns
       .get(idx)
       .map(|c| c.decl_type)
       .ok_or_else(|| Error::InvalidColumnType {
@@ -94,7 +102,7 @@ impl Index<usize> for Rows {
   type Output = Row;
 
   fn index(&self, idx: usize) -> &Self::Output {
-    return &self.0[idx];
+    return &self.rows[idx];
   }
 }
 
@@ -103,47 +111,57 @@ impl IntoIterator for Rows {
   type IntoIter = std::vec::IntoIter<Self::Item>;
 
   fn into_iter(self) -> Self::IntoIter {
-    return self.0.into_iter();
+    return self.rows.into_iter();
   }
 }
 
 #[derive(Debug)]
-pub struct Row(pub Vec<Value>, pub Rc<Vec<Column>>);
+pub struct Row {
+  pub(crate) values: ColVec<Value>,
+  pub(crate) columns: Rc<ColVec<Column>>,
+}
 
 impl Row {
   pub fn split_off(&mut self, at: usize) -> Row {
-    let split_values = self.0.split_off(at);
-    let mut columns = (*self.1).clone();
+    let split_values = self.values.split_off(at);
+    //let split_values = split_off_smallvec(&mut self.values, at);
+
+    let mut columns: ColVec<_> = (*self.columns).clone();
+    // let split_columns = split_off_smallvec(&mut columns, at);
     let split_columns = columns.split_off(at);
-    self.1 = Rc::new(columns);
-    return Row(split_values, Rc::new(split_columns));
+    self.columns = Rc::new(columns);
+
+    return Row {
+      values: split_values,
+      columns: Rc::new(split_columns),
+    };
   }
 
   pub fn len(&self) -> usize {
-    return self.0.len();
+    return self.values.len();
   }
 
   pub fn is_empty(&self) -> bool {
-    return self.0.is_empty();
+    return self.values.is_empty();
   }
 
   pub fn column_count(&self) -> usize {
-    return self.1.len();
+    return self.columns.len();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {
-    return self.1.get(idx).map(|c| c.name.as_str());
+    return self.columns.get(idx).map(|c| c.name.as_str());
   }
 
   pub fn last(&self) -> Option<&Value> {
-    return self.0.last();
+    return self.values.last();
   }
 
   pub fn get<T>(&self, idx: usize) -> Result<T, FromSqlError>
   where
     T: FromSql,
   {
-    let Some(v) = self.0.get(idx) else {
+    let Some(v) = self.values.get(idx) else {
       return Err(FromSqlError::OutOfRange(idx as i64));
     };
     return T::column_result(v.into());
@@ -151,12 +169,12 @@ impl Row {
 
   pub fn get_value(&self, idx: usize) -> Result<&Value, FromSqlError> {
     return self
-      .0
+      .values
       .get(idx)
       .ok_or_else(|| FromSqlError::OutOfRange(idx as i64));
   }
 
-  // NOTE: This one currently doesn't make sense becaues FromSql forces a copy through ValueRef.
+  // NOTE: This one currently doesn't make sense because FromSql forces a copy through ValueRef.
   // pub fn consume<T>(&mut self, idx: usize) -> Result<T, FromSqlError>
   // where
   //   T: FromSql,
@@ -167,11 +185,16 @@ impl Row {
   //   return T::column_result(v.into());
   // }
 
+  #[inline]
   pub fn consume_value(&mut self, idx: usize) -> Result<Value, FromSqlError> {
-    let Some(v) = self.0.get_mut(idx) else {
+    let Some(v) = self.values.get_mut(idx) else {
       return Err(FromSqlError::OutOfRange(idx as i64));
     };
     return Ok(std::mem::take(v));
+  }
+
+  pub fn into_values(self) -> ColVec<Value> {
+    return self.values;
   }
 }
 
@@ -179,6 +202,19 @@ impl Index<usize> for Row {
   type Output = Value;
 
   fn index(&self, idx: usize) -> &Self::Output {
-    return &self.0[idx];
+    return &self.values[idx];
   }
+}
+
+#[inline]
+#[allow(unused)]
+fn split_off_smallvec<A>(vec: &mut smallvec::SmallVec<A>, at: usize) -> smallvec::SmallVec<A>
+where
+  A: smallvec::Array,
+  A::Item: Clone,
+{
+  assert!(at <= vec.len(), "`at` out of bounds");
+  let mut tail = smallvec::SmallVec::<A>::with_capacity(vec.len() - at);
+  tail.extend(vec.drain(at..));
+  return tail;
 }

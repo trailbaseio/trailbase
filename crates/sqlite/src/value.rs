@@ -1,6 +1,7 @@
 use crate::from_sql::FromSqlError;
 
 pub type Blob = Vec<u8>;
+// pub type Blob = smallvec::SmallVec<u8; 128>;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {

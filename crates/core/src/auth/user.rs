@@ -41,7 +41,14 @@ impl DbUser {
   }
 
   pub fn from_row(row: Row) -> Result<Self, AuthError> {
+    #[inline]
     fn from_row_impl(mut row: Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
+      // Sanity check.
+      debug_assert_eq!(Some("id"), row.column_name(0));
+      debug_assert_eq!(Some("username"), row.column_name(3));
+      debug_assert_eq!(Some("totp_secret"), row.column_name(6));
+      debug_assert_eq!(Some("provider_id"), row.column_name(9));
+
       return Ok(DbUser {
         id: row.get(0)?,
         email: row.consume_value(1)?.try_into()?,
