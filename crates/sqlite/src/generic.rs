@@ -799,16 +799,16 @@ mod tests {
       int_null: Option<i64>,
       bool_from_int: bool,
     }
-    let query = "
+    let query = r#"
       SELECT
-        CAST('\x05\x01\x01\x01' AS bytea) AS bytes,
+        CAST('\x05010000' AS bytea) AS bytes,
         CAST('\x03' AS bytea) AS vec,
         'foo' AS text,
         NULL AS text_null,
         false AS flag,
         CAST(0 AS INT8) AS int_null,
         1 AS bool_from_int
-      ;";
+      ;"#;
 
     let row = conn.read_query_row(query, ()).await.unwrap().unwrap();
     let data = Data {
@@ -823,7 +823,7 @@ mod tests {
 
     assert_eq!(
       Data {
-        bytes: [5, 1, 1, 1],
+        bytes: [5, 1, 0, 0],
         vec: vec![3],
         text: "foo".to_string(),
         text_null: None,
