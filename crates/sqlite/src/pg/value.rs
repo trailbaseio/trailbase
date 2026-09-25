@@ -47,7 +47,7 @@ impl postgres::types::ToSql for Value {
         };
       }
       Value::Blob(v) => {
-        v.to_sql(ty, out)?;
+        v.as_slice().to_sql(ty, out)?;
       }
     };
     return Ok(postgres::types::IsNull::No);

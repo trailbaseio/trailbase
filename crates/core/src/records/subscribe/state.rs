@@ -13,18 +13,21 @@ use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
 
 use crate::auth::User;
-use crate::records::RecordApi;
-use crate::records::RecordError;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
 use crate::records::subscribe::event::{EventError, EventPayload, Record};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
+use crate::records::{RecordApi, RecordError};
 use crate::schema_metadata::ConnectionMetadata;
 
-impl<'a> crate::records::expand::Record<'a> for &'a Record {
-  fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)> {
-    return self.get_index(index).map(|(name, v)| (name.as_str(), v));
+impl crate::records::expand::Record for &mut Record {
+  fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)> {
+    // NOTE: This makes a copy since we need to keep both the IndexMap record alive for filtering
+    // and the serialized version for cheap copying.
+    return self
+      .get_index_mut(index)
+      .map(|(name, v)| (name.as_str(), v.clone()));
   }
 
   fn len(&self) -> usize {
@@ -468,7 +471,7 @@ fn broker(
     // column-name-based access for filters, we thus use an IndexMap rather than a Vec<(String,
     // Value)> a data type. Needs to be an Arc so it can be passed to sqlite worker across
     // async boundary.
-    let record: Record = record
+    let mut record: Record = record
       .into_iter()
       .enumerate()
       .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
@@ -476,7 +479,7 @@ fn broker(
 
     return match crate::records::expand::record_to_json_expand(
       &table_metadata.column_metadata,
-      &record,
+      &mut record,
       None,
     ) {
       Ok(json_obj) => Arc::new(match action {

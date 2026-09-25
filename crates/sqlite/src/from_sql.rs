@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::str::Utf8Error;
 
-use crate::value::{Value, ValueRef};
+use crate::value_ref::ValueRef;
 
 /// Enum listing possible errors from [`FromSql`] trait.
 #[derive(Debug, thiserror::Error)]
@@ -35,27 +35,6 @@ pub enum FromSqlError {
   #[error("Other {0}")]
   Other(Box<dyn Error + Send + Sync + 'static>),
 }
-
-// impl PartialEq for FromSqlError {
-//   fn eq(&self, other: &Self) -> bool {
-//     return match (self, other) {
-//       (Self::InvalidType, Self::InvalidType) => true,
-//       (Self::OutOfRange(n1), Self::OutOfRange(n2)) => n1 == n2,
-//       (Self::Utf8Error(u1), Self::Utf8Error(u2)) => u1 == u2,
-//       (
-//         Self::InvalidBlobSize {
-//           expected_size: es1,
-//           blob_size: bs1,
-//         },
-//         Self::InvalidBlobSize {
-//           expected_size: es2,
-//           blob_size: bs2,
-//         },
-//       ) => es1 == es2 && bs1 == bs2,
-//       (..) => false,
-//     };
-//   }
-// }
 
 /// Result type for implementers of the [`FromSql`] trait.
 pub type FromSqlResult<T> = Result<T, FromSqlError>;
@@ -223,12 +202,5 @@ where
   #[inline]
   fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
     return <T::Owned>::column_result(value).map(Cow::Owned);
-  }
-}
-
-impl FromSql for Value {
-  #[inline]
-  fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-    return value.try_into();
   }
 }

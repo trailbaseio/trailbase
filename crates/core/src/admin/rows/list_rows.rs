@@ -249,10 +249,8 @@ async fn fetch_rows(
       return err;
     })?;
 
-  return Ok((
-    rows_to_sql_value_rows(&result_rows)?,
-    crate::admin::util::rows_to_columns(&result_rows),
-  ));
+  let columns = crate::admin::util::rows_to_columns(&result_rows);
+  return Ok((rows_to_sql_value_rows(result_rows)?, columns));
 }
 
 fn parse_cursor(cursor: &str, pk_col: &Column) -> Result<Cursor, Error> {

@@ -256,7 +256,6 @@ struct LogEntry {
   user_id: Option<[u8; 16]>,
   //
   // data: Option<String>,
-  //
   /// Optional two-letter country code.
   client_geoip_cc: Option<String>,
   /// Optional city JSON.

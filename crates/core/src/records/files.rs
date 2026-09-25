@@ -75,17 +75,19 @@ pub(crate) struct FileDeletionsDb {
 }
 
 impl FileDeletionsDb {
-  pub fn from_row(row: &trailbase_sqlite::Row) -> Result<FileDeletionsDb, trailbase_sqlite::Error> {
+  pub fn from_row(
+    mut row: trailbase_sqlite::Row,
+  ) -> Result<FileDeletionsDb, trailbase_sqlite::Error> {
     return Ok(FileDeletionsDb {
       id: row.get(0)?,
       deleted: row.get(1)?,
       attempts: row.get(2)?,
-      errors: row.get(3)?,
-      table_name: row.get(4)?,
+      errors: row.consume_value(3)?.try_into()?,
+      table_name: row.consume_value(4)?.try_into()?,
       record_rowid: row.get(5)?,
-      column_name: row.get(6)?,
-      json: row.get(7)?,
-      updated_json: row.get(8)?,
+      column_name: row.consume_value(6)?.try_into()?,
+      json: row.consume_value(7)?.try_into()?,
+      updated_json: row.consume_value(8)?.try_into()?,
     });
   }
 }
@@ -146,7 +148,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
             format!(r#"DELETE FROM {file_deletions} WHERE table_name = $1 AND record_rowid = $2 RETURNING *"#),
             params!(qualified_table_name.escaped_string(), rowids[0]),
           ).await?
-      }.iter()
+      }.into_iter()
           .map(FileDeletionsDb::from_row)
           .collect::<Result<Vec<_>,_>>()?
     ,
@@ -170,7 +172,7 @@ pub(crate) async fn delete_files_marked_for_deletion(
         )
         .await?
       }
-          .iter()
+          .into_iter()
           .map(FileDeletionsDb::from_row)
           .collect::<Result<Vec<_>,_>>()?
           ,

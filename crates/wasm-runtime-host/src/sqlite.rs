@@ -135,7 +135,9 @@ async fn handle_sqlite_query(
       .map_err(sqlite_err);
   }
 
-  fn build_query_response(rows: Rows) -> Result<SqliteResponse, String> {
+  fn build_query_response(
+    rows: Rows,
+  ) -> Result<SqliteResponse, trailbase_sqlite::from_sql::FromSqlError> {
     let json_rows = rows
       .iter()
       .map(convert_values)
@@ -161,8 +163,12 @@ async fn handle_sqlite_query(
       Ok(SqliteResponse::Query { rows: vec![] })
     }
     Parsed::Empty => Ok(SqliteResponse::Query { rows: vec![] }),
-    Parsed::ReadQuery => build_query_response(read(conn, request).await?),
-    Parsed::WriteQuery => build_query_response(write(conn, request).await?),
+    Parsed::ReadQuery => {
+      build_query_response(read(conn, request).await?).map_err(|err| err.to_string())
+    }
+    Parsed::WriteQuery => {
+      build_query_response(write(conn, request).await?).map_err(|err| err.to_string())
+    }
   };
 }
 
@@ -275,12 +281,16 @@ pub(crate) fn sql_values_to_sqlite_params(
   return values.into_iter().map(|p| p.try_into()).collect();
 }
 
-pub fn convert_values(row: &trailbase_sqlite::Row) -> Result<Vec<SqlValue>, String> {
+pub fn convert_values(
+  row: &trailbase_sqlite::Row,
+) -> Result<Vec<SqlValue>, trailbase_sqlite::from_sql::FromSqlError> {
   return (0..row.column_count())
-    .map(|i| -> Result<SqlValue, String> {
-      let value = row.get_value(i).ok_or_else(|| "not found".to_string())?;
-      return Ok(value.into());
-    })
+    .map(
+      |i| -> Result<SqlValue, trailbase_sqlite::from_sql::FromSqlError> {
+        let value = row.get_value(i)?;
+        return Ok(value.into());
+      },
+    )
     .collect();
 }
 

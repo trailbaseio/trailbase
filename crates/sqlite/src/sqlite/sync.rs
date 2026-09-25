@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
 use crate::error::Error;
 use crate::params::Params;
-use crate::rows::{Row, Rows};
+use crate::rows::{Rc, Row, Rows};
 use crate::sqlite::util::{columns, from_row, from_rows};
 use crate::traits::SyncConnection as SyncConnectionTrait;
 use crate::r#type::ConnectionType;
@@ -66,7 +64,7 @@ pub(super) fn query_row(
   params.bind(&mut stmt)?;
 
   if let Some(row) = stmt.raw_query().next()? {
-    return Ok(Some(from_row(row, Arc::new(columns(row.as_ref())))?));
+    return Ok(Some(from_row(row, Rc::new(columns(row.as_ref())))?));
   }
   return Ok(None);
 }

@@ -110,7 +110,7 @@ pub async fn create_user_handler(
       },
     )
     .await?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose()?
   else {
     return Err(Error::Precondition("Internal".into()));

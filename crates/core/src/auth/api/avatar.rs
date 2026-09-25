@@ -37,7 +37,7 @@ pub async fn get_avatar_handler(
     &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     &AVATAR_TABLE_FILE_COLUMN,
     "user",
-    trailbase_sqlite::Value::Blob(user_id.into()),
+    Into::<trailbase_sqlite::Value>::into(user_id.as_bytes()),
   )
   .await
   .map_err(|err| match err {
@@ -128,9 +128,7 @@ pub async fn delete_avatar_handler(
   const QUERY: &str = formatcp!("DELETE FROM '{AVATAR_TABLE}' WHERE user = $1");
 
   let main_conn = state.connection_manager().main_entry().connection;
-  main_conn
-    .execute(QUERY, [trailbase_sqlite::Value::Blob(user.uuid.into())])
-    .await?;
+  main_conn.execute(QUERY, (user.uuid.into_bytes(),)).await?;
 
   return Ok(());
 }
@@ -289,7 +287,7 @@ mod tests {
     const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
 
     let db_user = DbUser::from_row(
-      &state
+      state
         .user_conn()
         .read_query_row(QUERY, (email,))
         .await

@@ -230,7 +230,7 @@ async fn test_oauth_login_flow_without_pkce() {
 
   // Check user exists.
   let db_user = DbUser::from_row(
-    &state
+    state
       .user_conn()
       .read_query_row(
         format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
@@ -350,7 +350,7 @@ async fn test_oauth_login_flow_with_pkce() {
 
   // Check user exists.
   let db_user = DbUser::from_row(
-    &state
+    state
       .user_conn()
       .read_query_row(
         format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
@@ -544,7 +544,7 @@ async fn test_oauth_login_flow_with_form_post_callback() {
 
   // Check user exists and is logged in.
   let db_user = DbUser::from_row(
-    &state
+    state
       .user_conn()
       .read_query_row(
         format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),

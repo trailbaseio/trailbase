@@ -315,7 +315,7 @@ pub async fn get_user_by_email(
 
       return AuthError::NotFound;
     })?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose()?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
@@ -338,7 +338,7 @@ pub async fn get_user_by_username(
 
       return AuthError::NotFound;
     })?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose()?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
@@ -361,7 +361,7 @@ pub async fn get_user_by_id(
 
       return AuthError::NotFound;
     })?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose()?;
 
   return db_user.ok_or_else(|| AuthError::NotFound);
@@ -410,14 +410,7 @@ pub(crate) async fn delete_all_sessions_for_user(
 ) -> Result<usize, AuthError> {
   const QUERY: &str = formatcp!(r#"DELETE FROM "{SESSION_TABLE}" WHERE user = $1"#);
 
-  return Ok(
-    session_conn
-      .execute(
-        QUERY,
-        [trailbase_sqlite::Value::Blob(user_id.into_bytes().to_vec())],
-      )
-      .await?,
-  );
+  return Ok(session_conn.execute(QUERY, (user_id.into_bytes(),)).await?);
 }
 
 pub(crate) async fn delete_session(

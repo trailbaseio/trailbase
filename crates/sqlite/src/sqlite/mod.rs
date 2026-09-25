@@ -5,6 +5,7 @@ mod lock;
 pub(super) mod sync;
 pub(super) mod transaction;
 pub(super) mod util;
+pub(super) mod value;
 
 pub use batch::execute_batch;
 pub use util::{extract_record_values, extract_row_id, from_rows};

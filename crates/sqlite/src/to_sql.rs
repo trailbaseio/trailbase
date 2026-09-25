@@ -1,4 +1,5 @@
-use crate::value::{Value, ValueRef};
+use crate::value::Value;
+use crate::value_ref::ValueRef;
 
 // Proxy/strong-typedef that only exists to implement `params!`/`named_params!`.
 #[allow(missing_debug_implementations)]
@@ -47,7 +48,13 @@ from_value!(Value);
 
 impl<'a, const N: usize> From<[u8; N]> for ToSqlProxy<'a> {
   fn from(t: [u8; N]) -> Self {
-    ToSqlProxy::Owned(Value::Blob(t.into()))
+    return ToSqlProxy::Owned(Value::Blob(t.to_vec()));
+  }
+}
+
+impl<'a, const N: usize> From<&'a [u8; N]> for ToSqlProxy<'a> {
+  fn from(t: &'a [u8; N]) -> Self {
+    ToSqlProxy::Borrowed(ValueRef::Blob(t))
   }
 }
 

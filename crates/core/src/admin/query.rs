@@ -142,7 +142,7 @@ pub async fn query_handler(
   if let Some(rows) = batched_rows {
     return Ok(Json(QueryResponse {
       columns: Some(rows_to_columns(&rows)),
-      rows: rows_to_sql_value_rows(&rows)?,
+      rows: rows_to_sql_value_rows(rows)?,
     }));
   }
 

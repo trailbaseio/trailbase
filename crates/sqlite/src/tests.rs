@@ -1,7 +1,6 @@
 use futures_util::future::join_all;
 use rusqlite::hooks::PreUpdateCase;
 use rusqlite::{ErrorCode, ffi};
-use serde::Deserialize;
 use std::borrow::Cow;
 
 use crate::sqlite::connection::{Connection, Options};
@@ -260,12 +259,6 @@ async fn test_execute_and_query() {
     .unwrap();
 
   assert_eq!(row.get::<String>(0).unwrap(), "baz");
-
-  #[derive(Deserialize)]
-  struct Person {
-    id: i64,
-    name: String,
-  }
 
   let rows = crate::sqlite::execute_batch(
     &conn,
