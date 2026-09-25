@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::database::Database;
 use crate::error::Error;
 use crate::from_sql::{FromSql, FromSqlError};
-use crate::rows::{Column, Rc, Row, Rows, ValueType};
+use crate::rows::{ColVec, Column, Rc, Row, Rows, ValueType};
 use crate::value::Value;
 
 #[inline]
@@ -43,17 +43,20 @@ pub fn get_value<T: FromSql>(row: &rusqlite::Row<'_>, idx: usize) -> Result<T, E
 }
 
 pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
-  let columns: Rc<Vec<Column>> = Rc::new(rows.as_ref().map(columns).unwrap_or_default());
+  let columns = Rc::new(rows.as_ref().map(columns).unwrap_or_default());
 
   let mut result = vec![];
   while let Some(row) = rows.next()? {
     result.push(self::from_row(row, columns.clone())?);
   }
 
-  return Ok(Rows(result, columns));
+  return Ok(Rows {
+    rows: result,
+    columns,
+  });
 }
 
-pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<Vec<Column>>) -> Result<Row, Error> {
+pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<ColVec<Column>>) -> Result<Row, Error> {
   #[cfg(debug_assertions)]
   if let Some(rc) = Some(columns(row.as_ref()))
     && rc.len() != cols.len()
@@ -67,13 +70,16 @@ pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<Vec<Column>>) -> Result<Row
   // We have to access by index here, since names can be duplicate.
   let values = (0..cols.len())
     .map(|idx| row.get(idx))
-    .collect::<Result<Vec<_>, _>>()?;
+    .collect::<Result<ColVec<_>, _>>()?;
 
-  return Ok(Row(values, cols));
+  return Ok(Row {
+    values,
+    columns: cols,
+  });
 }
 
 #[inline]
-pub(crate) fn columns(stmt: &rusqlite::Statement<'_>) -> Vec<Column> {
+pub(crate) fn columns(stmt: &rusqlite::Statement<'_>) -> ColVec<Column> {
   return stmt
     .columns()
     .into_iter()

@@ -272,7 +272,7 @@ async fn test_execute_and_query() {
   .unwrap()
   .unwrap();
   assert_eq!(rows.len(), 1);
-  assert_eq!(rows.0.get(0).unwrap().get::<i64>(0).unwrap(), 17);
+  assert_eq!(rows.get(0).unwrap().get::<i64>(0).unwrap(), 17);
 
   // Lastly make sure rusqlite and out Connection consistently execute batches
   // containing statements returning rows.

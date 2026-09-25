@@ -2,7 +2,7 @@ use rusqlite::fallible_iterator::FallibleIterator;
 
 use super::util::{columns, from_row};
 use crate::error::Error;
-use crate::rows::{Column, Rc, Rows};
+use crate::rows::{Rc, Rows};
 use crate::sqlite::connection::Connection;
 use crate::sqlite::executor::Executor;
 
@@ -36,13 +36,17 @@ pub(crate) async fn execute_batch_impl(
             Some(_) => {}
             None => {
               if let Some(row) = row {
-                let cols: Rc<Vec<Column>> = Rc::new(columns(row.as_ref()));
+                let cols = Rc::new(columns(row.as_ref()));
 
                 let mut result = vec![from_row(row, cols.clone())?];
                 while let Some(row) = rows.next()? {
                   result.push(from_row(row, cols.clone())?);
                 }
-                return Ok(Some(Rows(result, cols)));
+
+                return Ok(Some(Rows {
+                  rows: result,
+                  columns: cols,
+                }));
               }
 
               return Ok(None);

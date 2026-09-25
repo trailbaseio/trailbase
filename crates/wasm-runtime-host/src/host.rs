@@ -331,8 +331,12 @@ impl TransactionImpl {
     return Ok(
       rows
         .into_iter()
-        .map(|trailbase_sqlite::Row(row, _col)| {
-          return row.into_iter().map(from_sqlite_value).collect::<Vec<_>>();
+        .map(|row| {
+          return row
+            .into_values()
+            .into_iter()
+            .map(from_sqlite_value)
+            .collect::<Vec<_>>();
         })
         .collect(),
     );
