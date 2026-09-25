@@ -1,4 +1,4 @@
-use crate::value::{Blob, Value, ValueRef};
+use crate::value::{Value, ValueRef};
 
 // Proxy/strong-typedef that only exists to implement `params!`/`named_params!`.
 #[allow(missing_debug_implementations)]

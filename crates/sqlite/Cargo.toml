@@ -26,6 +26,7 @@ pg = ["dep:postgres", "dep:bytes", "dep:regex", "dep:sqlparser"]
 
 [dependencies]
 bytes = { workspace = true, optional = true }
+compact_str = "0.10.0"
 crossfire = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }

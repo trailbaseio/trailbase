@@ -34,8 +34,7 @@ impl FromStr for ValueType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
-  // TODO: Could be compact_str.
-  pub(crate) name: String,
+  pub(crate) name: compact_str::CompactString,
   pub(crate) decl_type: Option<ValueType>,
 }
 

@@ -140,10 +140,10 @@ impl WriteQuery {
         named_params,
         ..
       } => {
-        if let Some(row) = conn.write_query_row(query, named_params).await? {
+        if let Some(mut row) = conn.write_query_row(query, named_params).await? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
-            pk_value: Some(row.get(1)?),
+            pk_value: Some(row.consume_value(1)?),
           })
         } else {
           Err(trailbase_sqlite::Error::QueryReturnedNoRows)
@@ -185,10 +185,10 @@ impl WriteQuery {
         named_params,
         ..
       } => {
-        if let Some(row) = conn.query_row(query, named_params)? {
+        if let Some(mut row) = conn.query_row(query, named_params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
-            pk_value: Some(row.get(1)?),
+            pk_value: Some(row.consume_value(1)?),
           })
         } else {
           Err(trailbase_sqlite::Error::QueryReturnedNoRows)
