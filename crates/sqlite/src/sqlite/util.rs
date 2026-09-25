@@ -66,8 +66,8 @@ pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<Vec<Column>>) -> Result<Row
 
   // We have to access by index here, since names can be duplicate.
   let values = (0..cols.len())
-    .map(|idx| row.get(idx).unwrap_or(Value::Null))
-    .collect();
+    .map(|idx| row.get(idx))
+    .collect::<Result<Vec<_>, _>>()?;
 
   return Ok(Row(values, cols));
 }

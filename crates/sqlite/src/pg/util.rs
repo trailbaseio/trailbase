@@ -147,8 +147,8 @@ pub(crate) fn from_row(row: &postgres::Row, cols: Rc<Vec<Column>>) -> Result<Row
 
   // We have to access by index here, since names can be duplicate.
   let values = (0..cols.len())
-    .map(|idx| row.try_get::<usize, Value>(idx).unwrap_or(Value::Null))
-    .collect();
+    .map(|idx| row.try_get::<usize, Value>(idx))
+    .collect::<Result<Vec<_>, _>>()?;
 
   return Ok(Row(values, cols));
 }
