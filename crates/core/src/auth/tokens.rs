@@ -246,7 +246,7 @@ pub(crate) async fn reauth_with_refresh_token(
     .user_conn()
     .read_query_row(USER_QUERY, params!(user_id))
     .await?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose()?
   else {
     // Row not found case, typically expected in one of 5 cases:

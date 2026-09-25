@@ -159,7 +159,7 @@ async fn async_main(
             .user_conn()
             .read_query_rows(format!("SELECT * FROM {USER_TABLE} WHERE admin > 0"), ())
             .await?
-            .iter()
+            .into_iter()
             .map(DbUser::from_row)
             .collect::<Result<_, _>>()?;
 
@@ -302,7 +302,7 @@ async fn async_main(
             .user_conn()
             .read_query_rows("SELECT * FROM _user WHERE password_hash IS NOT NULL", ())
             .await?
-            .iter()
+            .into_iter()
             .map(DbUser::from_row)
             .collect::<Result<_, _>>()?;
 

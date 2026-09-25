@@ -131,7 +131,7 @@ pub async fn add_user(
   let hashed_password = hash_password(password)?;
 
   let user = DbUser::from_row(
-    &user_conn
+    user_conn
       .write_query_row(
         ADD_USER_QUERY,
         params!(normalized_email, hashed_password, true),

@@ -208,7 +208,7 @@ async fn register_test_user(
             )
             .await
             .unwrap()
-            .map(|row| DbUser::from_row(&row))
+            .map(DbUser::from_row)
             .transpose()
             .unwrap()
             .is_some()
@@ -228,7 +228,7 @@ async fn register_test_user(
   let db_user = match identifier {
     Identifier::Email(email) | Identifier::EmailAndUsername(email, _) => {
       let db_user = DbUser::from_row(
-        &state
+        state
           .user_conn()
           .read_query_row(
             format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
@@ -245,7 +245,7 @@ async fn register_test_user(
       db_user
     }
     Identifier::Username(username) => DbUser::from_row(
-      &state
+      state
         .user_conn()
         .read_query_row(
           format!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#),

@@ -437,7 +437,7 @@ async fn subscription_acl_test() {
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         record_id.clone(),
-        trailbase_sqlite::Value::Blob(user_x.to_vec()),
+        Into::<trailbase_sqlite::Value>::into(user_x),
       ],
       0,
     )
@@ -542,7 +542,7 @@ async fn test_acl_selective_table_subs() {
         "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo')",
         [
           trailbase_sqlite::Value::Integer(record_id_raw),
-          trailbase_sqlite::Value::Blob(user_x.into()),
+          Into::<trailbase_sqlite::Value>::into(user_x.into_bytes()),
         ],
       )
       .await
@@ -614,7 +614,7 @@ async fn subscription_acl_change_owner() {
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         trailbase_sqlite::Value::Integer(record_id),
-        trailbase_sqlite::Value::Blob(user_x_id.into()),
+        Into::<trailbase_sqlite::Value>::into(user_x_id.into_bytes()),
       ],
       0,
     )

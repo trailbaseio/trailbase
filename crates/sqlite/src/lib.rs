@@ -52,7 +52,7 @@ pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
 pub use rows::{Row, Rows, ValueType};
 pub use statement::Statement;
 pub use traits::SyncConnection as SyncConnectionTrait;
-pub use value::{Value, ValueRef};
+pub use value::{Blob, Value, ValueRef};
 
 #[macro_export]
 macro_rules! params {

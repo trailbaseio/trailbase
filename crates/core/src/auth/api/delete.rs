@@ -30,7 +30,7 @@ pub(crate) async fn delete_handler(
 
   state
     .user_conn()
-    .execute(QUERY, [trailbase_sqlite::Value::Blob(user.uuid.into())])
+    .execute(QUERY, (user.uuid.into_bytes(),))
     .await?;
 
   remove_all_cookies(&cookies);

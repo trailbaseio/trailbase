@@ -138,7 +138,7 @@ pub async fn register_user_handler(
     )
     .await
   {
-    Ok(Some(row)) => DbUser::from_row(&row)?,
+    Ok(Some(row)) => DbUser::from_row(row)?,
     Err(_err) => {
       #[cfg(debug_assertions)]
       log::debug!("Failed to register new user {normalized_email:?}: {_err:?}");

@@ -85,7 +85,7 @@ pub async fn login_anonymous_user_handler(
       )
       .await?
     {
-      Some(row) => DbUser::from_row(&row),
+      Some(row) => DbUser::from_row(row),
       None => Err(AuthError::Internal("failed to get user".into())),
     };
   };

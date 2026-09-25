@@ -591,7 +591,7 @@ fn extract_params_and_files_from_json(
         writer.set_include_SRID(true);
       }
 
-      return Ok((Value::Blob(writer.write_wkb(&geometry)?), None));
+      return Ok((Into::<Value>::into(writer.write_wkb(&geometry)?), None));
     } else {
       debug_assert!(!is_geometry);
     }
@@ -846,12 +846,12 @@ mod tests {
         match param.as_ref() {
           ID_COL_PLACEHOLDER => {
             assert!(
-              matches!(value, Value::Blob(x) if *x == id),
+              matches!(value, Value::Blob(x) if x.to_vec() == id),
               "VALUE: {value:?}"
             );
           }
           ":blob" => {
-            assert!(matches!(value, Value::Blob(x) if *x == blob));
+            assert!(matches!(value, Value::Blob(x) if x.to_vec() == blob));
           }
           ":text" => {
             assert!(matches!(value, Value::Text(x) if x.contains("some text :)")));

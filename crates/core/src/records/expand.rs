@@ -61,17 +61,17 @@ fn is_foreign_key(options: &[ColumnOption]) -> bool {
 
 pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
-pub trait Record<'a> {
-  fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)>;
+pub trait Record {
+  fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)>;
   fn len(&self) -> usize;
 }
 
-impl<'a> Record<'a> for &'a trailbase_sqlite::Row {
-  fn get(&self, index: usize) -> Option<(&'a str, &'a trailbase_sqlite::Value)> {
-    return match (self.column_name(index), self.get_value(index)) {
-      (Some(name), Some(value)) => Some((name, value)),
-      _ => None,
-    };
+impl Record for trailbase_sqlite::Row {
+  #[inline]
+  fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)> {
+    let value = self.consume_value(index).ok()?;
+    let name = self.column_name(index)?;
+    return Some((name, value));
   }
 
   fn len(&self) -> usize {
@@ -80,9 +80,9 @@ impl<'a> Record<'a> for &'a trailbase_sqlite::Row {
 }
 
 /// Serialize SQL row to json. Skips columns prefixed with "_" and can expand foreign key columns.
-pub(crate) fn record_to_json_expand<'a>(
+pub(crate) fn record_to_json_expand(
   column_metadata: &[ColumnMetadata],
-  record: impl Record<'a>,
+  mut record: impl Record,
   expand: Option<&HashMap<String, serde_json::Value>>,
 ) -> Result<JsonObject, JsonError> {
   // Record may contain extra columns like trailing "_rowid_" or filtered columns starting with "_".
@@ -97,12 +97,16 @@ pub(crate) fn record_to_json_expand<'a>(
     .map(
       |(i, meta)| -> Result<(String, serde_json::Value), JsonError> {
         let column = &meta.column;
-        let Some((name, value)) = record.get(i) else {
-          return Err(JsonError::ValueNotFound);
+
+        let value = {
+          let Some((name, value)) = record.consume(i) else {
+            return Err(JsonError::ValueNotFound);
+          };
+          if column.name.as_str() != name {
+            return Err(JsonError::ColumnMismatch);
+          }
+          value
         };
-        if column.name.as_str() != name {
-          return Err(JsonError::ColumnMismatch);
-        }
 
         if matches!(value, trailbase_sqlite::Value::Null) {
           return Ok((column.name.clone(), serde_json::Value::Null));
@@ -131,7 +135,7 @@ pub(crate) fn record_to_json_expand<'a>(
         }
 
         // De-serialize JSON.
-        if let trailbase_sqlite::Value::Text(str) = value
+        if let trailbase_sqlite::Value::Text(ref str) = value
           && let Some(ref json) = meta.json
         {
           return match json {
@@ -158,7 +162,7 @@ pub(crate) fn record_to_json_expand<'a>(
 
         // De-serialize WKB Geometry.
         #[cfg(any(feature = "geos", feature = "geos-static"))]
-        if let trailbase_sqlite::Value::Blob(wkb) = value
+        if let trailbase_sqlite::Value::Blob(ref wkb) = value
           && meta.is_geometry
         {
           let geometry = geos::Geometry::new_from_wkb(wkb)?;
@@ -356,7 +360,7 @@ mod tests {
         .unwrap();
 
       let parsed = rows
-        .iter()
+        .into_iter()
         .map(|row| super::record_to_json_expand(&metadata.column_metadata, row, None))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();

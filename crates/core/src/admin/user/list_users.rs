@@ -189,7 +189,7 @@ async fn fetch_users(
       log::error!("fetch users failed '{sql_query}': {err:?}");
       return err;
     })?
-    .iter()
+    .into_iter()
     .map(DbUser::from_row)
     .collect::<Result<_, _>>()?;
 

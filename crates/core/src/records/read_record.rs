@@ -95,7 +95,7 @@ pub async fn read_record_handler(
     let mut expand = expand.clone();
 
     for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-      let foreign_value = record_to_json_expand(&metadata.column_metadata, &row, None)
+      let foreign_value = record_to_json_expand(&metadata.column_metadata, row, None)
         .map_err(|err| RecordError::Internal(err.into()))?;
 
       let result = expand.insert(col_name.to_string(), foreign_value.into());
@@ -103,7 +103,7 @@ pub async fn read_record_handler(
     }
 
     return Ok(Json(
-      record_to_json_expand(api.columns(), &root, Some(&expand))
+      record_to_json_expand(api.columns(), root, Some(&expand))
         .map_err(|err| RecordError::Internal(err.into()))?,
     ));
   }
@@ -120,7 +120,7 @@ pub async fn read_record_handler(
     return Err(RecordError::RecordNotFound);
   };
 
-  let json_response = record_to_json_expand(api.columns(), &row, api.expand())
+  let json_response = record_to_json_expand(api.columns(), row, api.expand())
     .map_err(|err| RecordError::Internal(err.into()))?;
 
   #[cfg(debug_assertions)]

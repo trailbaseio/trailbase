@@ -1,11 +1,10 @@
 use rusqlite::hooks::PreUpdateCase;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::database::Database;
 use crate::error::Error;
 use crate::from_sql::{FromSql, FromSqlError};
-use crate::rows::{Column, Row, Rows, ValueType};
+use crate::rows::{Column, Rc, Row, Rows, ValueType};
 use crate::value::Value;
 
 #[inline]
@@ -44,7 +43,7 @@ pub fn get_value<T: FromSql>(row: &rusqlite::Row<'_>, idx: usize) -> Result<T, E
 }
 
 pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
-  let columns: Arc<Vec<Column>> = Arc::new(rows.as_ref().map_or_else(Vec::new, columns));
+  let columns: Rc<Vec<Column>> = Rc::new(rows.as_ref().map(columns).unwrap_or_default());
 
   let mut result = vec![];
   while let Some(row) = rows.next()? {
@@ -54,7 +53,7 @@ pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
   return Ok(Rows(result, columns));
 }
 
-pub(crate) fn from_row(row: &rusqlite::Row, cols: Arc<Vec<Column>>) -> Result<Row, Error> {
+pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<Vec<Column>>) -> Result<Row, Error> {
   #[cfg(debug_assertions)]
   if let Some(rc) = Some(columns(row.as_ref()))
     && rc.len() != cols.len()

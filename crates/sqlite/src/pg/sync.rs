@@ -1,11 +1,9 @@
-use std::sync::Arc;
-
 use postgres::fallible_iterator::FallibleIterator;
 
 use crate::error::Error;
 use crate::params::Params;
 use crate::pg::util::{PgStatement, columns, from_row, from_rows};
-use crate::rows::{Row, Rows};
+use crate::rows::{Rc, Row, Rows};
 use crate::traits::SyncConnection as SyncConnectionTrait;
 use crate::traits::SyncTransaction as SyncTransactionTrait;
 use crate::r#type::ConnectionType;
@@ -22,7 +20,7 @@ impl SyncConnectionTrait for postgres::Client {
     let mut row_iter = self.query_raw(&sql, &params)?;
 
     if let Some(row) = row_iter.next()? {
-      return Ok(Some(from_row(&row, Arc::new(columns(&row)))?));
+      return Ok(Some(from_row(&row, Rc::new(columns(&row)))?));
     }
 
     return Ok(None);
@@ -60,7 +58,7 @@ impl<'a> SyncConnectionTrait for postgres::Transaction<'a> {
     let mut row_iter = self.query_raw(&sql, &params)?;
 
     if let Some(row) = row_iter.next()? {
-      return Ok(Some(from_row(&row, Arc::new(columns(&row)))?));
+      return Ok(Some(from_row(&row, Rc::new(columns(&row)))?));
     }
 
     return Ok(None);

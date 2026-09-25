@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use triomphe::Arc;
 
 use crate::Value;
 use crate::database::Database;
@@ -13,7 +13,7 @@ use crate::pg::util::{
   columns as pg_columns, from_row as pg_from_row, from_rows as pg_from_rows,
   map_first as pg_map_first,
 };
-use crate::rows::{Row, Rows};
+use crate::rows::{Rc, Row, Rows};
 use crate::sqlite::executor::Executor as SqliteExecutor;
 use crate::sqlite::util::{
   columns as sqlite_columns, from_row as sqlite_from_row, from_rows as sqlite_from_rows, get_value,
@@ -255,7 +255,7 @@ impl Connection {
         exec
           .read_query_rows_f(sql, params, |rows| {
             return sqlite_map_first(rows, |row| {
-              return sqlite_from_row(row, Arc::new(sqlite_columns(row.as_ref())));
+              return sqlite_from_row(row, Rc::new(sqlite_columns(row.as_ref())));
             });
           })
           .await
@@ -308,7 +308,7 @@ impl Connection {
         exec
           .write_query_rows_f(sql, params, |rows| {
             return sqlite_map_first(rows, |row| {
-              return sqlite_from_row(row, Arc::new(sqlite_columns(row.as_ref())));
+              return sqlite_from_row(row, Rc::new(sqlite_columns(row.as_ref())));
             });
           })
           .await
@@ -317,7 +317,7 @@ impl Connection {
         exec
           .query_rows_f(sql, params, |rows| {
             return pg_map_first(rows, |row| {
-              return pg_from_row(&row, Arc::new(pg_columns(&row)));
+              return pg_from_row(&row, Rc::new(pg_columns(&row)));
             });
           })
           .await
@@ -1158,7 +1158,7 @@ mod tests {
       .unwrap();
 
     let version: i64 = conn
-      .read_query_row_get("SELECT uuid_extract_version(:id)", [Value::Blob(uuid)], 0)
+      .read_query_row_get("SELECT uuid_extract_version(:id)", (uuid,), 0)
       .await
       .unwrap()
       .unwrap();
@@ -1179,10 +1179,7 @@ mod tests {
 
     const INSERT: &str = "INSERT INTO table_w_uuid (\"user\") VALUES ($1);";
     conn
-      .execute(
-        INSERT,
-        (Value::Blob(uuid::Uuid::new_v4().into_bytes().into()),),
-      )
+      .execute(INSERT, (uuid::Uuid::new_v4().into_bytes().to_vec(),))
       .await
       .unwrap();
 

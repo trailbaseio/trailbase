@@ -1,12 +1,12 @@
 use postgres::fallible_iterator::FallibleIterator;
 use regex::Regex;
 use std::collections::{HashMap, hash_map::Entry};
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 
 use crate::SyncConnectionTrait;
 use crate::error::Error;
 use crate::params::Params;
-use crate::rows::{Column, Row, Rows, ValueType};
+use crate::rows::{Column, Rc, Row, Rows, ValueType};
 use crate::statement::Statement;
 use crate::to_sql::ToSqlProxy;
 use crate::value::Value;
@@ -124,7 +124,7 @@ pub fn from_rows(mut row_iter: postgres::RowIter) -> Result<Rows, Error> {
     return Ok(Rows::default());
   };
 
-  let columns: Arc<Vec<Column>> = Arc::new(columns(&first_row));
+  let columns: Rc<Vec<Column>> = Rc::new(columns(&first_row));
 
   let mut result = vec![self::from_row(&first_row, columns.clone())?];
   while let Some(row) = row_iter.next()? {
@@ -134,7 +134,7 @@ pub fn from_rows(mut row_iter: postgres::RowIter) -> Result<Rows, Error> {
   return Ok(Rows(result, columns));
 }
 
-pub(crate) fn from_row(row: &postgres::Row, cols: Arc<Vec<Column>>) -> Result<Row, Error> {
+pub(crate) fn from_row(row: &postgres::Row, cols: Rc<Vec<Column>>) -> Result<Row, Error> {
   #[cfg(debug_assertions)]
   if let Some(rc) = Some(columns(row))
     && rc.len() != cols.len()

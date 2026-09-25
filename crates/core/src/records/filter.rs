@@ -34,7 +34,7 @@ fn any_qs_value_to_sql(value: trailbase_qs::Value) -> trailbase_sqlite::Value {
   return match value {
     QsValue::String(s) => {
       if let Ok(b) = BASE64_URL_SAFE.decode(&s) {
-        Value::Blob(b)
+        Value::Blob(b.into())
       } else {
         Value::Text(s.clone())
       }
@@ -58,7 +58,8 @@ pub(crate) fn qs_value_to_sql_with_constraints(
       QsValue::String(s) => Ok(Value::Blob(
         BASE64_URL_SAFE
           .decode(&s)
-          .map_err(|_err| RecordError::BadRequest("Invalid query"))?,
+          .map_err(|_err| RecordError::BadRequest("Invalid query"))?
+          .into(),
       )),
       _ => Err(RecordError::BadRequest("Invalid query")),
     },

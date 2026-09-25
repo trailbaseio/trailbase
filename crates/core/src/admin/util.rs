@@ -33,7 +33,7 @@ pub(crate) fn rows_to_columns(rows: &Rows) -> Vec<Column> {
 fn row_to_sql_value_row(row: &Row) -> Result<Vec<SqlValue>, JsonError> {
   return (0..row.column_count())
     .map(|i| -> Result<SqlValue, JsonError> {
-      let value = row.get_value(i).ok_or(JsonError::ValueNotFound)?;
+      let value = row.get_value(i).map_err(|_| JsonError::ValueNotFound)?;
       return Ok(value.into());
     })
     .collect();
@@ -50,6 +50,6 @@ pub(crate) fn cursor_to_value(cursor: trailbase_qs::Cursor) -> trailbase_sqlite:
 
   return match cursor {
     QsCursor::Integer(i) => trailbase_sqlite::Value::Integer(i),
-    QsCursor::Blob(b) => trailbase_sqlite::Value::Blob(b),
+    QsCursor::Blob(b) => trailbase_sqlite::Value::Blob(b.into()),
   };
 }

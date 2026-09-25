@@ -699,7 +699,7 @@ impl RecordApi {
 
     params.push((
       Cow::Borrowed(":__user_id"),
-      user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
+      user.map_or(Value::Null, |u| Into::<Value>::into(u.uuid.into_bytes())),
     ));
     params.push((
       Cow::Borrowed(":__record_id"),
@@ -738,7 +738,7 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
     if let Some(user) = self.user
       && let Some(idx) = stmt.parameter_index(":__user_id")?
     {
-      stmt.bind_parameter(idx, trailbase_sqlite::Value::Blob(user.uuid.into()).into())?;
+      stmt.bind_parameter(idx, user.uuid.as_bytes().into())?;
     }
 
     return Ok(());

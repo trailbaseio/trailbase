@@ -341,7 +341,7 @@ fn insert_logs(
         log.referer,
         log.user_agent,
         if log.user_id > 0 {
-          Value::Blob(Uuid::from_u128(log.user_id).into())
+          Into::<Value>::into(Uuid::from_u128(log.user_id).into_bytes())
         } else {
           Value::Null
         },

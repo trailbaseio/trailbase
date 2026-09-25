@@ -1,13 +1,13 @@
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use triomphe::Arc;
 
 use crate::database::Database;
 use crate::error::Error;
 use crate::from_sql::FromSql;
 use crate::params::Params;
-use crate::rows::{Row, Rows};
+use crate::rows::{Rc, Row, Rows};
 use crate::sqlite::executor::Executor;
 use crate::sqlite::sync::SyncConnection;
 use crate::sqlite::transaction::Transaction;
@@ -165,7 +165,7 @@ impl Connection {
       .exec
       .read_query_rows_f(sql, params, |rows| {
         return map_first(rows, |row| {
-          return from_row(row, Arc::new(columns(row.as_ref())));
+          return from_row(row, Rc::new(columns(row.as_ref())));
         });
       })
       .await;
@@ -207,7 +207,7 @@ impl Connection {
       .exec
       .write_query_rows_f(sql, params, |rows| {
         return map_first(rows, |row| {
-          return from_row(row, Arc::new(columns(row.as_ref())));
+          return from_row(row, Rc::new(columns(row.as_ref())));
         });
       })
       .await;

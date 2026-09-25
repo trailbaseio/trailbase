@@ -122,7 +122,7 @@ pub(crate) async fn create_user_for_external_provider(
       },
     )
     .await?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose()?
     .ok_or_else(|| AuthError::Internal("insertion issue".into()))?;
 
@@ -140,7 +140,7 @@ pub(crate) async fn user_by_provider_id(
   return conn
     .read_query_row(QUERY, params!(provider_id as i64, provider_user_id))
     .await?
-    .map(|row| DbUser::from_row(&row))
+    .map(DbUser::from_row)
     .transpose();
 }
 

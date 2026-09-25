@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 use std::ops::Index;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::error::Error;
 use crate::from_sql::{FromSql, FromSqlError};
@@ -15,6 +14,8 @@ pub enum ValueType {
   Blob,
   Null,
 }
+
+pub(crate) type Rc<T> = triomphe::Arc<T>;
 
 impl FromStr for ValueType {
   type Err = ();
@@ -33,16 +34,18 @@ impl FromStr for ValueType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
+  // TODO: Could be compact_str.
   pub(crate) name: String,
   pub(crate) decl_type: Option<ValueType>,
 }
 
+// TODO: Vec<Column> and Vec<Value> could be smallvecs. Vec<Row> probably not worth.
 #[derive(Debug, Default)]
-pub struct Rows(pub(crate) Vec<Row>, pub(crate) Arc<Vec<Column>>);
+pub struct Rows(pub(crate) Vec<Row>, pub(crate) Rc<Vec<Column>>);
 
 impl Rows {
   pub fn empty() -> Self {
-    return Self(vec![], Arc::new(vec![]));
+    return Self(Vec::with_capacity(0), Rc::new(Vec::with_capacity(0)));
   }
 
   pub fn len(&self) -> usize {
@@ -104,29 +107,15 @@ impl IntoIterator for Rows {
 }
 
 #[derive(Debug)]
-pub struct Row(pub Vec<Value>, pub Arc<Vec<Column>>);
+pub struct Row(pub Vec<Value>, pub Rc<Vec<Column>>);
 
 impl Row {
   pub fn split_off(&mut self, at: usize) -> Row {
     let split_values = self.0.split_off(at);
     let mut columns = (*self.1).clone();
     let split_columns = columns.split_off(at);
-    self.1 = Arc::new(columns);
-    return Row(split_values, Arc::new(split_columns));
-  }
-
-  pub fn get<T>(&self, idx: usize) -> Result<T, FromSqlError>
-  where
-    T: FromSql,
-  {
-    let Some(value) = self.0.get(idx) else {
-      return Err(FromSqlError::OutOfRange(idx as i64));
-    };
-    return T::column_result(value.into());
-  }
-
-  pub fn get_value(&self, idx: usize) -> Option<&Value> {
-    return self.0.get(idx);
+    self.1 = Rc::new(columns);
+    return Row(split_values, Rc::new(split_columns));
   }
 
   pub fn len(&self) -> usize {
@@ -137,16 +126,51 @@ impl Row {
     return self.0.is_empty();
   }
 
-  pub fn last(&self) -> Option<&Value> {
-    return self.0.last();
-  }
-
   pub fn column_count(&self) -> usize {
     return self.1.len();
   }
 
   pub fn column_name(&self, idx: usize) -> Option<&str> {
     return self.1.get(idx).map(|c| c.name.as_str());
+  }
+
+  pub fn last(&self) -> Option<&Value> {
+    return self.0.last();
+  }
+
+  pub fn get<T>(&self, idx: usize) -> Result<T, FromSqlError>
+  where
+    T: FromSql,
+  {
+    let Some(v) = self.0.get(idx) else {
+      return Err(FromSqlError::OutOfRange(idx as i64));
+    };
+    return T::column_result(v.into());
+  }
+
+  pub fn get_value(&self, idx: usize) -> Result<&Value, FromSqlError> {
+    return self
+      .0
+      .get(idx)
+      .ok_or_else(|| FromSqlError::OutOfRange(idx as i64));
+  }
+
+  // NOTE: This one currently doesn't make sense becaues FromSql forces a copy through ValueRef.
+  // pub fn consume<T>(&mut self, idx: usize) -> Result<T, FromSqlError>
+  // where
+  //   T: FromSql,
+  // {
+  //   let Some(v) = self.0.get_mut(idx) else {
+  //     return Err(FromSqlError::OutOfRange(idx as i64));
+  //   };
+  //   return T::column_result(v.into());
+  // }
+
+  pub fn consume_value(&mut self, idx: usize) -> Result<Value, FromSqlError> {
+    let Some(v) = self.0.get_mut(idx) else {
+      return Err(FromSqlError::OutOfRange(idx as i64));
+    };
+    return Ok(std::mem::take(v));
   }
 }
 

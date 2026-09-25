@@ -1,8 +1,11 @@
 use crate::from_sql::{FromSqlError, FromSqlResult};
 
-#[derive(Clone, Debug, PartialEq)]
+pub type Blob = smallvec::SmallVec<[u8; 16]>;
+
+#[derive(Clone, Debug, Default, PartialEq)]
 pub enum Value {
   /// The value is a `NULL` value.
+  #[default]
   Null,
   /// The value is a signed integer.
   Integer(i64),
@@ -11,7 +14,7 @@ pub enum Value {
   /// The value is a text string.
   Text(String),
   /// The value is a blob of data
-  Blob(Vec<u8>),
+  Blob(Blob),
 }
 
 impl From<bool> for Value {
@@ -52,21 +55,49 @@ impl From<String> for Value {
 impl From<Vec<u8>> for Value {
   #[inline]
   fn from(v: Vec<u8>) -> Self {
+    return Self::Blob(v.into());
+  }
+}
+
+impl From<&[u8]> for Value {
+  #[inline]
+  fn from(v: &[u8]) -> Self {
+    return Self::Blob(Blob::from_slice(v));
+  }
+}
+
+impl From<Blob> for Value {
+  #[inline]
+  fn from(v: Blob) -> Self {
     return Self::Blob(v);
+  }
+}
+
+impl From<[u8; 16]> for Value {
+  #[inline]
+  fn from(v: [u8; 16]) -> Self {
+    return Self::Blob(v.into());
+  }
+}
+
+impl<const N: usize> From<&[u8; N]> for Value {
+  #[inline]
+  fn from(v: &[u8; N]) -> Self {
+    return Self::Blob(Blob::from_slice(v));
   }
 }
 
 // Convert between two value types.
 impl From<Value> for rusqlite::types::Value {
   fn from(value: Value) -> rusqlite::types::Value {
-    use rusqlite::types::Value as SqliteValue;
+    use rusqlite::types::Value as RusqliteValue;
 
     return match value {
-      Value::Null => SqliteValue::Null,
-      Value::Integer(i) => SqliteValue::Integer(i),
-      Value::Real(f) => SqliteValue::Real(f),
-      Value::Text(t) => SqliteValue::Text(t),
-      Value::Blob(b) => SqliteValue::Blob(b),
+      Value::Null => RusqliteValue::Null,
+      Value::Integer(i) => RusqliteValue::Integer(i),
+      Value::Real(f) => RusqliteValue::Real(f),
+      Value::Text(t) => RusqliteValue::Text(t),
+      Value::Blob(b) => RusqliteValue::Blob(b.to_vec()),
     };
   }
 }
@@ -99,7 +130,7 @@ impl TryFrom<rusqlite::types::ValueRef<'_>> for Value {
       rusqlite::types::ValueRef::Text(s) => std::str::from_utf8(s)
         .map(|s| Self::Text(s.to_string()))
         .map_err(Self::Error::Utf8Error),
-      rusqlite::types::ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
+      rusqlite::types::ValueRef::Blob(b) => Ok(Self::Blob(Blob::from_slice(b))),
     };
   }
 }
@@ -116,7 +147,7 @@ impl TryFrom<ValueRef<'_>> for Value {
       ValueRef::Text(s) => std::str::from_utf8(s)
         .map(|s| Self::Text(s.to_string()))
         .map_err(Self::Error::Utf8Error),
-      ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
+      ValueRef::Blob(b) => Ok(Self::Blob(Blob::from_slice(b))),
     };
   }
 }

@@ -105,7 +105,7 @@ pub async fn update_user_handler(
     .execute(
       UPDATE_QUERY,
       named_params! {
-          ":id": Value::Blob(user_id_bytes.to_vec()),
+          ":id": Into::<Value>::into(user_id_bytes),
           ":email": if let Some(email) = email {
               Value::Text(email)
           } else {

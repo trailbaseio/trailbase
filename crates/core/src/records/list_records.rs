@@ -156,7 +156,9 @@ pub async fn list_records_handler(
     ),
     (
       Cow::Borrowed(":__user_id"),
-      user.map_or(Value::Null, |u| Value::Blob(u.uuid.into())),
+      user.map_or(Value::Null, |u| {
+        Value::Blob(trailbase_sqlite::Blob::from_slice(u.uuid.as_bytes()))
+      }),
     ),
   ]);
 
@@ -331,7 +333,7 @@ pub async fn list_records_handler(
 
   let records = if expanded_tables.is_empty() {
     rows
-      .iter()
+      .into_iter()
       .map(|row| record_to_json_expand(api.columns(), row, api.expand()))
       .collect::<Result<Vec<_>, JsonError>>()
       .map_err(|err| RecordError::Internal(err.into()))?
@@ -351,10 +353,9 @@ pub async fn list_records_handler(
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
-          let foreign_value =
-            record_to_json_expand(&expanded.metadata.column_metadata, &curr, None)
-              .map_err(|err| RecordError::Internal(err.into()))?
-              .into();
+          let foreign_value = record_to_json_expand(&expanded.metadata.column_metadata, curr, None)
+            .map_err(|err| RecordError::Internal(err.into()))?
+            .into();
 
           let result = expand.insert(expanded.local_column_name.clone(), foreign_value);
           assert!(result.is_some());
@@ -362,7 +363,7 @@ pub async fn list_records_handler(
           curr = next;
         }
 
-        return record_to_json_expand(api.columns(), &row, Some(&expand))
+        return record_to_json_expand(api.columns(), row, Some(&expand))
           .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
@@ -734,7 +735,7 @@ mod tests {
       (Cow::Borrowed(":__limit"), Value::Integer(100)),
       (
         Cow::Borrowed(":__user_id"),
-        Value::Blob(uuid::Uuid::now_v7().into()),
+        Into::<Value>::into(uuid::Uuid::now_v7().into_bytes()),
       ),
     ];
 

@@ -40,8 +40,8 @@ impl DbUser {
     return uuid;
   }
 
-  pub fn from_row(row: &Row) -> Result<Self, AuthError> {
-    fn from_row_impl(row: &Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
+  pub fn from_row(row: Row) -> Result<Self, AuthError> {
+    fn from_row_impl(row: Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
       return Ok(DbUser {
         id: row.get(0)?,
         email: row.get(1)?,
@@ -58,6 +58,7 @@ impl DbUser {
       });
     }
 
+    // Should never fail. This means there's a schema mismatch.
     return from_row_impl(row).map_err(|err| AuthError::Internal(err.into()));
   }
 

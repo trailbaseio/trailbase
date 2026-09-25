@@ -89,11 +89,14 @@ impl TryFrom<SqlValue> for trailbase_sqlite::Value {
       SqlValue::Real(v) => Value::Real(v),
       SqlValue::Text(v) => Value::Text(v),
       SqlValue::Blob(b) => match b {
-        Blob::Array(v) => Value::Blob(v),
-        Blob::Base64UrlSafe(v) => {
-          Value::Blob(BASE64_URL_SAFE.decode(v).map_err(DecodeError::Base64)?)
-        }
-        Blob::Hex(v) => Value::Blob(decode_hex(&v)?),
+        Blob::Array(v) => Value::Blob(v.into()),
+        Blob::Base64UrlSafe(v) => Value::Blob(
+          BASE64_URL_SAFE
+            .decode(v)
+            .map_err(DecodeError::Base64)?
+            .into(),
+        ),
+        Blob::Hex(v) => Value::Blob(decode_hex(&v)?.into()),
       },
     });
   }
