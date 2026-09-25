@@ -41,20 +41,20 @@ impl DbUser {
   }
 
   pub fn from_row(row: Row) -> Result<Self, AuthError> {
-    fn from_row_impl(row: Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
+    fn from_row_impl(mut row: Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
       return Ok(DbUser {
         id: row.get(0)?,
-        email: row.get(1)?,
-        unverified_email: row.get(2)?,
-        username: row.get(3)?,
-        password_hash: row.get(4)?,
+        email: row.consume_value(1)?.try_into()?,
+        unverified_email: row.consume_value(2)?.try_into()?,
+        username: row.consume_value(3)?.try_into()?,
+        password_hash: row.consume_value(4)?.try_into()?,
         admin: row.get(5)?,
-        totp_secret: row.get(6)?,
+        totp_secret: row.consume_value(6)?.try_into()?,
         created: row.get(7)?,
         updated: row.get(8)?,
         provider_id: row.get(9)?,
-        provider_user_id: row.get(10)?,
-        provider_avatar_url: row.get(11)?,
+        provider_user_id: row.consume_value(10)?.try_into()?,
+        provider_avatar_url: row.consume_value(11)?.try_into()?,
       });
     }
 

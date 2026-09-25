@@ -62,7 +62,7 @@ pub fn flat_json_to_value(
       // handled below in the string  case.
       match col_type {
         ColumnDataType::Blob | ColumnDataType::Any => {
-          Ok(SqliteValue::Blob(json_array_to_bytes(arr)?.into()))
+          Ok(SqliteValue::Blob(json_array_to_bytes(arr)?))
         }
         _ => Err(JsonError::UnexpectedType("Array", col_type)),
       }
@@ -139,11 +139,11 @@ pub fn rich_json_to_value(value: serde_json::Value) -> Result<SqliteValue, JsonE
     serde_json::Value::Object(mut map) => {
       match map.remove("blob") {
         Some(serde_json::Value::String(str)) => {
-          return Ok(SqliteValue::Blob(BASE64_URL_SAFE.decode(&str)?.into()));
+          return Ok(SqliteValue::Blob(BASE64_URL_SAFE.decode(&str)?));
         }
         // NOTE: We're a bit lenient here, we will also accept int arrays as blobs.
         Some(serde_json::Value::Array(bytes)) => {
-          return Ok(SqliteValue::Blob(json_array_to_bytes(&bytes)?.into()));
+          return Ok(SqliteValue::Blob(json_array_to_bytes(&bytes)?));
         }
         _ => {}
       }
@@ -182,9 +182,8 @@ fn strict_parse_string_to_sqlite_value(
       // NOTE: That uuids also parse as url-safe base64, that's why we treat it as a fall-first.
       (36, v) => uuid::Uuid::parse_str(&v)
         .map(|v| v.into())
-        .or_else(|_| BASE64_URL_SAFE.decode(&v))?
-        .into(),
-      (_, v) => BASE64_URL_SAFE.decode(&v)?.into(),
+        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
+      (_, v) => BASE64_URL_SAFE.decode(&v)?,
     })),
     _ => Err(JsonError::UnexpectedType("string", data_type)),
   };
@@ -204,9 +203,8 @@ pub fn parse_string_to_sqlite_value(
       // NOTE: That UUIDs also parse as url-safe base64, that's why we treat it as a fall-first.
       (36, v) => uuid::Uuid::parse_str(&v)
         .map(|v| v.into())
-        .or_else(|_| BASE64_URL_SAFE.decode(&v))?
-        .into(),
-      (_, v) => BASE64_URL_SAFE.decode(&v)?.into(),
+        .or_else(|_| BASE64_URL_SAFE.decode(&v))?,
+      (_, v) => BASE64_URL_SAFE.decode(&v)?,
     }),
     ColumnDataType::Integer => SqliteValue::Integer(value.parse::<i64>()?),
     ColumnDataType::Real => SqliteValue::Real(value.parse::<f64>()?),

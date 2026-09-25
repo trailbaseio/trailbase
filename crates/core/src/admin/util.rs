@@ -10,8 +10,8 @@ use trailbase_sqlvalue::SqlValue;
 pub(crate) fn rows_to_columns(rows: &Rows) -> Vec<Column> {
   return (0..rows.column_count())
     .map(|i| {
-      let data_type = match rows.column_type(i).unwrap_or(ValueType::Null) {
-        ValueType::Null => ColumnDataType::Any,
+      let data_type = match rows.column_type(i).unwrap_or(ValueType::Undefined) {
+        ValueType::Null | ValueType::Undefined => ColumnDataType::Any,
         ValueType::Real => ColumnDataType::Real,
         ValueType::Text => ColumnDataType::Text,
         ValueType::Integer => ColumnDataType::Integer,
@@ -30,10 +30,10 @@ pub(crate) fn rows_to_columns(rows: &Rows) -> Vec<Column> {
     .collect();
 }
 
-fn row_to_sql_value_row(row: &Row) -> Result<Vec<SqlValue>, JsonError> {
+fn row_to_sql_value_row(mut row: Row) -> Result<Vec<SqlValue>, JsonError> {
   return (0..row.column_count())
     .map(|i| -> Result<SqlValue, JsonError> {
-      let value = row.get_value(i).map_err(|_| JsonError::ValueNotFound)?;
+      let value = row.consume_value(i).map_err(|_| JsonError::ValueNotFound)?;
       return Ok(value.into());
     })
     .collect();
@@ -41,8 +41,8 @@ fn row_to_sql_value_row(row: &Row) -> Result<Vec<SqlValue>, JsonError> {
 
 // TODO: We should use a different error types - no JSON at play here.
 #[inline]
-pub(crate) fn rows_to_sql_value_rows(rows: &Rows) -> Result<Vec<Vec<SqlValue>>, JsonError> {
-  return rows.iter().map(row_to_sql_value_row).collect();
+pub(crate) fn rows_to_sql_value_rows(rows: Rows) -> Result<Vec<Vec<SqlValue>>, JsonError> {
+  return rows.into_iter().map(row_to_sql_value_row).collect();
 }
 
 pub(crate) fn cursor_to_value(cursor: trailbase_qs::Cursor) -> trailbase_sqlite::Value {
@@ -50,6 +50,6 @@ pub(crate) fn cursor_to_value(cursor: trailbase_qs::Cursor) -> trailbase_sqlite:
 
   return match cursor {
     QsCursor::Integer(i) => trailbase_sqlite::Value::Integer(i),
-    QsCursor::Blob(b) => trailbase_sqlite::Value::Blob(b.into()),
+    QsCursor::Blob(b) => trailbase_sqlite::Value::Blob(b),
   };
 }

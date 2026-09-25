@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::str::Utf8Error;
 
-use crate::value::{ValueRef};
+use crate::value_ref::ValueRef;
 
 /// Enum listing possible errors from [`FromSql`] trait.
 #[derive(Debug, thiserror::Error)]
@@ -204,10 +204,3 @@ where
     return <T::Owned>::column_result(value).map(Cow::Owned);
   }
 }
-
-// impl FromSql for Value {
-//   #[inline]
-//   fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-//     return value.try_into();
-//   }
-// }

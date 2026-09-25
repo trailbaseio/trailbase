@@ -412,7 +412,7 @@ fn to_sqlite_value(value: Value) -> trailbase_sqlite::Value {
     Value::Text(s) => trailbase_sqlite::Value::Text(s),
     Value::Real(f) => trailbase_sqlite::Value::Real(f),
     Value::Integer(i) => trailbase_sqlite::Value::Integer(i),
-    Value::Blob(b) => trailbase_sqlite::Value::Blob(b.into()),
+    Value::Blob(b) => trailbase_sqlite::Value::Blob(b),
   };
 }
 

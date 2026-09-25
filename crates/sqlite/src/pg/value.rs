@@ -85,7 +85,7 @@ impl<'a> postgres::types::FromSql<'a> for Value {
         let value = serde_json::Value::from_sql(ty, raw)?;
         Ok(Value::Text(serde_json::to_string(&value)?))
       }
-      "bytea" | "uuid" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?.into())),
+      "bytea" | "uuid" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?)),
       "tid" => {
         // NOTE: `tid`s in PG are a tuple like:
         //   struct Tid { pub block: u32, pub offset: u16, }

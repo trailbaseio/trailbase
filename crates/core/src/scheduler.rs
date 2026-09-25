@@ -509,7 +509,7 @@ async fn delete_pending_files_job(
     .await
   {
     Ok(rows) => rows
-      .iter()
+      .into_iter()
       .map(FileDeletionsDb::from_row)
       .collect::<Result<Vec<_>, _>>()?,
     Err(err) => {

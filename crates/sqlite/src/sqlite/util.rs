@@ -79,7 +79,10 @@ pub(crate) fn columns(stmt: &rusqlite::Statement<'_>) -> Vec<Column> {
     .into_iter()
     .map(|c| Column {
       name: c.name().into(),
-      decl_type: c.decl_type().and_then(|s| ValueType::from_str(s).ok()),
+      decl_type: c
+        .decl_type()
+        .and_then(|s| ValueType::from_str(s).ok())
+        .unwrap_or(ValueType::Undefined),
     })
     .collect();
 }

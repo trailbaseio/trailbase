@@ -1093,9 +1093,11 @@ mod tests {
 
       let select = format!("SELECT {col} FROM int_table WHERE {col} IS NOT NULL");
       conn
-        .read_query_row_get::<Value>(select.clone(), (), 0)
+        .read_query_row(select.clone(), ())
         .await
         .unwrap()
+        .unwrap()
+        .get_value(0)
         .unwrap();
 
       conn
@@ -1133,9 +1135,11 @@ mod tests {
 
       let select = format!("SELECT {col} FROM float_table WHERE {col} IS NOT NULL");
       conn
-        .read_query_row_get::<Value>(select.clone(), (), 0)
+        .read_query_row(select.clone(), ())
         .await
         .unwrap()
+        .unwrap()
+        .get_value(0)
         .unwrap();
 
       conn
@@ -1271,9 +1275,11 @@ mod tests {
       .unwrap();
 
     let tid: Value = conn
-      .read_query_row_get("SELECT ctid FROM t WHERE data = 'b'", (), 0)
+      .read_query_row("SELECT ctid FROM t WHERE data = 'b'", ())
       .await
       .unwrap()
+      .unwrap()
+      .consume_value(0)
       .unwrap();
 
     log::info!("TID {tid:?}");

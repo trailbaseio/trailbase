@@ -437,7 +437,7 @@ async fn subscription_acl_test() {
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
       [
         record_id.clone(),
-        Into::<trailbase_sqlite::Value>::into(user_x),
+        Into::<trailbase_sqlite::Value>::into(&user_x),
       ],
       0,
     )
@@ -540,10 +540,7 @@ async fn test_acl_selective_table_subs() {
     conn
       .execute(
         "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo')",
-        [
-          trailbase_sqlite::Value::Integer(record_id_raw),
-          Into::<trailbase_sqlite::Value>::into(user_x.into_bytes()),
-        ],
+        params!(record_id_raw, user_x.into_bytes()),
       )
       .await
       .unwrap();
@@ -612,10 +609,7 @@ async fn subscription_acl_change_owner() {
   let _rowid: i64 = conn
     .write_query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
-      [
-        trailbase_sqlite::Value::Integer(record_id),
-        Into::<trailbase_sqlite::Value>::into(user_x_id.into_bytes()),
-      ],
+      params!(record_id, user_x_id.into_bytes()),
       0,
     )
     .await

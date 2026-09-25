@@ -733,7 +733,7 @@ mod tests {
       (Cow::Borrowed(":__limit"), Value::Integer(100)),
       (
         Cow::Borrowed(":__user_id"),
-        Into::<Value>::into(uuid::Uuid::now_v7().into_bytes()),
+        Into::<Value>::into(uuid::Uuid::now_v7().as_bytes()),
       ),
     ];
 

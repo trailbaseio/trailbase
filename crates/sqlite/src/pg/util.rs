@@ -213,13 +213,13 @@ pub(crate) fn columns(row: &postgres::Row) -> Vec<Column> {
     .columns()
     .iter()
     .map(|c| Column {
-      name: c.name().to_string(),
+      name: c.name().into(),
       decl_type: match c.type_().name() {
-        "int8" | "int4" => Some(ValueType::Integer),
-        "float8" | "float4" => Some(ValueType::Real),
-        "text" | "varchar" => Some(ValueType::Text),
-        "bytea" => Some(ValueType::Blob),
-        _ => None,
+        "int8" | "int4" => ValueType::Integer,
+        "float8" | "float4" => ValueType::Real,
+        "text" | "varchar" => ValueType::Text,
+        "bytea" => ValueType::Blob,
+        _ => ValueType::Undefined,
       },
     })
     .collect();

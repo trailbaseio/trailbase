@@ -8,6 +8,7 @@ use crate::value::Value;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ValueType {
+  Undefined = 0,
   Integer = 1,
   Real,
   Text,
@@ -16,6 +17,7 @@ pub enum ValueType {
 }
 
 pub(crate) type Rc<T> = triomphe::Arc<T>;
+// pub(crate) type Rc<T> = std::sync::Arc<T>;
 
 impl FromStr for ValueType {
   type Err = ();
@@ -35,7 +37,7 @@ impl FromStr for ValueType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
   pub(crate) name: compact_str::CompactString,
-  pub(crate) decl_type: Option<ValueType>,
+  pub(crate) decl_type: ValueType,
 }
 
 // TODO: Vec<Column> and Vec<Value> could be smallvecs. Vec<Row> probably not worth.
@@ -79,7 +81,7 @@ impl Rows {
     return self
       .1
       .get(idx)
-      .and_then(|c| c.decl_type)
+      .map(|c| c.decl_type)
       .ok_or_else(|| Error::InvalidColumnType {
         idx,
         name: self.column_name(idx).unwrap_or("?").to_string(),
