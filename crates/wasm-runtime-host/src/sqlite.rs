@@ -1,7 +1,9 @@
 use bytes::Bytes;
 use http::Uri;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
+use normalize_path::NormalizePath;
 use sqlite3_parser::ast::{OneSelect, Select, Stmt};
+use std::path::PathBuf;
 use tokio::time::Duration;
 use trailbase_schema::parse::{Bump, parse_into_statement, parse_into_statements};
 use trailbase_schema::sqlite::unquote_expr;
@@ -42,14 +44,18 @@ pub(crate) async fn acquire_transaction_lock_with_timeout(
 }
 
 async fn handle_sqlite_execute(
+  db_path: &std::path::Path,
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
   return match Parsed::single_from_query(&request.query)? {
     Parsed::Attach { path, db_name } => {
-      validate_attach_statement(&path, &db_name)?;
+      let target = validate_attach_statement(db_path, &path, &db_name)?;
 
-      conn.attach(&path, &db_name).await.map_err(sqlite_err)?;
+      conn
+        .attach(&target.to_string_lossy(), &db_name)
+        .await
+        .map_err(sqlite_err)?;
       Ok(SqliteResponse::Execute { rows_affected: 0 })
     }
     Parsed::Detach { db_name } => {
@@ -97,6 +103,7 @@ async fn handle_sqlite_execute_batch(
 }
 
 async fn handle_sqlite_query(
+  db_path: &std::path::Path,
   conn: trailbase_sqlite::Connection,
   request: SqliteRequest,
 ) -> Result<SqliteResponse, String> {
@@ -141,11 +148,12 @@ async fn handle_sqlite_query(
     // NOTE: We need to handle connection mutations (attach, detach) specially, so that they
     // apply to all internal read and write connections.
     Parsed::Attach { path, db_name } => {
-      if let Err(err) = validate_attach_statement(&path, &db_name) {
-        return Ok(SqliteResponse::Error(err));
-      }
+      let target = validate_attach_statement(db_path, &path, &db_name)?;
 
-      conn.attach(&path, &db_name).await.map_err(sqlite_err)?;
+      conn
+        .attach(&target.to_string_lossy(), &db_name)
+        .await
+        .map_err(sqlite_err)?;
       Ok(SqliteResponse::Query { rows: vec![] })
     }
     Parsed::Detach { db_name } => {
@@ -159,6 +167,7 @@ async fn handle_sqlite_query(
 }
 
 pub(crate) async fn handle_sqlite_request(
+  db_path: &std::path::Path,
   conn: trailbase_sqlite::Connection,
   request: http::Request<wasmtime_wasi_http::WasiBody>,
 ) -> Result<http::Response<wasmtime_wasi_http::WasiBody>, wasmtime_wasi_http::Error> {
@@ -170,9 +179,9 @@ pub(crate) async fn handle_sqlite_request(
   };
 
   let response = match uri.path() {
-    "/execute" => handle_sqlite_execute(conn, sqlite_request).await,
+    "/execute" => handle_sqlite_execute(db_path, conn, sqlite_request).await,
     "/batch" => handle_sqlite_execute_batch(conn, sqlite_request).await,
-    "/query" => handle_sqlite_query(conn, sqlite_request).await,
+    "/query" => handle_sqlite_query(db_path, conn, sqlite_request).await,
     _ => {
       // NOTE: Should not happen and doesn't need to be handled by the client as
       // SqliteResponse::Error.
@@ -276,26 +285,43 @@ pub fn convert_values(row: &trailbase_sqlite::Row) -> Result<Vec<SqlValue>, Stri
 }
 
 /// Validates statements like `ATTACH DATABASE {path} AS {db_name}`.
-fn validate_attach_statement(path: &str, db_name: &str) -> Result<(), String> {
+fn validate_attach_statement(
+  db_path: &std::path::Path,
+  path_str: &str,
+  db_name: &str,
+) -> Result<PathBuf, String> {
   const INVALID_NAMES: &[&str] = &["main", "public", "logs", "session"];
 
   if INVALID_NAMES.contains(&db_name) || db_name.is_empty() {
     return Err(format!("invalid db name: {db_name}"));
   }
 
-  // QUESTION: Should we further validate or constraint the path, e.g. it's not
-  // /etc/shadow? At the moment WASM components are pretty trusted.
-  if path.is_empty() {
+  if path_str.is_empty() {
     return Err("path is empty".into());
   }
 
+  if path_str == ":memory:" {
+    return Ok(PathBuf::from(path_str));
+  }
+
   for name in INVALID_NAMES {
-    if path.contains(&format!("{name}.db")) {
-      return Err(format!("invalid path: {path}"));
+    if path_str.contains(&format!("{name}.db")) {
+      return Err(format!("invalid path: {path_str}"));
     }
   }
 
-  return Ok(());
+  let path = PathBuf::from(path_str);
+  if path.is_absolute() {
+    return Err(format!("absolute path: {path_str}"));
+  }
+
+  let root = db_path.canonicalize().map_err(|err| err.to_string())?;
+  let p = root.join(path).normalize();
+  if !p.starts_with(root) {
+    return Err(format!("escapes db path: {path_str}"));
+  }
+
+  return Ok(p);
 }
 
 #[inline]
@@ -363,14 +389,18 @@ fn is_readonly_select(select: &Select) -> bool {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
+  use std::path::PathBuf;
   use trailbase_sqlite::Connection;
+
+  use super::*;
 
   #[tokio::test]
   async fn handle_sqlite_execute_test() {
     let conn = Connection::open_in_memory().unwrap();
 
+    let db_path: PathBuf = ".".into();
     let _ = handle_sqlite_execute(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "CREATE TABLE test (id INTEGER PRIMARY KEY)".to_string(),
@@ -381,6 +411,7 @@ mod tests {
     .unwrap();
 
     let response = handle_sqlite_execute(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "INSERT INTO test (id) VALUES (?1), (?2)".to_string(),
@@ -398,6 +429,7 @@ mod tests {
 
     // Attach
     let _ = handle_sqlite_execute(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "ATTACH DATABASE ':memory:' AS foo".to_string(),
@@ -409,6 +441,7 @@ mod tests {
 
     // Detach
     let _ = handle_sqlite_execute(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "DETACH DATABASE foo".to_string(),
@@ -420,6 +453,7 @@ mod tests {
 
     // Error
     let err = handle_sqlite_execute(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "NOT A VALID QUERY :)".to_string(),
@@ -502,9 +536,11 @@ mod tests {
   #[tokio::test]
   async fn handle_sqlite_query_test() {
     let conn = Connection::open_in_memory().unwrap();
+    let db_path: PathBuf = ".".into();
 
     // Write.
     let _ = handle_sqlite_query(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "CREATE TABLE test (id INTEGER PRIMARY KEY);".to_string(),
@@ -516,6 +552,7 @@ mod tests {
 
     // Read
     let response = handle_sqlite_query(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "SELECT * FROM test".to_string(),
@@ -533,6 +570,7 @@ mod tests {
 
     // Attach
     let _ = handle_sqlite_query(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "ATTACH DATABASE ':memory:' AS foo".to_string(),
@@ -544,6 +582,7 @@ mod tests {
 
     // Detach
     let _ = handle_sqlite_query(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "DETACH DATABASE foo".to_string(),
@@ -555,6 +594,7 @@ mod tests {
 
     // Error
     let err = handle_sqlite_query(
+      &db_path,
       conn.clone(),
       SqliteRequest {
         query: "NOT A VALID QUERY :)".to_string(),
@@ -585,12 +625,14 @@ mod tests {
 
   #[test]
   fn validate_attach_statement_test() {
-    validate_attach_statement("foo.db", "foo").unwrap();
+    let db_path = PathBuf::from(".");
+    validate_attach_statement(&db_path, "foo.db", "foo").unwrap();
 
-    assert!(validate_attach_statement("", "foo").is_err());
-    assert!(validate_attach_statement("foo.db", "main").is_err());
-    assert!(validate_attach_statement("foo.db", "").is_err());
-    assert!(validate_attach_statement("../session.db", "foo").is_err());
-    assert!(validate_attach_statement("foo.db", "session").is_err());
+    assert!(validate_attach_statement(&db_path, "", "foo").is_err());
+    assert!(validate_attach_statement(&db_path, "foo.db", "main").is_err());
+    assert!(validate_attach_statement(&db_path, "foo.db", "").is_err());
+    assert!(validate_attach_statement(&db_path, "../foo.db", "foo").is_err());
+    assert!(validate_attach_statement(&db_path, "../session.db", "foo").is_err());
+    assert!(validate_attach_statement(&db_path, "foo.db", "session").is_err());
   }
 }

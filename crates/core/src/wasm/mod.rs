@@ -59,6 +59,7 @@ impl WasmState {
       data_dir.root().join("wasm"),
       conn,
       tokio_rt,
+      data_dir.data_path(),
       root_fs,
       Some(shared_kv_store),
       dev,

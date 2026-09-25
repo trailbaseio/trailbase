@@ -40,6 +40,7 @@ async fn main() {
   let shared_state = Arc::new(SharedState {
     conn: Some(conn),
     kv_store: Default::default(),
+    db_path: ".".into(),
     fs_root_path: None,
   });
 

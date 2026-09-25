@@ -64,6 +64,8 @@ pub use self::trailbase::database::sqlite::{Transaction, TxError, Value};
 pub struct SharedState {
   pub conn: Option<trailbase_sqlite::Connection>,
   pub kv_store: trailbase_wasi_keyvalue::Store,
+  // Path from where to attach databases, i.e.: <depot>/data/.
+  pub db_path: PathBuf,
   pub fs_root_path: Option<PathBuf>,
 }
 
@@ -131,6 +133,7 @@ impl WasiHttpHooks for Hooks {
 
     return match request.uri().host() {
       Some("__sqlite") => {
+        let db_path = self.shared.db_path.clone();
         let conn = self.shared.conn.clone();
 
         Box::new(async move {
@@ -141,7 +144,7 @@ impl WasiHttpHooks for Hooks {
             ));
           })?;
 
-          let res = crate::sqlite::handle_sqlite_request(conn, request).await?;
+          let res = crate::sqlite::handle_sqlite_request(&db_path, conn, request).await?;
           Ok((
             res.map(BodyExt::boxed_unsync),
             Box::new(async { Ok(()) }) as Box<dyn Future<Output = _> + Send>,
