@@ -11,6 +11,7 @@ use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
+use trailbase_schema::record::record_to_json_expand;
 
 use crate::auth::User;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};
@@ -21,19 +22,19 @@ use crate::records::subscribe::hook::{
 use crate::records::{RecordApi, RecordError};
 use crate::schema_metadata::ConnectionMetadata;
 
-impl crate::records::expand::Record for &mut Record {
-  fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)> {
-    // NOTE: This makes a copy since we need to keep both the IndexMap record alive for filtering
-    // and the serialized version for cheap copying.
-    return self
-      .get_index_mut(index)
-      .map(|(name, v)| (name.as_str(), v.clone()));
-  }
-
-  fn len(&self) -> usize {
-    return (self as &Record).len();
-  }
-}
+// impl crate::records::expand::Record for &mut Record {
+//   fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)> {
+//     // NOTE: This makes a copy since we need to keep both the IndexMap record alive for filtering
+//     // and the serialized version for cheap copying.
+//     return self
+//       .get_index_mut(index)
+//       .map(|(name, v)| (name.as_str(), v.clone()));
+//   }
+//
+//   fn len(&self) -> usize {
+//     return (self as &Record).len();
+//   }
+// }
 
 /// Composite id uniquely identifying a subscription.
 ///
@@ -477,15 +478,11 @@ fn broker(
       .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
       .collect();
 
-    return match crate::records::expand::record_to_json_expand(
-      &table_metadata.column_metadata,
-      &mut record,
-      None,
-    ) {
+    return match record_to_json_expand(&table_metadata.column_metadata, &record, None) {
       Ok(json_obj) => Arc::new(match action {
-        RecordAction::Insert => EventPayload::insert(&json_obj, record),
-        RecordAction::Update => EventPayload::update(&json_obj, record),
-        RecordAction::Delete => EventPayload::delete(&json_obj, record),
+        RecordAction::Insert => EventPayload::insert(json_obj, record),
+        RecordAction::Update => EventPayload::update(json_obj, record),
+        RecordAction::Delete => EventPayload::delete(json_obj, record),
       }),
       Err(err) => Arc::new(EventPayload::error(&EventError {
         status: super::event::EventErrorStatus::Serialization,

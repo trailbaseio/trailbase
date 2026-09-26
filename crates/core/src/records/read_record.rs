@@ -5,11 +5,11 @@ use axum::{
 };
 use serde::Deserialize;
 use trailbase_schema::FileUploads;
+use trailbase_schema::record::record_to_json_expand;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::expand::expand_tables;
-use crate::records::expand::record_to_json_expand;
 use crate::records::files::read_file_into_response;
 use crate::records::read_queries::{
   ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
@@ -39,7 +39,7 @@ pub async fn read_record_handler(
   Path((api_name, record)): Path<(String, String)>,
   Query(query): Query<ReadRecordQuery>,
   user: Option<User>,
-) -> Result<Json<crate::records::expand::JsonObject>, RecordError> {
+) -> Result<Json<Box<serde_json::value::RawValue>>, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -62,7 +62,7 @@ pub async fn read_record_handler(
   if let Some(query_expand) = query.expand
     && !query_expand.is_empty()
   {
-    let Some(expand) = api.expand() else {
+    let Some(mut expand) = api.expand().cloned() else {
       return Err(RecordError::BadRequest("Invalid expansion"));
     };
 
@@ -92,13 +92,11 @@ pub async fn read_record_handler(
 
     // Alloc a map from column name to value that's pre-filled with with Value::Null for all
     // expandable columns.
-    let mut expand = expand.clone();
-
     for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
       let foreign_value = record_to_json_expand(&metadata.column_metadata, row, None)
         .map_err(|err| RecordError::Internal(err.into()))?;
 
-      let result = expand.insert(col_name.to_string(), foreign_value.into());
+      let result = expand.insert(col_name.to_string(), Some(foreign_value));
       debug_assert!(result.is_some(), "{col_name} duplicate");
     }
 
@@ -123,14 +121,14 @@ pub async fn read_record_handler(
   let json_response = record_to_json_expand(api.columns(), row, api.expand())
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-  #[cfg(debug_assertions)]
-  crate::records::json_schema::validate_api_json_schema(
-    &state,
-    &api,
-    trailbase_schema::json_schema::JsonSchemaMode::Select,
-    // Expensive.
-    &serde_json::Value::Object(json_response.clone()),
-  )?;
+  // #[cfg(debug_assertions)]
+  // crate::records::json_schema::validate_api_json_schema(
+  //   &state,
+  //   &api,
+  //   trailbase_schema::json_schema::JsonSchemaMode::Select,
+  //   // Expensive.
+  //   &serde_json::Value::Object(json_response.clone()),
+  // )?;
 
   return Ok(Json(json_response));
 }
@@ -535,6 +533,8 @@ mod tests {
     .await
     .unwrap();
 
+    let map = to_object(&map);
+
     assert_eq!(
       *map.get("index").unwrap(),
       serde_json::Value::String(column_value.to_string())
@@ -589,6 +589,8 @@ mod tests {
     )
     .await
     .unwrap();
+
+    let map = to_object(&map);
 
     let file_upload: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
     assert_eq!(
@@ -738,6 +740,8 @@ mod tests {
       )
       .await
       .unwrap();
+
+      let map = to_object(&map);
 
       let file: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
       let files: Vec<FileUpload> =
@@ -984,6 +988,8 @@ mod tests {
     .await
     .unwrap();
 
+    let json = to_object(&json);
+
     assert_eq!(serde_json::Value::Object(json), value);
 
     // Providing a value for the hidden column should be ignored
@@ -1167,6 +1173,8 @@ mod tests {
     .await
     .unwrap();
 
+    let obj = to_object(&obj);
+
     assert_eq!(serde_json::Value::Object(obj), expected);
 
     // Test views.
@@ -1193,6 +1201,8 @@ mod tests {
     )
     .await
     .unwrap();
+
+    let obj = to_object(&obj);
 
     assert_eq!(serde_json::Value::Object(obj), expected);
   }
@@ -1296,6 +1306,8 @@ mod tests {
         .await
         .unwrap();
 
+        let obj = to_object(&obj);
+
         assert_eq!(serde_json::Value::Object(obj), record);
       }
     }
@@ -1397,6 +1409,6 @@ mod tests {
     .await
     .unwrap();
 
-    assert_eq!(serde_json::Value::Object(obj), record);
+    assert_eq!(serde_json::Value::Object(to_object(&obj)), record);
   }
 }

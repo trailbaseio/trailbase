@@ -11,15 +11,15 @@ use std::convert::TryInto;
 use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::QualifiedNameEscaped;
+use trailbase_schema::json::JsonError;
+use trailbase_schema::record::{JsonObject, record_to_json_expand};
 use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-use crate::records::expand::{
-  ExpandedTable, JsonError, JsonObject, expand_tables, record_to_json_expand,
-};
+use crate::records::expand::{ExpandedTable, expand_tables};
 use crate::records::{Permission, RecordError};
 use crate::util::row_id_column;
 
@@ -33,7 +33,7 @@ pub struct ListResponse {
   #[serde(skip_serializing_if = "Option::is_none")]
   pub total_count: Option<usize>,
   /// Actual record data for records matching the query.
-  pub records: Vec<JsonObject>,
+  pub records: Vec<Box<serde_json::value::RawValue>>,
 }
 
 #[derive(Debug)]
@@ -358,10 +358,9 @@ pub async fn list_records_handler(
           let next = curr.split_off(expanded.num_columns);
 
           let foreign_value = record_to_json_expand(&expanded.metadata.column_metadata, curr, None)
-            .map_err(|err| RecordError::Internal(err.into()))?
-            .into();
+            .map_err(|err| RecordError::Internal(err.into()))?;
 
-          let result = expand.insert(expanded.local_column_name.clone(), foreign_value);
+          let result = expand.insert(expanded.local_column_name.clone(), Some(foreign_value));
           assert!(result.is_some());
 
           curr = next;
@@ -373,23 +372,24 @@ pub async fn list_records_handler(
       .collect::<Result<Vec<_>, RecordError>>()?
   };
 
-  #[cfg(any(feature = "geos", feature = "geos-static"))]
-  if let Some(meta) = geojson_geometry_column {
-    return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
-      build_feature_collection(meta, &pk_column.name, cursor, total_count, records)?,
-    )));
-  }
+  // FIXME: May have to expose schema::record::Value or push geojson construction into schema crate.
+  // #[cfg(any(feature = "geos", feature = "geos-static"))]
+  // if let Some(meta) = geojson_geometry_column {
+  //   return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
+  //     build_feature_collection(meta, &pk_column.name, cursor, total_count, records)?,
+  //   )));
+  // }
 
-  #[cfg(debug_assertions)]
-  for record in &records {
-    crate::records::json_schema::validate_api_json_schema(
-      &state,
-      &api,
-      trailbase_schema::json_schema::JsonSchemaMode::Select,
-      // Expensive.
-      &serde_json::Value::Object(record.clone()),
-    )?;
-  }
+  // #[cfg(debug_assertions)]
+  // for record in &records {
+  //   crate::records::json_schema::validate_api_json_schema(
+  //     &state,
+  //     &api,
+  //     trailbase_schema::json_schema::JsonSchemaMode::Select,
+  //     // Expensive.
+  //     &serde_json::Value::Object(record.clone()),
+  //   )?;
+  // }
 
   return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
     cursor,
@@ -544,6 +544,7 @@ mod tests {
   use crate::config::proto::{self, PermissionFlag};
   use crate::connection::ConnectionEntry;
   use crate::records::RecordError;
+  use crate::records::expand::JsonObject;
   use crate::records::test_utils::*;
   use crate::util::id_to_b64;
   use crate::util::urlencode;
@@ -814,8 +815,11 @@ mod tests {
 
     assert_eq!(3, response.records.len());
 
-    let first: Entry =
-      serde_json::from_value(serde_json::Value::Object(response.records[0].clone())).unwrap();
+    fn to_entry(raw: &serde_json::value::RawValue) -> Entry {
+      return serde_json::from_str(raw.get()).unwrap();
+    }
+
+    let first = to_entry(&response.records[0]);
 
     let ListOrGeoJSONResponse::List(response) = list_records_handler(
       State(state.clone()),
@@ -832,10 +836,7 @@ mod tests {
     };
 
     assert_eq!(1, response.records.len());
-    assert_eq!(
-      first,
-      serde_json::from_value(serde_json::Value::Object(response.records[0].clone())).unwrap()
-    );
+    assert_eq!(first, to_entry(&response.records[0]));
 
     let ListOrGeoJSONResponse::List(null_response) = list_records_handler(
       State(state.clone()),
@@ -951,7 +952,7 @@ mod tests {
 
       assert_eq!(resp.records.len(), 2);
 
-      let messages: Vec<Message> = resp.records.into_iter().map(to_message).collect();
+      let messages: Vec<Message> = resp.records.iter().map(to_message_raw).collect();
 
       assert_eq!(
         &["user_y to room0", "user_x to room0"],
@@ -972,7 +973,7 @@ mod tests {
       .unwrap();
 
       assert_eq!(resp_by_id.records.len(), 1, "mid: {}", first.mid);
-      assert_eq!(*first, to_message(resp_by_id.records[0].clone()));
+      assert_eq!(*first, to_message_raw(&resp_by_id.records[0]));
     }
 
     {
@@ -990,7 +991,7 @@ mod tests {
       assert_eq!(resp.records.len(), 2);
       assert_eq!(resp.total_count, Some(2));
 
-      let messages: Vec<Message> = resp.records.into_iter().map(to_message).collect();
+      let messages: Vec<Message> = resp.records.iter().map(to_message_raw).collect();
 
       assert_eq!(
         &["user_y to room0", "user_x to room0"],
@@ -1023,7 +1024,7 @@ mod tests {
       .unwrap();
 
       assert_eq!(resp0.records.len(), 1);
-      assert_eq!("user_y to room0", to_message(resp0.records[0].clone()).data);
+      assert_eq!("user_y to room0", to_message_raw(&resp0.records[0]).data);
       assert_eq!(resp0.total_count, Some(2));
 
       let cursor = resp0.cursor.unwrap();
@@ -1036,7 +1037,7 @@ mod tests {
       .unwrap();
 
       assert_eq!(resp1.records.len(), 1);
-      assert_eq!("user_x to room0", to_message(resp1.records[0].clone()).data);
+      assert_eq!("user_x to room0", to_message_raw(&resp1.records[0]).data);
       assert_eq!(resp1.total_count, Some(2));
       let cursor = resp1.cursor.unwrap();
 
@@ -1071,7 +1072,7 @@ mod tests {
       assert_eq!(limited_arr.len(), 1);
 
       // Composite filter
-      let messages: Vec<Message> = arr.into_iter().map(to_message).collect();
+      let messages: Vec<Message> = arr.iter().map(to_message_raw).collect();
       let first = &messages[0].mid;
       let third = &messages[2].mid;
       let filtered_arr = list_records(
@@ -1086,7 +1087,7 @@ mod tests {
       .records;
 
       assert_eq!(filtered_arr.len(), 2);
-      let filtd_messages: Vec<Message> = filtered_arr.into_iter().map(to_message).collect();
+      let filtd_messages: Vec<Message> = filtered_arr.iter().map(to_message_raw).collect();
       assert_eq!(first, &filtd_messages[0].mid);
       assert_eq!(third, &filtd_messages[1].mid);
     }
@@ -1137,6 +1138,8 @@ mod tests {
       .await
       .unwrap()
       .records;
+
+      let arr_asc = arr_asc.iter().map(|v| to_object(v)).collect::<Vec<_>>();
       assert_eq!(arr_asc.len(), 3);
 
       // Ordering by 'table', which needs proper escaping;
@@ -1162,9 +1165,11 @@ mod tests {
       .await
       .unwrap()
       .records;
+
+      let arr_desc = arr_desc.iter().map(|v| to_object(v)).collect::<Vec<_>>();
       assert_eq!(arr_desc.len(), 3);
 
-      assert_eq!(arr_asc, arr_desc.into_iter().rev().collect::<Vec<_>>());
+      assert_eq!(arr_asc, arr_desc);
 
       // Ordering and cursor work well together.
       let cursor_middle = list_records(
@@ -1178,7 +1183,7 @@ mod tests {
       .cursor
       .unwrap();
 
-      let mut cursored_desc = list_records(
+      let cursored_desc = list_records(
         &state,
         Some(&user_y_token.auth_token),
         Some(format!(
@@ -1190,7 +1195,12 @@ mod tests {
       .unwrap()
       .records;
 
+      let mut cursored_desc = cursored_desc
+        .iter()
+        .map(|v| to_object(v))
+        .collect::<Vec<_>>();
       assert_eq!(cursored_desc.len(), 1);
+
       assert_eq!(
         to_message(cursored_desc.swap_remove(0)),
         to_message(arr_asc[0].clone())

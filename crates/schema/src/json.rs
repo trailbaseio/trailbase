@@ -7,27 +7,33 @@
 /// The flat representation requires a column type and can only be used in the context of
 /// STRICT TABLES.
 use base64::prelude::*;
-use thiserror::Error;
 use trailbase_sqlite::Value as SqliteValue;
 
 use crate::sqlite::ColumnDataType;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum JsonError {
-  #[error("Float not finite")]
+  #[error("InfiniteFloat")]
   Finite,
-  #[error("Value not found")]
+  #[error("ValueNotFound")]
   ValueNotFound,
-  #[error("Unsupported type")]
+  #[error("UnsupportedType")]
   NotSupported,
+  #[error("ColumnMismatch")]
+  ColumnMismatch,
   #[error("Decoding")]
   Decode(#[from] base64::DecodeError),
-  #[error("Unexpected type: {0}, expected {1:?}")]
+  #[error("UnexpectedT: {0}, expected {1:?}")]
   UnexpectedType(&'static str, ColumnDataType),
-  #[error("Parse int error: {0}")]
+  #[error("ParseInt: {0}")]
   ParseInt(#[from] std::num::ParseIntError),
-  #[error("Parse float error: {0}")]
+  #[error("ParseFloat: {0}")]
   ParseFloat(#[from] std::num::ParseFloatError),
+  #[error("Serde: {0}")]
+  Serde(#[from] serde_json::Error),
+  #[cfg(feature = "geos")]
+  #[error("Geos: {0}")]
+  Geos(#[from] geos::Error),
 }
 
 /// Convert a SQLite value to basic JSON types: String, Number, Null.
@@ -36,6 +42,7 @@ pub enum JsonError {
 /// target column type) is needed for unambiguous reverse conversion.
 ///
 /// We use this for Record APIs.
+#[inline]
 pub fn value_to_flat_json(value: SqliteValue) -> Result<serde_json::Value, JsonError> {
   return match value {
     SqliteValue::Null => Ok(serde_json::Value::Null),
@@ -51,7 +58,8 @@ pub fn value_to_flat_json(value: SqliteValue) -> Result<serde_json::Value, JsonE
   };
 }
 
-pub fn value_to_flat_json_mut(value: &mut SqliteValue) -> Result<serde_json::Value, JsonError> {
+#[inline]
+pub fn value_ref_to_flat_json(value: &SqliteValue) -> Result<serde_json::Value, JsonError> {
   return match value {
     SqliteValue::Null => Ok(serde_json::Value::Null),
     SqliteValue::Real(real) => match serde_json::Number::from_f64(*real) {
@@ -62,7 +70,7 @@ pub fn value_to_flat_json_mut(value: &mut SqliteValue) -> Result<serde_json::Val
       *integer,
     ))),
     SqliteValue::Blob(blob) => Ok(serde_json::Value::String(BASE64_URL_SAFE.encode(blob))),
-    SqliteValue::Text(text) => Ok(serde_json::Value::String(std::mem::take(text))),
+    SqliteValue::Text(text) => Ok(serde_json::Value::String(text.clone())),
   };
 }
 

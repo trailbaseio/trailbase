@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use trailbase_schema::record::JsonObject;
 use trailbase_sqlite::params;
 
 use crate::AppState;
@@ -58,12 +59,24 @@ pub struct Message {
   pub data: String,
 }
 
-pub fn to_message(obj: crate::records::expand::JsonObject) -> Message {
+pub fn to_message(obj: JsonObject) -> Message {
   let mut keys: Vec<&str> = obj.keys().map(|s| s.as_str()).collect();
   keys.sort();
   assert_eq!(keys, ["data", "mid", "room", "table"], "Got: {keys:?}");
 
   return serde_json::from_value::<Message>(serde_json::Value::Object(obj)).unwrap();
+}
+
+pub fn to_object(raw: &serde_json::value::RawValue) -> JsonObject {
+  let value = serde_json::from_str(raw.get()).unwrap();
+  if let serde_json::Value::Object(obj) = value {
+    return obj;
+  }
+  panic!("not an obj: {value:?}");
+}
+
+pub fn to_message_raw(raw: &Box<serde_json::value::RawValue>) -> Message {
+  return to_message(to_object(&raw));
 }
 
 pub async fn create_chat_message_app_tables(state: &AppState) -> Result<(), anyhow::Error> {

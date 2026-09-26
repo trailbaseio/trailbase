@@ -775,6 +775,8 @@ mod tests {
       .await
       .unwrap();
 
+      let value = to_object(&value);
+
       assert_eq!("test", value.get("data").unwrap());
       assert!(value.get("new").is_none());
     }
@@ -837,6 +839,8 @@ mod tests {
       )
       .await
       .unwrap();
+
+      let value = to_object(&value);
 
       assert_eq!("test", value.get("data").unwrap());
       assert_eq!(

@@ -225,7 +225,7 @@ fn parse_geometries(record: &[u8], filter: &str) -> Option<(geos::Geometry, geos
 
 pub(crate) fn apply_filter_recursively_to_record(
   filter: &ValueOrComposite,
-  record: &indexmap::IndexMap<String, trailbase_sqlite::Value>,
+  record: &Vec<(String, trailbase_sqlite::Value)>,
 ) -> bool {
   return match filter {
     ValueOrComposite::Value(col_op_value) => {
@@ -236,8 +236,9 @@ pub(crate) fn apply_filter_recursively_to_record(
       } = col_op_value;
 
       record
-        .get(column.as_str())
-        .is_some_and(|record_value| compare_values(op, record_value, filter_value))
+        .iter()
+        .find(|(k, _v)| k == column)
+        .is_some_and(|(_k, record_value)| compare_values(op, record_value, filter_value))
     }
     ValueOrComposite::Composite(combiner, expressions) => match combiner {
       Combiner::And => {
@@ -315,10 +316,10 @@ mod tests {
 
   #[test]
   fn test_basic_value_filter() {
-    let record: IndexMap<String, Value> = IndexMap::from([(
+    let record = vec![(
       "a".to_string(),
       Value::Text("a value".to_string().to_string()),
-    )]);
+    )];
 
     assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
@@ -359,10 +360,10 @@ mod tests {
 
   #[test]
   fn test_basic_composite_filter() {
-    let record: IndexMap<String, Value> = IndexMap::from([
+    let record = vec![
       ("a".to_string(), Value::Integer(5)),
       ("b".to_string(), Value::Integer(-5)),
-    ]);
+    ];
 
     assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Composite(
