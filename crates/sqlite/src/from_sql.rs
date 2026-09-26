@@ -36,6 +36,26 @@ pub enum FromSqlError {
   Other(Box<dyn Error + Send + Sync + 'static>),
 }
 
+impl From<rusqlite::types::FromSqlError> for FromSqlError {
+  fn from(value: rusqlite::types::FromSqlError) -> Self {
+    use rusqlite::types::FromSqlError as RFromSqlError;
+    return match value {
+      RFromSqlError::InvalidType => FromSqlError::InvalidType,
+      RFromSqlError::OutOfRange(i) => FromSqlError::OutOfRange(i),
+      RFromSqlError::Utf8Error(err) => FromSqlError::Utf8Error(err),
+      RFromSqlError::InvalidBlobSize {
+        expected_size,
+        blob_size,
+      } => FromSqlError::InvalidBlobSize {
+        expected_size,
+        blob_size,
+      },
+      RFromSqlError::Other(err) => FromSqlError::Other(err),
+      err => FromSqlError::Other(err.into()),
+    };
+  }
+}
+
 /// Result type for implementers of the [`FromSql`] trait.
 pub type FromSqlResult<T> = Result<T, FromSqlError>;
 

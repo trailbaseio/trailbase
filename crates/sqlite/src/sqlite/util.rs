@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use crate::database::Database;
 use crate::error::Error;
-use crate::from_sql::{FromSql, FromSqlError};
+use crate::from_sql::FromSql;
 use crate::rows::{ColVec, Column, Rc, Row, Rows, ValueType};
 use crate::value::Value;
 
@@ -23,23 +23,7 @@ where
 
 #[inline]
 pub fn get_value<T: FromSql>(row: &rusqlite::Row<'_>, idx: usize) -> Result<T, Error> {
-  let value = row.get_ref(idx)?;
-
-  return FromSql::column_result(value.into()).map_err(|err| {
-    use rusqlite::Error as RError;
-
-    return Error::Rusqlite(match err {
-      FromSqlError::InvalidType => {
-        RError::InvalidColumnType(idx, "<unknown>".into(), value.data_type())
-      }
-      FromSqlError::OutOfRange(i) => RError::IntegralValueOutOfRange(idx, i),
-      FromSqlError::Utf8Error(err) => RError::Utf8Error(idx, err),
-      FromSqlError::Other(err) => RError::FromSqlConversionFailure(idx, value.data_type(), err),
-      FromSqlError::InvalidBlobSize { .. } => {
-        RError::FromSqlConversionFailure(idx, value.data_type(), Box::new(err))
-      }
-    });
-  });
+  return Ok(FromSql::column_result(row.get_ref(idx)?.into())?);
 }
 
 pub fn from_rows(mut rows: rusqlite::Rows) -> Result<Rows, Error> {
@@ -69,7 +53,14 @@ pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<ColVec<Column>>) -> Result<
 
   // We have to access by index here, since names can be duplicate.
   let values = (0..cols.len())
-    .map(|idx| row.get(idx))
+    .map(|idx| -> Result<Value, Error> {
+      return row
+        .get_ref(idx)?
+        .try_into()
+        .map_err(|err: rusqlite::types::FromSqlError| -> Error {
+          return Error::FromSql(err.into());
+        });
+    })
     .collect::<Result<ColVec<_>, _>>()?;
 
   return Ok(Row {
@@ -82,13 +73,12 @@ pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<ColVec<Column>>) -> Result<
 pub(crate) fn columns(stmt: &rusqlite::Statement<'_>) -> ColVec<Column> {
   return stmt
     .columns()
-    .into_iter()
+    .iter()
     .map(|c| Column {
       name: c.name().into(),
-      decl_type: c
-        .decl_type()
-        .and_then(|s| ValueType::from_str(s).ok())
-        .unwrap_or(ValueType::Undefined),
+      decl_type: c.decl_type().map_or(ValueType::Undefined, |s| {
+        ValueType::from_str(s).unwrap_or(ValueType::Undefined)
+      }),
     })
     .collect();
 }

@@ -293,7 +293,13 @@ pub async fn list_records_handler(
   let total_count = if count == Some(true) {
     // Total count is in the final column for VIEWS and the penultimate for TABLES.
     let count_index = last_row.len() - if is_table { 2 } else { 1 };
-    assert_eq!(rows.column_name(count_index), Some("_total_count_"));
+    debug_assert_eq!(
+      rows
+        .column(count_index)
+        .map(|c| c.name.as_str())
+        .unwrap_or_default(),
+      "_total_count_"
+    );
 
     let value = &last_row[count_index];
     let Value::Integer(count) = value else {

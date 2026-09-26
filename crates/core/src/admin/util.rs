@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 use trailbase_schema::json::JsonError;
 use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType};
 use trailbase_sqlite::{Row, Rows, ValueType};
@@ -8,9 +9,17 @@ use trailbase_sqlvalue::SqlValue;
 /// WARN: This is lossy and whenever possible we should rely on parsed "CREATE TABLE" statement for
 /// the respective column.
 pub(crate) fn rows_to_columns(rows: &Rows) -> Vec<Column> {
+  let fallback_col: LazyLock<trailbase_sqlite::Column> =
+    LazyLock::new(|| trailbase_sqlite::Column {
+      name: "??".into(),
+      decl_type: Default::default(),
+    });
+
   return (0..rows.column_count())
     .map(|i| {
-      let data_type = match rows.column_type(i).unwrap_or(ValueType::Undefined) {
+      let trailbase_sqlite::Column { name, decl_type } = rows.column(i).unwrap_or(&fallback_col);
+
+      let data_type = match *decl_type {
         ValueType::Null | ValueType::Undefined => ColumnDataType::Any,
         ValueType::Real => ColumnDataType::Real,
         ValueType::Text => ColumnDataType::Text,
@@ -19,7 +28,7 @@ pub(crate) fn rows_to_columns(rows: &Rows) -> Vec<Column> {
       };
 
       return Column {
-        name: rows.column_name(i).unwrap_or("<missing>").to_string(),
+        name: name.to_string(),
         type_name: "".to_string(),
         data_type,
         affinity_type: ColumnAffinityType::from_data_type(data_type),
