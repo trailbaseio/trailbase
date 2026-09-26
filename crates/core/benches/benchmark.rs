@@ -1,12 +1,12 @@
 #![allow(clippy::needless_return)]
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+// #[global_allocator]
+// static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use alloc_tracker::{Allocator, Session};
 
-// #[global_allocator]
-// static ALLOCATOR: Allocator<std::alloc::System> = Allocator::system();
+#[global_allocator]
+static GLOBAL: Allocator<std::alloc::System> = Allocator::system();
 
 use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 
@@ -17,6 +17,7 @@ use base64::prelude::*;
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use hyper::StatusCode;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
@@ -217,7 +218,13 @@ async fn check_health(router: &mut axum::Router<()>) -> Result<(), anyhow::Error
   return Ok(());
 }
 
-fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
+fn create_message_benchmark(
+  b: &mut Bencher,
+  session: Arc<Session>,
+  op_name: &'static str,
+  runtime: &tokio::runtime::Runtime,
+  setup: &Setup,
+) {
   let authorization = format!("Bearer {}", setup.user_x_token);
   let body = {
     let request = serde_json::json!({
@@ -243,10 +250,14 @@ fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, 
     let start = Instant::now();
 
     let tasks = (0..iters).map(|_i| {
+      let session = session.clone();
       let request = request.clone();
       let mut router = setup.app.main_router.1.clone();
 
       return runtime.spawn(async move {
+        let operation = session.operation(op_name);
+        let _span = operation.measure_process().iterations(1);
+
         let response = router.call(request()).await.unwrap();
         assert!(response.status().is_success());
       });
@@ -258,7 +269,12 @@ fn create_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, 
   });
 }
 
-fn list_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
+fn list_message_benchmark(
+  b: &mut Bencher,
+  session: Arc<Session>,
+  runtime: &tokio::runtime::Runtime,
+  setup: &Setup,
+) {
   let authorization = format!("Bearer {}", setup.user_x_token);
 
   let request = move || {
@@ -275,10 +291,14 @@ fn list_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, se
     let start = Instant::now();
 
     let tasks = (0..iters).map(|_i| {
+      let session = session.clone();
       let request = request.clone();
       let mut router = setup.app.main_router.1.clone();
 
       return runtime.spawn(async move {
+        let operation = session.operation("list-messages-parallel");
+        let _span = operation.measure_process().iterations(1);
+
         let response = router.call(request()).await.unwrap();
         assert!(response.status().is_success());
       });
@@ -290,7 +310,12 @@ fn list_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, se
   });
 }
 
-fn subscribe_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtime, setup: &Setup) {
+fn subscribe_message_benchmark(
+  b: &mut Bencher,
+  session: Arc<Session>,
+  runtime: &tokio::runtime::Runtime,
+  setup: &Setup,
+) {
   let authorization = format!("Bearer {}", setup.user_x_token);
   let create_request_body = {
     let request = serde_json::json!({
@@ -332,11 +357,15 @@ fn subscribe_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtim
     let start = Instant::now();
 
     let tasks = (0..iters).map(|_i| {
+      let session = session.clone();
       let create_request = create_request.clone();
       let subscribe_request = subscribe_request.clone();
       let mut router = setup.app.main_router.1.clone();
 
       return runtime.spawn(async move {
+        let operation = session.operation("subscribe-messages-parallel");
+        let _span = operation.measure_process().iterations(1);
+
         let subscriptions: Vec<_> = {
           let mut subscriptions = vec![];
           for _ in 0..N_SUBSCRIBERS {
@@ -378,7 +407,7 @@ fn subscribe_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtim
 }
 
 fn benchmark_group(c: &mut Criterion) {
-  // let session = Session::new();
+  let session = Arc::new(Session::new());
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .worker_threads(8)
@@ -412,11 +441,23 @@ fn benchmark_group(c: &mut Criterion) {
         .build()
         .unwrap();
 
-      create_message_benchmark(b, &current_thread_runtime, &setup)
+      create_message_benchmark(
+        b,
+        session.clone(),
+        "create-messages-single",
+        &current_thread_runtime,
+        &setup,
+      )
     });
 
     group.bench_function("parallel", |b| {
-      create_message_benchmark(b, &runtime, &setup)
+      create_message_benchmark(
+        b,
+        session.clone(),
+        "create-messages-parallel",
+        &runtime,
+        &setup,
+      )
     });
   }
 
@@ -426,7 +467,9 @@ fn benchmark_group(c: &mut Criterion) {
     group.sample_size(100);
     group.throughput(Throughput::Elements(1));
 
-    group.bench_function("parallel", |b| list_message_benchmark(b, &runtime, &setup));
+    group.bench_function("parallel", |b| {
+      list_message_benchmark(b, session.clone(), &runtime, &setup)
+    });
   }
 
   {
@@ -436,9 +479,13 @@ fn benchmark_group(c: &mut Criterion) {
     group.throughput(Throughput::Elements(1));
 
     group.bench_function("parallel", |b| {
-      subscribe_message_benchmark(b, &runtime, &setup)
+      subscribe_message_benchmark(b, session.clone(), &runtime, &setup)
     });
   }
+
+  let _report = session.to_report();
+  // eprintln!("Report:\n{}", session.to_report().to_string());
+  // report.write_to_directory(".");
 }
 
 criterion_group!(benches, benchmark_group);
