@@ -93,14 +93,14 @@ pub async fn read_record_handler(
     let mut expand: Vec<(compact_str::CompactString, _)> =
       Vec::with_capacity(expanded_tables.len());
     for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-      let foreign_value = record_to_json_expand(&metadata.column_metadata, &[], row, None)
+      let foreign_value = record_to_json_expand(&metadata.column_metadata, &[], &row, None)
         .map_err(|err| RecordError::Internal(err.into()))?;
 
       expand.push((compact_str::CompactString::from(col_name), foreign_value));
     }
 
     return Ok(Json(
-      record_to_json_expand(api.columns(), config_expand, root, Some(expand))
+      record_to_json_expand(api.columns(), config_expand, &root, Some(expand))
         .map_err(|err| RecordError::Internal(err.into()))?,
     ));
   }
@@ -117,7 +117,7 @@ pub async fn read_record_handler(
     return Err(RecordError::RecordNotFound);
   };
 
-  let json_response = record_to_json_expand(api.columns(), api.expand(), row, None)
+  let json_response = record_to_json_expand(api.columns(), api.expand(), &row, None)
     .map_err(|err| RecordError::Internal(err.into()))?;
 
   // #[cfg(debug_assertions)]

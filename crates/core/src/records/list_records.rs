@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::QualifiedNameEscaped;
 use trailbase_schema::json::JsonError;
-use trailbase_schema::record::{JsonObject, record_to_json_expand};
+use trailbase_schema::record::{JsonObject, record_to_json_expand, record_to_json_expand_ref};
 use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
@@ -276,7 +276,7 @@ pub async fn list_records_handler(
   .map_err(|err| RecordError::Internal(err.into()))?;
 
   // Execute the query.
-  let rows = conn.read_query_rows(list_query, params).await?;
+  let mut rows = conn.read_query_rows(list_query, params).await?;
 
   let Some(last_row) = rows.last() else {
     // Query result is empty:
@@ -334,14 +334,14 @@ pub async fn list_records_handler(
 
   let records = if expanded_tables.is_empty() {
     rows
-      .into_iter()
-      .map(|row| record_to_json_expand(api.columns(), config_expand, row, None))
+      .iter()
+      .map(|row| record_to_json_expand_ref(api.columns(), config_expand, row, None))
       .collect::<Result<Vec<_>, JsonError>>()
       .map_err(|err| RecordError::Internal(err.into()))?
   } else {
     rows
-      .into_iter()
-      .map(|mut row| {
+      .iter_mut()
+      .map(|row| {
         let mut curr = row.split_off(api.columns().len());
 
         let mut expand: Vec<(compact_str::CompactString, _)> =
@@ -350,7 +350,7 @@ pub async fn list_records_handler(
           let next = curr.split_off(expanded.num_columns);
 
           let foreign_value =
-            record_to_json_expand(&expanded.metadata.column_metadata, &[], curr, None)
+            record_to_json_expand(&expanded.metadata.column_metadata, &[], &curr, None)
               .map_err(|err| RecordError::Internal(err.into()))?;
 
           expand.push((
@@ -361,19 +361,25 @@ pub async fn list_records_handler(
           curr = next;
         }
 
-        return record_to_json_expand(api.columns(), config_expand, row, Some(expand))
+        return record_to_json_expand_ref(api.columns(), config_expand, row, Some(expand))
           .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
   };
 
-  // FIXME: May have to expose schema::record::Value or push geojson construction into schema crate.
-  // #[cfg(any(feature = "geos", feature = "geos-static"))]
-  // if let Some(meta) = geojson_geometry_column {
-  //   return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
-  //     build_feature_collection(meta, &pk_column.name, cursor, total_count, records)?,
-  //   )));
-  // }
+  #[cfg(any(feature = "geos", feature = "geos-static"))]
+  if let Some(meta) = geojson_geometry_column {
+    return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
+      trailbase_schema::record::build_feature_collection(
+        meta,
+        &pk_column.name,
+        cursor,
+        total_count,
+        records,
+      )
+      .map_err(|err| RecordError::Internal(err.into()))?,
+    )));
+  }
 
   // #[cfg(debug_assertions)]
   // for record in &records {
@@ -389,69 +395,75 @@ pub async fn list_records_handler(
   return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
     cursor,
     total_count,
-    records,
+    records: records
+      .into_iter()
+      .map(|obj| {
+        serde_json::value::to_raw_value(&trailbase_schema::record::Value::Object(obj))
+          .expect("well-formed")
+      })
+      .collect(),
   })));
 }
 
-#[cfg(any(feature = "geos", feature = "geos-static"))]
-fn build_feature_collection(
-  meta: &trailbase_schema::metadata::ColumnMetadata,
-  pk_column_name: &str,
-  cursor: Option<String>,
-  total_count: Option<usize>,
-  records: Vec<JsonObject>,
-) -> Result<geos::geojson::FeatureCollection, RecordError> {
-  type JsonMap = serde_json::Map<String, serde_json::Value>;
-  let foreign_members = match (cursor, total_count) {
-    (Some(c), None) => Some(JsonMap::from_iter([(
-      "cursor".to_string(),
-      serde_json::Value::String(c),
-    )])),
-    (None, Some(tc)) => Some(JsonMap::from_iter([(
-      "total_count".to_string(),
-      serde_json::Value::Number(tc.into()),
-    )])),
-    (Some(c), Some(tc)) => Some(JsonMap::from_iter([
-      ("cursor".to_string(), serde_json::Value::String(c)),
-      (
-        "total_count".to_string(),
-        serde_json::Value::Number(tc.into()),
-      ),
-    ])),
-    (None, None) => None,
-  };
-
-  let features = records
-    .into_iter()
-    .map(|mut obj| -> Result<geos::geojson::Feature, RecordError> {
-      let id = obj.get(pk_column_name).and_then(|id| match id {
-        serde_json::Value::Number(n) => Some(geos::geojson::feature::Id::Number(n.clone())),
-        serde_json::Value::String(s) => Some(geos::geojson::feature::Id::String(s.clone())),
-        _ => None,
-      });
-      debug_assert!(id.is_some());
-
-      // NOTE: Geometry may be NULL for nullable columns.
-      let geometry = obj.remove(&meta.column.name).and_then(|g| {
-        return geos::geojson::Geometry::from_json_value(g).ok();
-      });
-
-      return Ok(geos::geojson::Feature {
-        id,
-        geometry,
-        properties: Some(obj),
-        bbox: None,
-        foreign_members: None,
-      });
-    })
-    .collect::<Result<_, _>>()?;
-
-  return Ok(geos::geojson::FeatureCollection {
-    bbox: None,
-    features,
-    foreign_members,
-  });
-}
+// #[cfg(any(feature = "geos", feature = "geos-static"))]
+// fn build_feature_collection(
+//   meta: &trailbase_schema::metadata::ColumnMetadata,
+//   pk_column_name: &str,
+//   cursor: Option<String>,
+//   total_count: Option<usize>,
+//   records: Vec<JsonObject>,
+// ) -> Result<geos::geojson::FeatureCollection, RecordError> {
+//   type JsonMap = serde_json::Map<String, serde_json::Value>;
+//   let foreign_members = match (cursor, total_count) {
+//     (Some(c), None) => Some(JsonMap::from_iter([(
+//       "cursor".to_string(),
+//       serde_json::Value::String(c),
+//     )])),
+//     (None, Some(tc)) => Some(JsonMap::from_iter([(
+//       "total_count".to_string(),
+//       serde_json::Value::Number(tc.into()),
+//     )])),
+//     (Some(c), Some(tc)) => Some(JsonMap::from_iter([
+//       ("cursor".to_string(), serde_json::Value::String(c)),
+//       (
+//         "total_count".to_string(),
+//         serde_json::Value::Number(tc.into()),
+//       ),
+//     ])),
+//     (None, None) => None,
+//   };
+//
+//   let features = records
+//     .into_iter()
+//     .map(|mut obj| -> Result<geos::geojson::Feature, RecordError> {
+//       let id = obj.get(pk_column_name).and_then(|id| match id {
+//         serde_json::Value::Number(n) => Some(geos::geojson::feature::Id::Number(n.clone())),
+//         serde_json::Value::String(s) => Some(geos::geojson::feature::Id::String(s.clone())),
+//         _ => None,
+//       });
+//       debug_assert!(id.is_some());
+//
+//       // NOTE: Geometry may be NULL for nullable columns.
+//       let geometry = obj.remove(&meta.column.name).and_then(|g| {
+//         return geos::geojson::Geometry::from_json_value(g).ok();
+//       });
+//
+//       return Ok(geos::geojson::Feature {
+//         id,
+//         geometry,
+//         properties: Some(obj),
+//         bbox: None,
+//         foreign_members: None,
+//       });
+//     })
+//     .collect::<Result<_, _>>()?;
+//
+//   return Ok(geos::geojson::FeatureCollection {
+//     bbox: None,
+//     features,
+//     foreign_members,
+//   });
+// }
 
 fn fmt_order(col: &str, order: OrderPrecedent) -> String {
   return format!(

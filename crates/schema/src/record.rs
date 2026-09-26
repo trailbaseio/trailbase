@@ -1,10 +1,8 @@
 use base64::prelude::*;
-use std::collections::HashMap;
 use trailbase_sqlite::Value as SqliteValue;
 
 use crate::json::{JsonError, value_ref_to_flat_json};
 use crate::metadata::{ColumnMetadata, JsonColumnMetadata};
-use crate::sqlite::ColumnOption;
 
 pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
@@ -27,6 +25,38 @@ pub enum Value<'ctx> {
   },
   // Nested unparsed json.
   Raw(Box<serde_json::value::RawValue>),
+}
+
+impl<'ctx> From<Value<'ctx>> for serde_json::Value {
+  fn from(value: Value<'ctx>) -> Self {
+    use serde_json::Value as JValue;
+    return match value {
+      Value::Null => JValue::Null,
+      Value::Bool(b) => JValue::Bool(b),
+      Value::Number(n) => JValue::Number(n),
+      Value::String(s) => JValue::String(s.to_string()),
+      Value::Array(a) => JValue::Array(a.into_iter().map(|v| v.into()).collect()),
+      Value::Object(o) => JValue::Object(
+        o.into_iter()
+          .map(|(k, v)| (k.to_string(), v.into()))
+          .collect(),
+      ),
+      Value::ObjectOwned(o) => JValue::Object(o),
+      Value::ForeignKey { id, data } => {
+        if let Some(data) = data {
+          serde_json::json!({
+            "id": id,
+            "data": serde_json::from_str::<JValue>(data.get()).expect("well-formed"),
+          })
+        } else {
+          serde_json::json!({
+            "id": id,
+          })
+        }
+      }
+      Value::Raw(raw) => serde_json::from_str(raw.get()).expect("well-formed"),
+    };
+  }
 }
 
 impl serde::ser::Serialize for Value<'_> {
@@ -88,7 +118,7 @@ impl Record for trailbase_sqlite::Row {
   }
 }
 
-impl Record for &Vec<(String, trailbase_sqlite::Value)> {
+impl Record for Vec<(String, trailbase_sqlite::Value)> {
   #[inline]
   fn len(&self) -> usize {
     return Vec::len(self);
@@ -104,15 +134,32 @@ impl Record for &Vec<(String, trailbase_sqlite::Value)> {
 pub fn record_to_json_expand(
   column_metadata: &[ColumnMetadata],
   expand_config: &[compact_str::CompactString],
-  record: impl Record,
-  mut expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
+  record: &impl Record,
+  expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
 ) -> Result<Box<serde_json::value::RawValue>, JsonError> {
+  return Ok(
+    serde_json::value::to_raw_value(&Value::Object(record_to_json_expand_ref(
+      column_metadata,
+      expand_config,
+      record,
+      expand,
+    )?))
+    .expect("from well-formed value"),
+  );
+}
+
+pub fn record_to_json_expand_ref<'a>(
+  column_metadata: &'a [ColumnMetadata],
+  expand_config: &'a [compact_str::CompactString],
+  record: &'a impl Record,
+  mut expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
+) -> Result<Vec<(&'a str, Value<'a>)>, JsonError> {
   // Record may contain extra columns like trailing "_rowid_" or filtered columns starting with "_".
   if column_metadata.len() > record.len() {
     return Err(JsonError::ColumnMismatch);
   }
 
-  let obj: Vec<(&str, Value)> = column_metadata
+  return column_metadata
     .iter()
     .enumerate()
     .filter(|(_i, meta)| !meta.column.name.starts_with("_"))
@@ -142,18 +189,12 @@ pub fn record_to_json_expand(
           ));
         };
 
-        if let Some(pos) = expand.iter().position(|(c, _)| *c == column.name) {
-          return Ok((
-            column.name.as_str(),
-            Value::ForeignKey {
-              id: id,
-              data: Some(expand.swap_remove(pos).1),
-            },
-          ));
-        }
         return Ok((
           column.name.as_str(),
-          Value::ForeignKey { id: id, data: None },
+          Value::ForeignKey {
+            id: id,
+            data: pop_first_matching(expand, |(c, _)| *c == column.name).map(|(_, v)| v),
+          },
         ));
       }
 
@@ -209,9 +250,79 @@ pub fn record_to_json_expand(
 
       return Ok((column.name.as_str(), value_to_flat_json_borrow(value)?));
     })
-    .collect::<Result<_, JsonError>>()?;
+    .collect::<Result<_, JsonError>>();
+}
 
-  return Ok(serde_json::value::to_raw_value(&Value::Object(obj)).expect("from well-formed value"));
+#[cfg(feature = "geos")]
+pub fn build_feature_collection(
+  meta: &ColumnMetadata,
+  pk_column_name: &str,
+  cursor: Option<String>,
+  total_count: Option<usize>,
+  records: Vec<Vec<(&str, Value)>>,
+) -> Result<geos::geojson::FeatureCollection, JsonError> {
+  #[inline]
+  fn to_json_object(record: Vec<(&str, Value)>) -> JsonObject {
+    return record
+      .into_iter()
+      .map(|(k, v)| (k.to_string(), v.into()))
+      .collect();
+  }
+
+  let foreign_members = match (cursor, total_count) {
+    (Some(c), None) => Some(JsonObject::from_iter([(
+      "cursor".to_string(),
+      serde_json::Value::String(c),
+    )])),
+    (None, Some(tc)) => Some(JsonObject::from_iter([(
+      "total_count".to_string(),
+      serde_json::Value::Number(tc.into()),
+    )])),
+    (Some(c), Some(tc)) => Some(JsonObject::from_iter([
+      ("cursor".to_string(), serde_json::Value::String(c)),
+      (
+        "total_count".to_string(),
+        serde_json::Value::Number(tc.into()),
+      ),
+    ])),
+    (None, None) => None,
+  };
+
+  let features = records
+    .into_iter()
+    .map(
+      |mut obj: Vec<_>| -> Result<geos::geojson::Feature, JsonError> {
+        let id = pop_first_matching(&mut obj, |(c, _id)| *c == pk_column_name).and_then(
+          |(_c, id)| match id {
+            Value::Number(n) => Some(geos::geojson::feature::Id::Number(n)),
+            Value::String(s) => Some(geos::geojson::feature::Id::String(s.to_string())),
+            _ => None,
+          },
+        );
+        debug_assert!(id.is_some());
+
+        // NOTE: Geometry may be NULL for nullable columns.
+        let geometry =
+          pop_first_matching(&mut obj, |(c, _v)| *c == meta.column.name).and_then(|(_c, g)| {
+            return geos::geojson::Geometry::from_json_value(g.into()).ok();
+          });
+
+        return Ok(geos::geojson::Feature {
+          id,
+          geometry,
+          properties: Some(to_json_object(obj)),
+          bbox: None,
+          foreign_members: None,
+        });
+      },
+    )
+    .collect::<Result<_, _>>()?;
+
+  return Ok(geos::geojson::FeatureCollection {
+    bbox: None,
+    features,
+    foreign_members,
+  });
 }
 
 #[inline]
@@ -225,6 +336,14 @@ fn strip_file_metadata_id(mut _file_metadata: JsonObject) -> JsonObject {
   }
 
   return _file_metadata;
+}
+
+#[inline]
+fn pop_first_matching<T, F>(vec: &mut Vec<T>, predicate: F) -> Option<T>
+where
+  F: Fn(&T) -> bool,
+{
+  return Some(vec.remove(vec.iter().position(predicate)?));
 }
 
 #[cfg(test)]
