@@ -71,6 +71,11 @@ impl Rows {
     return self.rows.iter();
   }
 
+  #[inline]
+  pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Row> {
+    return self.rows.iter_mut();
+  }
+
   pub fn get(&self, idx: usize) -> Option<&Row> {
     return self.rows.get(idx);
   }
