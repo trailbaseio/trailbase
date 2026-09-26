@@ -165,8 +165,8 @@ impl Params {
         index,
         column,
         json,
-        is_file: _,
         is_geometry,
+        ..
       }) = accessor.column_by_name(&key)
       else {
         continue;
@@ -220,14 +220,7 @@ impl Params {
     // Insert parameters case.
     for (key, value) in row {
       // For admin operations we don't skip. There should not be client version skew.
-      let Some(ColumnMetadata {
-        index,
-        column: _,
-        json: _,
-        is_file: _,
-        is_geometry: _,
-      }) = accessor.column_by_name(&key)
-      else {
+      let Some(ColumnMetadata { index, .. }) = accessor.column_by_name(&key) else {
         return Err(ParamsError::ColumnNotFound);
       };
 
@@ -266,8 +259,8 @@ impl Params {
         index,
         column,
         json,
-        is_file: _,
         is_geometry,
+        ..
       }) = accessor.column_by_name(&key)
       else {
         continue;
@@ -349,8 +342,8 @@ impl Params {
         index,
         column,
         json,
-        is_file: _,
         is_geometry,
+        ..
       }) = accessor.column_by_name(&key)
       else {
         return Err(ParamsError::ColumnNotFound);
@@ -525,8 +518,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
       index,
       column,
       json,
-      is_file: _,
-      is_geometry: _,
+      ..
     }) = accessor.column_by_name(field_name)
     else {
       continue;

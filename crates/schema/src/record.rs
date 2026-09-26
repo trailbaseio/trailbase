@@ -103,8 +103,9 @@ impl Record for &Vec<(String, trailbase_sqlite::Value)> {
 /// Serialize SQL row to json. Skips columns prefixed with "_" and can expand foreign key columns.
 pub fn record_to_json_expand(
   column_metadata: &[ColumnMetadata],
+  expand_config: &[compact_str::CompactString],
   record: impl Record,
-  mut expand: Option<&HashMap<String, Option<Box<serde_json::value::RawValue>>>>,
+  mut expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
 ) -> Result<Box<serde_json::value::RawValue>, JsonError> {
   // Record may contain extra columns like trailing "_rowid_" or filtered columns starting with "_".
   if column_metadata.len() > record.len() {
@@ -132,16 +133,27 @@ pub fn record_to_json_expand(
       }
 
       // Expand a foreign key.
-      if let Some(foreign_value) = expand.as_mut().and_then(|e| e.get(&column.name)) {
-        debug_assert!(is_foreign_key(&column.options));
+      if meta.is_fk && expand_config.iter().any(|c| *c == column.name) {
         let id = value_ref_to_flat_json(value)?;
+        let Some(expand) = expand.as_mut() else {
+          return Ok((
+            column.name.as_str(),
+            Value::ForeignKey { id: id, data: None },
+          ));
+        };
 
+        if let Some(pos) = expand.iter().position(|(c, _)| *c == column.name) {
+          return Ok((
+            column.name.as_str(),
+            Value::ForeignKey {
+              id: id,
+              data: Some(expand.swap_remove(pos).1),
+            },
+          ));
+        }
         return Ok((
           column.name.as_str(),
-          Value::ForeignKey {
-            id: id,
-            data: foreign_value.clone(),
-          },
+          Value::ForeignKey { id: id, data: None },
         ));
       }
 
@@ -204,19 +216,15 @@ pub fn record_to_json_expand(
 
 #[inline]
 fn strip_file_metadata_id(mut _file_metadata: JsonObject) -> JsonObject {
-  #[cfg(not(test))]
+  // FIXME: Our tests currently depend on the id in the response (which are in a downstream crate).
+  // Enabling this in debug builds is silly. We should probably change the tests to read the id from
+  // the DB instead.
+  #[cfg(not(debug_assertions))]
   {
     _file_metadata.remove("id");
   }
 
   return _file_metadata;
-}
-
-#[inline]
-fn is_foreign_key(options: &[ColumnOption]) -> bool {
-  return options
-    .iter()
-    .any(|o| matches!(o, ColumnOption::ForeignKey { .. }));
 }
 
 #[cfg(test)]
@@ -238,6 +246,7 @@ mod tests {
       json: None,
       is_file: false,
       is_geometry: false,
+      is_fk: false,
     }];
 
     let record0 = vec![("a".to_string(), trailbase_sqlite::Value::Integer(5))];
@@ -245,7 +254,7 @@ mod tests {
     assert_eq!(
       serde_json::json!({"a": 5}),
       serde_json::from_str::<serde_json::Value>(
-        &record_to_json_expand(&column_metatada, &record0, None)
+        &record_to_json_expand(&column_metatada, &[], &record0, None)
           .unwrap()
           .to_string()
       )

@@ -472,13 +472,13 @@ fn broker(
     // column-name-based access for filters, we thus use an IndexMap rather than a Vec<(String,
     // Value)> a data type. Needs to be an Arc so it can be passed to sqlite worker across
     // async boundary.
-    let mut record: Record = record
+    let record: Record = record
       .into_iter()
       .enumerate()
       .map(|(idx, v)| (table_metadata.schema.columns[idx].name.clone(), v))
       .collect();
 
-    return match record_to_json_expand(&table_metadata.column_metadata, &record, None) {
+    return match record_to_json_expand(&table_metadata.column_metadata, &[], &record, None) {
       Ok(json_obj) => Arc::new(match action {
         RecordAction::Insert => EventPayload::insert(json_obj, record),
         RecordAction::Update => EventPayload::update(json_obj, record),

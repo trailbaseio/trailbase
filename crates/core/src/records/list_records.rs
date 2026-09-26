@@ -224,15 +224,12 @@ pub async fn list_records_handler(
   );
 
   let metadata = api.connection_metadata();
+  let config_expand = api.expand();
   let expanded_tables = match query_expand {
     Some(expand) => {
-      let Some(config_expand) = api.expand() else {
-        return Err(RecordError::BadRequest("Invalid expansion"));
-      };
-
       // NOTE: This will drop any unknown expand column, thus avoiding SQL injections.
       for col_name in &expand.columns {
-        if !config_expand.contains_key(col_name) {
+        if !config_expand.iter().any(|c| *c == col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
         }
       }
@@ -338,35 +335,33 @@ pub async fn list_records_handler(
   let records = if expanded_tables.is_empty() {
     rows
       .into_iter()
-      .map(|row| record_to_json_expand(api.columns(), row, api.expand()))
+      .map(|row| record_to_json_expand(api.columns(), config_expand, row, None))
       .collect::<Result<Vec<_>, JsonError>>()
       .map_err(|err| RecordError::Internal(err.into()))?
   } else {
     rows
       .into_iter()
       .map(|mut row| {
-        // Allocate new empty expansion map.
-        let Some(mut expand) = api.expand().cloned() else {
-          return Err(RecordError::Internal(
-            "Expansion config must be some".into(),
-          ));
-        };
-
         let mut curr = row.split_off(api.columns().len());
 
+        let mut expand: Vec<(compact_str::CompactString, _)> =
+          Vec::with_capacity(expanded_tables.len());
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
-          let foreign_value = record_to_json_expand(&expanded.metadata.column_metadata, curr, None)
-            .map_err(|err| RecordError::Internal(err.into()))?;
+          let foreign_value =
+            record_to_json_expand(&expanded.metadata.column_metadata, &[], curr, None)
+              .map_err(|err| RecordError::Internal(err.into()))?;
 
-          let result = expand.insert(expanded.local_column_name.clone(), Some(foreign_value));
-          assert!(result.is_some());
+          expand.push((
+            compact_str::CompactString::from(&expanded.local_column_name),
+            foreign_value,
+          ));
 
           curr = next;
         }
 
-        return record_to_json_expand(api.columns(), row, Some(&expand))
+        return record_to_json_expand(api.columns(), config_expand, row, Some(expand))
           .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
@@ -571,6 +566,7 @@ mod tests {
       json: None,
       is_file: false,
       is_geometry: false,
+      is_fk: false,
     };
   }
 
@@ -587,6 +583,7 @@ mod tests {
       json: None,
       is_file: false,
       is_geometry: false,
+      is_fk: false,
     };
   }
 
@@ -1168,8 +1165,7 @@ mod tests {
 
       let arr_desc = arr_desc.iter().map(|v| to_object(v)).collect::<Vec<_>>();
       assert_eq!(arr_desc.len(), 3);
-
-      assert_eq!(arr_asc, arr_desc);
+      assert_eq!(arr_asc, arr_desc.into_iter().rev().collect::<Vec<_>>());
 
       // Ordering and cursor work well together.
       let cursor_middle = list_records(

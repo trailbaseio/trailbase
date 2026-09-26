@@ -62,14 +62,12 @@ pub async fn read_record_handler(
   if let Some(query_expand) = query.expand
     && !query_expand.is_empty()
   {
-    let Some(mut expand) = api.expand().cloned() else {
-      return Err(RecordError::BadRequest("Invalid expansion"));
-    };
+    let config_expand = api.expand();
 
     // Input validation, i.e. only accept columns that are also configured.
     let query_expand: Vec<_> = query_expand.split(",").collect();
     for col_name in &query_expand {
-      if !query_expand.contains(col_name) {
+      if !config_expand.iter().any(|c| *c == col_name) {
         return Err(RecordError::BadRequest("Invalid expansion"));
       }
     }
@@ -92,16 +90,17 @@ pub async fn read_record_handler(
 
     // Alloc a map from column name to value that's pre-filled with with Value::Null for all
     // expandable columns.
+    let mut expand: Vec<(compact_str::CompactString, _)> =
+      Vec::with_capacity(expanded_tables.len());
     for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-      let foreign_value = record_to_json_expand(&metadata.column_metadata, row, None)
+      let foreign_value = record_to_json_expand(&metadata.column_metadata, &[], row, None)
         .map_err(|err| RecordError::Internal(err.into()))?;
 
-      let result = expand.insert(col_name.to_string(), Some(foreign_value));
-      debug_assert!(result.is_some(), "{col_name} duplicate");
+      expand.push((compact_str::CompactString::from(col_name), foreign_value));
     }
 
     return Ok(Json(
-      record_to_json_expand(api.columns(), root, Some(&expand))
+      record_to_json_expand(api.columns(), config_expand, root, Some(expand))
         .map_err(|err| RecordError::Internal(err.into()))?,
     ));
   }
@@ -118,7 +117,7 @@ pub async fn read_record_handler(
     return Err(RecordError::RecordNotFound);
   };
 
-  let json_response = record_to_json_expand(api.columns(), row, api.expand())
+  let json_response = record_to_json_expand(api.columns(), api.expand(), row, None)
     .map_err(|err| RecordError::Internal(err.into()))?;
 
   // #[cfg(debug_assertions)]
