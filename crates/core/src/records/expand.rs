@@ -42,12 +42,16 @@ impl From<trailbase_schema::json::JsonError> for JsonError {
       trailbase_schema::json::JsonError::Finite => Self::Finite,
       trailbase_schema::json::JsonError::ValueNotFound => Self::ValueNotFound,
       trailbase_schema::json::JsonError::NotSupported => Self::NotSupported,
+      trailbase_schema::json::JsonError::ColumnMismatch => Self::ColumnMismatch,
       trailbase_schema::json::JsonError::Decode(err) => Self::Decode(err),
       trailbase_schema::json::JsonError::UnexpectedType(expected, got) => {
         Self::UnexpectedType(expected, got)
       }
       trailbase_schema::json::JsonError::ParseInt(err) => Self::ParseInt(err),
       trailbase_schema::json::JsonError::ParseFloat(err) => Self::ParseFloat(err),
+      trailbase_schema::json::JsonError::Serde(err) => Self::SerdeJson(err),
+      #[cfg(any(feature = "geos", feature = "geos-static"))]
+      trailbase_schema::json::JsonError::Geos(err) => Self::Geos(err),
     };
   }
 }

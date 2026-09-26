@@ -10,6 +10,7 @@ pub mod metadata;
 pub mod parse;
 pub mod registry;
 pub mod sqlite;
+pub mod record;
 
 pub use error::Error;
 pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};

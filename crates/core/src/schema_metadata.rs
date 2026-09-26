@@ -375,7 +375,7 @@ mod tests {
   use crate::records::list_records::{ListOrGeoJSONResponse, list_records_handler};
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::add_record_api_config;
-  use crate::test_utils::*;
+  use crate::records::test_utils::*;
 
   #[tokio::test]
   async fn test_column_nullability() {
@@ -631,7 +631,7 @@ mod tests {
       .await
       .unwrap();
 
-      let value = serde_json::Value::Object(obj);
+      let value = serde_json::Value::Object(to_object(&obj));
       validator.validate(&value).expect(&format!("{value}"));
       assert_eq!(expected, value);
 
@@ -652,7 +652,7 @@ mod tests {
       let records: Vec<_> = list_response
         .records
         .into_iter()
-        .map(|obj| serde_json::Value::Object(obj))
+        .map(|obj| serde_json::Value::Object(to_object(&obj)))
         .collect();
       assert_eq!(vec![expected.clone()], records);
       validator.validate(&records[0]).unwrap();
@@ -681,7 +681,7 @@ mod tests {
       .await
       .unwrap();
 
-      let value = serde_json::Value::Object(obj);
+      let value = serde_json::Value::Object(to_object(&obj));
       validator.validate(&value).expect(&format!("{value}"));
       assert_eq!(expected, value);
     }
@@ -704,7 +704,7 @@ mod tests {
       let records: Vec<_> = list_response
         .records
         .into_iter()
-        .map(|obj| serde_json::Value::Object(obj))
+        .map(|obj| serde_json::Value::Object(to_object(&obj)))
         .collect();
       assert_eq!(vec![expected.clone()], records);
       validator.validate(&records[0]).unwrap();
@@ -729,7 +729,7 @@ mod tests {
       let records: Vec<_> = list_response
         .records
         .into_iter()
-        .map(|obj| serde_json::Value::Object(obj))
+        .map(|obj| serde_json::Value::Object(to_object(&obj)))
         .collect();
       assert_eq!(vec![expected], records);
       validator.validate(&records[0]).unwrap();
@@ -799,7 +799,7 @@ mod tests {
         "fk1": { "id": 1 },
       });
 
-      assert_eq!(expected, serde_json::Value::Object(obj));
+      assert_eq!(expected, serde_json::Value::Object(to_object(&obj)));
 
       let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
@@ -818,7 +818,7 @@ mod tests {
       let records: Vec<_> = list_response
         .records
         .into_iter()
-        .map(|obj| serde_json::Value::Object(obj))
+        .map(|obj| serde_json::Value::Object(to_object(&obj)))
         .collect();
       assert_eq!(vec![expected], records);
     }
@@ -848,7 +848,7 @@ mod tests {
       .await
       .unwrap();
 
-      assert_eq!(expected, serde_json::Value::Object(obj));
+      assert_eq!(expected, serde_json::Value::Object(to_object(&obj)));
 
       let ListOrGeoJSONResponse::List(list_response) = list_records_handler(
         State(state.clone()),
@@ -867,7 +867,7 @@ mod tests {
       let records: Vec<_> = list_response
         .records
         .into_iter()
-        .map(|obj| serde_json::Value::Object(obj))
+        .map(|obj| serde_json::Value::Object(to_object(&obj)))
         .collect();
       assert_eq!(vec![expected], records);
     }
@@ -902,7 +902,7 @@ mod tests {
       .await
       .unwrap();
 
-      assert_eq!(expected, serde_json::Value::Object(obj));
+      assert_eq!(expected, serde_json::Value::Object(to_object(&obj)));
 
       state
         .conn()
@@ -927,7 +927,7 @@ mod tests {
       let records: Vec<_> = list_response
         .records
         .into_iter()
-        .map(|obj| serde_json::Value::Object(obj))
+        .map(|obj| serde_json::Value::Object(to_object(&obj)))
         .collect();
 
       assert_eq!(

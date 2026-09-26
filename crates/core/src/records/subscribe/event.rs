@@ -6,7 +6,8 @@ use std::sync::Arc;
 use crate::records::RecordError;
 
 pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
-pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
+// pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
+pub type Record = Vec<(String, trailbase_sqlite::Value)>;
 
 #[derive(Debug, Clone, Copy, Deserialize_repr, Serialize_repr, PartialEq)]
 #[repr(i64)]
@@ -50,29 +51,20 @@ pub enum EventPayload {
 }
 
 impl EventPayload {
-  pub fn insert(obj: &JsonObject, record: Record) -> Self {
-    return Self::Insert {
-      json: to_raw_value(obj),
-      record,
-    };
+  pub fn insert(json: Box<serde_json::value::RawValue>, record: Record) -> Self {
+    return Self::Insert { json, record };
   }
 
-  pub fn update(obj: &JsonObject, record: Record) -> Self {
-    return Self::Update {
-      json: to_raw_value(obj),
-      record,
-    };
+  pub fn update(json: Box<serde_json::value::RawValue>, record: Record) -> Self {
+    return Self::Update { json, record };
   }
 
-  pub fn delete(obj: &JsonObject, record: Record) -> Self {
-    return Self::Delete {
-      json: to_raw_value(obj),
-      record,
-    };
+  pub fn delete(json: Box<serde_json::value::RawValue>, record: Record) -> Self {
+    return Self::Delete { json, record };
   }
 
   pub fn error(err: &EventError) -> Self {
-    return Self::Error(to_raw_value(err));
+    return Self::Error(serde_json::value::to_raw_value(err).unwrap_or_default());
   }
 
   pub fn ping() -> Self {
@@ -186,24 +178,16 @@ pub struct TestChangeEvent {
 }
 
 // NOTE: to_raw_value should never fail given the limited set of inputs.
-#[inline]
 #[cfg(not(debug_assertions))]
-fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
-where
-  T: ?Sized + Serialize,
-{
-  return serde_json::value::to_raw_value(value)
-    .map(|v| v.to_owned())
-    .unwrap_or_default();
+#[inline]
+fn to_raw_value(obj: &JsonObject) -> Box<serde_json::value::RawValue> {
+  return serde_json::value::to_raw_value(obj)
+    .unwrap_or_else(|_| serde_json::value::RawValue::from_string("{}".to_string()).unwrap());
 }
 
 #[cfg(debug_assertions)]
-fn to_raw_value<T>(value: &T) -> Box<serde_json::value::RawValue>
-where
-  T: ?Sized + Serialize,
-{
-  return serde_json::value::to_raw_value(value)
-    .map(|v| v.to_owned())
+fn to_raw_value(obj: &JsonObject) -> Box<serde_json::value::RawValue> {
+  return serde_json::value::to_raw_value(obj)
     .expect("should never fail for well-defined serde_json::Value");
 }
 
@@ -217,7 +201,7 @@ mod tests {
     {
       let event = ChangeEvent {
         event: Arc::new(EventPayload::delete(
-          &JsonObject::from_iter([("foo".to_string(), json!(4))]),
+          serde_json::value::to_raw_value(&json!({"foo": 4})).unwrap(),
           Default::default(),
         )),
         seq: Some(4),
