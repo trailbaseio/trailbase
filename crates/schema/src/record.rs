@@ -327,14 +327,7 @@ pub fn build_feature_collection(
 
 #[inline]
 fn strip_file_metadata_id(mut _file_metadata: JsonObject) -> JsonObject {
-  // FIXME: Our tests currently depend on the id in the response (which are in a downstream crate).
-  // Enabling this in debug builds is silly. We should probably change the tests to read the id from
-  // the DB instead.
-  #[cfg(not(debug_assertions))]
-  {
-    _file_metadata.remove("id");
-  }
-
+  _file_metadata.remove("id");
   return _file_metadata;
 }
 

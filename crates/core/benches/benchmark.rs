@@ -1,12 +1,12 @@
 #![allow(clippy::needless_return)]
 
-// #[global_allocator]
-// static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 use alloc_tracker::{Allocator, Session};
 
-#[global_allocator]
-static ALLOCATOR: Allocator<std::alloc::System> = Allocator::system();
+// #[global_allocator]
+// static ALLOCATOR: Allocator<std::alloc::System> = Allocator::system();
 
 use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 
@@ -378,7 +378,7 @@ fn subscribe_message_benchmark(b: &mut Bencher, runtime: &tokio::runtime::Runtim
 }
 
 fn benchmark_group(c: &mut Criterion) {
-  let session = Session::new();
+  // let session = Session::new();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .worker_threads(8)
