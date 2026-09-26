@@ -241,11 +241,14 @@ async fn test_execute_and_query() {
     .await
     .unwrap();
   assert_eq!(2, rows.len());
-  assert!(matches!(rows.column_type(0).unwrap(), ValueType::Integer));
-  assert_eq!(rows.column_name(0).unwrap(), "id");
+  assert!(matches!(
+    rows.column(0).unwrap().decl_type,
+    ValueType::Integer
+  ));
+  assert_eq!(rows.column(0).unwrap().name, "id");
 
-  assert!(matches!(rows.column_type(1).unwrap(), ValueType::Text));
-  assert_eq!(rows.column_name(1).unwrap(), "name");
+  assert!(matches!(rows.column(1).unwrap().decl_type, ValueType::Text));
+  assert_eq!(rows.column(1).unwrap().name, "name");
 
   conn
     .execute("UPDATE person SET name = 'baz' WHERE id = $1", (1,))

@@ -6,8 +6,9 @@ use crate::error::Error;
 use crate::from_sql::{FromSql, FromSqlError};
 use crate::value::Value;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq)]
 pub enum ValueType {
+  #[default]
   Undefined = 0,
   Integer = 1,
   Real,
@@ -38,8 +39,8 @@ impl FromStr for ValueType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Column {
-  pub(crate) name: compact_str::CompactString,
-  pub(crate) decl_type: ValueType,
+  pub name: compact_str::CompactString,
+  pub decl_type: ValueType,
 }
 
 // TODO: Vec<Column> and Vec<Value> could be smallvecs. Vec<Row> probably not worth.
@@ -65,6 +66,7 @@ impl Rows {
     return self.rows.is_empty();
   }
 
+  #[inline]
   pub fn iter(&self) -> std::slice::Iter<'_, Row> {
     return self.rows.iter();
   }
@@ -81,18 +83,13 @@ impl Rows {
     return self.columns.len();
   }
 
-  pub fn column_name(&self, idx: usize) -> Option<&str> {
-    return self.columns.get(idx).map(|c| c.name.as_str());
-  }
-
-  pub fn column_type(&self, idx: usize) -> Result<ValueType, Error> {
+  pub fn column(&self, idx: usize) -> Result<&Column, Error> {
     return self
       .columns
       .get(idx)
-      .map(|c| c.decl_type)
       .ok_or_else(|| Error::InvalidColumnType {
         idx,
-        name: self.column_name(idx).unwrap_or("?").to_string(),
+        name: "?".to_string(),
         decl_type: None,
       });
   }
@@ -110,6 +107,7 @@ impl IntoIterator for Rows {
   type Item = Row;
   type IntoIter = std::vec::IntoIter<Self::Item>;
 
+  #[inline]
   fn into_iter(self) -> Self::IntoIter {
     return self.rows.into_iter();
   }
@@ -149,14 +147,17 @@ impl Row {
     return self.columns.len();
   }
 
+  #[inline]
   pub fn column_name(&self, idx: usize) -> Option<&str> {
     return self.columns.get(idx).map(|c| c.name.as_str());
   }
 
+  #[inline]
   pub fn last(&self) -> Option<&Value> {
     return self.values.last();
   }
 
+  #[inline]
   pub fn get<T>(&self, idx: usize) -> Result<T, FromSqlError>
   where
     T: FromSql,
@@ -167,7 +168,16 @@ impl Row {
     return T::column_result(v.into());
   }
 
+  #[inline]
   pub fn get_value(&self, idx: usize) -> Result<&Value, FromSqlError> {
+    return self
+      .values
+      .get(idx)
+      .ok_or_else(|| FromSqlError::OutOfRange(idx as i64));
+  }
+
+  #[inline]
+  pub fn get_value_mut(&mut self, idx: usize) -> Result<&Value, FromSqlError> {
     return self
       .values
       .get(idx)

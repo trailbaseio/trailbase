@@ -63,6 +63,7 @@ pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
 
 pub trait Record {
   fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)>;
+  // fn get_mut(&mut self, index: usize) -> Option<(&str, &mut trailbase_sqlite::Value)>;
   fn len(&self) -> usize;
 }
 
@@ -96,22 +97,22 @@ pub(crate) fn record_to_json_expand(
     .filter(|(_i, meta)| !meta.column.name.starts_with("_"))
     .map(
       |(i, meta)| -> Result<(String, serde_json::Value), JsonError> {
-        let column = &meta.column;
-
-        let value = {
-          let Some((name, value)) = record.consume(i) else {
-            return Err(JsonError::ValueNotFound);
-          };
-          if column.name.as_str() != name {
-            return Err(JsonError::ColumnMismatch);
-          }
-          value
+        let Some((name, value)) = record.consume(i) else {
+          return Err(JsonError::ValueNotFound);
         };
 
+        let column = &meta.column;
+        if column.name.as_str() != name {
+          return Err(JsonError::ColumnMismatch);
+        }
+
+        // QUESTION: Should this go behind FK expansion? I.e. should the output be `{ fk: null }` or
+        // `{ fk: {id: null} }`?
         if matches!(value, trailbase_sqlite::Value::Null) {
           return Ok((column.name.clone(), serde_json::Value::Null));
         }
 
+        // Expand a foreign key.
         if let Some(foreign_value) = expand.and_then(|e| e.get(&column.name))
           && is_foreign_key(&column.options)
         {
@@ -134,7 +135,7 @@ pub(crate) fn record_to_json_expand(
           });
         }
 
-        // De-serialize JSON.
+        // De-serialize nested JSON.
         if let trailbase_sqlite::Value::Text(ref str) = value
           && let Some(ref json) = meta.json
         {

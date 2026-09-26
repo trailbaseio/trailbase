@@ -41,16 +41,20 @@ impl TryFrom<rusqlite::types::ValueRef<'_>> for Value {
       rusqlite::types::ValueRef::Null => Ok(Self::Null),
       rusqlite::types::ValueRef::Integer(i) => Ok(Self::Integer(i)),
       rusqlite::types::ValueRef::Real(r) => Ok(Self::Real(r)),
-      rusqlite::types::ValueRef::Text(s) => std::str::from_utf8(s)
-        .map(|s| Self::Text(s.to_string()))
-        .map_err(Self::Error::Utf8Error),
+      rusqlite::types::ValueRef::Text(s) => Ok(Self::Text(
+        std::str::from_utf8(s)
+          .map_err(Self::Error::Utf8Error)?
+          .to_owned(),
+      )),
       rusqlite::types::ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
     };
   }
 }
 
 impl rusqlite::types::FromSql for Value {
-  fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+  fn column_result(
+    value: rusqlite::types::ValueRef<'_>,
+  ) -> Result<Self, rusqlite::types::FromSqlError> {
     return value.try_into();
   }
 }

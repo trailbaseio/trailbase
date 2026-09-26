@@ -50,7 +50,7 @@ pub use connection_imports::*;
 pub use database::Database;
 pub use error::{Error, unpack_other_error};
 pub use params::{NamedParamRef, NamedParams, NamedParamsRef, Params};
-pub use rows::{Row, Rows, ValueType};
+pub use rows::{Column, Row, Rows, ValueType};
 pub use statement::Statement;
 pub use traits::SyncConnection as SyncConnectionTrait;
 pub use value::{Blob, Value};

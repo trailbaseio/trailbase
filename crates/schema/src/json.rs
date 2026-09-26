@@ -51,6 +51,21 @@ pub fn value_to_flat_json(value: SqliteValue) -> Result<serde_json::Value, JsonE
   };
 }
 
+pub fn value_to_flat_json_mut(value: &mut SqliteValue) -> Result<serde_json::Value, JsonError> {
+  return match value {
+    SqliteValue::Null => Ok(serde_json::Value::Null),
+    SqliteValue::Real(real) => match serde_json::Number::from_f64(*real) {
+      Some(number) => Ok(serde_json::Value::Number(number)),
+      None => Err(JsonError::Finite),
+    },
+    SqliteValue::Integer(integer) => Ok(serde_json::Value::Number(serde_json::Number::from(
+      *integer,
+    ))),
+    SqliteValue::Blob(blob) => Ok(serde_json::Value::String(BASE64_URL_SAFE.encode(blob))),
+    SqliteValue::Text(text) => Ok(serde_json::Value::String(std::mem::take(text))),
+  };
+}
+
 pub fn flat_json_to_value(
   col_type: ColumnDataType,
   value: serde_json::Value,
