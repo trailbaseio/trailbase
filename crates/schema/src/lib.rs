@@ -8,9 +8,9 @@ pub mod json;
 pub mod json_schema;
 pub mod metadata;
 pub mod parse;
+pub mod record;
 pub mod registry;
 pub mod sqlite;
-pub mod record;
 
 pub use error::Error;
 pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};

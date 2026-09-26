@@ -246,9 +246,11 @@ pub async fn get_uploaded_files_from_record_handler(
 mod tests {
   use axum::Json;
   use axum::extract::{Path, Query, State};
+  use base64::prelude::*;
   use object_store::{ObjectStore, ObjectStoreExt};
   use serde_json::json;
   use std::io::Read;
+  use std::str::FromStr;
   use std::sync::Arc;
   use trailbase_schema::{FileUpload, FileUploadData, FileUploadInput};
   use trailbase_sqlite::ConnectionType;
@@ -415,10 +417,10 @@ mod tests {
     }
   }
 
-  async fn create_test_record_api(state: &AppState, api_name: &str) {
+  async fn create_test_record_api(state: &AppState, api_name: &str, table_name: Option<&str>) {
     let conn = state.conn();
 
-    let table_name = "table 😍";
+    let table_name = table_name.unwrap_or("table 😍");
     conn
       .execute(
         format!(
@@ -469,7 +471,7 @@ mod tests {
     let state = test_state(None).await.unwrap();
 
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME).await;
+    create_test_record_api(&state, API_NAME, None).await;
 
     let create_response: CreateRecordResponse = unpack_json_response(
       create_record_handler(
@@ -501,7 +503,7 @@ mod tests {
   async fn test_escaping_keywords_for_create_record() {
     const API_NAME: &str = "table";
     let state = test_state(None).await.unwrap();
-    create_test_record_api(&state, API_NAME).await;
+    create_test_record_api(&state, API_NAME, None).await;
 
     let column_value = "test";
     let create_response: CreateRecordResponse = unpack_json_response(
@@ -549,7 +551,7 @@ mod tests {
   async fn test_single_file_upload_download_e2e() {
     let state = test_state(None).await.unwrap();
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME).await;
+    create_test_record_api(&state, API_NAME, None).await;
 
     let bytes: Vec<u8> = vec![42, 5, 42, 5];
     let file_column = "file";
@@ -661,7 +663,8 @@ mod tests {
     let state = test_state(None).await.unwrap();
 
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME).await;
+    const TABLE_NAME: &str = "test_table";
+    create_test_record_api(&state, API_NAME, Some(TABLE_NAME)).await;
 
     let bytes0: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
     let bytes1: Vec<u8> = vec![0, 1, 1, 2];
@@ -704,7 +707,25 @@ mod tests {
     .await
     .unwrap();
 
+    let conn = state.conn().clone();
     let assert_all_files_contents = async |record_id: String| -> Vec<object_store::path::Path> {
+      let record_uuid = BASE64_URL_SAFE.decode(&record_id).unwrap();
+
+      // NOTE: We cannot use `read_record_handler` here because we're striping the object-store uuid
+      // from the public response.
+      let row = conn
+        .read_query_row(
+          format!("SELECT file, files FROM {TABLE_NAME} WHERE id = ?1"),
+          (record_uuid,),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+      let file: FileUpload = serde_json::from_str(&row.get::<String>(0).unwrap()).unwrap();
+      let files: Vec<FileUpload> = serde_json::from_str(&row.get::<String>(1).unwrap()).unwrap();
+
+      // Helper;
       async fn assert_file(
         state: &AppState,
         index: i64,
@@ -715,7 +736,9 @@ mod tests {
         assert_eq!(f.original_filename(), Some(format!("bar{index}").as_str()));
         assert_eq!(f.content_type(), Some(format!("baz{index}").as_str()));
 
-        let file_path = object_store::path::Path::from(f.objectstore_id());
+        let uuid = f.objectstore_id();
+        assert!(!uuid.is_empty(), "empty file/object uuid");
+        let file_path = object_store::path::Path::from(uuid);
         assert_eq!(
           *expected,
           read_objectstore_file(state.objectstore(), &file_path).await
@@ -730,21 +753,6 @@ mod tests {
 
         return file_path;
       }
-
-      let Json(map) = read_record_handler(
-        State(state.clone()),
-        Path((API_NAME.to_string(), record_id.clone())),
-        Query(ReadRecordQuery::default()),
-        None,
-      )
-      .await
-      .unwrap();
-
-      let map = to_object(&map);
-
-      let file: FileUpload = serde_json::from_value(map.get("file").unwrap().clone()).unwrap();
-      let files: Vec<FileUpload> =
-        serde_json::from_value(map.get("files").unwrap().clone()).unwrap();
 
       return vec![
         assert_file(&state, 0, &bytes0, &file, async || {
@@ -790,7 +798,7 @@ mod tests {
       ];
     };
 
-    let paths0 = assert_all_files_contents.clone()(resp0.ids[0].clone()).await;
+    let paths0 = assert_all_files_contents(resp0.ids[0].clone()).await;
 
     // Insert two more records to check bulk creation.
     let resp1: CreateRecordResponse = unpack_json_response(
@@ -810,8 +818,8 @@ mod tests {
     .await
     .unwrap();
 
-    let paths1_0 = assert_all_files_contents.clone()(resp1.ids[0].clone()).await;
-    let paths1_1 = assert_all_files_contents.clone()(resp1.ids[1].clone()).await;
+    let paths1_0 = assert_all_files_contents(resp1.ids[0].clone()).await;
+    let paths1_1 = assert_all_files_contents(resp1.ids[1].clone()).await;
 
     for id in resp1.ids {
       let _ = delete_record_handler(State(state.clone()), Path((API_NAME.to_string(), id)), None)
