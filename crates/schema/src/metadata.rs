@@ -76,8 +76,10 @@ pub struct ColumnMetadata {
   pub json: Option<JsonColumnMetadata>,
   /// Whether the JSON schema happens to be `std.FileUpload[s]`.
   pub is_file: bool,
-  /// Whether the column has an ST_Valid geometry check constaint.
+  /// Whether the column has an ST_Valid geometry check constraint.
   pub is_geometry: bool,
+  /// the column has a REFERENCES constraint.
+  pub is_fk: bool,
 }
 
 /// A data class describing a sqlite Table and additional meta data useful for TrailBase.
@@ -117,6 +119,7 @@ impl TableMetadata {
           is_file: is_file_column(&json_metadata),
           json: json_metadata,
           is_geometry: is_geometry_column(c),
+          is_fk: is_foreign_key_column(c),
           column: c.clone(),
         });
       })
@@ -203,6 +206,7 @@ impl ViewMetadata {
           is_file: is_file_column(&json_metadata),
           json: json_metadata,
           is_geometry: is_geometry_column(&c),
+          is_fk: is_foreign_key_column(&c),
           column: c,
         });
       })
@@ -478,6 +482,13 @@ fn is_geometry_column(column: &Column) -> bool {
     }
   }
   return false;
+}
+
+fn is_foreign_key_column(column: &Column) -> bool {
+  return column
+    .options
+    .iter()
+    .any(|o| matches!(o, ColumnOption::ForeignKey { .. }));
 }
 
 pub fn find_geometry_column_indexes(columns: &[Column]) -> Vec<usize> {

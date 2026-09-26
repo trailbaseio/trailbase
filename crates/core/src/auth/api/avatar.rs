@@ -152,6 +152,7 @@ static AVATAR_TABLE_FILE_COLUMN: LazyLock<ColumnMetadata> = LazyLock::new(|| Col
   )),
   is_file: true,
   is_geometry: false,
+  is_fk: false,
 });
 
 static AVATAR_TABLE_NAME: LazyLock<QualifiedName> = LazyLock::new(|| QualifiedName {

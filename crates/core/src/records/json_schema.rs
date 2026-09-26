@@ -44,13 +44,14 @@ fn build_api_json_schema_internal(
   api: &RecordApi,
   mode: JsonSchemaMode,
 ) -> Result<(jsonschema::Validator, serde_json::Value), RecordError> {
-  if let (Some(config_expand), JsonSchemaMode::Select) = (api.expand(), mode) {
+  let config_expand = api.expand();
+  if mode == JsonSchemaMode::Select && !config_expand.is_empty() {
     let metadata = api.connection_metadata();
     let all_tables: Vec<_> = metadata.tables.values().collect();
-    let foreign_key_columns = config_expand.keys().map(|k| k.as_str()).collect::<Vec<_>>();
+
     let expand = Expand {
       tables: &all_tables,
-      foreign_key_columns,
+      foreign_key_columns: config_expand.iter().map(|c| c.as_str()).collect(),
     };
 
     return build_json_schema_expanded(

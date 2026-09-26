@@ -154,7 +154,7 @@ struct RecordApiState {
   enable_subscriptions: bool,
 
   // Foreign key expansion configuration. Affects schema.
-  expand: Option<HashMap<String, Option<Box<serde_json::value::RawValue>>>>,
+  expand: Vec<compact_str::CompactString>,
 
   listing_hard_limit: Option<usize>,
 
@@ -315,15 +315,13 @@ impl RecordApiState {
       enable_subscriptions: config.enable_subscriptions.unwrap_or(false),
 
       expand: if config.expand.is_empty() {
-        None
+        vec![]
       } else {
-        Some(
-          config
-            .expand
-            .iter()
-            .map(|col_name| (col_name.to_string(), None))
-            .collect(),
-        )
+        config
+          .expand
+          .iter()
+          .map(|col_name| col_name.into())
+          .collect()
       },
 
       listing_hard_limit: config.listing_hard_limit.map(|l| l as usize),
@@ -434,9 +432,7 @@ impl RecordApi {
   }
 
   #[inline]
-  pub(crate) fn expand(
-    &self,
-  ) -> Option<&HashMap<String, Option<Box<serde_json::value::RawValue>>>> {
+  pub(crate) fn expand(&self) -> &[compact_str::CompactString] {
     return self.state.expand.as_ref();
   }
 
@@ -982,6 +978,7 @@ mod tests {
       json: None,
       is_file: false,
       is_geometry: false,
+      is_fk: false,
     };
   }
 

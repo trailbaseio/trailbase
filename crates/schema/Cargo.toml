@@ -14,6 +14,7 @@ geos = ["dep:geos"]
 
 [dependencies]
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
+compact_str = "0.10.0"
 fallible-iterator = "0.3.0"
 geos = { workspace = true, optional = true }
 infer = "0.22.0"
@@ -27,7 +28,6 @@ regex = "1.13.1"
 schemars = "1.2.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_json_borrow = { workspace = true }
 sqlite3-parser = { workspace = true }
 thiserror = "2.0.20"
 trailbase-extension = { workspace = true }
