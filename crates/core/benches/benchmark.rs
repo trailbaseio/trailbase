@@ -1,19 +1,17 @@
 #![allow(clippy::needless_return)]
 
-// #[global_allocator]
-// static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-use alloc_tracker::{Allocator, Session};
-
 #[global_allocator]
-static GLOBAL: Allocator<std::alloc::System> = Allocator::system();
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
+// #[global_allocator]
+// static GLOBAL: alloc_tracker::Allocator<std::alloc::System> = alloc_tracker::Allocator::system();
 
+use alloc_tracker::Session;
 use axum::body::Body;
 use axum::extract::{Json, State};
 use axum::http::{self, Request};
 use base64::prelude::*;
+use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main};
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use hyper::StatusCode;

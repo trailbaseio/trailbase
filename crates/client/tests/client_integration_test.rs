@@ -737,7 +737,7 @@ async fn subscription_performance_test() {
   .into_iter()
   .map(|ev0| ev0.unwrap());
 
-  println!(
+  eprintln!(
     "Receiving 1 message via {N} subscriptions took: {elapsed:?}",
     elapsed = std::time::SystemTime::now().duration_since(start)
   );
@@ -751,7 +751,7 @@ async fn subscription_performance_test() {
       .unwrap();
   }
 
-  println!("{M} records created.");
+  eprintln!("{M} records created.");
 
   let _events =
     futures_util::future::join_all(table_subscriptions.iter_mut().map(|subscription| {
@@ -768,7 +768,7 @@ async fn subscription_performance_test() {
       return events;
     });
 
-  println!(
+  eprintln!(
     "Receiving {M} message via {N} subscriptions took: {elapsed:?}",
     elapsed = std::time::SystemTime::now().duration_since(start)
   );
@@ -1058,49 +1058,49 @@ fn client_integration_test() {
     .unwrap();
 
   runtime.block_on(login_test());
-  println!("Ran login tests");
+  eprintln!("Ran login tests");
 
   runtime.block_on(register_test());
-  println!("Ran register tests");
+  eprintln!("Ran register tests");
 
   runtime.block_on(login_anonymous_test());
-  println!("Ran login anonymous tests");
+  eprintln!("Ran login anonymous tests");
 
   runtime.block_on(login_otp());
-  println!("Ran login OTP tests");
+  eprintln!("Ran login OTP tests");
 
   runtime.block_on(login_multi_factor_test());
-  println!("Ran login multi-factor tests");
+  eprintln!("Ran login multi-factor tests");
 
   runtime.block_on(records_test());
-  println!("Ran records tests");
+  eprintln!("Ran records tests");
 
   runtime.block_on(transaction_test());
-  println!("Ran transaction tests");
+  eprintln!("Ran transaction tests");
 
   runtime.block_on(expand_foreign_records_test());
-  println!("Ran expand foreign records tests");
+  eprintln!("Ran expand foreign records tests");
 
   runtime.block_on(custom_json_column_test());
-  println!("Ran custom JSON column tests");
+  eprintln!("Ran custom JSON column tests");
 
   runtime.block_on(subscription_test());
-  println!("Ran subscription tests");
+  eprintln!("Ran subscription tests");
 
   runtime.block_on(subscription_performance_test());
-  println!("Ran subscription performance tests");
+  eprintln!("Ran subscription performance tests");
 
   #[cfg(feature = "ws")]
   {
     runtime.block_on(subscription_ws_test());
-    println!("Ran subscription websocket tests");
+    eprintln!("Ran subscription websocket tests");
   }
 
   runtime.block_on(file_upload_json_base64_test());
-  println!("Ran file upload JSON base64 tests");
+  eprintln!("Ran file upload JSON base64 tests");
 
   runtime.block_on(file_upload_multipart_form_test());
-  println!("Ran file upload multipart form tests");
+  eprintln!("Ran file upload multipart form tests");
 }
 
 fn now() -> u64 {

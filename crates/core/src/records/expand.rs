@@ -1,193 +1,10 @@
 use itertools::Itertools;
-use std::collections::HashMap;
-use thiserror::Error;
 use trailbase_schema::QualifiedName;
-use trailbase_schema::json::value_to_flat_json;
-use trailbase_schema::metadata::ColumnMetadata;
 use trailbase_schema::sqlite::ColumnOption;
 
 use crate::records::RecordError;
 use crate::records::record_api::RecordApi;
-use crate::schema_metadata::{ConnectionMetadata, JsonColumnMetadata, TableMetadata};
-
-#[derive(Debug, Error)]
-pub enum JsonError {
-  #[error("Float not finite")]
-  Finite,
-  #[error("Value not found")]
-  ValueNotFound,
-  #[error("UnsupportedType")]
-  NotSupported,
-  #[error("ColumnMismatch")]
-  ColumnMismatch,
-  #[error("Decoding")]
-  Decode(#[from] base64::DecodeError),
-  #[error("Unexpected type: {0}, expected {1:?}")]
-  UnexpectedType(&'static str, trailbase_schema::sqlite::ColumnDataType),
-  #[error("Parse int error: {0}")]
-  ParseInt(#[from] std::num::ParseIntError),
-  #[error("Parse float error: {0}")]
-  ParseFloat(#[from] std::num::ParseFloatError),
-  // NOTE: This is the only extra error to schema::JsonError. Can we collapse?
-  #[error("SerdeJson error: {0}")]
-  SerdeJson(#[from] serde_json::Error),
-  #[cfg(any(feature = "geos", feature = "geos-static"))]
-  #[error("Geos: {0}")]
-  Geos(#[from] geos::Error),
-}
-
-impl From<trailbase_schema::json::JsonError> for JsonError {
-  fn from(value: trailbase_schema::json::JsonError) -> Self {
-    return match value {
-      trailbase_schema::json::JsonError::Finite => Self::Finite,
-      trailbase_schema::json::JsonError::ValueNotFound => Self::ValueNotFound,
-      trailbase_schema::json::JsonError::NotSupported => Self::NotSupported,
-      trailbase_schema::json::JsonError::ColumnMismatch => Self::ColumnMismatch,
-      trailbase_schema::json::JsonError::Decode(err) => Self::Decode(err),
-      trailbase_schema::json::JsonError::UnexpectedType(expected, got) => {
-        Self::UnexpectedType(expected, got)
-      }
-      trailbase_schema::json::JsonError::ParseInt(err) => Self::ParseInt(err),
-      trailbase_schema::json::JsonError::ParseFloat(err) => Self::ParseFloat(err),
-      trailbase_schema::json::JsonError::Serde(err) => Self::SerdeJson(err),
-      #[cfg(any(feature = "geos", feature = "geos-static"))]
-      trailbase_schema::json::JsonError::Geos(err) => Self::Geos(err),
-    };
-  }
-}
-
-#[inline]
-fn is_foreign_key(options: &[ColumnOption]) -> bool {
-  return options
-    .iter()
-    .any(|o| matches!(o, ColumnOption::ForeignKey { .. }));
-}
-
-pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
-
-pub trait Record {
-  fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)>;
-  // fn get_mut(&mut self, index: usize) -> Option<(&str, &mut trailbase_sqlite::Value)>;
-  fn len(&self) -> usize;
-}
-
-impl Record for trailbase_sqlite::Row {
-  #[inline]
-  fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)> {
-    let value = self.consume_value(index).ok()?;
-    let name = self.column_name(index)?;
-    return Some((name, value));
-  }
-
-  fn len(&self) -> usize {
-    return self.column_count();
-  }
-}
-
-/// Serialize SQL row to json. Skips columns prefixed with "_" and can expand foreign key columns.
-pub(crate) fn record_to_json_expand(
-  column_metadata: &[ColumnMetadata],
-  mut record: impl Record,
-  expand: Option<&HashMap<String, serde_json::Value>>,
-) -> Result<JsonObject, JsonError> {
-  // Record may contain extra columns like trailing "_rowid_" or filtered columns starting with "_".
-  if column_metadata.len() > record.len() {
-    return Err(JsonError::ColumnMismatch);
-  }
-
-  return column_metadata
-    .iter()
-    .enumerate()
-    .filter(|(_i, meta)| !meta.column.name.starts_with("_"))
-    .map(
-      |(i, meta)| -> Result<(String, serde_json::Value), JsonError> {
-        let Some((name, value)) = record.consume(i) else {
-          return Err(JsonError::ValueNotFound);
-        };
-
-        let column = &meta.column;
-        if column.name.as_str() != name {
-          return Err(JsonError::ColumnMismatch);
-        }
-
-        // QUESTION: Should this go behind FK expansion? I.e. should the output be `{ fk: null }` or
-        // `{ fk: {id: null} }`?
-        if matches!(value, trailbase_sqlite::Value::Null) {
-          return Ok((column.name.clone(), serde_json::Value::Null));
-        }
-
-        // Expand a foreign key.
-        if let Some(foreign_value) = expand.and_then(|e| e.get(&column.name))
-          && is_foreign_key(&column.options)
-        {
-          let id = value_to_flat_json(value)?;
-
-          return Ok(match foreign_value {
-            serde_json::Value::Null => (
-              column.name.clone(),
-              serde_json::json!({
-                "id": id,
-              }),
-            ),
-            value => (
-              column.name.clone(),
-              serde_json::json!({
-                "id": id,
-                "data": value,
-              }),
-            ),
-          });
-        }
-
-        // De-serialize nested JSON.
-        if let trailbase_sqlite::Value::Text(ref str) = value
-          && let Some(ref json) = meta.json
-        {
-          return match json {
-            JsonColumnMetadata::SchemaName(x) if x == "std.FileUpload" => {
-              let mut file_metadata: serde_json::Value = serde_json::from_str(str)?;
-              strip_file_metadata_id(&mut file_metadata);
-              Ok((column.name.clone(), file_metadata))
-            }
-            JsonColumnMetadata::SchemaName(x) if x == "std.FileUploads" => {
-              let mut file_metadata_list: Vec<serde_json::Value> = serde_json::from_str(str)?;
-              for file_metadata in &mut file_metadata_list {
-                strip_file_metadata_id(file_metadata);
-              }
-              Ok((
-                column.name.clone(),
-                serde_json::Value::Array(file_metadata_list),
-              ))
-            }
-            JsonColumnMetadata::SchemaName(_) | JsonColumnMetadata::Pattern(_) => {
-              Ok((column.name.clone(), serde_json::from_str(str)?))
-            }
-          };
-        }
-
-        // De-serialize WKB Geometry.
-        #[cfg(any(feature = "geos", feature = "geos-static"))]
-        if let trailbase_sqlite::Value::Blob(ref wkb) = value
-          && meta.is_geometry
-        {
-          let geometry = geos::Geometry::new_from_wkb(wkb)?;
-          let json_geometry: geos::geojson::Geometry = geometry.try_into()?;
-          return Ok((column.name.clone(), serde_json::to_value(json_geometry)?));
-        }
-
-        debug_assert!(!meta.is_geometry);
-
-        return Ok((column.name.clone(), value_to_flat_json(value)?));
-      },
-    )
-    .collect::<Result<_, JsonError>>();
-}
-
-#[inline]
-fn strip_file_metadata_id(_file_metadata: &mut serde_json::Value) {
-  #[cfg(not(test))]
-  _file_metadata.as_object_mut().map(|o| o.remove("id"));
-}
+use crate::schema_metadata::{ConnectionMetadata, TableMetadata};
 
 pub(crate) struct ExpandedTable<'a> {
   pub metadata: &'a TableMetadata,
@@ -272,8 +89,8 @@ mod tests {
   use serde_json::json;
 
   use crate::app_state::*;
+  use crate::records::test_utils::*;
   use crate::schema_metadata::{TableMetadata, lookup_and_parse_table_schema};
-  use crate::test_utils::json_column;
 
   #[tokio::test]
   async fn test_read_rows() {
@@ -364,14 +181,26 @@ mod tests {
         .await
         .unwrap();
 
-      let parsed = rows
+      let records: Vec<_> = rows
         .into_iter()
-        .map(|row| super::record_to_json_expand(&metadata.column_metadata, row, None))
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .map(|row| {
+          let obj = trailbase_schema::record::record_to_json_expand(
+            &metadata.column_metadata,
+            &[],
+            &row,
+            None,
+          )
+          .unwrap();
 
-      assert_eq!(parsed.len(), 1);
-      assert_eq!(parsed.first().unwrap().get("col0").unwrap().clone(), object);
+          return to_object(&obj);
+        })
+        .collect();
+
+      assert_eq!(records.len(), 1);
+      assert_eq!(
+        records.first().unwrap().get("col0").unwrap().clone(),
+        object
+      );
     }
   }
 }

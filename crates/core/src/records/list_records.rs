@@ -12,7 +12,7 @@ use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
 use trailbase_schema::QualifiedNameEscaped;
 use trailbase_schema::json::JsonError;
-use trailbase_schema::record::{JsonObject, record_to_json_expand, record_to_json_expand_ref};
+use trailbase_schema::record::{record_to_json_expand, record_to_json_expand_ref};
 use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
@@ -405,66 +405,7 @@ pub async fn list_records_handler(
   })));
 }
 
-// #[cfg(any(feature = "geos", feature = "geos-static"))]
-// fn build_feature_collection(
-//   meta: &trailbase_schema::metadata::ColumnMetadata,
-//   pk_column_name: &str,
-//   cursor: Option<String>,
-//   total_count: Option<usize>,
-//   records: Vec<JsonObject>,
-// ) -> Result<geos::geojson::FeatureCollection, RecordError> {
-//   type JsonMap = serde_json::Map<String, serde_json::Value>;
-//   let foreign_members = match (cursor, total_count) {
-//     (Some(c), None) => Some(JsonMap::from_iter([(
-//       "cursor".to_string(),
-//       serde_json::Value::String(c),
-//     )])),
-//     (None, Some(tc)) => Some(JsonMap::from_iter([(
-//       "total_count".to_string(),
-//       serde_json::Value::Number(tc.into()),
-//     )])),
-//     (Some(c), Some(tc)) => Some(JsonMap::from_iter([
-//       ("cursor".to_string(), serde_json::Value::String(c)),
-//       (
-//         "total_count".to_string(),
-//         serde_json::Value::Number(tc.into()),
-//       ),
-//     ])),
-//     (None, None) => None,
-//   };
-//
-//   let features = records
-//     .into_iter()
-//     .map(|mut obj| -> Result<geos::geojson::Feature, RecordError> {
-//       let id = obj.get(pk_column_name).and_then(|id| match id {
-//         serde_json::Value::Number(n) => Some(geos::geojson::feature::Id::Number(n.clone())),
-//         serde_json::Value::String(s) => Some(geos::geojson::feature::Id::String(s.clone())),
-//         _ => None,
-//       });
-//       debug_assert!(id.is_some());
-//
-//       // NOTE: Geometry may be NULL for nullable columns.
-//       let geometry = obj.remove(&meta.column.name).and_then(|g| {
-//         return geos::geojson::Geometry::from_json_value(g).ok();
-//       });
-//
-//       return Ok(geos::geojson::Feature {
-//         id,
-//         geometry,
-//         properties: Some(obj),
-//         bbox: None,
-//         foreign_members: None,
-//       });
-//     })
-//     .collect::<Result<_, _>>()?;
-//
-//   return Ok(geos::geojson::FeatureCollection {
-//     bbox: None,
-//     features,
-//     foreign_members,
-//   });
-// }
-
+#[inline]
 fn fmt_order(col: &str, order: OrderPrecedent) -> String {
   return format!(
     r#"_ROW_."{col}" {}"#,
@@ -551,7 +492,6 @@ mod tests {
   use crate::config::proto::{self, PermissionFlag};
   use crate::connection::ConnectionEntry;
   use crate::records::RecordError;
-  use crate::records::expand::JsonObject;
   use crate::records::test_utils::*;
   use crate::util::id_to_b64;
   use crate::util::urlencode;

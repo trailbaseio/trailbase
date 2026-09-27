@@ -250,7 +250,6 @@ mod tests {
   use object_store::{ObjectStore, ObjectStoreExt};
   use serde_json::json;
   use std::io::Read;
-  use std::str::FromStr;
   use std::sync::Arc;
   use trailbase_schema::{FileUpload, FileUploadData, FileUploadInput};
   use trailbase_sqlite::ConnectionType;

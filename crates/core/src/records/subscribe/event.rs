@@ -5,8 +5,6 @@ use std::sync::Arc;
 
 use crate::records::RecordError;
 
-pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
-// pub type Record = indexmap::IndexMap<String, trailbase_sqlite::Value>;
 pub type Record = Vec<(String, trailbase_sqlite::Value)>;
 
 #[derive(Debug, Clone, Copy, Deserialize_repr, Serialize_repr, PartialEq)]
@@ -159,9 +157,9 @@ pub struct ChangeEvent {
 #[cfg(test)]
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum TestJsonEventPayload {
-  Update(JsonObject),
-  Insert(JsonObject),
-  Delete(JsonObject),
+  Update(trailbase_schema::record::JsonObject),
+  Insert(trailbase_schema::record::JsonObject),
+  Delete(trailbase_schema::record::JsonObject),
   Error {
     status: EventErrorStatus,
     message: Option<String>,
@@ -175,20 +173,6 @@ pub struct TestChangeEvent {
   #[serde(flatten)]
   pub event: TestJsonEventPayload,
   pub seq: Option<i64>,
-}
-
-// NOTE: to_raw_value should never fail given the limited set of inputs.
-#[cfg(not(debug_assertions))]
-#[inline]
-fn to_raw_value(obj: &JsonObject) -> Box<serde_json::value::RawValue> {
-  return serde_json::value::to_raw_value(obj)
-    .unwrap_or_else(|_| serde_json::value::RawValue::from_string("{}".to_string()).unwrap());
-}
-
-#[cfg(debug_assertions)]
-fn to_raw_value(obj: &JsonObject) -> Box<serde_json::value::RawValue> {
-  return serde_json::value::to_raw_value(obj)
-    .expect("should never fail for well-defined serde_json::Value");
 }
 
 #[cfg(test)]

@@ -303,7 +303,6 @@ fn sql_like_to_regex(like: &'_ str) -> Result<Regex, regex::Error> {
 mod tests {
   use super::*;
 
-  use indexmap::IndexMap;
   use trailbase_sqlite::Value;
 
   #[test]
