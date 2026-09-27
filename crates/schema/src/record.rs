@@ -99,6 +99,7 @@ fn value_to_flat_json_borrow<'a>(value: &'a SqliteValue) -> Result<Value<'a>, Js
   };
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait Record {
   fn len(&self) -> usize;
   fn get_value(&self, index: usize) -> Option<(&str, &trailbase_sqlite::Value)>;
@@ -113,7 +114,7 @@ impl Record for trailbase_sqlite::Row {
   #[inline]
   fn get_value(&self, index: usize) -> Option<(&str, &trailbase_sqlite::Value)> {
     let value = self.get_value(index).ok()?;
-    let name = self.column_name(index)?;
+    let name = self.column(index)?.name.as_str();
     return Some((name, value));
   }
 }
@@ -183,16 +184,13 @@ pub fn record_to_json_expand_ref<'a>(
       if meta.is_fk && expand_config.iter().any(|c| *c == column.name) {
         let id = value_ref_to_flat_json(value)?;
         let Some(expand) = expand.as_mut() else {
-          return Ok((
-            column.name.as_str(),
-            Value::ForeignKey { id: id, data: None },
-          ));
+          return Ok((column.name.as_str(), Value::ForeignKey { id, data: None }));
         };
 
         return Ok((
           column.name.as_str(),
           Value::ForeignKey {
-            id: id,
+            id,
             data: pop_first_matching(expand, |(c, _)| *c == column.name).map(|(_, v)| v),
           },
         ));

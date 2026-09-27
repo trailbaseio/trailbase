@@ -80,7 +80,7 @@ pub async fn update_user_handler(
   // NOTE: Empty string for username/email is used to unset ''.
   const UPDATE_QUERY: &str = formatcp!(
     "\
-    UPDATE {USER_TABLE} SET \
+    UPDATE '{USER_TABLE}' SET \
       email = CASE :email \
         WHEN '' THEN NULL \
         ELSE COALESCE(:email, prev.email) \

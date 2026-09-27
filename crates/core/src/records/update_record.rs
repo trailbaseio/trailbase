@@ -93,6 +93,7 @@ mod tests {
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
   use crate::config::proto::{self, PermissionFlag};
+  use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::records::create_record::{
     CreateRecordQuery, CreateRecordResponse, create_record_handler,
@@ -354,7 +355,7 @@ mod tests {
             "data"    TEXT NOT NULL
           ) {strict};
 
-          INSERT INTO test ("user", data) SELECT id, 'secret' FROM _user WHERE email = 'x@test.org';
+          INSERT INTO test ("user", data) SELECT id, 'secret' FROM {USER_TABLE} WHERE email = 'x@test.org';
         "#,
         strict = strict(conn),
         uuid = uuid_column(conn),

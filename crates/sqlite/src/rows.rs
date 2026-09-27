@@ -153,8 +153,12 @@ impl Row {
   }
 
   #[inline]
-  pub fn column_name(&self, idx: usize) -> Option<&str> {
-    return self.columns.get(idx).map(|c| c.name.as_str());
+  pub fn column(&self, idx: usize) -> Option<&Column> {
+    return self.columns.get(idx);
+  }
+
+  pub fn columns(&self) -> &[Column] {
+    return &self.columns;
   }
 
   #[inline]
