@@ -239,8 +239,10 @@ pub(crate) async fn reauth_with_refresh_token(
 
   // NOTE: The `verified` condition mirrors `mint_new_tokens`: a user with an email must have it
   // verified before we hand out tokens. Anonymous users are exempt, since they have no email.
-  const USER_QUERY: &str =
-    formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE id = $1 AND unverified_email IS NULL"#);
+  const USER_QUERY: &str = formatcp!(
+    r#"SELECT {columns} FROM "{USER_TABLE}" WHERE id = $1 AND unverified_email IS NULL"#,
+    columns = DbUser::COLUMNS
+  );
 
   let Some(db_user) = state
     .user_conn()

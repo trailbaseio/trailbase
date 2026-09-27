@@ -266,6 +266,7 @@ mod tests {
     CreateRecordQuery, CreateRecordResponse, create_record_handler,
   };
   use crate::records::delete_record::delete_record_handler;
+  use crate::records::files::FileDeletionsDb;
   use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
   use crate::records::update_record::update_record_handler;
@@ -839,8 +840,19 @@ mod tests {
     // Make sure the _file_deletions have been processed
     let pending_deletions = state
       .conn()
-      .read_query_rows("SELECT * FROM _file_deletions", ())
+      .read_query_rows(
+        format!(
+          "SELECT {columns} FROM {table}",
+          columns = FileDeletionsDb::COLUMNS,
+          table = FileDeletionsDb::TABLE_NAME
+        ),
+        (),
+      )
       .await
+      .unwrap()
+      .into_iter()
+      .map(FileDeletionsDb::from_row)
+      .collect::<Result<Vec<_>, _>>()
       .unwrap();
 
     assert_eq!(0, pending_deletions.len(), "{pending_deletions:?}");

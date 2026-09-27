@@ -122,8 +122,9 @@ pub async fn register_user_handler(
         (unverified_email, username, password_hash) \
       VALUES \
         (:unverified_email, :username, :password_hash) \
-      RETURNING * \
-    "
+      RETURNING {columns} \
+    ",
+    columns = DbUser::COLUMNS
   );
 
   let user = match state

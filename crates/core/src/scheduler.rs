@@ -503,7 +503,10 @@ async fn delete_pending_files_job(
   // TODO: Update job to delete files for all DBs.
   let rows: Vec<FileDeletionsDb> = match conn
     .write_query_rows(
-      format!(r#"DELETE FROM {file_deletions} WHERE deleted < (UNIXEPOCH() - 900) RETURNING *"#),
+      format!(
+        r#"DELETE FROM {file_deletions} WHERE deleted < (UNIXEPOCH() - 900) RETURNING {columns}"#,
+        columns = FileDeletionsDb::COLUMNS
+      ),
       (),
     )
     .await

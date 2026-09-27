@@ -67,8 +67,10 @@ pub async fn login_anonymous_user_handler(
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(request.params.redirect_uri))?;
 
   let create_user = async || -> Result<DbUser, AuthError> {
-    const INSERT_USER_QUERY: &str =
-      formatcp!("INSERT INTO \"{USER_TABLE}\" (username) VALUES (:username) RETURNING * ");
+    const INSERT_USER_QUERY: &str = formatcp!(
+      "INSERT INTO \"{USER_TABLE}\" (username) VALUES (:username) RETURNING {columns}",
+      columns = DbUser::COLUMNS
+    );
 
     let username = format!(
       "anon{suffix}",

@@ -121,7 +121,8 @@ pub async fn add_user(
   password: &str,
 ) -> Result<Uuid, AuthError> {
   const ADD_USER_QUERY: &str = formatcp!(
-    r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES ($1, $2, $3) RETURNING *"#
+    r#"INSERT INTO "{USER_TABLE}" (email, password_hash, verified) VALUES ($1, $2, $3) RETURNING {columns}"#,
+    columns = DbUser::COLUMNS
   );
 
   let normalized_email = validate_and_normalize_email_address(email)?;

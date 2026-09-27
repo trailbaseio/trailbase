@@ -3,7 +3,6 @@ use axum::{
   http::request::Parts,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::OnceLock;
 use trailbase_sqlite::Row;
 use uuid::Uuid;
 
@@ -36,61 +35,42 @@ pub struct DbUser {
 }
 
 impl DbUser {
+  // NOTE: We rely on explicit column orders because we used ALTER COLUMN in PG leading to a
+  // column order mismatch between SQLite and PG. Also, explicit is better :).
+  pub const COLUMNS: &str = "id, email, unverified_email, username, password_hash, admin, totp_secret, created, updated, provider_id, provider_user_id, provider_avatar_url";
+
   pub fn uuid(&self) -> Uuid {
     let uuid = Uuid::from_bytes(self.id);
     return uuid;
   }
 
   pub fn from_row(row: Row) -> Result<Self, AuthError> {
-    use trailbase_sqlite::from_sql::FromSqlError;
+    #[inline]
+    fn from_row_impl(mut row: Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
+      // Sanity check.
+      debug_assert_eq!(Some("id"), row.column(0).map(|c| c.name.as_str()));
+      debug_assert_eq!(Some("username"), row.column(3).map(|c| c.name.as_str()));
+      debug_assert_eq!(Some("totp_secret"), row.column(6).map(|c| c.name.as_str()));
+      debug_assert_eq!(Some("provider_id"), row.column(9).map(|c| c.name.as_str()));
 
-    // NOTE: The migrations used "ALTER TABLE" for PG leading to a different column ordering between
-    // SQLite and Postgres. We thus have to look up the column indexes for generic de-serialization.
-    // Alternatively, we could tract down all the uses of `SELECT * {USER_TABLE}` and specify an
-    // explicit column order.
-    type Builder = dyn Fn(Row) -> Result<DbUser, FromSqlError> + Sync + Send;
-    static ROW_TO_USER: OnceLock<Box<Builder>> = OnceLock::new();
-
-    let row_to_user = ROW_TO_USER.get_or_init(|| {
-      let columns = row.columns();
-
-      let find = |name: &str| -> usize {
-        return columns.iter().position(|c| c.name == name).expect("schema");
-      };
-
-      let idx_id = find("id");
-      let idx_email = find("email");
-      let idx_unverified_email = find("unverified_email");
-      let idx_username = find("username");
-      let idx_password_hash = find("password_hash");
-      let idx_admin = find("admin");
-      let idx_totp_secret = find("totp_secret");
-      let idx_created = find("created");
-      let idx_updated = find("updated");
-      let idx_provider_id = find("provider_id");
-      let idx_provider_user_id = find("provider_user_id");
-      let idx_provider_avatar_url = find("provider_avatar_url");
-
-      return Box::new(move |mut row: Row| {
-        return Ok(DbUser {
-          id: row.get(idx_id)?,
-          email: row.consume_value(idx_email)?.try_into()?,
-          unverified_email: row.consume_value(idx_unverified_email)?.try_into()?,
-          username: row.consume_value(idx_username)?.try_into()?,
-          password_hash: row.consume_value(idx_password_hash)?.try_into()?,
-          admin: row.get(idx_admin)?,
-          totp_secret: row.consume_value(idx_totp_secret)?.try_into()?,
-          created: row.get(idx_created)?,
-          updated: row.get(idx_updated)?,
-          provider_id: row.get(idx_provider_id)?,
-          provider_user_id: row.consume_value(idx_provider_user_id)?.try_into()?,
-          provider_avatar_url: row.consume_value(idx_provider_avatar_url)?.try_into()?,
-        });
+      return Ok(DbUser {
+        id: row.get(0)?,
+        email: row.consume_value(1)?.try_into()?,
+        unverified_email: row.consume_value(2)?.try_into()?,
+        username: row.consume_value(3)?.try_into()?,
+        password_hash: row.consume_value(4)?.try_into()?,
+        admin: row.get(5)?,
+        totp_secret: row.consume_value(6)?.try_into()?,
+        created: row.get(7)?,
+        updated: row.get(8)?,
+        provider_id: row.get(9)?,
+        provider_user_id: row.consume_value(10)?.try_into()?,
+        provider_avatar_url: row.consume_value(11)?.try_into()?,
       });
-    });
+    }
 
     // Should never fail. This means there's a schema mismatch.
-    return row_to_user(row).map_err(|err| AuthError::Internal(err.into()));
+    return from_row_impl(row).map_err(|err| AuthError::Internal(err.into()));
   }
 
   #[cfg(test)]

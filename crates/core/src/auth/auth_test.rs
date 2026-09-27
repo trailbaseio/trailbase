@@ -193,7 +193,10 @@ async fn register_test_user(
           state
             .user_conn()
             .read_query_row(
-              format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+              format!(
+                r#"SELECT {columns} FROM "{USER_TABLE}" WHERE email = $1"#,
+                columns = DbUser::COLUMNS
+              ),
               params!(email.clone()),
             )
             .await
@@ -201,20 +204,21 @@ async fn register_test_user(
             .is_none()
         );
 
-        assert!(
+        DbUser::from_row(
           state
             .user_conn()
             .read_query_row(
-              format!(r#"SELECT * FROM "{USER_TABLE}" WHERE unverified_email = $1"#),
+              format!(
+                r#"SELECT {columns} FROM "{USER_TABLE}" WHERE unverified_email = $1"#,
+                columns = DbUser::COLUMNS
+              ),
               params!(email.clone()),
             )
             .await
             .unwrap()
-            .map(DbUser::from_row)
-            .transpose()
-            .unwrap()
-            .is_some()
-        );
+            .unwrap(),
+        )
+        .unwrap();
       }
       _ => {}
     }
@@ -233,7 +237,10 @@ async fn register_test_user(
         state
           .user_conn()
           .read_query_row(
-            format!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#),
+            format!(
+              r#"SELECT {columns} FROM "{USER_TABLE}" WHERE email = $1"#,
+              columns = DbUser::COLUMNS
+            ),
             params!(email.clone()),
           )
           .await?
@@ -250,7 +257,10 @@ async fn register_test_user(
       state
         .user_conn()
         .read_query_row(
-          format!(r#"SELECT * FROM "{USER_TABLE}" WHERE username = $1"#),
+          format!(
+            r#"SELECT {columns} FROM "{USER_TABLE}" WHERE username = $1"#,
+            columns = DbUser::COLUMNS
+          ),
           params!(username.to_string()),
         )
         .await?

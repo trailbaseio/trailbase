@@ -285,7 +285,10 @@ mod tests {
 
     let user_x_token = login_with_password(&state, email, password).await.unwrap();
 
-    const QUERY: &str = formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE email = $1"#);
+    const QUERY: &str = formatcp!(
+      r#"SELECT {columns} FROM "{USER_TABLE}" WHERE email = $1"#,
+      columns = DbUser::COLUMNS
+    );
 
     let db_user = DbUser::from_row(
       state
@@ -338,14 +341,7 @@ mod tests {
       b"<html><body>Body 0</body></html>",
     )
     .await;
-
-    let rows = state
-      .conn()
-      .read_query_rows("SELECT * FROM _user_avatar", ())
-      .await
-      .unwrap();
-
-    assert!(non_img_result.is_err(), "{rows:?}");
+    assert!(non_img_result.is_err());
 
     let response = get_avatar_handler(State(state.clone()), Path(id_to_b64(&db_user.id)))
       .await

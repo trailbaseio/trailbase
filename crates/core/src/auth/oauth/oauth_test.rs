@@ -233,7 +233,10 @@ async fn test_oauth_login_flow_without_pkce() {
     state
       .user_conn()
       .read_query_row(
-        format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+        format!(
+          "SELECT {columns} FROM {USER_TABLE} WHERE provider_user_id = $1",
+          columns = DbUser::COLUMNS
+        ),
         (EXTERNAL_USER_ID,),
       )
       .await
@@ -353,7 +356,10 @@ async fn test_oauth_login_flow_with_pkce() {
     state
       .user_conn()
       .read_query_row(
-        format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+        format!(
+          "SELECT {columns} FROM {USER_TABLE} WHERE provider_user_id = $1",
+          columns = DbUser::COLUMNS
+        ),
         (EXTERNAL_USER_ID,),
       )
       .await
@@ -547,7 +553,10 @@ async fn test_oauth_login_flow_with_form_post_callback() {
     state
       .user_conn()
       .read_query_row(
-        format!("SELECT * FROM {USER_TABLE} WHERE provider_user_id = $1"),
+        format!(
+          "SELECT {columns} FROM {USER_TABLE} WHERE provider_user_id = $1",
+          columns = DbUser::COLUMNS
+        ),
         (EXTERNAL_USER_ID,),
       )
       .await

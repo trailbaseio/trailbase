@@ -106,8 +106,9 @@ pub(crate) async fn create_user_for_external_provider(
         provider_id, provider_user_id, email, username, provider_avatar_url \
       ) VALUES ( \
         :provider_id, :provider_user_id, :email, :username, :avatar \
-      ) RETURNING * \
-    "
+      ) RETURNING {columns} \
+    ",
+    columns = DbUser::COLUMNS
   );
 
   let db_user: DbUser = conn
@@ -134,8 +135,10 @@ pub(crate) async fn user_by_provider_id(
   provider_id: proto::OAuthProviderId,
   provider_user_id: String,
 ) -> Result<Option<DbUser>, AuthError> {
-  const QUERY: &str =
-    formatcp!(r#"SELECT * FROM "{USER_TABLE}" WHERE provider_id = $1 AND provider_user_id = $2"#);
+  const QUERY: &str = formatcp!(
+    r#"SELECT {columns} FROM "{USER_TABLE}" WHERE provider_id = $1 AND provider_user_id = $2"#,
+    columns = DbUser::COLUMNS
+  );
 
   return conn
     .read_query_row(QUERY, params!(provider_id as i64, provider_user_id))

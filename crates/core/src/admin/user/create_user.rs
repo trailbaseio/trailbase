@@ -85,8 +85,9 @@ pub async fn create_user_handler(
         (email, unverified_email, username, password_hash, admin) \
       VALUES \
         (:email, :unverified_email, :username, :password_hash, :admin) \
-      RETURNING * \
+      RETURNING {columns} \
     ",
+    columns = DbUser::COLUMNS,
   );
 
   let Some(user) = state

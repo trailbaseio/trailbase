@@ -184,7 +184,7 @@ async fn fetch_logs(
     r#"
       SELECT {TABLE_ALIAS}.*, {geoip}
       FROM
-        (SELECT * FROM {LOGS_TABLE}) AS {TABLE_ALIAS}
+        (SELECT {columns} FROM {LOGS_TABLE}) AS {TABLE_ALIAS}
       WHERE
         {where_clause}
       ORDER BY
@@ -192,6 +192,7 @@ async fn fetch_logs(
       LIMIT :limit
       OFFSET :offset
     "#,
+    columns = LogEntry::COLUMNS,
     geoip = match geoip_db_type {
       Some(DatabaseType::GeoLite2Country) =>
         format!("geoip_country({TABLE_ALIAS}.client_ip) AS client_geoip_cc"),
@@ -263,6 +264,8 @@ struct LogEntry {
 }
 
 impl LogEntry {
+  pub const COLUMNS: &str = "id, created, status, method, url, latency, client_ip, referrer, user_agent, user_id, client_geoip_cc, client_geoip_city";
+
   fn from_row(
     row: &trailbase_sqlite::Row,
     geoip_db_type: Option<DatabaseType>,
