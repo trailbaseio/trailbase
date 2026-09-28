@@ -135,7 +135,6 @@ walkdir = "2.5.0"
 trailbase-build = { workspace = true }
 
 [dev-dependencies]
-alloc_tracker = "0.7.11"
 anyhow = "^1.0.104"
 axum-test = "21.1.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
@@ -151,4 +150,3 @@ schemars = "1.2.2"
 temp-dir = "0.2.0"
 tokio-metrics = "0.5.2"
 tower = { version = "0.5.3", features = ["util"] }
-trailbase-extension = { workspace = true }
