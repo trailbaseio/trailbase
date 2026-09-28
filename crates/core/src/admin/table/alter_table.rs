@@ -425,6 +425,7 @@ mod tests {
   use crate::app_state::*;
   use crate::config::proto;
   use crate::connection::ConnectionEntry;
+  use crate::extract::RawJson;
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
   use crate::records::test_utils::*;
 
@@ -768,7 +769,7 @@ mod tests {
     .unwrap();
 
     {
-      let Json(value) = read_record_handler(
+      let RawJson(value) = read_record_handler(
         State(state.clone()),
         Path((API_NAME.to_string(), "1".to_string())),
         Query(ReadRecordQuery::default()),
@@ -833,7 +834,7 @@ mod tests {
     );
 
     {
-      let Json(value) = read_record_handler(
+      let RawJson(value) = read_record_handler(
         State(state.clone()),
         Path((API_NAME.to_string(), "1".to_string())),
         Query(ReadRecordQuery::default()),

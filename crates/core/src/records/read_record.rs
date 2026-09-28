@@ -1,14 +1,12 @@
-use axum::{
-  Json,
-  extract::{Path, Query, State},
-  response::Response,
-};
+use axum::extract::{Path, Query, State};
+use axum::response::Response;
 use serde::Deserialize;
-use trailbase_schema::json::record_to_json_expand;
+use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
 use trailbase_schema::json_schema::FileUploads;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::extract::RawJson;
 use crate::records::expand::expand_tables;
 use crate::records::files::read_file_into_response;
 use crate::records::read_queries::{
@@ -39,7 +37,7 @@ pub async fn read_record_handler(
   Path((api_name, record)): Path<(String, String)>,
   Query(query): Query<ReadRecordQuery>,
   user: Option<User>,
-) -> Result<Json<Box<serde_json::value::RawValue>>, RecordError> {
+) -> Result<RawJson, RecordError> {
   let Some(api) = state.lookup_record_api(&api_name) else {
     return Err(RecordError::ApiNotFound);
   };
@@ -99,7 +97,7 @@ pub async fn read_record_handler(
       expand.push((compact_str::CompactString::from(col_name), foreign_value));
     }
 
-    return Ok(Json(
+    return Ok(RawJson(
       record_to_json_expand(api.columns(), config_expand, &root, Some(expand))
         .map_err(|err| RecordError::Internal(err.into()))?,
     ));
@@ -117,19 +115,27 @@ pub async fn read_record_handler(
     return Err(RecordError::RecordNotFound);
   };
 
-  let json_response = record_to_json_expand(api.columns(), api.expand(), &row, None)
-    .map_err(|err| RecordError::Internal(err.into()))?;
+  let json_response = trailbase_schema::json::Value::Object(
+    record_to_json_expand_ref(api.columns(), api.expand(), &row, None)
+      .map_err(|err| RecordError::Internal(err.into()))?,
+  );
 
-  // #[cfg(debug_assertions)]
-  // crate::records::json_schema::validate_api_json_schema(
-  //   &state,
-  //   &api,
-  //   trailbase_schema::json_schema::JsonSchemaMode::Select,
-  //   // Expensive.
-  //   &serde_json::Value::Object(json_response.clone()),
-  // )?;
+  #[cfg(debug_assertions)]
+  {
+    // Expensive.
+    let value: serde_json::Value = json_response.clone().into();
 
-  return Ok(Json(json_response));
+    crate::records::json_schema::validate_api_json_schema(
+      &state,
+      &api,
+      trailbase_schema::json_schema::JsonSchemaMode::Select,
+      &value,
+    )?;
+  }
+
+  return Ok(RawJson(
+    serde_json::value::to_raw_value(&json_response).expect("well-formed"),
+  ));
 }
 
 type GetUploadedFileFromRecordPath = Path<(
@@ -244,7 +250,6 @@ pub async fn get_uploaded_files_from_record_handler(
 
 #[cfg(test)]
 mod tests {
-  use axum::Json;
   use axum::extract::{Path, Query, State};
   use base64::prelude::*;
   use object_store::{ObjectStore, ObjectStoreExt};
@@ -489,7 +494,7 @@ mod tests {
 
     let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let Json(_) = read_record_handler(
+    let RawJson(_) = read_record_handler(
       State(state),
       Path(record_path),
       Query(ReadRecordQuery::default()),
@@ -525,7 +530,7 @@ mod tests {
 
     let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let Json(map) = read_record_handler(
+    let RawJson(map) = read_record_handler(
       State(state),
       Path(record_path),
       Query(ReadRecordQuery::default()),
@@ -582,7 +587,7 @@ mod tests {
 
     let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let Json(map) = read_record_handler(
+    let RawJson(map) = read_record_handler(
       State(state.clone()),
       Path(record_path.clone()),
       Query(ReadRecordQuery::default()),
@@ -997,7 +1002,7 @@ mod tests {
 
     assert_eq!(create_response.ids[0], "1");
 
-    let Json(json) = read_record_handler(
+    let RawJson(json) = read_record_handler(
       State(state.clone()),
       Path((API_NAME.to_string(), create_response.ids[0].clone())),
       Query(ReadRecordQuery::default()),
@@ -1180,7 +1185,7 @@ mod tests {
       },
     });
 
-    let Json(obj) = read_record_handler(
+    let RawJson(obj) = read_record_handler(
       State(state.clone()),
       Path(("child_api".to_string(), "1".to_string())),
       Query(ReadRecordQuery {
@@ -1209,7 +1214,7 @@ mod tests {
     .await
     .unwrap();
 
-    let Json(obj) = read_record_handler(
+    let RawJson(obj) = read_record_handler(
       State(state.clone()),
       Path(("child_view_api".to_string(), "1".to_string())),
       Query(ReadRecordQuery {
@@ -1315,7 +1320,7 @@ mod tests {
           .await
           .unwrap();
 
-        let Json(obj) = read_record_handler(
+        let RawJson(obj) = read_record_handler(
           State(state),
           Path((name.clone(), create_response.ids[0].clone())),
           Query(ReadRecordQuery::default()),
@@ -1418,7 +1423,7 @@ mod tests {
     .await
     .unwrap();
 
-    let Json(obj) = read_record_handler(
+    let RawJson(obj) = read_record_handler(
       State(state),
       Path((name.clone(), create_response.ids[0].clone())),
       Query(ReadRecordQuery::default()),

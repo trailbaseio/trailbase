@@ -364,7 +364,7 @@ fn list_databases(
 mod tests {
   #![allow(irrefutable_let_patterns)]
 
-  use axum::extract::{Json, Path, Query, RawQuery, State};
+  use axum::extract::{Path, Query, RawQuery, State};
   use serde_json::json;
   use trailbase_schema::QualifiedName;
   use trailbase_schema::db::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
@@ -374,9 +374,9 @@ mod tests {
   use crate::app_state::*;
   use crate::config::proto::{PermissionFlag, RecordApiConfig};
   use crate::connection::ConnectionEntry;
+  use crate::extract::RawJson;
   use crate::records::list_records::{ListOrGeoJSONResponse, list_records_handler};
   use crate::records::read_record::{ReadRecordQuery, read_record_handler};
-  use crate::records::test_utils::add_record_api_config;
   use crate::records::test_utils::*;
 
   #[tokio::test]
@@ -624,7 +624,7 @@ mod tests {
         "fk_null": null,
       });
 
-      let Json(obj) = read_record_handler(
+      let RawJson(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery { expand: None }),
@@ -672,7 +672,7 @@ mod tests {
     });
 
     {
-      let Json(obj) = read_record_handler(
+      let RawJson(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
@@ -785,7 +785,7 @@ mod tests {
 
     // Expand none
     {
-      let Json(obj) = read_record_handler(
+      let RawJson(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery { expand: None }),
@@ -839,7 +839,7 @@ mod tests {
         },
       });
 
-      let Json(obj) = read_record_handler(
+      let RawJson(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
@@ -893,7 +893,7 @@ mod tests {
         },
       });
 
-      let Json(obj) = read_record_handler(
+      let RawJson(obj) = read_record_handler(
         State(state.clone()),
         Path(("test_table_api".to_string(), "1".to_string())),
         Query(ReadRecordQuery {
