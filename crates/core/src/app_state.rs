@@ -126,11 +126,7 @@ impl AppState {
         }
         _ => vec![],
       },
-      // TODO: Wire up from config, if/when PG is supported.
-      pg_uri: cfg_select! {
-        feature = "pg" => args.pg_uri,
-        _ => None,
-      },
+      pg_uri: args.pg_uri,
       read_only: Some(args.read_only),
     })
     .await?;

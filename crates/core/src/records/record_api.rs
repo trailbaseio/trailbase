@@ -764,7 +764,7 @@ fn build_read_delete_schema_query(
   access_rule: &str,
 ) -> Arc<str> {
   return match connection_type {
-    ConnectionType::Pg => format!(
+    ConnectionType::Pg | ConnectionType::Stoolap => format!(
       "\
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
@@ -826,7 +826,7 @@ fn build_create_access_query(
     .render()
     .map_err(|err| err.to_string())?
     .into(),
-    ConnectionType::Pg => CreateRecordAccessQueryTemplatePg {
+    ConnectionType::Pg | ConnectionType::Stoolap => CreateRecordAccessQueryTemplatePg {
       create_access_rule,
       column_metadata,
     }
@@ -883,7 +883,7 @@ fn build_update_access_query(
     .render()
     .map_err(|err| err.to_string())?
     .into(),
-    ConnectionType::Pg => UpdateRecordAccessQueryTemplatePg {
+    ConnectionType::Pg | ConnectionType::Stoolap => UpdateRecordAccessQueryTemplatePg {
       update_access_rule,
       table_name,
       pk_column_name,

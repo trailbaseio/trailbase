@@ -133,7 +133,7 @@ impl AsyncMigrate for Connection {
       ConnectionType::Sqlite => {
         ASSERT_SQLITE_MIGRATION_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name)
       }
-      ConnectionType::Pg => {
+      ConnectionType::Pg | ConnectionType::Stoolap => {
         ASSERT_PG_MIGRATION_TABLE_QUERY.replace("%MIGRATION_TABLE_NAME%", migration_table_name)
       }
     };

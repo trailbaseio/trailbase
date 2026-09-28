@@ -96,6 +96,7 @@ serde_urlencoded = "0.7.1"
 sha2 = "0.11.0"
 sqlformat = "0.5.0"
 sqlite3-parser = { workspace = true }
+stoolap = { workspace = true }
 thiserror = "2.0.21"
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }

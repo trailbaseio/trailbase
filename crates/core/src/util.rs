@@ -16,6 +16,7 @@ pub fn row_id_column2(connection_type: ConnectionType) -> &'static str {
   return match connection_type {
     ConnectionType::Pg => "ctid",
     ConnectionType::Sqlite => "_rowid_",
+    ConnectionType::Stoolap => "_???_",
   };
 }
 

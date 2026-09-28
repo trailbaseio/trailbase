@@ -8780,6 +8780,7 @@ dependencies = [
  "sha2 0.11.0",
  "sqlformat",
  "sqlite3-parser",
+ "stoolap",
  "temp-dir",
  "thiserror 2.0.21",
  "tokio",

@@ -184,7 +184,23 @@ impl ConnectionManager {
     const READ_ONLY: bool = false;
     let (main_conn, main_metadata, new_db) = cfg_select! {
       feature = "pg-test" => {
-        init_db_pg(
+        // init_db_pg(
+        //   InitDbOptions {
+        //     data_path: None,
+        //     migration_path: None,
+        //     is_main_db: true,
+        //     json_registry: &json_schema_registry,
+        //     runtimes: &sqlite_function_runtimes,
+        //     attach: vec![],
+        //     num_threads: None,
+        //     read_only: Some(READ_ONLY),
+        //   },
+        //   pg_uri.as_ref().expect("test").clone(),
+        // )
+        // .await
+
+        // HACK
+        init_db_stoolap(
           InitDbOptions {
             data_path: None,
             migration_path: None,
@@ -194,8 +210,7 @@ impl ConnectionManager {
             attach: vec![],
             num_threads: None,
             read_only: Some(READ_ONLY),
-          },
-          pg_uri.as_ref().expect("test").clone(),
+          }
         )
         .await
       }
@@ -435,6 +450,39 @@ async fn init_db_pg<'a>(
     connection: trailbase_sqlite::generic::PgConnection::Uri(pg_uri),
     num_threads: opts.num_threads,
   })?;
+
+  // Apply migrations.
+  //
+  // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
+  let init_schema = if opts.is_main_db {
+    crate::migrations::apply_pg_main_migrations(&conn, opts.migration_path)
+      .await
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?
+  } else {
+    false
+  };
+
+  // NOTE: read_only not supported for PG.
+  let metadata = build_metadata_and_maybe_file_deletions(
+    &conn,
+    opts.json_registry,
+    /* setup_file_deletions= */ true, // PG does not support RO.
+  )
+  .await?;
+
+  return Ok((conn, metadata, init_schema));
+}
+
+#[cfg(feature = "pg")]
+async fn init_db_stoolap<'a>(
+  opts: InitDbOptions<'a>,
+) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
+  #[cfg(not(test))]
+  log::warn!("Stoolap support is experimental");
+
+  let db = stoolap::Database::open_in_memory().unwrap();
+
+  let conn = trailbase_sqlite::Connection::stoolap_wo_opts(db)?;
 
   // Apply migrations.
   //

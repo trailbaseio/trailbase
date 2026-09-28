@@ -96,6 +96,17 @@ impl Connection {
     return Ok(inst);
   }
 
+  pub fn stoolap_wo_opts(db: stoolap::Database) -> Result<Self, Error> {
+    return Ok(Self::new(Executor::Stoolap(
+      crate::stoolap::executor::Executor::new(
+        move || -> Result<_, Error> {
+          return Ok(db.clone());
+        },
+        crate::stoolap::executor::Options {},
+      )?,
+    )));
+  }
+
   pub fn pg_with_opts(opts: PgOptions) -> Result<Self, Error> {
     use postgres::{Client, NoTls};
 
