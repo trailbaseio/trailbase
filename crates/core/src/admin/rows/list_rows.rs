@@ -3,8 +3,7 @@ use log::*;
 use serde::Serialize;
 use std::borrow::Cow;
 use trailbase_qs::{Cursor, CursorType, Order, OrderPrecedent, Query};
-use trailbase_schema::QualifiedName;
-use trailbase_schema::sqlite::{Column, ColumnDataType};
+use trailbase_schema::db::sqlite::{Column, ColumnDataType, QualifiedName};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
@@ -293,8 +292,11 @@ mod tests {
     .unwrap();
 
     let json_schema_registry = Some(
-      trailbase_schema::registry::build_json_schema_registry(vec![("foo".to_string(), pattern)])
-        .unwrap(),
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![(
+        "foo".to_string(),
+        pattern,
+      )])
+      .unwrap(),
     );
 
     let state = test_state(Some(TestStateOptions {

@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::Error;
+use crate::json_schema::error::Error;
 
 /// File input schema used both for multipart-form uploads (in which case the name is mapped to
 /// column names) and JSON where the column name is extracted from the corresponding key of the

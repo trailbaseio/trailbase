@@ -20,8 +20,8 @@ pub enum InitError {
   CustomInit(String),
   #[error("Table error: {0}")]
   TableError(#[from] crate::schema_metadata::SchemaLookupError),
-  #[error("Schema error: {0}")]
-  SchemaError(#[from] trailbase_schema::Error),
+  #[error("JsonSchema: {0}")]
+  JsonSchema(#[from] trailbase_schema::json_schema::Error),
   #[error("Script error: {0}")]
   ScriptError(String),
   #[error("ObjectStore error: {0}")]

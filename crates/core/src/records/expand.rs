@@ -1,6 +1,6 @@
 use itertools::Itertools;
-use trailbase_schema::QualifiedName;
-use trailbase_schema::sqlite::ColumnOption;
+use trailbase_schema::db::QualifiedName;
+use trailbase_schema::db::sqlite::ColumnOption;
 
 use crate::records::RecordError;
 use crate::records::record_api::RecordApi;
@@ -113,8 +113,11 @@ mod tests {
 
     let state = test_state(Some(TestStateOptions {
       json_schema_registry: Some(
-        trailbase_schema::registry::build_json_schema_registry(vec![("foo".to_string(), pattern)])
-          .unwrap(),
+        trailbase_schema::json_schema::registry::build_json_schema_registry(vec![(
+          "foo".to_string(),
+          pattern,
+        )])
+        .unwrap(),
       ),
       ..Default::default()
     }))
@@ -184,7 +187,7 @@ mod tests {
       let records: Vec<_> = rows
         .into_iter()
         .map(|row| {
-          let obj = trailbase_schema::record::record_to_json_expand(
+          let obj = trailbase_schema::json::record_to_json_expand(
             &metadata.column_metadata,
             &[],
             &row,

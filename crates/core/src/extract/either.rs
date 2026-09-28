@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
-use trailbase_schema::FileUploadInput;
+use trailbase_schema::json_schema::FileUploadInput;
 
 use crate::extract::content_type::{ContentTypeRejection, RequestContentType};
 use crate::extract::multipart::{Rejection as MultipartRejection, parse_multipart};

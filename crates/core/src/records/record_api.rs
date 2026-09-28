@@ -2,11 +2,11 @@ use askama::Template;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
-use trailbase_schema::metadata::{
+use trailbase_schema::db::metadata::{
   ColumnMetadata, ConnectionMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
   find_user_id_foreign_key_columns,
 };
-use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, ConnectionType, NamedParams, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
@@ -362,7 +362,7 @@ impl RecordApiState {
 impl RecordApi {
   pub(crate) fn build(
     conn: Arc<trailbase_sqlite::Connection>,
-    metadata: Arc<trailbase_schema::metadata::ConnectionMetadata>,
+    metadata: Arc<trailbase_schema::db::metadata::ConnectionMetadata>,
     config: proto::RecordApiConfig,
   ) -> Result<Self, String> {
     let table_name = QualifiedName::parse(config.table_name()).map_err(|err| err.to_string())?;
@@ -951,8 +951,8 @@ fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
 
 #[cfg(test)]
 mod tests {
-  use trailbase_schema::parse::{Bump, parse_into_statement};
-  use trailbase_schema::sqlite::{Column, QualifiedName};
+  use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+  use trailbase_schema::db::sqlite::{Column, ColumnAffinityType, ColumnDataType, QualifiedName};
 
   use super::*;
   use crate::{config::proto::PermissionFlag, records::Permission};
@@ -971,8 +971,8 @@ mod tests {
       column: Column {
         name: "index".to_string(),
         type_name: "uuid".to_string(),
-        data_type: trailbase_schema::sqlite::ColumnDataType::Blob,
-        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Blob,
+        data_type: ColumnDataType::Blob,
+        affinity_type: ColumnAffinityType::Blob,
         options: vec![],
       },
       json: None,

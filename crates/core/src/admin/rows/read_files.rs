@@ -3,7 +3,8 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
-use trailbase_schema::{FileUploads, QualifiedName};
+use trailbase_schema::db::QualifiedName;
+use trailbase_schema::json_schema::FileUploads;
 use ts_rs::TS;
 use utoipa::IntoParams;
 

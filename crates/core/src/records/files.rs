@@ -7,7 +7,8 @@ use object_store::{ObjectStore, ObjectStoreExt};
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::{FileUpload, FileUploads, QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{ConnectionType, params};
 
 use crate::app_state::AppState;

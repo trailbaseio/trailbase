@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use trailbase_schema::sqlite::{QualifiedName, TableIndex};
+use trailbase_schema::db::sqlite::{QualifiedName, TableIndex};
 
 use crate::error::Error;
 

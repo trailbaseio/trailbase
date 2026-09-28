@@ -2,9 +2,9 @@ use axum::extract::{Path, State};
 use axum::response::Response;
 use const_format::formatcp;
 use std::sync::LazyLock;
-use trailbase_schema::metadata::{ColumnMetadata, TableMetadata};
-use trailbase_schema::sqlite::{Column, ColumnOption, Table};
-use trailbase_schema::{FileUploadInput, QualifiedName};
+use trailbase_schema::db::metadata::{ColumnMetadata, TableMetadata};
+use trailbase_schema::db::sqlite::{Column, ColumnOption, QualifiedName, Table};
+use trailbase_schema::json_schema::FileUploadInput;
 
 use crate::app_state::AppState;
 use crate::auth::{AuthError, User};
@@ -34,7 +34,7 @@ pub async fn get_avatar_handler(
   let conn = state.user_conn();
   let file_upload = run_get_file_query(
     conn,
-    &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
+    &trailbase_schema::db::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     &AVATAR_TABLE_FILE_COLUMN,
     "user",
     Into::<trailbase_sqlite::Value>::into(user_id.as_bytes()),
@@ -103,7 +103,7 @@ pub async fn create_avatar_handler(
   let _user_id_value = run_insert_or_replace_query(
     conn,
     state.objectstore(),
-    &trailbase_schema::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
+    &trailbase_schema::db::QualifiedNameEscaped::new(&AVATAR_TABLE_NAME),
     &AVATAR_TABLE_METADATA.column_metadata,
     proto::ConflictResolutionStrategy::Replace,
     "user",
@@ -138,8 +138,8 @@ static AVATAR_TABLE_FILE_COLUMN: LazyLock<ColumnMetadata> = LazyLock::new(|| Col
   column: Column {
     name: String::from("file"),
     type_name: String::from("TEXT"),
-    data_type: trailbase_schema::sqlite::ColumnDataType::Text,
-    affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Text,
+    data_type: trailbase_schema::db::sqlite::ColumnDataType::Text,
+    affinity_type: trailbase_schema::db::sqlite::ColumnAffinityType::Text,
     options: vec![
       ColumnOption::Check(
         "jsonschema ('std.FileUpload', file, 'image/png, image/jpeg')".to_string(),
@@ -147,9 +147,9 @@ static AVATAR_TABLE_FILE_COLUMN: LazyLock<ColumnMetadata> = LazyLock::new(|| Col
       ColumnOption::NotNull,
     ],
   },
-  json: Some(trailbase_schema::metadata::JsonColumnMetadata::SchemaName(
-    String::from("std.FileUpload"),
-  )),
+  json: Some(
+    trailbase_schema::db::metadata::JsonColumnMetadata::SchemaName(String::from("std.FileUpload")),
+  ),
   is_file: true,
   is_geometry: false,
   is_fk: false,
@@ -172,8 +172,8 @@ static AVATAR_TABLE_METADATA: LazyLock<TableMetadata> = LazyLock::new(|| {
       Column {
         name: String::from("user"),
         type_name: String::from("BLOB"),
-        data_type: trailbase_schema::sqlite::ColumnDataType::Blob,
-        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Blob,
+        data_type: trailbase_schema::db::sqlite::ColumnDataType::Blob,
+        affinity_type: trailbase_schema::db::sqlite::ColumnAffinityType::Blob,
         options: vec![
           ColumnOption::Unique {
             is_primary: true,
@@ -183,7 +183,7 @@ static AVATAR_TABLE_METADATA: LazyLock<TableMetadata> = LazyLock::new(|| {
           ColumnOption::ForeignKey {
             foreign_table: "_user".to_string(),
             referred_columns: vec!["id".to_string()],
-            on_delete: Some(trailbase_schema::sqlite::ReferentialAction::Cascade),
+            on_delete: Some(trailbase_schema::db::sqlite::ReferentialAction::Cascade),
             on_update: None,
           },
         ],
@@ -192,8 +192,8 @@ static AVATAR_TABLE_METADATA: LazyLock<TableMetadata> = LazyLock::new(|| {
       Column {
         name: String::from("updated"),
         type_name: String::from("INTEGER"),
-        data_type: trailbase_schema::sqlite::ColumnDataType::Integer,
-        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
+        data_type: trailbase_schema::db::sqlite::ColumnDataType::Integer,
+        affinity_type: trailbase_schema::db::sqlite::ColumnAffinityType::Integer,
         options: vec![
           ColumnOption::Default("(UNIXEPOCH ())".to_string()),
           ColumnOption::NotNull,
@@ -208,7 +208,7 @@ static AVATAR_TABLE_METADATA: LazyLock<TableMetadata> = LazyLock::new(|| {
   };
 
   let json_schema_registry =
-    trailbase_schema::registry::build_json_schema_registry(vec![]).expect("static");
+    trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).expect("static");
 
   return TableMetadata::new(&json_schema_registry, schema.clone(), &[schema]).expect("static");
 });

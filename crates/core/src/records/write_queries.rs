@@ -3,8 +3,8 @@ use object_store::ObjectStore;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
-use trailbase_schema::QualifiedNameEscaped;
-use trailbase_schema::metadata::ColumnMetadata;
+use trailbase_schema::db::QualifiedNameEscaped;
+use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_sqlite::{Connection, ConnectionType, NamedParams, Value};
 
@@ -407,8 +407,8 @@ struct CreateOrReplaceRecordQueryTemplate<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use trailbase_schema::parse::{Bump, parse_into_statement};
-  use trailbase_schema::sqlite::QualifiedName;
+  use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+  use trailbase_schema::db::sqlite::QualifiedName;
 
   fn sanitize_template(template: &str) {
     let allocator = Bump::new();

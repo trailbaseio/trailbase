@@ -1745,7 +1745,7 @@ pub fn lookup_and_parse_table_schema(
   )?;
 
   let allocator = sqlite3_parser::Bump::new();
-  let Some(stmt) = crate::parse::parse_into_statement(&allocator, &sql)? else {
+  let Some(stmt) = crate::db::parse_sql::parse_into_statement(&allocator, &sql)? else {
     anyhow::bail!("Not a statement");
   };
 
@@ -1770,7 +1770,8 @@ fn column_with_alias(column: &Column, alias: String) -> Column {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::{metadata::find_record_pk_column_index_for_view, parse::parse_into_statement};
+  use crate::db::metadata::find_record_pk_column_index_for_view;
+  use crate::db::parse_sql::parse_into_statement;
 
   #[test]
   fn test_quote() {

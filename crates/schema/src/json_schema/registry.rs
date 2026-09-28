@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 pub use trailbase_extension::jsonschema::{JsonSchemaRegistry, Schema};
 
-use crate::error::Error;
-use crate::file::{FileUpload, FileUploads};
+use crate::json_schema::error::Error;
+use crate::json_schema::file::{FileUpload, FileUploads};
 
 #[derive(Debug, Default, Clone, PartialEq, JsonSchema)]
 struct KeyValue(std::collections::BTreeMap<String, String>);

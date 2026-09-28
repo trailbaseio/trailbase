@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
@@ -96,7 +96,7 @@ mod tests {
   use std::collections::HashMap;
 
   use axum::extract::RawQuery;
-  use trailbase_schema::{FileUpload, FileUploadData, FileUploadInput};
+  use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadInput};
 
   use super::*;
   use crate::admin::rows::list_rows::{ListRowsResponse, list_rows_handler};

@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
+use trailbase_schema::db::sqlite::{Column, ColumnAffinityType, ColumnDataType};
 use trailbase_schema::json::JsonError;
-use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType};
 use trailbase_sqlite::{Row, Rows, ValueType};
 use trailbase_sqlvalue::SqlValue;
 

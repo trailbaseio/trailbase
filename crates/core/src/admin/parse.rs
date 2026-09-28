@@ -1,7 +1,7 @@
 use axum::{Json, extract::State};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use trailbase_schema::parse::{Bump, parse_into_statement};
+use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;

@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 

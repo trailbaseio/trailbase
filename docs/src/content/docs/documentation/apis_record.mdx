@@ -554,7 +554,7 @@ can be useful for driving external code generation or introspection in general.
 
 ## File Uploads
 
-export const fileUploadInput = githubCodeReference({ path: "crates/schema/src/file.rs", match: "pub struct FileUploadInput"});
+export const fileUploadInput = githubCodeReference({ path: "crates/schema/src/json_schema/file.rs", match: "pub struct FileUploadInput"});
 
 Record APIs can also support file uploads and downloads. There's some special
 handling in place to only store metadata in the underlying table while the files

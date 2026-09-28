@@ -3,8 +3,8 @@ use itertools::Itertools;
 use log::*;
 use serde::Serialize;
 use std::collections::BTreeSet;
-use trailbase_schema::parse::{Bump, parse_into_statement};
-use trailbase_schema::sqlite::{QualifiedName, Table, TableIndex, View};
+use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+use trailbase_schema::db::sqlite::{QualifiedName, Table, TableIndex, View};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -59,7 +59,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
     connection: conn, ..
   } = state.connection_manager().main_entry();
 
-  let trailbase_schema::metadata::ConnectionMetadata { tables, views } =
+  let trailbase_schema::db::metadata::ConnectionMetadata { tables, views } =
     crate::schema_metadata::build_metadata_and_maybe_file_deletions(
       &conn,
       state.json_schema_registry(),

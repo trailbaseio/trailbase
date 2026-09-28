@@ -1,9 +1,7 @@
 use regex::Regex;
 use trailbase_qs::{Combiner, CompareOp};
-use trailbase_schema::{
-  metadata::ColumnMetadata,
-  sqlite::{Column, ColumnDataType},
-};
+use trailbase_schema::db::metadata::ColumnMetadata;
+use trailbase_schema::db::sqlite::{Column, ColumnDataType};
 
 use crate::records::RecordError;
 

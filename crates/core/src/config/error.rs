@@ -17,7 +17,7 @@ pub enum ConfigError {
   #[error("Id: {0}")]
   Id(#[from] uuid::Error),
   #[error("Schema: {0}")]
-  Schema(#[from] trailbase_schema::sqlite::SchemaError),
+  Schema(#[from] trailbase_schema::db::sqlite::SchemaError),
   #[error("Textproto: {0}")]
   Textproto(#[from] crate::config::textproto::Error),
 }

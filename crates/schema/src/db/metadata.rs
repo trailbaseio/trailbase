@@ -9,7 +9,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
-use crate::sqlite::{
+use crate::db::sqlite::{
   Column, ColumnDataType, ColumnMapping, ColumnOption, QualifiedName, Table, View,
 };
 
@@ -705,8 +705,8 @@ mod tests {
   use sqlite3_parser::Bump;
 
   use super::*;
-  use crate::parse::parse_into_statement;
-  use crate::sqlite::{SchemaError, Table};
+  use crate::db::parse_sql::parse_into_statement;
+  use crate::db::sqlite::{SchemaError, Table};
 
   fn parse_create_table(create_table_sql: &str) -> Table {
     let allocator = Bump::new();
@@ -1091,7 +1091,7 @@ mod tests {
 
   #[test]
   fn test_extract_json_metadata() {
-    let registry = crate::registry::build_json_schema_registry(vec![]).unwrap();
+    let registry = crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
 
     assert!(
       extract_json_metadata(&registry, &ColumnOption::Check("".to_string()))

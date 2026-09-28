@@ -6,7 +6,7 @@ use axum::{
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use thiserror::Error;
-use trailbase_schema::{FileUploadData, FileUploadInput};
+use trailbase_schema::json_schema::{FileUploadData, FileUploadInput};
 
 #[derive(Debug, Error)]
 pub enum Rejection {

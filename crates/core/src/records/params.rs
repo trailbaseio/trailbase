@@ -2,11 +2,11 @@ use parking_lot::RwLock;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
+use trailbase_schema::db::metadata::ColumnMetadata;
+use trailbase_schema::db::sqlite::{Column, ColumnDataType};
 use trailbase_schema::json::flat_json_to_value;
-use trailbase_schema::metadata::ColumnMetadata;
-use trailbase_schema::registry::JsonSchemaRegistry;
-use trailbase_schema::sqlite::{Column, ColumnDataType};
-use trailbase_schema::{FileUpload, FileUploadInput, FileUploads};
+use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
+use trailbase_schema::json_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::{NamedParams, Value};
 use trailbase_sqlvalue::SqlValue;
 
@@ -40,8 +40,8 @@ pub enum ParamsError {
   JsonValidation(#[from] schema_metadata::JsonSchemaError),
   #[error("Json serialization: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
-  #[error("Json schema: {0}")]
-  Schema(#[from] trailbase_schema::Error),
+  #[error("JsonSchema: {0}")]
+  JsonSchema(#[from] trailbase_schema::json_schema::Error),
   #[error("ObjectStore: {0}")]
   Storage(Arc<object_store::Error>),
   #[error("SqlValueDecode: {0}")]
@@ -685,9 +685,9 @@ mod tests {
   use base64::prelude::*;
   use schemars::{JsonSchema, schema_for};
   use serde_json::json;
-  use trailbase_schema::parse::{Bump, parse_into_statement};
-  use trailbase_schema::sqlite::Table;
-  use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
+  use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+  use trailbase_schema::db::sqlite::Table;
+  use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 
   use super::*;
   use crate::config::proto;
@@ -715,7 +715,8 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let registry =
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
     let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
     let qualified_name = QualifiedNameEscaped::new(&QualifiedName {
       name: table_name.clone(),
@@ -790,7 +791,7 @@ mod tests {
 
     const SCHEMA_NAME: &str = "test.TestSchema";
 
-    let registry = trailbase_schema::registry::build_json_schema_registry(vec![(
+    let registry = trailbase_schema::json_schema::registry::build_json_schema_registry(vec![(
       SCHEMA_NAME.to_string(),
       serde_json::to_value(&schema_for!(TestSchema)).unwrap(),
     )])
@@ -916,15 +917,14 @@ mod tests {
         "real": "3",
       });
 
-      assert!(
-        Params::for_insert(
-          &metadata,
-          &registry,
-          json_row_from_value(value.clone()).unwrap(),
-          None
-        )
-        .is_err()
+      let params = Params::for_insert(
+        &metadata,
+        &registry,
+        json_row_from_value(value.clone()).unwrap(),
+        None,
       );
+
+      assert!(params.is_err(), "{params:?}");
     }
 
     {
@@ -1061,7 +1061,8 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let registry =
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
     let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
 
     let id: i64 = 5;
@@ -1113,7 +1114,8 @@ mod tests {
       .try_into()
       .unwrap();
 
-    let registry = trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let registry =
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
     let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
 
     let id: i64 = 5;

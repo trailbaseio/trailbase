@@ -103,7 +103,7 @@ impl AppState {
     )?;
 
     let json_schema_registry = Arc::new(parking_lot::RwLock::new(
-      trailbase_schema::registry::build_json_schema_registry(vec![])?,
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![])?,
     ));
 
     if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
@@ -522,9 +522,11 @@ pub(crate) fn update_json_schema_registry(
     );
 
     registry.write().swap(
-      trailbase_schema::registry::build_json_schema_registry(schemas).map_err(|err| {
-        return ConfigError::Update(format!("Update of JSON schema registry failed: {err}"));
-      })?,
+      trailbase_schema::json_schema::registry::build_json_schema_registry(schemas).map_err(
+        |err| {
+          return ConfigError::Update(format!("Update of JSON schema registry failed: {err}"));
+        },
+      )?,
     );
 
     return Ok(true);
@@ -761,8 +763,9 @@ mod test_utils {
     } = options.unwrap_or_default();
 
     let json_schema_registry = Arc::new(parking_lot::RwLock::new(
-      json_schema_registry
-        .unwrap_or_else(|| trailbase_schema::registry::build_json_schema_registry(vec![]).unwrap()),
+      json_schema_registry.unwrap_or_else(|| {
+        trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap()
+      }),
     ));
 
     let config = config.unwrap_or_else(test_config);

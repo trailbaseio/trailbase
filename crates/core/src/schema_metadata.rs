@@ -3,11 +3,11 @@ use log::*;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use thiserror::Error;
-use trailbase_schema::parse::parse_into_statement;
-use trailbase_schema::sqlite::{Table, View};
+use trailbase_schema::db::parse_sql::parse_into_statement;
+use trailbase_schema::db::sqlite::{Table, View};
 use trailbase_sqlite::{ConnectionType, params, unpack_other_error};
 
-pub use trailbase_schema::metadata::{
+pub use trailbase_schema::db::metadata::{
   ConnectionMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata,
 };
 
@@ -21,7 +21,7 @@ pub enum SchemaLookupError {
   #[error("FromSqlError: {0}")]
   FromSql(#[from] trailbase_sqlite::from_sql::FromSqlError),
   #[error("SchemaError: {0}")]
-  Schema(#[from] trailbase_schema::sqlite::SchemaError),
+  Schema(#[from] trailbase_schema::db::sqlite::SchemaError),
   #[error("InvalidSqlStatement")]
   InvalidSqlStatement,
   #[error("QueryReturnedNoRows")]
@@ -29,7 +29,7 @@ pub enum SchemaLookupError {
   #[error("SqlParseError: {0}")]
   SqlParse(#[from] sqlite3_parser::lexer::sql::Error),
   #[error("JsonSchemaError: {0}")]
-  JsonSchema(#[from] trailbase_schema::metadata::JsonSchemaError),
+  JsonSchema(#[from] trailbase_schema::db::metadata::JsonSchemaError),
   #[error("NotFound")]
   NotFound,
   #[cfg(feature = "pg")]
@@ -39,7 +39,7 @@ pub enum SchemaLookupError {
 
 pub(crate) async fn build_metadata_and_maybe_file_deletions(
   conn: &trailbase_sqlite::Connection,
-  json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  json_schema_registry: &Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
   setup_file_deletions: bool,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
   let json_schema_registry = json_schema_registry.clone();
@@ -48,7 +48,7 @@ pub(crate) async fn build_metadata_and_maybe_file_deletions(
   fn build_metadata_impl(
     conn: &mut trailbase_sqlite::SyncConnection,
     connection_type: ConnectionType,
-    json_schema_registry: &Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+    json_schema_registry: &Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
   ) -> Result<ConnectionMetadata, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn, connection_type)?;
     let views = lookup_and_parse_all_view_schemas(conn, connection_type, &tables)?;
@@ -367,8 +367,8 @@ mod tests {
   use axum::extract::{Json, Path, Query, RawQuery, State};
   use serde_json::json;
   use trailbase_schema::QualifiedName;
+  use trailbase_schema::db::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
   use trailbase_schema::json_schema::{Expand, JsonSchemaMode, build_json_schema_expanded};
-  use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
   use trailbase_sqlite::ConnectionType;
 
   use crate::app_state::*;

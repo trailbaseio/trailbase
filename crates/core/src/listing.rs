@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use thiserror::Error;
 use trailbase_qs::ValueOrComposite;
-use trailbase_schema::metadata::ColumnMetadata;
+use trailbase_schema::db::metadata::ColumnMetadata;
 
 #[derive(Debug, Error)]
 pub enum WhereClauseError {

@@ -1,8 +1,7 @@
 use itertools::Itertools;
-use trailbase_schema::QualifiedName;
-use trailbase_schema::metadata::TableOrViewMetadata;
-use trailbase_schema::parse::{Bump, parse_into_statement};
-use trailbase_schema::sqlite::ColumnOption;
+use trailbase_schema::db::metadata::TableOrViewMetadata;
+use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+use trailbase_schema::db::sqlite::{ColumnOption, QualifiedName};
 use trailbase_sqlite::ConnectionType;
 
 use crate::config::{ConfigError, proto};

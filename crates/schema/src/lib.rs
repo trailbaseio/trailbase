@@ -2,78 +2,13 @@
 #![allow(clippy::needless_return)]
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
-pub mod error;
-pub mod file;
+// This crate became a kitchen sink for three different kinds of "schemas": DB schemas (e.g.
+// Sqlite), general JSON work (e.g. turning DB values into JSON records), and JSONSchema(TM) stuff.
+pub mod db;
 pub mod json;
 pub mod json_schema;
-pub mod metadata;
-pub mod parse;
-pub mod record;
-pub mod registry;
-pub mod sqlite;
 
-pub use error::Error;
-pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};
-pub use sqlite::QualifiedName;
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct QualifiedNameEscaped(String);
-
-impl QualifiedNameEscaped {
-  pub fn new(name: &QualifiedName) -> Self {
-    return Self(name.escaped_string());
-  }
-
-  pub fn parse(&self) -> QualifiedName {
-    return QualifiedName::parse(&self.0).expect("valid");
-  }
-}
-
-impl From<QualifiedName> for QualifiedNameEscaped {
-  fn from(name: QualifiedName) -> Self {
-    return Self::new(&name);
-  }
-}
-
-impl From<&QualifiedName> for QualifiedNameEscaped {
-  fn from(name: &QualifiedName) -> Self {
-    return Self::new(name);
-  }
-}
-
-impl std::fmt::Display for QualifiedNameEscaped {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    return self.0.fmt(f);
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_qualified_name_escaped() {
-    let simple = QualifiedName::parse("test").unwrap();
-    assert_eq!(
-      simple,
-      QualifiedName {
-        name: "test".to_string(),
-        database_schema: None,
-      }
-    );
-    assert_eq!(QualifiedNameEscaped::new(&simple).0, r#""test""#);
-
-    let composite = QualifiedName::parse("db.'test.bar'").unwrap();
-    assert_eq!(
-      composite,
-      QualifiedName {
-        name: "test.bar".to_string(),
-        database_schema: Some("db".to_string()),
-      }
-    );
-    assert_eq!(
-      QualifiedNameEscaped::new(&composite).0,
-      r#""db"."test.bar""#
-    );
-  }
-}
+// TODO: Clean up legacy re-exports after breaking up into 3 modules.
+pub use db::sqlite::QualifiedName;
+// pub use error::Error;
+// pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};

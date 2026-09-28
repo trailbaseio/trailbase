@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use trailbase_schema::sqlite::{
+use trailbase_schema::db::sqlite::{
   Column, ColumnAffinityType, ColumnDataType, ColumnOption, QualifiedName, Table,
 };
 use trailbase_sqlite::params;

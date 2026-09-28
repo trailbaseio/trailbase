@@ -12,7 +12,7 @@ use std::sync::{
   Arc,
   atomic::{AtomicI32, Ordering},
 };
-use trailbase_schema::{QualifiedName, QualifiedNameEscaped};
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlite::{Connection, named_params, params};
 
 use crate::DataDir;

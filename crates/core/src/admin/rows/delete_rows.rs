@@ -5,7 +5,8 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
-use trailbase_schema::{QualifiedName, QualifiedNameEscaped, metadata::find_file_column_indexes};
+use trailbase_schema::db::metadata::find_file_column_indexes;
+use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
@@ -137,7 +138,9 @@ pub async fn delete_rows_handler(
 mod tests {
   use axum::extract::{Json, Path, RawQuery, State};
   use serde::Deserialize;
-  use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
+  use trailbase_schema::db::sqlite::{
+    Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table,
+  };
   use trailbase_sqlite::ConnectionType;
   use trailbase_sqlvalue::Blob;
   use uuid::Uuid;

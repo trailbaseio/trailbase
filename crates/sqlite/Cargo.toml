@@ -43,7 +43,7 @@ tokio = { workspace = true }
 triomphe = "0.1.16"
 
 [dev-dependencies]
-chrono = { workspace = true }
+chrono = { workspace = true, features = ["clock"] }
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 csv = "1.4.0"
 env_logger.workspace = true

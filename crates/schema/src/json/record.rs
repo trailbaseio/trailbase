@@ -1,103 +1,9 @@
 use base64::prelude::*;
 use trailbase_sqlite::Value as SqliteValue;
 
-use crate::json::{JsonError, value_ref_to_flat_json};
-use crate::metadata::{ColumnMetadata, JsonColumnMetadata};
-
-pub type JsonObject = serde_json::value::Map<String, serde_json::Value>;
-
-// We have our own Value representation for JSON serialization only to reduce allocations.
-#[derive(Clone, Default)]
-pub enum Value<'ctx> {
-  #[default]
-  Null,
-  Bool(bool),
-  Number(serde_json::Number),
-  String(std::borrow::Cow<'ctx, str>),
-  Array(Vec<Value<'ctx>>),
-  // Two object representation for reference data and owned.
-  Object(Vec<(&'ctx str, Value<'ctx>)>),
-  ObjectOwned(JsonObject),
-  // Fk
-  ForeignKey {
-    id: serde_json::Value,
-    data: Option<Box<serde_json::value::RawValue>>,
-  },
-  // Nested unparsed json.
-  Raw(Box<serde_json::value::RawValue>),
-}
-
-impl<'ctx> From<Value<'ctx>> for serde_json::Value {
-  fn from(value: Value<'ctx>) -> Self {
-    use serde_json::Value as JValue;
-    return match value {
-      Value::Null => JValue::Null,
-      Value::Bool(b) => JValue::Bool(b),
-      Value::Number(n) => JValue::Number(n),
-      Value::String(s) => JValue::String(s.to_string()),
-      Value::Array(a) => JValue::Array(a.into_iter().map(|v| v.into()).collect()),
-      Value::Object(o) => JValue::Object(
-        o.into_iter()
-          .map(|(k, v)| (k.to_string(), v.into()))
-          .collect(),
-      ),
-      Value::ObjectOwned(o) => JValue::Object(o),
-      Value::ForeignKey { id, data } => {
-        if let Some(data) = data {
-          serde_json::json!({
-            "id": id,
-            "data": serde_json::from_str::<JValue>(data.get()).expect("well-formed"),
-          })
-        } else {
-          serde_json::json!({
-            "id": id,
-          })
-        }
-      }
-      Value::Raw(raw) => serde_json::from_str(raw.get()).expect("well-formed"),
-    };
-  }
-}
-
-impl serde::ser::Serialize for Value<'_> {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: serde::ser::Serializer,
-  {
-    match self {
-      Value::Null => serializer.serialize_unit(),
-      Value::Bool(b) => serializer.serialize_bool(*b),
-      Value::Number(n) => n.serialize(serializer),
-      Value::String(s) => serializer.serialize_str(s),
-      Value::Array(v) => serializer.collect_seq(v),
-      Value::Object(m) => serializer.collect_map(m.iter().map(|(k, v)| (*k, v))),
-      Value::ObjectOwned(m) => m.serialize(serializer),
-      Value::ForeignKey { id, data } => {
-        use serde::ser::SerializeMap;
-        let mut s = serializer.serialize_map(Some(if data.is_some() { 2 } else { 1 }))?;
-        s.serialize_entry("id", id)?;
-        if let Some(data) = data {
-          s.serialize_entry("data", data)?;
-        }
-        s.end()
-      }
-      Value::Raw(j) => j.serialize(serializer),
-    }
-  }
-}
-
-#[inline]
-fn value_to_flat_json_borrow<'a>(value: &'a SqliteValue) -> Result<Value<'a>, JsonError> {
-  return match value {
-    SqliteValue::Null => Ok(Value::Null),
-    SqliteValue::Real(f) => Ok(Value::Number(
-      serde_json::Number::from_f64(*f).ok_or(JsonError::Finite)?,
-    )),
-    SqliteValue::Integer(integer) => Ok(Value::Number(serde_json::Number::from(*integer))),
-    SqliteValue::Blob(blob) => Ok(Value::String(BASE64_URL_SAFE.encode(blob).into())),
-    SqliteValue::Text(text) => Ok(Value::String(std::borrow::Cow::Borrowed(text))),
-  };
-}
+use crate::db::metadata::{ColumnMetadata, JsonColumnMetadata};
+use crate::json::error::JsonError;
+use crate::json::value::{JsonObject, Value};
 
 #[allow(clippy::len_without_is_empty)]
 pub trait Record {
@@ -182,7 +88,7 @@ pub fn record_to_json_expand_ref<'a>(
 
       // Expand a foreign key.
       if meta.is_fk && expand_config.iter().any(|c| *c == column.name) {
-        let id = value_ref_to_flat_json(value)?;
+        let id = value_ref_to_flat_json_owned(value)?;
         let Some(expand) = expand.as_mut() else {
           return Ok((column.name.as_str(), Value::ForeignKey { id, data: None }));
         };
@@ -323,6 +229,35 @@ pub fn build_feature_collection(
   });
 }
 
+/// Convert a SQLite value to basic JSON types: String, Number, Null.
+#[inline]
+fn value_ref_to_flat_json_owned(value: &SqliteValue) -> Result<serde_json::Value, JsonError> {
+  return match value {
+    SqliteValue::Null => Ok(serde_json::Value::Null),
+    SqliteValue::Real(f) => Ok(serde_json::Value::Number(
+      serde_json::Number::from_f64(*f).ok_or(JsonError::Finite)?,
+    )),
+    SqliteValue::Integer(integer) => Ok(serde_json::Value::Number(serde_json::Number::from(
+      *integer,
+    ))),
+    SqliteValue::Blob(blob) => Ok(serde_json::Value::String(BASE64_URL_SAFE.encode(blob))),
+    SqliteValue::Text(text) => Ok(serde_json::Value::String(text.clone())),
+  };
+}
+
+#[inline]
+fn value_to_flat_json_borrow<'a>(value: &'a SqliteValue) -> Result<Value<'a>, JsonError> {
+  return match value {
+    SqliteValue::Null => Ok(Value::Null),
+    SqliteValue::Real(f) => Ok(Value::Number(
+      serde_json::Number::from_f64(*f).ok_or(JsonError::Finite)?,
+    )),
+    SqliteValue::Integer(integer) => Ok(Value::Number(serde_json::Number::from(*integer))),
+    SqliteValue::Blob(blob) => Ok(Value::String(BASE64_URL_SAFE.encode(blob).into())),
+    SqliteValue::Text(text) => Ok(Value::String(std::borrow::Cow::Borrowed(text))),
+  };
+}
+
 #[inline]
 fn strip_file_metadata_id(mut _file_metadata: JsonObject) -> JsonObject {
   _file_metadata.remove("id");
@@ -340,7 +275,7 @@ where
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::sqlite::{Column, ColumnAffinityType, ColumnDataType};
+  use crate::db::sqlite::{Column, ColumnAffinityType, ColumnDataType};
 
   #[test]
   fn simple_record() {

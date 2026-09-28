@@ -1,6 +1,6 @@
 use axum::{Json, extract::State};
 use serde::{Deserialize, Serialize};
-use trailbase_schema::sqlite::Table;
+use trailbase_schema::db::sqlite::Table;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;

@@ -2,7 +2,7 @@ use axum::extract::{Json, State};
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use trailbase_schema::sqlite::{Column, QualifiedName, Table};
+use trailbase_schema::db::sqlite::{Column, QualifiedName, Table};
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;
@@ -415,8 +415,10 @@ fn escape_and_join_column_names(names: &[String]) -> String {
 #[cfg(test)]
 mod tests {
   use axum::extract::{Path, Query, State};
-  use trailbase_schema::parse::{Bump, parse_into_statement};
-  use trailbase_schema::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table};
+  use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+  use trailbase_schema::db::sqlite::{
+    Column, ColumnAffinityType, ColumnDataType, ColumnOption, Table,
+  };
 
   use super::*;
   use crate::admin::table::create_table::{CreateTableRequest, create_table_handler};

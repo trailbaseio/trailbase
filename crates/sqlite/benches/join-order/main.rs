@@ -1,5 +1,4 @@
-use chrono::DateTime;
-use chrono::offset::Utc;
+use chrono::{DateTime, Utc};
 use csv::StringRecord;
 use glob::glob;
 use itertools::Itertools;
@@ -152,8 +151,7 @@ fn main() {
     .unwrap();
 
   let mut output = {
-    let now = SystemTime::now();
-    let datetime: DateTime<Utc> = now.into();
+    let datetime: DateTime<_> = Utc::now();
 
     let mut output = std::fs::OpenOptions::new()
       .write(true)

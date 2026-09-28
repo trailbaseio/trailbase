@@ -2,7 +2,8 @@ use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use trailbase_schema::{FileUploadInput, QualifiedNameEscaped};
+use trailbase_schema::db::QualifiedNameEscaped;
+use trailbase_schema::json_schema::FileUploadInput;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;

@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use serde::Deserialize;
-use trailbase_schema::sqlite::{ColumnMapping, QualifiedName, View, ViewColumn};
+use trailbase_schema::db::sqlite::{ColumnMapping, QualifiedName, View, ViewColumn};
 
 use crate::error::Error;
 use crate::table::{ColumnInformationSchema, build_column_schema, get_columns};
@@ -133,7 +133,7 @@ pub fn build_all_view_schemas(
 
 #[cfg(test)]
 mod tests {
-  use trailbase_schema::sqlite::{Column, ColumnOption};
+  use trailbase_schema::db::sqlite::{Column, ColumnAffinityType, ColumnDataType, ColumnOption};
 
   use super::*;
   use crate::util::test_connection;
@@ -196,8 +196,8 @@ mod tests {
         column: Column {
           name: "?column?".to_string(),
           type_name: "integer".to_string(),
-          data_type: trailbase_schema::sqlite::ColumnDataType::Integer,
-          affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
+          data_type: ColumnDataType::Integer,
+          affinity_type: ColumnAffinityType::Integer,
           options: vec![],
         },
         parent_name: None,
@@ -211,8 +211,8 @@ mod tests {
         column: Column {
           name: "value".to_string(),
           type_name: "integer".to_string(),
-          data_type: trailbase_schema::sqlite::ColumnDataType::Integer,
-          affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
+          data_type: ColumnDataType::Integer,
+          affinity_type: ColumnAffinityType::Integer,
           options: vec![ColumnOption::NotNull],
         },
         parent_name: Some("tt".to_string()),
@@ -226,8 +226,8 @@ mod tests {
         column: Column {
           name: "concat".to_string(),
           type_name: "text".to_string(),
-          data_type: trailbase_schema::sqlite::ColumnDataType::Text,
-          affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Text,
+          data_type: ColumnDataType::Text,
+          affinity_type: ColumnAffinityType::Text,
           options: vec![],
         },
         parent_name: None,

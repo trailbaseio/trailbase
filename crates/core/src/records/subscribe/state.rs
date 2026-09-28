@@ -11,7 +11,7 @@ use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 use trailbase_qs::ValueOrComposite;
 use trailbase_schema::QualifiedName;
-use trailbase_schema::record::record_to_json_expand;
+use trailbase_schema::json::record_to_json_expand;
 
 use crate::auth::User;
 use crate::records::filter::{Filter, qs_filter_to_record_filter};

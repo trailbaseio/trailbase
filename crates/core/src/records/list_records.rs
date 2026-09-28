@@ -10,9 +10,8 @@ use std::borrow::Cow;
 use std::convert::TryInto;
 use std::sync::LazyLock;
 use trailbase_qs::OrderPrecedent;
-use trailbase_schema::QualifiedNameEscaped;
-use trailbase_schema::json::JsonError;
-use trailbase_schema::record::{record_to_json_expand, record_to_json_expand_ref};
+use trailbase_schema::db::QualifiedNameEscaped;
+use trailbase_schema::json::{JsonError, record_to_json_expand, record_to_json_expand_ref};
 use trailbase_sqlite::{ConnectionType, Value};
 
 use crate::app_state::AppState;
@@ -370,7 +369,7 @@ pub async fn list_records_handler(
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   if let Some(meta) = geojson_geometry_column {
     return Ok(Json(ListOrGeoJSONResponse::GeoJSON(
-      trailbase_schema::record::build_feature_collection(
+      trailbase_schema::json::build_feature_collection(
         meta,
         &pk_column.name,
         cursor,
@@ -398,7 +397,7 @@ pub async fn list_records_handler(
     records: records
       .into_iter()
       .map(|obj| {
-        serde_json::value::to_raw_value(&trailbase_schema::record::Value::Object(obj))
+        serde_json::value::to_raw_value(&trailbase_schema::json::Value::Object(obj))
           .expect("well-formed")
       })
       .collect(),
@@ -445,7 +444,7 @@ fn decrypt_cursor(key: &KeyType, api_name: &str, encoded: &str) -> Result<i64, R
 #[template(escape = "none", path = "list_record_query.sql")]
 struct ListRecordQueryTemplateSqlite<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_metadata: &'a [trailbase_schema::metadata::ColumnMetadata],
+  column_metadata: &'a [trailbase_schema::db::metadata::ColumnMetadata],
   read_access_clause: &'a str,
   filter_clause: &'a str,
   cursor_clause: Option<&'a str>,
@@ -460,7 +459,7 @@ struct ListRecordQueryTemplateSqlite<'a> {
 #[template(escape = "none", path = "list_record_query_pg.sql")]
 struct ListRecordQueryTemplatePg<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_metadata: &'a [trailbase_schema::metadata::ColumnMetadata],
+  column_metadata: &'a [trailbase_schema::db::metadata::ColumnMetadata],
   read_access_clause: &'a str,
   filter_clause: &'a str,
   cursor_clause: Option<&'a str>,
@@ -479,9 +478,9 @@ mod tests {
   #![allow(irrefutable_let_patterns)]
 
   use serde::Deserialize;
-  use trailbase_schema::metadata::ColumnMetadata;
-  use trailbase_schema::parse::{Bump, parse_into_statement};
-  use trailbase_schema::sqlite::{Column, QualifiedName};
+  use trailbase_schema::db::metadata::ColumnMetadata;
+  use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
+  use trailbase_schema::db::sqlite::{Column, QualifiedName};
   use trailbase_sqlite::Value;
 
   use super::*;
@@ -511,8 +510,8 @@ mod tests {
       column: Column {
         name: "index".to_string(),
         type_name: "integer".to_string(),
-        data_type: trailbase_schema::sqlite::ColumnDataType::Integer,
-        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Integer,
+        data_type: trailbase_schema::db::sqlite::ColumnDataType::Integer,
+        affinity_type: trailbase_schema::db::sqlite::ColumnAffinityType::Integer,
         options: vec![],
       },
       json: None,
@@ -528,8 +527,8 @@ mod tests {
       column: Column {
         name: "a".to_string(),
         type_name: "text".to_string(),
-        data_type: trailbase_schema::sqlite::ColumnDataType::Text,
-        affinity_type: trailbase_schema::sqlite::ColumnAffinityType::Text,
+        data_type: trailbase_schema::db::sqlite::ColumnDataType::Text,
+        affinity_type: trailbase_schema::db::sqlite::ColumnAffinityType::Text,
         options: vec![],
       },
       json: None,

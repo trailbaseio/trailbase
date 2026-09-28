@@ -1,3 +1,7 @@
+mod error;
+pub mod file;
+pub mod registry;
+
 use jsonschema::Validator;
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -6,11 +10,14 @@ use serde_json::map::Entry;
 use std::sync::LazyLock;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 
-use crate::metadata::{
+use crate::db::metadata::{
   ColumnMetadata, JsonColumnMetadata, JsonSchemaError, TableMetadata, extract_json_metadata,
   is_pk_column,
 };
-use crate::sqlite::{ColumnDataType, ColumnOption};
+use crate::db::sqlite::{ColumnDataType, ColumnOption};
+
+pub use error::Error;
+pub use file::{FileUpload, FileUploadData, FileUploadInput, FileUploads};
 
 /// Influences the generated JSON schema. In `Insert` mode columns with default values will be
 /// optional.
@@ -330,7 +337,7 @@ fn column_data_type_to_json_type(data_type: ColumnDataType) -> Value {
 }
 
 static GEOJSON_GEOMETRY: LazyLock<Value> = LazyLock::new(|| {
-  const GEOJSON_GEOMETRY: &[u8] = include_bytes!("../schemas/Geometry.json");
+  const GEOJSON_GEOMETRY: &[u8] = include_bytes!("../../schemas/Geometry.json");
   return serde_json::from_slice(GEOJSON_GEOMETRY).expect("valid");
 });
 
@@ -340,15 +347,15 @@ mod tests {
   use serde_json::json;
   use std::sync::Arc;
 
-  use crate::FileUpload;
-  use crate::sqlite::{ColumnOption, Table, lookup_and_parse_table_schema};
+  use crate::db::sqlite::{ColumnOption, Table, lookup_and_parse_table_schema};
+  use crate::json_schema::FileUpload;
 
   use super::*;
 
   #[test]
   fn test_parse_table_schema() {
     let registry = Arc::new(RwLock::new(
-      crate::registry::build_json_schema_registry(vec![]).unwrap(),
+      crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
     ));
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
 
@@ -492,7 +499,7 @@ mod tests {
   #[test]
   fn test_file_uploads_schema() {
     let registry = Arc::new(RwLock::new(
-      crate::registry::build_json_schema_registry(vec![]).unwrap(),
+      crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
     ));
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
 
@@ -520,7 +527,7 @@ mod tests {
   #[test]
   fn test_geojson_schema() {
     let registry = Arc::new(RwLock::new(
-      crate::registry::build_json_schema_registry(vec![]).unwrap(),
+      crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
     ));
 
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();

@@ -31,15 +31,15 @@ pub enum AdminError {
   #[error("Internal: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
   #[error("Schema: {0}")]
-  Schema(#[from] trailbase_schema::sqlite::SchemaError),
+  Schema(#[from] trailbase_schema::db::sqlite::SchemaError),
   #[error("TableLookup: {0}")]
   TableLookup(#[from] crate::schema_metadata::SchemaLookupError),
   #[error("DBMigration: {0}")]
   Migration(#[from] trailbase_refinery::Error),
   #[error("SQL -> Json: {0}")]
   Json(#[from] trailbase_schema::json::JsonError),
-  #[error("Schema: {0}")]
-  SchemaError(#[from] trailbase_schema::Error),
+  #[error("JsonSchema: {0}")]
+  JsonSchemaError(#[from] trailbase_schema::json_schema::Error),
   #[error("Json -> SQL Params: {0}")]
   Params(#[from] crate::records::params::ParamsError),
   #[error("Config: {0}")]

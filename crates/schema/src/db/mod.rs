@@ -1,0 +1,67 @@
+pub mod metadata;
+pub mod parse_sql;
+pub mod sqlite;
+
+pub use sqlite::QualifiedName;
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct QualifiedNameEscaped(String);
+
+impl QualifiedNameEscaped {
+  pub fn new(name: &QualifiedName) -> Self {
+    return Self(name.escaped_string());
+  }
+
+  pub fn parse(&self) -> QualifiedName {
+    return QualifiedName::parse(&self.0).expect("valid");
+  }
+}
+
+impl From<QualifiedName> for QualifiedNameEscaped {
+  fn from(name: QualifiedName) -> Self {
+    return Self::new(&name);
+  }
+}
+
+impl From<&QualifiedName> for QualifiedNameEscaped {
+  fn from(name: &QualifiedName) -> Self {
+    return Self::new(name);
+  }
+}
+
+impl std::fmt::Display for QualifiedNameEscaped {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    return self.0.fmt(f);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_qualified_name_escaped() {
+    let simple = QualifiedName::parse("test").unwrap();
+    assert_eq!(
+      simple,
+      QualifiedName {
+        name: "test".to_string(),
+        database_schema: None,
+      }
+    );
+    assert_eq!(QualifiedNameEscaped::new(&simple).0, r#""test""#);
+
+    let composite = QualifiedName::parse("db.'test.bar'").unwrap();
+    assert_eq!(
+      composite,
+      QualifiedName {
+        name: "test.bar".to_string(),
+        database_schema: Some("db".to_string()),
+      }
+    );
+    assert_eq!(
+      QualifiedNameEscaped::new(&composite).0,
+      r#""db"."test.bar""#
+    );
+  }
+}

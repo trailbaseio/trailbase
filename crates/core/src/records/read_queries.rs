@@ -1,6 +1,7 @@
 use askama::Template;
-use trailbase_schema::metadata::ColumnMetadata;
-use trailbase_schema::{FileUpload, FileUploads, QualifiedNameEscaped};
+use trailbase_schema::db::QualifiedNameEscaped;
+use trailbase_schema::db::metadata::ColumnMetadata;
+use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::Value;
 
 use crate::records::error::RecordError;

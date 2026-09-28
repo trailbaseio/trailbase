@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
-use trailbase_schema::metadata::ConnectionMetadata;
+use trailbase_schema::db::metadata::ConnectionMetadata;
 
 pub use trailbase_sqlite::{Connection, unpack_other_error};
 
@@ -75,7 +75,7 @@ pub struct ConnectionEntry {
 struct ConnectionManagerState {
   // Properties retained for initializing new connections.
   data_dir: DataDir,
-  json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  json_schema_registry: Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
   sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   read_only: bool,
 
@@ -98,7 +98,8 @@ pub struct ConnectionManager {
 
 pub struct Options {
   pub data_dir: DataDir,
-  pub json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+  pub json_schema_registry:
+    Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
   pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   pub pg_uri: Option<String>,
   pub read_only: Option<bool>,
@@ -176,7 +177,7 @@ impl ConnectionManager {
   #[cfg(test)]
   pub(crate) async fn new_for_test(
     data_dir: DataDir,
-    json_schema_registry: Arc<RwLock<trailbase_schema::registry::JsonSchemaRegistry>>,
+    json_schema_registry: Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
     pg_uri: Option<String>,
   ) -> Self {
@@ -273,7 +274,7 @@ impl ConnectionManager {
 
   pub async fn get_entry_for_qn(
     &self,
-    name: &trailbase_schema::QualifiedName,
+    name: &trailbase_schema::db::QualifiedName,
   ) -> Result<ConnectionEntry, ConnectionError> {
     return match name.database_schema.as_deref() {
       Some("main") | Some("public") | None => Ok(self.main_entry()),

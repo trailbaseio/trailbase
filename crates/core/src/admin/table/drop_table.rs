@@ -1,7 +1,7 @@
 use axum::extract::{Json, State};
 use log::*;
 use serde::{Deserialize, Serialize};
-use trailbase_schema::QualifiedName;
+use trailbase_schema::db::QualifiedName;
 use ts_rs::TS;
 
 use crate::admin::AdminError as Error;

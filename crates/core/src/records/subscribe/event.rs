@@ -157,9 +157,9 @@ pub struct ChangeEvent {
 #[cfg(test)]
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub enum TestJsonEventPayload {
-  Update(trailbase_schema::record::JsonObject),
-  Insert(trailbase_schema::record::JsonObject),
-  Delete(trailbase_schema::record::JsonObject),
+  Update(trailbase_schema::json::JsonObject),
+  Insert(trailbase_schema::json::JsonObject),
+  Delete(trailbase_schema::json::JsonObject),
   Error {
     status: EventErrorStatus,
     message: Option<String>,

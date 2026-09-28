@@ -4,8 +4,8 @@ use axum::{
   response::Response,
 };
 use serde::Deserialize;
-use trailbase_schema::FileUploads;
-use trailbase_schema::record::record_to_json_expand;
+use trailbase_schema::json::record_to_json_expand;
+use trailbase_schema::json_schema::FileUploads;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
@@ -251,7 +251,7 @@ mod tests {
   use serde_json::json;
   use std::io::Read;
   use std::sync::Arc;
-  use trailbase_schema::{FileUpload, FileUploadData, FileUploadInput};
+  use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadInput};
   use trailbase_sqlite::ConnectionType;
 
   use super::*;

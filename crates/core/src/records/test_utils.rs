@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use trailbase_schema::record::JsonObject;
+use trailbase_schema::json::JsonObject;
 use trailbase_sqlite::params;
 
 use crate::AppState;
