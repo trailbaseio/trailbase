@@ -1,10 +1,13 @@
+use parking_lot::Mutex;
 use std::assert_matches;
 use std::os::unix::process::CommandExt;
+use std::sync::LazyLock;
 
 use base64::prelude::*;
 use futures_lite::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use serial_test::serial;
 use temp_dir::TempDir;
 use trailbase_client::{
   Client, CompareOp, Error, EventPayload, Filter, ListArguments, ListResponse, OperationResult,
@@ -140,6 +143,25 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
   return Ok(Some(Server { child }));
 }
 
+static SERVER: LazyLock<Mutex<Option<Server>>> = LazyLock::new(|| Mutex::new(None));
+
+#[ctor::ctor(unsafe)]
+fn before_all_tests() {
+  env_logger::Builder::from_env(
+    env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,tracing::span=warn"),
+  )
+  .format_timestamp_micros()
+  .init();
+
+  *SERVER.lock() = start_server().unwrap();
+}
+
+#[dtor::dtor(unsafe)]
+fn after_all_tests() {
+  let server = std::mem::take(&mut *SERVER.lock());
+  drop(server);
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct SimpleStrict {
   id: String,
@@ -193,6 +215,8 @@ async fn connect() -> Client {
   return client;
 }
 
+#[tokio::test]
+#[serial]
 async fn login_test() {
   let client = connect().await;
 
@@ -213,6 +237,8 @@ async fn login_test() {
   client.refresh().await.unwrap();
 }
 
+#[tokio::test]
+#[serial]
 async fn register_test() {
   let client = Client::new(&*site(), None).unwrap();
 
@@ -238,6 +264,8 @@ async fn register_test() {
   );
 }
 
+#[tokio::test]
+#[serial]
 async fn login_anonymous_test() {
   let client = Client::new(&*site(), None).unwrap();
 
@@ -256,7 +284,9 @@ async fn login_anonymous_test() {
     .unwrap();
 }
 
-async fn login_otp() {
+#[tokio::test]
+#[serial]
+async fn login_otp_test() {
   let client = Client::new(&*site(), None).unwrap();
 
   // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint
@@ -264,6 +294,8 @@ async fn login_otp() {
   client.request_otp("fake0@localhost").await.unwrap();
 }
 
+#[tokio::test]
+#[serial]
 async fn login_multi_factor_test() {
   let client = Client::new(&*site(), None).unwrap();
   let Some(mfa_token) = client.login("alice@trailbase.io", "secret").await.unwrap() else {
@@ -299,6 +331,8 @@ async fn login_multi_factor_test() {
   );
 }
 
+#[tokio::test]
+#[serial]
 async fn records_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -450,6 +484,8 @@ async fn records_test() {
   }
 }
 
+#[tokio::test]
+#[serial]
 async fn transaction_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -510,6 +546,8 @@ async fn transaction_test() {
   }
 }
 
+#[tokio::test]
+#[serial]
 async fn expand_foreign_records_test() {
   let client = connect().await;
   let api = client.records("comment");
@@ -583,6 +621,8 @@ struct SimpleSchema {
   data: SimpleSchemaDataColumn,
 }
 
+#[tokio::test]
+#[serial]
 async fn custom_json_column_test() {
   let client = connect().await;
   let api = client.records("simple_schema_table");
@@ -629,6 +669,8 @@ async fn custom_json_column_test() {
     .unwrap();
 }
 
+#[tokio::test]
+#[serial]
 async fn subscription_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -703,6 +745,8 @@ async fn subscription_test() {
   }
 }
 
+#[tokio::test]
+#[serial]
 async fn subscription_performance_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -775,6 +819,8 @@ async fn subscription_performance_test() {
 }
 
 #[cfg(feature = "ws")]
+#[tokio::test]
+#[serial]
 async fn subscription_ws_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -872,6 +918,8 @@ struct FileUploadTable {
   multiple_files: Vec<FileUpload>,
 }
 
+#[tokio::test]
+#[serial]
 async fn file_upload_json_base64_test() {
   let client = connect().await;
   let api = client.records("file_upload_table");
@@ -991,6 +1039,8 @@ async fn file_upload_json_base64_test() {
   api.delete(&record_id).await.unwrap();
 }
 
+#[tokio::test]
+#[serial]
 async fn file_upload_multipart_form_test() {
   let d = TempDir::new().unwrap();
   let f = d.child("test.text");
@@ -1040,67 +1090,6 @@ async fn file_upload_multipart_form_test() {
 
   // Clean up
   api.delete(record_id).await.unwrap();
-}
-
-#[test]
-fn client_integration_test() {
-  env_logger::Builder::from_env(
-    env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,tracing::span=warn"),
-  )
-  .format_timestamp_micros()
-  .init();
-
-  let _server = start_server().unwrap();
-
-  let runtime = tokio::runtime::Builder::new_multi_thread()
-    .enable_all()
-    .build()
-    .unwrap();
-
-  runtime.block_on(login_test());
-  eprintln!("Ran login tests");
-
-  runtime.block_on(register_test());
-  eprintln!("Ran register tests");
-
-  runtime.block_on(login_anonymous_test());
-  eprintln!("Ran login anonymous tests");
-
-  runtime.block_on(login_otp());
-  eprintln!("Ran login OTP tests");
-
-  runtime.block_on(login_multi_factor_test());
-  eprintln!("Ran login multi-factor tests");
-
-  runtime.block_on(records_test());
-  eprintln!("Ran records tests");
-
-  runtime.block_on(transaction_test());
-  eprintln!("Ran transaction tests");
-
-  runtime.block_on(expand_foreign_records_test());
-  eprintln!("Ran expand foreign records tests");
-
-  runtime.block_on(custom_json_column_test());
-  eprintln!("Ran custom JSON column tests");
-
-  runtime.block_on(subscription_test());
-  eprintln!("Ran subscription tests");
-
-  runtime.block_on(subscription_performance_test());
-  eprintln!("Ran subscription performance tests");
-
-  #[cfg(feature = "ws")]
-  {
-    runtime.block_on(subscription_ws_test());
-    eprintln!("Ran subscription websocket tests");
-  }
-
-  runtime.block_on(file_upload_json_base64_test());
-  eprintln!("Ran file upload JSON base64 tests");
-
-  runtime.block_on(file_upload_multipart_form_test());
-  eprintln!("Ran file upload multipart form tests");
 }
 
 fn now() -> u64 {

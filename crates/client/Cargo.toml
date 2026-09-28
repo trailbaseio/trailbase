@@ -35,12 +35,15 @@ url = "2.5.8"
 
 [dev-dependencies]
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
+ctor = "1.0.13"
+dtor = "1.0.6"
 env_logger = { workspace = true }
 futures-util = { workspace = true }
 lazy_static = "1.5.0"
 log = { workspace = true }
 reqwest = { version = "0.13.5", features = ["stream", "multipart", "json"] }
 rustix = { version = "1.1.5", features = ["process"] }
+serial_test = "4.0.1"
 temp-dir = "0.2.0"
 tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "process"] }
 totp-rs = { version = "^6.0.0", default-features = false, features = ["otpauth"] }
