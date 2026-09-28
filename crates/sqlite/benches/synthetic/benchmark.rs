@@ -77,7 +77,7 @@ fn async_insert_benchmark<C: AsyncConnection + 'static>(
       .unwrap();
     setup
       .conn
-      .async_execute("CREATE TABLE 'table' (a  INTEGER) STRICT", [])
+      .async_execute("CREATE TABLE \"table\" (a INTEGER)", [])
       .await
       .unwrap();
     let conn = Arc::new(setup.conn);
@@ -90,7 +90,7 @@ fn async_insert_benchmark<C: AsyncConnection + 'static>(
         for j in i * N..(i + 1) * N {
           conn
             .async_execute(
-              format!("INSERT INTO 'table' (a) VALUES (?1)"),
+              format!("INSERT INTO \"table\" (a) VALUES ($1)"),
               [Value::Integer(j as i64)],
             )
             .await
@@ -115,29 +115,29 @@ fn insert_benchmark_group(c: &mut Criterion) {
   group.sample_size(200);
   group.throughput(Throughput::Elements(1));
 
-  group.bench_function("trailbase-sqlite (1 thread)", |b| {
-    async_insert_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(1),
-          ..Default::default()
-        },
-      )?);
-    })
-  });
-
-  group.bench_function("trailbase-sqlite (2 threads)", |b| {
-    async_insert_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(2),
-          ..Default::default()
-        },
-      )?);
-    })
-  });
+  // group.bench_function("trailbase-sqlite (1 thread)", |b| {
+  //   async_insert_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(1),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   })
+  // });
+  //
+  // group.bench_function("trailbase-sqlite (2 threads)", |b| {
+  //   async_insert_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(2),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   })
+  // });
 
   group.bench_function("trailbase-sqlite (4 threads)", |b| {
     async_insert_benchmark(b, async |fname| {
@@ -151,17 +151,28 @@ fn insert_benchmark_group(c: &mut Criterion) {
     })
   });
 
-  group.bench_function("trailbase-sqlite (8 threads)", |b| {
+  group.bench_function("trailbase-sqlite (stoolap)", |b| {
     async_insert_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(8),
-          ..Default::default()
-        },
-      )?);
+      let db = {
+        let file = format!("file://{}", fname.to_string_lossy());
+        std::fs::create_dir_all(fname.parent().unwrap()).unwrap();
+        stoolap::Database::open(&file).unwrap()
+      };
+      return Ok(Connection::stoolap_wo_opts(db)?);
     })
   });
+
+  // group.bench_function("trailbase-sqlite (8 threads)", |b| {
+  //   async_insert_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(8),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   })
+  // });
 
   group.bench_function("locked-rusqlite", |b| {
     async_insert_benchmark(b, async |fname| {
@@ -171,18 +182,18 @@ fn insert_benchmark_group(c: &mut Criterion) {
     })
   });
 
-  let id = std::sync::atomic::AtomicU64::new(0);
-  group.bench_function("TL-rusqlite", |b| {
-    async_insert_benchmark(b, async |fname| {
-      let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-      debug!("New ThreadLocalRusqlite: {id}");
-
-      Ok(ThreadLocalRusqlite(
-        Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
-        id,
-      ))
-    })
-  });
+  // let id = std::sync::atomic::AtomicU64::new(0);
+  // group.bench_function("TL-rusqlite", |b| {
+  //   async_insert_benchmark(b, async |fname| {
+  //     let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  //     debug!("New ThreadLocalRusqlite: {id}");
+  //
+  //     Ok(ThreadLocalRusqlite(
+  //       Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+  //       id,
+  //     ))
+  //   })
+  // });
 }
 
 fn async_read_benchmark<C: AsyncConnection + 'static>(
@@ -202,7 +213,7 @@ fn async_read_benchmark<C: AsyncConnection + 'static>(
     let conn = rusqlite::Connection::open(setup.fname).unwrap();
     conn
       .execute(
-        "CREATE TABLE 'read_table' (id INTEGER PRIMARY KEY NOT NULL) STRICT",
+        "CREATE TABLE read_table (id INTEGER PRIMARY KEY NOT NULL)",
         [],
       )
       .unwrap();
@@ -210,7 +221,7 @@ fn async_read_benchmark<C: AsyncConnection + 'static>(
     for i in 0..N {
       conn
         .execute(
-          "INSERT INTO 'read_table' (id) VALUES (?1)",
+          "INSERT INTO \"read_table\" (id) VALUES ($1)",
           [Value::Integer(i)],
         )
         .unwrap();
@@ -229,7 +240,7 @@ fn async_read_benchmark<C: AsyncConnection + 'static>(
       return runtime.spawn(async move {
         conn
           .async_read_query::<i64>(
-            "SELECT id FROM 'read_table' WHERE id = ?1",
+            "SELECT id FROM \"read_table\" WHERE id = $1",
             [Value::Integer(idx)],
           )
           .await
@@ -253,29 +264,29 @@ fn read_benchmark_group(c: &mut Criterion) {
   group.sample_size(100);
   group.throughput(Throughput::Elements(1));
 
-  group.bench_function("trailbase-sqlite (1 thread)", |b| {
-    async_read_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(1),
-          ..Default::default()
-        },
-      )?);
-    })
-  });
-
-  group.bench_function("trailbase-sqlite (2 threads)", |b| {
-    async_read_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(2),
-          ..Default::default()
-        },
-      )?);
-    })
-  });
+  // group.bench_function("trailbase-sqlite (1 thread)", |b| {
+  //   async_read_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(1),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   })
+  // });
+  //
+  // group.bench_function("trailbase-sqlite (2 threads)", |b| {
+  //   async_read_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(2),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   })
+  // });
 
   group.bench_function("trailbase-sqlite (4 threads)", |b| {
     async_read_benchmark(b, async |fname| {
@@ -289,17 +300,28 @@ fn read_benchmark_group(c: &mut Criterion) {
     })
   });
 
-  group.bench_function("trailbase-sqlite (8 threads)", |b| {
+  group.bench_function("trailbase-sqlite (stoolap)", |b| {
     async_read_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(8),
-          ..Default::default()
-        },
-      )?);
+      let db = {
+        let file = format!("file://{}", fname.to_string_lossy());
+        std::fs::create_dir_all(fname.parent().unwrap()).unwrap();
+        stoolap::Database::open(&file).unwrap()
+      };
+      return Ok(Connection::stoolap_wo_opts(db)?);
     })
   });
+
+  // group.bench_function("trailbase-sqlite (8 threads)", |b| {
+  //   async_read_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(8),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   })
+  // });
 
   group.bench_function("locked-rusqlite", |b| {
     async_read_benchmark(b, async |fname| {
@@ -309,18 +331,18 @@ fn read_benchmark_group(c: &mut Criterion) {
     })
   });
 
-  let id = std::sync::atomic::AtomicU64::new(0);
-  group.bench_function("TL-rusqlite", |b| {
-    async_read_benchmark(b, async |fname| {
-      let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-      debug!("New ThreadLocalRusqlite: {id}");
-
-      Ok(ThreadLocalRusqlite(
-        Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
-        id,
-      ))
-    })
-  });
+  // let id = std::sync::atomic::AtomicU64::new(0);
+  // group.bench_function("TL-rusqlite", |b| {
+  //   async_read_benchmark(b, async |fname| {
+  //     let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  //     debug!("New ThreadLocalRusqlite: {id}");
+  //
+  //     Ok(ThreadLocalRusqlite(
+  //       Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+  //       id,
+  //     ))
+  //   })
+  // });
 }
 
 fn async_mixed_benchmark<C: AsyncConnection + 'static>(
@@ -329,7 +351,7 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
 ) {
   async fn fast_read_query<C: AsyncConnection>(conn: &C, i: i64) {
     conn
-      .async_read_query::<i64>("SELECT prop FROM 'A' WHERE id = ?1", [Value::Integer(i)])
+      .async_read_query::<i64>("SELECT prop FROM A WHERE id = $1", [Value::Integer(i)])
       .await
       .unwrap();
   }
@@ -337,7 +359,7 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
   async fn slow_read_query<C: AsyncConnection>(conn: &C, i: i64) {
     conn
       .async_read_query::<i64>(
-        "SELECT A.id, B.id FROM A LEFT JOIN Bridge ON A.id = Bridge.a LEFT JOIN B ON Bridge.b = B.id WHERE A.id = ?1",
+        "SELECT A.id, B.id FROM A LEFT JOIN Bridge ON A.id = Bridge.a LEFT JOIN B ON Bridge.b = B.id WHERE A.id = $1",
         [Value::Integer(i)],
       )
       .await
@@ -347,8 +369,8 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
   async fn write_query<C: AsyncConnection>(conn: &C) {
     conn
       .async_execute(
-        "INSERT INTO 'write_table' (payload) VALUES (?1)",
-        [Value::Blob([0; 256].into())],
+        "INSERT INTO \"write_table\" (payload) VALUES ($1)",
+        [Value::Text(std::iter::repeat('a').take(256).collect())],
       )
       .await
       .unwrap();
@@ -364,15 +386,15 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
       conn
         .execute_batch(
           r#"
-            CREATE TABLE 'write_table' (id INTEGER PRIMARY KEY NOT NULL, payload BLOB) STRICT;
+            CREATE TABLE write_table (id INTEGER PRIMARY KEY NOT NULL, payload TEXT);
 
-            CREATE TABLE 'A' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL) STRICT;
-            CREATE TABLE 'B' (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL) STRICT;
+            CREATE TABLE A (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL);
+            CREATE TABLE B (id INTEGER PRIMARY KEY NOT NULL, prop INTEGER NOT NULL);
 
-            CREATE TABLE 'Bridge' (
+            CREATE TABLE Bridge (
               a INTEGER NOT NULL,  -- Technically 'REFERENCES A(prop)' but dodging unique/index requirement
               b INTEGER NOT NULL   -- Technically 'REFERENCES B(prop)' but dodging unique/index requirement
-            ) STRICT;
+            );
           "#,
         )
         .unwrap();
@@ -380,9 +402,9 @@ fn async_mixed_benchmark<C: AsyncConnection + 'static>(
       for i in 0..N {
         let exec = |query: &str| conn.execute(query, rusqlite::params!(i)).unwrap();
 
-        exec("INSERT INTO 'A' (id, prop) VALUES (?1, ?1)");
-        exec("INSERT INTO 'B' (id, prop) VALUES (?1, ?1)");
-        exec("INSERT INTO 'Bridge' (a, b) VALUES (?1, ?1)");
+        exec("INSERT INTO A (id, prop) VALUES ($1, $1)");
+        exec("INSERT INTO B (id, prop) VALUES ($1, $1)");
+        exec("INSERT INTO Bridge (a, b) VALUES ($1, $1)");
       }
     }
 
@@ -429,29 +451,29 @@ fn mixed_benchmark_group(c: &mut Criterion) {
   group.sample_size(200);
   group.throughput(Throughput::Elements(1));
 
-  group.bench_function("trailbase-sqlite (1 thread)", |b| {
-    async_mixed_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(1),
-          ..Default::default()
-        },
-      )?);
-    });
-  });
-
-  group.bench_function("trailbase-sqlite (2 threads)", |b| {
-    async_mixed_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(2),
-          ..Default::default()
-        },
-      )?);
-    });
-  });
+  // group.bench_function("trailbase-sqlite (1 thread)", |b| {
+  //   async_mixed_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(1),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   });
+  // });
+  //
+  // group.bench_function("trailbase-sqlite (2 threads)", |b| {
+  //   async_mixed_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(2),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   });
+  // });
 
   group.bench_function("trailbase-sqlite (4 threads)", |b| {
     async_mixed_benchmark(b, async |fname| {
@@ -465,17 +487,28 @@ fn mixed_benchmark_group(c: &mut Criterion) {
     });
   });
 
-  group.bench_function("trailbase-sqlite (8 threads)", |b| {
+  group.bench_function("trailbase-sqlite (stoolap)", |b| {
     async_mixed_benchmark(b, async |fname| {
-      return Ok(Connection::with_opts(
-        || rusqlite::Connection::open(&fname),
-        Options {
-          num_threads: Some(8),
-          ..Default::default()
-        },
-      )?);
-    });
+      let db = {
+        let file = format!("file://{}", fname.to_string_lossy());
+        std::fs::create_dir_all(fname.parent().unwrap()).unwrap();
+        stoolap::Database::open(&file).unwrap()
+      };
+      return Ok(Connection::stoolap_wo_opts(db)?);
+    })
   });
+
+  // group.bench_function("trailbase-sqlite (8 threads)", |b| {
+  //   async_mixed_benchmark(b, async |fname| {
+  //     return Ok(Connection::with_opts(
+  //       || rusqlite::Connection::open(&fname),
+  //       Options {
+  //         num_threads: Some(8),
+  //         ..Default::default()
+  //       },
+  //     )?);
+  //   });
+  // });
 
   group.bench_function("locked-rusqlite", |b| {
     async_mixed_benchmark(b, async |fname| {
@@ -485,20 +518,20 @@ fn mixed_benchmark_group(c: &mut Criterion) {
     });
   });
 
-  {
-    let id = std::sync::atomic::AtomicU64::new(0);
-    group.bench_function("TL-rusqlite", |b| {
-      async_mixed_benchmark(b, async |fname| {
-        let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        debug!("New ThreadLocalRusqlite: {id}");
-
-        Ok(ThreadLocalRusqlite(
-          Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
-          id,
-        ))
-      });
-    });
-  }
+  // {
+  //   let id = std::sync::atomic::AtomicU64::new(0);
+  //   group.bench_function("TL-rusqlite", |b| {
+  //     async_mixed_benchmark(b, async |fname| {
+  //       let id = id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  //       debug!("New ThreadLocalRusqlite: {id}");
+  //
+  //       Ok(ThreadLocalRusqlite(
+  //         Box::new(move || rusqlite::Connection::open(&fname).unwrap()),
+  //         id,
+  //       ))
+  //     });
+  //   });
+  // }
 }
 
 criterion_group!(
