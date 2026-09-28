@@ -1,3 +1,7 @@
+## v0.33.23
+
+- Close side-channel for timing-based account enumeration. Reported by @SwissBitcoinPay 🙏
+
 ## v0.33.22
 
 - Fix behavior when a Rust WASM guest panics:
