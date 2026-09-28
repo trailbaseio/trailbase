@@ -1,5 +1,6 @@
 [advisories]
 unmaintained = "workspace"
+ignore = [{ id = "RUSTSEC-2023-0071", reason = "rsa: no safe upgrade is available" }]
 
 [sources]
 required-git-spec = "rev"
