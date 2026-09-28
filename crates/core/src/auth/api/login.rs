@@ -4,6 +4,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use chrono::{Duration, Utc};
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
+use std::sync::LazyLock;
 use tower_cookies::Cookies;
 use trailbase_sqlite::params;
 use ts_rs::TS;
@@ -14,7 +15,7 @@ use crate::auth::AuthError;
 use crate::auth::api::totp::new_totp;
 use crate::auth::jwt::PendingAuthTokenClaims;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
-use crate::auth::password::check_user_password;
+use crate::auth::password::{check_user_password, measure_password_verification_timing};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   SameSite, new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
@@ -102,6 +103,7 @@ pub(crate) async fn login_handler(
     Either::Multipart(req, _) => (req, false),
   };
 
+  // Validate inputs.
   let (user_identifier, password, params) = match request {
     LoginRequest::EmailOrUsername {
       email_or_username,
@@ -142,47 +144,6 @@ pub(crate) async fn login_handler(
     ),
   };
 
-  type CheckFuture = futures_util::future::BoxFuture<'static, Result<DbUser, AuthError>>;
-  type CheckFn = Box<dyn FnOnce() -> CheckFuture + Send>;
-
-  let check_credentials: CheckFn = match user_identifier {
-    UserIdentifier::Email(normalized_email) => {
-      let state = state.clone();
-      Box::new(move || -> CheckFuture {
-        return Box::pin(async move {
-          let db_user: DbUser = user_by_email(&state, &normalized_email)
-            .await
-            .map_err(|_| {
-              // Don't leak if user wasn't found or password was wrong.
-              return AuthError::Unauthorized;
-            })?;
-
-          // Check password and rate limits attempts.
-          check_user_password(&db_user, &password, state.demo_mode())?;
-
-          Ok(db_user)
-        });
-      })
-    }
-    UserIdentifier::Username(username) => {
-      let state = state.clone();
-      Box::new(|| -> CheckFuture {
-        return Box::pin(async move {
-          let db_user: DbUser = user_by_username(&state, &username).await.map_err(|_| {
-            // Don't leak if user wasn't found or password was wrong.
-            return AuthError::Unauthorized;
-          })?;
-
-          // Check password and rate limits attempts.
-          check_user_password(&db_user, &password, state.demo_mode())?;
-
-          Ok(db_user)
-        });
-      })
-    }
-  };
-
-  // Validate input params.
   let login_params = build_and_validate_input_params(
     &state,
     // NOTE: Merge form and query input but prioritize explicit query parameters over hidden form
@@ -195,9 +156,24 @@ pub(crate) async fn login_handler(
     }),
   )?;
 
+  let rate_limit_id = match &user_identifier {
+    UserIdentifier::Email(email) => email.to_lowercase(),
+    UserIdentifier::Username(username) => username.clone(),
+  };
+
   // Check credentials.
-  let db_user = match check_credentials().await {
+  let db_user = match check_credentials(&state, user_identifier, &password).await {
     Err(err) => {
+      // Rate-limit *failed* login attempts. We do *not* want failed logins to be able to prevent
+      // valid logins. Otherwise, one could easily flood and DoS someone else's account.
+      if !state.demo_mode() {
+        let attempts = FAILED_LOGIN_ATTEMPTS.get(&rate_limit_id).unwrap_or(0);
+        if attempts > FAILED_LOGIN_RATE_LIMIT {
+          return Err(AuthError::TooManyRequests);
+        }
+        FAILED_LOGIN_ATTEMPTS.insert(rate_limit_id, attempts + 1);
+      }
+
       if !json && let Some(redirect_uri) = params.redirect_uri.as_deref() {
         return Ok(auth_error_to_response(err, &cookies, Some(redirect_uri)));
       }
@@ -248,6 +224,65 @@ pub(crate) async fn login_handler(
       .await
     }
   };
+}
+
+fn get_somewhat_stable_password_verification_timing() -> std::time::Duration {
+  use std::time::Duration;
+
+  fn micros(d: Duration) -> f64 {
+    return d.as_micros() as f64;
+  }
+
+  const TOLERANCE: f64 = 0.5;
+
+  let mut prev: Option<Duration> = None;
+  let mut i = 0;
+
+  loop {
+    let curr = measure_password_verification_timing();
+    if i > 5 {
+      return curr;
+    }
+
+    if let Some(prev) = prev
+      && (micros(curr) - micros(prev)).abs() <= TOLERANCE * micros(prev)
+    {
+      return curr;
+    }
+
+    prev = Some(curr);
+    i += 1;
+  }
+}
+
+async fn check_credentials(
+  state: &AppState,
+  id: UserIdentifier,
+  password: &str,
+) -> Result<DbUser, AuthError> {
+  let maybe_db_user = match id {
+    UserIdentifier::Email(normalized_email) => user_by_email(state, &normalized_email).await,
+    UserIdentifier::Username(username) => user_by_username(state, &username).await,
+  };
+
+  let db_user = match maybe_db_user {
+    Ok(db_user) => db_user,
+    Err(_err) => {
+      // Hashing is quite expensive: tens of milliseconds for release builds and hundreds for
+      // debug builds. To avoid leaking account presence w/o burning cycles, we have to wait here.
+      static WAIT: LazyLock<std::time::Duration> =
+        LazyLock::new(get_somewhat_stable_password_verification_timing);
+
+      tokio::time::sleep(*WAIT).await;
+
+      // Don't let the error code reveal account pressence either.
+      return Err(AuthError::Unauthorized);
+    }
+  };
+
+  check_user_password(&db_user, password)?;
+
+  return Ok(db_user);
 }
 
 /// Log users in with (email, password). On success return tokens (json-case) or set cookies and
@@ -537,3 +572,13 @@ fn auth_error_to_response(err: AuthError, cookies: &Cookies, redirect: Option<&s
 
   return err_response;
 }
+
+const FAILED_LOGIN_RATE_LIMIT: usize = 3;
+
+static FAILED_LOGIN_ATTEMPTS: LazyLock<mini_moka::sync::Cache<String, usize>> =
+  LazyLock::new(|| {
+    mini_moka::sync::Cache::builder()
+      .time_to_live(std::time::Duration::from_secs(60))
+      .max_capacity(1024)
+      .build()
+  });

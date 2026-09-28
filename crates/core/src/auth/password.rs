@@ -1,6 +1,3 @@
-use mini_moka::sync::Cache;
-use std::sync::LazyLock;
-
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 
@@ -65,39 +62,14 @@ pub fn validate_password_policy(
   return Ok(());
 }
 
-#[derive(Clone)]
-struct FailedAttempt {
-  tries: usize,
-}
-
-impl Default for FailedAttempt {
-  fn default() -> Self {
-    return Self { tries: 1 };
-  }
-}
-
-// Track login attempts for abuse prevention.
-static ATTEMPTS: LazyLock<Cache<String, FailedAttempt>> = LazyLock::new(|| {
-  Cache::builder()
-    .time_to_live(std::time::Duration::from_secs(60))
-    .max_capacity(1024)
-    .build()
-});
-
 pub fn hash_password(password: &str) -> Result<String, AuthError> {
-  return trailbase_extension::password::hash_password(password).map_err(|err| {
-    // NOTE: Wrapping needed since Argon's error doesn't implement the error trait.
-    AuthError::Internal(err.to_string().into())
-  });
+  return trailbase_extension::password::hash_password(password)
+    .map_err(|err| AuthError::Internal(err.into()));
 }
 
 /// Checks the given password against a known user. Will further ensure that the email was verified
 /// and rate limit attempts to protect against brute-force attacks.
-pub fn check_user_password(
-  db_user: &DbUser,
-  password: &str,
-  is_demo: bool,
-) -> Result<(), AuthError> {
+pub fn check_user_password(db_user: &DbUser, password: &str) -> Result<(), AuthError> {
   if db_user.unverified_email.is_some() {
     return Err(AuthError::Unauthorized);
   }
@@ -106,28 +78,8 @@ pub fn check_user_password(
     return Err(AuthError::Unauthorized);
   };
 
-  let account = db_user
-    .email
-    .as_deref()
-    .or(db_user.username.as_deref())
-    .unwrap_or_default()
-    .to_string();
-
-  let attempts = ATTEMPTS.get(&account);
-
-  if !is_demo && attempts.as_ref().map(|a| a.tries).unwrap_or(0) >= LOGIN_RATE_LIMIT {
-    return Err(AuthError::TooManyRequests);
-  }
-
   trailbase_extension::password::verify_password(password.as_bytes(), password_hash).map_err(
     |err| {
-      ATTEMPTS.insert(
-        account,
-        attempts
-          .map(|a| FailedAttempt { tries: a.tries + 1 })
-          .unwrap_or_default(),
-      );
-
       return match err {
         trailbase_extension::password::PasswordError::InvalidPassword => AuthError::Unauthorized,
         err => AuthError::Internal(err.to_string().into()),
@@ -138,12 +90,12 @@ pub fn check_user_password(
   return Ok(());
 }
 
-// HACK: Increase limit in tests to avoid limits.
-#[cfg(test)]
-const LOGIN_RATE_LIMIT: usize = 10;
-
-#[cfg(not(test))]
-const LOGIN_RATE_LIMIT: usize = 3;
+pub(crate) fn measure_password_verification_timing() -> std::time::Duration {
+  let hash = hash_password("pw").expect("constant input");
+  let started = std::time::Instant::now();
+  let _ = trailbase_extension::password::verify_password(b"pw", &hash);
+  return started.elapsed();
+}
 
 #[cfg(test)]
 mod tests {
@@ -154,16 +106,8 @@ mod tests {
     let password = "0123456789.";
     let db_user = DbUser::new_for_test("foo@test.org", password);
 
-    assert!(check_user_password(&db_user, password, false).is_ok());
-
-    // Lock-out/rate-limit after 10 (3 in prod) failed attempts.
-    for _ in 0..10 {
-      assert!(check_user_password(&db_user, "mismatch", false).is_err());
-    }
-    assert!(check_user_password(&db_user, password, false).is_err());
-
-    // By-pass lock-out in demo mode.
-    assert!(check_user_password(&db_user, password, true).is_ok());
+    assert!(check_user_password(&db_user, password).is_ok());
+    assert!(check_user_password(&db_user, "nonsense").is_err());
   }
 
   #[test]

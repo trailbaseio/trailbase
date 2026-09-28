@@ -183,7 +183,7 @@ pub async fn login_with_password_for_test(
   let user_id = db_user.uuid();
 
   // Validates password and rate limits attempts.
-  crate::auth::password::check_user_password(&db_user, password, state.demo_mode())?;
+  crate::auth::password::check_user_password(&db_user, password)?;
 
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let tokens = crate::auth::tokens::mint_new_tokens(

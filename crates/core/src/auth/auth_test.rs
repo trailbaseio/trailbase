@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::response::Response;
 use base64::prelude::*;
 use regex::Regex;
+use std::assert_matches;
 use std::sync::Arc;
 use tower_cookies::Cookies;
 use trailbase_sqlite::params;
@@ -157,33 +158,32 @@ async fn register_test_user(
       extract_email_verification_token(&mailer.get_logs()[0].1);
 
     // Check that login before email verification fails.
-    assert!(matches!(
-      login_handler(
-        State(state.clone()),
-        Query(LoginInputParams::default()),
-        Extension(HasRoot(false)),
-        Cookies::default(),
-        Either::Json(match identifier {
-          Identifier::Email(ref email) | Identifier::EmailAndUsername(ref email, _) =>
-            LoginRequest::Email {
-              email: email.clone(),
-              password: password.to_string(),
-              params: LoginInputParams {
-                ..Default::default()
-              },
-            },
-          Identifier::Username(ref username) => LoginRequest::Username {
-            username: username.clone(),
+    let response = login_handler(
+      State(state.clone()),
+      Query(LoginInputParams::default()),
+      Extension(HasRoot(false)),
+      Cookies::default(),
+      Either::Json(match identifier {
+        Identifier::Email(ref email) | Identifier::EmailAndUsername(ref email, _) => {
+          LoginRequest::Email {
+            email: email.clone(),
             password: password.to_string(),
             params: LoginInputParams {
               ..Default::default()
             },
+          }
+        }
+        Identifier::Username(ref username) => LoginRequest::Username {
+          username: username.clone(),
+          password: password.to_string(),
+          params: LoginInputParams {
+            ..Default::default()
           },
-        })
-      )
-      .await,
-      Err(AuthError::Unauthorized),
-    ));
+        },
+      }),
+    )
+    .await;
+    assert_matches!(response, Err(AuthError::Unauthorized), "{response:?}");
 
     match identifier {
       Identifier::Email(ref email) | Identifier::EmailAndUsername(ref email, _) => {
@@ -274,8 +274,53 @@ fn extract_email_verification_token(body: &str) -> String {
 }
 
 #[tokio::test]
+async fn test_auth_password_login_flow_rate_limit() {
+  let email = "user_rate_limit@test.org";
+  let password = "secret123";
+
+  let (state, _mailer, _user) = setup_state_and_test_user(email, password, None).await;
+
+  let login_helper = async |password: &str| {
+    return login_handler(
+      State(state.clone()),
+      Query(LoginInputParams::default()),
+      Extension(HasRoot(false)),
+      Cookies::default(),
+      Either::Json(LoginRequest::Email {
+        email: email.to_string(),
+        password: password.to_string(),
+        params: LoginInputParams {
+          ..Default::default()
+        },
+      }),
+    )
+    .await;
+  };
+
+  for i in 0..5 {
+    let response = login_helper("invalid password").await;
+    if i < 3 {
+      assert_matches!(
+        response.as_ref().err(),
+        Some(AuthError::Unauthorized),
+        "attempt '{i}': {response:?}"
+      );
+    } else {
+      assert_matches!(
+        response.as_ref().err(),
+        Some(AuthError::TooManyRequests),
+        "attempt '{i}': {response:?}"
+      );
+    }
+  }
+
+  // Make sure valid logins still pass.
+  assert!(login_helper(password).await.is_ok());
+}
+
+#[tokio::test]
 async fn test_auth_password_login_flow_with_pkce() {
-  let email = "user@test.org".to_string();
+  let email = "user_w_pkce@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
@@ -296,7 +341,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   let (pkce_code_challenge, pkce_code_verifier) = oauth2::PkceCodeChallenge::new_random_sha256();
 
   // Missing code challenge.
-  assert!(matches!(
+  assert_matches!(
     login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: password.clone(),
@@ -309,10 +354,10 @@ async fn test_auth_password_login_flow_with_pkce() {
     }))
     .await,
     Err(AuthError::BadRequest(_)),
-  ));
+  );
 
   // Missing redirect.
-  assert!(matches!(
+  assert_matches!(
     login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: password.clone(),
@@ -325,10 +370,10 @@ async fn test_auth_password_login_flow_with_pkce() {
     }))
     .await,
     Err(AuthError::BadRequest(_)),
-  ));
+  );
 
   // Bad password.
-  assert!(matches!(
+  assert_matches!(
     &login_helper(Either::Json(LoginRequest::Email {
       email: email.clone(),
       password: "WRONG PASSWORD".to_string(),
@@ -341,12 +386,12 @@ async fn test_auth_password_login_flow_with_pkce() {
     }))
     .await,
     Err(AuthError::Unauthorized),
-  ));
+  );
 
   // Finally let's log in successfully.
   login_helper(Either::Json(LoginRequest::Email {
     // Make sure capitalization doesn't matter.
-    email: "usER@test.org".to_string(),
+    email: email.to_uppercase(),
     password: password.clone(),
     params: LoginInputParams {
       response_type: Some(ResponseType::Code),
@@ -421,7 +466,7 @@ async fn test_auth_password_login_flow_with_pkce() {
 
 #[tokio::test]
 async fn test_auth_password_login_flow_without_pkce() {
-  let email = "user@test.org".to_string();
+  let email = "user_wo_pkce@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
@@ -438,17 +483,15 @@ async fn test_auth_password_login_flow_without_pkce() {
   };
 
   // Test login using non-PKCE flow
-  assert!(matches!(
-    login_helper(Either::Json(LoginRequest::Email {
-      email: email.clone(),
-      password: "WRONG PASSWORD".to_string(),
-      params: LoginInputParams {
-        ..Default::default()
-      }
-    }))
-    .await,
-    Err(AuthError::Unauthorized),
-  ));
+  let response = login_helper(Either::Json(LoginRequest::Email {
+    email: email.clone(),
+    password: "WRONG PASSWORD".to_string(),
+    params: LoginInputParams {
+      ..Default::default()
+    },
+  }))
+  .await;
+  assert_matches!(response, Err(AuthError::Unauthorized), "{response:?}");
 
   {
     // Assert that form-based login yields a redirect.
@@ -531,7 +574,7 @@ async fn test_auth_password_login_flow_without_pkce() {
 
 #[tokio::test]
 async fn test_auth_password_login_flow_with_totp() {
-  let email = "user@test.org".to_string();
+  let email = "user_totp@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
@@ -615,7 +658,7 @@ async fn test_auth_password_login_flow_with_totp() {
 
 #[tokio::test]
 async fn test_auth_token_refresh_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_refresh@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, _mailer, _user) = setup_state_and_test_user(&email, &password, None).await;
@@ -648,7 +691,7 @@ async fn test_auth_token_refresh_flow() {
 
 #[tokio::test]
 async fn test_auth_reset_password_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_reset_pw@test.org".to_string();
   let password = "secret123".to_string();
   let reset_password = "new_password!";
 
@@ -764,7 +807,7 @@ async fn test_auth_reset_password_flow() {
 
 #[tokio::test]
 async fn test_auth_change_email_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_change_email@test.org".to_string();
   let new_email = "new_addresses@test.org".to_string();
   let password = "secret123".to_string();
 
@@ -874,7 +917,7 @@ async fn test_auth_change_email_flow() {
 
 #[tokio::test]
 async fn test_auth_change_password_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_change_pw@test.org".to_string();
   let password = "secret123".to_string();
   let new_password = "new_secret123".to_string();
 
@@ -912,7 +955,7 @@ async fn test_auth_change_password_flow() {
 
 #[tokio::test]
 async fn test_auth_change_username_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_change_username@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, _mailer, user) = setup_state_and_test_user(
@@ -966,7 +1009,7 @@ async fn test_auth_change_username_flow() {
 }
 
 #[tokio::test]
-async fn test_auth_register_handle_only() {
+async fn test_auth_register_username_only() {
   let username = "foo".to_string();
   let password = "secret123".to_string();
 
@@ -1029,7 +1072,7 @@ async fn test_auth_register_handle_only() {
 
 #[tokio::test]
 async fn test_auth_change_username_and_unset_email_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_change_username@test.org".to_string();
   let username = "foo".to_string();
   let password = "secret123".to_string();
 
@@ -1108,7 +1151,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
 
 #[tokio::test]
 async fn test_auth_delete_user_flow() {
-  let email = "user@test.org".to_string();
+  let email = "user_delete@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
@@ -1142,7 +1185,7 @@ async fn test_auth_delete_user_flow() {
 
 #[tokio::test]
 async fn test_auth_otp_flow_using_email() {
-  let email = "user@test.org".to_string();
+  let email = "user_email_otp@test.org".to_string();
   let password = "secret123".to_string();
 
   let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
@@ -1161,7 +1204,7 @@ async fn test_auth_otp_flow_using_email() {
   .await
   .unwrap();
 
-  // Only verify-email email for "user@test.org"
+  // Check that verify-email was sent.
   assert_eq!(mailer.get_logs().len(), 1, "{:?}", mailer.get_logs());
 
   otp::request_otp_handler(
@@ -1226,7 +1269,7 @@ async fn test_auth_otp_flow_using_email() {
       params: otp::LoginOtpParams {
         // Make sure trimming/normalization works.
         // email: Some(format!("{email}  ")),
-        email: Some("useR@test.org".to_string()),
+        email: Some(email.to_uppercase()),
         code: Some(format!("{otp_email_code} ")),
         ..Default::default()
       },
@@ -1244,7 +1287,7 @@ async fn test_auth_otp_flow_using_email() {
 
 #[tokio::test]
 async fn test_auth_otp_flow_using_username() {
-  let email = "user@test.org".to_string();
+  let email = "user_username_otp@test.org".to_string();
   let username = "foo".to_string();
   let password = "secret123".to_string();
 
@@ -1285,7 +1328,7 @@ async fn test_auth_otp_flow_using_username() {
   .await
   .unwrap();
 
-  // Only verify-email email for "user@test.org"
+  // Check that verify-email was sent.
   assert_eq!(mailer.get_logs().len(), 1, "{:?}", mailer.get_logs());
 
   otp::request_otp_handler(
@@ -1367,9 +1410,6 @@ async fn test_auth_otp_flow_using_username() {
 
 #[tokio::test]
 async fn test_auth_annonymous_signin() {
-  // let email = "user@test.org".to_string();
-  // let username = "foo".to_string();
-
   let mailer = TestAsyncSmtpTransport::new();
   let state = test_state(Some(TestStateOptions {
     mailer: Some(Mailer::Smtp(Arc::new(mailer.clone()))),
@@ -1538,7 +1578,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
   // Promotion attaches a not-yet-verified email to the pre-existing user. Since tokens must
   // never be minted for a user with an unverified email, refreshing that session has to fail
   // rather than hand out fresh tokens.
-  assert!(matches!(
+  assert_matches!(
     refresh_handler(
       State(state.clone()),
       Json(RefreshRequest {
@@ -1547,7 +1587,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
     )
     .await,
     Err(AuthError::Unauthorized)
-  ));
+  );
 
   // Steal the verification code from the DB and verify.
   let verification_email_token: String = extract_email_verification_token(&mailer.get_logs()[0].1);
@@ -1569,6 +1609,65 @@ async fn test_auth_refresh_after_anonymous_promotion() {
   )
   .await
   .unwrap();
+}
+
+#[tokio::test]
+async fn test_login_timing_does_not_leak_account_information() {
+  let email = "timing@test.org";
+  let password = "secret123";
+
+  let (state, _mailer, _user) = setup_state_and_test_user(email, password, None).await;
+
+  let time_login = async |email: &str, password: &str| -> std::time::Duration {
+    let mut measurements = vec![];
+
+    for _ in 0..3 {
+      let start = std::time::Instant::now();
+      let _ = login_handler(
+        State(state.clone()),
+        Query(LoginInputParams::default()),
+        Extension(HasRoot(false)),
+        Cookies::default(),
+        Either::Json(LoginRequest::Email {
+          email: email.to_string(),
+          password: password.to_string(),
+          params: LoginInputParams::default(),
+        }),
+      )
+      .await;
+
+      measurements.push(start.elapsed());
+    }
+
+    // Fastest of a few attempts: scheduling noise only ever adds time. Three wrong passwords stay
+    // below the lock-out threshold.
+    return measurements.into_iter().min().unwrap();
+  };
+
+  // Make sure to the lazy, initial measurement overhead doesn't skew.
+  let _ = time_login("nobody@test.org", "anything").await;
+
+  let wrong_password = time_login(email, "wrong").await;
+  let unknown_account = time_login("nobody@test.org", "anything").await;
+  let right_password = time_login(email, password).await;
+
+  fn micros(d: std::time::Duration) -> f64 {
+    return d.as_micros() as f64;
+  }
+
+  // We're talking hundreds of milliseconds vs microseconds (hashing vs non-hashing), so we're
+  // erroring on the lenient side here, to avoid flaky tests.
+  let tolerance = 4.0;
+
+  assert!(
+    (micros(unknown_account) - micros(right_password)).abs() <= tolerance * micros(right_password),
+    "right password: {right_password:?} vs {unknown_account:?} for an unknown account"
+  );
+
+  assert!(
+    (micros(wrong_password) - micros(right_password)).abs() <= tolerance * micros(right_password),
+    "right password: {right_password:?} vs {wrong_password:?} for a wrong password"
+  );
 }
 
 async fn session_exists(state: &AppState, user_id: Uuid) -> bool {

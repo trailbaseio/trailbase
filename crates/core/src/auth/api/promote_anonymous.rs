@@ -111,6 +111,9 @@ pub async fn promote_anonymous_user_handler(
   // for the same user.
   let new_password_hash = hash_password(&request.new_password)?;
 
+  // FIXME: Right now there's no flow to recover anonymous accounts when a user typos their email
+  // address. They'll be locked out forever or until a manual operator un-sets password and
+  // unverified_email.
   const QUERY: &str = formatcp!(
     "\
       UPDATE \"{USER_TABLE}\" \
