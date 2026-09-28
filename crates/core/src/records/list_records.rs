@@ -241,7 +241,7 @@ pub async fn list_records_handler(
   // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
   // have them be stripped later on by `rows_to_json`.
   let list_query = match conn.connection_type() {
-    ConnectionType::Pg => ListRecordQueryTemplatePg {
+    ConnectionType::Pg | ConnectionType::Stoolap => ListRecordQueryTemplatePg {
       table_name,
       column_metadata: api.columns(),
       // NOTE: We're using the read access rule to filter accessible rows as opposed to blocking

@@ -87,7 +87,9 @@ pub async fn lookup_and_parse_table_schema(
 ) -> Result<Table, SchemaLookupError> {
   #[cfg(feature = "pg")]
   return match conn.connection_type() {
-    ConnectionType::Pg => lookup_and_parse_table_schema_pg(conn, table_name).await,
+    ConnectionType::Pg | ConnectionType::Stoolap => {
+      lookup_and_parse_table_schema_pg(conn, table_name).await
+    }
     ConnectionType::Sqlite => {
       lookup_and_parse_table_schema_sqlite(conn, table_name, database).await
     }
@@ -448,6 +450,7 @@ mod tests {
         type_name: match connection_type {
           ConnectionType::Pg => "integer".to_string(),
           ConnectionType::Sqlite => "INTEGER".to_string(),
+          ConnectionType::Stoolap => "INTEGER".to_string(),
         },
         data_type: ColumnDataType::Integer,
         affinity_type: ColumnAffinityType::Integer,
