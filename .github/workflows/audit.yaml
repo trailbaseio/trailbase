@@ -6,6 +6,7 @@ on:
       - "**/Cargo.lock"
       - "**/Cargo.toml"
       - "**/deny.toml"
+      - ".github/workflows/audit.yaml"
   schedule:
     - cron: "0 7 * * *"
   workflow_dispatch:
