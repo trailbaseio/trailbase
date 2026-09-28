@@ -1,0 +1,44 @@
+name: audit
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - "**/Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/deny.toml"
+      - ".github/workflows/audit.yaml"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  check-advisories-and-sources:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      # Audit JS/TS
+      - uses: ./.github/actions/setup_pnpm
+      - run: pnpm audit --prod
+
+      # Audit Rust
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - run: cargo deny check advisories sources

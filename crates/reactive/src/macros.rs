@@ -1,5 +1,3 @@
-use paste::paste;
-
 use crate::{Merge, Reactive};
 
 impl<T: Clone + Default + Send + Sync + 'static> Merge for &Reactive<T> {
@@ -11,7 +9,7 @@ impl<T: Clone + Default + Send + Sync + 'static> Merge for &Reactive<T> {
 }
 
 macro_rules! impl_merge_for_nested_tuple {
-    ( $($i:literal),* ) => { paste!{
+    ( $($i:literal),* ) => { pastey::paste!{
     impl < $( [<T $i>], )* > Merge for ( $( [<T $i>], )* )
     where
         $( [<T $i>]: Merge, ) *
@@ -23,7 +21,7 @@ macro_rules! impl_merge_for_nested_tuple {
 }
 
 macro_rules! body {
-    ( $($i:literal),* ) => {paste!{
+    ( $($i:literal),* ) => { pastey::paste!{
         type Output = ( $([<T $i>]::Output,)* );
 
         fn merge(self) -> Reactive<Self::Output> {

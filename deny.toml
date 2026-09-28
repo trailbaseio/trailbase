@@ -1,0 +1,8 @@
+[advisories]
+unmaintained = "workspace"
+ignore = [{ id = "RUSTSEC-2023-0071", reason = "rsa: no safe upgrade availble and only used for Signin-with-Apple pub-key RSA" }]
+
+[sources]
+required-git-spec = "rev"
+unknown-git = "deny"
+unknown-registry = "deny"

@@ -27,3 +27,8 @@ allowBuilds:
   tree-sitter-json: true
 minimumReleaseAgeExclude:
   - trailbase@0.13.1
+overrides:
+  form-data@>=4.0.0 <4.0.6: ^4.0.6
+audit:
+  ignore:
+    - GHSA-8cw4-87c7-c6xx # csv-parse: update requires major version bump
