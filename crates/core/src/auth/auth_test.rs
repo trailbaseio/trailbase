@@ -69,6 +69,7 @@ async fn setup_state_and_test_user(
   email: &str,
   password: &str,
   config: Option<proto::Config>,
+  is_demo: bool,
 ) -> (AppState, TestAsyncSmtpTransport, User) {
   let _ = env_logger::try_init_from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn"),
@@ -85,6 +86,7 @@ async fn setup_state_and_test_user(
 
       config
     }),
+    is_demo: Some(is_demo),
     ..Default::default()
   }))
   .await
@@ -278,7 +280,7 @@ async fn test_auth_password_login_flow_rate_limit() {
   let email = "user_rate_limit@test.org";
   let password = "secret123";
 
-  let (state, _mailer, _user) = setup_state_and_test_user(email, password, None).await;
+  let (state, _mailer, _user) = setup_state_and_test_user(email, password, None, false).await;
 
   let login_helper = async |password: &str| {
     return login_handler(
@@ -297,6 +299,12 @@ async fn test_auth_password_login_flow_rate_limit() {
     .await;
   };
 
+  // Make sure valid logins are not blocked. We rely on generic auth-router rate limits to prevent
+  // flooding attacks, e.g. overwhelm the server by repeatedly logging in with a valid account.
+  for _ in 0..5 {
+    assert!(login_helper(password).await.is_ok());
+  }
+
   for i in 0..5 {
     let response = login_helper("invalid password").await;
     if i < 3 {
@@ -314,8 +322,9 @@ async fn test_auth_password_login_flow_rate_limit() {
     }
   }
 
-  // Make sure valid logins still pass.
-  assert!(login_helper(password).await.is_ok());
+  // Make sure valid logins also fail otherwise one could just ignore the rate limiting and keep
+  // brute-forcing until it passes.
+  assert!(login_helper(password).await.is_err());
 }
 
 #[tokio::test]
@@ -323,7 +332,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   let email = "user_w_pkce@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   let login_helper = async |request| {
     return login_handler(
@@ -469,7 +478,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   let email = "user_wo_pkce@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   let login_helper = async |request| {
     return login_handler(
@@ -577,7 +586,7 @@ async fn test_auth_password_login_flow_with_totp() {
   let email = "user_totp@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   let login_helper = async |request| {
     return login_handler(
@@ -661,7 +670,7 @@ async fn test_auth_token_refresh_flow() {
   let email = "user_refresh@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, _user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, _mailer, _user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   // Test refresh flow.
   let tokens = login_with_password(&state, &email, &password)
@@ -695,7 +704,7 @@ async fn test_auth_reset_password_flow() {
   let password = "secret123".to_string();
   let reset_password = "new_password!";
 
-  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   // Reset (forgotten) password flow.
   let _ = reset_password_request_handler(
@@ -811,7 +820,7 @@ async fn test_auth_change_email_flow() {
   let new_email = "new_addresses@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   // Form requests require old email
   assert!(
@@ -921,7 +930,7 @@ async fn test_auth_change_password_flow() {
   let password = "secret123".to_string();
   let new_password = "new_secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   let _ = change_password_handler(
     State(state.clone()),
@@ -966,6 +975,7 @@ async fn test_auth_change_username_flow() {
       config.auth.user_identifier = Some(proto::UserIdentifier::RequireEmail as i32);
       config
     }),
+    false,
   )
   .await;
 
@@ -1154,7 +1164,7 @@ async fn test_auth_delete_user_flow() {
   let email = "user_delete@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   let _tokens = login_with_password(&state, &email, &password)
     .await
@@ -1188,7 +1198,7 @@ async fn test_auth_otp_flow_using_email() {
   let email = "user_email_otp@test.org".to_string();
   let password = "secret123".to_string();
 
-  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None).await;
+  let (state, mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   assert_eq!(Some(&email), user.email.as_ref());
 
@@ -1616,7 +1626,8 @@ async fn test_login_timing_does_not_leak_account_information() {
   let email = "timing@test.org";
   let password = "secret123";
 
-  let (state, _mailer, _user) = setup_state_and_test_user(email, password, None).await;
+  // Note: we enable demo mode to prevent rate limiting to interfere with sampling.
+  let (state, _mailer, _user) = setup_state_and_test_user(email, password, None, true).await;
 
   let time_login = async |email: &str, password: &str| -> std::time::Duration {
     let mut measurements = vec![];

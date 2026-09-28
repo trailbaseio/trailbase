@@ -696,7 +696,8 @@ mod test_utils {
   pub struct TestStateOptions {
     pub config: Option<proto::Config>,
     pub json_schema_registry: Option<JsonSchemaRegistry>,
-    pub(crate) mailer: Option<Mailer>,
+    pub mailer: Option<Mailer>,
+    pub is_demo: Option<bool>,
   }
 
   pub async fn test_state(options: Option<TestStateOptions>) -> anyhow::Result<AppState> {
@@ -755,6 +756,7 @@ mod test_utils {
       config,
       mailer,
       json_schema_registry,
+      is_demo,
     } = options.unwrap_or_default();
 
     let json_schema_registry = Arc::new(parking_lot::RwLock::new(
@@ -810,7 +812,7 @@ mod test_utils {
         site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
         read_only: false,
         dev: true,
-        demo: false,
+        demo: is_demo.unwrap_or(false),
         auth: config.derive_unchecked(|c| {
           Arc::new(AuthOptions::from_config(
             c.server.site_url.as_deref(),

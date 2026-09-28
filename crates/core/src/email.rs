@@ -320,7 +320,7 @@ fn fallback_sender(site_url: &Option<url::Url>) -> String {
 }
 
 #[derive(Clone)]
-pub(crate) enum Mailer {
+pub enum Mailer {
   Smtp(Arc<dyn AsyncTransport<Ok = smtp::response::Response, Error = smtp::Error> + Send + Sync>),
   Local(Arc<AsyncSendmailTransport<Tokio1Executor>>),
 }

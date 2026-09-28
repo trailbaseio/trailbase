@@ -161,18 +161,20 @@ pub(crate) async fn login_handler(
     UserIdentifier::Username(username) => username.clone(),
   };
 
+  if !state.demo_mode() {
+    // NOTE: This may also prevent valid logins from passing, i.e. someone could DoS a valid
+    // account. We rely on generic auth-router-wide rate limiting for DoS protection.
+    let attempts = FAILED_LOGIN_ATTEMPTS.get(&rate_limit_id).unwrap_or(0);
+    if attempts > FAILED_LOGIN_RATE_LIMIT {
+      return Err(AuthError::TooManyRequests);
+    }
+  }
+
   // Check credentials.
   let db_user = match check_credentials(&state, user_identifier, &password).await {
     Err(err) => {
-      // Rate-limit *failed* login attempts. We do *not* want failed logins to be able to prevent
-      // valid logins. Otherwise, one could easily flood and DoS someone else's account.
-      if !state.demo_mode() {
-        let attempts = FAILED_LOGIN_ATTEMPTS.get(&rate_limit_id).unwrap_or(0);
-        if attempts > FAILED_LOGIN_RATE_LIMIT {
-          return Err(AuthError::TooManyRequests);
-        }
-        FAILED_LOGIN_ATTEMPTS.insert(rate_limit_id, attempts + 1);
-      }
+      let attempts = FAILED_LOGIN_ATTEMPTS.get(&rate_limit_id).unwrap_or(0);
+      FAILED_LOGIN_ATTEMPTS.insert(rate_limit_id, attempts + 1);
 
       if !json && let Some(redirect_uri) = params.redirect_uri.as_deref() {
         return Ok(auth_error_to_response(err, &cookies, Some(redirect_uri)));
