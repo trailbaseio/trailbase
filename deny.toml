@@ -1,0 +1,7 @@
+[advisories]
+unmaintained = "workspace"
+
+[sources]
+required-git-spec = "rev"
+unknown-git = "deny"
+unknown-registry = "deny"
