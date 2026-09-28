@@ -10,5 +10,5 @@ readme = "../../README.md"
 [dependencies]
 futures-util = { workspace = true }
 parking_lot = { workspace = true }
-paste = "1"
+pastey = "0.2.3"
 tokio = { workspace = true }

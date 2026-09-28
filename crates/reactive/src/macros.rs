@@ -1,4 +1,4 @@
-use paste::paste;
+use pastey::pastey;
 
 use crate::{Merge, Reactive};
 
@@ -23,7 +23,7 @@ macro_rules! impl_merge_for_nested_tuple {
 }
 
 macro_rules! body {
-    ( $($i:literal),* ) => {paste!{
+    ( $($i:literal),* ) => {pastey!{
         type Output = ( $([<T $i>]::Output,)* );
 
         fn merge(self) -> Reactive<Self::Output> {
