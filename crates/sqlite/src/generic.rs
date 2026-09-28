@@ -98,12 +98,7 @@ impl Connection {
 
   pub fn stoolap_wo_opts(db: stoolap::Database) -> Result<Self, Error> {
     return Ok(Self::new(Executor::Stoolap(
-      crate::stoolap::executor::Executor::new(
-        move || -> Result<_, Error> {
-          return Ok(db.clone());
-        },
-        crate::stoolap::executor::Options {},
-      )?,
+      crate::stoolap::executor::Executor::new(db, crate::stoolap::executor::Options {})?,
     )));
   }
 
@@ -798,7 +793,7 @@ mod tests {
     let path = tmp_dir.path().to_path_buf();
 
     let exec = StoolapExecutor::new(
-      move || Database::open(&format!("file://{}", path.to_string_lossy())),
+      Database::open(&format!("file://{}", path.to_string_lossy())).unwrap(),
       Options {},
     )
     .unwrap();

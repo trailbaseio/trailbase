@@ -10,14 +10,8 @@ pub(crate) struct Executor {
 
 #[allow(unused)]
 impl Executor {
-  pub fn new<E>(
-    builder: impl Fn() -> Result<stoolap::Database, E> + Sync + Send + 'static,
-    opt: Options,
-  ) -> Result<Self, Error>
-  where
-    Error: From<E>,
-  {
-    return Ok(Self { db: builder()? });
+  pub fn new(db: stoolap::Database, opt: Options) -> Result<Self, Error> {
+    return Ok(Self { db });
   }
 
   pub fn threads(&self) -> usize {

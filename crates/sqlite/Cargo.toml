@@ -14,10 +14,10 @@ name = "synthetic"
 path = "benches/synthetic/benchmark.rs"
 harness = false
 
-[[bench]]
-name = "join-order"
-path = "benches/join-order/main.rs"
-harness = false
+# [[bench]]
+# name = "join-order"
+# path = "benches/join-order/main.rs"
+# harness = false
 
 [features]
 default = []
