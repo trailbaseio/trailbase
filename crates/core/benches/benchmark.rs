@@ -15,6 +15,7 @@ use criterion::{Bencher, Criterion, Throughput, criterion_group, criterion_main}
 use eventsource_stream::Eventsource;
 use futures_util::StreamExt;
 use hyper::StatusCode;
+use serde::Deserialize;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
@@ -27,6 +28,12 @@ use trailbase::constants::RECORD_API_PATH;
 use trailbase::{AppState, SocketAddr};
 use trailbase::{DataDir, Server, ServerOptions};
 use trailbase_sqlite::params;
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CreateRecordResponse {
+  /// Url-Safe base64 encoded ids of the newly created record.
+  pub ids: Vec<String>,
+}
 
 async fn create_chat_message_app_tables(
   conn: &trailbase_sqlite::Connection,
@@ -267,6 +274,79 @@ fn create_message_benchmark(
   });
 }
 
+fn read_message_benchmark(
+  b: &mut Bencher,
+  session: Arc<Session>,
+  runtime: &tokio::runtime::Runtime,
+  setup: &Setup,
+) {
+  let authorization = format!("Bearer {}", setup.user_x_token);
+
+  let ids = runtime.block_on({
+    let mut router = setup.app.main_router.1.clone();
+    let authorization = authorization.clone();
+
+    async move {
+      let body = serde_json::json!({
+        "_owner": BASE64_URL_SAFE.encode(setup.user_x),
+        "room": BASE64_URL_SAFE.encode(setup.room),
+        "data": "user_x message to room",
+      });
+
+      let create_request = Request::builder()
+        .method(http::Method::POST)
+        .uri(&format!("/{RECORD_API_PATH}/messages_api"))
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::AUTHORIZATION, &authorization)
+        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+        .unwrap();
+
+      let response = router.call(create_request).await.unwrap();
+      assert!(response.status().is_success());
+      let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+      let created: CreateRecordResponse = serde_json::from_slice(&body).unwrap();
+      return created.ids;
+    }
+  });
+
+  let read_request = move || {
+    Request::builder()
+      .method(http::Method::GET)
+      .uri(&format!(
+        "/{RECORD_API_PATH}/messages_api/{id}",
+        id = ids[0]
+      ))
+      .header(http::header::CONTENT_TYPE, "application/json")
+      .header(http::header::AUTHORIZATION, &authorization)
+      .body(Body::empty())
+      .unwrap()
+  };
+
+  b.to_async(runtime).iter_custom(async |iters| {
+    let start = Instant::now();
+
+    let tasks = (0..iters).map(|_i| {
+      let session = session.clone();
+      let read_request = read_request.clone();
+      let mut router = setup.app.main_router.1.clone();
+
+      return runtime.spawn(async move {
+        let operation = session.operation("read-message-parallel");
+        let _span = operation.measure_process().iterations(1);
+
+        let response = router.call(read_request()).await.unwrap();
+        assert!(response.status().is_success());
+      });
+    });
+
+    futures_util::future::join_all(tasks).await;
+
+    return start.elapsed();
+  });
+}
+
 fn list_message_benchmark(
   b: &mut Bencher,
   session: Arc<Session>,
@@ -456,6 +536,17 @@ fn benchmark_group(c: &mut Criterion) {
         &runtime,
         &setup,
       )
+    });
+  }
+
+  {
+    let mut group = c.benchmark_group("ChatReadMessage");
+    group.measurement_time(Duration::from_secs(20));
+    group.sample_size(100);
+    group.throughput(Throughput::Elements(1));
+
+    group.bench_function("parallel", |b| {
+      read_message_benchmark(b, session.clone(), &runtime, &setup)
     });
   }
 
