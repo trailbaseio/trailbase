@@ -13,16 +13,16 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::auth::AuthError;
 use crate::auth::api::login::{LoginResponse, build_auth_token_flow_response};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   get_user_by_id, user_by_email, user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username, validate_redirect,
 };
+use crate::auth::{AuthError, HasRoot};
 use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
-use crate::extract::{Either, HasRoot};
+use crate::extract::Either;
 use crate::rand::random_numeric_and_uppercase;
 use crate::util::urlencode;
 

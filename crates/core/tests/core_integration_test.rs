@@ -173,7 +173,6 @@ async fn test_record_apis() {
         .route("/trace", axum::routing::get(trace_id))
         .into(),
       &options.cors_allowed_origins,
-      /* has_root= */ false,
     ));
   }
 

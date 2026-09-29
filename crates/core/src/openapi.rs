@@ -64,6 +64,7 @@ pub fn build_api_definitions_from_config(
       false,
       custom_routers,
       /* auth_rate_limit= */ None,
+      /* has_root= */ false,
     )
     .unwrap_or_else(|err| {
       log::error!("failed to build main_router: {err}");

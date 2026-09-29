@@ -11,7 +11,6 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
-use crate::auth::AuthError;
 use crate::auth::api::totp::new_totp;
 use crate::auth::jwt::PendingAuthTokenClaims;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
@@ -21,11 +20,12 @@ use crate::auth::util::{
   SameSite, new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
   validate_and_normalize_email_address, validate_and_normalize_username,
 };
+use crate::auth::{AuthError, HasRoot};
 use crate::constants::{
   AUTHORIZATION_CODE_TABLE, COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN,
   DEFAULT_AUTHORIZATION_CODE_TTL, DEFAULT_MFA_TOKEN_TTL, VERIFICATION_CODE_LENGTH,
 };
-use crate::extract::{Either, HasRoot};
+use crate::extract::Either;
 use crate::rand::random_alphanumeric;
 use crate::util::{b64_to_uuid, urlencode};
 

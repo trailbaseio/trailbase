@@ -7,12 +7,11 @@ use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::AppState;
-use crate::auth::AuthError;
 use crate::auth::user::User;
 use crate::auth::util::{
   delete_all_sessions_for_user, delete_session, remove_all_cookies, validate_redirect,
 };
-use crate::extract::HasRoot;
+use crate::auth::{AuthError, HasRoot};
 
 #[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct LogoutParams {

@@ -19,6 +19,7 @@ mod util;
 mod wasm;
 
 pub use error::AdminError;
+pub(super) use openapi::OpenApiExtension;
 
 use crate::app_state::AppState;
 use utoipa_axum::router::OpenApiRouter;

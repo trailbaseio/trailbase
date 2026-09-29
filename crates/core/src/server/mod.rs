@@ -30,15 +30,15 @@ use trailbase_assets::AssetService;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::admin;
+use crate::admin::{self, OpenApiExtension};
 use crate::app_state::{AppState, validate_path};
+use crate::auth::HasRoot;
 use crate::auth::util::is_admin;
 use crate::auth::{self, AuthError, User};
 use crate::config::proto;
 use crate::connection::ConnectionEntry;
 use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
-use crate::extract::HasRoot;
 use crate::extract::ip::RealIpKeyExtractor;
 use crate::init_error::InitError;
 use crate::logging;
@@ -163,36 +163,34 @@ impl Server {
       None
     };
 
+    let openapi_ext = OpenApiExtension::default();
     let independent_admin_router = if let Some(admin_address) = admin_address
       && admin_address != address
     {
       let (router, _api) = OpenApiRouter::new()
         .nest(&format!("/{AUTH_API_PATH}/"), {
           let auth_router = auth::admin_auth_router();
-          if let Some(auth_rate_limit) = auth_rate_limit {
+          let auth_router = if let Some(auth_rate_limit) = auth_rate_limit {
             // Limit access to the auth routes only.
             auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
               auth_rate_limit,
             )))
           } else {
             auth_router
-          }
+          };
+
+          auth_router.layer(Extension(HasRoot(false)))
         })
-        .merge(Self::build_admin_router(&state))
+        .merge(Self::build_admin_router(&state).layer(Extension(openapi_ext.clone())))
         .split_for_parts();
 
       // NOTE: For the admin router no (GET, "/") is path installed => has_root=false.
-      let admin_router = Self::wrap_with_default_layers(
-        &state,
-        router,
-        &cors_allowed_origins,
-        /* has_root= */ false,
-      );
+      let admin_router = Self::wrap_with_default_layers(&state, router, &cors_allowed_origins);
 
       Some((admin_address, admin_router))
     } else {
       // Simply add to the main router.
-      custom_routers.push(Self::build_admin_router(&state));
+      custom_routers.push(Self::build_admin_router(&state).layer(Extension(openapi_ext.clone())));
       None
     };
 
@@ -207,29 +205,21 @@ impl Server {
       public_dir_spa,
       custom_routers,
       auth_rate_limit,
+      has_root,
     )?
     .split_for_parts();
 
-    let main_router =
-      Self::wrap_with_default_layers(&state, main_router, &cors_allowed_origins, has_root);
-    let api = crate::openapi::add_info(api);
+    *openapi_ext.api.lock() = Some(crate::openapi::add_info(api));
+
+    let main_router = Self::wrap_with_default_layers(&state, main_router, &cors_allowed_origins);
     let tls = load_tls(state.data_dir(), tls_cert, tls_key);
 
-    return if let Some((admin_address, admin_router)) = independent_admin_router {
-      Ok(Self {
-        state,
-        main_router: (address, main_router),
-        admin_router: Some((admin_address, admin_router.layer(Extension(api)))),
-        tls,
-      })
-    } else {
-      Ok(Self {
-        state,
-        main_router: (address, main_router.layer(Extension(api))),
-        admin_router: None,
-        tls,
-      })
-    };
+    return Ok(Self {
+      state,
+      main_router: (address, main_router),
+      admin_router: independent_admin_router,
+      tls,
+    });
   }
 
   fn setup_tracing(state: &AppState, log_responses: bool) {
@@ -417,6 +407,7 @@ impl Server {
     public_dir_spa: bool,
     custom_routers: Vec<OpenApiRouter<AppState>>,
     auth_rate_limit: Option<u32>,
+    has_root: bool,
   ) -> Result<OpenApiRouter<AppState>, InitError> {
     let enable_transactions = config.server.enable_record_transactions();
 
@@ -425,13 +416,15 @@ impl Server {
       .merge(records::router(connection_type, enable_transactions))
       .nest(&format!("/{AUTH_API_PATH}/"), {
         let auth_router = auth::router(config);
-        if let Some(auth_rate_limit) = auth_rate_limit {
+        let auth_router = if let Some(auth_rate_limit) = auth_rate_limit {
           auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
             auth_rate_limit,
           )))
         } else {
           auth_router
-        }
+        };
+
+        auth_router.layer(Extension(HasRoot(has_root)))
       })
       .routes(routes!(healthcheck_handler));
 
@@ -508,7 +501,6 @@ impl Server {
     state: &AppState,
     router: Router<AppState>,
     cors_allowed_origins: &[String],
-    has_root: bool,
   ) -> Router<()> {
     #[cfg(feature = "otel")]
     let router = router
@@ -516,7 +508,6 @@ impl Server {
       .layer(axum_tracing_opentelemetry::middleware::OtelAxumLayer::default());
 
     return router
-      .layer(Extension(HasRoot(has_root)))
       .layer(CookieManagerLayer::new())
       .layer(build_cors(cors_allowed_origins, state.dev_mode()))
       .layer(

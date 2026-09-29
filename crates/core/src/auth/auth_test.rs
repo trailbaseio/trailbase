@@ -13,6 +13,7 @@ use crate::AppState;
 use crate::api::AuthTokenClaims;
 use crate::app_state::{TestStateOptions, test_state};
 use crate::auth::AuthError;
+use crate::auth::HasRoot;
 use crate::auth::api::change_email::{self, ChangeEmailConfigParams};
 use crate::auth::api::change_password::{
   ChangePasswordParams, ChangePasswordRequest, change_password_handler,
@@ -46,7 +47,7 @@ use crate::auth::util::{login_with_password, login_with_password_for_test};
 use crate::config::proto;
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
-use crate::extract::{Either, HasRoot};
+use crate::extract::Either;
 
 fn build_test_config_with_trivial_tokens() -> proto::Config {
   let mut config = crate::app_state::test_config();

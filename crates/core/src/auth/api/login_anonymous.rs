@@ -9,12 +9,12 @@ use ts_rs::TS;
 use utoipa::ToSchema;
 
 use crate::app_state::AppState;
-use crate::auth::AuthError;
 use crate::auth::api::register::RegisterUserParams;
 use crate::auth::user::DbUser;
 use crate::auth::util::validate_redirect;
+use crate::auth::{AuthError, HasRoot};
 use crate::constants::{DEFAULT_ANONYMOUS_REFRESH_TOKEN_TTL, DEFAULT_AUTH_TOKEN_TTL, USER_TABLE};
-use crate::extract::{Either, HasRoot};
+use crate::extract::Either;
 
 #[derive(Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]

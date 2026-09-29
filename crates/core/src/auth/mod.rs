@@ -23,6 +23,10 @@ pub use user::{DbUser, User};
 use crate::AppState;
 use crate::config::proto;
 
+/// Signals whether the server as a GET "/" route. Useful for redirects after auth actions.
+#[derive(Clone)]
+pub(super) struct HasRoot(pub bool);
+
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
 pub(super) fn router(config: &proto::Config) -> OpenApiRouter<AppState> {
   // We support the following authentication flows:

@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::api::AuthTokenClaims;
 use crate::app_state::{AppState, TestStateOptions, test_state};
-use crate::auth::AuthError;
 use crate::auth::api::token::{
   AuthCodeToTokenRequest, TokenResponse as TokenHandlerResponse, auth_code_to_token_handler,
 };
@@ -22,12 +21,12 @@ use crate::auth::oauth::state::OAuthStateClaims;
 use crate::auth::oauth::{callback, list_providers, login};
 use crate::auth::user::DbUser;
 use crate::auth::util::derive_pkce_code_challenge;
+use crate::auth::{AuthError, HasRoot};
 use crate::config::proto;
 use crate::constants::{
   AUTH_API_PATH, COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE,
   USER_TABLE,
 };
-use crate::extract::HasRoot;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct AuthQuery {
