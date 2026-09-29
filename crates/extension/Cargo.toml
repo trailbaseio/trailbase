@@ -16,7 +16,7 @@ arc-swap = "1.9.2"
 argon2 = { workspace = true }
 base64 = { workspace = true }
 bcrypt = "0.19.3"
-jsonschema = { version = "0.57.0", default-features = false }
+jsonschema = { version = "0.58.2", default-features = false }
 maxminddb = "0.32.0"
 parking_lot = { workspace = true }
 quick_cache = { version = "0.7.0", default-features = false }
@@ -25,6 +25,6 @@ regex = "1.13.1"
 rusqlite = { version = "0.40.2", default-features = false, features = ["functions"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 uuid = { workspace = true }
 validator = { version = "0.21.0", default-features = false }

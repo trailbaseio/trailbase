@@ -41,7 +41,7 @@ askama = { workspace = true }
 async-channel = "2.5.0"
 async-trait = "0.1.92"
 axum = { workspace = true }
-axum-tracing-opentelemetry = { version = "0.39.1", optional = true }
+axum-tracing-opentelemetry = { version = "0.42.1", optional = true }
 base32 = "0.5.1"
 base64 = { workspace = true }
 bytes = { workspace = true }
@@ -61,11 +61,11 @@ governor = "0.10.4"
 hex = "0.4.3"
 http-body-util = { workspace = true }
 hyper = { workspace = true }
-hyper-util = "0.1.20"
+hyper-util = "0.1.21"
 indexmap = "2.14.2"
-init-tracing-opentelemetry = { version = "0.41.1", features = ["tracing_subscriber_ext", "metrics"], optional = true }
+init-tracing-opentelemetry = { version = "0.43.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.57.0", default-features = false }
+jsonschema = { version = "0.58.2", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.0"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
@@ -96,7 +96,7 @@ serde_urlencoded = "0.7.1"
 sha2 = "0.11.0"
 sqlformat = "0.5.0"
 sqlite3-parser = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 tokio = { workspace = true }
 tokio-rustls = { workspace = true }
 totp-rs = { version = "^6.0.0", features = ["gen_secret", "qr", "otpauth"] }
@@ -106,7 +106,7 @@ tower-http = { version = "^0.7.1", default-features = false, features = ["cors",
 tower-service = { version = "0.3.3", default-features = false }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tracing = { workspace = true }
-tracing-opentelemetry-instrumentation-sdk = "0.38.3"
+tracing-opentelemetry-instrumentation-sdk = "0.42.1"
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
 trailbase-auth-config = { workspace = true }

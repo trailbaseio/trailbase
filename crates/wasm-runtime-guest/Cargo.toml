@@ -20,7 +20,7 @@ serde_json = { workspace = true }
 serde_path_to_error = "0.1.20"
 serde_urlencoded = "0.7.1"
 static_assertions = "1.1.0"
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 trailbase-sqlvalue = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.8"

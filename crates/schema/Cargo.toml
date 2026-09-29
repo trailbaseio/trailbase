@@ -19,7 +19,7 @@ fallible-iterator = "0.3.0"
 geos = { workspace = true, optional = true }
 infer = "0.22.0"
 itertools = { workspace = true }
-jsonschema = { version = "0.57.0", default-features = false }
+jsonschema = { version = "0.58.2", default-features = false }
 lazy_static = "1.5.0"
 log = { workspace = true }
 parking_lot = { workspace = true }
@@ -29,7 +29,7 @@ schemars = "1.2.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite3-parser = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 trailbase-extension = { workspace = true }
 trailbase-sqlite = { workspace = true }
 ts-rs = { workspace = true }

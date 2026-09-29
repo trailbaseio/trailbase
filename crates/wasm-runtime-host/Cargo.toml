@@ -25,7 +25,7 @@ rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlite3-parser = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 trailbase-schema = { workspace = true }
 trailbase-sqlvalue = { workspace = true, features = ["rusqlite"] }
 trailbase-sqlite = { workspace = true }

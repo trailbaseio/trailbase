@@ -29,7 +29,7 @@ reqwest-websocket = { version = "0.6.0", features = ["json"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_repr = "0.1.21"
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 tracing = "0.1.44"
 url = "2.5.8"
 

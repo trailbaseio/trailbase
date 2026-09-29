@@ -7,7 +7,7 @@ edition = "2024"
 itertools = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true }
-thiserror = "2.0.20"
+thiserror = "2.0.21"
 tokio = { workspace = true }
 trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true, features = ["generic"] }
