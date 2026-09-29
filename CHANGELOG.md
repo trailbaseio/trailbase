@@ -1,3 +1,14 @@
+## v0.34.0
+
+- Performance release - many small and large improvements across the board:
+  - Fixed significant regression introduced in v0.33.3.
+  - Reduce allocations in many places. Most relevant for large reads.
+  - Introduce a read-performance benchmark.
+  - Use small-vec and small-string optimizations in more places.
+- Remove `trailbase_sqlite::Connection::..*query_value[s]` for deserializing rows into arbitrary `serde` types. This protects us from accidental overhead and lowers the requirements for onboard new DB backends. We're currently experimenting with stoolap.
+- Paths in `ATTACH DATABASE` calls from WASM are now relative to `<depot>/data` rather than CWD. This is a breaking change if you use auxiliary DBs from WASM. You'll have to update your paths or move your DBs. Referencing DBs in parent paths is not possible.
+- Update dependencies.
+
 ## v0.33.23
 
 - Close side-channel for timing-based account enumeration. Reported by @SwissBitcoinPay 🙏
