@@ -1,5 +1,3 @@
-use utoipa_axum::router::OpenApiRouter;
-
 pub mod cli;
 pub mod jwt;
 pub mod user;
@@ -20,32 +18,27 @@ pub use error::AuthError;
 pub use jwt::{AuthTokenClaims, JwtHelper};
 pub use user::{DbUser, User};
 
+use axum::extract::Extension;
+use std::sync::{Arc, OnceLock};
+use tower_governor::GovernorLayer;
+use tower_governor::governor::{GovernorConfig, GovernorConfigBuilder};
+use utoipa_axum::router::OpenApiRouter;
+
 use crate::AppState;
 use crate::config::proto;
+use crate::constants::AUTH_API_PATH;
+use crate::extract::ip::RealIpKeyExtractor;
 
 /// Signals whether the server as a GET "/" route. Useful for redirects after auth actions.
 #[derive(Clone)]
-pub(super) struct HasRoot(pub bool);
+pub(crate) struct HasRoot(bool);
 
 /// Router for auth API endpoints, i.e. api/auth/v?/... .
-pub(super) fn router(config: &proto::Config) -> OpenApiRouter<AppState> {
-  // We support the following authentication flows:
-  //
-  //  * unauthed: register (anonymous + normal), login, get-avatar-url
-  //  * unauthed + rate limited:
-  //    * reset-password
-  //    * verify-email (+retrigger)
-  //  * authed:
-  //    * get-login-status (no CSRF, no side-effect)
-  //    * refresh-token (no CSRF, safe side-effect)
-  //    * logout (no CSRF, safe side-effect)
-  //    * change-password (no CSRF: requires old pass),
-  //    * change-email (CSRF: requires old email so only targeted),
-  //    * delete-user (technically CSRF: however, currently DELETE method)
-  //    * promote-anonymous.
-  //
-  //  Avatar life-cycle: read+update are handled as record APIs.
-
+pub(super) fn auth_router(
+  config: &proto::Config,
+  dev_mode: bool,
+  has_root: bool,
+) -> OpenApiRouter<AppState> {
   // Using the utoipa integration, we can use the on-handler metadata as the
   // source of truth for registering the routes avoiding skew.
   // Inversely, using this macro ensures that the handlers do have metadata.
@@ -116,21 +109,99 @@ pub(super) fn router(config: &proto::Config) -> OpenApiRouter<AppState> {
       .routes(routes!(api::otp::login_otp_handler));
   }
 
-  return router;
+  router = router.layer(Extension(HasRoot(has_root)));
+
+  // Install an Ip-based rate limiter *ONLY* for auth APIs to avoid abuse.
+  //
+  // NOTE: If you run into rate-limits and are running behind a reverse proxy, please set the
+  // "x-forwarded-for" header correctly to ensure ip-based rate limiting and request logging
+  // works correctly.
+  return OpenApiRouter::new().nest(&format!("/{AUTH_API_PATH}/"), {
+    if let Some(rate_limit) = rate_limit(config, dev_mode) {
+      router.layer(GovernorLayer::new(build_shared_governor_conf(rate_limit)))
+    } else {
+      router
+    }
+  });
 }
 
 /// Replicating minimal functionality of the above main router in case the admin dash is routed
 /// from a different port to prevent cross-origin requests.
-pub(super) fn admin_auth_router() -> OpenApiRouter<AppState> {
+pub(super) fn admin_auth_router(config: &proto::Config, dev_mode: bool) -> OpenApiRouter<AppState> {
   // Using the utoipa integration, we can use the on-handler metadata as the
   // source of truth for registering the routes avoiding skew.
   // Inversely, using this macro ensures that the handlers do have metadata.
   use utoipa_axum::routes;
 
-  return OpenApiRouter::new()
+  let router = OpenApiRouter::new()
     .routes(routes!(api::login::login_handler))
     .routes(routes!(api::status::login_status_handler))
-    .routes(routes!(api::logout::logout_handler));
+    .routes(routes!(api::logout::logout_handler))
+    .layer(Extension(HasRoot(false)));
+
+  return OpenApiRouter::new().nest(&format!("/{AUTH_API_PATH}/"), {
+    if let Some(rate_limit) = rate_limit(config, dev_mode) {
+      router.layer(GovernorLayer::new(build_shared_governor_conf(rate_limit)))
+    } else {
+      router
+    }
+  });
+}
+
+fn rate_limit(config: &proto::Config, dev_mode: bool) -> Option<u32> {
+  if dev_mode {
+    return None;
+  }
+
+  if let Some(auth_rate_limit) = config.server.auth_ip_rate_limit
+    && auth_rate_limit > 0
+  {
+    return Some(auth_rate_limit);
+  }
+
+  return None;
+}
+
+type Governor =
+  GovernorConfig<RealIpKeyExtractor, governor::middleware::StateInformationMiddleware>;
+
+fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
+  static GOVERNOR_CONF: OnceLock<Arc<Governor>> = OnceLock::new();
+
+  let governor_conf = GOVERNOR_CONF.get_or_init(|| {
+    let governor_conf = Arc::new(
+      GovernorConfigBuilder::default()
+        // Quota.
+        .burst_size(rate_limit)
+        // Replenish one after 1 seconds.
+        .per_second(1)
+        .key_extractor(RealIpKeyExtractor)
+        // Set rate limiting headers on reply.
+        .use_headers()
+        // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited
+        // GET auth status.
+        .methods(vec![axum::http::Method::POST])
+        .finish()
+        .expect("startup"),
+    );
+
+    // Periodically clean up governor.
+    tokio::spawn({
+      let governor_limiter = governor_conf.limiter().clone();
+      async move {
+        let interval = tokio::time::Duration::from_secs(60);
+        loop {
+          tokio::time::sleep(interval).await;
+          log::trace!("rate limiting storage size: {}", governor_limiter.len());
+          governor_limiter.retain_recent();
+        }
+      }
+    });
+
+    return governor_conf;
+  });
+
+  return governor_conf.clone();
 }
 
 #[cfg(test)]

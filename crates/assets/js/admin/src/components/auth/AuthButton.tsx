@@ -36,7 +36,7 @@ export function AuthButton(props: { iconSize: number }) {
         <Avatar user={user()} size={props.iconSize} />
       </button>
 
-      <DialogContent class="max-w-[95dvw]">
+      <DialogContent class="max-w-[95dvw] md:max-w-[620px]">
         <DialogHeader>
           <DialogTitle>Profile</DialogTitle>
         </DialogHeader>

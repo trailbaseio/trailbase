@@ -158,6 +158,7 @@ mod tests {
   use super::*;
   use crate::app_state::{AppState, TestStateOptions, test_state};
   use crate::auth::apple::test_support::{APP_ID, sign_token, valid_claims};
+  use crate::constants::AUTH_API_PATH;
 
   async fn apple_state(
     native_client_id: Option<&str>,
@@ -332,13 +333,17 @@ mod tests {
   async fn apple_native_login_route_is_mounted_and_rejects_garbage() {
     let state = apple_state(Some(APP_ID), proto::UserIdentifier::RequireEmail).await;
 
-    let router: Router = Router::from(crate::auth::router(&state.get_config()))
-      .layer(CookieManagerLayer::new())
-      .with_state(state);
+    let router: Router = Router::from(crate::auth::auth_router(
+      &state.get_config(),
+      /* dev_mode= */ false,
+      /* has_root= */ false,
+    ))
+    .layer(CookieManagerLayer::new())
+    .with_state(state);
     let server = TestServer::new(router);
 
     let response = server
-      .post("/apple/authorize")
+      .post(&format!("/{AUTH_API_PATH}/apple/authorize"))
       .json(&serde_json::json!({
         "identity_token": "garbage",
         "nonce": "test",

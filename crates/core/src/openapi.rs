@@ -2,7 +2,6 @@ use utoipa::openapi::{ContactBuilder, InfoBuilder, LicenseBuilder, OpenApi, Open
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::config::proto;
-use crate::constants::ADMIN_API_PATH;
 
 fn version() -> String {
   let version_info = trailbase_build::get_version_info!();
@@ -51,7 +50,7 @@ pub fn build_api_definitions_from_config(
   include_admin: bool,
 ) -> utoipa::openapi::OpenApi {
   let custom_routers = if include_admin {
-    vec![OpenApiRouter::new().nest(&format!("/{ADMIN_API_PATH}/"), crate::admin::router())]
+    vec![crate::admin::unprotected_admin_router()]
   } else {
     vec![]
   };
@@ -63,7 +62,7 @@ pub fn build_api_definitions_from_config(
       None,
       false,
       custom_routers,
-      /* auth_rate_limit= */ None,
+      /* dev_mode = */ false,
       /* has_root= */ false,
     )
     .unwrap_or_else(|err| {

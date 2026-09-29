@@ -1,19 +1,15 @@
 mod serve;
 
-use axum::body::Body;
-use axum::extract::{DefaultBodyLimit, Extension, Request, State};
+use axum::Router;
+use axum::extract::{DefaultBodyLimit, Request};
 use axum::handler::HandlerWithoutStateExt;
 use axum::http::{HeaderValue, StatusCode};
-use axum::middleware::{self, Next};
 use axum::response::Response;
-use axum::{RequestExt, Router};
-use bytes::Bytes;
 use http_body_util::BodyExt;
 use http_body_util::combinators::UnsyncBoxBody;
 use log::*;
-use std::borrow::Cow;
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock};
 use tokio::signal;
 use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
@@ -21,25 +17,18 @@ use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObj
 use tokio_rustls::rustls::{ServerConfig, crypto};
 use tower::Service;
 use tower_cookies::CookieManagerLayer;
-use tower_governor::GovernorLayer;
-use tower_governor::governor::{GovernorConfig, GovernorConfigBuilder};
 use tower_http::services::fs::{ServeDir, ServeFile};
 use tower_http::{cors, limit::RequestBodyLimitLayer, trace::TraceLayer};
 use tracing_subscriber::{filter, prelude::*};
-use trailbase_assets::AssetService;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::admin::{self, OpenApiExtension};
 use crate::app_state::{AppState, validate_path};
-use crate::auth::HasRoot;
-use crate::auth::util::is_admin;
-use crate::auth::{self, AuthError, User};
+use crate::auth;
 use crate::config::proto;
 use crate::connection::ConnectionEntry;
-use crate::constants::{ADMIN_API_PATH, AUTH_API_PATH, HEADER_CSRF_TOKEN};
 use crate::data_dir::DataDir;
-use crate::extract::ip::RealIpKeyExtractor;
 use crate::init_error::InitError;
 use crate::logging;
 use crate::records;
@@ -149,39 +138,17 @@ impl Server {
       }
     }
 
-    // Install an Ip-based rate limiter *ONLY* for auth APIs to avoid abuse.
-    //
-    // NOTE: If you run into rate-limits and are running behind a reverse proxy, please set the
-    // "x-forwarded-for" header correctly to ensure ip-based rate limiting and request logging
-    // works correctly.
-    let auth_rate_limit = if !state.dev_mode()
-      && let Some(auth_rate_limit) = state.get_config().server.auth_ip_rate_limit
-      && auth_rate_limit > 0
-    {
-      Some(auth_rate_limit)
-    } else {
-      None
-    };
-
+    let config = state.get_config();
     let openapi_ext = OpenApiExtension::default();
     let independent_admin_router = if let Some(admin_address) = admin_address
       && admin_address != address
     {
       let (router, _api) = OpenApiRouter::new()
-        .nest(&format!("/{AUTH_API_PATH}/"), {
-          let auth_router = auth::admin_auth_router();
-          let auth_router = if let Some(auth_rate_limit) = auth_rate_limit {
-            // Limit access to the auth routes only.
-            auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
-              auth_rate_limit,
-            )))
-          } else {
-            auth_router
-          };
-
-          auth_router.layer(Extension(HasRoot(false)))
-        })
-        .merge(Self::build_admin_router(&state).layer(Extension(openapi_ext.clone())))
+        .merge(auth::admin_auth_router(&config, state.dev_mode()))
+        .merge(admin::protected_admin_router_and_assets(
+          &state,
+          &openapi_ext,
+        ))
         .split_for_parts();
 
       // NOTE: For the admin router no (GET, "/") is path installed => has_root=false.
@@ -190,7 +157,10 @@ impl Server {
       Some((admin_address, admin_router))
     } else {
       // Simply add to the main router.
-      custom_routers.push(Self::build_admin_router(&state).layer(Extension(openapi_ext.clone())));
+      custom_routers.push(admin::protected_admin_router_and_assets(
+        &state,
+        &openapi_ext,
+      ));
       None
     };
 
@@ -199,12 +169,12 @@ impl Server {
     } = state.connection_manager().main_entry();
 
     let (main_router, api) = Self::build_main_router(
-      &state.get_config(),
+      &config,
       conn.connection_type(),
       public_dir.as_ref(),
       public_dir_spa,
       custom_routers,
-      auth_rate_limit,
+      state.dev_mode(),
       has_root,
     )?
     .split_for_parts();
@@ -259,6 +229,8 @@ impl Server {
 
     #[cfg(feature = "otel")]
     {
+      use std::sync::OnceLock;
+
       let otel_guard = if state.dev_mode() {
         init_tracing_opentelemetry::TracingConfig::development()
       } else {
@@ -310,6 +282,7 @@ impl Server {
 
           // NOTE: Disabled since prost-reflect prints map entries in random order (uses
           // HashMap internally).
+          // https://github.com/andrewhickman/prost-reflect/issues/201
           //
           // Write the latest config state back to disk. Right now we only do this in debug builds
           // to make sure our checked-in configurations are stable and up-to-date.
@@ -372,61 +345,22 @@ impl Server {
     return Ok(());
   }
 
-  pub(crate) fn build_admin_router(state: &AppState) -> OpenApiRouter<AppState> {
-    return OpenApiRouter::new()
-      .nest(
-        &format!("/{ADMIN_API_PATH}/"),
-        admin::router().layer(middleware::from_fn_with_state(
-          state.clone(),
-          assert_admin_api_access,
-        )),
-      )
-      // NOTE: We cannot ACL-lock the UI assets. We need to be able to sign into the SPA.
-      .nest_service(
-        "/_/admin",
-        AssetService::<trailbase_assets::AdminAssets>::with_parameters(
-          |_path: &str| -> Option<Response<Body>> {
-            // SPA fallback.
-            let file = trailbase_assets::AdminAssets::get("index.html")?;
-
-            return Some(
-              Response::builder()
-                .header(axum::http::header::CONTENT_TYPE, file.metadata.mimetype())
-                .body(Body::from(cow_to_bytes(file.data)))
-                .unwrap_or_default(),
-            );
-          },
-        ),
-      );
-  }
-
   pub(crate) fn build_main_router(
     config: &proto::Config,
     connection_type: trailbase_sqlite::ConnectionType,
     public_dir: Option<&PathBuf>,
     public_dir_spa: bool,
     custom_routers: Vec<OpenApiRouter<AppState>>,
-    auth_rate_limit: Option<u32>,
+    dev_mode: bool,
     has_root: bool,
   ) -> Result<OpenApiRouter<AppState>, InitError> {
     let enable_transactions = config.server.enable_record_transactions();
 
     let mut router = OpenApiRouter::new()
       // Public, stable and versioned APIs.
-      .merge(records::router(connection_type, enable_transactions))
-      .nest(&format!("/{AUTH_API_PATH}/"), {
-        let auth_router = auth::router(config);
-        let auth_router = if let Some(auth_rate_limit) = auth_rate_limit {
-          auth_router.layer(GovernorLayer::new(build_shared_governor_conf(
-            auth_rate_limit,
-          )))
-        } else {
-          auth_router
-        };
-
-        auth_router.layer(Extension(HasRoot(has_root)))
-      })
-      .routes(routes!(healthcheck_handler));
+      .merge(auth::auth_router(config, dev_mode, has_root))
+      .routes(routes!(healthcheck_handler))
+      .merge(records::router(connection_type, enable_transactions));
 
     #[cfg(debug_assertions)]
     {
@@ -539,40 +473,6 @@ impl Server {
 )]
 async fn healthcheck_handler() -> &'static str {
   return "Ok";
-}
-
-/// Assert that the caller is an admin and provides a valid CSRF token. Unlike the access to the
-/// HTML/js assets, this one errors.
-///
-/// NOTE: returning a redirect (like below) only makes sense for the html serving, not the APIs.
-async fn assert_admin_api_access(
-  State(state): State<AppState>,
-  mut req: Request,
-  next: Next,
-) -> Result<Response, AuthError> {
-  let user = req.extract_parts_with_state::<User, _>(&state).await?;
-
-  // IMPORTANT: We cannot trust the admin bit in the auth-token, since it may be stale. We need to
-  // query the DB.
-  if !is_admin(&state, &user.uuid).await {
-    return Err(AuthError::Forbidden);
-  }
-
-  // CSRF protection.
-  let Some(received_csrf_token) = req
-    .headers()
-    .get(HEADER_CSRF_TOKEN)
-    .and_then(|header| header.to_str().ok())
-  else {
-    return Err(AuthError::BadRequest("admin APIs require csrf header"));
-  };
-
-  let expected_csrf = &user.csrf_token;
-  if expected_csrf != received_csrf_token {
-    return Err(AuthError::BadRequest("invalid CSRF token"));
-  }
-
-  return Ok(next.run(req).await);
 }
 
 fn build_cors(cors_allowed_origins: &[String], dev: bool) -> cors::CorsLayer {
@@ -772,13 +672,6 @@ async fn start_listen(
   }
 }
 
-fn cow_to_bytes(cow: Cow<'static, [u8]>) -> Bytes {
-  match cow {
-    Cow::Borrowed(x) => Bytes::from(x),
-    Cow::Owned(x) => Bytes::from(x),
-  }
-}
-
 fn load_tls(
   data_dir: &DataDir,
   tls_cert: Option<CertificateDer<'static>>,
@@ -813,48 +706,6 @@ fn load_tls(
     }
     (None, None) => None,
   };
-}
-
-type Governor =
-  GovernorConfig<RealIpKeyExtractor, governor::middleware::StateInformationMiddleware>;
-
-fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
-  static GOVERNOR_CONF: OnceLock<Arc<Governor>> = OnceLock::new();
-
-  let governor_conf = GOVERNOR_CONF.get_or_init(|| {
-    let governor_conf = Arc::new(
-      GovernorConfigBuilder::default()
-        // Quota.
-        .burst_size(rate_limit)
-        // Replenish one after 1 seconds.
-        .per_second(1)
-        .key_extractor(RealIpKeyExtractor)
-        // Set rate limiting headers on reply.
-        .use_headers()
-        // Only block POST method for abuse prevention (e.g. sign-up, ...), e.g. allow unlimited
-        // GET auth status.
-        .methods(vec![axum::http::Method::POST])
-        .finish()
-        .expect("startup"),
-    );
-
-    // Periodically clean up governor.
-    tokio::spawn({
-      let governor_limiter = governor_conf.limiter().clone();
-      async move {
-        let interval = tokio::time::Duration::from_secs(60);
-        loop {
-          tokio::time::sleep(interval).await;
-          log::trace!("rate limiting storage size: {}", governor_limiter.len());
-          governor_limiter.retain_recent();
-        }
-      }
-    });
-
-    return governor_conf;
-  });
-
-  return governor_conf.clone();
 }
 
 #[cfg(unix)]
