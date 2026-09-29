@@ -40,7 +40,7 @@ impl<'ctx> From<Value<'ctx>> for serde_json::Value {
         if let Some(data) = data {
           serde_json::json!({
             "id": id,
-            "data": serde_json::from_str::<JValue>(data.get()).expect("well-formed"),
+            "data": data,
           })
         } else {
           serde_json::json!({
@@ -48,7 +48,7 @@ impl<'ctx> From<Value<'ctx>> for serde_json::Value {
           })
         }
       }
-      Value::Raw(raw) => serde_json::from_str(raw.get()).expect("well-formed"),
+      Value::Raw(raw) => serde_json::from_str(raw.get()).expect("RawValue => Value"),
     };
   }
 }

@@ -397,10 +397,10 @@ pub async fn list_records_handler(
     records: records
       .into_iter()
       .map(|obj| {
-        serde_json::value::to_raw_value(&trailbase_schema::json::Value::Object(obj))
-          .expect("well-formed")
+        return serde_json::value::to_raw_value(&trailbase_schema::json::Value::Object(obj));
       })
-      .collect(),
+      .collect::<Result<Vec<_>, _>>()
+      .map_err(|err| RecordError::Internal(err.into()))?,
   })));
 }
 

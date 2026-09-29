@@ -44,15 +44,9 @@ pub fn record_to_json_expand(
   record: &impl Record,
   expand: Option<Vec<(compact_str::CompactString, Box<serde_json::value::RawValue>)>>,
 ) -> Result<Box<serde_json::value::RawValue>, JsonError> {
-  return Ok(
-    serde_json::value::to_raw_value(&Value::Object(record_to_json_expand_ref(
-      column_metadata,
-      expand_config,
-      record,
-      expand,
-    )?))
-    .expect("from well-formed value"),
-  );
+  return Ok(serde_json::value::to_raw_value(&Value::Object(
+    record_to_json_expand_ref(column_metadata, expand_config, record, expand)?,
+  ))?);
 }
 
 pub fn record_to_json_expand_ref<'a>(

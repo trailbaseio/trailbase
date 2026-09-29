@@ -264,7 +264,8 @@ struct LogEntry {
 }
 
 impl LogEntry {
-  pub const COLUMNS: &str = "id, created, status, method, url, latency, client_ip, referrer, user_agent, user_id, client_geoip_cc, client_geoip_city";
+  pub const COLUMNS: &str =
+    "id, created, status, method, url, latency, client_ip, referer, user_agent, user_id";
 
   fn from_row(
     row: &trailbase_sqlite::Row,
@@ -282,11 +283,11 @@ impl LogEntry {
       user_agent: row.get(8)?,
       user_id: row.get(9)?,
       client_geoip_cc: match geoip_db_type {
-        Some(DatabaseType::GeoLite2Country) => Some(row.get(10)?),
+        Some(DatabaseType::GeoLite2Country) => row.get(10)?,
         _ => None,
       },
       client_geoip_city: match geoip_db_type {
-        Some(DatabaseType::GeoLite2City) => Some(row.get(10)?),
+        Some(DatabaseType::GeoLite2City) => row.get(10)?,
         _ => None,
       },
     });

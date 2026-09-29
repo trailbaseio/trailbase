@@ -1,3 +1,7 @@
+## v0.34.1
+
+- Fix admin UI failing to fetch logs.
+
 ## v0.34.0
 
 - Performance release - many small and large improvements across the board:

@@ -15,6 +15,6 @@ impl IntoResponse for RawJson {
         HeaderValue::from_static("application/json"),
       )
       .body(Body::from(String::from(body)))
-      .expect("valid");
+      .unwrap_or_default();
   }
 }

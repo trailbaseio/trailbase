@@ -134,7 +134,8 @@ pub async fn read_record_handler(
   }
 
   return Ok(RawJson(
-    serde_json::value::to_raw_value(&json_response).expect("well-formed"),
+    serde_json::value::to_raw_value(&json_response)
+      .map_err(|err| RecordError::Internal(err.into()))?,
   ));
 }
 
