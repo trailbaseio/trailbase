@@ -890,7 +890,7 @@ fn start_watchdog(db: &Arc<parking_lot::Mutex<Option<pglite_oxide::PgliteServer>
             runtime_monitor.intervals()
           );
 
-          if elapsed > Duration::from_mins(12) {
+          if elapsed > Duration::from_mins(8) {
             error!("WATCHDOG: expired");
 
             if let Some(arc) = db.upgrade() {

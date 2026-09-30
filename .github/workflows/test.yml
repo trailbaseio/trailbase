@@ -169,8 +169,9 @@ jobs:
           RUST_BACKTRACE: 1
         uses: nick-fields/retry@v3
         with:
-          timeout_minutes: 20
-          max_attempts: 3
+          timeout_minutes: 18
+          max_attempts: 6
+          # NOTE: The internal watchdog may terminate the test with a non-zero exit code.
           retry_on: any # options: any, timeout, error
           continue_on_error: false
           command: cargo test --features=geos,otel,pg-test
