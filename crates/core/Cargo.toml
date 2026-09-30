@@ -36,7 +36,6 @@ ws = ["axum/ws"]
 
 [dependencies]
 aes-gcm-siv = "0.12.1"
-argon2 = { workspace = true }
 askama = { workspace = true }
 async-channel = "2.5.0"
 async-trait = "0.1.92"

@@ -8599,7 +8599,6 @@ version = "0.2.0"
 dependencies = [
  "aes-gcm-siv",
  "anyhow",
- "argon2",
  "askama",
  "async-channel 2.5.0",
  "async-trait",
@@ -8713,7 +8712,6 @@ name = "trailbase-assets"
 version = "0.2.0"
 dependencies = [
  "axum",
- "itertools 0.15.0",
  "log",
  "rust-embed",
  "tower-service",

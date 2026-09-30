@@ -1,3 +1,4 @@
+use rand::RngExt;
 use std::time::Duration;
 
 use crate::auth::AuthError;
@@ -115,15 +116,18 @@ pub async fn check_user_password(db_user: &DbUser, password: String) -> Result<(
     );
   }
 
-  return tokio::time::timeout(
+  let started = std::time::Instant::now();
+  let result = tokio::time::timeout(
     HASHING_TIMEOUT,
     tokio::task::spawn_blocking(move || {
       return check_user_password_impl(&password, &password_hash);
     }),
   )
-  .await
-  .map_err(|_| AuthError::Timeout)?
-  .map_err(|_err| {
+  .await;
+
+  exponential_moving_average::update(started.elapsed());
+
+  return result.map_err(|_| AuthError::Timeout)?.map_err(|_err| {
     return cfg_select! {
       debug_assertions => AuthError::Internal(_err.into()),
       _ => AuthError::Internal("busy".into()),
@@ -131,11 +135,63 @@ pub async fn check_user_password(db_user: &DbUser, password: String) -> Result<(
   })?;
 }
 
-pub(crate) fn measure_password_verification_timing() -> std::time::Duration {
-  let hash = hash_password_impl("pw").expect("constant input");
-  let started = std::time::Instant::now();
-  let _ = trailbase_extension::password::verify_password(b"pw", &hash);
-  return started.elapsed();
+mod exponential_moving_average {
+  use std::sync::atomic::AtomicU64;
+  use std::sync::atomic::Ordering;
+  use std::time::Duration;
+
+  // Effective window size of 5.
+  pub const ALPHA: f64 = 2.0 / (5.0 + 1.0);
+  pub static MICROS: AtomicU64 = AtomicU64::new(0);
+
+  pub fn update(d: Duration) {
+    let new = d.as_micros().try_into().unwrap_or(50 * 1000);
+    let old = MICROS.load(Ordering::SeqCst);
+    if old == 0 {
+      MICROS.store(new, Ordering::Relaxed);
+    } else {
+      MICROS.store(
+        // Compute the updated exponential moving average.
+        (ALPHA * (new as f64) + (1.0 - ALPHA) * (old as f64)).ceil() as u64,
+        Ordering::Relaxed,
+      );
+    }
+  }
+
+  pub fn get_micros() -> u64 {
+    let micros = MICROS.load(Ordering::SeqCst);
+    if micros == 0 {
+      let t = measure_password_verification_timing().as_millis() as u64;
+      MICROS.store(t, Ordering::Relaxed);
+      return t;
+    }
+    return micros;
+  }
+
+  fn measure_password_verification_timing() -> Duration {
+    const PW: &str = "?";
+    let hash = super::hash_password_impl(PW).expect("static input");
+    let started = std::time::Instant::now();
+    let _ = trailbase_extension::password::verify_password(PW, &hash);
+    return started.elapsed();
+  }
+}
+
+/// To avoid leaking account presence w/o burning cycles, we have to wait here for a roughly
+/// check equivalent amount of time. We don't just hash nonsense because hashing is quite
+/// expensive: tens of milliseconds for release builds and hundreds for debug builds.
+pub async fn sleep_for_password_check_equivalent() {
+  tokio::time::sleep(get_password_check_equivalent_duration()).await;
+}
+
+fn get_password_check_equivalent_duration() -> Duration {
+  let avg = exponential_moving_average::get_micros() as i64;
+
+  // Randomize the wait to make it less obvious.
+  let range = avg / 10;
+  let delta = rand::rng().random_range(-range..range);
+
+  return Duration::from_micros(std::cmp::max(0, avg + delta) as u64);
 }
 
 const HASHING_TIMEOUT: Duration = Duration::from_secs(5);
@@ -223,5 +279,18 @@ mod tests {
       assert!(test("a2", &options).is_err());
       assert!(test("2.", &options).is_ok());
     }
+  }
+
+  #[test]
+  fn password_check_equivalent_durations() {
+    let durations: Vec<_> = (0..10)
+      .map(|_| get_password_check_equivalent_duration())
+      .collect();
+
+    assert!(durations[0].as_micros() > 0);
+
+    // Make sure there's some randomness.
+    let has_diff = durations.windows(2).any(|w| w[0] != w[1]);
+    assert!(has_diff);
   }
 }

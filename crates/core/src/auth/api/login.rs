@@ -14,7 +14,7 @@ use crate::app_state::AppState;
 use crate::auth::api::totp::new_totp;
 use crate::auth::jwt::PendingAuthTokenClaims;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
-use crate::auth::password::{check_user_password, measure_password_verification_timing};
+use crate::auth::password::{check_user_password, sleep_for_password_check_equivalent};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   SameSite, new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
@@ -228,35 +228,6 @@ pub(crate) async fn login_handler(
   };
 }
 
-fn get_somewhat_stable_password_verification_timing() -> std::time::Duration {
-  use std::time::Duration;
-
-  fn micros(d: Duration) -> f64 {
-    return d.as_micros() as f64;
-  }
-
-  const TOLERANCE: f64 = 0.5;
-
-  let mut prev: Option<Duration> = None;
-  let mut i = 0;
-
-  loop {
-    let curr = measure_password_verification_timing();
-    if i > 5 {
-      return curr;
-    }
-
-    if let Some(prev) = prev
-      && (micros(curr) - micros(prev)).abs() <= TOLERANCE * micros(prev)
-    {
-      return curr;
-    }
-
-    prev = Some(curr);
-    i += 1;
-  }
-}
-
 async fn check_credentials(
   state: &AppState,
   id: UserIdentifier,
@@ -270,12 +241,10 @@ async fn check_credentials(
   let db_user = match maybe_db_user {
     Ok(db_user) => db_user,
     Err(_err) => {
-      // Hashing is quite expensive: tens of milliseconds for release builds and hundreds for
-      // debug builds. To avoid leaking account presence w/o burning cycles, we have to wait here.
-      static WAIT: LazyLock<std::time::Duration> =
-        LazyLock::new(get_somewhat_stable_password_verification_timing);
-
-      tokio::time::sleep(*WAIT).await;
+      // To avoid leaking account presence w/o burning cycles, we have to wait here for a roughly
+      // check equivalent amount of time. We don't just hash nonsense because hashing is quite
+      // expensive: tens of milliseconds for release builds and hundreds for debug builds.
+      sleep_for_password_check_equivalent().await;
 
       // Don't let the error code reveal account pressence either.
       return Err(AuthError::Unauthorized);
