@@ -13,5 +13,5 @@ trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true, features = ["generic"] }
 
 [dev-dependencies]
-pglite-oxide = "0.5.1"
+oliphaunt-wasix = { workspace = true }
 tempfile = "3.27.0"

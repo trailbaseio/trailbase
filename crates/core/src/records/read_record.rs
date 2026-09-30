@@ -1337,8 +1337,7 @@ mod tests {
     }
   }
 
-  // NOTE: pglite-oxide doesn't support PostGIS, we may want to run this against a real PG
-  // instance.
+  // TODO: enable PostGIS with oliphaunt-wasix.
   #[cfg(all(
     any(feature = "geos", feature = "geos-static"),
     not(feature = "pg-test")

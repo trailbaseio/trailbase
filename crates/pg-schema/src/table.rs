@@ -106,7 +106,11 @@ SELECT
     MAX(CASE WHEN tc.constraint_type = 'PRIMARY KEY' THEN tc.constraint_name END) AS primary_key,
     MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN tc.constraint_name END) AS foreign_key,
     MAX(CASE WHEN tc.constraint_type = 'UNIQUE' THEN tc.constraint_name END) AS unique_constraint,
-    MAX(CASE WHEN tc.constraint_type = 'CHECK' THEN tc.constraint_name END) AS check_constraint,
+    -- NOTE: As of PG18, auto-generated NOT NULL constraints are also surfaced as CHECK
+    -- constraints for backward compatibility. We filter those out via `pg_constraint.contype`
+    -- (contype = 'c' is an actual CHECK, 'n' is an implicit NOT NULL constraint) to avoid
+    -- duplicating the `is_nullable`-derived `NotNull` column option.
+    MAX(CASE WHEN tc.constraint_type = 'CHECK' AND pgcon.contype = 'c' THEN tc.constraint_name END) AS check_constraint,
     -- Only for FKs
     MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN fk_ccu.table_name END) AS fk_table_name,
     MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN fk_ccu.column_name END) AS fk_column_name,
@@ -114,7 +118,7 @@ SELECT
     vcu.table_name AS source_table,
     vcu.column_name AS source_column,
     -- Only Checks
-    MAX(chc.check_clause) AS check_clause
+    MAX(CASE WHEN pgcon.contype = 'c' THEN chc.check_clause END) AS check_clause
 FROM
     information_schema.columns c
     LEFT JOIN information_schema.constraint_column_usage ccu ON
@@ -150,6 +154,15 @@ FROM
         ccu.constraint_catalog = tc.constraint_catalog
         AND ccu.constraint_schema = tc.constraint_schema
         AND ccu.constraint_name = chc.constraint_name
+    -- Used to distinguish real CHECK constraints (contype = 'c') from PG18's auto-generated
+    -- NOT NULL constraints, which are also reported as CHECK constraints in
+    -- `information_schema` for backward compatibility (contype = 'n').
+    LEFT JOIN pg_catalog.pg_constraint pgcon ON
+        tc.constraint_type = 'CHECK'
+        AND pgcon.conname = tc.constraint_name
+        AND pgcon.connamespace = (
+          SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = tc.constraint_schema
+        )
     LEFT JOIN information_schema.view_column_usage vcu ON
         c.table_schema = vcu.view_schema
         AND c.table_name = vcu.view_name

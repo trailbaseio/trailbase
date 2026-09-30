@@ -1,16 +1,16 @@
 #[cfg(test)]
-pub async fn test_connection() -> (pglite_oxide::PgliteServer, trailbase_sqlite::Connection) {
+pub async fn test_connection() -> (
+  oliphaunt_wasix::OliphauntServer,
+  trailbase_sqlite::Connection,
+) {
   let temp_dir = tempfile::TempDir::new().unwrap();
 
-  // NOTE: `db.connection_uri()` returns rubbish for UDS.
-  let sock = temp_dir.path().join(".s.PGSQL.5432");
-
-  let db = pglite_oxide::PgliteServer::builder()
-    .fresh_temporary()
-    .unix(&sock)
+  let db = oliphaunt_wasix::OliphauntServer::builder()
+    .listen(oliphaunt_wasix::ServerListen::unix(temp_dir.path()))
     .start()
     .unwrap();
 
+  // The tests depend on the "template1" schema.
   let pg_uri = format!(
     "postgresql://postgres@/template1?host={}",
     temp_dir.path().to_string_lossy()

@@ -237,16 +237,13 @@ fn event_loop(
 }
 
 #[cfg(test)]
-pub fn build_pg_test_executor() -> Result<(pglite_oxide::PgliteServer, Executor), Error> {
+pub fn build_pg_test_executor() -> Result<(oliphaunt_wasix::OliphauntServer, Executor), Error> {
   use postgres::{Client, NoTls};
 
   let tmp_dir = tempfile::TempDir::new().unwrap();
-  let sock = tmp_dir.path().join(".s.PGSQL.5432");
 
-  let db = pglite_oxide::PgliteServer::builder()
-    .fresh_temporary()
-    .extensions([pglite_oxide::extensions::PG_UUIDV7])
-    .unix(&sock)
+  let db = oliphaunt_wasix::OliphauntServer::builder()
+    .listen(oliphaunt_wasix::ServerListen::unix(tmp_dir.path()))
     .start()
     .map_err(|err| Error::Other(err.into()))?;
 

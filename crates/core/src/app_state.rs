@@ -718,37 +718,28 @@ mod test_utils {
 
     #[cfg(feature = "pg-test")]
     let (pg_shutdown, pg_uri) = {
+      // https://github.com/f0rr0/oliphaunt/blob/main/src/wasix/sdks/rust/src/oliphaunt/generated_extensions.rs
       let extensions = [
+        oliphaunt_wasix::Extension::PGCRYPTO,
         // Enable case-insensitive text columns.
-        pglite_oxide::extensions::CITEXT,
-        // Enable UUIDv7 support.
-        pglite_oxide::extensions::PG_UUIDV7,
-        // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
-        // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+        oliphaunt_wasix::Extension::CITEXT,
+        // Enable postgis.
+        // oliphaunt_wasix::Extension::POSTGIS,
       ];
 
-      // Start PgLite.
-      let sock = data_dir.main_db_path().join(".s.PGSQL.5432");
+      // Start the embedded Postgres.
+      let db = oliphaunt_wasix::OliphauntServer::builder()
+        .extensions(extensions)
+        .listen(oliphaunt_wasix::ServerListen::unix(data_dir.main_db_path()))
+        .start()?;
+      let pg_uri = db.connection_string().to_string();
 
-      let db = Arc::new(parking_lot::Mutex::new(Some(
-        pglite_oxide::PgliteServer::builder()
-          .fresh_temporary()
-          .extensions(extensions)
-          .unix(&sock)
-          .start()?,
-      )));
-
+      let db = Arc::new(parking_lot::Mutex::new(Some(db)));
       start_watchdog(&db);
 
-      // NOTE: `db.connection_uri()` returns rubbish for UDS, i.e. we need to construct our own uri.
-      let pg_uri = format!(
-        "postgresql://postgres@/template1?host={}",
-        data_dir.main_db_path().to_string_lossy()
-      );
-
       let pg_shutdown = scopeguard::guard(db, |db| {
-        if let Some(db) = db.lock().take() {
-          db.shutdown().unwrap();
+        if let Some(mut db) = db.lock().take() {
+          db.close().unwrap();
         }
       });
 
@@ -859,7 +850,7 @@ pub(crate) fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
 }
 
 #[cfg(all(feature = "pg-test", test))]
-fn start_watchdog(db: &Arc<parking_lot::Mutex<Option<pglite_oxide::PgliteServer>>>) {
+fn start_watchdog(db: &Arc<parking_lot::Mutex<Option<oliphaunt_wasix::OliphauntServer>>>) {
   use std::sync::OnceLock;
   use std::thread::{JoinHandle, sleep};
   use std::time::{Duration, SystemTime};
@@ -894,9 +885,9 @@ fn start_watchdog(db: &Arc<parking_lot::Mutex<Option<pglite_oxide::PgliteServer>
             error!("WATCHDOG: expired");
 
             if let Some(arc) = db.upgrade() {
-              if let Some(db) = arc.lock().take() {
+              if let Some(mut db) = arc.lock().take() {
                 info!("WATCHDOG: shutting down pglite");
-                db.shutdown().unwrap();
+                db.close().unwrap();
 
                 // Give the test a chance to terminate.
                 sleep(Duration::from_secs(15));

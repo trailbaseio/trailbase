@@ -156,7 +156,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -167,7 +167,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1008,6 +1008,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cap-fs-ext"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56ff379b70af8e08307a8f65e7040c7301cb4a572538ade16b4984f0da77847f"
+dependencies = [
+ "cap-primitives",
+ "cap-std",
+ "io-lifetimes 3.0.1",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "cap-primitives"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1021,8 +1033,20 @@ dependencies = [
  "maybe-owned",
  "rustix",
  "rustix-linux-procfs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
  "winx",
+]
+
+[[package]]
+name = "cap-std"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ec78e242cfa2cfe276807ac2ecc00315a6c97786977414bcd1c3963b6c91b8"
+dependencies = [
+ "cap-primitives",
+ "io-extras",
+ "io-lifetimes 3.0.1",
+ "rustix",
 ]
 
 [[package]]
@@ -2274,7 +2298,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.3",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2591,7 +2615,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4310,6 +4334,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "liboliphaunt-wasix-aot-aarch64-apple-darwin"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9049ab9fe12854f66809d335799c1d7a9fe8f83b6ec3b5cb37569e2fb77a95f"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "liboliphaunt-wasix-aot-aarch64-unknown-linux-gnu"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ebf4db27b9f3e90645865f0b44d9ed5b3d9fd8a54a4e5482d70763bdeff3015c"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "liboliphaunt-wasix-aot-x86_64-pc-windows-msvc"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d99ebe7e2c4fd9e826fbcde43d104205528177e67ba046c150ce60dc30b0f7cc"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "liboliphaunt-wasix-aot-x86_64-unknown-linux-gnu"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5901f3380f69980bd492deace358df16e207aab5379e474e9fe450238a4c0b2"
+dependencies = [
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "liboliphaunt-wasix-portable"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47ff3f35d1db54cbf44f272eab71e520c721048c2f49f8b3291e6e7c231f0a5c"
+dependencies = [
+ "oliphaunt-extension-contrib-pg18-aot-linux-arm64",
+ "oliphaunt-extension-contrib-pg18-aot-linux-x64",
+ "oliphaunt-extension-contrib-pg18-aot-macos-arm64",
+ "oliphaunt-extension-contrib-pg18-aot-windows-x64",
+ "oliphaunt-extension-contrib-pg18-wasix",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4842,7 +4922,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5106,6 +5186,76 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f40cff3dde1b6087cc5d5f5d4d65712f34016a03ed60e9c08dcc392736b5b7"
 dependencies = [
  "asn1-rs",
+]
+
+[[package]]
+name = "oliphaunt-extension-contrib-pg18-aot-linux-arm64"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22962116792ca188ed83d3d38b2976e9bc8afbcfafa8bd26e79c6509782851b2"
+
+[[package]]
+name = "oliphaunt-extension-contrib-pg18-aot-linux-x64"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d238ebc710178eaef2cd6e4cdb81fe098629d9736b9bbfa71afdd0615daf9d3c"
+
+[[package]]
+name = "oliphaunt-extension-contrib-pg18-aot-macos-arm64"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6be219f20450bde37c8220be5ca40b13eccd9bc796ab5378825d1e742bd93e6d"
+
+[[package]]
+name = "oliphaunt-extension-contrib-pg18-aot-windows-x64"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0a29fb910e4039b219078e4572e9eb082050fff8648ef7f6656d7ca10d5afba1"
+
+[[package]]
+name = "oliphaunt-extension-contrib-pg18-wasix"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f94f3c38b7237b40a5358593f68454040f58bf07747d4f9022f6a63418976098"
+
+[[package]]
+name = "oliphaunt-wasix"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0639810aeb8df626b42ea869cf332bcaefe69bf42274e883023c37c391226f5"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "cap-fs-ext",
+ "cap-std",
+ "directories",
+ "dunce",
+ "filetime",
+ "flate2",
+ "liboliphaunt-wasix-aot-aarch64-apple-darwin",
+ "liboliphaunt-wasix-aot-aarch64-unknown-linux-gnu",
+ "liboliphaunt-wasix-aot-x86_64-pc-windows-msvc",
+ "liboliphaunt-wasix-aot-x86_64-unknown-linux-gnu",
+ "liboliphaunt-wasix-portable",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "virtual-fs",
+ "virtual-mio",
+ "virtual-net",
+ "wasmer",
+ "wasmer-config",
+ "wasmer-journal",
+ "wasmer-package",
+ "wasmer-types",
+ "wasmer-wasix",
+ "wasmer-wasix-types",
+ "webc",
+ "zstd",
 ]
 
 [[package]]
@@ -5408,74 +5558,6 @@ dependencies = [
  "hashbrown 0.15.5",
  "indexmap",
  "serde",
-]
-
-[[package]]
-name = "pglite-oxide"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "724b405e433008d85390c80e57b11c2d7d5e3c8a7ec0b1a29e27a2a7ab55c33f"
-dependencies = [
- "anyhow",
- "async-trait",
- "directories",
- "dunce",
- "filetime",
- "flate2",
- "hex",
- "pglite-oxide-aot-aarch64-apple-darwin",
- "pglite-oxide-aot-aarch64-unknown-linux-gnu",
- "pglite-oxide-aot-x86_64-pc-windows-msvc",
- "pglite-oxide-aot-x86_64-unknown-linux-gnu",
- "pglite-oxide-assets",
- "regex",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tar",
- "tempfile",
- "tokio",
- "tracing",
- "wasmer",
- "wasmer-config",
- "wasmer-types",
- "wasmer-wasix",
- "webc",
- "zstd",
-]
-
-[[package]]
-name = "pglite-oxide-aot-aarch64-apple-darwin"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14743897cb696b0d23221aa45829a26245bf38eb9f300acee869fc38661befb5"
-
-[[package]]
-name = "pglite-oxide-aot-aarch64-unknown-linux-gnu"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61f36fc1adaec4cd25fe5776a8004cfa3d7808a6ea8b2907fbe95e6ac7e38827"
-
-[[package]]
-name = "pglite-oxide-aot-x86_64-pc-windows-msvc"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "188238b0a2b8c22b017943512dc23d76922ebfeedbb71ffcab08965495dfedbc"
-
-[[package]]
-name = "pglite-oxide-aot-x86_64-unknown-linux-gnu"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc6e0ca754a7399d9531c6746716effd6da1b0a125f4f8b74aefd01e3a2a17d5"
-
-[[package]]
-name = "pglite-oxide-assets"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23c36e82dc783789f454ab454f3abab65c9233df70ec0515be7facc4f109228e"
-dependencies = [
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -6160,7 +6242,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7022,7 +7104,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7091,7 +7173,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7641,7 +7723,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7780,7 +7862,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7988,10 +8070,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand 2.5.0",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8010,7 +8092,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -8643,9 +8725,9 @@ dependencies = [
  "minijinja",
  "oauth2",
  "object_store",
+ "oliphaunt-wasix",
  "once_cell",
  "parking_lot",
- "pglite-oxide",
  "pin-project-lite",
  "prost",
  "prost-reflect",
@@ -8846,7 +8928,7 @@ version = "0.0.1"
 dependencies = [
  "itertools 0.15.0",
  "log",
- "pglite-oxide",
+ "oliphaunt-wasix",
  "serde",
  "tempfile",
  "thiserror 2.0.21",
@@ -8948,8 +9030,8 @@ dependencies = [
  "glob",
  "itertools 0.15.0",
  "log",
+ "oliphaunt-wasix",
  "parking_lot",
- "pglite-oxide",
  "postgres",
  "rand 0.10.3",
  "regex",
@@ -9454,9 +9536,9 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "virtual-fs"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e66c1686d8c304c6136cb1a553cbc16c92261af8f34be365af8400b0ce82f94"
+checksum = "18f2136946b8a66d2bc7548fc4396c72e7a8671e8ab878342f5483e6c6dfd61f"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9498,9 +9580,9 @@ dependencies = [
 
 [[package]]
 name = "virtual-net"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac308570c4756033af92f1b8680f0f84b82df526d25575c2136cde7bbbd838d6"
+checksum = "fb377443085e3e30d0e3357a8d55925da670d070a04c9dd2284236a20cf308f1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9745,12 +9827,12 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.250.0"
+version = "0.252.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2271adb766023046af314460f1fae02cc34ea16d736d93404d3b65be44270923"
+checksum = "8185ae345fa5687c054626ff9a50e7089797a343d9904d1dc9820eb4c4d3196f"
 dependencies = [
  "leb128fmt",
- "wasmparser 0.250.0",
+ "wasmparser 0.252.0",
 ]
 
 [[package]]
@@ -9823,9 +9905,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer"
-version = "7.2.0-alpha.3"
+version = "7.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "596add954aa5e3937e889839c63250fc72340ccdb0cb9adcb89f026535300f73"
+checksum = "05af716b1bf3de5b8081133223f77f37916e9b4f41e0781c7fbe3e0d7b6da43a"
 dependencies = [
  "bindgen",
  "bytes",
@@ -9836,7 +9918,7 @@ dependencies = [
  "derive_more",
  "futures",
  "indexmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "js-sys",
  "more-asserts",
  "paste",
@@ -9859,9 +9941,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler"
-version = "7.2.0-alpha.3"
+version = "7.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c15b69f6d74316e1a8366911bd04d9bab1115a8712c1fb4323d37624382d84c"
+checksum = "99d984ed2ecd52a8e68ea0f4959bc342bf3b2381262105898a8cb416ecd15003"
 dependencies = [
  "backtrace",
  "bytes",
@@ -9869,7 +9951,7 @@ dependencies = [
  "crossbeam-channel",
  "enum-iterator",
  "enumset",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "leb128",
  "libc",
  "macho-unwind-info",
@@ -9888,16 +9970,16 @@ dependencies = [
  "thiserror 2.0.21",
  "wasmer-types",
  "wasmer-vm",
- "wasmparser 0.250.0",
+ "wasmparser 0.252.0",
  "which",
  "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "wasmer-config"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcff14aae6b37c51f0bdc6e73736df7b978dd0515659e5fc6db3afb74ffe323f"
+checksum = "98700e4516eb825f1ad22cd5273bafd0694941722686010dc1af79b70812393f"
 dependencies = [
  "anyhow",
  "bytesize",
@@ -9918,9 +10000,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-derive"
-version = "7.2.0-alpha.3"
+version = "7.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "349030f566b3fe9ef09bf4abf4b917968a937f403a5e208740aa4c88e87928e5"
+checksum = "882cc3b1909d543b4c5cd84c21d659c9c3608225240a79b68e39554749592b79"
 dependencies = [
  "proc-macro-error2",
  "proc-macro2",
@@ -9930,9 +10012,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-journal"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5863066574694ff8df6cf316416e89b7d4f0c7bca866facdfd4d8369b335fa55"
+checksum = "d02acd34af8c89ce772dd492da754dc999d4e3d3f30cbbf11a9c58f5e6c3a659"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9957,9 +10039,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-package"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b786ad94623fa6612d4ed85e2603590797544ecd4ac5f8d414bebe677920cd5"
+checksum = "54f12fd1711df6b12ade23b5db433d3f1aae4f31a7580d7db480f2cce03ccdb1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -9986,9 +10068,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-types"
-version = "7.2.0-alpha.3"
+version = "7.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7aaf2baad42ce3f3ebc4508fbe8bb362fe31c08bae9048646842affd4868812d"
+checksum = "87234e5a975dc1343c08692165e01def9725a74cf527277c0e36b0eb66b8f427"
 dependencies = [
  "bytecheck",
  "crc32fast",
@@ -9997,21 +10079,21 @@ dependencies = [
  "getrandom 0.4.3",
  "hex",
  "indexmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "more-asserts",
  "rkyv",
  "serde",
  "sha2 0.11.0",
  "target-lexicon",
  "thiserror 2.0.21",
- "wasmparser 0.250.0",
+ "wasmparser 0.252.0",
 ]
 
 [[package]]
 name = "wasmer-vm"
-version = "7.2.0-alpha.3"
+version = "7.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54214dc7f3bc7c0f19eb31ac7d10796f30314a6fb3666004f4b11798646dd6e4"
+checksum = "8112dae928ca0d5341180e1ea1418d78bdb3788a78da625a4a3889fe908a91bb"
 dependencies = [
  "backtrace",
  "bytesize",
@@ -10024,7 +10106,7 @@ dependencies = [
  "fnv",
  "gimli 0.33.0",
  "indexmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "libc",
  "libunwind",
  "mach2 0.6.0",
@@ -10041,9 +10123,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-wasix"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb6cfbfb4636accd684b014841965d19674b75b8ae8446e9327ef04f7a7e9ae9"
+checksum = "90a93bb66bc9bb1c766d53c68676f8a4f23582b0feef6135c184dfd3bf762e2e"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10067,7 +10149,7 @@ dependencies = [
  "heapless 0.9.3",
  "hex",
  "http",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "libc",
  "libtest-mimic",
  "linked_hash_set",
@@ -10102,14 +10184,14 @@ dependencies = [
  "virtual-net",
  "waker-fn",
  "walkdir",
- "wasm-encoder 0.250.0",
+ "wasm-encoder 0.252.0",
  "wasmer",
  "wasmer-config",
  "wasmer-journal",
  "wasmer-package",
  "wasmer-types",
  "wasmer-wasix-types",
- "wasmparser 0.250.0",
+ "wasmparser 0.252.0",
  "webc",
  "weezl",
  "windows-sys 0.61.2",
@@ -10119,9 +10201,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-wasix-types"
-version = "0.702.0-alpha.3"
+version = "0.702.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69e823d48c54f97a6663844c2fd52dad4894da08fc930bcb930b93799b5d9606"
+checksum = "f982c57b8ccfcb6bc6f7d7ba420bf53a2099ea9c77135b45cdf45198a00c90db"
 dependencies = [
  "anyhow",
  "bitflags 2.13.2",
@@ -10143,9 +10225,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.250.0"
+version = "0.252.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "071d99cdfb8111603ed05500506c3298a940b58d609dd0259d3981785dd33556"
+checksum = "d3eb099dcadcde5be9eef55e3a337128efd4e44b4c93122487e4d2e4e1c6627c"
 dependencies = [
  "bitflags 2.13.2",
  "indexmap",
@@ -10640,7 +10722,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

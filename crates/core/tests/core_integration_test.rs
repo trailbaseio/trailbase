@@ -22,9 +22,27 @@ use trailbase::{DataDir, Server, ServerOptions, SocketAddr};
 async fn lifecycle_record_api_and_logs_integration_tests() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
+  #[cfg(feature = "pg-test")]
+  let db = oliphaunt_wasix::OliphauntServer::builder()
+    .extensions([
+      // Enable case-insensitive text columns.
+      oliphaunt_wasix::Extension::CITEXT,
+      // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
+      // supported: https://github.com/f0rr0/oliphaunt/blob/main/docs/EXTENSIONS.md
+    ])
+    .start()
+    .unwrap();
+
   let Server {
     state, main_router, ..
-  } = initialize_server(&data_dir).await;
+  } = initialize_server(
+    &data_dir,
+    cfg_select! {
+        feature = "pg-test" => Some(db.connection_string().to_string()),
+        _ => None,
+    },
+  )
+  .await;
 
   let conn = state.connection_manager().main_entry().connection;
 
@@ -263,37 +281,11 @@ async fn lifecycle_record_api_and_logs_integration_tests() {
   assert_eq!(got.status, 200);
 }
 
-async fn initialize_server(data_dir: &temp_dir::TempDir) -> Server {
-  #[allow(unused)]
-  #[cfg(feature = "pg")]
-  let db = cfg_select! {
-    feature = "pg-test" => Some(
-      pglite_oxide::PgliteServer::builder()
-        .fresh_temporary()
-        .extensions([
-          // Enable case-insensitive text columns.
-          pglite_oxide::extensions::CITEXT,
-          // Enable UUIDv7 support.
-          pglite_oxide::extensions::PG_UUIDV7,
-          // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
-          // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-        ])
-        .start()
-        .unwrap(),
-    ),
-    _ => None::<()>,
-  };
-
+async fn initialize_server(data_dir: &temp_dir::TempDir, pg_uri: Option<String>) -> Server {
   let (_new, state) = AppState::init(InitArgs {
     data_dir: DataDir(data_dir.path().to_path_buf()),
     dev: false,
-
-    #[cfg(feature = "pg-test")]
-    pg_uri: Some(if let Some(db) = db.as_ref() {
-      db.connection_uri()
-    } else {
-      "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
-    }),
+    pg_uri,
     ..Default::default()
   })
   .await

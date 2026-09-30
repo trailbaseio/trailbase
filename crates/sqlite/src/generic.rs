@@ -694,7 +694,7 @@ static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 mod tests {
-  use pglite_oxide::PgliteServer;
+  use oliphaunt_wasix::OliphauntServer;
   use serde::Deserialize;
 
   use super::*;
@@ -772,8 +772,8 @@ mod tests {
 
   #[tokio::test]
   async fn generic_connection_w_pg_test() {
-    let db = PgliteServer::temporary_tcp().unwrap();
-    let pg_uri = db.connection_uri();
+    let db = OliphauntServer::builder().start().unwrap();
+    let pg_uri = db.connection_string().to_string();
     println!("Started PgLite: {pg_uri}");
 
     let conn = Connection::pg_with_opts(PgOptions {
@@ -837,8 +837,8 @@ mod tests {
 
   #[tokio::test]
   async fn generic_connection_w_pg_create_simple_table_test() {
-    let db = PgliteServer::temporary_tcp().unwrap();
-    let pg_uri = db.connection_uri();
+    let db = OliphauntServer::builder().start().unwrap();
+    let pg_uri = db.connection_string().to_string();
     println!("Started PgLite: {pg_uri}");
 
     let conn = Connection::pg_with_opts(PgOptions {
@@ -878,8 +878,8 @@ mod tests {
 
   #[tokio::test]
   async fn generic_connection_w_pg_create_more_complex_table_test() {
-    let db = PgliteServer::temporary_tcp().unwrap();
-    let pg_uri = db.connection_uri();
+    let db = OliphauntServer::builder().start().unwrap();
+    let pg_uri = db.connection_string().to_string();
     println!("Started PgLite: {pg_uri}");
 
     let conn = Connection::pg_with_opts(PgOptions {
@@ -1045,8 +1045,8 @@ mod tests {
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     {
-      // Make sure `pglite-oxide`'s RNG works correctly.
-      // https://github.com/f0rr0/pglite-oxide/issues/29
+      // Make sure `oliphaunt-wasix`'s RNG works correctly.
+      // https://github.com/f0rr0/oliphaunt/issues/29
       let uuid0: [u8; 16] = conn
         .read_query_row_get("SELECT gen_random_uuid()", (), 0)
         .await
@@ -1156,7 +1156,7 @@ mod tests {
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     let uuid: Vec<u8> = conn
-      .read_query_row_get("SELECT uuid_generate_v7();", (), 0)
+      .read_query_row_get("SELECT uuidv7();", (), 0)
       .await
       .unwrap()
       .unwrap();
