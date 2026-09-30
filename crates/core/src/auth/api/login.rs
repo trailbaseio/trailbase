@@ -171,7 +171,7 @@ pub(crate) async fn login_handler(
   }
 
   // Check credentials.
-  let db_user = match check_credentials(&state, user_identifier, &password).await {
+  let db_user = match check_credentials(&state, user_identifier, password).await {
     Err(err) => {
       let attempts = FAILED_LOGIN_ATTEMPTS.get(&rate_limit_id).unwrap_or(0);
       FAILED_LOGIN_ATTEMPTS.insert(rate_limit_id, attempts + 1);
@@ -260,7 +260,7 @@ fn get_somewhat_stable_password_verification_timing() -> std::time::Duration {
 async fn check_credentials(
   state: &AppState,
   id: UserIdentifier,
-  password: &str,
+  password: String,
 ) -> Result<DbUser, AuthError> {
   let maybe_db_user = match id {
     UserIdentifier::Email(normalized_email) => user_by_email(state, &normalized_email).await,
@@ -282,7 +282,7 @@ async fn check_credentials(
     }
   };
 
-  check_user_password(&db_user, password)?;
+  check_user_password(&db_user, password).await?;
 
   return Ok(db_user);
 }

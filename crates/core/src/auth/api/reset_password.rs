@@ -190,7 +190,7 @@ pub async fn reset_password_update_handler(
     PasswordResetTokenClaims::from_password_reset_token(state.jwt(), &request.password_reset_token)
       .map_err(|_err| AuthError::BadRequest("Invalid token"))?;
 
-  let hashed_password = hash_password(&request.password)?;
+  let hashed_password = hash_password(request.password).await?;
   const UPDATE_PASSWORD_QUERY: &str = formatcp!(
     "\
       UPDATE \"{USER_TABLE}\" \

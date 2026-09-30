@@ -90,8 +90,8 @@ fn start_server() -> Result<Option<Server>, std::io::Error> {
           Rlimit {
             // Soft limit.
             current: Some(current_limits.maximum.unwrap_or(1024).min(2048)),
-            // Hard limit.
-            maximum: None,
+            // Hard limit. Don't use None, which implies infinite.
+            maximum: current_limits.maximum,
           },
         ) {
           eprintln!("ERROR: Failed to raise OPEN FILE LIMIT: {err}");
@@ -235,6 +235,70 @@ async fn login_test() {
   client.logout().await.unwrap();
   assert!(client.tokens().is_none());
   client.refresh().await.unwrap();
+}
+
+#[test]
+#[serial]
+fn login_flood_test() {
+  use reqwest::Client;
+  use reqwest::header::{self, HeaderValue};
+  use std::time::Duration;
+
+  let client = Client::builder()
+    .pool_idle_timeout(Some(Duration::from_secs(120)))
+    // .pool_max_idle_per_host(10)
+    // .timeout(Duration::from_secs(5))
+    .build()
+    .unwrap();
+
+  #[derive(Serialize)]
+  struct Credentials<'a> {
+    email_or_username: &'a str,
+    password: &'a str,
+  }
+
+  let url = url::Url::parse(&format!("{}/api/auth/v1/login", site())).unwrap();
+
+  const N: usize = 100;
+  let join_handles = (0..N).map(|_| {
+    let client = client.clone();
+    let url = url.clone();
+
+    return std::thread::spawn(move || {
+      let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+      rt.block_on(async {
+        let response = client
+          .post(url.clone())
+          .header(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+          )
+          .body(
+            serde_json::to_vec(&Credentials {
+              email_or_username: "admin@localhost",
+              password: "secret",
+            })
+            .unwrap(),
+          )
+          .send()
+          .await
+          .unwrap();
+
+        assert!(response.status().is_success(), "Got: {}", response.status());
+
+        let _ = response.bytes().await.unwrap();
+      });
+    });
+  });
+
+  let _results: Vec<_> = join_handles
+    .into_iter()
+    .map(|h| h.join().unwrap())
+    .collect();
 }
 
 #[tokio::test]

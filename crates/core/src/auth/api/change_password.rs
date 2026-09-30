@@ -94,7 +94,7 @@ pub async fn change_password_handler(
   // Optionally validate old password.
   // TODO: It would probably be good practice to check TOTP as well for users of multi-factor
   // auth.
-  if let Err(_err) = check_user_password(&db_user, &request.old_password) {
+  if let Err(_err) = check_user_password(&db_user, request.old_password).await {
     const MSG: &str = "invalid `old_password`";
     if !json && let Some(redirect_uri) = err_redirect_uri.or(redirect_uri) {
       return Ok(
@@ -107,7 +107,7 @@ pub async fn change_password_handler(
   // NOTE: we're using the old_password_hash to prevent races between concurrent change requests
   // for the same user.
   let old_password_hash = db_user.password_hash;
-  let new_password_hash = hash_password(&request.new_password)?;
+  let new_password_hash = hash_password(request.new_password).await?;
 
   const QUERY: &str = formatcp!(
     "\

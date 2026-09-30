@@ -15,15 +15,17 @@ pub enum AuthError {
   Conflict,
   #[error("NotFound")]
   NotFound,
-  #[error("MethodNotAllowed")]
-  MethodNotAllowed,
-  #[error("OAuth provider not found")]
-  OAuthProviderNotFound,
   #[error("Bad request: {0}")]
   BadRequest(&'static str),
-  #[error("Too many requests")]
+  #[error("MethodNotAllowed")]
+  MethodNotAllowed,
+  #[error("OAuthProviderNotFound")]
+  OAuthProviderNotFound,
+  #[error("TooManyRequests")]
   TooManyRequests,
-  #[error("Failed dependency: {0}")]
+  #[error("Timeout")]
+  Timeout,
+  #[error("FailedDep: {0}")]
   FailedDependency(Box<dyn std::error::Error + Send + Sync>),
   #[error("Internal: {0}")]
   Internal(Box<dyn std::error::Error + Send + Sync>),
@@ -70,6 +72,7 @@ impl IntoResponse for AuthError {
       Self::OAuthProviderNotFound => (StatusCode::METHOD_NOT_ALLOWED, None),
       Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, Some(msg.to_string())),
       Self::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, None),
+      Self::Timeout => (StatusCode::GATEWAY_TIMEOUT, None),
       Self::FailedDependency(err) if cfg!(debug_assertions) => {
         (StatusCode::FAILED_DEPENDENCY, Some(err.to_string()))
       }

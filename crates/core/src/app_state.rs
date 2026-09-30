@@ -275,7 +275,7 @@ impl AppState {
         let email = "admin@localhost";
         let username = "admin";
         let password = random_alphanumeric(20);
-        let hashed_password = crate::auth::password::hash_password(&password)?;
+        let hashed_password = crate::auth::password::hash_password(password.clone()).await?;
 
         app_state
           .user_conn()

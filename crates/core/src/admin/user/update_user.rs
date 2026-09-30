@@ -73,7 +73,7 @@ pub async fn update_user_handler(
 
   let user_id_bytes: [u8; 16] = user_id.into_bytes();
   let hashed_password = match password {
-    Some(ref pw) => Some(hash_password(pw)?),
+    Some(pw) => Some(hash_password(pw).await?),
     None => None,
   };
 

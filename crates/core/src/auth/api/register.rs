@@ -114,7 +114,7 @@ pub async fn register_user_handler(
     }
   };
 
-  let hashed_password = hash_password(&request.password)?;
+  let hashed_password = hash_password(request.password).await?;
 
   const INSERT_USER_QUERY: &str = formatcp!(
     "\

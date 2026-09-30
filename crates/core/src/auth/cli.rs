@@ -59,7 +59,7 @@ pub async fn change_password(
 ) -> Result<Uuid, AuthError> {
   let db_user = user.lookup_user(user_conn).await?;
 
-  let hashed_password = hash_password(password)?;
+  let hashed_password = hash_password(password.to_string()).await?;
 
   const UPDATE_PASSWORD_QUERY: &str =
     formatcp!(r#"UPDATE "{USER_TABLE}" SET password_hash = $1 WHERE id = $2 RETURNING id"#);
@@ -129,7 +129,7 @@ pub async fn add_user(
   if password.is_empty() {
     return Err(AuthError::BadRequest("Password must not be empty"));
   }
-  let hashed_password = hash_password(password)?;
+  let hashed_password = hash_password(password.to_string()).await?;
 
   let user = DbUser::from_row(
     user_conn

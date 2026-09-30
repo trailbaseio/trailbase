@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
 
@@ -62,52 +64,101 @@ pub fn validate_password_policy(
   return Ok(());
 }
 
-pub fn hash_password(password: &str) -> Result<String, AuthError> {
+pub(crate) fn hash_password_impl(password: &str) -> Result<String, AuthError> {
   return trailbase_extension::password::hash_password(password)
     .map_err(|err| AuthError::Internal(err.into()));
 }
 
-/// Checks the given password against a known user. Will further ensure that the email was verified
-/// and rate limit attempts to protect against brute-force attacks.
-pub fn check_user_password(db_user: &DbUser, password: &str) -> Result<(), AuthError> {
+/// Hashes the given password with argon2.
+///
+/// NOTE: hashing is a synchronous but expensive op (tens of milliseconds in release mode if you
+/// have AVX and hundreds in debug builds), so we push work into a background thread with a fixed
+/// timeout to prevent the async runtime from locking up.
+pub async fn hash_password(password: String) -> Result<String, AuthError> {
+  return tokio::time::timeout(
+    HASHING_TIMEOUT,
+    tokio::task::spawn_blocking(move || hash_password_impl(&password)),
+  )
+  .await
+  .map_err(|_| AuthError::Timeout)?
+  .map_err(|_err| {
+    return cfg_select! {
+      debug_assertions => AuthError::Internal(_err.into()),
+      _ => AuthError::Internal("busy".into()),
+    };
+  })?;
+}
+
+/// Checks the given password against a known user's hash. Will further ensure that an email
+/// address, if present, is verified.
+///
+/// NOTE: hashing is a synchronous but expensive op (tens of milliseconds in release mode if you
+/// have AVX and hundreds in debug builds), so we push work into a background thread with a fixed
+/// timeout to prevent the async runtime from locking up.
+pub async fn check_user_password(db_user: &DbUser, password: String) -> Result<(), AuthError> {
   if db_user.unverified_email.is_some() {
     return Err(AuthError::Unauthorized);
   }
 
-  let Some(password_hash) = db_user.password_hash.as_deref() else {
+  let Some(password_hash) = db_user.password_hash.clone() else {
     return Err(AuthError::Unauthorized);
   };
 
-  trailbase_extension::password::verify_password(password.as_bytes(), password_hash).map_err(
-    |err| {
-      return match err {
-        trailbase_extension::password::PasswordError::InvalidPassword => AuthError::Unauthorized,
-        err => AuthError::Internal(err.to_string().into()),
-      };
-    },
-  )?;
+  fn check_user_password_impl(password: &str, password_hash: &str) -> Result<(), AuthError> {
+    return trailbase_extension::password::verify_password(password, password_hash).map_err(
+      |err| {
+        return match err {
+          trailbase_extension::password::PasswordError::InvalidPassword => AuthError::Unauthorized,
+          err => AuthError::Internal(err.to_string().into()),
+        };
+      },
+    );
+  }
 
-  return Ok(());
+  return tokio::time::timeout(
+    HASHING_TIMEOUT,
+    tokio::task::spawn_blocking(move || {
+      return check_user_password_impl(&password, &password_hash);
+    }),
+  )
+  .await
+  .map_err(|_| AuthError::Timeout)?
+  .map_err(|_err| {
+    return cfg_select! {
+      debug_assertions => AuthError::Internal(_err.into()),
+      _ => AuthError::Internal("busy".into()),
+    };
+  })?;
 }
 
 pub(crate) fn measure_password_verification_timing() -> std::time::Duration {
-  let hash = hash_password("pw").expect("constant input");
+  let hash = hash_password_impl("pw").expect("constant input");
   let started = std::time::Instant::now();
   let _ = trailbase_extension::password::verify_password(b"pw", &hash);
   return started.elapsed();
 }
 
+const HASHING_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[cfg(test)]
 mod tests {
   use super::*;
 
-  #[test]
-  fn test_password_verification() {
+  #[tokio::test]
+  async fn test_password_verification() {
     let password = "0123456789.";
     let db_user = DbUser::new_for_test("foo@test.org", password);
 
-    assert!(check_user_password(&db_user, password).is_ok());
-    assert!(check_user_password(&db_user, "nonsense").is_err());
+    assert!(
+      check_user_password(&db_user, password.to_string())
+        .await
+        .is_ok()
+    );
+    assert!(
+      check_user_password(&db_user, "nonsense".to_string())
+        .await
+        .is_err()
+    );
   }
 
   #[test]

@@ -176,14 +176,10 @@ pub async fn login_with_password_for_test(
     UserIdentifier::Username(username) => user_by_username(state, &username).await,
     UserIdentifier::Email(email) => user_by_email(state, &email).await,
   }
-  .map_err(|_| {
-    // Don't leak if user wasn't found or password was wrong.
-    return AuthError::Unauthorized;
-  })?;
-  let user_id = db_user.uuid();
+  .map_err(|_| AuthError::Unauthorized)?;
 
   // Validates password and rate limits attempts.
-  crate::auth::password::check_user_password(&db_user, password)?;
+  crate::auth::password::check_user_password(&db_user, password.to_string()).await?;
 
   let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let tokens = crate::auth::tokens::mint_new_tokens(
@@ -195,7 +191,7 @@ pub async fn login_with_password_for_test(
   .await?;
 
   return Ok(Some(NewTokens {
-    id: user_id,
+    id: db_user.uuid(),
     auth_token: state
       .jwt()
       .encode(&tokens.auth_token_claims)

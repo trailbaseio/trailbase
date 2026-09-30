@@ -88,7 +88,7 @@ impl DbUser {
       email: Some(email.to_string()),
       unverified_email: None,
       username: None,
-      password_hash: Some(crate::auth::password::hash_password(password).unwrap()),
+      password_hash: Some(crate::auth::password::hash_password_impl(password).unwrap()),
       admin: false,
       totp_secret: None,
       created: timestamp as i64,

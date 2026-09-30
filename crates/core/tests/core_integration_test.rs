@@ -17,96 +17,26 @@ use trailbase::test_utils::*;
 use trailbase::util::id_to_b64;
 use trailbase::{DataDir, Server, ServerOptions, SocketAddr};
 
-async fn add_record_api_config(
-  state: &AppState,
-  api: RecordApiConfig,
-) -> Result<(), anyhow::Error> {
-  let mut config = (*state.get_config()).clone();
-  config.record_apis.push(api);
-  return Ok(state.validate_and_update_config(config, None).await?);
-}
-
-#[test]
-fn integration_tests() {
-  let runtime = tokio::runtime::Builder::new_multi_thread()
-    .enable_all()
-    .build()
-    .unwrap();
-
-  let _ = runtime.block_on(test_record_apis());
-}
-
-async fn test_record_apis() {
+/// Tests setup, record APIs, and logs writes (and OpenTelemetry if present).
+#[tokio::test]
+async fn lifecycle_record_api_and_logs_integration_tests() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
-  #[allow(unused)]
-  #[cfg(feature = "pg")]
-  let db = cfg_select! {
-    feature = "pg-test" => Some(
-      pglite_oxide::PgliteServer::builder()
-        .fresh_temporary()
-        .extensions([
-          // Enable case-insensitive text columns.
-          pglite_oxide::extensions::CITEXT,
-          // Enable UUIDv7 support.
-          pglite_oxide::extensions::PG_UUIDV7,
-          // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
-          // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
-        ])
-        .start()
-        .unwrap(),
-    ),
-    _ => None::<()>,
-  };
-
-  let (_new, state) = AppState::init(InitArgs {
-    data_dir: DataDir(data_dir.path().to_path_buf()),
-    dev: false,
-
-    #[cfg(feature = "pg-test")]
-    pg_uri: Some(if let Some(db) = db.as_ref() {
-      db.connection_uri()
-    } else {
-      "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
-    }),
-    ..Default::default()
-  })
-  .await
-  .unwrap();
-
-  let options = ServerOptions {
-    ..Default::default()
-  };
-
   let Server {
-    state,
-    main_router,
-    admin_router,
-    tls,
-  } = Server::init(
-    state,
-    SocketAddr::parse("localhost:4041").unwrap(),
-    options.clone(),
-  )
-  .await
-  .unwrap();
-
-  assert!(admin_router.is_none());
-  assert!(tls.is_none());
+    state, main_router, ..
+  } = initialize_server(&data_dir).await;
 
   let conn = state.connection_manager().main_entry().connection;
-  let logs_conn = state.logs_conn();
 
   create_chat_message_app_tables(&conn).await.unwrap();
   state.rebuild_connection_metadata().await.unwrap();
 
   let room = add_room(&conn, "room0").await.unwrap();
   let password = "Secret!1!!";
-  let client_ip = "22.11.22.11";
 
   // Register message table as record API with moderator read access.
   add_record_api_config(
-        &state,
+    &state,
     RecordApiConfig{
       name: Some("messages_api".to_string()),
       table_name: Some("message".to_string()),
@@ -116,8 +46,7 @@ async fn test_record_apis() {
         ),
       ..Default::default()
     }
-      )
-      .await.unwrap();
+  ).await.unwrap();
 
   let now = std::time::SystemTime::now();
   let timestamp = now
@@ -145,6 +74,7 @@ async fn test_record_apis() {
   #[allow(unused_mut)]
   let (_address, mut router) = main_router;
 
+  // Test OpenTelemetry if present.
   #[cfg(feature = "otel")]
   {
     #[tracing::instrument]
@@ -172,9 +102,11 @@ async fn test_record_apis() {
       axum::Router::new()
         .route("/trace", axum::routing::get(trace_id))
         .into(),
-      &options.cors_allowed_origins,
+      &[],
     ));
   }
+
+  let client_ip = "22.11.22.11";
 
   {
     let server = TestServer::new(router);
@@ -288,8 +220,10 @@ async fn test_record_apis() {
     }
   }
 
+  // Verify that logs were written.
   tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
+  let logs_conn = state.logs_conn();
   let logs_count: i64 = logs_conn
     .read_query_row_get("SELECT COUNT(*) FROM _logs", (), 0)
     .await
@@ -327,6 +261,69 @@ async fn test_record_apis() {
   assert_eq!(got.client_ip, client_ip);
   assert!(got.latency > 0.0);
   assert_eq!(got.status, 200);
+}
+
+async fn initialize_server(data_dir: &temp_dir::TempDir) -> Server {
+  #[allow(unused)]
+  #[cfg(feature = "pg")]
+  let db = cfg_select! {
+    feature = "pg-test" => Some(
+      pglite_oxide::PgliteServer::builder()
+        .fresh_temporary()
+        .extensions([
+          // Enable case-insensitive text columns.
+          pglite_oxide::extensions::CITEXT,
+          // Enable UUIDv7 support.
+          pglite_oxide::extensions::PG_UUIDV7,
+          // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
+          // supported: https://github.com/f0rr0/pglite-oxide/blob/main/docs/EXTENSIONS.md
+        ])
+        .start()
+        .unwrap(),
+    ),
+    _ => None::<()>,
+  };
+
+  let (_new, state) = AppState::init(InitArgs {
+    data_dir: DataDir(data_dir.path().to_path_buf()),
+    dev: false,
+
+    #[cfg(feature = "pg-test")]
+    pg_uri: Some(if let Some(db) = db.as_ref() {
+      db.connection_uri()
+    } else {
+      "postgresql://postgres:example@127.0.0.1:5432/postgres?sslmode=disable".to_string()
+    }),
+    ..Default::default()
+  })
+  .await
+  .unwrap();
+
+  let options = ServerOptions {
+    ..Default::default()
+  };
+
+  let server = Server::init(
+    state,
+    SocketAddr::parse("localhost:4041").unwrap(),
+    options.clone(),
+  )
+  .await
+  .unwrap();
+
+  assert!(server.admin_router.is_none());
+  assert!(server.tls.is_none());
+
+  return server;
+}
+
+async fn add_record_api_config(
+  state: &AppState,
+  api: RecordApiConfig,
+) -> Result<(), anyhow::Error> {
+  let mut config = (*state.get_config()).clone();
+  config.record_apis.push(api);
+  return Ok(state.validate_and_update_config(config, None).await?);
 }
 
 async fn create_chat_message_app_tables(
