@@ -1,3 +1,10 @@
+## v0.34.2
+
+- Push expensive password hashing off the async runtime and add an explicit timeout of 5s.
+  - Add test coverage for the flooded logins.
+- Use exponential moving average plus some randomness to better handle the password-hash equivalent wait in the missing-user case.
+- Update dependencies.
+
 ## v0.34.1
 
 - Fix admin UI failing to fetch logs.
