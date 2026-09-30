@@ -4098,9 +4098,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.58.2"
+version = "0.58.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "657c6a38b0e00dda091d9c006cc1741957ba2377f00dccfd6e79df4c95619bb1"
+checksum = "905edfa6eee835291d6efe33f733f7fcb40c2a24be93b78b74df95e56aef8611"
 dependencies = [
  "ahash",
  "bytecount",
@@ -4110,12 +4110,12 @@ dependencies = [
  "fraction 0.17.0",
  "getrandom 0.3.4",
  "itoa",
- "jsonschema-regex 0.58.2",
- "jsonschema-value 0.58.2",
+ "jsonschema-regex 0.58.3",
+ "jsonschema-value 0.58.3",
  "num-cmp",
  "num-traits",
  "percent-encoding",
- "referencing 0.58.2",
+ "referencing 0.58.3",
  "regex",
  "serde",
  "serde_json",
@@ -4135,9 +4135,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.58.2"
+version = "0.58.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "599c68ae272eac23e6525c3fc04a39828ae4a0d76d1fb5ba0e23a6241fd5cbfe"
+checksum = "023cf6b6c38655c1e9cedf72b9c534fd361bd35d20ac06e074f2c93b7dd0836c"
 dependencies = [
  "regex-syntax",
 ]
@@ -4158,9 +4158,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-value"
-version = "0.58.2"
+version = "0.58.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9097316258ece14ed6908011db130c54a11a5bd0c46472b1fe112c8c86261263"
+checksum = "43519639b8e32075ef90a9b6b19136e516a3236b7943c3fe6b1622dafdced8ea"
 dependencies = [
  "ahash",
  "bytecount",
@@ -6433,9 +6433,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.58.2"
+version = "0.58.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddfcda65789fdadcc3ddde7b127bd2272deb3fc97fddb4fc94a499f839989990"
+checksum = "ead446bbb5527785ff232eb96625ac03daa627945470374c553db8f13090e30f"
 dependencies = [
  "ahash",
  "fluent-uri",
@@ -8632,7 +8632,7 @@ dependencies = [
  "indoc",
  "init-tracing-opentelemetry",
  "itertools 0.15.0",
- "jsonschema 0.58.2",
+ "jsonschema 0.58.3",
  "jsonwebtoken",
  "lazy_static",
  "lettre",
@@ -8827,7 +8827,7 @@ dependencies = [
  "argon2",
  "base64 0.23.1",
  "bcrypt",
- "jsonschema 0.58.2",
+ "jsonschema 0.58.3",
  "maxminddb",
  "parking_lot",
  "quick_cache",
@@ -8912,7 +8912,7 @@ dependencies = [
  "indoc",
  "infer",
  "itertools 0.15.0",
- "jsonschema 0.58.2",
+ "jsonschema 0.58.3",
  "lazy_static",
  "litegis",
  "log",
