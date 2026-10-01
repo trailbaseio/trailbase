@@ -9,6 +9,7 @@ mod sqlite;
 
 use bytes::Bytes;
 use core::future::Future;
+use deadpool::managed::Timeouts;
 use http::Uri;
 use http_body_util::combinators::UnsyncBoxBody;
 use std::path::{Path, PathBuf};
@@ -378,9 +379,7 @@ impl HttpStore {
           .max_size(POOL_HARD_LIMIT)
           .runtime(deadpool::Runtime::Tokio1)
           .timeouts(Timeouts {
-            wait: Some(WASM_WAIT_TIMEOUT),
-            // create: Some(WASM_WAIT_TIMEOUT.into()),
-            // recycle: Some(WASM_WAIT_TIMEOUT.into()),
+            wait: Some(DEFAULT_CALL_TIMEOUT),
             ..Default::default()
           })
           .build()
@@ -497,7 +496,15 @@ impl HttpStore {
                   ref mut store,
                   ref proxy_bindings,
                   ref mut has_trapped,
-                } = *pool.get().await.map_err(|_err| Error::Timeout(None))?;
+                } = *pool
+                  .timeout_get(&Timeouts {
+                    // NOTE: In principle we could wait shorter here, i.e. `call_timeout - dt`, the
+                    // time we spent to get here. Typically `dt` should be small.
+                    wait: Some(call_timeout),
+                    ..Default::default()
+                  })
+                  .await
+                  .map_err(|_err| Error::Timeout(None))?;
 
                 debug_assert!(!*has_trapped);
 
@@ -574,8 +581,11 @@ impl HttpStore {
           },
           // NOTE: We have a separate timeout here (besides the call timeout above), since
           // cancelling the call won't drop the sender to close the receiver (the sender is
-          // leaked via the store). Thus we have to separately time out the receiving end.
-          _timeout = tokio::time::sleep(WASM_WAIT_TIMEOUT) => {
+          // leaked via the Wasmtime store). We thus have this additional timeout on the receiving
+          // end.
+          // It must not be shorter than the call timeout: guests only respond once a job
+          // handler returns, so a shorter wait may report a still-running job as timed out.
+          _timeout = tokio::time::sleep(call_timeout) => {
             Err(Error::Timeout(Some(uri)))
           },
         };
@@ -910,5 +920,4 @@ mod tests {
 }
 
 const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(20);
-const WASM_WAIT_TIMEOUT: Duration = Duration::from_secs(20);
 const POOL_HARD_LIMIT: usize = 65536;

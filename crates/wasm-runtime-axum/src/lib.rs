@@ -231,12 +231,25 @@ pub async fn install_routes_and_jobs<S: Clone + Send + Sync + 'static>(
             .body(empty())
             .map_err(|err| WasmError::Other(err.to_string()))?;
 
-          store
+          let response = store
             .call_incoming_http_handler(
               request,
               Some(timeout.map_or_else(|| Duration::from_mins(60), Duration::from_millis)),
             )
             .await?;
+
+          // Translate non-ok HTTP responses back to errors.
+          let status = response.status();
+          if !status.is_success() {
+            let body = response.into_body().collect().await.unwrap_or_default();
+            return Err(
+              format!(
+                "Job failed [{status}]: {body}",
+                body = String::from_utf8_lossy(&body.to_bytes())
+              )
+              .into(),
+            );
+          }
 
           Ok::<_, AnyError>(())
         });
