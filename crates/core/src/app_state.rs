@@ -883,18 +883,9 @@ pub fn start_watchdog<T: Send + Sync + 'static>(
 
     let started = SystemTime::now();
     loop {
-      let now = SystemTime::now();
-      let elapsed = now.duration_since(started).unwrap_or_default();
-
-      #[cfg(test)]
-      {
-        let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&_handle);
-        // NOTE: For some reasons iterating .intervals() bricks the test.
-        info!(
-          "WATCHDOG elapsed {elapsed:?}: metrics = {:?}",
-          runtime_monitor.intervals()
-        );
-      }
+      let elapsed = SystemTime::now()
+        .duration_since(started)
+        .unwrap_or_default();
 
       if elapsed >= timeout {
         error!("WATCHDOG: expired");

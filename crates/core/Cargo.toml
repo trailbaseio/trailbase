@@ -147,5 +147,4 @@ rcgen = "0.14.10"
 rsa = "0.10.0-rc.18"
 schemars = "1.2.2"
 temp-dir = "0.2.0"
-tokio-metrics = "0.5.2"
 tower = { version = "0.5.3", features = ["util"] }
