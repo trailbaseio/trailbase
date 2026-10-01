@@ -735,7 +735,23 @@ mod test_utils {
       let pg_uri = db.connection_string().to_string();
 
       let db = Arc::new(parking_lot::Mutex::new(Some(db)));
-      start_watchdog(&db);
+
+      // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
+      start_watchdog(
+        &db,
+        |db| {
+          if let Some(mut db) = db.lock().take() {
+            info!("shutting down pglite");
+            db.close().unwrap();
+
+            // Give the test a chance to terminate.
+            std::thread::sleep(std::time::Duration::from_secs(15));
+          } else {
+            info!("pglite already consumed");
+          }
+        },
+        std::time::Duration::from_mins(8),
+      );
 
       let pg_shutdown = scopeguard::guard(db, |db| {
         if let Some(mut db) = db.lock().take() {
@@ -849,64 +865,56 @@ pub(crate) fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
   return Ok(());
 }
 
-#[cfg(all(feature = "pg-test", test))]
-fn start_watchdog(db: &Arc<parking_lot::Mutex<Option<oliphaunt_wasix::OliphauntServer>>>) {
+#[cfg(feature = "pg-test")]
+pub fn start_watchdog<T: Send + Sync + 'static>(
+  resource: &Arc<T>,
+  cb: impl FnOnce(&T) + Send + Sync + 'static,
+  timeout: std::time::Duration,
+) {
   use std::sync::OnceLock;
   use std::thread::{JoinHandle, sleep};
   use std::time::{Duration, SystemTime};
 
-  let db = Arc::downgrade(&db);
+  let resource = Arc::downgrade(&resource);
+  let _handle = tokio::runtime::Handle::current();
+
+  let watcher = move || {
+    debug!("WATCHDOG: started");
+
+    let started = SystemTime::now();
+    loop {
+      let now = SystemTime::now();
+      let elapsed = now.duration_since(started).unwrap_or_default();
+
+      #[cfg(test)]
+      {
+        let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&_handle);
+        // NOTE: For some reasons iterating .intervals() bricks the test.
+        info!(
+          "WATCHDOG elapsed {elapsed:?}: metrics = {:?}",
+          runtime_monitor.intervals()
+        );
+      }
+
+      if elapsed >= timeout {
+        error!("WATCHDOG: expired");
+
+        if let Some(resource) = resource.upgrade() {
+          cb(&resource);
+        } else {
+          info!("WATCHDOG: resource already dropped");
+        }
+
+        error!("WATCHDOG: terminating process");
+        std::process::exit(42);
+      }
+
+      sleep(Duration::from_mins(1));
+    }
+  };
 
   static WATCHDOG_THREAD: OnceLock<JoinHandle<()>> = OnceLock::new();
-  WATCHDOG_THREAD.get_or_init(|| {
-    return std::thread::spawn({
-      // NOTE: During CI, we have random tests occasionally time out. This is an attempt
-      // to get ahead of CI's own timeout of 6h.
-      let handle = tokio::runtime::Handle::current();
-
-      #[allow(unreachable_code)]
-      move || {
-        let started = SystemTime::now();
-
-        debug!("WATCHDOG: started");
-
-        loop {
-          let now = SystemTime::now();
-          let elapsed = now.duration_since(started).unwrap_or_default();
-
-          let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-          // NOTE: For some reasons iterating .intervals() bricks the test.
-          info!(
-            "WATCHDOG elapsed {elapsed:?}: metrics = {:?}",
-            runtime_monitor.intervals()
-          );
-
-          if elapsed > Duration::from_mins(8) {
-            error!("WATCHDOG: expired");
-
-            if let Some(arc) = db.upgrade() {
-              if let Some(mut db) = arc.lock().take() {
-                info!("WATCHDOG: shutting down pglite");
-                db.close().unwrap();
-
-                // Give the test a chance to terminate.
-                sleep(Duration::from_secs(15));
-              } else {
-                info!("WATCHDOG: DB already consumed");
-              }
-            } else {
-              info!("WATCHDOG: DB already shut-down");
-            }
-
-            error!("WATCHDOG: terminated");
-            std::process::exit(1);
-          }
-
-          sleep(Duration::from_mins(1));
-        }
-      }
-    });
-  });
+  WATCHDOG_THREAD.get_or_init(|| std::thread::spawn(watcher));
 }
 
 #[cfg(test)]

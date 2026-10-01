@@ -17,32 +17,71 @@ use trailbase::test_utils::*;
 use trailbase::util::id_to_b64;
 use trailbase::{DataDir, Server, ServerOptions, SocketAddr};
 
+#[allow(unused)]
+struct PgSetup {
+  pg_uri: String,
+  cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
+}
+
+#[cfg(all(test, feature = "pg-test"))]
+fn start_pg() -> PgSetup {
+  let db = oliphaunt_wasix::OliphauntServer::builder()
+    .extensions([
+      oliphaunt_wasix::Extension::PGCRYPTO,
+      // Enable case-insensitive text columns.
+      oliphaunt_wasix::Extension::CITEXT,
+      // Enable postgis.
+      // oliphaunt_wasix::Extension::POSTGIS,
+    ])
+    .start()
+    .unwrap();
+
+  let pg_uri = db.connection_string().to_string();
+
+  let db = Arc::new(parking_lot::Mutex::new(Some(db)));
+
+  // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
+  trailbase::app_state::start_watchdog(
+    &db,
+    |db| {
+      if let Some(mut db) = db.lock().take() {
+        log::info!("shutting down pglite");
+        db.close().unwrap();
+
+        // Give the test a chance to terminate.
+        std::thread::sleep(std::time::Duration::from_secs(15));
+      } else {
+        log::info!("pglite already consumed");
+      }
+    },
+    std::time::Duration::from_mins(8),
+  );
+
+  let pg_shutdown = scopeguard::guard(db, |db| {
+    if let Some(mut db) = db.lock().take() {
+      db.close().unwrap();
+    }
+  });
+
+  return PgSetup {
+    pg_uri,
+    cleanup: vec![Box::new(pg_shutdown)],
+  };
+}
+
 /// Tests setup, record APIs, and logs writes (and OpenTelemetry if present).
 #[tokio::test]
 async fn lifecycle_record_api_and_logs_integration_tests() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
-  #[cfg(feature = "pg-test")]
-  let db = oliphaunt_wasix::OliphauntServer::builder()
-    .extensions([
-      // Enable case-insensitive text columns.
-      oliphaunt_wasix::Extension::CITEXT,
-      // NOTE: pgcrypto and postgis, which would be interesting for us, are not currently
-      // supported: https://github.com/f0rr0/oliphaunt/blob/main/docs/EXTENSIONS.md
-    ])
-    .start()
-    .unwrap();
+  let pg_setup: Option<PgSetup> = cfg_select! {
+      feature = "pg-test" => Some(start_pg()),
+      _ => None,
+  };
 
   let Server {
     state, main_router, ..
-  } = initialize_server(
-    &data_dir,
-    cfg_select! {
-        feature = "pg-test" => Some(db.connection_string().to_string()),
-        _ => None,
-    },
-  )
-  .await;
+  } = initialize_server(&data_dir, pg_setup.as_ref().map(|s| s.pg_uri.clone())).await;
 
   let conn = state.connection_manager().main_entry().connection;
 
