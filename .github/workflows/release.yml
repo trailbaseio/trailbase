@@ -5,6 +5,9 @@ on:
     tags:
       - "v*.*.*"
 
+  # Manual UI trigger.
+  workflow_dispatch:
+
 env:
   TOOLCHAIN_VERSION: 1.98.1
   CARGO_PROFILE_RELEASE_LTO: "fat"

@@ -188,7 +188,7 @@ Future<Process> initTrailBase() async {
   process.stdout.listen(stdout.add);
 
   final uri = Uri.parse('http://${address}/api/healthcheck');
-  for (int i = 0; i < 100; ++i) {
+  for (int i = 0; i < 200; ++i) {
     try {
       final response = await http.get(uri);
       if (response.statusCode == HttpStatus.ok) {

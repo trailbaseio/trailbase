@@ -1,0 +1,157 @@
+# output:
+#   - meta
+#   - execution
+#   - execution_out
+#   - execution_info
+#   - success
+#   - failure
+#   - summary
+
+pre-commit:
+  exclude:
+    - crates/assets/js/bindings/**
+    - crates/schema/bindings/**
+    - guests/typescript/generated/common/**
+    - vendor/**
+
+  commands:
+
+    check-case-conflict:
+      glob: "*"
+      run: check-case-conflict {staged_files}
+
+    check-merge-conflict:
+      glob: "*"
+      run: check-merge-conflict {staged_files}
+
+    check-symlinks:
+      glob: "*"
+      run: check-symlinks {staged_files}
+
+    end-of-file-fixer:
+      glob: "*"
+      file_types: [text]
+      run: end-of-file-fixer {staged_files}
+      stage_fixed: true
+
+    mixed-line-ending:
+      glob: "*"
+      file_types: [text]
+      run: mixed-line-ending {staged_files}
+      stage_fixed: true
+
+    trailing-whitespace:
+      glob: "*"
+      file_types: [text]
+      run: trailing-whitespace-fixer {staged_files}
+      stage_fixed: true
+
+    # === Proto ===
+    pnpm-proto:
+      glob: "*.proto"
+      run: pnpm -r proto
+
+
+    # === Rust ===
+    rust-format:
+      glob: "*.rs"
+      run: cargo fmt -- --check
+
+    rust-test:
+      # Stream rather than buffer the command output. Useful to debug timeouts where the buffer would never get flushed.
+      interactive: true
+      glob: "*.rs"
+      exclude:
+        - bindings/**
+      run: pnpm i --frozen-lockfile --prefer-offline --reporter=append-only && PNPM_OFFLINE=TRUE cargo test --workspace --features=geos,otel,pg,wasm -- --nocapture
+
+    clippy:
+      glob: "*.rs"
+      run: pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo clippy --workspace --features=geos,otel,pg,wasm --no-deps
+
+
+    # === JS ===
+    prettier:
+      glob: "*.{js,jsx,ts,tsx,astro,md,mdx}"
+      run: pnpm -r check:format
+
+    pnpm-check:
+      glob: "*.{js,jsx,ts,tsx,astro}"
+      run: pnpm -r check
+
+    pnpm-test:
+      glob: "*.{js,jsx,ts,tsx,astro}"
+      run: pnpm -r test
+
+    pnpm-build:
+      glob: "*.{js,jsx,ts,tsx,astro}"
+      run: pnpm -r build
+
+    build-website:
+      # The rest is covered by pnpm-build above.
+      glob: "*.{md,mdx}"
+      run: pnpm i --frozen-lockfile --prefer-offline && pnpm -C docs build
+
+
+    # === Dart ===
+    dart-analyze:
+      glob: "*.dart"
+      run: dart pub get && dart analyze
+
+    dart-format:
+      glob: "*.dart"
+      run: dart format -o none --show all --set-exit-if-changed {staged_files}
+
+    dart-test:
+      glob: "*.dart"
+      run: dart pub get && cd client/dart && dart test
+
+
+    # === Dotnet ===
+    dotnet-format:
+      glob: "*.cs"
+      run: dotnet format client/dotnet/trailbase --verify-no-changes && dotnet format client/dotnet/test --verify-no-changes
+
+    dotnet-test:
+      glob: "*.cs"
+      run: dotnet test client/dotnet/test
+
+
+    # === Python ===
+    python-format:
+      glob: "*.py"
+      run: poetry -C client/python run black --config pyproject.toml --check .
+
+    python-check:
+      glob: "*.py"
+      run: poetry -C client/python run pyright --outputjson && poetry -C client/python run flake8
+
+    python-test:
+      glob: "*.py"
+      run: poetry -C client/python run pytest
+
+
+    # === Swift ===
+    swift-format:
+      glob: "*.swift"
+      run: swift format -r --in-place client/swift/trailbase/**/*.swift
+
+    swift-test:
+      glob: "*.swift"
+      run: swift test --package-path client/swift/trailbase
+
+
+    # === Go ===
+    go-format:
+      glob: "*.go"
+      run: DIFF=$(gofmt -d -e client/go/trailbase/) && echo "${DIFF}" && test -z "${DIFF}"
+
+    go-test:
+      glob: "*.go"
+      run: cd client/go/trailbase && go test -v
+
+
+    # === Kotlin ===
+    kotlin-test:
+      glob: "*.{kt,kts}"
+      run: cd client/kotlin && ./gradlew allTests

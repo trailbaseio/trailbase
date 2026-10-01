@@ -12,8 +12,11 @@ on:
       - ".github/workflows/audit.yaml"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
+
   schedule:
     - cron: "0 7 * * *"
+
+  # Manual UI trigger.
   workflow_dispatch:
 
 permissions:

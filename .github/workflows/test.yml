@@ -1,11 +1,16 @@
 name: test
 
 on:
-  pull_request:
   push:
     branches:
       - main
       - dev
+
+  # Pro-actively on PRs.
+  pull_request:
+
+  # Manual UI trigger.
+  workflow_dispatch:
 
 env:
   TOOLCHAIN_VERSION: 1.98.1
@@ -98,13 +103,10 @@ jobs:
       - id: setup_clients
         uses: ./.github/actions/setup_clients
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      - name: Install pre-commit
-        run: pip install pre-commit
+      - name: Install lefthook and pre-commit hooks
+        run: |
+          go install github.com/evilmartians/lefthook/v2@v2.1.16
+          pip install pre-commit-hooks==4.6.0
 
       - name: "Build & Run Tests"
         uses: nick-fields/retry@v3
@@ -115,7 +117,7 @@ jobs:
           max_attempts: 2
           retry_on: timeout # options: any, timeout, error
           continue_on_error: false
-          command: pre-commit run --all-files --verbose
+          command: lefthook run pre-commit --all-files
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)

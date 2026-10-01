@@ -259,8 +259,8 @@ fn login_flood_test() {
 
   let url = url::Url::parse(&format!("{}/api/auth/v1/login", site())).unwrap();
 
-  const N: usize = 100;
-  let join_handles = (0..N).map(|_| {
+  let threads: usize = std::thread::available_parallelism().map_or(2, |n| n.into());
+  let join_handles = (0..8 * threads).map(|_| {
     let client = client.clone();
     let url = url.clone();
 
