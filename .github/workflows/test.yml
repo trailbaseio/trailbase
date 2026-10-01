@@ -98,20 +98,24 @@ jobs:
       - id: setup_clients
         uses: ./.github/actions/setup_clients
 
-      # - name: "Build & Run Tests"
-      #   uses: j178/prek-action@v3.0.0
-      #   env:
-      #     RUST_BACKTRACE: 1
-      #   with:
-      #     cache: true
-      #     extra-args: "--all-files --verbose"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install pre-commit
+        run: pip install pre-commit
 
       - name: "Build & Run Tests"
-        uses: pre-commit/action@v3.0.1
+        uses: nick-fields/retry@v3
         env:
           RUST_BACKTRACE: 1
         with:
-          extra_args: "--all-files --verbose"
+          timeout_minutes: 60
+          max_attempts: 2
+          retry_on: timeout # options: any, timeout, error
+          continue_on_error: false
+          command: pre-commit run --all-files --verbose
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)
@@ -165,9 +169,9 @@ jobs:
           toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
 
       - name: "Build & Run Tests"
+        uses: nick-fields/retry@v3
         env:
           RUST_BACKTRACE: 1
-        uses: nick-fields/retry@v3
         with:
           timeout_minutes: 18
           max_attempts: 6
