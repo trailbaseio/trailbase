@@ -63,6 +63,7 @@ import { cn } from "@/lib/utils";
 import type { Column } from "@bindings/Column";
 import type { ColumnDataType } from "@bindings/ColumnDataType";
 import type { ColumnOption } from "@bindings/ColumnOption";
+import type { ReferentialAction } from "@bindings/ReferentialAction";
 import type { Table } from "@bindings/Table";
 
 export function newDefaultColumn(
@@ -162,10 +163,10 @@ function ColumnOptionCheckField(props: {
 
       <HoverCardContent class="ui-expanded:shadow-md w-80">
         <div class="flex justify-between space-x-4">
-          <div class="space-y-1">
-            <h4 class="text-sm font-semibold">Column Constraint</h4>
+          <div class="space-y-1 text-sm">
+            <h4 class="font-semibold">Column Constraint</h4>
 
-            <p class="text-sm">
+            <p>
               Can be any boolean expression constant like{" "}
               <span class="font-mono font-bold">{`${props.columnName} < 42 `}</span>
               including SQL function calls like{" "}
@@ -235,10 +236,10 @@ function ColumnOptionDefaultField(props: {
 
       <HoverCardContent class="w-80">
         <div class="flex justify-between space-x-4">
-          <div class="space-y-1">
-            <h4 class="text-sm font-semibold">Column Default Value</h4>
+          <div class="space-y-1 text-sm">
+            <h4 class="font-semibold">Column Default Value</h4>
 
-            <p class="text-sm">
+            <p>
               Can either be a constant like{" "}
               <span class="font-mono font-bold">'foo'</span>,{" "}
               <span class="font-mono font-bold">42</span>, and{" "}
@@ -324,11 +325,16 @@ function ColumnOptionForeignKeySelect(props: {
   data_type: ColumnDataType;
   databaseSchema: string | null;
 }) {
-  const fkValue = (): string =>
-    getForeignKey(props.value)?.foreign_table ?? "None";
+  const foreignTable = (): string | null =>
+    getForeignKey(props.value)?.foreign_table ?? null;
+
+  const onDelete = (): ReferentialAction | null =>
+    getForeignKey(props.value)?.on_delete ?? null;
+
+  const onUpdate = (): ReferentialAction | null =>
+    getForeignKey(props.value)?.on_update ?? null;
 
   const fkTableOptions = createMemo((): string[] => [
-    "None",
     ...props.allTables
       .filter((schema) => {
         if (schema.temporary || schema.virtual_table) {
@@ -355,10 +361,10 @@ function ColumnOptionForeignKeySelect(props: {
 
       <Select
         multiple={false}
-        value={fkValue()}
+        value={foreignTable()}
         options={fkTableOptions()}
         onChange={(table: string | null) => {
-          if (!table || table === "None") {
+          if (!table) {
             props.onChange(setForeignKey(props.value, undefined));
             return;
           }
@@ -370,7 +376,7 @@ function ColumnOptionForeignKeySelect(props: {
                 (props.databaseSchema ?? "main") && t.name.name === table,
           );
           if (referredTable === undefined) {
-            throw new Error(`Failed to find table '${table}' for fk`);
+            throw new Error(`Failed to find referenced table '${table}'`);
           }
 
           const pkIndex = findPrimaryKeyColumnIndex(referredTable.columns);
@@ -410,6 +416,84 @@ function ColumnOptionForeignKeySelect(props: {
 
         <SelectContent />
       </Select>
+
+      <Show when={foreignTable()}>
+        <div></div>
+
+        <div class="flex flex-col gap-2">
+          <div class="flex w-full items-center gap-2">
+            <div class="min-w-22">ON DELETE</div>
+
+            <Select
+              class="grow"
+              multiple={false}
+              value={onDelete()}
+              options={referentialActions}
+              onChange={(action: ReferentialAction | null) => {
+                const fk = getForeignKey(props.value);
+                if (!fk) {
+                  return;
+                }
+
+                props.onChange(
+                  setForeignKey(props.value, {
+                    ...fk,
+                    on_delete: action,
+                  }),
+                );
+              }}
+              itemComponent={(props) => (
+                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+              )}
+              disabled={props.disabled}
+            >
+              <SelectTrigger>
+                <SelectValue<ReferentialAction>>
+                  {(state) => state.selectedOption()}
+                </SelectValue>
+              </SelectTrigger>
+
+              <SelectContent />
+            </Select>
+          </div>
+
+          <div class="flex w-full items-center gap-2">
+            <div class="min-w-22">ON UPDATE</div>
+
+            <Select
+              class="grow"
+              multiple={false}
+              value={onUpdate()}
+              options={referentialActions}
+              onChange={(action: ReferentialAction | null) => {
+                const fk = getForeignKey(props.value);
+                if (!fk) {
+                  return;
+                }
+
+                props.onChange(
+                  setForeignKey(props.value, {
+                    ...fk,
+                    on_update: action,
+                  }),
+                );
+              }}
+              itemComponent={(props) => (
+                <SelectItem item={props.item}>{props.item.rawValue}</SelectItem>
+              )}
+              disabled={props.disabled}
+            >
+              <SelectTrigger>
+                <SelectValue<ReferentialAction>>
+                  {(state) => state.selectedOption()}
+                </SelectValue>
+              </SelectTrigger>
+
+              <SelectContent />
+            </Select>
+          </div>
+        </div>
+      </Show>
     </div>
   );
 }
@@ -485,7 +569,7 @@ function ColumnOptionsFields(props: {
           props.onChange(setNotNull(props.value, !current));
         }}
       >
-        <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+        <Label class="text-right leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
           NOT NULL
         </Label>
 
@@ -509,7 +593,7 @@ function ColumnOptionsFields(props: {
             );
           }}
         >
-          <Label class="text-right text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          <Label class="text-right leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
             UNIQUE {getUnique(props.value)?.is_primary && "(PRIMARY KEY)"}
           </Label>
 
@@ -614,7 +698,7 @@ export function ColumnSubForm(props: {
 
         <Collapsible.Content class="collapsible__content">
           <CardContent>
-            <div class="flex flex-col gap-2 py-1">
+            <div class="flex flex-col gap-2 py-1 text-sm">
               {/* Column presets */}
               <div
                 class={cn("grid items-center", gapStyle)}
@@ -1025,6 +1109,14 @@ const presets: [string, (colName: string) => Column][] = [
     },
   ],
 ];
+
+const referentialActions: ReferentialAction[] = [
+  "Restrict",
+  "Cascade",
+  "SetNull",
+  "NoAction",
+  "SetDefault",
+] as const;
 
 const customCheckBoxStyle = "flex items-center justify-end py-1 gap-2";
 const transitionTimingFunc = "cubic-bezier(.87,0,.13,1)";
