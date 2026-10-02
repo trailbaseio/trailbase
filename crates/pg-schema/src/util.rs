@@ -1,6 +1,6 @@
 #[cfg(test)]
 pub async fn test_connection() -> (
-  oliphaunt_wasix::OliphauntServer,
+  std::sync::Arc<parking_lot::Mutex<Option<oliphaunt_wasix::OliphauntServer>>>,
   trailbase_sqlite::Connection,
 ) {
   let temp_dir = tempfile::TempDir::new().unwrap();
@@ -14,6 +14,18 @@ pub async fn test_connection() -> (
   let pg_uri = format!(
     "postgresql://postgres@/template1?host={}",
     temp_dir.path().to_string_lossy()
+  );
+
+  let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
+  trailbase_sqlite::test_util::start_watchdog(
+    &db,
+    |db| {
+      log::info!("shutting down pglite");
+      if let Some(mut db) = db.lock().take() {
+        db.close().unwrap();
+      }
+    },
+    std::time::Duration::from_mins(8),
   );
 
   return (

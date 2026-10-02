@@ -17,6 +17,7 @@ mod params;
 mod rows;
 pub mod sqlite;
 mod statement;
+pub mod test_util;
 pub mod to_sql;
 pub mod traits;
 mod r#type;

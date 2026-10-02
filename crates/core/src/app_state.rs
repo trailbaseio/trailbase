@@ -737,15 +737,12 @@ mod test_utils {
       let db = Arc::new(parking_lot::Mutex::new(Some(db)));
 
       // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
-      start_watchdog(
+      trailbase_sqlite::test_util::start_watchdog(
         &db,
         |db| {
           if let Some(mut db) = db.lock().take() {
             info!("shutting down pglite");
             db.close().unwrap();
-
-            // Give the test a chance to terminate.
-            std::thread::sleep(std::time::Duration::from_secs(15));
           } else {
             info!("pglite already consumed");
           }
@@ -863,49 +860,6 @@ pub(crate) fn validate_path(path: Option<&PathBuf>) -> Result<(), InitError> {
     return Err(InitError::CustomInit(format!("Path not found: {path:?}")));
   }
   return Ok(());
-}
-
-#[cfg(feature = "pg-test")]
-pub fn start_watchdog<T: Send + Sync + 'static>(
-  resource: &Arc<T>,
-  cb: impl FnOnce(&T) + Send + Sync + 'static,
-  timeout: std::time::Duration,
-) {
-  use std::sync::OnceLock;
-  use std::thread::{JoinHandle, sleep};
-  use std::time::{Duration, SystemTime};
-
-  let resource = Arc::downgrade(&resource);
-  let _handle = tokio::runtime::Handle::current();
-
-  let watcher = move || {
-    debug!("WATCHDOG: started");
-
-    let started = SystemTime::now();
-    loop {
-      let elapsed = SystemTime::now()
-        .duration_since(started)
-        .unwrap_or_default();
-
-      if elapsed >= timeout {
-        error!("WATCHDOG: expired");
-
-        if let Some(resource) = resource.upgrade() {
-          cb(&resource);
-        } else {
-          info!("WATCHDOG: resource already dropped");
-        }
-
-        error!("WATCHDOG: terminating process");
-        std::process::exit(42);
-      }
-
-      sleep(Duration::from_mins(1));
-    }
-  };
-
-  static WATCHDOG_THREAD: OnceLock<JoinHandle<()>> = OnceLock::new();
-  WATCHDOG_THREAD.get_or_init(|| std::thread::spawn(watcher));
 }
 
 #[cfg(test)]

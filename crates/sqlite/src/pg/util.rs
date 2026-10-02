@@ -238,7 +238,7 @@ mod tests {
   use super::*;
 
   #[test]
-  fn pg_statement_test() {
+  fn postgres_statement_test() {
     let (sql, params) = PgStatement::new("INSERT INTO 'table' (col) VALUES (?1), (?1)")
       .unwrap()
       .bind(("foo",))
@@ -275,8 +275,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_execute_batch_test() {
-    let (_db, exec) = crate::pg::executor::build_pg_test_executor().unwrap();
+  async fn postgres_execute_batch_test() {
+    let (_db, exec) = crate::pg::executor::build_postgres_test_executor().unwrap();
 
     assert_eq!(
       5,

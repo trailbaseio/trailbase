@@ -41,7 +41,7 @@ fn start_pg() -> PgSetup {
   let db = Arc::new(parking_lot::Mutex::new(Some(db)));
 
   // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
-  trailbase::app_state::start_watchdog(
+  trailbase_sqlite::test_util::start_watchdog(
     &db,
     |db| {
       if let Some(mut db) = db.lock().take() {

@@ -237,19 +237,39 @@ fn event_loop(
 }
 
 #[cfg(test)]
-pub fn build_pg_test_executor() -> Result<(oliphaunt_wasix::OliphauntServer, Executor), Error> {
+pub fn build_postgres_test_executor() -> Result<
+  (
+    Arc<parking_lot::Mutex<Option<oliphaunt_wasix::OliphauntServer>>>,
+    Executor,
+  ),
+  Error,
+> {
   use postgres::{Client, NoTls};
 
-  let tmp_dir = tempfile::TempDir::new().unwrap();
+  // let tmp_dir = tempfile::TempDir::new().unwrap();
+  // let db = oliphaunt_wasix::OliphauntServer::builder()
+  //   .listen(oliphaunt_wasix::ServerListen::unix(tmp_dir.path()))
+  //   .start()
+  //   .map_err(|err| Error::Other(err.into()))?;
+  // let pg_uri = format!(
+  //   "postgresql://postgres@/template1?host={}",
+  //   tmp_dir.path().to_string_lossy()
+  // );
 
-  let db = oliphaunt_wasix::OliphauntServer::builder()
-    .listen(oliphaunt_wasix::ServerListen::unix(tmp_dir.path()))
-    .start()
-    .map_err(|err| Error::Other(err.into()))?;
+  let db = oliphaunt_wasix::OliphauntServer::builder().start().unwrap();
+  let pg_uri = db.connection_string().to_string();
+  log::debug!("Started PgLite: {pg_uri}");
 
-  let pg_uri = format!(
-    "postgresql://postgres@/template1?host={}",
-    tmp_dir.path().to_string_lossy()
+  let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
+  crate::test_util::start_watchdog(
+    &db,
+    |db| {
+      log::info!("shutting down pglite");
+      if let Some(mut db) = db.lock().take() {
+        db.close().unwrap();
+      }
+    },
+    std::time::Duration::from_mins(8),
   );
 
   return Ok((
@@ -272,8 +292,8 @@ mod tests {
   use crate::named_params;
 
   #[tokio::test]
-  async fn pg_poc_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_basic_executor_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
     assert_eq!(1, exec.threads());
@@ -322,8 +342,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_poc_named_parameter_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_named_parameter_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
     assert_eq!(1, exec.threads());

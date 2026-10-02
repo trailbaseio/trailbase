@@ -698,12 +698,12 @@ mod tests {
   use serde::Deserialize;
 
   use super::*;
-  use crate::pg::executor::build_pg_test_executor;
+  use crate::pg::executor::build_postgres_test_executor;
   use crate::{named_params, params};
 
   #[tokio::test]
-  async fn generic_pg_poc_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn simple_postgres_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
@@ -771,10 +771,22 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn generic_connection_w_pg_test() {
+  async fn generic_connection_w_postgres_test() {
     let db = OliphauntServer::builder().start().unwrap();
     let pg_uri = db.connection_string().to_string();
-    println!("Started PgLite: {pg_uri}");
+    log::debug!("Started PgLite: {pg_uri}");
+
+    let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
+    crate::test_util::start_watchdog(
+      &db,
+      |db| {
+        log::info!("shutting down pglite");
+        if let Some(mut db) = db.lock().take() {
+          db.close().unwrap();
+        }
+      },
+      std::time::Duration::from_mins(8),
+    );
 
     let conn = Connection::pg_with_opts(PgOptions {
       connection: PgConnection::Uri(pg_uri),
@@ -836,10 +848,22 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn generic_connection_w_pg_create_simple_table_test() {
+  async fn generic_connection_w_postgres_create_simple_table_test() {
     let db = OliphauntServer::builder().start().unwrap();
     let pg_uri = db.connection_string().to_string();
-    println!("Started PgLite: {pg_uri}");
+    log::debug!("Started PgLite: {pg_uri}");
+
+    let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
+    crate::test_util::start_watchdog(
+      &db,
+      |db| {
+        log::info!("shutting down pglite");
+        if let Some(mut db) = db.lock().take() {
+          db.close().unwrap();
+        }
+      },
+      std::time::Duration::from_mins(8),
+    );
 
     let conn = Connection::pg_with_opts(PgOptions {
       connection: PgConnection::Uri(pg_uri),
@@ -877,10 +901,22 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn generic_connection_w_pg_create_more_complex_table_test() {
+  async fn generic_connection_w_postgres_create_more_complex_table_test() {
     let db = OliphauntServer::builder().start().unwrap();
     let pg_uri = db.connection_string().to_string();
-    println!("Started PgLite: {pg_uri}");
+    log::debug!("Started PgLite: {pg_uri}");
+
+    let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
+    crate::test_util::start_watchdog(
+      &db,
+      |db| {
+        log::info!("shutting down pglite");
+        if let Some(mut db) = db.lock().take() {
+          db.close().unwrap();
+        }
+      },
+      std::time::Duration::from_mins(8),
+    );
 
     let conn = Connection::pg_with_opts(PgOptions {
       connection: PgConnection::Uri(pg_uri),
@@ -1040,8 +1076,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_lite_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_lite_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     {
@@ -1064,8 +1100,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_int_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_int_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     conn
@@ -1109,8 +1145,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_float_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_float_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     conn
@@ -1151,8 +1187,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_uuids_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_uuids_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     let uuid: Vec<u8> = conn
@@ -1211,8 +1247,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_json_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_json_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     conn
@@ -1256,8 +1292,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_tid_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_tid_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     conn
@@ -1294,8 +1330,8 @@ mod tests {
   }
 
   #[tokio::test]
-  async fn pg_trigger_test() {
-    let (_db, exec) = build_pg_test_executor().unwrap();
+  async fn postgres_trigger_test() {
+    let (_db, exec) = build_postgres_test_executor().unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     let column_name = "test";
