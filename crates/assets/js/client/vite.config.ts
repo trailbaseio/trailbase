@@ -2,16 +2,6 @@ import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
 import { resolve } from "path";
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function external(
-  source: string,
-  _importer: string | undefined,
-  _isResolved: boolean,
-): boolean {
-  console.log(source);
-  return source.startsWith("../bindings");
-}
-
 export default defineConfig({
   build: {
     outDir: "./dist",
@@ -30,6 +20,8 @@ export default defineConfig({
       // staticImport: true,
       // insertTypesEntry: true,
       bundleTypes: true,
+      // Do not include type-declarations in ./tests/.
+      include: ["src/*"],
     }),
   ],
 });

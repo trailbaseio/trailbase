@@ -5,8 +5,6 @@ import { isDev, jsonContentTypeHeader } from "./constants.ts";
 import { parseJSON } from "./json.ts";
 import { Client } from "./client.ts";
 
-import type { JsonValue } from "@bindings/serde_json/JsonValue";
-import type { Operation } from "@bindings/Operation";
 import type { WsProtocol } from "@bindings/WsProtocol";
 
 export interface FileUpload {
@@ -158,11 +156,11 @@ export class CreateOperation<
     return parseJSON(await response.text()).ids[0];
   }
 
-  protected toJSON(): Operation {
+  protected toJSON() {
     return {
       Create: {
         api_name: this.apiName,
-        value: this.record as JsonValue,
+        value: this.record,
       },
     };
   }
@@ -185,12 +183,12 @@ export class UpdateOperation<
     });
   }
 
-  protected toJSON(): Operation {
+  protected toJSON() {
     return {
       Update: {
         api_name: this.apiName,
         record_id: this.id.toString(),
-        value: this.record as JsonValue,
+        value: this.record,
       },
     };
   }
@@ -208,7 +206,7 @@ export class DeleteOperation implements DeferredMutation<void> {
     });
   }
 
-  protected toJSON(): Operation {
+  protected toJSON() {
     return {
       Delete: {
         api_name: this.apiName,

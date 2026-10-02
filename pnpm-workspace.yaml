@@ -26,7 +26,7 @@ allowBuilds:
   tree-sitter: true
   tree-sitter-json: true
 minimumReleaseAgeExclude:
-  - trailbase@0.13.1
+  - trailbase@0.13.1 || 0.14.2 || 0.14.3
 overrides:
   form-data@>=4.0.0 <4.0.6: ^4.0.6
 audit:

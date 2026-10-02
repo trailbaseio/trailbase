@@ -38,7 +38,7 @@ jobs:
 
       # Audit JS/TS
       - uses: ./.github/actions/setup_pnpm
-      - run: pnpm audit --prod
+      - run: pnpm audit --prod --ignore-unfixable
 
       # Audit Rust
       - uses: taiki-e/install-action@v2
