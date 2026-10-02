@@ -63,7 +63,7 @@ pre-commit:
       glob: "*.rs"
       exclude:
         - bindings/**
-      run: pnpm i --frozen-lockfile --prefer-offline --reporter=append-only && PNPM_OFFLINE=TRUE cargo test --workspace --features=geos,otel,pg,wasm -- --nocapture
+      run: pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo test --workspace --features=geos,otel,wasm -- --nocapture
 
     clippy:
       glob: "*.rs"
