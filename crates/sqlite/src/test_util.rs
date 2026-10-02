@@ -8,7 +8,7 @@ pub fn start_watchdog<T: Send + Sync + 'static>(
   cb: impl FnOnce(&T) + Send + Sync + 'static,
   timeout: std::time::Duration,
 ) {
-  let resource = Arc::downgrade(&resource);
+  let resource = Arc::downgrade(resource);
 
   let watcher = move || {
     debug!("WATCHDOG: started");

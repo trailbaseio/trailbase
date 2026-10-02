@@ -2323,15 +2323,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dtor"
-version = "1.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd3f6c362b2bbd7063090886afd78978f5dbf1f11da7efcc40f81d32c943fac1"
-dependencies = [
- "linktime-proc-macro",
-]
-
-[[package]]
 name = "dunce"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4441,12 +4432,6 @@ checksum = "984fb35d06508d1e69fc91050cceba9c0b748f983e6739fa2c7a9237154c52c8"
 dependencies = [
  "linked-hash-map",
 ]
-
-[[package]]
-name = "linktime-proc-macro"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e57c38c1e860fd37c604281cdfb1dd2216977fd76a50f85ba2f388ef3219616"
 
 [[package]]
 name = "linux-raw-sys"
@@ -7481,31 +7466,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serial_test"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6df5ed973ad8d834e09f824f9e9f449af6b9a3745f78dec7cc752770bd3bf11"
-dependencies = [
- "futures-executor",
- "futures-util",
- "log",
- "once_cell",
- "parking_lot",
- "serial_test_derive",
-]
-
-[[package]]
-name = "serial_test_derive"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a22144e767da4ddd8416dbf383700542ffd8a5dc493dfecedfe1fe3ad03c98ae"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.6",
-]
-
-[[package]]
 name = "sha1"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8845,7 +8805,6 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "bytes",
- "dtor",
  "env_logger",
  "eventsource-stream",
  "futures-lite 2.6.1",
@@ -8853,7 +8812,7 @@ dependencies = [
  "http",
  "http-body-util",
  "jsonwebtoken",
- "lazy_static",
+ "libtest-mimic",
  "log",
  "parking_lot",
  "reqwest 0.13.5",
@@ -8862,7 +8821,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
- "serial_test",
  "temp-dir",
  "thiserror 2.0.21",
  "tokio",

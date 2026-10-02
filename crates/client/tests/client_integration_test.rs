@@ -1,165 +1,95 @@
-use parking_lot::Mutex;
-use std::assert_matches;
-use std::os::unix::process::CommandExt;
-use std::sync::LazyLock;
+mod server;
+
+use libtest_mimic::{Arguments, Failed, Trial};
+use std::{assert_matches, time::Duration};
 
 use base64::prelude::*;
 use futures_lite::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use serial_test::serial;
 use temp_dir::TempDir;
 use trailbase_client::{
   Client, CompareOp, Error, EventPayload, Filter, ListArguments, ListResponse, OperationResult,
   Pagination, ReadArguments, StatusCode,
 };
 
-struct Server {
-  child: Option<std::process::Child>,
-}
+use server::{site, start_server};
 
-impl Drop for Server {
-  fn drop(&mut self) {
-    if let Some(mut child) = std::mem::take(&mut self.child) {
-      child.kill().unwrap();
-    }
-  }
-}
-
-fn port() -> u16 {
-  const DEFAULT_PORT: u16 = 4057;
-  if let Ok(port) = std::env::var("PORT") {
-    return port.parse().unwrap_or(DEFAULT_PORT);
-  }
-  return DEFAULT_PORT;
-}
-
-fn site() -> String {
-  return format!("http://127.0.0.1:{}", port());
-}
-
-fn start_server() -> Result<Option<Server>, std::io::Error> {
-  let mut child = if port() == 4000 {
-    // Use an externally bootstrapped server.
-    None
-  } else {
-    let cwd = std::env::current_dir()?;
-    assert!(cwd.ends_with("client"));
-
-    let command_cwd = cwd.parent().unwrap().parent().unwrap();
-    let depot_path = "client/testfixture";
-
-    log::info!("Building dev server... (cold builds may take a while)");
-    let _output = std::process::Command::new("cargo")
-      .args(&[
-        "build",
-        #[cfg(feature = "ws")]
-        {
-          "--features=ws"
-        },
-      ])
-      .current_dir(&command_cwd)
-      .output()?;
-
-    log::info!("Starting the dev server...");
-    let args = [
-      "run".to_string(),
-      #[cfg(feature = "ws")]
-      {
-        "--features=ws".to_string()
-      },
-      "--".to_string(),
-      format!("--data-dir={depot_path}"),
-      "run".to_string(),
-      format!("--address=127.0.0.1:{}", port()),
-      "--runtime-threads=2".to_string(),
-    ];
-
-    let mut run_command = std::process::Command::new("cargo");
-
-    #[cfg(target_os = "linux")]
-    unsafe {
-      run_command.pre_exec(|| {
-        use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
-
-        let current_limits = getrlimit(Resource::Nofile);
-        eprintln!("Current process limits: {current_limits:?}");
-
-        if let Err(err) = setrlimit(
-          Resource::Nofile,
-          Rlimit {
-            // Soft limit.
-            current: Some(current_limits.maximum.unwrap_or(1024).min(2048)),
-            // Hard limit. Don't use None, which implies infinite.
-            maximum: current_limits.maximum,
-          },
-        ) {
-          eprintln!("ERROR: Failed to raise OPEN FILE LIMIT: {err}");
-        }
-
-        return Ok(());
-      });
-    }
-
-    Some(run_command.args(&args).current_dir(&command_cwd).spawn()?)
-  };
-
-  // Wait for server to become healthy.
-  let runtime = tokio::runtime::Builder::new_current_thread()
-    .enable_all()
-    .build()
-    .unwrap();
-
-  runtime.block_on(async {
-    let client = reqwest::Client::new();
-    let url = format!("{site}/api/healthcheck", site = site());
-
-    for _ in 0..200 {
-      if let Some(child) = &mut child
-        && let Ok(Some(status)) = child.try_wait()
-      {
-        panic!(
-          "Test server already exited with {status}. Maybe other server running at same port?"
-        );
-      }
-
-      let response = client.get(&url).send().await;
-
-      if let Ok(response) = response {
-        if let Ok(body) = response.text().await {
-          if body.to_uppercase() == "OK" {
-            println!("Server found healthy @{}", site());
-            return;
-          }
-        }
-      }
-
-      tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-    }
-
-    panic!("Server did not get healthy");
-  });
-
-  return Ok(Some(Server { child }));
-}
-
-static SERVER: LazyLock<Mutex<Option<Server>>> = LazyLock::new(|| Mutex::new(None));
-
-#[ctor::ctor(unsafe)]
-fn before_all_tests() {
+fn main() {
   env_logger::Builder::from_env(
     env_logger::Env::new().default_filter_or("info,trailbase_refinery=warn,tracing::span=warn"),
   )
   .format_timestamp_micros()
   .init();
 
-  *SERVER.lock() = start_server().unwrap();
+  let mut args = Arguments::from_args();
+  if let Some(test_threads) = &args.test_threads
+    && *test_threads != 1
+  {
+    log::warn!("ignoring --test-threads={test_threads}");
+  }
+  args.test_threads = Some(1);
+
+  let server = if !args.list {
+    let rt = tokio::runtime::Builder::new_current_thread()
+      .enable_all()
+      .build()
+      .unwrap();
+
+    Some(rt.block_on(async {
+      return start_server(Duration::from_mins(10)).await;
+    }))
+  } else {
+    None
+  };
+
+  let tests = vec![
+    Trial::test("login_test", || block_on(login_test())),
+    Trial::test("login_flood_test", || Ok(login_flood_test())),
+    Trial::test("register_test", || block_on(register_test())),
+    Trial::test("login_anonymous_test", || block_on(login_anonymous_test())),
+    Trial::test("login_otp_test", || block_on(login_otp_test())),
+    Trial::test("login_multi_factor_test", || {
+      block_on(login_multi_factor_test())
+    }),
+    Trial::test("record_test", || block_on(records_test())),
+    Trial::test("transaction_test", || block_on(transaction_test())),
+    Trial::test("expand_foreign_records_test", || {
+      block_on(expand_foreign_records_test())
+    }),
+    Trial::test("custom_json_column_test", || {
+      block_on(custom_json_column_test())
+    }),
+    Trial::test("subscription_test", || block_on(subscription_test())),
+    Trial::test("subscription_performance_test", || {
+      block_on(subscription_performance_test())
+    }),
+    #[cfg(feature = "ws")]
+    Trial::test("subscription_ws_test", || block_on(subscription_ws_test())),
+    Trial::test("file_upload_json_base64_test", || {
+      block_on(file_upload_json_base64_test())
+    }),
+    Trial::test("file_upload_multipart_form_test", || {
+      block_on(file_upload_multipart_form_test())
+    }),
+  ];
+
+  let conclusion = libtest_mimic::run(&args, tests);
+
+  drop(server);
+
+  conclusion.exit();
 }
 
-#[dtor::dtor(unsafe)]
-fn after_all_tests() {
-  let server = std::mem::take(&mut *SERVER.lock());
-  drop(server);
+fn block_on<F: std::future::Future<Output = ()>>(fut: F) -> Result<(), Failed> {
+  let rt = tokio::runtime::Builder::new_current_thread()
+    .enable_all()
+    .build()
+    .unwrap();
+
+  rt.block_on(async { fut });
+
+  return Ok(());
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -215,8 +145,6 @@ async fn connect() -> Client {
   return client;
 }
 
-#[tokio::test]
-#[serial]
 async fn login_test() {
   let client = connect().await;
 
@@ -237,8 +165,6 @@ async fn login_test() {
   client.refresh().await.unwrap();
 }
 
-#[test]
-#[serial]
 fn login_flood_test() {
   use reqwest::Client;
   use reqwest::header::{self, HeaderValue};
@@ -259,8 +185,11 @@ fn login_flood_test() {
 
   let url = url::Url::parse(&format!("{}/api/auth/v1/login", site())).unwrap();
 
-  let threads: usize = std::thread::available_parallelism().map_or(2, |n| n.into());
-  let join_handles = (0..8 * threads).map(|_| {
+  let parallelism: usize = std::thread::available_parallelism().map_or(2, |n| n.into());
+  let threads = parallelism * 2;
+
+  log::info!("spawning {threads} login threads");
+  let join_handles = (0..threads).map(|_| {
     let client = client.clone();
     let url = url.clone();
 
@@ -301,8 +230,6 @@ fn login_flood_test() {
     .collect();
 }
 
-#[tokio::test]
-#[serial]
 async fn register_test() {
   let client = Client::new(&*site(), None).unwrap();
 
@@ -328,8 +255,6 @@ async fn register_test() {
   );
 }
 
-#[tokio::test]
-#[serial]
 async fn login_anonymous_test() {
   let client = Client::new(&*site(), None).unwrap();
 
@@ -348,20 +273,16 @@ async fn login_anonymous_test() {
     .unwrap();
 }
 
-#[tokio::test]
-#[serial]
 async fn login_otp_test() {
-  let client = Client::new(&*site(), None).unwrap();
+  let client = Client::new(&*server::site(), None).unwrap();
 
   // NOTE: Since we don't have access to the sent emails, we just make sure the endpoint
   // responds ok even for invalid users.
   client.request_otp("fake0@localhost").await.unwrap();
 }
 
-#[tokio::test]
-#[serial]
 async fn login_multi_factor_test() {
-  let client = Client::new(&*site(), None).unwrap();
+  let client = Client::new(&*server::site(), None).unwrap();
   let Some(mfa_token) = client.login("alice@trailbase.io", "secret").await.unwrap() else {
     panic!("expected multi-factor token");
   };
@@ -395,8 +316,6 @@ async fn login_multi_factor_test() {
   );
 }
 
-#[tokio::test]
-#[serial]
 async fn records_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -548,8 +467,6 @@ async fn records_test() {
   }
 }
 
-#[tokio::test]
-#[serial]
 async fn transaction_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -610,8 +527,6 @@ async fn transaction_test() {
   }
 }
 
-#[tokio::test]
-#[serial]
 async fn expand_foreign_records_test() {
   let client = connect().await;
   let api = client.records("comment");
@@ -685,8 +600,6 @@ struct SimpleSchema {
   data: SimpleSchemaDataColumn,
 }
 
-#[tokio::test]
-#[serial]
 async fn custom_json_column_test() {
   let client = connect().await;
   let api = client.records("simple_schema_table");
@@ -733,8 +646,6 @@ async fn custom_json_column_test() {
     .unwrap();
 }
 
-#[tokio::test]
-#[serial]
 async fn subscription_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -809,8 +720,6 @@ async fn subscription_test() {
   }
 }
 
-#[tokio::test]
-#[serial]
 async fn subscription_performance_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -883,8 +792,6 @@ async fn subscription_performance_test() {
 }
 
 #[cfg(feature = "ws")]
-#[tokio::test]
-#[serial]
 async fn subscription_ws_test() {
   let client = connect().await;
   let api = client.records("simple_strict_table");
@@ -982,8 +889,6 @@ struct FileUploadTable {
   multiple_files: Vec<FileUpload>,
 }
 
-#[tokio::test]
-#[serial]
 async fn file_upload_json_base64_test() {
   let client = connect().await;
   let api = client.records("file_upload_table");
@@ -1103,8 +1008,6 @@ async fn file_upload_json_base64_test() {
   api.delete(&record_id).await.unwrap();
 }
 
-#[tokio::test]
-#[serial]
 async fn file_upload_multipart_form_test() {
   let d = TempDir::new().unwrap();
   let f = d.child("test.text");
