@@ -1,3 +1,11 @@
+## v0.34.3
+
+- Add referential actions to table editor, i.e. set `ON (DELETE|UPDATE)` action on foreign-key references.
+- Fix WASM call timeout for long-running custom jobs. @jimmydjabali 🙏
+- Add an `audit` CI workflow to vet Rust and JS dependencies. @0rzech 🙏
+- Internal: migrate from `pre-commit` to `lefthook` and improve CI/testing setup to hopefully get ahead of current infra timeouts. The `pglite` integration is still flailing.
+- Update Rust and JavaScript dependencies.
+
 ## v0.34.2
 
 - Push expensive password hashing off the async runtime and add an explicit timeout of 5s.
