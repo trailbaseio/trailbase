@@ -1108,6 +1108,22 @@ const presets: [string, (colName: string) => Column][] = [
       };
     },
   ],
+  [
+    "Boolean",
+    (colName: string) => {
+      return {
+        name: colName,
+        ...typeNameAndAffinityType("Integer"),
+        options: [
+          {
+            Check: `${colName} IN (0, 1)`,
+          },
+          { Default: "0" },
+          "NotNull",
+        ],
+      };
+    },
+  ],
 ];
 
 const referentialActions: ReferentialAction[] = [
