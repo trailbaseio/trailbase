@@ -62,11 +62,10 @@ class ClientTest {
   fun setUpAll() {
     val workingDirectory: Path = Paths.get("").toAbsolutePath().parent
     assertEquals("kotlin", workingDirectory.name)
-    // Depot path relative to working directory.
-    val depotPath = "../testfixture"
 
+    // Paths relative to working directory.
     val result =
-            ProcessBuilder("cargo", "build")
+            ProcessBuilder("python3", "../runner.py", "build")
                     .directory(workingDirectory.toFile())
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT)
                     .redirectError(ProcessBuilder.Redirect.INHERIT)
@@ -78,12 +77,10 @@ class ClientTest {
 
     process =
             ProcessBuilder(
-                            "cargo",
+                            "python3",
+                            "../runner.py",
                             "run",
-                            "--",
-                            "--data-dir=${depotPath}",
-                            "run",
-                            "--address=${address}",
+                            "--port=${port}",
                             "--runtime-threads=2"
                     )
                     .directory(workingDirectory.toFile())

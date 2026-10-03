@@ -5,7 +5,7 @@ import type { ChildProcess } from "node:child_process";
 import { resolve } from "node:path";
 import spawn from "nano-spawn";
 
-import { serverAddress, serverPort, envVarSet } from "./util";
+import { envVarSet, serverAddress, serverPort } from "./util";
 
 const useWebSocket = envVarSet("USE_WS");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -26,25 +26,26 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
     throw new Error(root);
   }
 
-  const features = useWebSocket ? ["--features=ws"] : [];
-  await spawn("cargo", ["build", ...features], { cwd: root });
-
-  const args = [
-    "run",
-    ...features,
-    "--",
-    "--data-dir=client/testfixture",
-    `--public-url=http://${serverAddress()}`,
-    "run",
-    `--address=${serverAddress()}`,
-    "--runtime-threads=1",
-  ];
-
-  const subprocess = spawn("cargo", args, {
+  const features = useWebSocket ? ["--ws"] : [];
+  await spawn("python3", ["client/runner.py", "build", ...features], {
     cwd: root,
-    stdout: process.stdout,
-    stderr: process.stdout,
   });
+
+  const subprocess = spawn(
+    "python3",
+    [
+      "client/runner.py",
+      "run",
+      ...features,
+      `--port=${serverPort()}`,
+      "--runtime-threads=1",
+    ],
+    {
+      cwd: root,
+      stdout: process.stdout,
+      stderr: process.stdout,
+    },
+  );
 
   // NOTE: debug builds of trail loading JS-WASM can take a long time.
   for (let i = 0; i < 300; ++i) {

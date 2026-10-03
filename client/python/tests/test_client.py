@@ -39,25 +39,20 @@ class TrailBaseFixture:
 
     def __init__(self) -> None:
         cwd = os.getcwd()
-        traildepot = "../testfixture" if cwd.endswith("python") else "client/testfixture"
+        prefix = ".." if cwd.endswith("python") else "./client"
 
         logger.info("Building TrailBase")
-        build = subprocess.run(["cargo", "build"])
+        build = subprocess.run(["python3", f"{prefix}/runner.py", "build"])
         assert build.returncode == 0, f"{build.stderr}"
 
         logger.info("Starting TrailBase")
         self.process = subprocess.Popen(
             [
-                "cargo",
+                "python3",
+                f"{prefix}/runner.py",
                 "run",
-                "--",
-                "--data-dir",
-                traildepot,
-                "run",
-                "-a",
-                address,
-                "--runtime-threads",
-                "1",
+                f"--port={port}",
+                "--runtime-threads=1",
             ]
         )
 

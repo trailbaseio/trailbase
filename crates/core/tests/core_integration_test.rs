@@ -75,8 +75,8 @@ async fn lifecycle_record_api_and_logs_integration_tests() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
   let pg_setup: Option<PgSetup> = cfg_select! {
-      feature = "pg-test" => Some(start_pg()),
-      _ => None,
+    feature = "pg-test" => Some(start_pg()),
+    _ => None,
   };
 
   let Server {

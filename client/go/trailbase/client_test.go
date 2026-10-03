@@ -42,21 +42,19 @@ func startTrailBase() (*exec.Cmd, error) {
 	}
 
 	// First build separately to avoid health timeouts.
-	err = buildCommand("cargo", cwd, "build").Run()
+	err = buildCommand("python3", cwd, "client/runner.py", "build").Run()
 	if err != nil {
 		return nil, err
 	}
 
 	// Then start
 	args := []string{
+		"client/runner.py",
 		"run",
-		"--",
-		fmt.Sprint("--data-dir=", traildepot),
-		"run",
-		fmt.Sprintf("--address=127.0.0.1:%d", PORT),
+		fmt.Sprintf("--port=%d", PORT),
 		"--runtime-threads=2",
 	}
-	cmd := buildCommand("cargo", cwd, args...)
+	cmd := buildCommand("python3", cwd, args...)
 	cmd.Start()
 
 	for i := range 100 {

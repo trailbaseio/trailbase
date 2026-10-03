@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:trailbase/src/operations.dart';
@@ -164,22 +163,16 @@ Future<Client> connect() async {
 }
 
 Future<Process> initTrailBase() async {
-  final result = await Process.run('cargo', ['build'],
-      stdoutEncoding: utf8, stderrEncoding: utf8);
+  final result = await Process.run('python3', ['../runner.py', 'build']);
   if (result.exitCode > 0) {
     throw Exception(
         'Cargo build failed.\n\nstdout: ${result.stdout}\n\nstderr: ${result.stderr}\n');
   }
 
-  // Relative to CWD.
-  const depotPath = '../testfixture';
-
-  final process = await Process.start('cargo', [
+  final process = await Process.start('python3', [
+    '../runner.py',
     'run',
-    '--',
-    '--data-dir=${depotPath}',
-    'run',
-    '--address=${address}',
+    '--port=${port}',
     // We want at least some parallelism to experience isolate-local state.
     '--runtime-threads=2',
   ]);

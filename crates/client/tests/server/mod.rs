@@ -37,32 +37,30 @@ pub async fn start_server(timeout: Duration) -> Result<Option<Server>, std::io::
     let depot_path = "client/testfixture";
 
     log::info!("Building dev server... (cold builds may take a while)");
-    let _output = std::process::Command::new("cargo")
+    let _output = std::process::Command::new("python3")
       .args(&[
+        "client/runner.py",
         "build",
         #[cfg(feature = "ws")]
         {
-          "--features=ws"
+          "--ws"
         },
       ])
       .current_dir(&command_cwd)
       .output()?;
 
     log::info!("Starting the dev server...");
+    let mut run_command = std::process::Command::new("python3");
     let args = [
+      "client/runner.py".to_string(),
       "run".to_string(),
       #[cfg(feature = "ws")]
       {
-        "--features=ws".to_string()
+        "--ws".to_string()
       },
-      "--".to_string(),
-      format!("--data-dir={depot_path}"),
-      "run".to_string(),
-      format!("--address=127.0.0.1:{}", port()),
+      format!("--port={}", port()),
       "--runtime-threads=2".to_string(),
     ];
-
-    let mut run_command = std::process::Command::new("cargo");
 
     #[cfg(target_os = "linux")]
     unsafe {

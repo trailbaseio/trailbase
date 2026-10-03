@@ -52,8 +52,8 @@ public class ClientTestFixture : IDisposable {
     Console.WriteLine($"Building TrailBase: {projectDirectory}");
     var buildProcess = new Process();
     buildProcess.StartInfo.WorkingDirectory = projectDirectory;
-    buildProcess.StartInfo.FileName = "cargo";
-    buildProcess.StartInfo.Arguments = "build";
+    buildProcess.StartInfo.FileName = "python3";
+    buildProcess.StartInfo.Arguments = "../../runner.py build";
     buildProcess.StartInfo.UseShellExecute = false;
     buildProcess.StartInfo.RedirectStandardOutput = true;
     buildProcess.Start();
@@ -67,8 +67,8 @@ public class ClientTestFixture : IDisposable {
 
     process = new Process();
     process.StartInfo.WorkingDirectory = projectDirectory;
-    process.StartInfo.FileName = "cargo";
-    process.StartInfo.Arguments = $"run -- --data-dir ../../testfixture run -a {address} --runtime-threads 2";
+    process.StartInfo.FileName = "python3";
+    process.StartInfo.Arguments = $"../../runner.py run --port={Constants.Port} --runtime-threads=2";
     process.StartInfo.UseShellExecute = false;
     process.StartInfo.RedirectStandardOutput = true;
     process.Start();
@@ -76,6 +76,8 @@ public class ClientTestFixture : IDisposable {
     var client = new HttpClient();
     Task.Run(async () => {
       for (int i = 0; i < 200; ++i) {
+        // TODO: Check process exist status and abort if already terminated.
+
         try {
           var response = await client.GetAsync($"http://{address}/api/healthcheck");
           if (response.StatusCode == System.Net.HttpStatusCode.OK) {

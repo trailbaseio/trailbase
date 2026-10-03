@@ -36,33 +36,29 @@ public enum StartupError: Error {
 
 func startTrailBase() async throws -> ProcessIdentifier {
   let cwd = FilePath("../../../")
-  let depotPath = "client/testfixture"
 
-  let traildepot = cwd.appending(depotPath).string
+  let traildepot = cwd.appending("client/testfixture").string
   if !FileManager.default.fileExists(atPath: traildepot) {
     throw StartupError.configNotFound(path: traildepot)
   }
 
   let build = try await Subprocess.run(
-    .name("cargo"), arguments: ["build"], workingDirectory: cwd, output: .string, error: .string
+    .name("python3"), arguments: ["client/runner.py", "build"], workingDirectory: cwd,
+    output: .string, error: .string
   )
 
   if !build.terminationStatus.isSuccess {
     throw StartupError.buildFailed(stdout: build.standardOutput, stderr: build.standardError)
   }
 
-  let arguments: Arguments = [
-    "run",
-    "--",
-    "--data-dir=\(depotPath)",
-    "run",
-    "--address=127.0.0.1:\(PORT)",
-    "--runtime-threads=2",
-  ]
-
   let process = try Subprocess.runDetached(
-    .name("cargo"),
-    arguments: arguments,
+    .name("python3"),
+    arguments: [
+      "client/runner.py",
+      "run",
+      "--port=\(PORT)",
+      "--runtime-threads=2",
+    ],
     workingDirectory: cwd,
     output: .standardOutput,
     error: .standardError,
