@@ -1,8 +1,10 @@
 import { adminFetch } from "@/lib/fetch";
 
-import type { ListBackupsResponse } from "@bindings/ListBackupsResponse";
-import type { DeleteBackupsRequest } from "@bindings/DeleteBackupsRequest";
-import type { RestoreBackupRequest } from "@bindings/RestoreBackupRequest";
+import type {
+  ListBackupsResponse,
+  DeleteBackupsRequest,
+  RestoreBackupRequest,
+} from "trailbase-bindings";
 
 export async function listBackups(): Promise<ListBackupsResponse> {
   const response = await adminFetch("/backups", {

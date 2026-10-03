@@ -1,0 +1,18 @@
+{
+  "name": "trailbase-bindings",
+  "version": "0.0.1",
+  "license": "Apache-2.0 OR OSL-3.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "barrelize && vite build"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^7.59.3",
+    "barrelize": "^1.9.2",
+    "typescript": "=6.0.3",
+    "vite": "^8.3.1",
+    "vite-plugin-dts": "^5.1.1"
+  }
+}

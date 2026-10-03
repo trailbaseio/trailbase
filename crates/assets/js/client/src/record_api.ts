@@ -5,7 +5,7 @@ import { isDev, jsonContentTypeHeader } from "./constants.ts";
 import { parseJSON } from "./json.ts";
 import { Client } from "./client.ts";
 
-import type { WsProtocol } from "@bindings/WsProtocol";
+import type { WsProtocol, Operation, JsonValue } from "trailbase-bindings";
 
 export interface FileUpload {
   content_type?: null | string;
@@ -156,11 +156,11 @@ export class CreateOperation<
     return parseJSON(await response.text()).ids[0];
   }
 
-  protected toJSON() {
+  protected toJSON(): Operation {
     return {
       Create: {
         api_name: this.apiName,
-        value: this.record,
+        value: this.record as JsonValue,
       },
     };
   }
@@ -183,12 +183,12 @@ export class UpdateOperation<
     });
   }
 
-  protected toJSON() {
+  protected toJSON(): Operation {
     return {
       Update: {
         api_name: this.apiName,
         record_id: this.id.toString(),
-        value: this.record,
+        value: this.record as JsonValue,
       },
     };
   }
@@ -206,7 +206,7 @@ export class DeleteOperation implements DeferredMutation<void> {
     });
   }
 
-  protected toJSON() {
+  protected toJSON(): Operation {
     return {
       Delete: {
         api_name: this.apiName,

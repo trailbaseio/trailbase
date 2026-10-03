@@ -21,10 +21,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-import { Column } from "@bindings/Column";
-import type { QualifiedName } from "@bindings/QualifiedName";
-import type { ReadFilesQuery } from "@bindings/ReadFilesQuery";
-import type { SqlValue } from "@bindings/SqlValue";
+import {
+  Column,
+  QualifiedName,
+  ReadFilesQuery,
+  SqlValue,
+} from "trailbase-bindings";
 
 export type FileUpload = {
   id: string;

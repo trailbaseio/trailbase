@@ -67,8 +67,7 @@ import { deleteUser, updateUser, fetchUsers } from "@/lib/api/user";
 import { copyToClipboard, safeParseInt } from "@/lib/utils";
 import { formatSortingAsOrder } from "@/lib/list";
 
-import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
-import type { UserJson } from "@bindings/UserJson";
+import type { UpdateUserRequest, UserJson } from "trailbase-bindings";
 
 function buildColumns(): ColumnDef<StockFeatures, UserJson>[] {
   // NOTE: the headers are lower-case to match the column names and don't confuse when trying to use the filter bar.

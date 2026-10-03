@@ -1,7 +1,6 @@
 import { adminFetch } from "@/lib/fetch";
 
-import type { MintRequest } from "@bindings/MintRequest";
-import type { LoginResponse } from "@bindings/LoginResponse";
+import type { MintRequest, LoginResponse } from "trailbase-bindings";
 
 export async function mintTokens(request: MintRequest): Promise<LoginResponse> {
   return (

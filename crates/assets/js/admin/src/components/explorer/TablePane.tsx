@@ -89,15 +89,17 @@ import {
   validateViewRecordApiRequirements,
 } from "@/lib/schema";
 
-import type { Column } from "@bindings/Column";
-import type { ColumnOption } from "@bindings/ColumnOption";
-import type { ListRowsResponse } from "@bindings/ListRowsResponse";
-import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
-import type { SqlValue } from "@bindings/SqlValue";
-import type { Table } from "@bindings/Table";
-import type { TableIndex } from "@bindings/TableIndex";
-import type { TableTrigger } from "@bindings/TableTrigger";
-import type { View } from "@bindings/View";
+import type {
+  Column,
+  ColumnOption,
+  ListRowsResponse,
+  ListSchemasResponse,
+  SqlValue,
+  Table,
+  TableIndex,
+  TableTrigger,
+  View,
+} from "trailbase-bindings";
 import { createWritableMemo } from "@solid-primitives/memo";
 
 type SimpleSignal<T> = [Accessor<T>, set: (state: T) => void];

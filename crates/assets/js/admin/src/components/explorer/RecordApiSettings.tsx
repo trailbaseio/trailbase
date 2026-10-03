@@ -81,10 +81,12 @@ import { client } from "@/lib/client";
 import { fromHex } from "@/lib/utils";
 import { escapeQualifiedName, equalQualifiedNames } from "@/lib/schema";
 
-import type { ForeignKey } from "@bindings/ForeignKey";
-import type { QualifiedName } from "@bindings/QualifiedName";
-import type { Table } from "@bindings/Table";
-import type { View } from "@bindings/View";
+import type {
+  ForeignKey,
+  QualifiedName,
+  Table,
+  View,
+} from "trailbase-bindings";
 
 const tablePermissions = {
   Create: PermissionFlag.CREATE,

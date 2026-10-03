@@ -16,24 +16,26 @@ import { DefaultTransport, Transport } from "./transport.ts";
 
 export type { Transport } from "./transport.ts";
 
-import type { ChangeEmailRequest } from "@bindings/ChangeEmailRequest";
-import type { ConfirmRegisterTotpRequest } from "@bindings/ConfirmRegisterTotpRequest";
-import type { DisableTotpRequest } from "@bindings/DisableTotpRequest";
-import type { LoginAnonymousRequest } from "@bindings/LoginAnonymousRequest";
-import type { LoginMfaRequest } from "@bindings/LoginMfaRequest";
-import type { LoginOtpRequest } from "@bindings/LoginOtpRequest";
-import type { LoginRequest } from "@bindings/LoginRequest";
-import type { LoginResponse } from "@bindings/LoginResponse";
-import type { LoginStatusResponse } from "@bindings/LoginStatusResponse";
-import type { LogoutRequest } from "@bindings/LogoutRequest";
-import type { MfaTokenResponse } from "@bindings/MfaTokenResponse";
-import type { PromoteAnonymousRequest } from "@bindings/PromoteAnonymousRequest";
-import type { RefreshRequest } from "@bindings/RefreshRequest";
-import type { RefreshResponse } from "@bindings/RefreshResponse";
-import type { RegisterTotpResponse } from "@bindings/RegisterTotpResponse";
-import type { RegisterUserRequest } from "@bindings/RegisterUserRequest";
-import type { RequestOtpRequest } from "@bindings/RequestOtpRequest";
-import type { TransactionResponse } from "@bindings/TransactionResponse";
+import type {
+  ChangeEmailRequest,
+  ConfirmRegisterTotpRequest,
+  DisableTotpRequest,
+  LoginAnonymousRequest,
+  LoginMfaRequest,
+  LoginOtpRequest,
+  LoginRequest,
+  LoginResponse,
+  LoginStatusResponse,
+  LogoutRequest,
+  MfaTokenResponse,
+  PromoteAnonymousRequest,
+  RefreshRequest,
+  RefreshResponse,
+  RegisterTotpResponse,
+  RegisterUserRequest,
+  RequestOtpRequest,
+  TransactionResponse,
+} from "trailbase-bindings";
 
 export type User = {
   id: string;

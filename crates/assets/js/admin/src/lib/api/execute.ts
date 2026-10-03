@@ -1,7 +1,6 @@
 import { adminFetch } from "@/lib/fetch";
 
-import type { QueryResponse } from "@bindings/QueryResponse";
-import type { QueryRequest } from "@bindings/QueryRequest";
+import type { QueryResponse, QueryRequest } from "trailbase-bindings";
 
 export type ExecutionError = {
   code: number;

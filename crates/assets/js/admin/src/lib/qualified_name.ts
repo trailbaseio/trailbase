@@ -1,4 +1,4 @@
-import type { QualifiedName } from "@bindings/QualifiedName";
+import type { QualifiedName } from "trailbase-bindings";
 
 /// Parse a qualified schema name like: `[db].name`.
 export function parseQualifiedName(input: string): QualifiedName {

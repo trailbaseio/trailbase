@@ -1,14 +1,16 @@
 import { assert, TypeEqualityGuard } from "@/lib/value";
 import { tryParseBigInt, tryParseFloat } from "@/lib/utils";
 
-import type { Column } from "@bindings/Column";
-import type { ColumnDataType } from "@bindings/ColumnDataType";
-import type { ColumnOption } from "@bindings/ColumnOption";
-import type { ConflictResolution } from "@bindings/ConflictResolution";
-import type { ReferentialAction } from "@bindings/ReferentialAction";
-import type { QualifiedName } from "@bindings/QualifiedName";
-import type { Table } from "@bindings/Table";
-import type { View } from "@bindings/View";
+import type {
+  Column,
+  ColumnDataType,
+  ColumnOption,
+  ConflictResolution,
+  ReferentialAction,
+  QualifiedName,
+  Table,
+  View,
+} from "trailbase-bindings";
 
 export function isNotNull(options: ColumnOption[]): boolean {
   return options.findIndex((o: ColumnOption) => o === "NotNull") >= 0;

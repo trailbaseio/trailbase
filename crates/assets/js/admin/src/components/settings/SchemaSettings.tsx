@@ -13,8 +13,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { adminFetch } from "@/lib/fetch";
 import { createSystemInfoQuery } from "@/lib/api/info";
 
-import type { ListJsonSchemasResponse } from "@bindings/ListJsonSchemasResponse";
-import type { JsonSchema } from "@bindings/JsonSchema";
+import type { ListJsonSchemasResponse, JsonSchema } from "trailbase-bindings";
 
 async function listSchemas(): Promise<ListJsonSchemasResponse> {
   const response = await adminFetch("/schema", {

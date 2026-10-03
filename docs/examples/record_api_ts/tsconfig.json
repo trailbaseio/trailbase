@@ -9,8 +9,7 @@
     "module": "ESNext",
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@bindings/*": ["../../../crates/assets/js/bindings/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src/**/*"],

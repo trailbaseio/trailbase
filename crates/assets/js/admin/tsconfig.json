@@ -17,7 +17,6 @@
     "paths": {
       "@/*": ["./src/*"],
       "@proto/*": ["./proto/*"],
-      "@bindings/*": ["../bindings/*"],
       "@templates/*": ["../../templates/*"],
       "@shared/*": ["../shared/*"]
     }

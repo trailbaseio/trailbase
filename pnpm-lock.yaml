@@ -211,6 +211,9 @@ importers:
       tailwindcss-animate:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.3.3)
+      trailbase-bindings:
+        specifier: file:../bindings
+        version: link:../bindings
       ts-proto:
         specifier: ^2.12.4
         version: 2.12.4
@@ -239,11 +242,26 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@26.6.3)(jsdom@30.1.1(@noble/hashes@2.4.0))(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
 
+  crates/assets/js/bindings:
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: ^7.59.3
+        version: 7.59.3(@types/node@26.6.3)
+      barrelize:
+        specifier: ^1.9.2
+        version: 1.9.2
+      typescript:
+        specifier: '=6.0.3'
+        version: 6.0.3
+      vite:
+        specifier: ^8.3.1
+        version: 8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1)
+      vite-plugin-dts:
+        specifier: ^5.1.1
+        version: 5.1.1(@microsoft/api-extractor@7.59.3(@types/node@26.6.3))(esbuild@0.28.2)(rolldown@1.2.12)(supports-color@10.2.2)(typescript@6.0.3)(vite@8.3.1(@types/node@26.6.3)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+
   crates/assets/js/client:
     dependencies:
-      '@types/geojson':
-        specifier: ^7946.0.16
-        version: 7946.0.16
       '@ungap/raw-json':
         specifier: 0.4.4
         version: 0.4.4
@@ -263,6 +281,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: ^7.59.3
         version: 7.59.3(@types/node@26.6.3)
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       eslint:
         specifier: ^10.11.0
         version: 10.11.0(jiti@2.7.0)(supports-color@10.2.2)
@@ -290,6 +311,9 @@ importers:
       tinybench:
         specifier: ^6.2.0
         version: 6.2.0
+      trailbase-bindings:
+        specifier: file:../bindings
+        version: link:../bindings
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -3959,6 +3983,10 @@ packages:
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
+
+  barrelize@1.9.2:
+    resolution: {integrity: sha512-7wV9NLsoghnPsD4qGt9kglaSCZ1Hjc5MUiEF9XM0CwZB6BsT16VOYPPFPByTYKblTyh3tGjzZUd6fL3kxBmOtw==}
+    hasBin: true
 
   base64-arraybuffer@1.0.2:
     resolution: {integrity: sha512-I3yl4r9QB5ZRY3XuJVEPfc2XhZO6YweFPI+UovAzn+8/hb3oJ6lnysaFcjVpkCPfVWFUDvoZ8kmVDP7WyRtYtQ==}
@@ -10800,6 +10828,8 @@ snapshots:
   balanced-match@1.0.2: {}
 
   balanced-match@4.0.4: {}
+
+  barrelize@1.9.2: {}
 
   base64-arraybuffer@1.0.2: {}
 

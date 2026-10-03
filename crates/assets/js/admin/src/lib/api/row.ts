@@ -3,14 +3,16 @@ import { buildListSearchParams } from "@/lib/list";
 import { findPrimaryKeyColumnIndex, escapeQualifiedName } from "@/lib/schema";
 import type { Record } from "@/lib/record";
 
-import type { Table } from "@bindings/Table";
-import type { Column } from "@bindings/Column";
-import type { InsertRowRequest } from "@bindings/InsertRowRequest";
-import type { UpdateRowRequest } from "@bindings/UpdateRowRequest";
-import type { DeleteRowsRequest } from "@bindings/DeleteRowsRequest";
-import type { ListRowsResponse } from "@bindings/ListRowsResponse";
-import type { QualifiedName } from "@bindings/QualifiedName";
-import type { SqlValue } from "@bindings/SqlValue";
+import type {
+  Table,
+  Column,
+  InsertRowRequest,
+  UpdateRowRequest,
+  DeleteRowsRequest,
+  ListRowsResponse,
+  QualifiedName,
+  SqlValue,
+} from "trailbase-bindings";
 
 function removeUndefined(row: Record): { [key: string]: SqlValue } {
   return Object.fromEntries(

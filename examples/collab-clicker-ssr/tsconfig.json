@@ -23,8 +23,7 @@
     "noUncheckedSideEffectImports": true,
 
     "paths": {
-      "@/*": ["./src/*"],
-      "@bindings/*": ["../../crates/assets/js/bindings/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": [

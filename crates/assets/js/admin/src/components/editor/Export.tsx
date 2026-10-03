@@ -20,7 +20,7 @@ import {
   showSaveFileDialog,
 } from "@/lib/utils";
 
-import type { QueryResponse } from "@bindings/QueryResponse";
+import type { QueryResponse } from "trailbase-bindings";
 
 function buildDelimited(response: QueryResponse, delimiter: string): string {
   const escape = (value: string) => `"${value.replaceAll('"', '""')}"`;

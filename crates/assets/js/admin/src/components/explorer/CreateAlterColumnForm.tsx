@@ -60,11 +60,13 @@ import {
 } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 
-import type { Column } from "@bindings/Column";
-import type { ColumnDataType } from "@bindings/ColumnDataType";
-import type { ColumnOption } from "@bindings/ColumnOption";
-import type { ReferentialAction } from "@bindings/ReferentialAction";
-import type { Table } from "@bindings/Table";
+import type {
+  Column,
+  ColumnDataType,
+  ColumnOption,
+  ReferentialAction,
+  Table,
+} from "trailbase-bindings";
 
 export function newDefaultColumn(
   index: number,

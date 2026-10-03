@@ -26,7 +26,8 @@ import { type FieldApiT, FieldInfo } from "@/components/FormFields";
 import { Config, JobsConfig, SystemJob } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";
 import { listJobs, runJob } from "@/lib/api/jobs";
-import type { Job } from "@bindings/Job";
+
+import type { Job } from "trailbase-bindings";
 
 const cronRegex =
   /^(@(yearly|monthly|weekly|daily|hourly|))|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*)\s*){6,7})$/;

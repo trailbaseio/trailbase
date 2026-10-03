@@ -53,8 +53,10 @@ import { adminFetch } from "@/lib/fetch";
 import { createSetOnce } from "@/lib/signals";
 import { showSaveFileDialog, copyToClipboard } from "@/lib/utils";
 
-import type { OAuthProviderResponse } from "@bindings/OAuthProviderResponse";
-import type { OAuthProviderEntry } from "@bindings/OAuthProviderEntry";
+import type {
+  OAuthProviderResponse,
+  OAuthProviderEntry,
+} from "trailbase-bindings";
 
 // OAuth2 provider assets.
 import openIdConnect from "@shared/assets/oauth2/oidc.svg";

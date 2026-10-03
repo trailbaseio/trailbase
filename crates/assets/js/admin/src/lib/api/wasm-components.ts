@@ -1,7 +1,9 @@
 import { adminFetch } from "@/lib/fetch";
 
-import type { ListWasmComponentsResponse } from "@bindings/ListWasmComponentsResponse";
-import type { WasmComponentRequest } from "@bindings/WasmComponentRequest";
+import type {
+  ListWasmComponentsResponse,
+  WasmComponentRequest,
+} from "trailbase-bindings";
 
 export async function listWasmComponents(): Promise<ListWasmComponentsResponse> {
   const response = await adminFetch("/wasm");

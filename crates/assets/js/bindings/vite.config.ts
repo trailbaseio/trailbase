@@ -1,6 +1,6 @@
-import { defineConfig } from "vite";
-import dts from "vite-plugin-dts";
 import { resolve } from "path";
+import dts from "vite-plugin-dts";
+import { defineConfig } from "vite";
 
 export default defineConfig({
   build: {
@@ -8,7 +8,7 @@ export default defineConfig({
     minify: false,
     lib: {
       entry: resolve(__dirname, "src/index.ts"),
-      name: "trailbase",
+      name: "trailbase-bindings",
       fileName: "index",
       formats: ["es"],
     },
@@ -16,11 +16,9 @@ export default defineConfig({
   plugins: [
     dts({
       strictOutput: true,
-      bundleTypes: {
-        bundledPackages: ["trailbase-bindings"],
-      },
+      bundleTypes: true,
       // Do not include type-declarations in ./tests/.
-      include: ["src/**/*"],
+      include: ["src/**/*.ts"],
     }),
   ],
 });

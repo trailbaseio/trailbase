@@ -46,10 +46,12 @@ import {
   equalQualifiedNames,
 } from "@/lib/schema";
 
-import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
-import type { Table } from "@bindings/Table";
-import type { View } from "@bindings/View";
-import { QualifiedName } from "@bindings/QualifiedName";
+import type {
+  ListSchemasResponse,
+  Table,
+  View,
+  QualifiedName,
+} from "trailbase-bindings";
 
 function pickInitiallySelectedTable(
   tables: ([Table, string] | [View, string])[],

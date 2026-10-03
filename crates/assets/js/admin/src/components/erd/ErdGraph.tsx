@@ -13,7 +13,7 @@ export type { PortMetadata } from "@antv/x6/lib/model/port";
 import type { ResolvedTheme } from "@/lib/theme";
 import { createWindowSize } from "@/lib/signals";
 
-import type { Column } from "@bindings/Column";
+import type { Column } from "trailbase-bindings";
 
 export const LINE_HEIGHT = 24;
 export const NODE_WIDTH = 250;

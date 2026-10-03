@@ -15,10 +15,13 @@ import {
   isUUIDColumn,
 } from "@/lib/schema";
 
-import type { Column } from "@bindings/Column";
-import type { ColumnDataType } from "@bindings/ColumnDataType";
-import type { QualifiedName } from "@bindings/QualifiedName";
-import type { SqlValue } from "@bindings/SqlValue";
+import type {
+  Column,
+  ColumnDataType,
+  ForeignKey,
+  QualifiedName,
+  SqlValue,
+} from "trailbase-bindings";
 
 import type { BlobEncoding } from "@/components/table/BlobEncoding";
 import {
@@ -29,7 +32,6 @@ import {
 } from "@/components/table/Files";
 import { Uuid } from "@/components/table/Uuid";
 import { Link } from "@kobalte/core";
-import { ForeignKey } from "@bindings/ForeignKey";
 
 export type CellType =
   "UUID" | "JSON" | "File" | "File[]" | "Geometry" | ColumnDataType;

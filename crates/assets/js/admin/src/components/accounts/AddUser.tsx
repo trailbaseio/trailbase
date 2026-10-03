@@ -13,7 +13,7 @@ import {
 
 import { createUser } from "@/lib/api/user";
 
-import type { CreateUserRequest } from "@bindings/CreateUserRequest";
+import type { CreateUserRequest } from "trailbase-bindings";
 
 export function AddUser(props: {
   close: () => void;

@@ -45,7 +45,7 @@ import {
 } from "@/components/ui/sidebar";
 import { TextField, TextFieldLabel } from "@/components/ui/text-field";
 
-import type { InfoResponse } from "@bindings/InfoResponse";
+import type { InfoResponse } from "trailbase-bindings";
 import { Config, ServerConfig } from "@proto/config";
 import {
   notEmptyValidator,

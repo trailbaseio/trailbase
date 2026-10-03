@@ -2,10 +2,12 @@ import { children, createSignal, For, Show, JSX } from "solid-js";
 import { createForm } from "@tanstack/solid-form";
 import { urlSafeBase64Decode, urlSafeBase64Encode } from "trailbase";
 
-import type { Column } from "@bindings/Column";
-import type { Table } from "@bindings/Table";
-import type { ColumnAffinityType } from "@bindings/ColumnAffinityType";
-import type { ColumnDataType } from "@bindings/ColumnDataType";
+import type {
+  Column,
+  Table,
+  ColumnAffinityType,
+  ColumnDataType,
+} from "trailbase-bindings";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";

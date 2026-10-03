@@ -77,8 +77,7 @@ import { cn } from "@/lib/utils";
 
 import countriesGeoJSON from "@/assets/countries-110m.json";
 
-import type { LogJson } from "@bindings/LogJson";
-import type { StatsResponse } from "@bindings/StatsResponse";
+import type { LogJson, StatsResponse } from "trailbase-bindings";
 
 // Needed for bundlers like vite: https://github.com/maplibre/maplibre-gl-js/blob/main/docs/index.md#installation
 maplibregl.setWorkerUrl(workerUrl);

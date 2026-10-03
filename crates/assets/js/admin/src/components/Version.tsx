@@ -1,5 +1,6 @@
 import { Match, Switch } from "solid-js";
-import type { InfoResponse } from "@bindings/InfoResponse";
+
+import type { InfoResponse } from "trailbase-bindings";
 
 export function Version(props: { info: InfoResponse | undefined }) {
   // Version tags have the shape <tag>[-<n>-<hash>], where the latter part is

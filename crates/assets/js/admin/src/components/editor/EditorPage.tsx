@@ -90,10 +90,12 @@ import { useNavbar, DirtyDialog } from "@/components/Navbar";
 import { renderCell, deriveCellType } from "@/components/table/SqlCell";
 import { ExportMenu } from "@/components/editor/Export";
 
-import type { Column } from "@bindings/Column";
-import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
-import type { QueryResponse } from "@bindings/QueryResponse";
-import type { SqlValue } from "@bindings/SqlValue";
+import type {
+  Column,
+  ListSchemasResponse,
+  QueryResponse,
+  SqlValue,
+} from "trailbase-bindings";
 
 import { createConfigQuery } from "@/lib/api/config";
 import { createTheme } from "@/lib/theme";

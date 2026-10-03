@@ -7,7 +7,6 @@
     "baseUrl": "./",
     "paths": {
       "@/*": ["./src/*"],
-      "@bindings/*": ["../../assets/js/bindings/*"],
       "@shared/*": ["../../assets/js/shared/*"],
       "@auth-ui/*": ["./bindings/*"]
     }

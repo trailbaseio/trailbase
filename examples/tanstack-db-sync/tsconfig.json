@@ -23,7 +23,6 @@
 
     "paths": {
       "@/*": ["./src/*"],
-      "@bindings/*": ["../../crates/assets/js/bindings/*"],
       "@schema/*": ["./types/*"]
     }
   },

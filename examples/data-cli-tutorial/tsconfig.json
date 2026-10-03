@@ -9,8 +9,7 @@
     "noEmit": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@schema/*": ["./types/*"],
-      "@bindings/*": ["../../crates/assets/js/bindings/*"]
+      "@schema/*": ["./types/*"]
     }
   },
   "include": ["src/**/*"],

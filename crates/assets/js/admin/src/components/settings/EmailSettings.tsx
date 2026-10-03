@@ -41,7 +41,7 @@ import {
 } from "@/components/FormFields";
 import type { FormApiT } from "@/components/FormFields";
 
-import type { TestEmailRequest } from "@bindings/TestEmailRequest";
+import type { TestEmailRequest } from "trailbase-bindings";
 
 import { Config, EmailConfig, SmtpEncryption } from "@proto/config";
 import { createConfigQuery, setConfig } from "@/lib/api/config";

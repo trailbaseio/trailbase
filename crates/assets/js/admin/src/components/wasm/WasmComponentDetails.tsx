@@ -5,7 +5,7 @@ import { TbOutlineArrowLeft, TbOutlineSandbox } from "solid-icons/tb";
 import { createWritableMemo } from "@solid-primitives/memo";
 import { Tokens } from "trailbase";
 
-import type { WasmComponent } from "@bindings/WasmComponent";
+import type { WasmComponent } from "trailbase-bindings";
 
 import { Header } from "@/components/Header";
 import {

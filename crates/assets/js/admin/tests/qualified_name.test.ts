@@ -1,7 +1,7 @@
 import { test } from "vitest";
 
 import { parseQualifiedName } from "@/lib/qualified_name";
-import type { QualifiedName } from "@bindings/QualifiedName";
+import type { QualifiedName } from "trailbase-bindings";
 
 test("QualifiedName parsing", ({ expect }) => {
   expect(parseQualifiedName("test")).toEqual({

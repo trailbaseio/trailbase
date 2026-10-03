@@ -1,19 +1,21 @@
 import { adminFetch } from "@/lib/fetch";
 import { useQuery } from "@tanstack/solid-query";
 
-import type { AlterIndexRequest } from "@bindings/AlterIndexRequest";
-import type { AlterIndexResponse } from "@bindings/AlterIndexResponse";
-import type { AlterTableRequest } from "@bindings/AlterTableRequest";
-import type { AlterTableResponse } from "@bindings/AlterTableResponse";
-import type { CreateIndexRequest } from "@bindings/CreateIndexRequest";
-import type { CreateIndexResponse } from "@bindings/CreateIndexResponse";
-import type { CreateTableRequest } from "@bindings/CreateTableRequest";
-import type { CreateTableResponse } from "@bindings/CreateTableResponse";
-import type { DropIndexRequest } from "@bindings/DropIndexRequest";
-import type { DropIndexResponse } from "@bindings/DropIndexResponse";
-import type { DropTableRequest } from "@bindings/DropTableRequest";
-import type { DropTableResponse } from "@bindings/DropTableResponse";
-import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
+import type {
+  AlterIndexRequest,
+  AlterIndexResponse,
+  AlterTableRequest,
+  AlterTableResponse,
+  CreateIndexRequest,
+  CreateIndexResponse,
+  CreateTableRequest,
+  CreateTableResponse,
+  DropIndexRequest,
+  DropIndexResponse,
+  DropTableRequest,
+  DropTableResponse,
+  ListSchemasResponse,
+} from "trailbase-bindings";
 
 export function createTableSchemaQuery() {
   async function getAllTableSchemas(): Promise<ListSchemasResponse> {

@@ -1,10 +1,12 @@
 import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
 
-import type { UpdateUserRequest } from "@bindings/UpdateUserRequest";
-import type { CreateUserRequest } from "@bindings/CreateUserRequest";
-import type { ListUsersResponse } from "@bindings/ListUsersResponse";
-import type { DeleteUserRequest } from "@bindings/DeleteUserRequest";
+import type {
+  UpdateUserRequest,
+  CreateUserRequest,
+  ListUsersResponse,
+  DeleteUserRequest,
+} from "trailbase-bindings";
 
 export async function createUser(request: CreateUserRequest) {
   await adminFetch("/user", {

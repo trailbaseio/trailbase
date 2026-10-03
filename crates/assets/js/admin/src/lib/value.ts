@@ -1,11 +1,11 @@
 import { fromHex } from "@/lib/utils";
 import { urlSafeBase64Encode } from "trailbase";
 
-import type { Blob } from "@bindings/Blob";
-import type { SqlValue } from "@bindings/SqlValue";
+import type { Blob } from "trailbase-bindings";
+import type { SqlValue } from "trailbase-bindings";
 
-export type { Blob } from "@bindings/Blob";
-export type { SqlValue } from "@bindings/SqlValue";
+export type { Blob } from "trailbase-bindings";
+export type { SqlValue } from "trailbase-bindings";
 
 // Define partial types (afterwards assert they match the generated type union).
 export type SqlNullValue = "Null";

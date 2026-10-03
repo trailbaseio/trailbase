@@ -1,8 +1,10 @@
 import { adminFetch } from "@/lib/fetch";
 
-import type { ListJobsResponse } from "@bindings/ListJobsResponse";
-import type { RunJobRequest } from "@bindings/RunJobRequest";
-import type { RunJobResponse } from "@bindings/RunJobResponse";
+import type {
+  ListJobsResponse,
+  RunJobRequest,
+  RunJobResponse,
+} from "trailbase-bindings";
 
 export async function listJobs(): Promise<ListJobsResponse> {
   const response = await adminFetch("/jobs", {

@@ -1,0 +1,9 @@
+{
+  "barrels": [
+    {
+      "root": "src",
+      "name": "index.ts",
+      "include": ["./**/*.ts"]
+    }
+  ]
+}

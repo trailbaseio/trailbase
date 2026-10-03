@@ -40,10 +40,12 @@ import { generateRandomName } from "@/lib/name";
 import { createConfigQuery } from "@/lib/api/config";
 import { invalidateConfig } from "@/lib/api/config";
 
-import type { Column } from "@bindings/Column";
-import type { Table } from "@bindings/Table";
-import type { AlterTableOperation } from "@bindings/AlterTableOperation";
-import type { QualifiedName } from "@bindings/QualifiedName";
+import type {
+  Column,
+  Table,
+  AlterTableOperation,
+  QualifiedName,
+} from "trailbase-bindings";
 import { equalQualifiedNames, escapeQualifiedName } from "@/lib/schema";
 import { createWritableMemo } from "@solid-primitives/memo";
 

@@ -32,8 +32,9 @@ import {
   installWasmComponent,
   uninstallWasmComponent,
 } from "@/lib/api/wasm-components";
-import type { WasmComponent } from "@bindings/WasmComponent";
 import { cn } from "@/lib/utils";
+
+import type { WasmComponent } from "trailbase-bindings";
 
 function ComponentIcon(props: { icon?: string }) {
   const icon = createMemo(() => props.icon?.trim());

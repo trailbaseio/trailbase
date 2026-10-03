@@ -1,8 +1,7 @@
 import { adminFetch } from "@/lib/fetch";
 import { buildListSearchParams } from "@/lib/list";
 
-import type { ListLogsResponse } from "@bindings/ListLogsResponse";
-import type { StatsResponse } from "@bindings/StatsResponse";
+import type { ListLogsResponse, StatsResponse } from "trailbase-bindings";
 
 export async function fetchLogs(
   pageSize: number,

@@ -48,10 +48,12 @@ import {
 import { createTheme, type ResolvedTheme } from "@/lib/theme";
 import { createTableSchemaQuery } from "@/lib/api/table";
 
-import type { Table } from "@bindings/Table";
-import type { View } from "@bindings/View";
-import type { ListSchemasResponse } from "@bindings/ListSchemasResponse";
-import { QualifiedName } from "@bindings/QualifiedName";
+import type {
+  Table,
+  View,
+  ListSchemasResponse,
+  QualifiedName,
+} from "trailbase-bindings";
 
 function namesMatch(a: QualifiedName, b: QualifiedName): boolean {
   if (a.name === b.name) {

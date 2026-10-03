@@ -24,9 +24,7 @@ import {
 } from "@/components/FormFields";
 import { SheetContainer } from "@/components/SafeSheet";
 
-import type { ColumnOrder } from "@bindings/ColumnOrder";
-import type { Table } from "@bindings/Table";
-import type { TableIndex } from "@bindings/TableIndex";
+import type { ColumnOrder, Table, TableIndex } from "trailbase-bindings";
 
 export function CreateAlterIndexForm(props: {
   close: () => void;

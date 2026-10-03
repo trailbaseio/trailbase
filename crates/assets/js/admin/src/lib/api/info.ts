@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/solid-query";
 
 import { adminFetch } from "@/lib/fetch";
-import type { InfoResponse } from "@bindings/InfoResponse";
+import type { InfoResponse } from "trailbase-bindings";
 
 export function createSystemInfoQuery() {
   return useQuery(() => ({
