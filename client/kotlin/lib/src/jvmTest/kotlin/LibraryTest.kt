@@ -556,3 +556,23 @@ class ExpandableTypeTest {
     assert(decoded.parent == Expandable.withData(id, ParentRecord(3)))
   }
 }
+
+class BooleanColumnTest {
+  @Serializable
+  private data class RecordWithBooleanColumn(
+    @Serializable(with = BooleanColumnSerializer::class)
+    val value: Boolean,
+  )
+
+  @Test
+  fun `BooleanColumnSerializer serializes correctly`() {
+    val encoded = Json.encodeToString(RecordWithBooleanColumn(false))
+    assertEquals("""{"value":0}""", encoded)
+  }
+
+  @Test
+  fun `BooleanColumnSerializer deserializes correctly`() {
+    val decoded = Json.decodeFromString<RecordWithBooleanColumn>("""{"value": 1}""")
+    assertEquals(RecordWithBooleanColumn(true), decoded)
+  }
+}
