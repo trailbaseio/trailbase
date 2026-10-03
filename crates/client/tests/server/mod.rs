@@ -34,7 +34,6 @@ pub async fn start_server(timeout: Duration) -> Result<Option<Server>, std::io::
     assert!(cwd.ends_with("client"));
 
     let command_cwd = cwd.parent().unwrap().parent().unwrap();
-    let depot_path = "client/testfixture";
 
     log::info!("Building dev server... (cold builds may take a while)");
     let _output = std::process::Command::new("python3")

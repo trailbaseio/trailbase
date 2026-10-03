@@ -712,26 +712,36 @@ Future<void> main() async {
       final client = await connect();
       final api = client.records('simple_schema_table');
 
-      expect(() async {
-        // data object is string encoded.
-        await api.create({
-          'data': '{ "name": "TheEntireObjectIsAString" }',
-        });
-      }, throwsA(predicate((e) {
-        if (e is HttpException) {
-          return e.status == HttpStatus.badRequest;
-        }
-        return false;
-      })));
+      // Data object is string encoded. We accept this since at the DB-level it's a DB anyway. Less de and re-servialization
+      final id0 = await api.create({
+        'data': '{ "name": "TheEntireObjectIsAString" }',
+      });
+      expect(
+        await api.read(id0),
+        equals({
+          'id': id0,
+          'data': {'name': 'TheEntireObjectIsAString'},
+        }),
+      );
+      await api.createBulk([
+        {'data': '{ "name": "TheEntireObjectIsAString" }'},
+        {'data': '{ "name": "TheEntireObjectIsAString" }'},
+      ]);
 
+      // Data object is a JSON object and needs to be encoded to string and backend by the backend.
       final id = await api.create({
         'data': {'name': 'Eve'},
       });
-
+      expect(
+        await api.read(id),
+        equals({
+          'id': id,
+          'data': {'name': 'Eve'},
+        }),
+      );
       await api.update(id, {
         'data': {'name': 'Alice'},
       });
-
       await api.createBulk([
         {
           'data': {'name': 'Eve'},
@@ -742,16 +752,16 @@ Future<void> main() async {
       ]);
 
       // Test that invalid input produces a client-error, i.e. 400.
-      expect(() async {
-        await api.create({
-          'data': "{ 4: 'Eve' }",
-        });
-      }, throwsA(predicate((e) {
-        if (e is HttpException) {
-          return e.status == HttpStatus.badRequest;
-        }
-        return false;
-      })));
+      await expectLater(
+        api.create({'data': "{ 4: 'Eve' }"}),
+        throwsA(isA<HttpException>()
+            .having((e) => e.status, 'status', equals(HttpStatus.badRequest))),
+      );
+      await expectLater(
+        api.update(id, {'data': "{ 4: 'Eve' }"}),
+        throwsA(isA<HttpException>()
+            .having((e) => e.status, 'status', equals(HttpStatus.badRequest))),
+      );
     });
   });
 }

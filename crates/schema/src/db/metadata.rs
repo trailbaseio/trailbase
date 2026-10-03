@@ -16,13 +16,13 @@ use crate::db::sqlite::{
 // TODO: Can we merge this with crate::sqlite::SchemaError?
 #[derive(Debug, Clone, Error)]
 pub enum JsonSchemaError {
-  #[error("Schema compile error: {0}")]
+  #[error("SchemaCompile: {0}")]
   SchemaCompile(String),
-  #[error("Validation error")]
+  #[error("Validation")]
   Validation,
-  #[error("Schema not found: {0}")]
+  #[error("SchemaNotFound: {0}")]
   NotFound(String),
-  #[error("Json serialization error: {0}")]
+  #[error("JsonSerialization: {0}")]
   JsonSerialization(Arc<serde_json::Error>),
   #[error("Other: {0}")]
   Other(String),

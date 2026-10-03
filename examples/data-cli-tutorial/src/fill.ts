@@ -4,6 +4,18 @@ import { parse } from "csv-parse/sync";
 import { initClient } from "trailbase";
 import type { Movie } from "@schema/movie";
 
+type MovieCsv = {
+  rank: string;
+  name: string;
+  year: string;
+  watch_time: string;
+  rating: string;
+  metascore: string;
+  gross: string;
+  votes: string;
+  description: string;
+};
+
 const client = initClient("http://localhost:4000");
 await client.login("admin@localhost", "secret");
 const api = client.records<Movie>("movies");
@@ -32,7 +44,7 @@ while (true) {
 console.log(`Cleaned up ${cnt} movies`);
 
 const file = await readFile("data/Top_1000_IMDb_movies_New_version.csv");
-const records = parse(file, {
+const records: MovieCsv[] = parse(file, {
   fromLine: 2,
   // prettier-ignore
   columns: ["rank", "name", "year", "watch_time", "rating", "metascore", "gross", "votes", "description"],

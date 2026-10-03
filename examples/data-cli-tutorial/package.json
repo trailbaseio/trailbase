@@ -22,7 +22,7 @@
     "typescript-eslint": "^8.71.0"
   },
   "dependencies": {
-    "csv-parse": "^5.6.0",
+    "csv-parse": "^7.0.3",
     "trailbase": "^0.14.3"
   }
 }

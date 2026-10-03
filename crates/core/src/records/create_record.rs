@@ -116,20 +116,11 @@ pub async fn create_record_handler(
       }
     }
 
-    #[cfg(debug_assertions)]
-    crate::records::json_schema::validate_api_json_schema(
-      &state,
-      &api,
-      trailbase_schema::json_schema::JsonSchemaMode::Insert,
-      &serde_json::Value::Object(record.clone()),
-    )
-    .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-
     let mut lazy_params =
       LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, files);
 
     // NOTE: We're currently serializing the async checks, we could parallelize them however it's
-    // unclear if this would be much faster.
+    // unclear if this would be much faster. Batching might help.
     api
       .check_record_level_access(
         Permission::Create,

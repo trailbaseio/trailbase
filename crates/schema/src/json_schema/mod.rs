@@ -72,7 +72,15 @@ pub fn build_json_schema_expanded(
   }
 
   return Ok((
-    Validator::new(&schema).map_err(|err| JsonSchemaError::SchemaCompile(err.to_string()))?,
+    Validator::new(&schema).map_err(|err| {
+      return cfg_select! {
+        debug_assertions => JsonSchemaError::SchemaCompile(format!(
+          "${err}:\n{schema}",
+          schema = serde_json::to_string_pretty(&schema).unwrap_or_default()
+        )),
+        _ => JsonSchemaError::SchemaCompile(err.to_string()),
+      };
+    })?,
     schema,
   ));
 }
@@ -291,7 +299,11 @@ fn build_json_schema_expanded_impl(
           // Not sure this is the best approach, especially since we also don't mark them as
           // required.
           "type": if nullable {
-            serde_json::json!(["null", column_data_type_to_json_type(col.data_type)])
+            match col.data_type {
+                ColumnDataType::Any => column_data_type_to_json_type(col.data_type),
+                _  => serde_json::json!(["null", column_data_type_to_json_type(col.data_type)])
+            }
+
           } else {
             column_data_type_to_json_type(col.data_type)
           }
