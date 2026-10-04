@@ -1,3 +1,12 @@
+## v0.34.4
+
+- Add and enforce uniqueness requirement across `email` and `unverified_email` columns.
+- Add periodic clean-up job for stale users missing email verification.
+- Add missing username uniqueness requirement and fix session cleanup for experimental PG setup.
+- Fix JSON schema construction for nullable `ANY` columns.
+- A more consistent integration test setup across the 8 client environments.
+- Update dependencies.
+
 ## v0.34.3
 
 - Add referential actions to table editor, i.e. set `ON (DELETE|UPDATE)` action on foreign-key references.
