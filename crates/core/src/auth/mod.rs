@@ -14,6 +14,7 @@ pub(crate) mod util;
 
 mod error;
 
+pub use api::verify_email::EMAIL_VERIFICATION_TTL;
 pub use error::AuthError;
 pub use jwt::{AuthTokenClaims, JwtHelper};
 pub use user::{DbUser, User};
@@ -48,9 +49,11 @@ pub(super) fn auth_router(
     .routes(routes!(api::register::register_user_handler))
     // E-mail verification and change flows.
     .routes(routes!(
-      api::verify_email::request_email_verification_handler,
+      api::verify_email::email_verification_request_handler,
     ))
-    .routes(routes!(api::verify_email::verify_email_handler))
+    .routes(routes!(
+      api::verify_email::email_verification_confirm_handler
+    ))
     .routes(routes!(api::change_email::change_email_request_handler))
     .routes(routes!(api::change_email::change_email_confirm_handler))
     // Change username flow.

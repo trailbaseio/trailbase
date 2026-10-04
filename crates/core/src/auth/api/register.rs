@@ -21,12 +21,12 @@ use crate::email::Email;
 use crate::extract::Either;
 use crate::util::urlencode;
 
-#[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
+#[derive(Clone, Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub struct RegisterUserParams {
   pub redirect_uri: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, ToSchema, TS)]
+#[derive(Clone, Debug, Default, Deserialize, ToSchema, TS)]
 #[ts(export)]
 pub struct RegisterUserRequest {
   pub email: Option<String>,
@@ -118,10 +118,9 @@ pub async fn register_user_handler(
 
   const INSERT_USER_QUERY: &str = formatcp!(
     "\
-      INSERT INTO \"{USER_TABLE}\" \
-        (unverified_email, username, password_hash) \
-      VALUES \
-        (:unverified_email, :username, :password_hash) \
+      INSERT INTO \"{USER_TABLE}\" (unverified_email, username, password_hash) \
+        SELECT :unverified_email, :username, :password_hash \
+          WHERE NOT EXISTS(SELECT 1 FROM \"{USER_TABLE}\" WHERE email = :unverified_email) \
       RETURNING {columns} \
     ",
     columns = DbUser::COLUMNS
@@ -132,7 +131,7 @@ pub async fn register_user_handler(
     .write_query_row(
       INSERT_USER_QUERY,
       named_params! {
-        ":unverified_email": normalized_email.clone(),
+        ":unverified_email": normalized_email,
         ":username": username,
         ":password_hash": hashed_password,
       },
@@ -140,15 +139,14 @@ pub async fn register_user_handler(
     .await
   {
     Ok(Some(row)) => DbUser::from_row(row)?,
-    Err(_err) => {
-      #[cfg(debug_assertions)]
-      log::debug!("Failed to register new user {normalized_email:?}: {_err:?}");
-
-      // In case the user already exists, we claim success to avoid leaking users' email addresses.
+    Ok(None) => {
+      // Above nested SELECT returned no rows, i.e. email address is already registered. We claim
+      // success to avoid account enumerations.
       return Ok(success_response());
     }
-    Ok(None) => {
-      return Err(AuthError::Internal("Failed to get user".into()));
+    Err(_err) => {
+      // The `unverified_email` or username is already present. We claim success to avoid account enumerations.
+      return Ok(success_response());
     }
   };
 

@@ -1,6 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
+use chrono::Duration;
 use const_format::formatcp;
 use mini_moka::sync::Cache;
 use serde::Deserialize;
@@ -34,7 +35,7 @@ pub struct EmailVerificationParams {
     (status = 400, description = "Malformed email address."),
   )
 )]
-pub async fn request_email_verification_handler(
+pub async fn email_verification_request_handler(
   State(state): State<AppState>,
   Query(query): Query<EmailVerificationParams>,
 ) -> Result<Response, AuthError> {
@@ -65,7 +66,7 @@ pub async fn request_email_verification_handler(
   let claims = EmailVerificationTokenClaims::new(
     &user.uuid(),
     normalized_email.clone(),
-    chrono::Duration::seconds(TTL_SEC),
+    EMAIL_VERIFICATION_TTL,
   );
   let token = state
     .jwt()
@@ -87,7 +88,6 @@ pub(crate) struct VerifyEmailParams {
   redirect_uri: Option<String>,
 }
 
-/// Request a new email to verify email address.
 #[utoipa::path(
   get,
   path = "/verify_email/confirm/{email_verification_token}",
@@ -99,7 +99,7 @@ pub(crate) struct VerifyEmailParams {
     (status = 401, description = "Unauthorized: invalid reset code."),
   )
 )]
-pub(crate) async fn verify_email_handler(
+pub(crate) async fn email_verification_confirm_handler(
   State(state): State<AppState>,
   Path(email_verification_token): Path<String>,
   Query(query): Query<VerifyEmailParams>,
@@ -142,7 +142,7 @@ pub(crate) async fn verify_email_handler(
   };
 }
 
-const TTL_SEC: i64 = 3600;
+pub const EMAIL_VERIFICATION_TTL: Duration = Duration::hours(2);
 
 // Track login attempts for abuse prevention.
 fn rate_limit_verify_email_attempts(id: String) -> Result<(), AuthError> {

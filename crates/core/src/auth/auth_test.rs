@@ -39,7 +39,7 @@ use crate::auth::api::reset_password::{
 };
 use crate::auth::api::token::{AuthCodeToTokenRequest, TokenResponse, auth_code_to_token_handler};
 use crate::auth::api::totp;
-use crate::auth::api::verify_email::{VerifyEmailParams, verify_email_handler};
+use crate::auth::api::verify_email::{VerifyEmailParams, email_verification_confirm_handler};
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
@@ -118,7 +118,6 @@ async fn register_test_user(
   password: &str,
 ) -> Result<User, anyhow::Error> {
   // Register new user and email verification flow.
-
   let request = match identifier {
     Identifier::Email(ref email) => RegisterUserRequest {
       email: Some(email.clone()),
@@ -148,9 +147,36 @@ async fn register_test_user(
   let _ = register_user_handler(
     State(state.clone()),
     Query(RegisterUserParams::default()),
-    Either::Form(request),
+    Either::Form(request.clone()),
   )
   .await?;
+
+  {
+    let num_users = async || {
+      return state
+        .user_conn()
+        .read_query_row_get::<i64>(format!("SELECT COUNT(*) FROM {USER_TABLE}"), (), 0)
+        .await
+        .unwrap()
+        .unwrap() as usize;
+    };
+
+    let n_users_before = num_users().await;
+
+    // Make sure re-registrations appear successful to avoid account enumerations, while doing
+    // nothing.
+    assert_matches!(
+      register_user_handler(
+        State(state.clone()),
+        Query(RegisterUserParams::default()),
+        Either::Form(request.clone()),
+      )
+      .await,
+      Ok(_),
+    );
+
+    assert_eq!(n_users_before, num_users().await);
+  }
 
   // Assert that a verification email was sent.
   if has_email {
@@ -224,7 +250,7 @@ async fn register_test_user(
       _ => {}
     }
 
-    let _ = verify_email_handler(
+    let _ = email_verification_confirm_handler(
       State(state.clone()),
       Path(verification_email_token.clone()),
       Query(VerifyEmailParams::default()),
@@ -1220,6 +1246,27 @@ async fn test_auth_otp_flow_using_email() {
 
   let (state, mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
+  // Re-register the existing user should yield success to prevent account enumerations.
+  {
+    let before = mailer.get_logs().len();
+    let _ = register_user_handler(
+      State(state.clone()),
+      Query(RegisterUserParams::default()),
+      Either::Json(RegisterUserRequest {
+        email: Some(email.clone()),
+        username: None,
+        password: password.to_string(),
+        password_repeat: password.to_string(),
+        ..Default::default()
+      }),
+    )
+    .await
+    .unwrap();
+
+    // No email was sent.
+    assert_eq!(before, mailer.get_logs().len(), "{:?}", mailer.get_logs());
+  }
+
   assert_eq!(Some(&email), user.email.as_ref());
 
   // NOTE: We return a success response on unknown user to avoid leaks.
@@ -1523,7 +1570,7 @@ async fn test_auth_annonymous_signin() {
   // Steal the verification code from the DB and verify.
   let verification_email_token: String = extract_email_verification_token(&mailer.get_logs()[0].1);
 
-  verify_email_handler(
+  email_verification_confirm_handler(
     State(state.clone()),
     Path(verification_email_token.clone()),
     Query(VerifyEmailParams::default()),
@@ -1622,7 +1669,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
   // Steal the verification code from the DB and verify.
   let verification_email_token: String = extract_email_verification_token(&mailer.get_logs()[0].1);
 
-  verify_email_handler(
+  email_verification_confirm_handler(
     State(state.clone()),
     Path(verification_email_token.clone()),
     Query(VerifyEmailParams::default()),

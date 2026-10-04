@@ -13,9 +13,10 @@ use std::sync::{
   atomic::{AtomicI32, Ordering},
 };
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, named_params, params};
+use trailbase_sqlite::{Connection, ConnectionType, named_params, params};
 
 use crate::DataDir;
+use crate::auth::EMAIL_VERIFICATION_TTL;
 use crate::config::proto;
 use crate::connection::ConnectionManager;
 use crate::constants::{
@@ -354,9 +355,10 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
     }
     proto::SystemJobId::AuthCleaner => {
       let session_conn = opts.session_conn.clone();
+      let user_conn = opts.connection_manager.main_entry().connection.clone();
 
       DefaultSystemJob {
-        name: "Session Cleanup",
+        name: "Auth Cleanup",
         default_config: proto::SystemJob {
           id: Some(id as i32),
           schedule: Some("@hourly".into()),
@@ -365,21 +367,46 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
           timeout: None,
         },
         callback: build_callback(move || {
+          let user_conn = user_conn.clone();
           let session_conn = session_conn.clone();
 
-          const QUERY: &str = formatcp!(
+          const SESSION_CLEANUP_QUERY: &str = formatcp!(
             "\
-              DELETE FROM '{SESSION_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
-              DELETE FROM '{AUTHORIZATION_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
-              DELETE FROM '{OTP_CODE_TABLE}' WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM \"{SESSION_TABLE}\" WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM \"{AUTHORIZATION_CODE_TABLE}\" WHERE expires < (UNIXEPOCH() - 60); \
+              DELETE FROM \"{OTP_CODE_TABLE}\" WHERE expires < (UNIXEPOCH() - 60); \
             "
           );
 
+          const STALE_EMAIL_VERIFICATION_CLEANUP: &str = formatcp!(
+            "DELETE FROM \"{USER_TABLE}\" WHERE \
+               unverified_email IS NOT NULL AND UNIXEPOCH() > (created + :ttl_seconds);"
+          );
+
           return async move {
-            session_conn.execute_batch(QUERY).await.map_err(|err| {
-              warn!("Periodic session cleanup failed: {err}");
-              err
-            })?;
+            let session_result = session_conn
+              .execute_batch(SESSION_CLEANUP_QUERY)
+              .await
+              .map_err(|err| {
+                warn!("Periodic session cleanup failed: {err}");
+                err
+              });
+
+            let user_result = user_conn
+              .execute(
+                STALE_EMAIL_VERIFICATION_CLEANUP,
+                named_params! {
+                  ":ttl_seconds": EMAIL_VERIFICATION_TTL.num_seconds() + 10,
+                },
+              )
+              .await
+              .map_err(|err| {
+                warn!("Stale unverified email cleanup failed: {err}");
+                err
+              });
+
+            session_result?;
+            user_result?;
 
             return Ok::<(), trailbase_sqlite::Error>(());
           };
@@ -401,7 +428,14 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
           let conn = main_conn.clone();
 
           return async move {
-            conn.execute("PRAGMA optimize", ()).await.map_err(|err| {
+            let query = match conn.connection_type() {
+              ConnectionType::Sqlite => "PRAGMA optimize",
+              // QUESTION: should we run VACCUM for PG, can be quite expensive. May bet better to
+              // leave maintenance to external tooling.
+              ConnectionType::Pg => "VACUUM",
+            };
+
+            conn.execute_batch(query).await.map_err(|err| {
               warn!("Periodic query optimizer failed: {err}");
               return err;
             })?;
@@ -463,7 +497,7 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
       }
     }
     proto::SystemJobId::AnonymousCleaner => {
-      let main_conn = opts.connection_manager.main_entry().connection.clone();
+      let user_conn = opts.connection_manager.main_entry().connection.clone();
       let anonymous_refresh_token_ttl = opts
         .config
         .auth
@@ -479,9 +513,9 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
           timeout: None,
         },
         callback: build_callback(move || {
-          let main_conn = main_conn.clone();
+          let user_conn = user_conn.clone();
           return async move {
-            return cleanup_anonymous_users(&main_conn, anonymous_refresh_token_ttl).await;
+            return cleanup_anonymous_users(&user_conn, anonymous_refresh_token_ttl).await;
           };
         }),
       }
@@ -700,5 +734,43 @@ mod tests {
     delete_pending_files_job(state.conn(), state.objectstore(), None)
       .await
       .unwrap();
+  }
+
+  #[tokio::test]
+  async fn all_default_jobs() {
+    let state = crate::app_state::test_state(None).await.unwrap();
+    let config = state.get_config();
+    let conn = state.connection_manager().main_entry().connection;
+
+    let options = BuildJobOptions {
+      config: &config,
+      data_dir: state.data_dir(),
+      read_only: false,
+      connection_manager: &state.connection_manager(),
+      logs_conn: state.logs_conn(),
+      session_conn: state.session_conn(),
+      object_store: state.objectstore().clone(),
+    };
+
+    let jobs = vec![
+      proto::SystemJobId::Backup,
+      proto::SystemJobId::Heartbeat,
+      proto::SystemJobId::LogCleaner,
+      proto::SystemJobId::AuthCleaner,
+      proto::SystemJobId::QueryOptimizer,
+      proto::SystemJobId::FileDeletions,
+      proto::SystemJobId::AnonymousCleaner,
+    ];
+
+    for job_id in jobs {
+      let job = build_job(job_id, &options);
+      assert_eq!(job_id as i32, job.default_config.id.unwrap());
+
+      if job_id == proto::SystemJobId::Backup && conn.connection_type() != ConnectionType::Sqlite {
+        continue;
+      }
+
+      (*job.callback)().await.expect(&format!("Job: {job_id:?}"));
+    }
   }
 }
