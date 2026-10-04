@@ -876,18 +876,18 @@ dependencies = [
 
 [[package]]
 name = "bon"
-version = "3.10.1"
+version = "3.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60eafe0d77c3a2fc292c1d1346c3041b33c0a108085a2afabf672b70f69dbbc9"
+checksum = "214f5df094ce551a10a30ffb9c70243d61f121a3d985a6495933e181dee6a7d2"
 dependencies = [
  "bon-macros",
 ]
 
 [[package]]
 name = "bon-macros"
-version = "3.10.1"
+version = "3.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd0f9631d8aaaee112c41985d675ef269e02acbd4f33122836af4f0c5f699ff6"
+checksum = "2706da6c749998cc555d04184909608956a69ad3f8ab1a076fbc867b4a3c3ce5"
 dependencies = [
  "darling 0.24.1",
  "ident_case",
@@ -1088,9 +1088,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.5.1"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f360145194ee8e21db5ee7f3fcd4fe52210864c75c985dae33218202c8bbe040"
+checksum = "f74872d07caf508b30a21f6836e7d7016a2eaf7d9ff4f48deaa58cd8a0407630"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -3830,9 +3830,9 @@ dependencies = [
 
 [[package]]
 name = "insta"
-version = "1.48.0"
+version = "1.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86f0f8fee8c926415c58d6ae43a08523a26faccb2323f5e6b644fe7dd4ef6b82"
+checksum = "b67d3d2e287e4b86c10b3f3b641033d1f89b74bdb39d05f34952e2b9a6fe21cd"
 dependencies = [
  "console",
  "once_cell",
@@ -4103,9 +4103,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema"
-version = "0.58.4"
+version = "0.58.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5761b0ca0a31464030d7c2a98087fde3124ebb5e09b5a112cdb815f03b8ee150"
+checksum = "ea18b8d5e1469b1bdd6b349169305141316a7c26da27f239773b65c830c0f5d6"
 dependencies = [
  "ahash",
  "bytecount",
@@ -4115,12 +4115,12 @@ dependencies = [
  "fraction 0.17.0",
  "getrandom 0.3.4",
  "itoa",
- "jsonschema-regex 0.58.4",
- "jsonschema-value 0.58.4",
+ "jsonschema-regex 0.58.5",
+ "jsonschema-value 0.58.5",
  "num-cmp",
  "num-traits",
  "percent-encoding",
- "referencing 0.58.4",
+ "referencing 0.58.5",
  "regex",
  "serde",
  "serde_json",
@@ -4140,9 +4140,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-regex"
-version = "0.58.4"
+version = "0.58.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1ffba4378a3d6ee7f1ab65a8ed95c711ccfe4a3870932bdce89d8260abed38a"
+checksum = "854e9e22c420535035e95eed240cbfb4a5f4b7da74d122d63144e0c31926dbfd"
 dependencies = [
  "regex-syntax",
 ]
@@ -4163,9 +4163,9 @@ dependencies = [
 
 [[package]]
 name = "jsonschema-value"
-version = "0.58.4"
+version = "0.58.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "386121f898b560ff6aaa7974952720e9d9276a201eca31296387c2ed8707855e"
+checksum = "4e3bfac11ac357ec620880025757d38c67da8fd5b9ef5024d19f0f360002b4ca"
 dependencies = [
  "ahash",
  "bytecount",
@@ -4751,9 +4751,9 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "1.2.3"
+version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b18443e9c262bfe8fa82f51666e2642c53393f7e5c27b3e1aeab922cff5b9d8"
+checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
 dependencies = [
  "libc",
  "log",
@@ -6484,9 +6484,9 @@ dependencies = [
 
 [[package]]
 name = "referencing"
-version = "0.58.4"
+version = "0.58.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cfa1c91745dbca76a406b926918d7c63e15a4525ebab939fec3e015a1fb82b1"
+checksum = "590efadb0a669f1712c1e3ab810a55d4c3d20d0127c455f7236dd0710aba0346"
 dependencies = [
  "ahash",
  "fluent-uri",
@@ -8155,9 +8155,9 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
 dependencies = [
  "bytes",
  "libc",
@@ -8646,7 +8646,7 @@ dependencies = [
  "indoc",
  "init-tracing-opentelemetry",
  "itertools 0.15.0",
- "jsonschema 0.58.4",
+ "jsonschema 0.58.5",
  "jsonwebtoken",
  "lazy_static",
  "lettre",
@@ -8837,7 +8837,7 @@ dependencies = [
  "argon2",
  "base64 0.23.1",
  "bcrypt",
- "jsonschema 0.58.4",
+ "jsonschema 0.58.5",
  "maxminddb",
  "parking_lot",
  "quick_cache",
@@ -8923,7 +8923,7 @@ dependencies = [
  "indoc",
  "infer",
  "itertools 0.15.0",
- "jsonschema 0.58.4",
+ "jsonschema 0.58.5",
  "lazy_static",
  "litegis",
  "log",
@@ -9191,9 +9191,9 @@ dependencies = [
 
 [[package]]
 name = "twox-hash"
-version = "2.1.4"
+version = "2.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5283634e518fe9e82c7b20520bb4bc209009fd16c82077c802f8111ecbb0117a"
+checksum = "86a801b3cea342a06d468c8710662aa29e5e05e4f5c0d62f00bbb7f2ad7941c2"
 
 [[package]]
 name = "typed-path"
@@ -9405,9 +9405,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.26.1"
+version = "1.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
+checksum = "97277d36b9c3ace13e58fa6e753f8b0bbbf302a18dd193240d70f9e29681059a"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",

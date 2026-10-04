@@ -19,7 +19,7 @@ fallible-iterator = "0.3.0"
 geos = { workspace = true, optional = true }
 infer = "0.22.0"
 itertools = { workspace = true }
-jsonschema = { version = "0.58.4", default-features = false }
+jsonschema = { version = "0.58.5", default-features = false }
 lazy_static = "1.5.1"
 log = { workspace = true }
 parking_lot = { workspace = true }
