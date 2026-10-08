@@ -46,7 +46,9 @@ pub struct RegisterUserRequest {
   params(RegisterUserParams),
   request_body = RegisterUserRequest,
   responses(
-    (status = 303, description = "Form fail OR success, new user registered, or user already exists."),
+    (status = 200, description = "New user registered, or email is already registered but want to avoid account enumerations."),
+    (status = 303, description = "New user registered, or email is already registered but want to avoid account enumerations."),
+    (status = 409, description = "Username (or unverified_email) already taken."),
     (status = 424, description = "Failed to send verification Email."),
   )
 )]
@@ -140,13 +142,16 @@ pub async fn register_user_handler(
   {
     Ok(Some(row)) => DbUser::from_row(row)?,
     Ok(None) => {
-      // Above nested SELECT returned no rows, i.e. email address is already registered. We claim
-      // success to avoid account enumerations.
+      // Above nested SELECT returns no rows when the email address is already registered. We reply
+      // with success to avoid account enumerations, i.e. probe if certain email addresses are
+      // registered..
       return Ok(success_response());
     }
     Err(_err) => {
-      // The `unverified_email` or username is already present. We claim success to avoid account enumerations.
-      return Ok(success_response());
+      // The `unverified_email` or username is already present. In this case we return a conflict to
+      // let user choose a different username. Also usernames are considered public, while
+      // `unverified_email` addresses are ephemeral and are only around till the next cleanup.
+      return Err(AuthError::Conflict);
     }
   };
 
