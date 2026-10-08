@@ -172,7 +172,7 @@ async fn register_test_user(
         Either::Form(request.clone()),
       )
       .await,
-      Ok(_),
+      Err(AuthError::Conflict),
     );
 
     assert_eq!(n_users_before, num_users().await);

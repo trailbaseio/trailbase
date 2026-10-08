@@ -46,7 +46,9 @@ pub struct RegisterUserRequest {
   params(RegisterUserParams),
   request_body = RegisterUserRequest,
   responses(
-    (status = 303, description = "Form fail OR success, new user registered, or user already exists."),
+    (status = 200, description = "New user registered, or email is already registered but want to avoid account enumerations."),
+    (status = 303, description = "New user registered, or email is already registered but want to avoid account enumerations."),
+    (status = 409, description = "Username (or unverified_email) already taken."),
     (status = 424, description = "Failed to send verification Email."),
   )
 )]
@@ -146,7 +148,7 @@ pub async fn register_user_handler(
     }
     Err(_err) => {
       // The `unverified_email` or username is already present. We claim success to avoid account enumerations.
-      return Ok(success_response());
+      return Err(AuthError::Conflict);
     }
   };
 
