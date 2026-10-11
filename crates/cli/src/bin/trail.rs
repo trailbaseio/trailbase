@@ -6,6 +6,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
+use clap_complete::generate;
 use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
@@ -710,6 +711,7 @@ fn main() -> Result<(), BoxError> {
     public_url,
     version,
     cmd,
+    shell_completion,
   } = CommandLineArgs::parse();
 
   let mut warn_data_dir = false;
@@ -752,6 +754,12 @@ fn main() -> Result<(), BoxError> {
     println!("trail {tag} ({date})");
     println!("sqlite: {}", rusqlite::version());
 
+    return Ok(());
+  }
+
+  if let Some(shell) = shell_completion {
+    let mut cmd = CommandLineArgs::command();
+    generate(shell, &mut cmd, "trail", &mut std::io::stdout());
     return Ok(());
   }
 

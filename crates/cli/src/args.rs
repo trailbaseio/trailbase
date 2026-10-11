@@ -1,4 +1,5 @@
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum, ValueHint};
+use clap_complete::Shell;
 
 use trailbase::api::JsonSchemaMode;
 
@@ -31,21 +32,31 @@ impl From<JsonSchemaModeArg> for JsonSchemaMode {
 pub struct CommandLineArgs {
   /// Directory for runtime files including the databases. Will be created by TrailBase if dir
   /// doesn't exist.
-  #[arg(long, env)]
+  #[arg(long, env, value_hint = ValueHint::DirPath)]
   pub depot: Option<std::path::PathBuf>,
 
   /// DEPRECATED: Use --depot instead
-  #[arg(long, env, hide = true)]
+  #[arg(long, env, hide = true, value_hint = ValueHint::DirPath)]
   pub data_dir: Option<std::path::PathBuf>,
 
   /// Public url used to access TrailBase. This is necessary for sending valid auth emails and
   /// OAuth2 redirects, i.e. after users authenticating externally.
-  #[arg(long, env)]
+  #[arg(long, env, value_hint = ValueHint::Url)]
   pub public_url: Option<url::Url>,
 
   /// Print `trail` version.
   #[arg(long)]
   pub version: bool,
+
+  /// Generate shell auto-completion files.
+  ///
+  /// $ trail --sell-completion=bash | sudo tee /usr/share/bash-completion/completions/trail
+  ///
+  /// $ trail --sell-completion=zsh | sudo tee /usr/local/share/zsh/site-functions/_trail
+  ///
+  /// Any location in $FPATH will do. The leading "_" is critical.
+  #[arg(long, value_enum)]
+  pub shell_completion: Option<Shell>,
 
   #[command(subcommand)]
   pub cmd: Option<SubCommands>,
@@ -121,7 +132,7 @@ pub struct ServerArgs {
   pub admin_address: Option<String>,
 
   /// Optional path to static assets that will be served at the HTTP root.
-  #[arg(long, env)]
+  #[arg(long, env, value_hint = ValueHint::DirPath)]
   pub public_dir: Option<String>,
 
   /// Enable SPA fallback: serve index.html for routes (paths without file extensions).
@@ -131,11 +142,11 @@ pub struct ServerArgs {
   pub spa: bool,
 
   /// Optional path to sandboxed FS root for WASM runtime.
-  #[arg(long, env)]
+  #[arg(long, env, value_hint = ValueHint::DirPath)]
   pub runtime_root_fs: Option<String>,
 
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
-  #[arg(long, env)]
+  #[arg(long, env, value_hint = ValueHint::FilePath)]
   pub geoip_db_path: Option<String>,
 
   /// Start with DBs and config in read-only mode, i.e. all writes will fail. Only supported with
@@ -163,7 +174,8 @@ pub struct ServerArgs {
   #[arg(long, env)]
   pub runtime_threads: Option<usize>,
 
-  #[arg(long, env)]
+  /// Postgres URL, like: postgresql://<user>:<pass>@localhost:<port>/<db>.
+  #[arg(long, env, value_hint = ValueHint::Url)]
   pub experimental_pg: Option<String>,
 }
 
@@ -259,7 +271,7 @@ pub enum UserSubCommands {
     /// User in question, either email, username or UUID.
     user: String,
     /// User's verification state to set.
-    #[arg(default_value = "true")]
+    #[arg(long, default_value = "true")]
     verified: bool,
   },
   /// Invalidate user session, thus requiring them to re-auth when their auth token expires.
