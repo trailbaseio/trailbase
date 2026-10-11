@@ -152,10 +152,10 @@ impl Email {
         APP_NAME => &config.server.application_name,
         CODE => email_verification_token,
         EMAIL => email_address,
-        REDIRECT_URI => redirect_uri,
+        REDIRECT_URI => redirect_uri.map(|uri| uri.to_string()),
         SITE_URL => site_url.origin().ascii_serialization(),
         TOKEN => email_verification_token,
-        VERIFICATION_URL => verification_url,
+        VERIFICATION_URL => verification_url.to_string(),
       })?;
 
     return Email::new_internal(state, to, subject, body);
@@ -202,10 +202,10 @@ impl Email {
         APP_NAME => &config.server.application_name,
         CODE => email_verification_token,
         EMAIL => email_address,
-        REDIRECT_URI => redirect_uri,
+        REDIRECT_URI => redirect_uri.map(|uri| uri.to_string()),
         SITE_URL => site_url.origin().ascii_serialization(),
         TOKEN => email_verification_token,
-        VERIFICATION_URL => verification_url,
+        VERIFICATION_URL => verification_url.to_string(),
       })?;
 
     return Email::new_internal(state, to, subject, body);

@@ -19,7 +19,7 @@ fallible-iterator = "0.3.0"
 geos = { workspace = true, optional = true }
 infer = "0.22.0"
 itertools = { workspace = true }
-jsonschema = { version = "0.58.5", default-features = false }
+jsonschema = { version = "0.58.6", default-features = false }
 lazy_static = "1.5.1"
 log = { workspace = true }
 parking_lot = { workspace = true }
@@ -38,7 +38,7 @@ uuid = { workspace = true }
 
 [dev-dependencies]
 anyhow = "1.0.104"
-indoc = "2.0.7"
+indoc = "2.0.8"
 litegis = { workspace = true }
 rusqlite = { workspace = true }
 tokio = { workspace = true }

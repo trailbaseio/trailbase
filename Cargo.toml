@@ -68,14 +68,14 @@ futures-util = { version = "0.3.34", default-features = false, features = ["allo
 geos = { version = "11.3.1", default-features = false, features = ["geo", "json"] }
 http = { version = "1.5.0", default-features = false }
 http-body-util = { version = "0.1.5", default-features = false }
-hyper = { version = "1.11.1", default-features = false }
+hyper = { version = "1.12.0", default-features = false }
 itertools = { version = "0.15.0", default-features = false, features = ["use_std"] }
 jsonwebtoken = { version = "11.1.0", default-features = false, features = ["use_pem", "rust_crypto"] }
 # libsqlite3-sys = { version = "0.38.2", default-features = false, features = ["bundled", "preupdate_hook"] }
 litegis = { version = "0.0.7", default-features = false }
 log = { version = "0.4.34", default-features = false }
 mimalloc = { version = "^0.1.52", default-features = false }
-minijinja = { version = "2.24.0", default-features = false }
+minijinja = { version = "3.0.0", default-features = false }
 oliphaunt-pgwire-server = { version = "0.2.1", features = ["extension-citext", "extension-pgcrypto"] }
 oliphaunt-wasix = { version = "0.3.2", features = ["extension-citext", "extension-pgcrypto"] }
 parking_lot = { version = "0.12.5", default-features = false, features = ["send_guard", "arc_lock"] }
@@ -83,9 +83,9 @@ rand = "^0.10.3"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
 rmcp-openapi = { git = "https://github.com/ignatz/rmcp-openapi-minimal.git", branch = "main" }
 rusqlite = { version = "0.40.2", default-features = false, features = ["bundled", "cache", "column_decltype", "functions", "backup", "preupdate_hook"] }
-rust-embed = { version = "^8.12.0", default-features = false, features = ["mime-guess"] }
+rust-embed = { version = "^8.13.0", default-features = false, features = ["mime-guess"] }
 serde = { version = "^1.0.229", default-features = false, features = ["derive", "rc", "std"] }
-serde_json = { version = "^1.0.151", default-features = false, features = ["raw_value"] }
+serde_json = { version = "^1.0.154", default-features = false, features = ["raw_value"] }
 serde_qs = { version = "1.1.3", default-features = false, features = [] }
 sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-alpha.4-fork", default-features = false }
 sqlite3-parser = "0.17.0"

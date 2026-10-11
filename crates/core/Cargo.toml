@@ -64,7 +64,7 @@ hyper-util = "0.1.21"
 indexmap = "2.14.2"
 init-tracing-opentelemetry = { version = "0.43.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.58.5", default-features = false }
+jsonschema = { version = "0.58.6", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.1"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }
@@ -139,13 +139,13 @@ axum-test = "21.1.0"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 env_logger = { workspace = true }
 eventsource-stream = { version = "0.2.3", default-features = false }
-indoc = "2.0.7"
+indoc = "2.0.8"
 mimalloc = { workspace = true }
 oliphaunt-pgwire-server = { workspace = true }
 oliphaunt-wasix = { workspace = true }
 quoted_printable = "0.5.2"
 rcgen = "0.14.10"
-rsa = "0.10.0-rc.18"
+rsa = "0.10.0-rc.19"
 schemars = "1.2.2"
 temp-dir = "0.2.0"
 tower = { version = "0.5.3", features = ["util"] }
