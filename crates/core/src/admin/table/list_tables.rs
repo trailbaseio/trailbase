@@ -44,7 +44,7 @@ pub struct ListSchemasResponse {
 pub async fn list_tables_handler(
   State(state): State<AppState>,
 ) -> Result<Json<ListSchemasResponse>, Error> {
-  let conn = state.connection_manager().main_entry().connection;
+  let conn = &state.connection_manager().main_entry().connection;
 
   return match conn.connection_type() {
     #[cfg(feature = "pg")]
@@ -62,7 +62,7 @@ async fn list_tables_handler_pg_impl(state: AppState) -> Result<Json<ListSchemas
   let trailbase_schema::db::metadata::ConnectionMetadata { tables, views } =
     crate::schema_metadata::build_metadata_and_maybe_file_deletions(
       &conn,
-      state.json_schema_registry(),
+      state.json_schema_registry().load_full(),
       /* setup_file_deletions = */ false,
     )
     .await?;

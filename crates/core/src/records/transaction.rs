@@ -223,7 +223,7 @@ fn apply_ops<T: SyncConnection>(
           }
 
           let mut lazy_params =
-            LazyParams::for_insert(&api, state.json_schema_registry().clone(), record, None);
+            LazyParams::for_insert(&api, state.json_schema_registry().load_full(), record, None);
           api.record_level_access_check(
             conn,
             Permission::Create,
@@ -280,7 +280,7 @@ fn apply_ops<T: SyncConnection>(
 
           let mut lazy_params = LazyParams::for_update(
             &api,
-            state.json_schema_registry().clone(),
+            state.json_schema_registry().load_full(),
             record,
             None,
             pk_meta.column.name.clone(),

@@ -1,5 +1,4 @@
 use jsonschema::Validator;
-use parking_lot::RwLock;
 use quick_cache::sync::Cache;
 use rusqlite::Error;
 use rusqlite::functions::{Context, FunctionFlags};
@@ -176,7 +175,7 @@ fn jsonschema_matches(context: &Context) -> Result<bool, Error> {
 
 pub(crate) fn register_extension_functions(
   db: &rusqlite::Connection,
-  registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
+  registry: Option<Arc<JsonSchemaRegistry>>,
 ) -> Result<(), rusqlite::Error> {
   // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
   // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,
@@ -193,37 +192,37 @@ pub(crate) fn register_extension_functions(
     jsonschema_matches,
   )?;
 
-  if let Some(registry) = registry {
-    // Match column against registered JSON schema by name, e.g. jsonschema(col, 'schema-name').
+  let Some(registry) = registry else {
+    return Ok(());
+  };
+
+  db.create_scalar_function(
+    "jsonschema",
+    2,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
     {
       let registry = registry.clone();
-      db.create_scalar_function(
-        "jsonschema",
-        2,
-        FunctionFlags::SQLITE_UTF8
-          | FunctionFlags::SQLITE_DETERMINISTIC
-          | FunctionFlags::SQLITE_INNOCUOUS,
-        move |context| {
-          let lock = registry.read();
-          return jsonschema_by_name_impl(context, &lock);
-        },
-      )?;
-    }
+      move |context| {
+        return jsonschema_by_name_impl(context, &registry);
+      }
+    },
+  )?;
+
+  db.create_scalar_function(
+    "jsonschema",
+    3,
+    FunctionFlags::SQLITE_UTF8
+      | FunctionFlags::SQLITE_DETERMINISTIC
+      | FunctionFlags::SQLITE_INNOCUOUS,
     {
       let registry = registry.clone();
-      db.create_scalar_function(
-        "jsonschema",
-        3,
-        FunctionFlags::SQLITE_UTF8
-          | FunctionFlags::SQLITE_DETERMINISTIC
-          | FunctionFlags::SQLITE_INNOCUOUS,
-        move |context| {
-          let lock = registry.read();
-          return jsonschema_by_name_with_extra_args_impl(context, &lock);
-        },
-      )?;
-    }
-  }
+      move |context| {
+        return jsonschema_by_name_with_extra_args_impl(context, &registry);
+      }
+    },
+  )?;
 
   return Ok(());
 }
@@ -232,7 +231,6 @@ pub(crate) fn register_extension_functions(
 mod tests {
   use super::*;
 
-  use parking_lot::RwLock;
   use rusqlite::params;
 
   #[test]
@@ -296,7 +294,7 @@ mod tests {
         }
     "#;
 
-    let json_schema_registry = Arc::new(RwLock::new(JsonSchemaRegistry::from_schemas(vec![(
+    let json_schema_registry = Arc::new(JsonSchemaRegistry::from_schemas(vec![(
       "name0".to_string(),
       Schema::from(
         serde_json::from_str(text0_schema).unwrap(),
@@ -304,7 +302,7 @@ mod tests {
         false,
       )
       .unwrap(),
-    )])));
+    )]));
 
     let conn = crate::connect_sqlite(None, Some(json_schema_registry)).unwrap();
 

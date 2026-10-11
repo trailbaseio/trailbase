@@ -8648,6 +8648,7 @@ version = "0.2.0"
 dependencies = [
  "aes-gcm-siv",
  "anyhow",
+ "arc-swap",
  "askama",
  "async-channel 2.5.0",
  "async-trait",

@@ -1,6 +1,5 @@
 use fallible_iterator::FallibleIterator;
 use log::*;
-use parking_lot::RwLock;
 use std::sync::Arc;
 use thiserror::Error;
 use trailbase_schema::db::parse_sql::parse_into_statement;
@@ -39,16 +38,14 @@ pub enum SchemaLookupError {
 
 pub(crate) async fn build_metadata_and_maybe_file_deletions(
   conn: &trailbase_sqlite::Connection,
-  json_schema_registry: &Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
+  json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
   setup_file_deletions: bool,
 ) -> Result<ConnectionMetadata, SchemaLookupError> {
-  let json_schema_registry = json_schema_registry.clone();
-
   // Nested impl just for packaging error.
   fn build_metadata_impl(
     conn: &mut trailbase_sqlite::SyncConnection,
     connection_type: ConnectionType,
-    json_schema_registry: &Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
+    json_schema_registry: &Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
   ) -> Result<ConnectionMetadata, SchemaLookupError> {
     let tables = lookup_and_parse_all_table_schemas(conn, connection_type)?;
     let views = lookup_and_parse_all_view_schemas(conn, connection_type, &tables)?;
@@ -56,7 +53,7 @@ pub(crate) async fn build_metadata_and_maybe_file_deletions(
     return Ok(ConnectionMetadata::from_schemas(
       tables,
       views,
-      &json_schema_registry.read(),
+      &json_schema_registry,
     )?);
   }
 
@@ -516,7 +513,7 @@ mod tests {
     let table_metadata = metadata.get_table(&table_name).unwrap();
 
     let (validator, schema) = build_json_schema_expanded(
-      &state.json_schema_registry().read(),
+      &state.json_schema_registry().load(),
       &table_name.name,
       &table_metadata.column_metadata,
       JsonSchemaMode::Select,

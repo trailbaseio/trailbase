@@ -355,7 +355,6 @@ static GEOJSON_GEOMETRY: LazyLock<Value> = LazyLock::new(|| {
 
 #[cfg(test)]
 mod tests {
-  use parking_lot::RwLock;
   use serde_json::json;
   use std::sync::Arc;
 
@@ -366,9 +365,8 @@ mod tests {
 
   #[test]
   fn test_parse_table_schema() {
-    let registry = Arc::new(RwLock::new(
-      crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
-    ));
+    let registry =
+      Arc::new(crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap());
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
 
     let col0_schema = json!({
@@ -400,12 +398,8 @@ mod tests {
       )
       .unwrap();
 
-    let (table, schema, _value) = get_and_build_table_schema(
-      &conn,
-      &registry.read(),
-      "test_table",
-      JsonSchemaMode::Insert,
-    );
+    let (table, schema, _value) =
+      get_and_build_table_schema(&conn, &registry, "test_table", JsonSchemaMode::Insert);
 
     let col = table.columns.first().unwrap();
     let check_expr = col
@@ -510,9 +504,8 @@ mod tests {
 
   #[test]
   fn test_file_uploads_schema() {
-    let registry = Arc::new(RwLock::new(
-      crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
-    ));
+    let registry =
+      Arc::new(crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap());
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
 
     conn
@@ -526,21 +519,16 @@ mod tests {
       )
       .unwrap();
 
-    let (_table, schema, _value) = get_and_build_table_schema(
-      &conn,
-      &registry.read(),
-      "test_table",
-      JsonSchemaMode::Insert,
-    );
+    let (_table, schema, _value) =
+      get_and_build_table_schema(&conn, &registry, "test_table", JsonSchemaMode::Insert);
 
     assert!(schema.is_valid(&json!({})));
   }
 
   #[test]
   fn test_geojson_schema() {
-    let registry = Arc::new(RwLock::new(
-      crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
-    ));
+    let registry =
+      Arc::new(crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap());
 
     let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
     litegis::register(&conn).unwrap();
@@ -551,12 +539,8 @@ mod tests {
 
     {
       // Insert
-      let (_table, schema, _value) = get_and_build_table_schema(
-        &conn,
-        &registry.read(),
-        "test_table",
-        JsonSchemaMode::Insert,
-      );
+      let (_table, schema, _value) =
+        get_and_build_table_schema(&conn, &registry, "test_table", JsonSchemaMode::Insert);
 
       let valid_point = json!({
         "type": "Point",
@@ -583,12 +567,8 @@ mod tests {
 
     {
       // Update
-      let (_table, schema, _value) = get_and_build_table_schema(
-        &conn,
-        &registry.read(),
-        "test_table",
-        JsonSchemaMode::Update,
-      );
+      let (_table, schema, _value) =
+        get_and_build_table_schema(&conn, &registry, "test_table", JsonSchemaMode::Update);
 
       assert!(schema.is_valid(&json!({})));
     }

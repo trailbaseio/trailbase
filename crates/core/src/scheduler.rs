@@ -473,7 +473,7 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
 
               for db_name in db_names {
                 let conn = match db_name {
-                  None => connection_manager.main_entry().connection,
+                  None => connection_manager.main_entry().connection.clone(),
                   Some(ref db_name) => {
                     let Ok(entry) = connection_manager
                       .get_entry(/* is_main= */ false, Some([db_name.clone()].into()))
@@ -740,7 +740,7 @@ mod tests {
   async fn all_default_jobs() {
     let state = crate::app_state::test_state(None).await.unwrap();
     let config = state.get_config();
-    let conn = state.connection_manager().main_entry().connection;
+    let conn = &state.connection_manager().main_entry().connection;
 
     let options = BuildJobOptions {
       config: &config,

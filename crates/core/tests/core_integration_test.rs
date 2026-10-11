@@ -3,7 +3,6 @@ use axum::http::StatusCode;
 use axum_test::TestServer;
 use axum_test::multipart::MultipartForm;
 use serde::Deserialize;
-use std::sync::Arc;
 use tower_cookies::Cookie;
 use trailbase_sqlite::params;
 
@@ -39,7 +38,7 @@ async fn start_pg() -> PgSetup {
 
   let pg_uri = db.connection_string().to_string();
 
-  let db = Arc::new(parking_lot::Mutex::new(Some(db)));
+  let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
 
   // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
   trailbase_sqlite::test_util::start_watchdog(
@@ -359,7 +358,7 @@ async fn add_record_api_config(
 }
 
 async fn create_chat_message_app_tables(
-  conn: &Arc<trailbase_sqlite::Connection>,
+  conn: &trailbase_sqlite::Connection,
 ) -> Result<(), anyhow::Error> {
   // Create a messages, chat room and members tables.
   conn
@@ -403,7 +402,7 @@ async fn create_chat_message_app_tables(
 }
 
 async fn add_room(
-  conn: &Arc<trailbase_sqlite::Connection>,
+  conn: &trailbase_sqlite::Connection,
   name: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let room: [u8; 16] = conn
@@ -419,7 +418,7 @@ async fn add_room(
 }
 
 async fn add_user_to_room(
-  conn: &Arc<trailbase_sqlite::Connection>,
+  conn: &trailbase_sqlite::Connection,
   user: [u8; 16],
   room: [u8; 16],
 ) -> Result<(), anyhow::Error> {

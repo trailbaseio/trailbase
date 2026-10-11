@@ -1,3 +1,4 @@
+use arc_swap::ArcSwap;
 use log::*;
 use object_store::ObjectStore;
 use std::collections::HashMap;
@@ -54,7 +55,7 @@ struct InternalState {
   jobs: Reactive<Arc<JobRegistry>>,
   mailer: Reactive<Mailer>,
   config: Reactive<proto::Config>,
-  json_schema_registry: Arc<parking_lot::RwLock<JsonSchemaRegistry>>,
+  json_schema_registry: ArcSwap<JsonSchemaRegistry>,
 
   // TODO: Maybe remove main `conn` in favor of connection manager. Note that this is currently
   // also used for the state.user_conn().
@@ -102,9 +103,9 @@ impl AppState {
       /* read_only= */ args.read_only,
     )?;
 
-    let json_schema_registry = Arc::new(parking_lot::RwLock::new(
+    let json_schema_registry = ArcSwap::from_pointee(
       trailbase_schema::json_schema::registry::build_json_schema_registry(vec![])?,
-    ));
+    );
 
     if let Some(config) = crate::config::maybe_load_config_textproto_unverified(&args.data_dir)? {
       update_json_schema_registry(&config.schemas, &json_schema_registry)?;
@@ -112,7 +113,7 @@ impl AppState {
 
     let (connection_manager, new_db) = ConnectionManager::new(crate::connection::Options {
       data_dir: args.data_dir.clone(),
-      json_schema_registry: json_schema_registry.clone(),
+      json_schema_registry: json_schema_registry.load_full(),
       sqlite_function_runtimes: cfg_select! {
         feature = "wasm" => {
           crate::wasm::build_sync_wasm_runtimes_for_components(
@@ -186,7 +187,7 @@ impl AppState {
       )
       .await;
 
-      let main_conn = connection_manager.main_entry().connection;
+      let main_conn = connection_manager.main_entry().connection.clone();
 
       AppState {
         state: Arc::new(InternalState {
@@ -235,7 +236,7 @@ impl AppState {
           mailer: config.derive_unchecked(Mailer::new_from_config),
           config: config.clone(),
           json_schema_registry,
-          conn: (*main_conn).clone(),
+          conn: main_conn.clone(),
           session_conn,
           logs_conn,
           connection_manager,
@@ -247,7 +248,7 @@ impl AppState {
           wasm: crate::wasm::WasmState::init(
             &args.data_dir,
             config,
-            (*main_conn).clone(),
+            main_conn.clone(),
             args.wasm_tokio_runtime,
             args.runtime_root_fs,
             args.dev,
@@ -326,7 +327,7 @@ impl AppState {
     return self.state.demo;
   }
 
-  pub fn json_schema_registry(&self) -> &Arc<parking_lot::RwLock<JsonSchemaRegistry>> {
+  pub fn json_schema_registry(&self) -> &ArcSwap<JsonSchemaRegistry> {
     return &self.state.json_schema_registry;
   }
 
@@ -347,8 +348,8 @@ impl AppState {
     return &self.state.logs_conn;
   }
 
-  pub fn connection_manager(&self) -> ConnectionManager {
-    return self.state.connection_manager.clone();
+  pub fn connection_manager(&self) -> &ConnectionManager {
+    return &self.state.connection_manager;
   }
 
   pub fn version(&self) -> trailbase_build::version::VersionInfo {
@@ -495,7 +496,7 @@ impl AppState {
 /// Returns true if schemas were registered.
 pub(crate) fn update_json_schema_registry(
   config: &[proto::JsonSchemaConfig],
-  registry: &parking_lot::RwLock<JsonSchemaRegistry>,
+  registry: &ArcSwap<JsonSchemaRegistry>,
 ) -> Result<bool, ConfigError> {
   if !config.is_empty() {
     let schemas: Vec<_> = config
@@ -521,13 +522,13 @@ pub(crate) fn update_json_schema_registry(
       schemas = schemas.iter().map(|(name, _)| name.as_str())
     );
 
-    registry.write().swap(
+    registry.store(Arc::new(
       trailbase_schema::json_schema::registry::build_json_schema_registry(schemas).map_err(
         |err| {
           return ConfigError::Update(format!("Update of JSON schema registry failed: {err}"));
         },
       )?,
-    );
+    ));
 
     return Ok(true);
   }
@@ -563,7 +564,7 @@ async fn build_record_apis_impl(
         connection: conn,
         metadata,
       } = if attached_databases.is_empty() {
-        connection_manager.main_entry()
+        connection_manager.main_entry().clone()
       } else {
         connection_manager
           .get_entry(
@@ -769,11 +770,9 @@ mod test_utils {
       is_demo,
     } = options.unwrap_or_default();
 
-    let json_schema_registry = Arc::new(parking_lot::RwLock::new(
-      json_schema_registry.unwrap_or_else(|| {
-        trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap()
-      }),
-    ));
+    let json_schema_registry = ArcSwap::from_pointee(json_schema_registry.unwrap_or_else(|| {
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap()
+    }));
 
     let config = config.unwrap_or_else(test_config);
     update_json_schema_registry(&config.schemas, &json_schema_registry).unwrap();
@@ -783,7 +782,7 @@ mod test_utils {
 
     let connection_manager = ConnectionManager::new_for_test(
       data_dir.clone(),
-      json_schema_registry.clone(),
+      json_schema_registry.load_full(),
       vec![],
       pg_uri.clone(),
     )
@@ -837,7 +836,7 @@ mod test_utils {
         ),
         config,
         json_schema_registry,
-        conn: (*connection_manager.main_entry().connection).clone(),
+        conn: connection_manager.main_entry().connection,
         session_conn,
         logs_conn,
         connection_manager,

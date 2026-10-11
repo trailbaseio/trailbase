@@ -24,7 +24,7 @@ fn get_conn_and_migration_path(
     Some(db) if db != "main" => {
       let db_path = state.data_dir().data_path().join(format!("{db}.db"));
       let migration_path = state.data_dir().migrations_path().join(&db);
-      let json_registry = state.json_schema_registry().clone();
+      let json_registry = state.json_schema_registry().load_full();
 
       Ok((
         trailbase_sqlite::Connection::with_opts(
@@ -42,7 +42,7 @@ fn get_conn_and_migration_path(
       ))
     }
     _ => Ok((
-      (*state.connection_manager().main_entry().connection).clone(),
+      state.connection_manager().main_entry().connection,
       (state.data_dir().migrations_path().join("main")),
     )),
   };

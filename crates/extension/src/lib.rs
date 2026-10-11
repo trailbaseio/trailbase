@@ -1,7 +1,6 @@
 #![forbid(clippy::unwrap_used)]
 #![allow(clippy::needless_return)]
 
-use parking_lot::RwLock;
 use rusqlite::Connection;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -52,7 +51,7 @@ pub fn apply_default_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
 
 pub fn connect_sqlite(
   path: Option<PathBuf>,
-  registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
+  registry: Option<Arc<JsonSchemaRegistry>>,
 ) -> Result<Connection, Error> {
   // NOTE: We used to initialize C extensions here as well, such as sqlean and sqlite-vec, however
   // this has now been moved to the top-level CLI.
@@ -81,7 +80,7 @@ pub fn connect_sqlite(
 
 pub fn register_all_extension_functions(
   db: &Connection,
-  registry: Option<Arc<RwLock<JsonSchemaRegistry>>>,
+  registry: Option<Arc<JsonSchemaRegistry>>,
 ) -> Result<(), rusqlite::Error> {
   // WARN: Be careful with declaring INNOCUOUS. It allows "user-defined functions" to run
   // when "trusted_schema=OFF", which means as part of: VIEWs, TRIGGERs, CHECK, DEFAULT,

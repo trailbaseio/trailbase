@@ -22,20 +22,6 @@ use crate::records::subscribe::hook::{
 use crate::records::{RecordApi, RecordError};
 use crate::schema_metadata::ConnectionMetadata;
 
-// impl crate::records::expand::Record for &mut Record {
-//   fn consume(&mut self, index: usize) -> Option<(&str, trailbase_sqlite::Value)> {
-//     // NOTE: This makes a copy since we need to keep both the IndexMap record alive for filtering
-//     // and the serialized version for cheap copying.
-//     return self
-//       .get_index_mut(index)
-//       .map(|(name, v)| (name.as_str(), v.clone()));
-//   }
-//
-//   fn len(&self) -> usize {
-//     return (self as &Record).len();
-//   }
-// }
-
 /// Composite id uniquely identifying a subscription.
 ///
 /// If row_id is Some, this is considered to reference a subscription to a specific record.
@@ -176,7 +162,7 @@ pub struct PerConnectionStateInternal {
   pub connection_metadata: Arc<ConnectionMetadata>,
 
   /// Should be the same as for all `record_apis` above.
-  pub conn: Arc<trailbase_sqlite::Connection>,
+  pub conn: trailbase_sqlite::Connection,
 
   /// Map from table name to row id to list of subscriptions.
   ///

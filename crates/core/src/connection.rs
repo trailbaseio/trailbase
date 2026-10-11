@@ -1,4 +1,4 @@
-use parking_lot::RwLock;
+use arc_swap::ArcSwap;
 use quick_cache::sync::GuardResult;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -68,19 +68,19 @@ struct ConnectionKey {
 
 #[derive(Clone)]
 pub struct ConnectionEntry {
-  pub connection: Arc<Connection>,
+  pub connection: Connection,
   pub metadata: Arc<ConnectionMetadata>,
 }
 
 struct ConnectionManagerState {
   // Properties retained for initializing new connections.
   data_dir: DataDir,
-  json_schema_registry: Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
+  json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
   sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   read_only: bool,
 
   // Properties for caching connections:
-  main: RwLock<ConnectionEntry>,
+  main: ArcSwap<ConnectionEntry>,
   connections: quick_cache::sync::Cache<ConnectionKey, ConnectionEntry>,
 
   #[allow(unused)]
@@ -98,8 +98,7 @@ pub struct ConnectionManager {
 
 pub struct Options {
   pub data_dir: DataDir,
-  pub json_schema_registry:
-    Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
+  pub json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
   pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
   pub pg_uri: Option<String>,
   pub read_only: Option<bool>,
@@ -162,8 +161,8 @@ impl ConnectionManager {
           json_schema_registry,
           sqlite_function_runtimes,
           read_only: read_only.unwrap_or(false),
-          main: RwLock::new(ConnectionEntry {
-            connection: Arc::new(main_conn),
+          main: ArcSwap::from_pointee(ConnectionEntry {
+            connection: main_conn,
             metadata: Arc::new(main_metadata),
           }),
           connections: quick_cache::sync::Cache::new(256),
@@ -177,7 +176,7 @@ impl ConnectionManager {
   #[cfg(test)]
   pub(crate) async fn new_for_test(
     data_dir: DataDir,
-    json_schema_registry: Arc<RwLock<trailbase_schema::json_schema::registry::JsonSchemaRegistry>>,
+    json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
     sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
     pg_uri: Option<String>,
   ) -> Self {
@@ -225,8 +224,8 @@ impl ConnectionManager {
         json_schema_registry,
         sqlite_function_runtimes,
         read_only: READ_ONLY,
-        main: RwLock::new(ConnectionEntry {
-          connection: Arc::new(main_conn),
+        main: ArcSwap::from_pointee(ConnectionEntry {
+          connection: main_conn,
           metadata: Arc::new(main_metadata),
         }),
         connections: quick_cache::sync::Cache::new(256),
@@ -236,7 +235,7 @@ impl ConnectionManager {
   }
 
   pub fn main_entry(&self) -> ConnectionEntry {
-    return self.state.main.read().clone();
+    return (**self.state.main.load()).clone();
   }
 
   pub async fn get_entry(
@@ -245,7 +244,7 @@ impl ConnectionManager {
     attached_databases: Option<BTreeSet<String>>,
   ) -> Result<ConnectionEntry, ConnectionError> {
     if is_main && attached_databases.is_none() {
-      return Ok(self.state.main.read().clone());
+      return Ok(self.main_entry());
     }
 
     let key = ConnectionKey {
@@ -263,7 +262,9 @@ impl ConnectionManager {
             num_threads: None,
           })
           .await?;
+
         let _ = placeholder.insert(entry.clone());
+
         Ok(entry)
       }
       GuardResult::Timeout => {
@@ -277,7 +278,7 @@ impl ConnectionManager {
     name: &trailbase_schema::db::QualifiedName,
   ) -> Result<ConnectionEntry, ConnectionError> {
     return match name.database_schema.as_deref() {
-      Some("main") | Some("public") | None => Ok(self.main_entry()),
+      Some("main") | Some("public") | None => Ok(self.main_entry().clone()),
       Some(db) => {
         // QUESTION: Should we disallow access to "logs", "auth", etc? Currently, this is not
         // exposed to WASM, i.e. there's no sanctioned way to interact with this.
@@ -294,7 +295,7 @@ impl ConnectionManager {
       // Some code doesn't use cached connections to avoid side-effects (e.g. admin query handler).
       // However, this doesn't work specifically for SQLite "in-memory" connections, thus we need
       // this test-only workaround.
-      return Ok(self.state.main.read().clone());
+      return Ok(self.main_entry());
     }
 
     let pg_uri: Option<&String> = cfg_select! {
@@ -365,7 +366,7 @@ impl ConnectionManager {
     };
 
     return Ok(ConnectionEntry {
-      connection: Arc::new(conn),
+      connection: conn,
       metadata: Arc::new(metadata),
     });
   }
@@ -375,16 +376,20 @@ impl ConnectionManager {
     // Main
     {
       let new_metadata = Arc::new({
-        let conn = self.state.main.read().connection.clone();
+        let conn = self.state.main.load().connection.clone();
         build_metadata_and_maybe_file_deletions(
           &conn,
-          &self.state.json_schema_registry,
+          self.state.json_schema_registry.clone(),
           /* setup_file_deletions= */ !self.state.read_only,
         )
         .await?
       });
 
-      self.state.main.write().metadata = new_metadata;
+      let connection = self.state.main.load().connection.clone();
+      self.state.main.store(Arc::new(ConnectionEntry {
+        connection,
+        metadata: new_metadata,
+      }))
     }
 
     // Others:
@@ -392,7 +397,7 @@ impl ConnectionManager {
       let new_metadata = Arc::new(
         build_metadata_and_maybe_file_deletions(
           &entry.connection,
-          &self.state.json_schema_registry,
+          self.state.json_schema_registry.clone(),
           /* setup_file_deletions = */ !self.state.read_only,
         )
         .await?,
@@ -416,7 +421,7 @@ struct InitDbOptions<'a> {
   data_path: Option<&'a PathBuf>,
   migration_path: Option<&'a PathBuf>,
   is_main_db: bool,
-  json_registry: &'a Arc<RwLock<JsonSchemaRegistry>>,
+  json_registry: &'a Arc<JsonSchemaRegistry>,
   runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
   attach: Vec<AttachedDatabase>,
   num_threads: Option<usize>,
@@ -450,7 +455,7 @@ async fn init_db_pg<'a>(
   // NOTE: read_only not supported for PG.
   let metadata = build_metadata_and_maybe_file_deletions(
     &conn,
-    opts.json_registry,
+    opts.json_registry.clone(),
     /* setup_file_deletions= */ true, // PG does not support RO.
   )
   .await?;
@@ -477,7 +482,7 @@ async fn init_db_sqlite<'a>(
 
   fn build_connection(
     db_path: Option<PathBuf>,
-    json_registry: Arc<RwLock<JsonSchemaRegistry>>,
+    json_registry: Arc<JsonSchemaRegistry>,
     #[allow(unused)] runtimes: &[(SqliteStore, SqliteFunctions)],
   ) -> Result<rusqlite::Connection, ConnectionError> {
     let conn = trailbase_extension::connect_sqlite(db_path, Some(json_registry))?;
@@ -574,7 +579,7 @@ async fn init_db_sqlite<'a>(
   // Lastly, after attaching all DBs, build connection metadata.
   let metadata = build_metadata_and_maybe_file_deletions(
     &conn,
-    opts.json_registry,
+    opts.json_registry.clone(),
     /* setup_file_deletions= */ !opts.read_only.unwrap_or(false),
   )
   .await?;

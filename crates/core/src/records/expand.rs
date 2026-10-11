@@ -142,7 +142,7 @@ mod tests {
       .unwrap();
 
     let metadata = TableMetadata::new(
-      &state.json_schema_registry().read(),
+      &state.json_schema_registry().load(),
       table.clone(),
       &[table],
     )

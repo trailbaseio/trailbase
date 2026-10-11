@@ -139,7 +139,7 @@ pub struct RecordApi {
 
 struct RecordApiState {
   /// Cached connection for access checks and subscription state construction.
-  conn: Arc<trailbase_sqlite::Connection>,
+  conn: trailbase_sqlite::Connection,
   /// Cached connection metadata.
   metadata: Arc<ConnectionMetadata>,
 
@@ -174,7 +174,7 @@ struct RecordApiState {
 
 impl RecordApiState {
   pub(crate) fn from_table(
-    conn: Arc<Connection>,
+    conn: Connection,
     metadata: Arc<ConnectionMetadata>,
     table_metadata: &TableMetadata,
     config: proto::RecordApiConfig,
@@ -190,7 +190,7 @@ impl RecordApiState {
   }
 
   pub(crate) fn from_view(
-    conn: Arc<Connection>,
+    conn: Connection,
     metadata: Arc<ConnectionMetadata>,
     view_metadata: &ViewMetadata,
     config: proto::RecordApiConfig,
@@ -206,7 +206,7 @@ impl RecordApiState {
   }
 
   fn from_impl(
-    conn: Arc<Connection>,
+    conn: Connection,
     metadata: Arc<ConnectionMetadata>,
     schema: RecordApiSchema,
     config: proto::RecordApiConfig,
@@ -361,7 +361,7 @@ impl RecordApiState {
 
 impl RecordApi {
   pub(crate) fn build(
-    conn: Arc<trailbase_sqlite::Connection>,
+    conn: trailbase_sqlite::Connection,
     metadata: Arc<trailbase_schema::db::metadata::ConnectionMetadata>,
     config: proto::RecordApiConfig,
   ) -> Result<Self, String> {
@@ -411,7 +411,7 @@ impl RecordApi {
     return &self.state.schema.attached_databases;
   }
 
-  pub fn conn(&self) -> &Arc<trailbase_sqlite::Connection> {
+  pub fn conn(&self) -> &trailbase_sqlite::Connection {
     return &self.state.conn;
   }
 

@@ -1,4 +1,3 @@
-use parking_lot::RwLock;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -322,7 +321,7 @@ impl Params {
 
   pub fn for_admin_update<S: ColumnAccessor>(
     accessor: &S,
-    json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
+    json_schema_registry: Arc<JsonSchemaRegistry>,
     row: indexmap::IndexMap<String, SqlValue>,
     pk_column_name: String,
     pk_column_value: SqlValue,
@@ -355,7 +354,7 @@ impl Params {
             match value {
               SqlValue::Text(text) => {
                 let (param, json_files) = extract_params_and_files_from_json(
-                  &json_schema_registry.read(),
+                  &json_schema_registry,
                   column,
                   json.as_ref(),
                   *is_geometry,
@@ -427,23 +426,18 @@ pub enum LazyParams<'a> {
 impl<'a> LazyParams<'a> {
   pub fn for_insert<S: ColumnAccessor + Sync>(
     accessor: &'a S,
-    json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
+    json_schema_registry: Arc<JsonSchemaRegistry>,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
     return LazyParams::LazyInsert(Some(Box::new(move || {
-      return Params::for_insert(
-        accessor,
-        &json_schema_registry.read(),
-        json_row,
-        multipart_files,
-      );
+      return Params::for_insert(accessor, &json_schema_registry, json_row, multipart_files);
     })));
   }
 
   pub fn for_update<S: ColumnAccessor + Sync>(
     accessor: &'a S,
-    json_schema_registry: Arc<RwLock<JsonSchemaRegistry>>,
+    json_schema_registry: Arc<JsonSchemaRegistry>,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
     primary_key_column: String,
@@ -452,7 +446,7 @@ impl<'a> LazyParams<'a> {
     return LazyParams::LazyUpdate(Some(Box::new(move || {
       return Params::for_update(
         accessor,
-        &json_schema_registry.read(),
+        &json_schema_registry,
         json_row,
         multipart_files,
         primary_key_column,

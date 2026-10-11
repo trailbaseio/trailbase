@@ -72,7 +72,7 @@ pub async fn list_rows_handler(
   // Build fresh metadata rather than relying on cache.
   let metadata = crate::schema_metadata::build_metadata_and_maybe_file_deletions(
     &conn,
-    state.json_schema_registry(),
+    state.json_schema_registry().load_full(),
     /* setup_file_deletions= */ false,
   )
   .await?;

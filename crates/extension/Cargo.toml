@@ -12,7 +12,7 @@ readme = "../../README.md"
 crate-type=["rlib"]
 
 [dependencies]
-arc-swap = "1.9.2"
+arc-swap = { workspace = true }
 argon2 = { workspace = true }
 base64 = { workspace = true }
 bcrypt = "0.19.3"

@@ -55,7 +55,7 @@ fn build_api_json_schema_internal(
     };
 
     return build_json_schema_expanded(
-      &state.json_schema_registry().read(),
+      &state.json_schema_registry().load(),
       api.api_name(),
       api.columns(),
       mode,
@@ -65,7 +65,7 @@ fn build_api_json_schema_internal(
   }
 
   return build_json_schema(
-    &state.json_schema_registry().read(),
+    &state.json_schema_registry().load(),
     api.api_name(),
     api.columns(),
     mode,

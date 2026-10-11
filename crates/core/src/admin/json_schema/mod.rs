@@ -35,7 +35,7 @@ pub async fn list_schemas_handler(
 ) -> Result<Json<ListJsonSchemasResponse>, Error> {
   let schemas = state
     .json_schema_registry()
-    .read()
+    .load()
     .entries()
     .iter()
     .map(|(name, schema)| {
