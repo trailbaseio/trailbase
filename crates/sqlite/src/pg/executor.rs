@@ -237,26 +237,19 @@ fn event_loop(
 }
 
 #[cfg(test)]
-pub fn build_postgres_test_executor() -> Result<
+pub async fn build_postgres_test_executor() -> Result<
   (
-    Arc<parking_lot::Mutex<Option<oliphaunt_wasix::OliphauntServer>>>,
+    Arc<parking_lot::Mutex<Option<oliphaunt_pgwire_server::AsyncOliphauntServer>>>,
     Executor,
   ),
   Error,
 > {
   use postgres::{Client, NoTls};
 
-  // let tmp_dir = tempfile::TempDir::new().unwrap();
-  // let db = oliphaunt_wasix::OliphauntServer::builder()
-  //   .listen(oliphaunt_wasix::ServerListen::unix(tmp_dir.path()))
-  //   .start()
-  //   .map_err(|err| Error::Other(err.into()))?;
-  // let pg_uri = format!(
-  //   "postgresql://postgres@/template1?host={}",
-  //   tmp_dir.path().to_string_lossy()
-  // );
-
-  let db = oliphaunt_wasix::OliphauntServer::builder().start().unwrap();
+  let db = oliphaunt_pgwire_server::AsyncOliphauntServer::builder()
+    .start()
+    .await
+    .unwrap();
   let pg_uri = db.connection_string().to_string();
   log::debug!("Started PgLite: {pg_uri}");
 
@@ -265,8 +258,8 @@ pub fn build_postgres_test_executor() -> Result<
     &db,
     |db| {
       log::info!("shutting down pglite");
-      if let Some(mut db) = db.lock().take() {
-        db.close().unwrap();
+      if let Some(db) = db.lock().take() {
+        db.close_with_completion(|res| res.unwrap());
       }
     },
     std::time::Duration::from_mins(8),
@@ -293,7 +286,7 @@ mod tests {
 
   #[tokio::test]
   async fn postgres_basic_executor_test() {
-    let (_db, exec) = build_postgres_test_executor().unwrap();
+    let (_db, exec) = build_postgres_test_executor().await.unwrap();
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
     assert_eq!(1, exec.threads());
@@ -343,7 +336,7 @@ mod tests {
 
   #[tokio::test]
   async fn postgres_named_parameter_test() {
-    let (_db, exec) = build_postgres_test_executor().unwrap();
+    let (_db, exec) = build_postgres_test_executor().await.unwrap();
 
     // IMPORTANT: PgLite only handles a single concurrent connection.
     assert_eq!(1, exec.threads());

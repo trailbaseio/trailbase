@@ -141,6 +141,7 @@ env_logger = { workspace = true }
 eventsource-stream = { version = "0.2.3", default-features = false }
 indoc = "2.0.7"
 mimalloc = { workspace = true }
+oliphaunt-pgwire-server = { workspace = true }
 oliphaunt-wasix = { workspace = true }
 quoted_printable = "0.5.2"
 rcgen = "0.14.10"

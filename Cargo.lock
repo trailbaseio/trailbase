@@ -241,7 +241,7 @@ checksum = "45403b49e3954a4b8428a0ac21a4b7afadccf92bfd96273f1a58cd4812496ae0"
 dependencies = [
  "generic-array 0.12.4",
  "generic-array 0.13.3",
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
  "stable_deref_trait",
 ]
 
@@ -839,7 +839,7 @@ version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
 dependencies = [
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
 ]
 
 [[package]]
@@ -1785,7 +1785,7 @@ version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
 dependencies = [
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
  "rand_core 0.6.4",
  "subtle",
  "zeroize",
@@ -1807,11 +1807,11 @@ dependencies = [
 
 [[package]]
 name = "crypto-common"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1bfb12502f3fc46cca1bb51ac28df9d618d813cdc3d2f25b9fe775a34af26bb3"
+checksum = "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
 dependencies = [
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
  "typenum",
 ]
 
@@ -2244,7 +2244,7 @@ checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer 0.10.4",
  "const-oid 0.9.6",
- "crypto-common 0.1.6",
+ "crypto-common 0.1.7",
  "subtle",
 ]
 
@@ -2426,7 +2426,7 @@ dependencies = [
  "crypto-bigint 0.5.5",
  "digest 0.10.7",
  "ff",
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
  "group",
  "hkdf",
  "pem-rfc7468 0.7.0",
@@ -3047,9 +3047,9 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "0.14.9"
+version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bb6743198531e02858aeaea5398fcc883e71851fcbcb5a2f773e2fb6cb1edf2"
+checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
@@ -3367,7 +3367,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "634bd4d29cbf24424d0a4bfcbf80c6960129dc24424752a7d1d1390607023422"
 dependencies = [
  "as-slice",
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
  "hash32 0.1.1",
  "stable_deref_trait",
 ]
@@ -4316,9 +4316,9 @@ dependencies = [
 
 [[package]]
 name = "liboliphaunt-wasix-aot-aarch64-apple-darwin"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9049ab9fe12854f66809d335799c1d7a9fe8f83b6ec3b5cb37569e2fb77a95f"
+checksum = "835ede81ff81dcfb2767878209a1c372b7e3338c401595cf179aa68e1f1cc0c7"
 dependencies = [
  "serde_json",
  "sha2 0.10.9",
@@ -4326,9 +4326,9 @@ dependencies = [
 
 [[package]]
 name = "liboliphaunt-wasix-aot-aarch64-unknown-linux-gnu"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebf4db27b9f3e90645865f0b44d9ed5b3d9fd8a54a4e5482d70763bdeff3015c"
+checksum = "14b15cb79e689f5f0eab69f5acd92f68f61ae57d9f3bfa4cc18658a6d1bb67ad"
 dependencies = [
  "serde_json",
  "sha2 0.10.9",
@@ -4336,9 +4336,9 @@ dependencies = [
 
 [[package]]
 name = "liboliphaunt-wasix-aot-x86_64-pc-windows-msvc"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d99ebe7e2c4fd9e826fbcde43d104205528177e67ba046c150ce60dc30b0f7cc"
+checksum = "6c7a811a634a1b0d686369cbaefa8dabbfe5825fc4a03140ddda7beb3343bd30"
 dependencies = [
  "serde_json",
  "sha2 0.10.9",
@@ -4346,9 +4346,9 @@ dependencies = [
 
 [[package]]
 name = "liboliphaunt-wasix-aot-x86_64-unknown-linux-gnu"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5901f3380f69980bd492deace358df16e207aab5379e474e9fe450238a4c0b2"
+checksum = "9e56a349c5c888ad65a623cbce954e13ae6dcead6ea846fc63202158f815976d"
 dependencies = [
  "serde_json",
  "sha2 0.10.9",
@@ -4356,9 +4356,9 @@ dependencies = [
 
 [[package]]
 name = "liboliphaunt-wasix-portable"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47ff3f35d1db54cbf44f272eab71e520c721048c2f49f8b3291e6e7c231f0a5c"
+checksum = "78ebe15bd97751ed6c63ae25067c6a92a2266fa861d295d9d45844260acba30b"
 dependencies = [
  "oliphaunt-extension-contrib-pg18-aot-linux-arm64",
  "oliphaunt-extension-contrib-pg18-aot-linux-x64",
@@ -5159,39 +5159,74 @@ dependencies = [
 
 [[package]]
 name = "oliphaunt-extension-contrib-pg18-aot-linux-arm64"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22962116792ca188ed83d3d38b2976e9bc8afbcfafa8bd26e79c6509782851b2"
+checksum = "6593cd36d8c9cb83d2098ef5f62005bb62861f05bcd3d7238f5bcccbc11cdfd3"
+dependencies = [
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "oliphaunt-extension-contrib-pg18-aot-linux-x64"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d238ebc710178eaef2cd6e4cdb81fe098629d9736b9bbfa71afdd0615daf9d3c"
+checksum = "238580b3fed00f8537e64c1c6548d74d33b544a322946879a8821eed7f4dc792"
+dependencies = [
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "oliphaunt-extension-contrib-pg18-aot-macos-arm64"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6be219f20450bde37c8220be5ca40b13eccd9bc796ab5378825d1e742bd93e6d"
+checksum = "41bef2ac428e3b7f2149d1c342135c573a9dbd9c592eebaea3e0083f3840c64c"
+dependencies = [
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "oliphaunt-extension-contrib-pg18-aot-windows-x64"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a29fb910e4039b219078e4572e9eb082050fff8648ef7f6656d7ca10d5afba1"
+checksum = "623d461eda99618bda616e1f488160d0fa6833215676f73dc0c134a29c283cbd"
+dependencies = [
+ "sha2 0.10.9",
+]
 
 [[package]]
 name = "oliphaunt-extension-contrib-pg18-wasix"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f94f3c38b7237b40a5358593f68454040f58bf07747d4f9022f6a63418976098"
+checksum = "76a2cbf8c683ae8b380f11f4fa7581c41eddb370ab4d94cbba07d169c2ab7778"
+dependencies = [
+ "sha2 0.10.9",
+]
+
+[[package]]
+name = "oliphaunt-pgwire-server"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "615ed3a8a52e7ef087e5ab9a8737170119177b405d44cc345dcb6bb580fee5d1"
+dependencies = [
+ "anyhow",
+ "oliphaunt-query",
+ "oliphaunt-wasix",
+ "tempfile",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "oliphaunt-query"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "523a7416f6a830ef02928994a2a89e9fd9d01e4fe67b22f0480d377d5f9b235c"
 
 [[package]]
 name = "oliphaunt-wasix"
-version = "0.2.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0639810aeb8df626b42ea869cf332bcaefe69bf42274e883023c37c391226f5"
+checksum = "a2dc2d38563c9b90bfea2504751bbad64ecff3ddd18a8ae62526fabb83179824"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -5206,6 +5241,7 @@ dependencies = [
  "liboliphaunt-wasix-aot-x86_64-pc-windows-msvc",
  "liboliphaunt-wasix-aot-x86_64-unknown-linux-gnu",
  "liboliphaunt-wasix-portable",
+ "oliphaunt-query",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -7267,7 +7303,7 @@ checksum = "d3e97a565f76233a6003f9f5c54be1d9c5bdfa3eccfb189469f11ec4901c47dc"
 dependencies = [
  "base16ct 0.2.0",
  "der 0.7.10",
- "generic-array 0.14.9",
+ "generic-array 0.14.7",
  "pkcs8 0.10.2",
  "subtle",
  "zeroize",
@@ -8657,6 +8693,7 @@ dependencies = [
  "minijinja",
  "oauth2",
  "object_store",
+ "oliphaunt-pgwire-server",
  "oliphaunt-wasix",
  "once_cell",
  "parking_lot",
@@ -8856,7 +8893,7 @@ version = "0.0.1"
 dependencies = [
  "itertools 0.15.0",
  "log",
- "oliphaunt-wasix",
+ "oliphaunt-pgwire-server",
  "parking_lot",
  "serde",
  "tempfile",
@@ -8959,7 +8996,7 @@ dependencies = [
  "glob",
  "itertools 0.15.0",
  "log",
- "oliphaunt-wasix",
+ "oliphaunt-pgwire-server",
  "parking_lot",
  "postgres",
  "rand 0.10.3",

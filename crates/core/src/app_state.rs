@@ -728,10 +728,13 @@ mod test_utils {
       ];
 
       // Start the embedded Postgres.
-      let db = oliphaunt_wasix::OliphauntServer::builder()
+      let db = oliphaunt_pgwire_server::AsyncOliphauntServer::builder()
         .extensions(extensions)
-        .listen(oliphaunt_wasix::ServerListen::unix(data_dir.main_db_path()))
-        .start()?;
+        .listen(oliphaunt_pgwire_server::ServerListen::unix(
+          data_dir.main_db_path(),
+        ))
+        .start()
+        .await?;
       let pg_uri = db.connection_string().to_string();
 
       let db = Arc::new(parking_lot::Mutex::new(Some(db)));
@@ -740,9 +743,9 @@ mod test_utils {
       trailbase_sqlite::test_util::start_watchdog(
         &db,
         |db| {
-          if let Some(mut db) = db.lock().take() {
+          if let Some(db) = db.lock().take() {
             info!("shutting down pglite");
-            db.close().unwrap();
+            db.close_with_completion(|res| res.unwrap());
           } else {
             info!("pglite already consumed");
           }
@@ -751,8 +754,8 @@ mod test_utils {
       );
 
       let pg_shutdown = scopeguard::guard(db, |db| {
-        if let Some(mut db) = db.lock().take() {
-          db.close().unwrap();
+        if let Some(db) = db.lock().take() {
+          db.close_with_completion(|res| res.unwrap());
         }
       });
 

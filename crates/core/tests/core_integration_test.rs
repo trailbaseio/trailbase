@@ -24,8 +24,8 @@ struct PgSetup {
 }
 
 #[cfg(all(test, feature = "pg-test"))]
-fn start_pg() -> PgSetup {
-  let db = oliphaunt_wasix::OliphauntServer::builder()
+async fn start_pg() -> PgSetup {
+  let db = oliphaunt_pgwire_server::AsyncOliphauntServer::builder()
     .extensions([
       oliphaunt_wasix::Extension::PGCRYPTO,
       // Enable case-insensitive text columns.
@@ -34,6 +34,7 @@ fn start_pg() -> PgSetup {
       // oliphaunt_wasix::Extension::POSTGIS,
     ])
     .start()
+    .await
     .unwrap();
 
   let pg_uri = db.connection_string().to_string();
@@ -44,9 +45,9 @@ fn start_pg() -> PgSetup {
   trailbase_sqlite::test_util::start_watchdog(
     &db,
     |db| {
-      if let Some(mut db) = db.lock().take() {
+      if let Some(db) = db.lock().take() {
         log::info!("shutting down pglite");
-        db.close().unwrap();
+        db.close_with_completion(|res| res.unwrap());
 
         // Give the test a chance to terminate.
         std::thread::sleep(std::time::Duration::from_secs(15));
@@ -58,8 +59,8 @@ fn start_pg() -> PgSetup {
   );
 
   let pg_shutdown = scopeguard::guard(db, |db| {
-    if let Some(mut db) = db.lock().take() {
-      db.close().unwrap();
+    if let Some(db) = db.lock().take() {
+      db.close_with_completion(|res| res.unwrap());
     }
   });
 
@@ -75,7 +76,7 @@ async fn lifecycle_record_api_and_logs_integration_tests() {
   let data_dir = temp_dir::TempDir::new().unwrap();
 
   let pg_setup: Option<PgSetup> = cfg_select! {
-    feature = "pg-test" => Some(start_pg()),
+    feature = "pg-test" => Some(start_pg().await),
     _ => None,
   };
 

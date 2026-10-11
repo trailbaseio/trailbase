@@ -50,7 +50,7 @@ env_logger.workspace = true
 futures-util = { workspace = true }
 glob = "0.3.4"
 itertools = { workspace = true }
-oliphaunt-wasix = { workspace = true }
+oliphaunt-pgwire-server = { workspace = true }
 rand = { workspace = true }
 tempfile = "3.27.0"
 uuid = { workspace = true }

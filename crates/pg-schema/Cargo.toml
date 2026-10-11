@@ -13,6 +13,6 @@ trailbase-schema = { workspace = true }
 trailbase-sqlite = { workspace = true, features = ["generic"] }
 
 [dev-dependencies]
-oliphaunt-wasix = { workspace = true }
+oliphaunt-pgwire-server = { workspace = true }
 tempfile = "3.27.0"
 parking_lot = { workspace = true }

@@ -276,7 +276,9 @@ mod tests {
 
   #[tokio::test]
   async fn postgres_execute_batch_test() {
-    let (_db, exec) = crate::pg::executor::build_postgres_test_executor().unwrap();
+    let (_db, exec) = crate::pg::executor::build_postgres_test_executor()
+      .await
+      .unwrap();
 
     assert_eq!(
       5,
