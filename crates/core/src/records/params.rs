@@ -125,11 +125,10 @@ impl trailbase_sqlite::Params for ArcInsertParams {
       value,
     } in &self.0.params
     {
-      let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? else {
-        continue;
+      if let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? {
+        // FIXME: hidden clone?
+        stmt.bind_parameter(idx, value.into())?;
       };
-      // FIXME: hidden clone.
-      stmt.bind_parameter(idx, value.into())?;
     }
 
     return Ok(());
@@ -259,15 +258,14 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
       value,
     } in &self.0.params
     {
-      let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? else {
-        continue;
+      if let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? {
+        // FIXME: hidden clone?
+        stmt.bind_parameter(idx, value.into())?;
       };
-      // FIXME: hidden clone.
-      stmt.bind_parameter(idx, value.into())?;
     }
 
     if let Some(idx) = stmt.parameter_index(":__pk_value")? {
-      // FIXME: hidden clone.
+      // FIXME: hidden clone?
       stmt.bind_parameter(idx, (&self.0.pk_column_value).into())?;
     } else {
       #[cfg(debug_assertions)]
