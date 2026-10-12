@@ -1,5 +1,4 @@
 use askama::Template;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -7,7 +6,7 @@ use trailbase_schema::db::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, ConnectionType, NamedParams, SyncConnectionTrait, Value};
+use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value};
 
 use crate::auth::user::User;
 use crate::config::proto;
@@ -33,9 +32,11 @@ pub(crate) struct RecordApiSchema {
 
   // Helpers:
 
-  // SQLite parameter template
-  named_params_template: NamedParams,
+  // A clonable list of all column names. Used for insert/update param construction.
+  column_names: Arc<Vec<String>>,
+
   // Mapping form column name to *API column index*.
+  //
   // NOTE: The index may be different from the column's index in the underlying TABLE or VIEW
   // due to excluded columns.
   column_name_to_index: HashMap<String, usize>,
@@ -63,15 +64,12 @@ impl RecordApiSchema {
         .map(|(index, meta)| (meta.column.name.clone(), index)),
     );
 
-    let named_params_template: NamedParams = column_metadata
-      .iter()
-      .map(|meta| {
-        (
-          Cow::Owned(named_placeholder(&meta.column.name)),
-          trailbase_sqlite::Value::Null,
-        )
-      })
-      .collect();
+    let column_names = Arc::new(
+      column_metadata
+        .iter()
+        .map(|meta| named_placeholder(&meta.column.name))
+        .collect(),
+    );
 
     return Ok(Self {
       qualified_name: table_metadata.schema.name.clone(),
@@ -83,7 +81,7 @@ impl RecordApiSchema {
       has_file_columns,
       user_id_columns,
       column_name_to_index,
-      named_params_template,
+      column_names,
     });
   }
 
@@ -114,6 +112,13 @@ impl RecordApiSchema {
         .map(|(index, meta)| (meta.column.name.clone(), index)),
     );
 
+    let column_names = Arc::new(
+      column_metadata
+        .iter()
+        .map(|meta| named_placeholder(&meta.column.name))
+        .collect(),
+    );
+
     return Ok(Self {
       qualified_name: view_metadata.schema.name.clone(),
       table_name: QualifiedNameEscaped::new(&view_metadata.schema.name),
@@ -124,7 +129,7 @@ impl RecordApiSchema {
       has_file_columns,
       user_id_columns,
       column_name_to_index,
-      named_params_template: NamedParams::new(),
+      column_names,
     });
   }
 }
@@ -137,7 +142,7 @@ pub struct RecordApi {
 struct RecordAclParams {
   user: Option<[u8; 16]>,
   record_id: Option<Value>,
-  template: Option<NamedParams>,
+  all_column_names: Option<Arc<Vec<String>>>,
   params: Option<Params>,
 }
 
@@ -146,7 +151,7 @@ impl RecordAclParams {
     p: Permission,
     user: Option<&User>,
     record_id: Option<Value>,
-    template: Option<NamedParams>,
+    all_column_names: Option<Arc<Vec<String>>>,
     request_params: Option<&mut LazyParams<'_, P>>,
   ) -> Result<Self, RecordError>
   where
@@ -155,7 +160,7 @@ impl RecordAclParams {
     return Ok(Self {
       user: user.map(|u| u.uuid.into_bytes()),
       record_id,
-      template,
+      all_column_names,
       params: match p {
         Permission::Create | Permission::Update => {
           let params = request_params
@@ -180,8 +185,8 @@ impl trailbase_sqlite::Params for RecordAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    match (self.template, self.params) {
-      (Some(template), Some(params)) => {
+    match (self.all_column_names, self.params) {
+      (Some(all_column_names), Some(params)) => {
         let named_params = match &params {
           Params::Insert(p) => &p.params,
           Params::Update(p) => &p.params,
@@ -194,7 +199,8 @@ impl trailbase_sqlite::Params for RecordAclParams {
           )?;
         }
 
-        for (column_index, (column_name, _null)) in template.into_iter().enumerate() {
+        // TODO: We could sort the named_params first then we could move i, j indexes in lockstep.
+        for (column_index, column_name) in all_column_names.iter().enumerate() {
           if let Some(idx) = stmt.parameter_index(&column_name)? {
             // FIXME: hidden clone?
             stmt.bind_parameter(
@@ -628,7 +634,7 @@ impl RecordApi {
                 return Err(RecordError::ApiRequiresTable);
               };
 
-              Some(self.state.schema.named_params_template.clone())
+              Some(self.state.schema.column_names.clone())
             }
             _ => None,
           },
@@ -673,7 +679,7 @@ impl RecordApi {
             return Err(RecordError::ApiRequiresTable);
           };
 
-          Some(self.state.schema.named_params_template.clone())
+          Some(self.state.schema.column_names.clone())
         }
         _ => None,
       },
