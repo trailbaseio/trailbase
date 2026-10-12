@@ -20,6 +20,7 @@ import {
   TextField,
   TextFieldLabel,
   TextFieldInput,
+  TextFieldTextArea,
 } from "@/components/ui/text-field";
 import {
   Tooltip,
@@ -444,14 +445,14 @@ function buildSqlTextFormField(
         <FormRow field={field}>
           <TextFieldLabel>{opts.label}</TextFieldLabel>
 
-          <TextFieldInput
+          <TextFieldTextArea
             disabled={disabled()}
-            type={"text"}
             value={getValue() ?? ""}
             placeholder={opts.placeholder(initialValue, disabled())}
+            rows={3}
             onBlur={field().handleBlur}
             onInput={(e: Event) => {
-              const value: string = (e.target as HTMLInputElement).value;
+              const value: string = (e.target as HTMLTextAreaElement).value;
               // NOTE: There's no way to get back to `value === undefined` to
               // apply the column default.
               field().handleChange({ Text: value });
