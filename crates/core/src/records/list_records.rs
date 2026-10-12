@@ -203,10 +203,10 @@ pub async fn list_records_handler(
           .first()
           .is_some_and(|(_c, o)| *o == OrderPrecedent::Ascending) =>
       {
-        Some(format!("_ROW_.{}> :cursor", row_id_column(conn)).to_string())
+        Some(format!("_ROW_.{}> :cursor", row_id_column(conn.connection_type())).to_string())
       }
       // Descending:
-      _ => Some(format!("_ROW_.{} < :cursor", row_id_column(conn)).to_string()),
+      _ => Some(format!("_ROW_.{} < :cursor", row_id_column(conn.connection_type())).to_string()),
     }
   } else {
     None

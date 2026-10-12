@@ -224,7 +224,7 @@ fn apply_ops<T: SyncConnection>(
 
           let mut lazy_params =
             LazyParams::for_insert(&api, state.json_schema_registry().load_full(), record, None);
-          api.record_level_access_check(
+          api.sync_check_record_level_access(
             conn,
             Permission::Create,
             None,
@@ -236,21 +236,23 @@ fn apply_ops<T: SyncConnection>(
             .insert_conflict_resolution_strategy()
             .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
 
-          let (query, files) = WriteQuery::new_insert_or_replace(
+          let (params, files) = lazy_params
+            .consume()
+            .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?;
+
+          let query = WriteQuery::new_insert_or_replace(
             conn.connection_type(),
             api.table_name(),
             api.columns(),
             &api.record_pk_column().column.name,
             conflict_resolution_strategy,
-            lazy_params
-              .consume()
-              .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
+            params,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
           if !files.is_empty() {
             return Err(RecordError::BadRequest(
-              "transactions don't implement file handling yet",
+              "transactions do not (yet) implement file handling",
             ));
           }
 
@@ -293,7 +295,7 @@ fn apply_ops<T: SyncConnection>(
             record_id.clone(),
           );
 
-          api.record_level_access_check(
+          api.sync_check_record_level_access(
             conn,
             Permission::Update,
             Some(&record_id),
@@ -301,18 +303,16 @@ fn apply_ops<T: SyncConnection>(
             user,
           )?;
 
-          let (query, files) = WriteQuery::new_update(
-            conn.connection_type(),
-            api.table_name(),
-            lazy_params
-              .consume()
-              .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
+          let (params, files) = lazy_params
+            .consume()
+            .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?;
+
+          let query = WriteQuery::new_update(conn.connection_type(), api.table_name(), params)
+            .map_err(|err| RecordError::Internal(err.into()))?;
 
           if !files.is_empty() {
             return Err(RecordError::BadRequest(
-              "transactions don't implement file handling yet",
+              "transactions do not (yet) implement file handling",
             ));
           }
 
@@ -333,7 +333,13 @@ fn apply_ops<T: SyncConnection>(
 
           let record_id = api.primary_key_to_value(record_id_str.clone())?;
 
-          api.record_level_access_check(conn, Permission::Delete, Some(&record_id), None, user)?;
+          api.sync_check_record_level_access::<_, ()>(
+            conn,
+            Permission::Delete,
+            Some(&record_id),
+            None,
+            user,
+          )?;
 
           let query = WriteQuery::new_delete(
             conn.connection_type(),

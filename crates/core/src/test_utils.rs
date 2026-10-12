@@ -1,7 +1,5 @@
 use trailbase_sqlite::{Connection, ConnectionType};
 
-pub use crate::util::row_id_column;
-
 pub fn strict(conn: &Connection) -> &'static str {
   return match conn.connection_type() {
     ConnectionType::Pg => "",

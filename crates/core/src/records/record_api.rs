@@ -1,5 +1,5 @@
 use askama::Template;
-use std::borrow::Cow;
+use compact_str::CompactString;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -7,12 +7,13 @@ use trailbase_schema::db::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, ConnectionType, NamedParams, SyncConnectionTrait, Value};
+use trailbase_sqlite::to_sql::ToSqlProxy;
+use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, ValueRef};
 
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::constants::USER_TABLE;
-use crate::records::params::{LazyParams, Params};
+use crate::records::params::{LazyParams, Params, ToParamsEnum};
 use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
@@ -33,16 +34,15 @@ pub(crate) struct RecordApiSchema {
 
   // Helpers:
 
-  // SQLite parameter emplate
-  named_params_template: NamedParams,
+  // A cheaply clone-able list of all column names. Used for insert/update param construction.
+  column_names: Arc<Vec<CompactString>>,
+
   // Mapping form column name to *API column index*.
+  //
   // NOTE: The index may be different from the column's index in the underlying TABLE or VIEW
   // due to excluded columns.
   column_name_to_index: HashMap<String, usize>,
 }
-
-// type DeferredAclCheck<T: SyncConnectionTrait> =
-//   Box<dyn (FnOnce(&T) -> Result<(), RecordError>) + Send>;
 
 impl RecordApiSchema {
   fn from_table(
@@ -66,15 +66,12 @@ impl RecordApiSchema {
         .map(|(index, meta)| (meta.column.name.clone(), index)),
     );
 
-    let named_params_template: NamedParams = column_metadata
-      .iter()
-      .map(|meta| {
-        (
-          Cow::Owned(named_placeholder(&meta.column.name)),
-          trailbase_sqlite::Value::Null,
-        )
-      })
-      .collect();
+    let column_names = Arc::new(
+      column_metadata
+        .iter()
+        .map(|meta| named_placeholder(&meta.column.name))
+        .collect(),
+    );
 
     return Ok(Self {
       qualified_name: table_metadata.schema.name.clone(),
@@ -86,7 +83,7 @@ impl RecordApiSchema {
       has_file_columns,
       user_id_columns,
       column_name_to_index,
-      named_params_template,
+      column_names,
     });
   }
 
@@ -117,6 +114,13 @@ impl RecordApiSchema {
         .map(|(index, meta)| (meta.column.name.clone(), index)),
     );
 
+    let column_names = Arc::new(
+      column_metadata
+        .iter()
+        .map(|meta| named_placeholder(&meta.column.name))
+        .collect(),
+    );
+
     return Ok(Self {
       qualified_name: view_metadata.schema.name.clone(),
       table_name: QualifiedNameEscaped::new(&view_metadata.schema.name),
@@ -127,7 +131,7 @@ impl RecordApiSchema {
       has_file_columns,
       user_id_columns,
       column_name_to_index,
-      named_params_template: NamedParams::new(),
+      column_names,
     });
   }
 }
@@ -135,6 +139,133 @@ impl RecordApiSchema {
 #[derive(Clone)]
 pub struct RecordApi {
   state: Arc<RecordApiState>,
+}
+
+struct RequestParams {
+  all_column_names: Arc<Vec<CompactString>>,
+  present_fields: String,
+  request_params: Params,
+}
+
+impl RequestParams {
+  fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params) -> Self {
+    let present_fields = match &request_params {
+      Params::Insert(p) => {
+        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
+      }
+      Params::Update(p) => {
+        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
+      }
+    };
+
+    return Self {
+      all_column_names,
+      present_fields,
+      request_params,
+    };
+  }
+}
+
+struct RecordAclParams {
+  user: Option<[u8; 16]>,
+  record_id: Option<Value>,
+  params: Option<RequestParams>,
+}
+
+impl RecordAclParams {
+  fn new<P>(
+    p: Permission,
+    user: Option<&User>,
+    record_id: Option<Value>,
+    all_column_names: &Arc<Vec<CompactString>>,
+    request_params: Option<&mut LazyParams<'_, P>>,
+  ) -> Result<Self, RecordError>
+  where
+    Arc<P>: ToParamsEnum,
+  {
+    return Ok(Self {
+      user: user.map(|u| u.uuid.into_bytes()),
+      record_id,
+      params: match p {
+        Permission::Create | Permission::Update => {
+          let (params, _files) = request_params
+            .ok_or_else(|| RecordError::Internal("missing insert/update params".into()))?
+            .params()
+            .map_err(|_| RecordError::BadRequest("invalid params"))?;
+
+          Some(RequestParams::new(
+            all_column_names.clone(),
+            params
+              .params_enum()
+              .ok_or_else(|| RecordError::BadRequest("invalid params"))?,
+          ))
+        }
+        Permission::Read | Permission::Delete | Permission::Schema => None,
+      },
+    });
+  }
+}
+
+impl trailbase_sqlite::Params for RecordAclParams {
+  fn bind<S: trailbase_sqlite::Statement>(
+    self,
+    stmt: &mut S,
+  ) -> Result<(), trailbase_sqlite::Error> {
+    match self.params {
+      Some(params) => {
+        if let Some(idx) = stmt.parameter_index(":__fields")? {
+          stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
+        }
+
+        let request_params = match &params.request_params {
+          Params::Insert(p) => &p.params,
+          Params::Update(p) => &p.params,
+        };
+
+        // TODO: We could first sort the `request_params` by column index and then move i, j indexes
+        // in lockstep to avoid repeat scans and move more work off the executor.
+        for (column_index, column_name) in params.all_column_names.iter().enumerate() {
+          if let Some(idx) = stmt.parameter_index(&column_name)? {
+            stmt.bind_parameter(
+              idx,
+              request_params
+                .iter()
+                .find_map(|p| {
+                  // NOTE: Consider matching here by column_name and removing the index.
+                  if p.column_index == column_index {
+                    debug_assert_eq!(p.placeholder, *column_name);
+                    Some(ToSqlProxy::Borrowed((&p.value).into()))
+                  } else {
+                    None
+                  }
+                })
+                .unwrap_or(ToSqlProxy::Borrowed(ValueRef::Null))
+                .into(),
+            )?;
+          }
+        }
+      }
+      _ => {}
+    }
+
+    if let Some(idx) = stmt.parameter_index(":__user_id")? {
+      if let Some(user) = self.user {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
+    }
+
+    if let Some(idx) = stmt.parameter_index(":__record_id")? {
+      if let Some(id) = self.record_id {
+        stmt.bind_parameter(idx, ToSqlProxy::Owned(id))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
+    }
+
+    return Ok(());
+  }
 }
 
 struct RecordApiState {
@@ -154,7 +285,7 @@ struct RecordApiState {
   enable_subscriptions: bool,
 
   // Foreign key expansion configuration. Affects schema.
-  expand: Vec<compact_str::CompactString>,
+  expand: Vec<CompactString>,
 
   listing_hard_limit: Option<usize>,
 
@@ -432,7 +563,7 @@ impl RecordApi {
   }
 
   #[inline]
-  pub(crate) fn expand(&self) -> &[compact_str::CompactString] {
+  pub(crate) fn expand(&self) -> &[CompactString] {
     return self.state.expand.as_ref();
   }
 
@@ -496,13 +627,16 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
-  pub async fn check_record_level_access(
+  pub async fn check_record_level_access<P>(
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
-  ) -> Result<(), RecordError> {
+  ) -> Result<(), RecordError>
+  where
+    Arc<P>: ToParamsEnum,
+  {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -513,7 +647,13 @@ impl RecordApi {
     if self
       .check_record_level_access_impl(
         access_query,
-        self.build_named_params(p, record_id, request_params, user)?,
+        RecordAclParams::new(
+          p,
+          user,
+          record_id.cloned(),
+          &self.state.schema.column_names,
+          request_params,
+        )?,
       )
       .await
     {
@@ -523,14 +663,17 @@ impl RecordApi {
     return Err(RecordError::Forbidden);
   }
 
-  pub fn record_level_access_check<T: SyncConnectionTrait>(
+  pub fn sync_check_record_level_access<T: SyncConnectionTrait, P>(
     &self,
     conn: &mut T,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
-  ) -> Result<(), RecordError> {
+  ) -> Result<(), RecordError>
+  where
+    Arc<P>: ToParamsEnum,
+  {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -538,7 +681,13 @@ impl RecordApi {
       return Ok(());
     };
 
-    let params = self.build_named_params(p, record_id, request_params, user)?;
+    let params = RecordAclParams::new(
+      p,
+      user,
+      record_id.cloned(),
+      &self.state.schema.column_names,
+      request_params,
+    )?;
 
     return match conn
       .query_row(access_query, params)
@@ -556,18 +705,21 @@ impl RecordApi {
     query: impl AsRef<str> + Send + 'static,
     params: impl trailbase_sqlite::Params + Send + 'static,
   ) -> bool {
-    // TODO: Remove query from debug_assert and thus the extra allocation.
+    #[cfg(debug_assertions)]
     let q = query.as_ref().to_string();
 
+    #[allow(unreachable_code)]
     return match self.state.conn.read_query_row_get(query, params, 0).await {
       Ok(Some(allowed)) => allowed,
       Ok(None) => {
-        debug_assert!(false, "RLA query '{q}' returned no result");
+        #[cfg(debug_assertions)]
+        panic!("RLA query '{q}' returned no result");
 
         false
       }
-      Err(err) => {
-        debug_assert!(false, "RLA query '{q}' failed: {err}");
+      Err(_err) => {
+        #[cfg(debug_assertions)]
+        panic!("RLA query '{q}' failed: {_err}");
 
         false
       }
@@ -588,17 +740,16 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(Permission::Read, user)?;
 
-    let Some(ref access_query) = self.state.subscription_read_access_query else {
+    let Some(subscription_read_access_query) = self.state.subscription_read_access_query.clone()
+    else {
       return Ok(());
     };
 
-    let params = SubscriptionAclParams {
-      params: record.clone(),
-      user: user.cloned(),
-    };
-
     if self
-      .check_record_level_access_impl(access_query.clone(), params)
+      .check_record_level_access_impl(
+        subscription_read_access_query,
+        SubscriptionAclParams::new(record, user),
+      )
       .await
     {
       return Ok(());
@@ -626,91 +777,20 @@ impl RecordApi {
   fn has_access(&self, e: Entity, p: Permission) -> bool {
     return (self.state.acl[e as usize] & (p as u8)) > 0;
   }
-
-  // TODO: We should probably break this up into separate functions for CRUD, to only do and inject
-  // what's actually needed. Maybe even break up the entire check_access_and_rls_then. It's pretty
-  // winding right now.
-  // TODO: It may be cheaper to implement trailbase_sqlite::Params for LazyParams than convert to
-  // NamedParams :shrug:.
-  fn build_named_params(
-    &self,
-    p: Permission,
-    record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
-    user: Option<&User>,
-  ) -> Result<NamedParams, RecordError> {
-    // We need to inject context like: record id, user, request, and row into the access
-    // check. Below we're building the query and binding the context as params accordingly.
-    let mut params = match p {
-      Permission::Create | Permission::Update => {
-        // Create and update cannot write to views.
-        if !self.is_table() {
-          return Err(RecordError::ApiRequiresTable);
-        };
-
-        let (named_params, column_names, column_indexes) = match request_params
-          .ok_or_else(|| RecordError::Internal("missing insert params".into()))?
-          .params()
-          .map_err(|_| RecordError::BadRequest("invalid params"))?
-        {
-          Params::Insert {
-            named_params,
-            column_names,
-            column_indexes,
-            ..
-          } => {
-            assert_eq!(p, Permission::Create);
-            (named_params, column_names, column_indexes)
-          }
-          Params::Update {
-            named_params,
-            column_names,
-            column_indexes,
-            ..
-          } => {
-            assert_eq!(p, Permission::Update);
-            (named_params, column_names, column_indexes)
-          }
-        };
-
-        assert_eq!(column_names.len(), column_indexes.len());
-
-        // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
-        // explicit NULL value for all missing fields on the request. Can we make this cheaper,
-        // either by pre-processing the access query or improving construction?
-        let mut all_named_params = self.state.schema.named_params_template.clone();
-
-        for (index, column_index) in column_indexes.iter().enumerate() {
-          // Override the default NULL value with the request value.
-          all_named_params[*column_index].1 = named_params[index].1.clone();
-        }
-
-        all_named_params.push((
-          Cow::Borrowed(":__fields"),
-          Value::Text(serde_json::to_string(&column_names).expect("json array")),
-        ));
-
-        all_named_params
-      }
-      Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
-    };
-
-    params.push((
-      Cow::Borrowed(":__user_id"),
-      user.map_or(Value::Null, |u| Into::<Value>::into(u.uuid.as_bytes())),
-    ));
-    params.push((
-      Cow::Borrowed(":__record_id"),
-      record_id.map_or(Value::Null, |id| id.clone()),
-    ));
-
-    return Ok(params);
-  }
 }
 
 struct SubscriptionAclParams {
   params: Arc<EventPayload>,
-  user: Option<User>,
+  user: Option<[u8; 16]>,
+}
+
+impl SubscriptionAclParams {
+  fn new(event: &Arc<EventPayload>, user: Option<&User>) -> Self {
+    return Self {
+      params: event.clone(),
+      user: user.map(|u| u.uuid.into_bytes()),
+    };
+  }
 }
 
 impl trailbase_sqlite::Params for SubscriptionAclParams {
@@ -718,13 +798,16 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
+    // NOTE: We only have to provide values for placeholders in
+    // `core/templates/subscription_record_access_query.sql`, i.e. we can skip `:__fields`, etc.
     match *self.params {
       EventPayload::Insert { ref record, .. }
       | EventPayload::Update { ref record, .. }
       | EventPayload::Delete { ref record, .. } => {
         for (name, v) in record.iter() {
+          // QUESTION: Can we push the placeholder construction off?
           if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
-            stmt.bind_parameter(idx, v.into())?;
+            stmt.bind_parameter(idx, ToSqlProxy::Borrowed(v.into()))?;
           };
         }
       }
@@ -733,10 +816,12 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       }
     }
 
-    if let Some(user) = self.user
-      && let Some(idx) = stmt.parameter_index(":__user_id")?
-    {
-      stmt.bind_parameter(idx, user.uuid.as_bytes().into())?;
+    if let Some(idx) = stmt.parameter_index(":__user_id")? {
+      if let Some(user) = self.user {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
     }
 
     return Ok(());
@@ -747,7 +832,7 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
 #[template(
   escape = "none",
   whitespace = "minimize",
-  path = "subscription_record_read.sql"
+  path = "subscription_record_access_query.sql"
 )]
 struct SubscriptionRecordReadTemplate<'a> {
   read_access_rule: &'a str,
@@ -947,6 +1032,47 @@ fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
     config_table_name, *name,
     "Expected: {name}, got: {config_table_name}"
   );
+}
+
+#[inline]
+fn strings_to_json_array<'a, I>(iter: I) -> String
+where
+  I: Iterator<Item = &'a str>,
+{
+  let mut out = String::with_capacity(256);
+
+  out.push('[');
+  for (i, s) in iter.enumerate() {
+    if i > 0 {
+      out.push(',');
+    }
+    write_json_string(&mut out, s);
+  }
+  out.push(']');
+
+  return out;
+}
+
+#[inline]
+fn write_json_string(out: &mut String, s: &str) {
+  out.push('"');
+  for c in s.chars() {
+    match c {
+      '"' => out.push_str("\\\""),
+      '\\' => out.push_str("\\\\"),
+      '\n' => out.push_str("\\n"),
+      '\r' => out.push_str("\\r"),
+      '\t' => out.push_str("\\t"),
+      '\u{08}' => out.push_str("\\b"),
+      '\u{0C}' => out.push_str("\\f"),
+      // Control characters must be escaped as \u00XX.
+      c if (c as u32) < 0x20 => {
+        out.push_str(&format!("\\u{:04x}", c as u32));
+      }
+      c => out.push(c),
+    }
+  }
+  out.push('"');
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -8,7 +9,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::records::params::Params;
+use crate::records::params::UpdateParams;
 use crate::records::write_queries::run_update_query;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
@@ -73,17 +74,20 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
+  let (params, files) = UpdateParams::for_admin_update(
+    table_metadata,
+    state.json_schema_registry().load_full(),
+    request.row,
+    pk_col.clone(),
+    request.primary_key_value,
+  )?;
+
   run_update_query(
     &conn,
     state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
-    Params::for_admin_update(
-      table_metadata,
-      state.json_schema_registry().load_full(),
-      request.row,
-      pk_col.clone(),
-      request.primary_key_value,
-    )?,
+    Arc::new(params),
+    files,
   )
   .await?;
 

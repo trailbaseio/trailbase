@@ -6,23 +6,25 @@ use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_sqlite::traits::SyncTransaction;
-use trailbase_sqlite::{Connection, ConnectionType, NamedParams, Value};
+use trailbase_sqlite::{Connection, ConnectionType, Value};
 
 use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, Params};
-use crate::util::row_id_column2;
+use crate::records::params::{
+  ArcInsertParams, ArcUpdateParams, FileMetadataContents, InsertParams, NamedParam, UpdateParams,
+};
+use crate::util::row_id_column;
 
 #[derive(Debug)]
 pub enum WriteQuery {
   Insert {
     query: String,
-    named_params: NamedParams,
+    params: Arc<InsertParams>,
   },
   Update {
     query: String,
-    named_params: NamedParams,
+    params: Arc<UpdateParams>,
   },
   Delete {
     query: String,
@@ -42,77 +44,47 @@ impl WriteQuery {
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
     conflict_resolution: proto::ConflictResolutionStrategy,
-    params: Params,
-  ) -> Result<(Self, FileMetadataContents), RecordError> {
-    use crate::config::proto::ConflictResolutionStrategy;
-
-    let Params::Insert {
-      named_params,
-      files,
-      column_names,
-      column_indexes: _,
-    } = params
-    else {
-      return Err(RecordError::Internal("not an insert".into()));
-    };
-
-    let row_id_column = row_id_column2(connection_type);
+    params: Arc<InsertParams>,
+  ) -> Result<Self, RecordError> {
+    let row_id_column = row_id_column(connection_type);
     let query = CreateOrReplaceRecordQueryTemplate {
       table_name,
-      req_column_names: &column_names,
+      params: &params.params,
       pk_column_name,
       column_metadata: match conflict_resolution {
-        ConflictResolutionStrategy::Replace => column_metadata,
-        ConflictResolutionStrategy::Ignore => &[],
-        ConflictResolutionStrategy::Abort | ConflictResolutionStrategy::Undefined => &[],
+        proto::ConflictResolutionStrategy::Replace => column_metadata,
+        proto::ConflictResolutionStrategy::Ignore => &[],
+        proto::ConflictResolutionStrategy::Abort | proto::ConflictResolutionStrategy::Undefined => {
+          &[]
+        }
       },
-      ignore_conflict: matches!(conflict_resolution, ConflictResolutionStrategy::Ignore),
+      ignore_conflict: matches!(
+        conflict_resolution,
+        proto::ConflictResolutionStrategy::Ignore
+      ),
       returning: &[row_id_column, pk_column_name],
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok((
-      Self::Insert {
-        query,
-        named_params,
-      },
-      files,
-    ));
+    return Ok(Self::Insert { query, params });
   }
 
   pub fn new_update(
     connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
-    params: Params,
-  ) -> Result<(Self, FileMetadataContents), RecordError> {
-    let Params::Update {
-      named_params,
-      files,
-      column_names,
-      column_indexes: _,
-      pk_column_name,
-    } = params
-    else {
-      return Err(RecordError::Internal("not an update".into()));
-    };
-
+    params: Arc<UpdateParams>,
+  ) -> Result<Self, RecordError> {
     let query = UpdateRecordQueryTemplate {
       table_name,
-      column_names: &column_names,
-      pk_column_name: &pk_column_name,
-      returning: Some(row_id_column2(connection_type)),
+      params: &params.params,
+      pk_column_name: &params.pk_column_name,
+      returning: Some(row_id_column(connection_type)),
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok((
-      Self::Update {
-        query,
-        named_params,
-      },
-      files,
-    ));
+    return Ok(Self::Update { query, params });
   }
 
   pub fn new_delete(
@@ -124,7 +96,7 @@ impl WriteQuery {
     return Ok(Self::Delete {
       query: format!(
         r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {row_id}"#,
-        row_id = row_id_column2(connection_type)
+        row_id = row_id_column(connection_type)
       ),
       pk_value,
     });
@@ -135,12 +107,8 @@ impl WriteQuery {
     conn: &trailbase_sqlite::Connection,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
-      Self::Insert {
-        query,
-        named_params,
-        ..
-      } => {
-        if let Some(mut row) = conn.write_query_row(query, named_params).await? {
+      Self::Insert { query, params } => {
+        if let Some(mut row) = conn.write_query_row(query, ArcInsertParams(params)).await? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),
@@ -149,11 +117,11 @@ impl WriteQuery {
           Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
-      Self::Update {
-        query,
-        named_params,
-      } => {
-        if let Some(rowid) = conn.write_query_row_get(query, named_params, 0).await? {
+      Self::Update { query, params } => {
+        if let Some(rowid) = conn
+          .write_query_row_get(query, ArcUpdateParams(params), 0)
+          .await?
+        {
           Ok(WriteQueryResult {
             rowid,
             pk_value: None,
@@ -180,12 +148,8 @@ impl WriteQuery {
     conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
-      Self::Insert {
-        query,
-        named_params,
-        ..
-      } => {
-        if let Some(mut row) = conn.query_row(query, named_params)? {
+      Self::Insert { query, params, .. } => {
+        if let Some(mut row) = conn.query_row(query, ArcInsertParams(params))? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),
@@ -194,11 +158,8 @@ impl WriteQuery {
           Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
-      Self::Update {
-        query,
-        named_params,
-      } => {
-        if let Some(row) = conn.query_row(query, named_params)? {
+      Self::Update { query, params } => {
+        if let Some(row) = conn.query_row(query, ArcUpdateParams(params))? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
@@ -296,9 +257,10 @@ pub(crate) async fn run_insert_or_replace_query(
   column_metadata: &[ColumnMetadata],
   conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
-  params: Params,
+  params: Arc<InsertParams>,
+  files: FileMetadataContents,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
-  let (query, files) = WriteQuery::new_insert_or_replace(
+  let query = WriteQuery::new_insert_or_replace(
     conn.connection_type(),
     table_name,
     column_metadata,
@@ -338,9 +300,10 @@ pub(crate) async fn run_update_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
-  params: Params,
+  params: Arc<UpdateParams>,
+  files: FileMetadataContents,
 ) -> Result<(), RecordError> {
-  let (query, files) = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
+  let query = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
 
   // We're storing any files to the object store first to make sure the DB entry is valid right
   // after commit and not racily pointing to soon-to-be-written files.
@@ -388,7 +351,7 @@ pub(crate) async fn run_delete_query(
 #[template(escape = "none", path = "update_record_query.sql")]
 struct UpdateRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [String],
+  params: &'a [NamedParam],
   pk_column_name: &'a str,
   returning: Option<&'a str>,
 }
@@ -397,7 +360,7 @@ struct UpdateRecordQueryTemplate<'a> {
 #[template(escape = "none", path = "create_or_replace_record_query.sql")]
 struct CreateOrReplaceRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  req_column_names: &'a [String],
+  params: &'a [NamedParam],
   pk_column_name: &'a str,
   column_metadata: &'a [ColumnMetadata],
   ignore_conflict: bool,
@@ -423,7 +386,20 @@ mod tests {
     {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        req_column_names: &["index".to_string(), "trigger".to_string()],
+        params: &[
+          NamedParam {
+            column_index: 0,
+            column_name: "index".into(),
+            placeholder: ":index".into(),
+            value: Value::Null,
+          },
+          NamedParam {
+            column_index: 1,
+            column_name: "trigger".into(),
+            placeholder: ":trigger".into(),
+            value: Value::Null,
+          },
+        ],
         pk_column_name: "index",
         column_metadata: &[],
         ignore_conflict: false,
@@ -442,7 +418,7 @@ mod tests {
           database_schema: Some("db".to_string()),
         }
         .into(),
-        req_column_names: &[],
+        params: &[],
         pk_column_name: "id",
         column_metadata: &[],
         ignore_conflict: false,
@@ -457,7 +433,12 @@ mod tests {
     {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        req_column_names: &["index".to_string()],
+        params: &[NamedParam {
+          column_index: 0,
+          column_name: "index".into(),
+          placeholder: ":index".into(),
+          value: Value::Null,
+        }],
         pk_column_name: "index",
         column_metadata: &[],
         ignore_conflict: true,

@@ -227,7 +227,7 @@ mod tests {
         .read_query_row(
           format!(
             "SELECT * FROM {table_name} WHERE {} = $1",
-            row_id_column(conn)
+            row_id_column(conn.connection_type())
           ),
           trailbase_sqlite::params!(response.row_id),
         )
