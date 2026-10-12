@@ -2,6 +2,7 @@ use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
 use utoipa::{IntoParams, ToSchema};
@@ -9,7 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::params::{InsertParams, JsonRow, LazyParams, Params};
+use crate::records::params::{InsertParams, JsonRow, LazyParams};
 use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
@@ -100,7 +101,7 @@ pub async fn create_record_handler(
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let mut params_list: Vec<InsertParams> = Vec::with_capacity(records_and_files.len());
+  let mut params_list: Vec<Arc<InsertParams>> = Vec::with_capacity(records_and_files.len());
   for (mut record, files) in records_and_files {
     if api.insert_autofill_missing_user_id_columns()
       && let Some(ref user) = user
@@ -170,7 +171,8 @@ pub async fn create_record_handler(
         .into_iter()
         .map(|params| -> Result<_, RecordError> {
           let table_name: QualifiedNameEscaped = api.table_name().clone();
-          let (query, files) = WriteQuery::new_insert_or_replace(
+          let files = std::mem::take(&mut *params.files.lock());
+          let query = WriteQuery::new_insert_or_replace(
             conn.connection_type(),
             &table_name,
             api.columns(),

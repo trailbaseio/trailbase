@@ -6,19 +6,30 @@ use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_sqlite::traits::SyncTransaction;
-use trailbase_sqlite::{Connection, ConnectionType, NamedParams, Value};
+use trailbase_sqlite::{Connection, ConnectionType, Value};
 
 use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, InsertParams, Params, UpdateParams};
+use crate::records::params::{
+  ArcInsertParams, ArcUpdateParams, FileMetadataContents, InsertParams, UpdateParams,
+};
 use crate::util::row_id_column2;
 
 #[derive(Debug)]
 pub enum WriteQuery {
-  Insert { query: String, params: InsertParams },
-  Update { query: String, params: UpdateParams },
-  Delete { query: String, pk_value: Value },
+  Insert {
+    query: String,
+    params: Arc<InsertParams>,
+  },
+  Update {
+    query: String,
+    params: Arc<UpdateParams>,
+  },
+  Delete {
+    query: String,
+    pk_value: Value,
+  },
 }
 
 pub struct WriteQueryResult {
@@ -33,8 +44,8 @@ impl WriteQuery {
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
     conflict_resolution: proto::ConflictResolutionStrategy,
-    mut params: InsertParams,
-  ) -> Result<(Self, FileMetadataContents), RecordError> {
+    params: Arc<InsertParams>,
+  ) -> Result<Self, RecordError> {
     use crate::config::proto::ConflictResolutionStrategy;
 
     // FIXME: Update template to consume InsertParams.
@@ -62,14 +73,16 @@ impl WriteQuery {
 
     let files = std::mem::take(&mut params.files);
 
-    return Ok((Self::Insert { query, params }, files));
+    return Ok(Self::Insert { query, params });
   }
 
   pub fn new_update(
     connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
-    mut params: UpdateParams,
+    params: Arc<UpdateParams>,
   ) -> Result<(Self, FileMetadataContents), RecordError> {
+    let files = std::mem::take(&mut *params.files.lock());
+
     // FIXME: Update template to consume InsertParams.
     let column_names: Vec<_> = params
       .params
@@ -85,8 +98,6 @@ impl WriteQuery {
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
-
-    let files = std::mem::take(&mut params.files);
 
     return Ok((Self::Update { query, params }, files));
   }
@@ -112,7 +123,7 @@ impl WriteQuery {
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
       Self::Insert { query, params } => {
-        if let Some(mut row) = conn.write_query_row(query, params).await? {
+        if let Some(mut row) = conn.write_query_row(query, ArcInsertParams(params)).await? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),
@@ -122,7 +133,10 @@ impl WriteQuery {
         }
       }
       Self::Update { query, params } => {
-        if let Some(rowid) = conn.write_query_row_get(query, params, 0).await? {
+        if let Some(rowid) = conn
+          .write_query_row_get(query, ArcUpdateParams(params), 0)
+          .await?
+        {
           Ok(WriteQueryResult {
             rowid,
             pk_value: None,
@@ -258,9 +272,10 @@ pub(crate) async fn run_insert_or_replace_query(
   column_metadata: &[ColumnMetadata],
   conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
-  params: InsertParams,
+  params: Arc<InsertParams>,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
-  let (query, files) = WriteQuery::new_insert_or_replace(
+  let files = std::mem::take(&mut *params.files.lock());
+  let query = WriteQuery::new_insert_or_replace(
     conn.connection_type(),
     table_name,
     column_metadata,
@@ -300,7 +315,7 @@ pub(crate) async fn run_update_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
-  params: UpdateParams,
+  params: Arc<UpdateParams>,
 ) -> Result<(), RecordError> {
   let (query, files) = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
 
