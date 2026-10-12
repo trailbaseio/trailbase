@@ -236,7 +236,7 @@ fn apply_ops<T: SyncConnection>(
             .insert_conflict_resolution_strategy()
             .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
 
-          let (query, _files) = WriteQuery::new_insert_or_replace(
+          let (query, files) = WriteQuery::new_insert_or_replace(
             conn.connection_type(),
             api.table_name(),
             api.columns(),
@@ -247,6 +247,12 @@ fn apply_ops<T: SyncConnection>(
               .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
+
+          if !files.is_empty() {
+            return Err(RecordError::BadRequest(
+              "transactions don't implement file handling yet",
+            ));
+          }
 
           match query.apply_sync(conn) {
             Ok(result) => Ok(TransactionResult::Id(extract_record_id(
@@ -295,7 +301,7 @@ fn apply_ops<T: SyncConnection>(
             user,
           )?;
 
-          let (query, _files) = WriteQuery::new_update(
+          let (query, files) = WriteQuery::new_update(
             conn.connection_type(),
             api.table_name(),
             lazy_params
@@ -303,6 +309,12 @@ fn apply_ops<T: SyncConnection>(
               .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?,
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
+
+          if !files.is_empty() {
+            return Err(RecordError::BadRequest(
+              "transactions don't implement file handling yet",
+            ));
+          }
 
           let _ = query
             .apply_sync(conn)
