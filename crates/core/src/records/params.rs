@@ -266,9 +266,12 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
       stmt.bind_parameter(idx, value.into())?;
     }
 
-    if let Some(idx) = stmt.parameter_index("__pk_value")? {
+    if let Some(idx) = stmt.parameter_index(":__pk_value")? {
       // FIXME: hidden clone.
       stmt.bind_parameter(idx, (&self.0.pk_column_value).into())?;
+    } else {
+      #[cfg(debug_assertions)]
+      panic!(":__pk_value not found");
     }
 
     return Ok(());
