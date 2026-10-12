@@ -80,9 +80,19 @@ pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 #[derive(Debug)]
 pub struct NamedParam {
   // TODO: We could likely remove the index if we matched columns by name during ACL construction.
-  column_index: usize,
+  pub(crate) column_index: usize,
   pub(crate) column_name: String,
-  value: Value,
+  pub(crate) value: Value,
+}
+
+pub trait ToParamsEnum {
+  fn params_enum(&self) -> Option<Params>;
+}
+
+impl ToParamsEnum for Arc<()> {
+  fn params_enum(&self) -> Option<Params> {
+    return None;
+  }
 }
 
 #[derive(Debug)]
@@ -94,6 +104,12 @@ pub struct InsertParams {
   ///
   /// TODO: pull out the files.
   pub(crate) files: Mutex<FileMetadataContents>,
+}
+
+impl ToParamsEnum for Arc<InsertParams> {
+  fn params_enum(&self) -> Option<Params> {
+    return Some(Params::Insert(self.clone()));
+  }
 }
 
 pub struct ArcInsertParams(pub Arc<InsertParams>);
@@ -112,6 +128,7 @@ impl trailbase_sqlite::Params for ArcInsertParams {
       let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? else {
         continue;
       };
+      // FIXME: hidden clone.
       stmt.bind_parameter(idx, value.into())?;
     }
 
@@ -214,10 +231,19 @@ pub struct UpdateParams {
   pub(crate) params: Vec<NamedParam>,
 
   /// List of files and contents to be written to an object store.
+  ///
+  /// TODO: pull out the files.
   pub(crate) files: Mutex<FileMetadataContents>,
 
-  /// Primary key column name.
+  /// Primary key column name & value.
   pub(crate) pk_column_name: String,
+  pub(crate) pk_column_value: Value,
+}
+
+impl ToParamsEnum for Arc<UpdateParams> {
+  fn params_enum(&self) -> Option<Params> {
+    return Some(Params::Update(self.clone()));
+  }
 }
 
 pub struct ArcUpdateParams(pub Arc<UpdateParams>);
@@ -233,11 +259,16 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
       value,
     } in &self.0.params
     {
-      // FIXME: we should bind ":__pk_value" here.
       let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? else {
         continue;
       };
+      // FIXME: hidden clone.
       stmt.bind_parameter(idx, value.into())?;
+    }
+
+    if let Some(idx) = stmt.parameter_index("__pk_value")? {
+      // FIXME: hidden clone.
+      stmt.bind_parameter(idx, (&self.0.pk_column_value).into())?;
     }
 
     return Ok(());
@@ -303,14 +334,6 @@ impl UpdateParams {
       return Err(ParamsError::Column("no valid columns to update found"));
     }
 
-    // Inject the pk_value. It may already be present, if redundantly provided both in the API path
-    // *and* the request. In most cases it probably wont and duplication is not an issue.
-    params.push(NamedParam {
-      column_index: usize::MAX,
-      column_name: "__pk_value".to_string(),
-      value: pk_column_value,
-    });
-
     // Note: files provided as part of a JSON request are handled above.
     if let Some(multipart_files) = multipart_files {
       files.extend(extract_files_from_multipart(
@@ -324,6 +347,7 @@ impl UpdateParams {
       params,
       files: Mutex::new(files),
       pk_column_name,
+      pk_column_value,
     });
   }
 
@@ -405,18 +429,11 @@ impl UpdateParams {
       return Err(ParamsError::Column("no valid columns to update found"));
     }
 
-    // Inject the pk_value. It may already be present, if redundantly provided both in the API path
-    // *and* the request. In most cases it probably wont and duplication is not an issue.
-    params.push(NamedParam {
-      column_index: usize::MAX,
-      column_name: "__pk_value".to_string(),
-      value: pk_column_param,
-    });
-
     return Ok(Self {
       params,
       files: Mutex::new(files),
       pk_column_name,
+      pk_column_value: pk_column_param,
     });
   }
 }
@@ -436,12 +453,12 @@ pub enum Params {
 ///
 /// If the request gets rejected by the policy we want to avoid parsing the request JSON and if the
 /// engine requires a parse we don't want to re-parse in the handler.
-pub enum LazyParams<'a, T> {
+pub enum LazyParams<'a, T: 'static> {
   Builder(Option<Box<dyn (FnOnce() -> Result<T, ParamsError>) + Send + 'a>>),
   Params(Result<Arc<T>, ParamsError>),
 }
 
-impl<'a, T> LazyParams<'a, T> {
+impl<'a, T: 'static> LazyParams<'a, T> {
   pub fn params(&mut self) -> Result<&'_ Arc<T>, &ParamsError> {
     return match self {
       LazyParams::Params(result) => result.as_ref(),
@@ -778,7 +795,7 @@ mod tests {
         expected_params: 2,
       },
     ] {
-      let params = Params::for_insert(
+      let params = InsertParams::new(
         &metadata,
         &registry,
         json_row_from_value(i.input).unwrap(),
@@ -786,25 +803,21 @@ mod tests {
       )
       .unwrap();
 
-      let (query, _file_metadata) = WriteQuery::new_insert_or_replace(
+      let query = WriteQuery::new_insert_or_replace(
         trailbase_sqlite::ConnectionType::Sqlite,
         &qualified_name,
         &metadata.column_metadata,
         "id",
         proto::ConflictResolutionStrategy::Replace,
-        params,
+        Arc::new(params),
       )
       .unwrap();
 
-      let WriteQuery::Insert {
-        query,
-        named_params,
-      } = query
-      else {
+      let WriteQuery::Insert { query, params } = query else {
         panic!("not an insert");
       };
 
-      assert_eq!(i.expected_params, named_params.iter().count());
+      assert_eq!(i.expected_params, params.params.len());
 
       // Make sure it's a valid query
       assert!(parse_into_statement(&allocator, &query).is_ok(), "{query}")
@@ -830,7 +843,6 @@ mod tests {
     .unwrap();
 
     const ID_COL: &str = "myid";
-    const ID_COL_PLACEHOLDER: &str = ":myid";
 
     let sql = format!(
       r#"
@@ -858,40 +870,34 @@ mod tests {
     let num = 5;
     let real = 3.0;
 
-    let assert_params = |p: &Params| {
-      let Params::Insert {
-        named_params,
-        files: _,
-        column_names: _,
-        column_indexes: _,
-      } = p
-      else {
-        panic!("Not an insert")
-      };
+    let assert_params = |p: &InsertParams| {
+      let InsertParams { params, .. } = p;
+      assert!(params.len() >= 5, "{params:?}");
 
-      assert!(named_params.len() >= 5, "{:?}", named_params);
-
-      for (param, value) in named_params {
-        match param.as_ref() {
-          ID_COL_PLACEHOLDER => {
+      for NamedParam {
+        column_name, value, ..
+      } in params
+      {
+        match column_name.as_str() {
+          ID_COL => {
             assert!(
               matches!(value, Value::Blob(x) if x.to_vec() == id),
               "VALUE: {value:?}"
             );
           }
-          ":blob" => {
+          "blob" => {
             assert!(matches!(value, Value::Blob(x) if x.to_vec() == blob));
           }
-          ":text" => {
+          "text" => {
             assert!(matches!(value, Value::Text(x) if x.contains("some text :)")));
           }
-          ":num" => {
+          "num" => {
             assert!(matches!(value, Value::Integer(x) if *x == 5));
           }
-          ":real" => {
+          "real" => {
             assert!(matches!(value, Value::Real(x) if *x == 3.0));
           }
-          ":json_col" => {
+          "json_col" => {
             assert!(matches!(value, Value::Text(_x)));
           }
           x => assert!(false, "{x}"),
@@ -910,7 +916,7 @@ mod tests {
       });
 
       assert_params(
-        &Params::for_insert(
+        &InsertParams::new(
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
@@ -931,7 +937,7 @@ mod tests {
       });
 
       assert_params(
-        &Params::for_insert(
+        &InsertParams::new(
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
@@ -949,7 +955,7 @@ mod tests {
         "real": "3",
       });
 
-      let params = Params::for_insert(
+      let params = InsertParams::new(
         &metadata,
         &registry,
         json_row_from_value(value.clone()).unwrap(),
@@ -971,7 +977,7 @@ mod tests {
       });
 
       assert!(
-        Params::for_insert(
+        InsertParams::new(
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
@@ -992,7 +998,7 @@ mod tests {
         "real": 3,
       });
 
-      let params = Params::for_insert(
+      let params = InsertParams::new(
         &metadata,
         &registry,
         json_row_from_value(value).unwrap(),
@@ -1012,7 +1018,7 @@ mod tests {
       });
 
       assert!(
-        Params::for_insert(
+        InsertParams::new(
           &metadata,
           &registry,
           json_row_from_value(value).unwrap(),
@@ -1036,7 +1042,7 @@ mod tests {
         "real": 3,
       });
 
-      let params = Params::for_insert(
+      let params = InsertParams::new(
         &metadata,
         &registry,
         json_row_from_value(value).unwrap(),
@@ -1046,17 +1052,19 @@ mod tests {
 
       assert_params(&params);
 
-      let Params::Insert { named_params, .. } = params else {
-        panic!("Not an insert");
-      };
-      let json_col: Vec<Value> = named_params
+      let json_col: Vec<Value> = params
+        .params
         .iter()
-        .filter_map(|(name, value)| {
-          if name == ":json_col" {
-            return Some(value.clone());
-          }
-          return None;
-        })
+        .filter_map(
+          |NamedParam {
+             column_name, value, ..
+           }| {
+            if column_name == "json_col" {
+              return Some(value.clone());
+            }
+            return None;
+          },
+        )
         .collect();
 
       assert_eq!(json_col.len(), 1);
@@ -1101,7 +1109,7 @@ mod tests {
 
     let empty = json!({});
     assert!(
-      Params::for_update(
+      UpdateParams::new(
         &metadata,
         &registry,
         json_row_from_value(empty).unwrap(),
@@ -1116,7 +1124,7 @@ mod tests {
         "unknown_column": 5,
     });
     assert!(
-      Params::for_update(
+      UpdateParams::new(
         &metadata,
         &registry,
         json_row_from_value(unknown_column).unwrap(),
@@ -1163,7 +1171,7 @@ mod tests {
         }
       });
 
-      let params = Params::for_update(
+      let params = UpdateParams::new(
         &metadata,
         &registry,
         json_row_from_value(value).unwrap(),
@@ -1173,19 +1181,18 @@ mod tests {
       )
       .unwrap();
 
-      let Params::Update {
-        column_names,
-        files,
-        ..
-      } = params
-      else {
-        panic!("Expected Update params");
-      };
+      let UpdateParams { params, files, .. } = params;
 
       // Avatar file-column should not be skipped but the file data is absent.
-      assert_eq!(vec!["avatar", "name"], column_names);
-      assert_eq!(1, files.len());
-      assert!(files[0].1.is_none());
+      assert_eq!(
+        vec!["avatar", "name"],
+        params
+          .iter()
+          .map(|p| p.column_name.as_str())
+          .collect::<Vec<_>>()
+      );
+      assert_eq!(1, files.lock().len());
+      assert!(files.lock()[0].1.is_none());
     }
 
     // Test: FileUploadInput with 'data' field should NOT be skipped.
@@ -1200,7 +1207,7 @@ mod tests {
         }
       });
 
-      let params_with_file = Params::for_update(
+      let params_with_file = UpdateParams::new(
         &metadata,
         &registry,
         json_row_from_value(value_with_new_file).unwrap(),
@@ -1210,23 +1217,18 @@ mod tests {
       )
       .unwrap();
 
-      let Params::Update {
-        column_names,
-        files,
-        ..
-      } = params_with_file
-      else {
-        panic!("Expected Update params");
-      };
+      let UpdateParams { params, files, .. } = params_with_file;
 
       // Avatar should be present when there IS a 'data' field (new upload).
       assert_eq!(
         vec!["avatar", "name"],
-        column_names,
-        "New FileUploadInput with data field must be included, but column_names = {column_names:?}"
+        params
+          .iter()
+          .map(|p| p.column_name.as_str())
+          .collect::<Vec<_>>()
       );
-      assert_eq!(1, files.len());
-      assert!(files[0].1.is_some());
+      assert_eq!(1, files.lock().len());
+      assert!(files.lock()[0].1.is_some());
     }
   }
 }

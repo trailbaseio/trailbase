@@ -12,7 +12,7 @@ use trailbase_sqlite::{Connection, ConnectionType, NamedParams, SyncConnectionTr
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::constants::USER_TABLE;
-use crate::records::params::{LazyParams, Params};
+use crate::records::params::{LazyParams, NamedParam, Params, ToParamsEnum};
 use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
@@ -499,7 +499,10 @@ impl RecordApi {
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
-  ) -> Result<(), RecordError> {
+  ) -> Result<(), RecordError>
+  where
+    Arc<P>: ToParamsEnum,
+  {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -527,7 +530,10 @@ impl RecordApi {
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
-  ) -> Result<(), RecordError> {
+  ) -> Result<(), RecordError>
+  where
+    Arc<P>: ToParamsEnum,
+  {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -635,7 +641,10 @@ impl RecordApi {
     record_id: Option<&Value>,
     request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
-  ) -> Result<NamedParams, RecordError> {
+  ) -> Result<NamedParams, RecordError>
+  where
+    Arc<P>: ToParamsEnum,
+  {
     // We need to inject context like: record id, user, request, and row into the access
     // check. Below we're building the query and binding the context as params accordingly.
     let mut params = match p {
@@ -645,46 +654,54 @@ impl RecordApi {
           return Err(RecordError::ApiRequiresTable);
         };
 
-        let (named_params, column_names, column_indexes) = match request_params
+        let params = request_params
           .ok_or_else(|| RecordError::Internal("missing insert params".into()))?
           .params()
-          .map_err(|_| RecordError::BadRequest("invalid params"))?
-        {
-          Params::Insert {
-            named_params,
-            column_names,
-            column_indexes,
-            ..
-          } => {
-            assert_eq!(p, Permission::Create);
-            (named_params, column_names, column_indexes)
-          }
-          Params::Update {
-            named_params,
-            column_names,
-            column_indexes,
-            ..
-          } => {
-            assert_eq!(p, Permission::Update);
-            (named_params, column_names, column_indexes)
-          }
+          .map_err(|_| RecordError::BadRequest("invalid params"))?;
+
+        let Some(params) = params.params_enum() else {
+          return Err(RecordError::BadRequest("invalid params"));
         };
 
-        debug_assert_eq!(column_names.len(), column_indexes.len());
+        let named_params = match &params {
+          Params::Insert(insert_params) => {
+            assert_eq!(p, Permission::Create);
+            &insert_params.params
+          }
+          Params::Update(update_params) => {
+            assert_eq!(p, Permission::Update);
+            &update_params.params
+          }
+        };
 
         // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
         // explicit NULL value for all missing fields on the request. Can we make this cheaper,
         // either by pre-processing the access query or improving construction?
         let mut all_named_params = self.state.schema.named_params_template.clone();
 
-        for (index, column_index) in column_indexes.iter().enumerate() {
+        for NamedParam {
+          column_index,
+          column_name,
+          value,
+        } in named_params
+        {
           // Override the default NULL value with the request value.
-          all_named_params[*column_index].1 = named_params[index].1.clone();
+          // all_named_params[*column_index] =
+          //   (Cow::Owned(named_placeholder(column_name)), value.clone());
+          all_named_params[*column_index].1 = value.clone();
         }
 
         all_named_params.push((
           Cow::Borrowed(":__fields"),
-          Value::Text(serde_json::to_string(&column_names).expect("json array")),
+          Value::Text(
+            serde_json::to_string(
+              &named_params
+                .iter()
+                .map(|p| p.column_name.as_str())
+                .collect::<Vec<_>>(),
+            )
+            .expect("json array"),
+          ),
         ));
 
         all_named_params

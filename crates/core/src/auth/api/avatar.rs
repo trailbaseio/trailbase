@@ -1,7 +1,7 @@
 use axum::extract::{Path, State};
 use axum::response::Response;
 use const_format::formatcp;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 use trailbase_schema::db::metadata::{ColumnMetadata, TableMetadata};
 use trailbase_schema::db::sqlite::{Column, ColumnOption, QualifiedName, Table};
 use trailbase_schema::json_schema::FileUploadInput;
@@ -105,7 +105,7 @@ pub async fn create_avatar_handler(
     &AVATAR_TABLE_METADATA.column_metadata,
     proto::ConflictResolutionStrategy::Replace,
     "user",
-    params,
+    Arc::new(params),
   )
   .await
   .map_err(|err| AuthError::Internal(err.into()))?;

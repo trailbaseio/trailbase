@@ -71,8 +71,6 @@ impl WriteQuery {
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    let files = std::mem::take(&mut params.files);
-
     return Ok(Self::Insert { query, params });
   }
 
@@ -80,9 +78,7 @@ impl WriteQuery {
     connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
     params: Arc<UpdateParams>,
-  ) -> Result<(Self, FileMetadataContents), RecordError> {
-    let files = std::mem::take(&mut *params.files.lock());
-
+  ) -> Result<Self, RecordError> {
     // FIXME: Update template to consume InsertParams.
     let column_names: Vec<_> = params
       .params
@@ -99,7 +95,7 @@ impl WriteQuery {
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok((Self::Update { query, params }, files));
+    return Ok(Self::Update { query, params });
   }
 
   pub fn new_delete(
@@ -164,7 +160,7 @@ impl WriteQuery {
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
       Self::Insert { query, params, .. } => {
-        if let Some(mut row) = conn.query_row(query, params)? {
+        if let Some(mut row) = conn.query_row(query, ArcInsertParams(params))? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),
@@ -174,7 +170,7 @@ impl WriteQuery {
         }
       }
       Self::Update { query, params } => {
-        if let Some(row) = conn.query_row(query, params)? {
+        if let Some(row) = conn.query_row(query, ArcUpdateParams(params))? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
@@ -317,7 +313,8 @@ pub(crate) async fn run_update_query(
   table_name: &QualifiedNameEscaped,
   params: Arc<UpdateParams>,
 ) -> Result<(), RecordError> {
-  let (query, files) = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
+  let files = std::mem::take(&mut *params.files.lock());
+  let query = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
 
   // We're storing any files to the object store first to make sure the DB entry is valid right
   // after commit and not racily pointing to soon-to-be-written files.
