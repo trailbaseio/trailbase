@@ -674,34 +674,35 @@ impl RecordApi {
           }
         };
 
-        // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
+        // NOTE: We cannot have ACL queries access missing _REQ_.props. So we need to inject an
         // explicit NULL value for all missing fields on the request. Can we make this cheaper,
         // either by pre-processing the access query or improving construction?
         let mut all_named_params = self.state.schema.named_params_template.clone();
 
         for NamedParam {
           column_index,
-          column_name,
+          column_name: _,
           value,
         } in named_params
         {
-          // Override the default NULL value with the request value.
-          // all_named_params[*column_index] =
-          //   (Cow::Owned(named_placeholder(column_name)), value.clone());
+          // Override the default NULL value with the actual request value.
           all_named_params[*column_index].1 = value.clone();
         }
 
         all_named_params.push((
           Cow::Borrowed(":__fields"),
-          Value::Text(
-            serde_json::to_string(
-              &named_params
-                .iter()
-                .map(|p| p.column_name.as_str())
-                .collect::<Vec<_>>(),
-            )
-            .expect("json array"),
-          ),
+          Value::Text(strings_to_json_array(
+            named_params.iter().map(|p| &p.column_name),
+          )),
+          // Value::Text(
+          //   serde_json::to_string(
+          //     &named_params
+          //       .iter()
+          //       .map(|p| &p.column_name)
+          //       .collect::<Vec<_>>(),
+          //   )
+          //   .unwrap_or_else(|_| "[]".to_string()),
+          // ),
         ));
 
         all_named_params
@@ -961,6 +962,46 @@ fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
     config_table_name, *name,
     "Expected: {name}, got: {config_table_name}"
   );
+}
+
+#[inline]
+fn strings_to_json_array<'a, I>(iter: I) -> String
+where
+  I: Iterator<Item = &'a String>,
+{
+  let mut out = String::with_capacity(256);
+  out.push('[');
+  for (i, s) in iter.enumerate() {
+    if i > 0 {
+      out.push(',');
+    }
+    write_json_string(&mut out, s);
+  }
+  out.push(']');
+
+  return out;
+}
+
+#[inline]
+fn write_json_string(out: &mut String, s: &str) {
+  out.push('"');
+  for c in s.chars() {
+    match c {
+      '"' => out.push_str("\\\""),
+      '\\' => out.push_str("\\\\"),
+      '\n' => out.push_str("\\n"),
+      '\r' => out.push_str("\\r"),
+      '\t' => out.push_str("\\t"),
+      '\u{08}' => out.push_str("\\b"),
+      '\u{0C}' => out.push_str("\\f"),
+      // Control characters must be escaped as \u00XX.
+      c if (c as u32) < 0x20 => {
+        out.push_str(&format!("\\u{:04x}", c as u32));
+      }
+      c => out.push(c),
+    }
+  }
+  out.push('"');
 }
 
 #[cfg(test)]
