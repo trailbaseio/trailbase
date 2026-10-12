@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::records::params::Params;
+use crate::records::params::UpdateParams;
 use crate::records::write_queries::run_update_query;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
@@ -77,7 +77,7 @@ pub async fn update_row_handler(
     &conn,
     state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
-    Params::for_admin_update(
+    UpdateParams::for_admin_update(
       table_metadata,
       state.json_schema_registry().load_full(),
       request.row,

@@ -11,23 +11,14 @@ use trailbase_sqlite::{Connection, ConnectionType, NamedParams, Value};
 use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
-use crate::records::params::{FileMetadataContents, Params};
+use crate::records::params::{FileMetadataContents, InsertParams, Params, UpdateParams};
 use crate::util::row_id_column2;
 
 #[derive(Debug)]
 pub enum WriteQuery {
-  Insert {
-    query: String,
-    named_params: NamedParams,
-  },
-  Update {
-    query: String,
-    named_params: NamedParams,
-  },
-  Delete {
-    query: String,
-    pk_value: Value,
-  },
+  Insert { query: String, params: InsertParams },
+  Update { query: String, params: UpdateParams },
+  Delete { query: String, pk_value: Value },
 }
 
 pub struct WriteQueryResult {
@@ -42,19 +33,16 @@ impl WriteQuery {
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
     conflict_resolution: proto::ConflictResolutionStrategy,
-    params: Params,
+    mut params: InsertParams,
   ) -> Result<(Self, FileMetadataContents), RecordError> {
     use crate::config::proto::ConflictResolutionStrategy;
 
-    let Params::Insert {
-      named_params,
-      files,
-      column_names,
-      column_indexes: _,
-    } = params
-    else {
-      return Err(RecordError::Internal("not an insert".into()));
-    };
+    // FIXME: Update template to consume InsertParams.
+    let column_names: Vec<_> = params
+      .params
+      .iter()
+      .map(|p| p.column_name.as_str())
+      .collect();
 
     let row_id_column = row_id_column2(connection_type);
     let query = CreateOrReplaceRecordQueryTemplate {
@@ -72,47 +60,35 @@ impl WriteQuery {
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok((
-      Self::Insert {
-        query,
-        named_params,
-      },
-      files,
-    ));
+    let files = std::mem::take(&mut params.files);
+
+    return Ok((Self::Insert { query, params }, files));
   }
 
   pub fn new_update(
     connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
-    params: Params,
+    mut params: UpdateParams,
   ) -> Result<(Self, FileMetadataContents), RecordError> {
-    let Params::Update {
-      named_params,
-      files,
-      column_names,
-      column_indexes: _,
-      pk_column_name,
-    } = params
-    else {
-      return Err(RecordError::Internal("not an update".into()));
-    };
+    // FIXME: Update template to consume InsertParams.
+    let column_names: Vec<_> = params
+      .params
+      .iter()
+      .map(|p| p.column_name.as_str())
+      .collect();
 
     let query = UpdateRecordQueryTemplate {
       table_name,
       column_names: &column_names,
-      pk_column_name: &pk_column_name,
+      pk_column_name: &params.pk_column_name,
       returning: Some(row_id_column2(connection_type)),
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok((
-      Self::Update {
-        query,
-        named_params,
-      },
-      files,
-    ));
+    let files = std::mem::take(&mut params.files);
+
+    return Ok((Self::Update { query, params }, files));
   }
 
   pub fn new_delete(
@@ -135,12 +111,8 @@ impl WriteQuery {
     conn: &trailbase_sqlite::Connection,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
-      Self::Insert {
-        query,
-        named_params,
-        ..
-      } => {
-        if let Some(mut row) = conn.write_query_row(query, named_params).await? {
+      Self::Insert { query, params } => {
+        if let Some(mut row) = conn.write_query_row(query, params).await? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),
@@ -149,11 +121,8 @@ impl WriteQuery {
           Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
-      Self::Update {
-        query,
-        named_params,
-      } => {
-        if let Some(rowid) = conn.write_query_row_get(query, named_params, 0).await? {
+      Self::Update { query, params } => {
+        if let Some(rowid) = conn.write_query_row_get(query, params, 0).await? {
           Ok(WriteQueryResult {
             rowid,
             pk_value: None,
@@ -180,12 +149,8 @@ impl WriteQuery {
     conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
-      Self::Insert {
-        query,
-        named_params,
-        ..
-      } => {
-        if let Some(mut row) = conn.query_row(query, named_params)? {
+      Self::Insert { query, params, .. } => {
+        if let Some(mut row) = conn.query_row(query, params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),
@@ -194,11 +159,8 @@ impl WriteQuery {
           Err(trailbase_sqlite::Error::QueryReturnedNoRows)
         }
       }
-      Self::Update {
-        query,
-        named_params,
-      } => {
-        if let Some(row) = conn.query_row(query, named_params)? {
+      Self::Update { query, params } => {
+        if let Some(row) = conn.query_row(query, params)? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
@@ -296,7 +258,7 @@ pub(crate) async fn run_insert_or_replace_query(
   column_metadata: &[ColumnMetadata],
   conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
-  params: Params,
+  params: InsertParams,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
   let (query, files) = WriteQuery::new_insert_or_replace(
     conn.connection_type(),
@@ -338,7 +300,7 @@ pub(crate) async fn run_update_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
-  params: Params,
+  params: UpdateParams,
 ) -> Result<(), RecordError> {
   let (query, files) = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
 
@@ -388,7 +350,7 @@ pub(crate) async fn run_delete_query(
 #[template(escape = "none", path = "update_record_query.sql")]
 struct UpdateRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [String],
+  column_names: &'a [&'a str],
   pk_column_name: &'a str,
   returning: Option<&'a str>,
 }
@@ -397,7 +359,7 @@ struct UpdateRecordQueryTemplate<'a> {
 #[template(escape = "none", path = "create_or_replace_record_query.sql")]
 struct CreateOrReplaceRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  req_column_names: &'a [String],
+  req_column_names: &'a [&'a str],
   pk_column_name: &'a str,
   column_metadata: &'a [ColumnMetadata],
   ignore_conflict: bool,
@@ -423,7 +385,7 @@ mod tests {
     {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        req_column_names: &["index".to_string(), "trigger".to_string()],
+        req_column_names: &["index", "trigger"],
         pk_column_name: "index",
         column_metadata: &[],
         ignore_conflict: false,
@@ -457,7 +419,7 @@ mod tests {
     {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        req_column_names: &["index".to_string()],
+        req_column_names: &["index"],
         pk_column_name: "index",
         column_metadata: &[],
         ignore_conflict: true,

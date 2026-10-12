@@ -6,14 +6,14 @@ use trailbase_schema::db::sqlite::{Column, ColumnDataType};
 use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
 use trailbase_schema::json_schema::{FileUpload, FileUploadInput, FileUploads};
-use trailbase_sqlite::{NamedParams, Value};
+use trailbase_sqlite::Value;
 use trailbase_sqlvalue::SqlValue;
 
 use crate::records::RecordApi;
 use crate::records::util::named_placeholder;
 use crate::schema_metadata::{self, JsonColumnMetadata, TableMetadata};
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParamsError {
   #[error("Not a Number")]
   NotANumber,
@@ -38,28 +38,16 @@ pub enum ParamsError {
   #[error("Json validation: {0}")]
   JsonValidation(#[from] schema_metadata::JsonSchemaError),
   #[error("Json serialization: {0}")]
-  JsonSerialization(Arc<serde_json::Error>),
+  JsonSerialization(#[from] serde_json::Error),
   #[error("JsonSchema: {0}")]
   JsonSchema(#[from] trailbase_schema::json_schema::Error),
   #[error("ObjectStore: {0}")]
-  Storage(Arc<object_store::Error>),
+  Storage(#[from] object_store::Error),
   #[error("SqlValueDecode: {0}")]
   SqlValueDecode(#[from] trailbase_sqlvalue::DecodeError),
   #[cfg(any(feature = "geos", feature = "geos-static"))]
   #[error("Geos: {0}")]
   Geos(#[from] geos::Error),
-}
-
-impl From<serde_json::Error> for ParamsError {
-  fn from(err: serde_json::Error) -> Self {
-    return Self::JsonSerialization(Arc::new(err));
-  }
-}
-
-impl From<object_store::Error> for ParamsError {
-  fn from(err: object_store::Error) -> Self {
-    return Self::Storage(Arc::new(err));
-  }
 }
 
 impl From<trailbase_schema::json::JsonError> for ParamsError {
@@ -82,78 +70,60 @@ impl From<trailbase_schema::json::JsonError> for ParamsError {
   }
 }
 
-// Contains Metadata (i.e. column contents) and file contents.
+/// Contains Metadata (i.e. column contents) and file contents.
 pub(crate) type FileMetadataContents = Vec<(FileUpload, Option<Vec<u8>>)>;
 
+/// A JSON object representing a DB record/row.
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
-pub trait ColumnAccessor {
-  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata>;
-}
-
-/// Implementation to build insert/update Params for admin APIs.
-impl ColumnAccessor for TableMetadata {
-  #[inline]
-  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata> {
-    return self.column_by_name(field_name);
-  }
-}
-
-/// Implementation to build insert/update Params for record APIs.
-impl ColumnAccessor for RecordApi {
-  #[inline]
-  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata> {
-    return self.column_metadata_by_name(field_name);
-  }
-}
-
-/// Represents a record provided by the user via request, i.e. a create or update record request.
-///
-/// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
-/// be filtered out and the json values will be translated into SQLite values.
 #[derive(Debug)]
-pub enum Params {
-  Insert {
-    /// List of named params with their respective placeholders, e.g.:
-    ///   '(":col_name": Value::Text("hi"))'.
-    named_params: NamedParams,
-
-    /// List of files and contents to be written to an object store.
-    files: FileMetadataContents,
-
-    /// Metadata for mapping `named_params` back to SQL schema to construct Insert/Update queries.
-    column_names: Vec<String>,
-    column_indexes: Vec<usize>,
-  },
-  Update {
-    /// List of named params with their respective placeholders, e.g.:
-    ///   '(":col_name": Value::Text("hi"))'.
-    named_params: NamedParams,
-
-    /// List of files and contents to be written to an object store.
-    files: FileMetadataContents,
-
-    /// Metadata for mapping `named_params` back to SQL schema to construct Insert/Update queries.
-    column_names: Vec<String>,
-    column_indexes: Vec<usize>,
-
-    pk_column_name: String,
-  },
+pub struct NamedParam {
+  // TODO: We could likely remove the index if we matched columns by name during ACL construction.
+  column_index: usize,
+  pub(crate) column_name: String,
+  value: Value,
 }
 
-impl Params {
+#[derive(Debug)]
+pub struct InsertParams {
+  /// List of named params with their respective placeholders, e.g.:
+  pub(crate) params: Vec<NamedParam>,
+
+  /// List of files and contents to be written to an object store.
+  pub(crate) files: FileMetadataContents,
+}
+
+impl trailbase_sqlite::Params for InsertParams {
+  fn bind<S: trailbase_sqlite::Statement>(
+    self,
+    stmt: &mut S,
+  ) -> Result<(), trailbase_sqlite::Error> {
+    for NamedParam {
+      column_index: _,
+      column_name,
+      value,
+    } in self.params
+    {
+      let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? else {
+        continue;
+      };
+      stmt.bind_parameter(idx, value.into())?;
+    }
+
+    return Ok(());
+  }
+}
+
+impl InsertParams {
   /// Converts a Json object + optional MultiPart files into trailbase_sqlite::Values and extracted
   /// files.
-  pub fn for_insert<S: ColumnAccessor>(
+  pub fn new<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Result<Self, ParamsError> {
-    let mut named_params = NamedParams::with_capacity(row.len());
-    let mut column_names = Vec::with_capacity(row.len());
-    let mut column_indexes = Vec::with_capacity(row.len());
-
+    let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataContents = vec![];
 
     // Insert parameters case.
@@ -184,9 +154,11 @@ impl Params {
         files.extend(json_files);
       }
 
-      named_params.push((named_placeholder(&key).into(), param));
-      column_names.push(key);
-      column_indexes.push(*index);
+      params.push(NamedParam {
+        column_index: *index,
+        column_name: key,
+        value: param,
+      });
     }
 
     // Note: files provided as part of a JSON request are handled above.
@@ -194,27 +166,18 @@ impl Params {
       files.extend(extract_files_from_multipart(
         accessor,
         multipart_files,
-        &mut named_params,
-        &mut column_names,
-        &mut column_indexes,
+        &mut params,
       )?);
     }
 
-    return Ok(Params::Insert {
-      named_params,
-      files,
-      column_names,
-      column_indexes,
-    });
+    return Ok(Self { params, files });
   }
 
   pub fn for_admin_insert<S: ColumnAccessor>(
     accessor: &S,
     row: indexmap::IndexMap<String, SqlValue>,
   ) -> Result<Self, ParamsError> {
-    let mut named_params = NamedParams::with_capacity(row.len());
-    let mut column_names = Vec::with_capacity(row.len());
-    let mut column_indexes = Vec::with_capacity(row.len());
+    let mut params = Vec::<NamedParam>::with_capacity(row.len());
 
     // Insert parameters case.
     for (key, value) in row {
@@ -223,20 +186,56 @@ impl Params {
         return Err(ParamsError::ColumnNotFound);
       };
 
-      named_params.push((named_placeholder(&key).into(), value.try_into()?));
-      column_names.push(key);
-      column_indexes.push(*index);
+      params.push(NamedParam {
+        column_index: *index,
+        column_name: key,
+        value: value.try_into()?,
+      });
     }
 
-    return Ok(Params::Insert {
-      named_params,
+    return Ok(Self {
+      params,
       files: vec![],
-      column_names,
-      column_indexes,
     });
   }
+}
 
-  pub fn for_update<S: ColumnAccessor>(
+#[derive(Debug)]
+pub struct UpdateParams {
+  /// List of named params with their respective placeholders, e.g.:
+  pub(crate) params: Vec<NamedParam>,
+
+  /// List of files and contents to be written to an object store.
+  pub(crate) files: FileMetadataContents,
+
+  /// Primary key column name.
+  pub(crate) pk_column_name: String,
+}
+
+impl trailbase_sqlite::Params for UpdateParams {
+  fn bind<S: trailbase_sqlite::Statement>(
+    self,
+    stmt: &mut S,
+  ) -> Result<(), trailbase_sqlite::Error> {
+    for NamedParam {
+      column_index: _,
+      column_name,
+      value,
+    } in self.params
+    {
+      // FIXME: we should bind ":__pk_value" here.
+      let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? else {
+        continue;
+      };
+      stmt.bind_parameter(idx, value.into())?;
+    }
+
+    return Ok(());
+  }
+}
+
+impl UpdateParams {
+  pub fn new<S: ColumnAccessor>(
     accessor: &S,
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
@@ -244,10 +243,7 @@ impl Params {
     pk_column_name: String,
     pk_column_value: Value,
   ) -> Result<Self, ParamsError> {
-    let mut named_params = NamedParams::with_capacity(row.len() + 1);
-    let mut column_names = Vec::with_capacity(row.len() + 1);
-    let mut column_indexes = Vec::with_capacity(row.len() + 1);
-
+    let mut params = Vec::<NamedParam>::with_capacity(row.len() + 1);
     let mut files: FileMetadataContents = vec![];
 
     // Update parameters case.
@@ -284,37 +280,39 @@ impl Params {
         ));
       }
 
-      named_params.push((named_placeholder(&key).into(), param));
-      column_names.push(key);
-      column_indexes.push(*index);
+      params.push(NamedParam {
+        column_index: *index,
+        column_name: key,
+        value: param,
+      });
     }
 
     // Make sure not everything was skipped, otherwise we'll yield an invalid query leading to
     // a server-error.
-    if column_indexes.is_empty() {
+    if params.is_empty() {
       return Err(ParamsError::Column("no valid columns to update found"));
     }
 
     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
     // *and* the request. In most cases it probably wont and duplication is not an issue.
-    named_params.push((":__pk_value".into(), pk_column_value));
+    params.push(NamedParam {
+      column_index: usize::MAX,
+      column_name: "__pk_value".to_string(),
+      value: pk_column_value,
+    });
 
     // Note: files provided as part of a JSON request are handled above.
     if let Some(multipart_files) = multipart_files {
       files.extend(extract_files_from_multipart(
         accessor,
         multipart_files,
-        &mut named_params,
-        &mut column_names,
-        &mut column_indexes,
+        &mut params,
       )?);
     }
 
-    return Ok(Params::Update {
-      named_params,
+    return Ok(Self {
+      params,
       files,
-      column_names,
-      column_indexes,
       pk_column_name,
     });
   }
@@ -328,10 +326,7 @@ impl Params {
   ) -> Result<Self, ParamsError> {
     let pk_column_param = pk_column_value.try_into()?;
 
-    let mut named_params = NamedParams::with_capacity(row.len() + 1);
-    let mut column_names = Vec::with_capacity(row.len() + 1);
-    let mut column_indexes = Vec::with_capacity(row.len() + 1);
-
+    let mut params = Vec::<NamedParam>::with_capacity(row.len() + 1);
     let mut files: FileMetadataContents = vec![];
 
     // Update parameters case.
@@ -387,54 +382,374 @@ impl Params {
         ));
       }
 
-      named_params.push((named_placeholder(&key).into(), param));
-      column_names.push(key);
-      column_indexes.push(*index);
+      params.push(NamedParam {
+        column_index: *index,
+        column_name: key,
+        value: param,
+      });
     }
 
     // Make sure not everything was skipped, otherwise we'll yield an invalid query leading to
     // a server-error.
-    if column_indexes.is_empty() {
+    if params.is_empty() {
       return Err(ParamsError::Column("no valid columns to update found"));
     }
 
     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
     // *and* the request. In most cases it probably wont and duplication is not an issue.
-    named_params.push((":__pk_value".into(), pk_column_param));
+    params.push(NamedParam {
+      column_index: usize::MAX,
+      column_name: "__pk_value".to_string(),
+      value: pk_column_param,
+    });
 
-    return Ok(Params::Update {
-      named_params,
+    return Ok(Self {
+      params,
       files,
-      column_names,
-      column_indexes,
       pk_column_name,
     });
   }
 }
+
+/// Represents a record provided by the user via request, i.e. a create or update record request.
+///
+/// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
+/// be filtered out and the json values will be translated into SQLite values.
+#[derive(Debug)]
+pub enum Params {
+  Insert {
+    /// List of named params with their respective placeholders, e.g.:
+    params: Vec<NamedParam>,
+
+    /// List of files and contents to be written to an object store.
+    files: FileMetadataContents,
+  },
+  Update {
+    /// List of named params with their respective placeholders, e.g.:
+    params: Vec<NamedParam>,
+
+    /// List of files and contents to be written to an object store.
+    files: FileMetadataContents,
+
+    // Primary key column name.
+    pk_column_name: String,
+  },
+}
+
+// impl Params {
+//   /// Converts a Json object + optional MultiPart files into trailbase_sqlite::Values and extracted
+//   /// files.
+//   pub fn for_insert<S: ColumnAccessor>(
+//     accessor: &S,
+//     json_schema_registry: &JsonSchemaRegistry,
+//     row: JsonRow,
+//     multipart_files: Option<Vec<FileUploadInput>>,
+//   ) -> Result<Self, ParamsError> {
+//     let mut params = Vec::<NamedParam>::with_capacity(row.len());
+//     let mut files: FileMetadataContents = vec![];
+//
+//     // Insert parameters case.
+//     for (key, value) in row {
+//       // We simply skip unknown columns, this could simply be malformed input or client version
+//       // skew. This is similar in spirit to protobuf's unknown fields behavior.
+//       let Some(ColumnMetadata {
+//         index,
+//         column,
+//         json,
+//         is_geometry,
+//         ..
+//       }) = accessor.column_by_name(&key)
+//       else {
+//         continue;
+//       };
+//
+//       let (param, json_files) = extract_params_and_files_from_json(
+//         json_schema_registry,
+//         column,
+//         json.as_ref(),
+//         *is_geometry,
+//         value,
+//       )?;
+//       if let Some(json_files) = json_files {
+//         // Note: files provided as a multipart form upload are handled below. They need more
+//         // special handling to establish the field.name to column mapping.
+//         files.extend(json_files);
+//       }
+//
+//       params.push(NamedParam {
+//         column_index: *index,
+//         column_name: key,
+//         value: param,
+//       });
+//     }
+//
+//     // Note: files provided as part of a JSON request are handled above.
+//     if let Some(multipart_files) = multipart_files {
+//       files.extend(extract_files_from_multipart(
+//         accessor,
+//         multipart_files,
+//         &mut params,
+//       )?);
+//     }
+//
+//     return Ok(Params::Insert { params, files });
+//   }
+//
+//   pub fn for_admin_insert<S: ColumnAccessor>(
+//     accessor: &S,
+//     row: indexmap::IndexMap<String, SqlValue>,
+//   ) -> Result<Self, ParamsError> {
+//     let mut params = Vec::<NamedParam>::with_capacity(row.len());
+//
+//     // Insert parameters case.
+//     for (key, value) in row {
+//       // For admin operations we don't skip. There should not be client version skew.
+//       let Some(ColumnMetadata { index, .. }) = accessor.column_by_name(&key) else {
+//         return Err(ParamsError::ColumnNotFound);
+//       };
+//
+//       params.push(NamedParam {
+//         column_index: *index,
+//         column_name: key,
+//         value: value.try_into()?,
+//       });
+//     }
+//
+//     return Ok(Params::Insert {
+//       params,
+//       files: vec![],
+//     });
+//   }
+//
+//   pub fn for_update<S: ColumnAccessor>(
+//     accessor: &S,
+//     json_schema_registry: &JsonSchemaRegistry,
+//     row: JsonRow,
+//     multipart_files: Option<Vec<FileUploadInput>>,
+//     pk_column_name: String,
+//     pk_column_value: Value,
+//   ) -> Result<Self, ParamsError> {
+//     let mut params = Vec::<NamedParam>::with_capacity(row.len() + 1);
+//     let mut files: FileMetadataContents = vec![];
+//
+//     // Update parameters case.
+//     for (key, value) in row {
+//       // We simply skip unknown columns, this could simply be malformed input or client version
+//       // skew. This is similar in spirit to protobuf's unknown fields behavior.
+//       let Some(ColumnMetadata {
+//         index,
+//         column,
+//         json,
+//         is_geometry,
+//         ..
+//       }) = accessor.column_by_name(&key)
+//       else {
+//         continue;
+//       };
+//
+//       let (param, json_files) = extract_params_and_files_from_json(
+//         json_schema_registry,
+//         column,
+//         json.as_ref(),
+//         *is_geometry,
+//         value,
+//       )?;
+//       if let Some(json_files) = json_files {
+//         // Note: files provided as a multipart form upload are handled below. They need more
+//         // special handling to establish the field.name to column mapping.
+//         files.extend(json_files);
+//       }
+//
+//       if key == pk_column_name && pk_column_value != param {
+//         return Err(ParamsError::Column(
+//           "Primary key mismatch in update request",
+//         ));
+//       }
+//
+//       params.push(NamedParam {
+//         column_index: *index,
+//         column_name: key,
+//         value: param,
+//       });
+//     }
+//
+//     // Make sure not everything was skipped, otherwise we'll yield an invalid query leading to
+//     // a server-error.
+//     if params.is_empty() {
+//       return Err(ParamsError::Column("no valid columns to update found"));
+//     }
+//
+//     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
+//     // *and* the request. In most cases it probably wont and duplication is not an issue.
+//     params.push(NamedParam {
+//       column_index: usize::MAX,
+//       column_name: "__pk_value".to_string(),
+//       value: pk_column_value,
+//     });
+//
+//     // Note: files provided as part of a JSON request are handled above.
+//     if let Some(multipart_files) = multipart_files {
+//       files.extend(extract_files_from_multipart(
+//         accessor,
+//         multipart_files,
+//         &mut params,
+//       )?);
+//     }
+//
+//     return Ok(Params::Update {
+//       params,
+//       files,
+//       pk_column_name,
+//     });
+//   }
+//
+//   pub fn for_admin_update<S: ColumnAccessor>(
+//     accessor: &S,
+//     json_schema_registry: Arc<JsonSchemaRegistry>,
+//     row: indexmap::IndexMap<String, SqlValue>,
+//     pk_column_name: String,
+//     pk_column_value: SqlValue,
+//   ) -> Result<Self, ParamsError> {
+//     let pk_column_param = pk_column_value.try_into()?;
+//
+//     let mut params = Vec::<NamedParam>::with_capacity(row.len() + 1);
+//     let mut files: FileMetadataContents = vec![];
+//
+//     // Update parameters case.
+//     for (key, value) in row {
+//       // For admin operations we don't skip. There should not be client version skew.
+//       let Some(ColumnMetadata {
+//         index,
+//         column,
+//         json,
+//         is_geometry,
+//         ..
+//       }) = accessor.column_by_name(&key)
+//       else {
+//         return Err(ParamsError::ColumnNotFound);
+//       };
+//
+//       let param: Value = if let Some(JsonColumnMetadata::SchemaName(schema_name)) = json.as_ref() {
+//         match schema_name.as_str() {
+//           "std.FileUpload" | "std.FileUploads" => {
+//             match value {
+//               SqlValue::Text(text) => {
+//                 let (param, json_files) = extract_params_and_files_from_json(
+//                   &json_schema_registry,
+//                   column,
+//                   json.as_ref(),
+//                   *is_geometry,
+//                   serde_json::from_str(&text)?,
+//                 )?;
+//                 if let Some(json_files) = json_files {
+//                   // Note: files provided as a multipart form upload are handled below. They need
+//                   // more special handling to establish the field.name to column
+//                   // mapping.
+//                   files.extend(json_files);
+//                 }
+//
+//                 param
+//               }
+//               SqlValue::Null => Value::Null,
+//               _ => {
+//                 return Err(ParamsError::UnexpectedType("", format!("{value:?}")));
+//               }
+//             }
+//           }
+//           _ => value.try_into()?,
+//         }
+//       } else {
+//         value.try_into()?
+//       };
+//
+//       if key == pk_column_name && pk_column_param != param {
+//         return Err(ParamsError::Column(
+//           "Primary key mismatch in update request",
+//         ));
+//       }
+//
+//       params.push(NamedParam {
+//         column_index: *index,
+//         column_name: key,
+//         value: param,
+//       });
+//     }
+//
+//     // Make sure not everything was skipped, otherwise we'll yield an invalid query leading to
+//     // a server-error.
+//     if params.is_empty() {
+//       return Err(ParamsError::Column("no valid columns to update found"));
+//     }
+//
+//     // Inject the pk_value. It may already be present, if redundantly provided both in the API path
+//     // *and* the request. In most cases it probably wont and duplication is not an issue.
+//     params.push(NamedParam {
+//       column_index: usize::MAX,
+//       column_name: "__pk_value".to_string(),
+//       value: pk_column_param,
+//     });
+//
+//     return Ok(Params::Update {
+//       params,
+//       files,
+//       pk_column_name,
+//     });
+//   }
+// }
 
 /// A lazy representation of SQL query parameters derived from the request json to share between
 /// handler and the policy engine.
 ///
 /// If the request gets rejected by the policy we want to avoid parsing the request JSON and if the
 /// engine requires a parse we don't want to re-parse in the handler.
-pub enum LazyParams<'a> {
-  LazyInsert(Option<Box<dyn (FnOnce() -> Result<Params, ParamsError>) + Send + 'a>>),
-  LazyUpdate(Option<Box<dyn (FnOnce() -> Result<Params, ParamsError>) + Send + 'a>>),
-  Params(Result<Params, ParamsError>),
+pub enum LazyParams<'a, T> {
+  Builder(Option<Box<dyn (FnOnce() -> Result<T, ParamsError>) + Send + 'a>>),
+  Params(Result<T, ParamsError>),
 }
 
-impl<'a> LazyParams<'a> {
+impl<'a, T> LazyParams<'a, T> {
+  pub fn params(&mut self) -> Result<&'_ T, &ParamsError> {
+    return match self {
+      LazyParams::Params(result) => result.as_ref(),
+      LazyParams::Builder(builder) => {
+        let Some(builder) = std::mem::take(builder) else {
+          unreachable!("empty builder");
+        };
+
+        *self = Self::Params(builder());
+        let LazyParams::Params(result) = self else {
+          unreachable!("just assigned");
+        };
+        result.as_ref()
+      }
+    };
+  }
+
+  pub fn consume(self) -> Result<T, ParamsError> {
+    return match self {
+      LazyParams::Params(result) => result,
+      LazyParams::Builder(builder) => match builder {
+        Some(f) => f(),
+        None => unreachable!("missing builder"),
+      },
+    };
+  }
+}
+
+impl<'a> LazyParams<'a, InsertParams> {
   pub fn for_insert<S: ColumnAccessor + Sync>(
     accessor: &'a S,
     json_schema_registry: Arc<JsonSchemaRegistry>,
     json_row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
   ) -> Self {
-    return LazyParams::LazyInsert(Some(Box::new(move || {
-      return Params::for_insert(accessor, &json_schema_registry, json_row, multipart_files);
+    return LazyParams::Builder(Some(Box::new(move || {
+      return InsertParams::new(accessor, &json_schema_registry, json_row, multipart_files);
     })));
   }
+}
 
+impl<'a> LazyParams<'a, UpdateParams> {
   pub fn for_update<S: ColumnAccessor + Sync>(
     accessor: &'a S,
     json_schema_registry: Arc<JsonSchemaRegistry>,
@@ -443,8 +758,8 @@ impl<'a> LazyParams<'a> {
     primary_key_column: String,
     primary_key_value: Value,
   ) -> Self {
-    return LazyParams::LazyUpdate(Some(Box::new(move || {
-      return Params::for_update(
+    return LazyParams::Builder(Some(Box::new(move || {
+      return UpdateParams::new(
         accessor,
         &json_schema_registry,
         json_row,
@@ -454,41 +769,12 @@ impl<'a> LazyParams<'a> {
       );
     })));
   }
-
-  pub fn params(&mut self) -> Result<&'_ Params, ParamsError> {
-    return match self {
-      LazyParams::Params(result) => result.as_ref().map_err(|err| err.clone()),
-      LazyParams::LazyInsert(builder) | LazyParams::LazyUpdate(builder) => {
-        let Some(builder) = std::mem::take(builder) else {
-          unreachable!("empty builder");
-        };
-
-        *self = Self::Params(builder());
-        let LazyParams::Params(result) = self else {
-          unreachable!("just assigned");
-        };
-        result.as_ref().map_err(|err| err.clone())
-      }
-    };
-  }
-
-  pub fn consume(self) -> Result<Params, ParamsError> {
-    return match self {
-      LazyParams::Params(result) => result,
-      LazyParams::LazyInsert(builder) | LazyParams::LazyUpdate(builder) => match builder {
-        Some(f) => f(),
-        None => unreachable!("missing builder"),
-      },
-    };
-  }
 }
 
 fn extract_files_from_multipart<S: ColumnAccessor>(
   accessor: &S,
   multipart_files: Vec<FileUploadInput>,
-  named_params: &mut NamedParams,
-  column_names: &mut Vec<String>,
-  column_indexes: &mut Vec<usize>,
+  params: &mut Vec<NamedParam>,
 ) -> Result<FileMetadataContents, ParamsError> {
   let files: Vec<(String, FileUpload, Option<Vec<u8>>)> = multipart_files
     .into_iter()
@@ -530,20 +816,18 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
           ));
         }
 
-        named_params.push((
-          named_placeholder(&column.name).into(),
-          Value::Text(serde_json::to_string(&file_metadata)?),
-        ));
-        column_names.push(column.name.to_string());
-        column_indexes.push(*index);
+        params.push(NamedParam {
+          column_index: *index,
+          column_name: column.name.clone(),
+          value: Value::Text(serde_json::to_string(&file_metadata)?),
+        });
       }
       "std.FileUploads" => {
-        named_params.push((
-          named_placeholder(&column.name).into(),
-          Value::Text(serde_json::to_string(&file_metadata)?),
-        ));
-        column_names.push(column.name.to_string());
-        column_indexes.push(*index);
+        params.push(NamedParam {
+          column_index: *index,
+          column_name: column.name.clone(),
+          value: Value::Text(serde_json::to_string(&file_metadata)?),
+        });
       }
       _ => {
         return Err(ParamsError::Column("Mismatching JSON schema"));
@@ -672,6 +956,26 @@ fn extract_param_and_file_from_json_value(
     }
     InputOrMetadata::Metadata(metadata) => Ok((metadata, None)),
   };
+}
+
+pub trait ColumnAccessor {
+  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata>;
+}
+
+/// Implementation to build insert/update Params for admin APIs.
+impl ColumnAccessor for TableMetadata {
+  #[inline]
+  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata> {
+    return self.column_by_name(field_name);
+  }
+}
+
+/// Implementation to build insert/update Params for record APIs.
+impl ColumnAccessor for RecordApi {
+  #[inline]
+  fn column_by_name(&self, field_name: &str) -> Option<&ColumnMetadata> {
+    return self.column_metadata_by_name(field_name);
+  }
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::records::params::Params;
+use crate::records::params::InsertParams;
 use crate::records::write_queries::run_insert_or_replace_query;
 use crate::util::row_id_column;
 
@@ -62,7 +62,7 @@ pub async fn insert_row_handler(
     row_id_column(&conn),
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
-    Params::for_admin_insert(table_metadata, request.row)?,
+    InsertParams::for_admin_insert(table_metadata, request.row)?,
   )
   .await?;
 

@@ -41,9 +41,6 @@ pub(crate) struct RecordApiSchema {
   column_name_to_index: HashMap<String, usize>,
 }
 
-// type DeferredAclCheck<T: SyncConnectionTrait> =
-//   Box<dyn (FnOnce(&T) -> Result<(), RecordError>) + Send>;
-
 impl RecordApiSchema {
   fn from_table(
     table_metadata: &TableMetadata,
@@ -496,11 +493,11 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
-  pub async fn check_record_level_access(
+  pub async fn check_record_level_access<P>(
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -523,12 +520,12 @@ impl RecordApi {
     return Err(RecordError::Forbidden);
   }
 
-  pub fn record_level_access_check<T: SyncConnectionTrait>(
+  pub fn record_level_access_check<T: SyncConnectionTrait, P>(
     &self,
     conn: &mut T,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
@@ -632,11 +629,11 @@ impl RecordApi {
   // winding right now.
   // TODO: It may be cheaper to implement trailbase_sqlite::Params for LazyParams than convert to
   // NamedParams :shrug:.
-  fn build_named_params(
+  fn build_named_params<P>(
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_>>,
+    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
   ) -> Result<NamedParams, RecordError> {
     // We need to inject context like: record id, user, request, and row into the access
@@ -673,7 +670,7 @@ impl RecordApi {
           }
         };
 
-        assert_eq!(column_names.len(), column_indexes.len());
+        debug_assert_eq!(column_names.len(), column_indexes.len());
 
         // NOTE: We cannot have access queries access missing _REQ_.props. So we need to inject an
         // explicit NULL value for all missing fields on the request. Can we make this cheaper,

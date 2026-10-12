@@ -9,7 +9,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::params::{JsonRow, LazyParams, Params};
+use crate::records::params::{InsertParams, JsonRow, LazyParams, Params};
 use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
@@ -100,7 +100,7 @@ pub async fn create_record_handler(
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let mut params_list: Vec<Params> = Vec::with_capacity(records_and_files.len());
+  let mut params_list: Vec<InsertParams> = Vec::with_capacity(records_and_files.len());
   for (mut record, files) in records_and_files {
     if api.insert_autofill_missing_user_id_columns()
       && let Some(ref user) = user

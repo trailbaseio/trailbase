@@ -12,7 +12,7 @@ use crate::config::proto;
 use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
-use crate::records::params::{JsonRow, Params};
+use crate::records::params::{InsertParams, JsonRow};
 use crate::records::read_queries::run_get_file_query;
 use crate::records::write_queries::run_insert_or_replace_query;
 use crate::util::uuid_to_b64;
@@ -90,7 +90,7 @@ pub async fn create_avatar_handler(
     serde_json::Value::String(uuid_to_b64(&user.uuid)),
   )]);
 
-  let params = Params::for_insert(
+  let params = InsertParams::new(
     &*AVATAR_TABLE_METADATA,
     &state.json_schema_registry().load(),
     record,
