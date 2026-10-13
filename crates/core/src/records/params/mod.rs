@@ -1,3 +1,4 @@
+use compact_str::CompactString;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -25,10 +26,10 @@ pub(crate) type FileMetadataContents = Vec<(FileUpload, Option<Vec<u8>>)>;
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
 #[derive(Debug)]
-pub(crate) struct NamedParam {
+pub struct NamedParam {
   pub column_index: usize,
-  pub column_name: String,
-  pub placeholder: String,
+  pub column_name: CompactString,
+  pub placeholder: CompactString,
   pub value: Value,
 }
 
@@ -45,7 +46,7 @@ impl ToParamsEnum for Arc<()> {
 #[derive(Debug)]
 pub struct InsertParams {
   /// List of named params with their respective placeholders, e.g.:
-  pub(crate) params: Vec<NamedParam>,
+  pub params: Vec<NamedParam>,
 }
 
 impl ToParamsEnum for Arc<InsertParams> {
@@ -120,7 +121,7 @@ impl InsertParams {
       params.push(NamedParam {
         column_index: *index,
         placeholder: named_placeholder(&key),
-        column_name: key,
+        column_name: key.into(),
         value: param,
       });
     }
@@ -153,7 +154,7 @@ impl InsertParams {
       params.push(NamedParam {
         column_index: *index,
         placeholder: named_placeholder(&key),
-        column_name: key,
+        column_name: key.into(),
         value: value.try_into()?,
       });
     }
@@ -165,11 +166,11 @@ impl InsertParams {
 #[derive(Debug)]
 pub struct UpdateParams {
   /// List of named params with their respective placeholders, e.g.:
-  pub(crate) params: Vec<NamedParam>,
+  pub params: Vec<NamedParam>,
 
   /// Primary key column name & value.
-  pub(crate) pk_column_name: String,
-  pub(crate) pk_column_value: Value,
+  pub pk_column_name: String,
+  pub pk_column_value: Value,
 }
 
 impl ToParamsEnum for Arc<UpdateParams> {
@@ -257,7 +258,7 @@ impl UpdateParams {
       params.push(NamedParam {
         column_index: *index,
         placeholder: named_placeholder(&key),
-        column_name: key,
+        column_name: key.into(),
         value: param,
       });
     }
@@ -355,7 +356,7 @@ impl UpdateParams {
       params.push(NamedParam {
         column_index: *index,
         placeholder: named_placeholder(&key),
-        column_name: key,
+        column_name: key.into(),
         value: param,
       });
     }
@@ -511,7 +512,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
         params.push(NamedParam {
           column_index: *index,
           placeholder: named_placeholder(&column.name),
-          column_name: column.name.clone(),
+          column_name: CompactString::from(&column.name),
           value: Value::Text(serde_json::to_string(&file_metadata)?),
         });
       }
@@ -519,7 +520,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
         params.push(NamedParam {
           column_index: *index,
           placeholder: named_placeholder(&column.name),
-          column_name: column.name.clone(),
+          column_name: CompactString::from(&column.name),
           value: Value::Text(serde_json::to_string(&file_metadata)?),
         });
       }

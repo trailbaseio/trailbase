@@ -389,14 +389,14 @@ mod tests {
         params: &[
           NamedParam {
             column_index: 0,
-            column_name: "index".to_string(),
-            placeholder: ":index".to_string(),
+            column_name: "index".into(),
+            placeholder: ":index".into(),
             value: Value::Null,
           },
           NamedParam {
             column_index: 1,
-            column_name: "trigger".to_string(),
-            placeholder: ":trigger".to_string(),
+            column_name: "trigger".into(),
+            placeholder: ":trigger".into(),
             value: Value::Null,
           },
         ],
@@ -435,8 +435,8 @@ mod tests {
         table_name: &QualifiedName::parse("table").unwrap().into(),
         params: &[NamedParam {
           column_index: 0,
-          column_name: "index".to_string(),
-          placeholder: ":index".to_string(),
+          column_name: "index".into(),
+          placeholder: ":index".into(),
           value: Value::Null,
         }],
         pk_column_name: "index",

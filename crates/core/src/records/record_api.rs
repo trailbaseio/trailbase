@@ -1,4 +1,5 @@
 use askama::Template;
+use compact_str::CompactString;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -34,7 +35,7 @@ pub(crate) struct RecordApiSchema {
   // Helpers:
 
   // A cheaply clone-able list of all column names. Used for insert/update param construction.
-  column_names: Arc<Vec<String>>,
+  column_names: Arc<Vec<CompactString>>,
 
   // Mapping form column name to *API column index*.
   //
@@ -141,13 +142,13 @@ pub struct RecordApi {
 }
 
 struct RequestParams {
-  all_column_names: Arc<Vec<String>>,
+  all_column_names: Arc<Vec<CompactString>>,
   present_fields: String,
   request_params: Params,
 }
 
 impl RequestParams {
-  fn new(all_column_names: Arc<Vec<String>>, request_params: Params) -> Self {
+  fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params) -> Self {
     let present_fields = match &request_params {
       Params::Insert(p) => {
         strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
@@ -176,7 +177,7 @@ impl RecordAclParams {
     p: Permission,
     user: Option<&User>,
     record_id: Option<Value>,
-    all_column_names: &Arc<Vec<String>>,
+    all_column_names: &Arc<Vec<CompactString>>,
     request_params: Option<&mut LazyParams<'_, P>>,
   ) -> Result<Self, RecordError>
   where
@@ -284,7 +285,7 @@ struct RecordApiState {
   enable_subscriptions: bool,
 
   // Foreign key expansion configuration. Affects schema.
-  expand: Vec<compact_str::CompactString>,
+  expand: Vec<CompactString>,
 
   listing_hard_limit: Option<usize>,
 
@@ -562,7 +563,7 @@ impl RecordApi {
   }
 
   #[inline]
-  pub(crate) fn expand(&self) -> &[compact_str::CompactString] {
+  pub(crate) fn expand(&self) -> &[CompactString] {
     return self.state.expand.as_ref();
   }
 
