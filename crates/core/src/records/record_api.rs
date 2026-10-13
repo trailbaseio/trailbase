@@ -6,7 +6,8 @@ use trailbase_schema::db::metadata::{
   find_user_id_foreign_key_columns,
 };
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
-use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value};
+use trailbase_sqlite::to_sql::ToSqlProxy;
+use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, ValueRef};
 
 use crate::auth::user::User;
 use crate::config::proto;
@@ -32,7 +33,7 @@ pub(crate) struct RecordApiSchema {
 
   // Helpers:
 
-  // A clonable list of all column names. Used for insert/update param construction.
+  // A cheaply clone-able list of all column names. Used for insert/update param construction.
   column_names: Arc<Vec<String>>,
 
   // Mapping form column name to *API column index*.
@@ -207,19 +208,19 @@ impl trailbase_sqlite::Params for RecordAclParams {
   ) -> Result<(), trailbase_sqlite::Error> {
     match self.params {
       Some(params) => {
+        if let Some(idx) = stmt.parameter_index(":__fields")? {
+          stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
+        }
+
         let request_params = match &params.request_params {
           Params::Insert(p) => &p.params,
           Params::Update(p) => &p.params,
         };
 
-        if let Some(idx) = stmt.parameter_index(":__fields")? {
-          stmt.bind_parameter(idx, params.present_fields.into())?;
-        }
-
-        // TODO: We could sort the request_params first then we could move i, j indexes in lockstep.
+        // TODO: We could first sort the `request_params` by column index and then move i, j indexes
+        // in lockstep to avoid repeat scans and move more work off the executor.
         for (column_index, column_name) in params.all_column_names.iter().enumerate() {
           if let Some(idx) = stmt.parameter_index(&column_name)? {
-            // FIXME: hidden clone?
             stmt.bind_parameter(
               idx,
               request_params
@@ -228,12 +229,12 @@ impl trailbase_sqlite::Params for RecordAclParams {
                   // NOTE: Consider matching here by column_name and removing the index.
                   if p.column_index == column_index {
                     debug_assert_eq!(p.column_name, column_name[1..]);
-                    Some(&p.value)
+                    Some(ToSqlProxy::Borrowed((&p.value).into()))
                   } else {
                     None
                   }
                 })
-                .unwrap_or(&Value::Null)
+                .unwrap_or(ToSqlProxy::Borrowed(ValueRef::Null))
                 .into(),
             )?;
           }
@@ -244,17 +245,17 @@ impl trailbase_sqlite::Params for RecordAclParams {
 
     if let Some(idx) = stmt.parameter_index(":__user_id")? {
       if let Some(user) = self.user {
-        stmt.bind_parameter(idx, user.into())?;
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
       } else {
-        stmt.bind_parameter(idx, Value::Null.into())?;
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
       }
     }
 
     if let Some(idx) = stmt.parameter_index(":__record_id")? {
       if let Some(id) = self.record_id {
-        stmt.bind_parameter(idx, id.into())?;
+        stmt.bind_parameter(idx, ToSqlProxy::Owned(id))?;
       } else {
-        stmt.bind_parameter(idx, Value::Null.into())?;
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
       }
     }
 
@@ -739,13 +740,11 @@ impl RecordApi {
       return Ok(());
     };
 
-    let params = SubscriptionAclParams {
-      params: record.clone(),
-      user: user.cloned(),
-    };
-
     if self
-      .check_record_level_access_impl(access_query.clone(), params)
+      .check_record_level_access_impl(
+        access_query.clone(),
+        SubscriptionAclParams::new(record, user),
+      )
       .await
     {
       return Ok(());
@@ -777,7 +776,16 @@ impl RecordApi {
 
 struct SubscriptionAclParams {
   params: Arc<EventPayload>,
-  user: Option<User>,
+  user: Option<[u8; 16]>,
+}
+
+impl SubscriptionAclParams {
+  fn new(event: &Arc<EventPayload>, user: Option<&User>) -> Self {
+    return Self {
+      params: event.clone(),
+      user: user.map(|u| u.uuid.into_bytes()),
+    };
+  }
 }
 
 impl trailbase_sqlite::Params for SubscriptionAclParams {
@@ -791,7 +799,7 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       | EventPayload::Delete { ref record, .. } => {
         for (name, v) in record.iter() {
           if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
-            stmt.bind_parameter(idx, v.into())?;
+            stmt.bind_parameter(idx, ToSqlProxy::Borrowed(v.into()))?;
           };
         }
       }
@@ -800,10 +808,12 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       }
     }
 
-    if let Some(user) = self.user
-      && let Some(idx) = stmt.parameter_index(":__user_id")?
-    {
-      stmt.bind_parameter(idx, user.uuid.as_bytes().into())?;
+    if let Some(idx) = stmt.parameter_index(":__user_id")? {
+      if let Some(user) = self.user {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
     }
 
     return Ok(());
@@ -1022,6 +1032,7 @@ where
   I: Iterator<Item = &'a String>,
 {
   let mut out = String::with_capacity(256);
+
   out.push('[');
   for (i, s) in iter.enumerate() {
     if i > 0 {

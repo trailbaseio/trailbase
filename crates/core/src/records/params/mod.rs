@@ -7,6 +7,7 @@ use trailbase_schema::json::flat_json_to_value;
 use trailbase_schema::json_schema::registry::JsonSchemaRegistry;
 use trailbase_schema::json_schema::{FileUpload, FileUploadInput, FileUploads};
 use trailbase_sqlite::Value;
+use trailbase_sqlite::to_sql::ToSqlProxy;
 use trailbase_sqlvalue::SqlValue;
 
 use crate::records::RecordApi;
@@ -59,6 +60,9 @@ impl trailbase_sqlite::Params for ArcInsertParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
+    #[cfg(test)]
+    assert_eq!(1, Arc::strong_count(&self.0));
+
     for NamedParam {
       column_index: _,
       column_name,
@@ -66,8 +70,7 @@ impl trailbase_sqlite::Params for ArcInsertParams {
     } in &self.0.params
     {
       if let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? {
-        // FIXME: hidden clone?
-        stmt.bind_parameter(idx, value.into())?;
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
 
@@ -181,6 +184,9 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
+    #[cfg(test)]
+    assert_eq!(1, Arc::strong_count(&self.0));
+
     for NamedParam {
       column_index: _,
       column_name,
@@ -188,14 +194,12 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
     } in &self.0.params
     {
       if let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? {
-        // FIXME: hidden clone?
-        stmt.bind_parameter(idx, value.into())?;
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
 
     if let Some(idx) = stmt.parameter_index(":__pk_value")? {
-      // FIXME: hidden clone?
-      stmt.bind_parameter(idx, (&self.0.pk_column_value).into())?;
+      stmt.bind_parameter(idx, ToSqlProxy::Borrowed((&self.0.pk_column_value).into()))?;
     } else {
       #[cfg(debug_assertions)]
       panic!(":__pk_value not found");

@@ -15,10 +15,10 @@ pub(crate) struct ExpandedTable<'a> {
   pub foreign_column_name: String,
 }
 
-pub(crate) fn expand_tables<'s, T: AsRef<str>>(
+pub(crate) fn expand_tables<'s>(
   record_api: &'s RecordApi,
   connection_metadata: &'s ConnectionMetadata,
-  expand: &[T],
+  expand: &[impl AsRef<str>],
 ) -> Result<Vec<ExpandedTable<'s>>, RecordError> {
   let mut expanded_tables = Vec::<ExpandedTable>::with_capacity(expand.len());
 
@@ -28,10 +28,7 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
       continue;
     }
 
-    let Some(meta) = record_api
-      .column_index_by_name(col_name)
-      .map(|idx| &record_api.columns()[idx])
-    else {
+    let Some(column_index) = record_api.column_index_by_name(col_name) else {
       return Err(RecordError::Internal("Missing column".into()));
     };
 
@@ -41,7 +38,7 @@ pub(crate) fn expand_tables<'s, T: AsRef<str>>(
       referred_columns: _,
       on_delete: _,
       on_update: _,
-    }) = meta
+    }) = record_api.columns()[column_index]
       .column
       .options
       .iter()
