@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  TOOLCHAIN_VERSION: 1.98.1
+  TOOLCHAIN_VERSION: 1.97.1
 
 permissions:
   contents: read
