@@ -28,6 +28,7 @@ pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 pub struct NamedParam {
   pub(crate) column_index: usize,
   pub(crate) column_name: String,
+  pub(crate) placeholder: String,
   pub(crate) value: Value,
 }
 
@@ -64,12 +65,10 @@ impl trailbase_sqlite::Params for ArcInsertParams {
     assert_eq!(1, Arc::strong_count(&self.0));
 
     for NamedParam {
-      column_index: _,
-      column_name,
-      value,
+      placeholder, value, ..
     } in &self.0.params
     {
-      if let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? {
+      if let Some(idx) = stmt.parameter_index(&placeholder)? {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
@@ -120,6 +119,7 @@ impl InsertParams {
 
       params.push(NamedParam {
         column_index: *index,
+        placeholder: named_placeholder(&key),
         column_name: key,
         value: param,
       });
@@ -152,6 +152,7 @@ impl InsertParams {
 
       params.push(NamedParam {
         column_index: *index,
+        placeholder: named_placeholder(&key),
         column_name: key,
         value: value.try_into()?,
       });
@@ -188,12 +189,10 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
     assert_eq!(1, Arc::strong_count(&self.0));
 
     for NamedParam {
-      column_index: _,
-      column_name,
-      value,
+      placeholder, value, ..
     } in &self.0.params
     {
-      if let Some(idx) = stmt.parameter_index(&named_placeholder(&column_name))? {
+      if let Some(idx) = stmt.parameter_index(&placeholder)? {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
@@ -257,6 +256,7 @@ impl UpdateParams {
 
       params.push(NamedParam {
         column_index: *index,
+        placeholder: named_placeholder(&key),
         column_name: key,
         value: param,
       });
@@ -354,6 +354,7 @@ impl UpdateParams {
 
       params.push(NamedParam {
         column_index: *index,
+        placeholder: named_placeholder(&key),
         column_name: key,
         value: param,
       });
@@ -509,6 +510,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
 
         params.push(NamedParam {
           column_index: *index,
+          placeholder: named_placeholder(&column.name),
           column_name: column.name.clone(),
           value: Value::Text(serde_json::to_string(&file_metadata)?),
         });
@@ -516,6 +518,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
       "std.FileUploads" => {
         params.push(NamedParam {
           column_index: *index,
+          placeholder: named_placeholder(&column.name),
           column_name: column.name.clone(),
           value: Value::Text(serde_json::to_string(&file_metadata)?),
         });
@@ -1001,9 +1004,9 @@ mod tests {
         .iter()
         .filter_map(
           |NamedParam {
-             column_name, value, ..
+             placeholder, value, ..
            }| {
-            if column_name == "json_col" {
+            if placeholder == ":json_col" {
               return Some(value.clone());
             }
             return None;
@@ -1129,10 +1132,10 @@ mod tests {
 
       // Avatar file-column should not be skipped but the file data is absent.
       assert_eq!(
-        vec!["avatar", "name"],
+        vec![":avatar", ":name"],
         params
           .iter()
-          .map(|p| p.column_name.as_str())
+          .map(|p| p.placeholder.as_str())
           .collect::<Vec<_>>()
       );
       assert_eq!(1, files.len());
@@ -1165,10 +1168,10 @@ mod tests {
 
       // Avatar should be present when there IS a 'data' field (new upload).
       assert_eq!(
-        vec!["avatar", "name"],
+        vec![":avatar", ":name"],
         params
           .iter()
-          .map(|p| p.column_name.as_str())
+          .map(|p| p.placeholder.as_str())
           .collect::<Vec<_>>()
       );
       assert_eq!(1, files.len());

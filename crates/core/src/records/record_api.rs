@@ -149,8 +149,12 @@ struct RequestParams {
 impl RequestParams {
   fn new(all_column_names: Arc<Vec<String>>, request_params: Params) -> Self {
     let present_fields = match &request_params {
-      Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| &p.column_name)).into(),
-      Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| &p.column_name)).into(),
+      Params::Insert(p) => {
+        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
+      }
+      Params::Update(p) => {
+        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
+      }
     };
 
     return Self {
@@ -228,7 +232,7 @@ impl trailbase_sqlite::Params for RecordAclParams {
                 .find_map(|p| {
                   // NOTE: Consider matching here by column_name and removing the index.
                   if p.column_index == column_index {
-                    debug_assert_eq!(p.column_name, column_name[1..]);
+                    debug_assert_eq!(p.placeholder, *column_name);
                     Some(ToSqlProxy::Borrowed((&p.value).into()))
                   } else {
                     None
@@ -649,7 +653,6 @@ impl RecordApi {
           &self.state.schema.column_names,
           request_params,
         )?,
-        // self.build_named_params(p, record_id, request_params, user)?,
       )
       .await
     {
@@ -736,13 +739,14 @@ impl RecordApi {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(Permission::Read, user)?;
 
-    let Some(ref access_query) = self.state.subscription_read_access_query else {
+    let Some(subscription_read_access_query) = self.state.subscription_read_access_query.clone()
+    else {
       return Ok(());
     };
 
     if self
       .check_record_level_access_impl(
-        access_query.clone(),
+        subscription_read_access_query,
         SubscriptionAclParams::new(record, user),
       )
       .await
@@ -793,11 +797,14 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
+    // NOTE: We only have to provide values for placeholders in
+    // `core/templates/subscription_record_read.sql`, i.e. we can skip `:__fields`, etc.
     match *self.params {
       EventPayload::Insert { ref record, .. }
       | EventPayload::Update { ref record, .. }
       | EventPayload::Delete { ref record, .. } => {
         for (name, v) in record.iter() {
+          // QUESTION: Can we push the placeholder construction off?
           if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
             stmt.bind_parameter(idx, ToSqlProxy::Borrowed(v.into()))?;
           };
@@ -1029,7 +1036,7 @@ fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
 #[inline]
 fn strings_to_json_array<'a, I>(iter: I) -> String
 where
-  I: Iterator<Item = &'a String>,
+  I: Iterator<Item = &'a str>,
 {
   let mut out = String::with_capacity(256);
 
