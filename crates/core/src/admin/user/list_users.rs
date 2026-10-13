@@ -117,7 +117,10 @@ pub async fn list_users_handler(
     filter_where_clause.clone(),
     offset,
     &order.unwrap_or_else(|| Order {
-      columns: vec![(row_id_column(&conn).to_string(), OrderPrecedent::Descending)],
+      columns: vec![(
+        row_id_column(conn.connection_type()).to_string(),
+        OrderPrecedent::Descending,
+      )],
     }),
     limit_or_default(limit, None).map_err(|err| Error::BadRequest(err.into()))?,
   )

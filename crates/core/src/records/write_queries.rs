@@ -12,9 +12,9 @@ use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
-  ArcInsertParams, ArcUpdateParams, FileMetadataContents, InsertParams, UpdateParams,
+  ArcInsertParams, ArcUpdateParams, FileMetadataContents, InsertParams, NamedParam, UpdateParams,
 };
-use crate::util::row_id_column2;
+use crate::util::row_id_column;
 
 #[derive(Debug)]
 pub enum WriteQuery {
@@ -46,26 +46,22 @@ impl WriteQuery {
     conflict_resolution: proto::ConflictResolutionStrategy,
     params: Arc<InsertParams>,
   ) -> Result<Self, RecordError> {
-    use crate::config::proto::ConflictResolutionStrategy;
-
-    // FIXME: Update template to consume InsertParams.
-    let column_names: Vec<_> = params
-      .params
-      .iter()
-      .map(|p| p.column_name.as_str())
-      .collect();
-
-    let row_id_column = row_id_column2(connection_type);
+    let row_id_column = row_id_column(connection_type);
     let query = CreateOrReplaceRecordQueryTemplate {
       table_name,
-      req_column_names: &column_names,
+      params: &params.params,
       pk_column_name,
       column_metadata: match conflict_resolution {
-        ConflictResolutionStrategy::Replace => column_metadata,
-        ConflictResolutionStrategy::Ignore => &[],
-        ConflictResolutionStrategy::Abort | ConflictResolutionStrategy::Undefined => &[],
+        proto::ConflictResolutionStrategy::Replace => column_metadata,
+        proto::ConflictResolutionStrategy::Ignore => &[],
+        proto::ConflictResolutionStrategy::Abort | proto::ConflictResolutionStrategy::Undefined => {
+          &[]
+        }
       },
-      ignore_conflict: matches!(conflict_resolution, ConflictResolutionStrategy::Ignore),
+      ignore_conflict: matches!(
+        conflict_resolution,
+        proto::ConflictResolutionStrategy::Ignore
+      ),
       returning: &[row_id_column, pk_column_name],
     }
     .render()
@@ -79,18 +75,11 @@ impl WriteQuery {
     table_name: &QualifiedNameEscaped,
     params: Arc<UpdateParams>,
   ) -> Result<Self, RecordError> {
-    // FIXME: Update template to consume InsertParams.
-    let column_names: Vec<_> = params
-      .params
-      .iter()
-      .map(|p| p.column_name.as_str())
-      .collect();
-
     let query = UpdateRecordQueryTemplate {
       table_name,
-      column_names: &column_names,
+      params: &params.params,
       pk_column_name: &params.pk_column_name,
-      returning: Some(row_id_column2(connection_type)),
+      returning: Some(row_id_column(connection_type)),
     }
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
@@ -107,7 +96,7 @@ impl WriteQuery {
     return Ok(Self::Delete {
       query: format!(
         r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {row_id}"#,
-        row_id = row_id_column2(connection_type)
+        row_id = row_id_column(connection_type)
       ),
       pk_value,
     });
@@ -362,7 +351,7 @@ pub(crate) async fn run_delete_query(
 #[template(escape = "none", path = "update_record_query.sql")]
 struct UpdateRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
+  params: &'a [NamedParam],
   pk_column_name: &'a str,
   returning: Option<&'a str>,
 }
@@ -371,7 +360,7 @@ struct UpdateRecordQueryTemplate<'a> {
 #[template(escape = "none", path = "create_or_replace_record_query.sql")]
 struct CreateOrReplaceRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
-  req_column_names: &'a [&'a str],
+  params: &'a [NamedParam],
   pk_column_name: &'a str,
   column_metadata: &'a [ColumnMetadata],
   ignore_conflict: bool,
@@ -397,7 +386,20 @@ mod tests {
     {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        req_column_names: &["index", "trigger"],
+        params: &[
+          NamedParam {
+            column_index: 0,
+            column_name: "index".to_string(),
+            placeholder: ":index".to_string(),
+            value: Value::Null,
+          },
+          NamedParam {
+            column_index: 1,
+            column_name: "trigger".to_string(),
+            placeholder: ":trigger".to_string(),
+            value: Value::Null,
+          },
+        ],
         pk_column_name: "index",
         column_metadata: &[],
         ignore_conflict: false,
@@ -416,7 +418,7 @@ mod tests {
           database_schema: Some("db".to_string()),
         }
         .into(),
-        req_column_names: &[],
+        params: &[],
         pk_column_name: "id",
         column_metadata: &[],
         ignore_conflict: false,
@@ -431,7 +433,12 @@ mod tests {
     {
       let query = CreateOrReplaceRecordQueryTemplate {
         table_name: &QualifiedName::parse("table").unwrap().into(),
-        req_column_names: &["index"],
+        params: &[NamedParam {
+          column_index: 0,
+          column_name: "index".to_string(),
+          placeholder: ":index".to_string(),
+          value: Value::Null,
+        }],
         pk_column_name: "index",
         column_metadata: &[],
         ignore_conflict: true,

@@ -798,7 +798,7 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
     // NOTE: We only have to provide values for placeholders in
-    // `core/templates/subscription_record_read.sql`, i.e. we can skip `:__fields`, etc.
+    // `core/templates/subscription_record_access_query.sql`, i.e. we can skip `:__fields`, etc.
     match *self.params {
       EventPayload::Insert { ref record, .. }
       | EventPayload::Update { ref record, .. }
@@ -831,7 +831,7 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
 #[template(
   escape = "none",
   whitespace = "minimize",
-  path = "subscription_record_read.sql"
+  path = "subscription_record_access_query.sql"
 )]
 struct SubscriptionRecordReadTemplate<'a> {
   read_access_rule: &'a str,

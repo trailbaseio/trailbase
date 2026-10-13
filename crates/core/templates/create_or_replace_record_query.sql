@@ -1,12 +1,12 @@
 INSERT INTO {{ table_name }}
-{%- if req_column_names.is_empty() %} DEFAULT VALUES
+{%- if params.is_empty() %} DEFAULT VALUES
 {%- else %} (
-  {%- for name in req_column_names -%}
-    {%- if !loop.first %}, {% endif %}"{{ name }}"
+  {%- for param in params -%}
+    {%- if !loop.first %}, {% endif %}"{{ param.column_name }}"
   {%- endfor -%}
   ) VALUES (
-  {%- for name in req_column_names -%}
-    {%- if !loop.first %}, {% endif %}{{ crate::records::util::named_placeholder(name) }}
+  {%- for param in params -%}
+    {%- if !loop.first %}, {% endif %}{{ param.placeholder }}
   {%- endfor -%}
 )
 

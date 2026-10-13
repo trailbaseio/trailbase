@@ -25,11 +25,11 @@ pub(crate) type FileMetadataContents = Vec<(FileUpload, Option<Vec<u8>>)>;
 pub(crate) type JsonRow = serde_json::Map<String, serde_json::Value>;
 
 #[derive(Debug)]
-pub struct NamedParam {
-  pub(crate) column_index: usize,
-  pub(crate) column_name: String,
-  pub(crate) placeholder: String,
-  pub(crate) value: Value,
+pub(crate) struct NamedParam {
+  pub column_index: usize,
+  pub column_name: String,
+  pub placeholder: String,
+  pub value: Value,
 }
 
 pub trait ToParamsEnum {

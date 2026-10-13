@@ -1,6 +1,6 @@
 UPDATE {{ table_name }} SET
-{%- for name in column_names -%}
-  {%- if !loop.first %},{% endif %} "{{ name }}" = {{ crate::records::util::named_placeholder(name) }}
+{%- for param in params -%}
+  {%- if !loop.first %},{% endif %} "{{ param.column_name }}" = {{ param.placeholder }}
 {%- endfor %}
 WHERE "{{ pk_column_name }}" = :__pk_value
 {%- match returning -%}

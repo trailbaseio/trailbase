@@ -60,7 +60,7 @@ pub async fn insert_row_handler(
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
     &table_metadata.column_metadata,
     crate::config::proto::ConflictResolutionStrategy::Abort,
-    row_id_column(&conn),
+    row_id_column(conn.connection_type()),
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
     Arc::new(InsertParams::for_admin_insert(table_metadata, request.row)?),
