@@ -236,12 +236,9 @@ fn apply_ops<T: SyncConnection>(
             .insert_conflict_resolution_strategy()
             .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
 
-          let params = lazy_params
+          let (params, files) = lazy_params
             .consume()
             .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?;
-
-          // TODO: write files.
-          let files = std::mem::take(&mut *params.files.lock());
 
           let query = WriteQuery::new_insert_or_replace(
             conn.connection_type(),
@@ -255,7 +252,7 @@ fn apply_ops<T: SyncConnection>(
 
           if !files.is_empty() {
             return Err(RecordError::BadRequest(
-              "transactions don't implement file handling yet",
+              "transactions do not (yet) implement file handling",
             ));
           }
 
@@ -306,19 +303,16 @@ fn apply_ops<T: SyncConnection>(
             user,
           )?;
 
-          let params = lazy_params
+          let (params, files) = lazy_params
             .consume()
             .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?;
-
-          // TODO: update files.
-          let files = std::mem::take(&mut *params.files.lock());
 
           let query = WriteQuery::new_update(conn.connection_type(), api.table_name(), params)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
           if !files.is_empty() {
             return Err(RecordError::BadRequest(
-              "transactions don't implement file handling yet",
+              "transactions do not (yet) implement file handling",
             ));
           }
 

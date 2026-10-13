@@ -1,4 +1,3 @@
-use parking_lot::Mutex;
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -45,11 +44,6 @@ impl ToParamsEnum for Arc<()> {
 pub struct InsertParams {
   /// List of named params with their respective placeholders, e.g.:
   pub(crate) params: Vec<NamedParam>,
-
-  /// List of files and contents to be written to an object store.
-  ///
-  /// TODO: pull out the files.
-  pub(crate) files: Mutex<FileMetadataContents>,
 }
 
 impl ToParamsEnum for Arc<InsertParams> {
@@ -89,7 +83,7 @@ impl InsertParams {
     json_schema_registry: &JsonSchemaRegistry,
     row: JsonRow,
     multipart_files: Option<Vec<FileUploadInput>>,
-  ) -> Result<Self, ParamsError> {
+  ) -> Result<(Self, FileMetadataContents), ParamsError> {
     let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataContents = vec![];
 
@@ -137,10 +131,7 @@ impl InsertParams {
       )?);
     }
 
-    return Ok(Self {
-      params,
-      files: Mutex::new(files),
-    });
+    return Ok((Self { params }, files));
   }
 
   pub fn for_admin_insert<S: ColumnAccessor>(
@@ -163,10 +154,7 @@ impl InsertParams {
       });
     }
 
-    return Ok(Self {
-      params,
-      files: Mutex::new(vec![]),
-    });
+    return Ok(Self { params });
   }
 }
 
@@ -174,11 +162,6 @@ impl InsertParams {
 pub struct UpdateParams {
   /// List of named params with their respective placeholders, e.g.:
   pub(crate) params: Vec<NamedParam>,
-
-  /// List of files and contents to be written to an object store.
-  ///
-  /// TODO: pull out the files.
-  pub(crate) files: Mutex<FileMetadataContents>,
 
   /// Primary key column name & value.
   pub(crate) pk_column_name: String,
@@ -230,8 +213,8 @@ impl UpdateParams {
     multipart_files: Option<Vec<FileUploadInput>>,
     pk_column_name: String,
     pk_column_value: Value,
-  ) -> Result<Self, ParamsError> {
-    let mut params = Vec::<NamedParam>::with_capacity(row.len() + 1);
+  ) -> Result<(Self, FileMetadataContents), ParamsError> {
+    let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataContents = vec![];
 
     // Update parameters case.
@@ -290,12 +273,14 @@ impl UpdateParams {
       )?);
     }
 
-    return Ok(Self {
-      params,
-      files: Mutex::new(files),
-      pk_column_name,
-      pk_column_value,
-    });
+    return Ok((
+      Self {
+        params,
+        pk_column_name,
+        pk_column_value,
+      },
+      files,
+    ));
   }
 
   pub fn for_admin_update<S: ColumnAccessor>(
@@ -304,10 +289,10 @@ impl UpdateParams {
     row: indexmap::IndexMap<String, SqlValue>,
     pk_column_name: String,
     pk_column_value: SqlValue,
-  ) -> Result<Self, ParamsError> {
+  ) -> Result<(Self, FileMetadataContents), ParamsError> {
     let pk_column_param = pk_column_value.try_into()?;
 
-    let mut params = Vec::<NamedParam>::with_capacity(row.len() + 1);
+    let mut params = Vec::<NamedParam>::with_capacity(row.len());
     let mut files: FileMetadataContents = vec![];
 
     // Update parameters case.
@@ -376,12 +361,14 @@ impl UpdateParams {
       return Err(ParamsError::Column("no valid columns to update found"));
     }
 
-    return Ok(Self {
-      params,
-      files: Mutex::new(files),
-      pk_column_name,
-      pk_column_value: pk_column_param,
-    });
+    return Ok((
+      Self {
+        params,
+        pk_column_name,
+        pk_column_value: pk_column_param,
+      },
+      files,
+    ));
   }
 }
 
@@ -401,12 +388,14 @@ pub enum Params {
 /// If the request gets rejected by the policy we want to avoid parsing the request JSON and if the
 /// engine requires a parse we don't want to re-parse in the handler.
 pub enum LazyParams<'a, T: 'static> {
-  Builder(Option<Box<dyn (FnOnce() -> Result<T, ParamsError>) + Send + 'a>>),
-  Params(Result<Arc<T>, ParamsError>),
+  Builder(
+    Option<Box<dyn (FnOnce() -> Result<(T, FileMetadataContents), ParamsError>) + Send + 'a>>,
+  ),
+  Params(Result<(Arc<T>, FileMetadataContents), ParamsError>),
 }
 
 impl<'a, T: 'static> LazyParams<'a, T> {
-  pub fn params(&mut self) -> Result<&'_ Arc<T>, &ParamsError> {
+  pub fn params(&mut self) -> Result<&'_ (Arc<T>, FileMetadataContents), &ParamsError> {
     return match self {
       LazyParams::Params(result) => result.as_ref(),
       LazyParams::Builder(builder) => {
@@ -414,7 +403,7 @@ impl<'a, T: 'static> LazyParams<'a, T> {
           unreachable!("empty builder");
         };
 
-        *self = Self::Params(builder().map(|p| Arc::new(p)));
+        *self = Self::Params(builder().map(|(p, f)| (Arc::new(p), f)));
         let LazyParams::Params(result) = self else {
           unreachable!("just assigned");
         };
@@ -423,11 +412,11 @@ impl<'a, T: 'static> LazyParams<'a, T> {
     };
   }
 
-  pub fn consume(self) -> Result<Arc<T>, ParamsError> {
+  pub fn consume(self) -> Result<(Arc<T>, FileMetadataContents), ParamsError> {
     return match self {
       LazyParams::Params(result) => result,
       LazyParams::Builder(builder) => match builder {
-        Some(f) => f().map(|p| Arc::new(p)),
+        Some(f) => f().map(|(p, f)| (Arc::new(p), f)),
         None => unreachable!("missing builder"),
       },
     };
@@ -742,7 +731,7 @@ mod tests {
         expected_params: 2,
       },
     ] {
-      let params = InsertParams::new(
+      let (params, _files) = InsertParams::new(
         &metadata,
         &registry,
         json_row_from_value(i.input).unwrap(),
@@ -869,7 +858,8 @@ mod tests {
           json_row_from_value(value).unwrap(),
           None,
         )
-        .unwrap(),
+        .unwrap()
+        .0,
       );
     }
 
@@ -890,7 +880,8 @@ mod tests {
           json_row_from_value(value).unwrap(),
           None,
         )
-        .unwrap(),
+        .unwrap()
+        .0,
       );
 
       // Make sure we're strictly parsing, e.g. not converting strings to numbers.
@@ -951,7 +942,8 @@ mod tests {
         json_row_from_value(value).unwrap(),
         None,
       )
-      .unwrap();
+      .unwrap()
+      .0;
       assert_params(&params);
     }
 
@@ -995,7 +987,8 @@ mod tests {
         json_row_from_value(value).unwrap(),
         None,
       )
-      .unwrap();
+      .unwrap()
+      .0;
 
       assert_params(&params);
 
@@ -1118,7 +1111,7 @@ mod tests {
         }
       });
 
-      let params = UpdateParams::new(
+      let (params, files) = UpdateParams::new(
         &metadata,
         &registry,
         json_row_from_value(value).unwrap(),
@@ -1128,7 +1121,7 @@ mod tests {
       )
       .unwrap();
 
-      let UpdateParams { params, files, .. } = params;
+      let UpdateParams { params, .. } = params;
 
       // Avatar file-column should not be skipped but the file data is absent.
       assert_eq!(
@@ -1138,8 +1131,8 @@ mod tests {
           .map(|p| p.column_name.as_str())
           .collect::<Vec<_>>()
       );
-      assert_eq!(1, files.lock().len());
-      assert!(files.lock()[0].1.is_none());
+      assert_eq!(1, files.len());
+      assert!(files[0].1.is_none());
     }
 
     // Test: FileUploadInput with 'data' field should NOT be skipped.
@@ -1154,7 +1147,7 @@ mod tests {
         }
       });
 
-      let params_with_file = UpdateParams::new(
+      let (params, files) = UpdateParams::new(
         &metadata,
         &registry,
         json_row_from_value(value_with_new_file).unwrap(),
@@ -1164,7 +1157,7 @@ mod tests {
       )
       .unwrap();
 
-      let UpdateParams { params, files, .. } = params_with_file;
+      let UpdateParams { params, .. } = params;
 
       // Avatar should be present when there IS a 'data' field (new upload).
       assert_eq!(
@@ -1174,8 +1167,8 @@ mod tests {
           .map(|p| p.column_name.as_str())
           .collect::<Vec<_>>()
       );
-      assert_eq!(1, files.lock().len());
-      assert!(files.lock()[0].1.is_some());
+      assert_eq!(1, files.len());
+      assert!(files[0].1.is_some());
     }
   }
 }

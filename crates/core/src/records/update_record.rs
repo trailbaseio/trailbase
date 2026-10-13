@@ -57,13 +57,16 @@ pub async fn update_record_handler(
     )
     .await?;
 
+  let (params, files) = lazy_params
+    .consume()
+    .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
   run_update_query(
     api.conn(),
     state.objectstore(),
     api.table_name(),
-    lazy_params
-      .consume()
-      .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?,
+    params,
+    files,
   )
   .await
   .map_err(|err| RecordError::Internal(err.into()))?;

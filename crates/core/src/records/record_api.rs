@@ -182,14 +182,17 @@ impl RecordAclParams {
       record_id,
       params: match p {
         Permission::Create | Permission::Update => {
-          let params = request_params
+          let (params, _files) = request_params
             .ok_or_else(|| RecordError::Internal("missing insert/update params".into()))?
             .params()
-            .map_err(|_| RecordError::BadRequest("invalid params"))?
-            .params_enum()
-            .ok_or_else(|| RecordError::BadRequest("invalid params"))?;
+            .map_err(|_| RecordError::BadRequest("invalid params"))?;
 
-          Some(RequestParams::new(all_column_names.clone(), params))
+          Some(RequestParams::new(
+            all_column_names.clone(),
+            params
+              .params_enum()
+              .ok_or_else(|| RecordError::BadRequest("invalid params"))?,
+          ))
         }
         Permission::Read | Permission::Delete | Permission::Schema => None,
       },

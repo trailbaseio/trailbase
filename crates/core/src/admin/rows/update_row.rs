@@ -74,17 +74,20 @@ pub async fn update_row_handler(
     return Err(Error::Precondition(format!("Not a primary key: {pk_col}")));
   }
 
+  let (params, files) = UpdateParams::for_admin_update(
+    table_metadata,
+    state.json_schema_registry().load_full(),
+    request.row,
+    pk_col.clone(),
+    request.primary_key_value,
+  )?;
+
   run_update_query(
     &conn,
     state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
-    Arc::new(UpdateParams::for_admin_update(
-      table_metadata,
-      state.json_schema_registry().load_full(),
-      request.row,
-      pk_col.clone(),
-      request.primary_key_value,
-    )?),
+    Arc::new(params),
+    files,
   )
   .await?;
 

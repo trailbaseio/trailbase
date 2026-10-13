@@ -90,7 +90,7 @@ pub async fn create_avatar_handler(
     serde_json::Value::String(uuid_to_b64(&user.uuid)),
   )]);
 
-  let params = InsertParams::new(
+  let (params, files) = InsertParams::new(
     &*AVATAR_TABLE_METADATA,
     &state.json_schema_registry().load(),
     record,
@@ -106,6 +106,7 @@ pub async fn create_avatar_handler(
     proto::ConflictResolutionStrategy::Replace,
     "user",
     Arc::new(params),
+    files,
   )
   .await
   .map_err(|err| AuthError::Internal(err.into()))?;

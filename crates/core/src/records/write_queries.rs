@@ -269,8 +269,8 @@ pub(crate) async fn run_insert_or_replace_query(
   conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
   params: Arc<InsertParams>,
+  files: FileMetadataContents,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
-  let files = std::mem::take(&mut *params.files.lock());
   let query = WriteQuery::new_insert_or_replace(
     conn.connection_type(),
     table_name,
@@ -312,8 +312,8 @@ pub(crate) async fn run_update_query(
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
   params: Arc<UpdateParams>,
+  files: FileMetadataContents,
 ) -> Result<(), RecordError> {
-  let files = std::mem::take(&mut *params.files.lock());
   let query = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
 
   // We're storing any files to the object store first to make sure the DB entry is valid right

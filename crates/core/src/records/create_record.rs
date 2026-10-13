@@ -10,7 +10,7 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::params::{InsertParams, JsonRow, LazyParams};
+use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, LazyParams};
 use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
 use crate::records::{Permission, RecordError};
 use crate::util::uuid_to_b64;
@@ -101,7 +101,9 @@ pub async fn create_record_handler(
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let mut params_list: Vec<Arc<InsertParams>> = Vec::with_capacity(records_and_files.len());
+  let mut params_list: Vec<(Arc<InsertParams>, FileMetadataContents)> =
+    Vec::with_capacity(records_and_files.len());
+
   for (mut record, files) in records_and_files {
     if api.insert_autofill_missing_user_id_columns()
       && let Some(ref user) = user
@@ -152,6 +154,7 @@ pub async fn create_record_handler(
       return Err(RecordError::BadRequest("no values provided"));
     }
     1 => {
+      let (params, files) = params_list.swap_remove(0);
       let record_id = run_insert_or_replace_query(
         api.conn(),
         state.objectstore(),
@@ -159,7 +162,8 @@ pub async fn create_record_handler(
         api.columns(),
         conflict_resolution_strategy,
         &pk_meta.column.name,
-        params_list.swap_remove(0),
+        params,
+        files,
       )
       .await?;
 
@@ -170,8 +174,9 @@ pub async fn create_record_handler(
       let queries = params_list
         .into_iter()
         .map(|params| -> Result<_, RecordError> {
-          let table_name: QualifiedNameEscaped = api.table_name().clone();
-          let files = std::mem::take(&mut *params.files.lock());
+          let table_name: &QualifiedNameEscaped = api.table_name();
+          let (params, files) = params;
+
           let query = WriteQuery::new_insert_or_replace(
             conn.connection_type(),
             &table_name,
@@ -182,7 +187,7 @@ pub async fn create_record_handler(
           )
           .map_err(|err| RecordError::Internal(err.into()))?;
 
-          return Ok((query, Some((table_name, files))));
+          return Ok((query, Some((table_name.clone(), files))));
         })
         .collect::<Result<Vec<_>, _>>()?;
 
