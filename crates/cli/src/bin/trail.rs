@@ -6,7 +6,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
-use clap_complete::generate;
+use clap_complete::{CompleteEnv, generate};
 use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
@@ -698,6 +698,11 @@ async fn async_main(
 }
 
 fn main() -> Result<(), BoxError> {
+  // Check if the `COMPLETE` env is set to handle dynamic CLI auto-completion.
+  CompleteEnv::with_factory(CommandLineArgs::command)
+    .bin("trail")
+    .complete();
+
   // Install the process-wide rustls crypto provider. Since rustls 0.23.39 there is no more
   // implicit default. W/o this any TLS traffic incoming and outgoing (e.g. via WASM components)
   // would panic.

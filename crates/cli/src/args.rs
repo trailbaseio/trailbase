@@ -1,5 +1,5 @@
 use clap::{Args, Parser, Subcommand, ValueEnum, ValueHint};
-use clap_complete::Shell;
+use clap_complete::{ArgValueCompleter, CompletionCandidate, Shell};
 
 use trailbase::api::JsonSchemaMode;
 
@@ -28,7 +28,7 @@ impl From<JsonSchemaModeArg> for JsonSchemaMode {
 /// NOTE: a good rule of thumb for thinking of proto config vs CLI options: if it requires a
 /// server restart, it should probably be a CLI option and a config option otherwise.
 #[derive(Parser, Debug, Clone, Default)]
-#[command(version, about, long_about = None, disable_version_flag = true)]
+#[command(name = "trail", version, about, long_about = None, disable_version_flag = true)]
 pub struct CommandLineArgs {
   /// Directory for runtime files including the databases. Will be created by TrailBase if dir
   /// doesn't exist.
@@ -107,6 +107,7 @@ pub enum SubCommands {
   #[cfg(feature = "mcp")]
   Mcp {
     /// URL of the TrailBase server the MCP talks to (Default: http://localhost:4000).
+    #[arg(value_hint = ValueHint::Url)]
     address: Option<String>,
     /// Credentials (auth+refresh tokens) of an admin user to authenticate requests to the
     /// TrailBase server. Either from the admin UI's profile dialog or `trail user mint`.
@@ -124,7 +125,7 @@ pub enum SubCommands {
 pub struct ServerArgs {
   /// Socket address the HTTP server binds to, e.g. "0.0.0.0:80" for TCP or "unix:/tmp/tb.sock" for
   /// UDS (Default: localhost:4000).
-  #[arg(short, long, env, default_value = "localhost:4000")]
+  #[arg(short, long, env, default_value = "localhost:4000",  value_hint = clap::ValueHint::Other, add = ArgValueCompleter::new(host_and_port_completer))]
   pub address: String,
 
   /// Optional socket address to start a separately served admin server for both UI and APIs.
@@ -325,4 +326,28 @@ pub enum BackupSubCommands {
     /// Backup to restore.
     timestamp: i64,
   },
+}
+
+fn host_and_port_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate> {
+  let Some(current) = current.to_str() else {
+    return Vec::new();
+  };
+
+  const DEFAULTS: &[&str] = &["localhost:4000", "0.0.0.0:4000"];
+
+  if current.is_empty() {
+    return DEFAULTS.iter().map(CompletionCandidate::new).collect();
+  }
+
+  if !current.contains(":") {
+    for default in DEFAULTS {
+      if default.starts_with(current) {
+        return vec![CompletionCandidate::new(default)];
+      }
+    }
+
+    return vec![CompletionCandidate::new(&format!("{current}:4000"))];
+  }
+
+  return Vec::new();
 }

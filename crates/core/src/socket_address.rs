@@ -9,19 +9,27 @@ pub enum SocketAddr {
 }
 
 impl SocketAddr {
-  pub fn parse(address: &str) -> Result<Self, std::io::Error> {
+  pub fn parse(address: &str) -> Result<Self, String> {
     let address = address.trim();
     if let Some((_, uds)) = address.split_once("unix:") {
       return Ok(SocketAddr::Uds(uds.into()));
     }
 
-    if let Some(a) = address.to_socket_addrs()?.next() {
-      return Ok(SocketAddr::Tcp(a));
+    fn parse_socket_addr(address: &str) -> Result<SocketAddr, String> {
+      if let Ok(mut iter) = address.to_socket_addrs()
+        && let Some(a) = iter.next()
+      {
+        return Ok(SocketAddr::Tcp(a));
+      }
+
+      return Err(format!("failed to parse socket address: {address}"));
     }
 
-    return Err(std::io::Error::other(format!(
-      "failed to parse socket address: {address}"
-    )));
+    if let Ok(a) = parse_socket_addr(address) {
+      return Ok(a);
+    }
+
+    return parse_socket_addr(&format!("{address}:4000"));
   }
 }
 
