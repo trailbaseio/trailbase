@@ -1,3 +1,16 @@
+## v0.34.5
+
+- Add (dynamic) auto-completion support to CLI. Install with:
+  - `$ trail --sell-completion=bash | sudo tee /usr/share/bash-completion/completions/trail`
+  - `$ trail --shell-completion=zsh | sudo tee /usr/local/share/zsh/site-functions/_trail`
+- Performance & cleanup:
+  - Share params across RecordApi ACL checks create/update queries reducing the overall allocations and memory pressure.
+  - Minimize use of RwLocks in favor ArcSwap.
+  - Split up params enum into separate types and separate file-handling from params.
+- Return `CONFLICT` on new user registration, if either `username` or `unverified_email` are already claimed.
+- Add explicit errors for missing file-write support in transaction API.
+- Update dependencies.
+
 ## v0.34.4
 
 - Add and enforce uniqueness requirement across `email` and `unverified_email` columns.
