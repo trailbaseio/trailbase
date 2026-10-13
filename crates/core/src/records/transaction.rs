@@ -224,7 +224,7 @@ fn apply_ops<T: SyncConnection>(
 
           let mut lazy_params =
             LazyParams::for_insert(&api, state.json_schema_registry().load_full(), record, None);
-          api.record_level_access_check(
+          api.sync_check_record_level_access(
             conn,
             Permission::Create,
             None,
@@ -298,7 +298,7 @@ fn apply_ops<T: SyncConnection>(
             record_id.clone(),
           );
 
-          api.record_level_access_check(
+          api.sync_check_record_level_access(
             conn,
             Permission::Update,
             Some(&record_id),
@@ -339,7 +339,7 @@ fn apply_ops<T: SyncConnection>(
 
           let record_id = api.primary_key_to_value(record_id_str.clone())?;
 
-          api.record_level_access_check::<_, ()>(
+          api.sync_check_record_level_access::<_, ()>(
             conn,
             Permission::Delete,
             Some(&record_id),

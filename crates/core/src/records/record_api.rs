@@ -655,7 +655,7 @@ impl RecordApi {
     return Err(RecordError::Forbidden);
   }
 
-  pub fn record_level_access_check<T: SyncConnectionTrait, P>(
+  pub fn sync_check_record_level_access<T: SyncConnectionTrait, P>(
     &self,
     conn: &mut T,
     p: Permission,
@@ -673,7 +673,6 @@ impl RecordApi {
       return Ok(());
     };
 
-    // let params = self.build_named_params(p, record_id, request_params, user)?;
     let params = RecordAclParams::new(
       p,
       user,
@@ -771,98 +770,6 @@ impl RecordApi {
   fn has_access(&self, e: Entity, p: Permission) -> bool {
     return (self.state.acl[e as usize] & (p as u8)) > 0;
   }
-
-  // TODO: We should probably break this up into separate functions for CRUD, to only do and inject
-  // what's actually needed. Maybe even break up the entire check_access_and_rls_then. It's pretty
-  // winding right now.
-  // TODO: It may be cheaper to implement trailbase_sqlite::Params for LazyParams than convert to
-  // NamedParams :shrug:.
-  // fn build_named_params<P>(
-  //   &self,
-  //   p: Permission,
-  //   record_id: Option<&Value>,
-  //   request_params: Option<&mut LazyParams<'_, P>>,
-  //   user: Option<&User>,
-  // ) -> Result<NamedParams, RecordError>
-  // where
-  //   Arc<P>: ToParamsEnum,
-  // {
-  //   // We need to inject context like: record id, user, request, and row into the access
-  //   // check. Below we're building the query and binding the context as params accordingly.
-  //   let mut params = match p {
-  //     Permission::Create | Permission::Update => {
-  //       // Create and update cannot write to views.
-  //       if !self.is_table() {
-  //         return Err(RecordError::ApiRequiresTable);
-  //       };
-  //
-  //       let params = request_params
-  //         .ok_or_else(|| RecordError::Internal("missing insert params".into()))?
-  //         .params()
-  //         .map_err(|_| RecordError::BadRequest("invalid params"))?;
-  //
-  //       let Some(params) = params.params_enum() else {
-  //         return Err(RecordError::BadRequest("invalid params"));
-  //       };
-  //
-  //       let named_params = match &params {
-  //         Params::Insert(insert_params) => {
-  //           assert_eq!(p, Permission::Create);
-  //           &insert_params.params
-  //         }
-  //         Params::Update(update_params) => {
-  //           assert_eq!(p, Permission::Update);
-  //           &update_params.params
-  //         }
-  //       };
-  //
-  //       // NOTE: We cannot have ACL queries access missing _REQ_.props. So we need to inject an
-  //       // explicit NULL value for all missing fields on the request. Can we make this cheaper,
-  //       // either by pre-processing the access query or improving construction?
-  //       let mut all_named_params = self.state.schema.named_params_template.clone();
-  //
-  //       for NamedParam {
-  //         column_index,
-  //         column_name: _,
-  //         value,
-  //       } in named_params
-  //       {
-  //         // Override the default NULL value with the actual request value.
-  //         all_named_params[*column_index].1 = value.clone();
-  //       }
-  //
-  //       all_named_params.push((
-  //         Cow::Borrowed(":__fields"),
-  //         Value::Text(strings_to_json_array(
-  //           named_params.iter().map(|p| &p.column_name),
-  //         )),
-  //         // Value::Text(
-  //         //   serde_json::to_string(
-  //         //     &named_params
-  //         //       .iter()
-  //         //       .map(|p| &p.column_name)
-  //         //       .collect::<Vec<_>>(),
-  //         //   )
-  //         //   .unwrap_or_else(|_| "[]".to_string()),
-  //         // ),
-  //       ));
-  //
-  //       all_named_params
-  //     }
-  //     Permission::Read | Permission::Delete | Permission::Schema => NamedParams::with_capacity(2),
-  //   };
-  //
-  //   params.push((
-  //     Cow::Borrowed(":__user_id"),
-  //     user.map_or(Value::Null, |u| Into::<Value>::into(u.uuid.as_bytes())),
-  //   ));
-  //   params.push((
-  //     Cow::Borrowed(":__record_id"),
-  //     record_id.map_or(Value::Null, |id| id.clone()),
-  //   ));
-  //
-  //   return Ok(params);
-  // }
 }
 
 struct SubscriptionAclParams {
