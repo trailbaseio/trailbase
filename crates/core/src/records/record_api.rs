@@ -139,11 +139,31 @@ pub struct RecordApi {
   state: Arc<RecordApiState>,
 }
 
+struct RequestParams {
+  all_column_names: Arc<Vec<String>>,
+  present_fields: String,
+  request_params: Params,
+}
+
+impl RequestParams {
+  fn new(all_column_names: Arc<Vec<String>>, request_params: Params) -> Self {
+    let present_fields = match &request_params {
+      Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| &p.column_name)).into(),
+      Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| &p.column_name)).into(),
+    };
+
+    return Self {
+      all_column_names,
+      present_fields,
+      request_params,
+    };
+  }
+}
+
 struct RecordAclParams {
   user: Option<[u8; 16]>,
   record_id: Option<Value>,
-  all_column_names: Option<Arc<Vec<String>>>,
-  params: Option<Params>,
+  params: Option<RequestParams>,
 }
 
 impl RecordAclParams {
@@ -151,7 +171,7 @@ impl RecordAclParams {
     p: Permission,
     user: Option<&User>,
     record_id: Option<Value>,
-    all_column_names: Option<Arc<Vec<String>>>,
+    all_column_names: &Arc<Vec<String>>,
     request_params: Option<&mut LazyParams<'_, P>>,
   ) -> Result<Self, RecordError>
   where
@@ -160,19 +180,16 @@ impl RecordAclParams {
     return Ok(Self {
       user: user.map(|u| u.uuid.into_bytes()),
       record_id,
-      all_column_names,
       params: match p {
         Permission::Create | Permission::Update => {
           let params = request_params
             .ok_or_else(|| RecordError::Internal("missing insert/update params".into()))?
             .params()
-            .map_err(|_| RecordError::BadRequest("invalid params"))?;
+            .map_err(|_| RecordError::BadRequest("invalid params"))?
+            .params_enum()
+            .ok_or_else(|| RecordError::BadRequest("invalid params"))?;
 
-          Some(
-            params
-              .params_enum()
-              .ok_or_else(|| RecordError::BadRequest("invalid params"))?,
-          )
+          Some(RequestParams::new(all_column_names.clone(), params))
         }
         Permission::Read | Permission::Delete | Permission::Schema => None,
       },
@@ -185,30 +202,27 @@ impl trailbase_sqlite::Params for RecordAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    match (self.all_column_names, self.params) {
-      (Some(all_column_names), Some(params)) => {
-        let named_params = match &params {
+    match self.params {
+      Some(params) => {
+        let request_params = match &params.request_params {
           Params::Insert(p) => &p.params,
           Params::Update(p) => &p.params,
         };
 
         if let Some(idx) = stmt.parameter_index(":__fields")? {
-          stmt.bind_parameter(
-            idx,
-            strings_to_json_array(named_params.iter().map(|p| &p.column_name)).into(),
-          )?;
+          stmt.bind_parameter(idx, params.present_fields.into())?;
         }
 
-        // TODO: We could sort the named_params first then we could move i, j indexes in lockstep.
-        for (column_index, column_name) in all_column_names.iter().enumerate() {
+        // TODO: We could sort the request_params first then we could move i, j indexes in lockstep.
+        for (column_index, column_name) in params.all_column_names.iter().enumerate() {
           if let Some(idx) = stmt.parameter_index(&column_name)? {
             // FIXME: hidden clone?
             stmt.bind_parameter(
               idx,
-              named_params
+              request_params
                 .iter()
                 .find_map(|p| {
-                  // TODO: Consider matching here by column_name and removing the index.
+                  // NOTE: Consider matching here by column_name and removing the index.
                   if p.column_index == column_index {
                     debug_assert_eq!(p.column_name, column_name[1..]);
                     Some(&p.value)
@@ -628,16 +642,7 @@ impl RecordApi {
           p,
           user,
           record_id.cloned(),
-          match p {
-            Permission::Create | Permission::Update => {
-              if !self.is_table() {
-                return Err(RecordError::ApiRequiresTable);
-              };
-
-              Some(self.state.schema.column_names.clone())
-            }
-            _ => None,
-          },
+          &self.state.schema.column_names,
           request_params,
         )?,
         // self.build_named_params(p, record_id, request_params, user)?,
@@ -673,16 +678,7 @@ impl RecordApi {
       p,
       user,
       record_id.cloned(),
-      match p {
-        Permission::Create | Permission::Update => {
-          if !self.is_table() {
-            return Err(RecordError::ApiRequiresTable);
-          };
-
-          Some(self.state.schema.column_names.clone())
-        }
-        _ => None,
-      },
+      &self.state.schema.column_names,
       request_params,
     )?;
 
