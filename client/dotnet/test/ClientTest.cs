@@ -74,9 +74,14 @@ public class ClientTestFixture : IDisposable {
     process.Start();
 
     var client = new HttpClient();
+    var started = DateTimeOffset.Now;
+
     Task.Run(async () => {
-      for (int i = 0; i < 200; ++i) {
-        // TODO: Check process exist status and abort if already terminated.
+      while (true) {
+        var exited = process.WaitForExit(TimeSpan.FromMilliseconds(50));
+        if (exited) {
+          throw new Exception($"Server exited abnormally: {process.ExitCode}");
+        }
 
         try {
           var response = await client.GetAsync($"http://{address}/api/healthcheck");
@@ -86,6 +91,11 @@ public class ClientTestFixture : IDisposable {
         }
         catch (Exception e) {
           Console.WriteLine($"Caught exception: {e.Message}");
+        }
+
+        var elapsed = DateTimeOffset.Now - started;
+        if (elapsed.TotalMinutes >= 10) {
+          throw new Exception($"Server did not start in time");
         }
 
         await Task.Delay(500);
