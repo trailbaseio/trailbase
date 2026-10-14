@@ -164,6 +164,7 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
+          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
