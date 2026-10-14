@@ -13,6 +13,7 @@ on:
   workflow_dispatch:
 
 env:
+  # Before upgrade check: https://github.com/rust-lang/rust/issues/161660.
   TOOLCHAIN_VERSION: 1.97.1
 
 permissions:
@@ -90,7 +91,6 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
-          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
@@ -113,8 +113,6 @@ jobs:
         uses: nick-fields/retry@v3
         env:
           RUST_BACKTRACE: 1
-          # Run integration test against both: Rust and JS test components.
-          JS_GUEST_RUNTIME: 1
         with:
           timeout_minutes: 60
           max_attempts: 2
@@ -133,7 +131,6 @@ jobs:
         with:
           submodules: 'recursive'
           fetch-depth: 0
-          lfs: true
 
       - id: free_disk
         uses: ./.github/actions/free_disk
@@ -157,7 +154,7 @@ jobs:
       - name: Monitor Disk Space (End)
         run: df -h
 
-  test-pg:
+  test-wasm-js:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -165,6 +162,35 @@ jobs:
           submodules: 'recursive'
           fetch-depth: 0
           lfs: true
+
+      - id: free_disk
+        uses: ./.github/actions/free_disk
+
+      - id: setup_build
+        uses: ./.github/actions/setup_build
+        with:
+          cache-key-suffix: test-websocket
+          toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
+
+      - name: "Build & Run Tests"
+        env:
+          RUST_BACKTRACE: 1
+          # Run integration test against both: Rust and JS test components.
+          TEST_WASM_JS_GUEST_RUNTIME: 1
+        run: cd crates/assets/js/client && pnpm test
+
+      # Just to monitor the runner's disk consumption.
+      - name: Monitor Disk Space (End)
+        run: df -h
+
+
+  test-pg:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
 
       - id: free_disk
         uses: ./.github/actions/free_disk
