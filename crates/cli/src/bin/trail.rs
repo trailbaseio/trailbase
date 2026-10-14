@@ -63,12 +63,13 @@ async fn async_main(
       let (_new, state) = AppState::init(InitArgs {
         data_dir: data_dir.clone(),
         public_url: public_url.clone(),
-        runtime_root_fs: cmd.runtime_root_fs.as_ref().map(|p| p.into()),
-        geoip_db_path: cmd.geoip_db_path.as_ref().map(|p| p.into()),
+        geoip_db_path: cmd.geoip_db_path.clone(),
         read_only: cmd.read_only,
         dev: cmd.dev,
         demo: cmd.demo,
         wasm_tokio_runtime,
+        wasm_extra_components: cmd.runtime_extra_components,
+        wasm_filesystem_root: cmd.runtime_root_fs.clone(),
         pg_uri: cmd.experimental_pg.clone(),
       })
       .await?;

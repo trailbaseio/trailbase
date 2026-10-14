@@ -26,17 +26,28 @@ use crate::scheduler::{BuildJobOptions, JobRegistry, build_job_registry_from_con
 
 #[derive(Default)]
 pub struct InitArgs {
+  /// Depot path.
   pub data_dir: DataDir,
+  /// Public URL of this TrailBase server.
   pub public_url: Option<url::Url>,
-  pub runtime_root_fs: Option<PathBuf>,
+  /// Optional path to Maxmind geoip DB for logs analysis.
   pub geoip_db_path: Option<PathBuf>,
 
   /// SQLite DBs in read-only mode (including session but excluding logs).
   pub read_only: bool,
+  /// The server runs in a development environment, e.g. permissive CORS policies.
   pub dev: bool,
+  /// Demo mode disables a bunch of operations to avoid tempering of a public server.
   pub demo: bool,
-  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
 
+  /// Optional explicit tokio runtimed used for scheduling async WASM component work.
+  pub wasm_tokio_runtime: Option<tokio::runtime::Handle>,
+  /// Optional list of additional components to load in addition to `<depot>/wasm/*.wasm`.
+  pub wasm_extra_components: Option<Vec<PathBuf>>,
+  /// Optional root fs path accessible by WASM guests.
+  pub wasm_filesystem_root: Option<PathBuf>,
+
+  /// Optional postgre URI, if an external postgres instance should be used instead of SQLite.
   pub pg_uri: Option<String>,
 }
 
@@ -90,7 +101,7 @@ pub struct AppState {
 
 impl AppState {
   pub async fn init(args: InitArgs) -> Result<(bool, Self), InitError> {
-    validate_path(args.runtime_root_fs.as_ref())?;
+    validate_path(args.wasm_filesystem_root.as_ref())?;
     validate_path(args.geoip_db_path.as_ref())?;
 
     // First create directory structure.
@@ -116,10 +127,10 @@ impl AppState {
       json_schema_registry: json_schema_registry.load_full(),
       sqlite_function_runtimes: cfg_select! {
         feature = "wasm" => {
-          crate::wasm::build_sync_wasm_runtimes_for_components(
-            args.data_dir.root().join("wasm"),
-            args.data_dir.data_path(),
-            args.runtime_root_fs.as_deref(),
+          crate::wasm::build_sync_wasm_runtimes_for_sqlite(
+            &args.data_dir,
+            args.wasm_extra_components.as_deref().unwrap_or_default(),
+            args.wasm_filesystem_root.clone(),
             args.dev,
           )
           .await
@@ -247,10 +258,11 @@ impl AppState {
           #[cfg(feature = "wasm")]
           wasm: crate::wasm::WasmState::init(
             &args.data_dir,
+            args.wasm_extra_components.as_deref().unwrap_or_default(),
             config,
             main_conn.clone(),
             args.wasm_tokio_runtime,
-            args.runtime_root_fs,
+            args.wasm_filesystem_root,
             args.dev,
           ),
           #[cfg(test)]

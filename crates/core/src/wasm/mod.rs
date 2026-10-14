@@ -5,16 +5,52 @@ use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, Registra
 use trailbase_reactive::Reactive;
 use trailbase_wasm_common::HttpContextUser;
 use trailbase_wasm_common::manifest::Metadata;
-use trailbase_wasm_runtime_axum::Job;
+use trailbase_wasm_runtime_axum::{AnyError, Job, KvStore, Runtime, WasmRuntimeBuilder};
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::config::proto;
 use crate::{AppState, DataDir, User};
 
-use trailbase_wasm_runtime_axum::{AnyError, KvStore, Runtime, WasmRuntimeBuilder};
-pub use trailbase_wasm_runtime_axum::{
-  SqliteFunctions, SqliteStore, build_sync_wasm_runtimes_for_components,
-};
+pub use trailbase_wasm_runtime_axum::{SqliteFunctions, SqliteStore};
+
+pub(crate) async fn build_sync_wasm_runtimes_for_sqlite(
+  data_dir: &DataDir,
+  extra_components: &[PathBuf],
+  fs_root_path: Option<PathBuf>,
+  dev: bool,
+) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
+  let wasm_components_path = data_dir.wasm_path();
+  let mut components = trailbase_wasm_runtime_host::find_wasm_components(&wasm_components_path);
+
+  if !extra_components.is_empty() {
+    components.extend_from_slice(extra_components);
+    components.dedup();
+  }
+
+  if components.is_empty() {
+    log::debug!("No WASM component found in {wasm_components_path:?}");
+    return Ok(vec![]);
+  }
+
+  let shared_state = Arc::new(trailbase_wasm_runtime_host::SharedState {
+    conn: None,
+    kv_store: KvStore::new(),
+    db_path: data_dir.data_path(),
+    fs_root_path,
+  });
+
+  let mut sync_runtimes = Vec::<(SqliteStore, SqliteFunctions)>::with_capacity(components.len());
+  for path in components {
+    if let Some(result) =
+      trailbase_wasm_runtime_axum::sync_wasm_runtime_for_sqlite(path, shared_state.clone(), dev)
+        .await?
+    {
+      sync_runtimes.push(result)
+    }
+  }
+
+  return Ok(sync_runtimes);
+}
 
 type WasmMetadataAndRuntime = (Option<Metadata>, Runtime);
 
@@ -29,12 +65,30 @@ pub struct WasmState {
 impl WasmState {
   pub fn init(
     data_dir: &DataDir,
+    extra_components: &[PathBuf],
     config: Reactive<proto::Config>,
     conn: trailbase_sqlite::Connection,
     tokio_rt: Option<tokio::runtime::Handle>,
-    root_fs: Option<PathBuf>,
+    fs_root_path: Option<PathBuf>,
     dev: bool,
   ) -> Self {
+    let wasm_components_path = data_dir.wasm_path();
+    let mut components = trailbase_wasm_runtime_host::find_wasm_components(&wasm_components_path);
+
+    if !extra_components.is_empty() {
+      components.extend_from_slice(extra_components);
+      components.dedup();
+    }
+
+    if components.is_empty() {
+      log::debug!("No WASM component found in {wasm_components_path:?}");
+
+      return Self {
+        runtimes: vec![],
+        builders: vec![],
+      };
+    }
+
     const AUTH_CONFIG_KEY: &str = "config:auth";
     let shared_kv_store = KvStore::new();
     // Assign right away.
@@ -55,15 +109,24 @@ impl WasmState {
       });
     }
 
-    let builders = trailbase_wasm_runtime_axum::wasm_runtime_builders(
-      data_dir.root().join("wasm"),
-      conn,
-      tokio_rt,
-      data_dir.data_path(),
-      root_fs,
-      Some(shared_kv_store),
-      dev,
-    );
+    let shared_state = Arc::new(trailbase_wasm_runtime_host::SharedState {
+      conn: Some(conn),
+      kv_store: shared_kv_store,
+      db_path: data_dir.data_path(),
+      fs_root_path,
+    });
+
+    let builders: Vec<_> = components
+      .into_iter()
+      .map(|path| {
+        return trailbase_wasm_runtime_axum::wasm_runtime_builder(
+          path,
+          shared_state.clone(),
+          tokio_rt.clone(),
+          dev,
+        );
+      })
+      .collect();
 
     return Self {
       runtimes: builders

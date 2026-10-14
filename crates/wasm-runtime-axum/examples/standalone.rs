@@ -44,8 +44,7 @@ async fn main() {
     fs_root_path: None,
   });
 
-  let runtimes_builder =
-    wasm_runtime_builder(args.path, shared_state, None, None, /* dev= */ false);
+  let runtimes_builder = wasm_runtime_builder(args.path, shared_state, None, /* dev= */ false);
   let runtime = runtimes_builder().unwrap();
 
   let InstallResult {

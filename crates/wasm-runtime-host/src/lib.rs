@@ -52,9 +52,6 @@ pub enum Error {
 
 #[derive(Clone, Default, Debug)]
 pub struct RuntimeOptions {
-  /// Optional file-system sandbox root for r/o file access.
-  pub fs_root_path: Option<PathBuf>,
-
   /// Whether to use the non-optimizing baseline compiler.
   pub use_winch: bool,
 

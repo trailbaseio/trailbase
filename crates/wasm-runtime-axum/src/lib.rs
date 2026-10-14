@@ -8,7 +8,7 @@ use futures_util::future::BoxFuture;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use hyper::StatusCode;
 use log::*;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::time::Duration;
@@ -18,9 +18,7 @@ use trailbase_wasm_common::manifest::{
 use trailbase_wasm_common::{
   HttpContext, HttpContextKind, HttpContextUser, component_path_to_name,
 };
-use trailbase_wasm_runtime_host::{
-  Error as WasmError, InitArgs, RuntimeOptions, find_wasm_components,
-};
+use trailbase_wasm_runtime_host::{Error as WasmError, InitArgs, RuntimeOptions};
 use utoipa_axum::router::{OpenApiRouter, UtoipaMethodRouter};
 
 pub use trailbase_wasm_runtime_host::functions::{SqliteFunctions, SqliteStore};
@@ -28,60 +26,12 @@ pub use trailbase_wasm_runtime_host::{HttpStore, KvStore, Runtime, SharedState};
 
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
-pub async fn build_sync_wasm_runtimes_for_components(
-  path_to_components: PathBuf,
-  db_path: PathBuf,
-  fs_root_path: Option<&Path>,
-  use_winch: bool,
-) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
-  let components = find_wasm_components(&path_to_components);
-  let shared_state = Arc::new(SharedState {
-    conn: None,
-    kv_store: KvStore::new(),
-    db_path,
-    fs_root_path: fs_root_path.map(|p| p.to_owned()),
-  });
-
-  let mut sync_runtimes: Vec<(SqliteStore, SqliteFunctions)> = vec![];
-
-  for path in components {
-    let rt = Runtime::init(
-      path,
-      shared_state.clone(),
-      RuntimeOptions {
-        fs_root_path: fs_root_path.map(|p| p.to_owned()),
-        // https://github.com/trailbaseio/trailbase/issues/206
-        use_winch: if cfg!(target_os = "macos") {
-          false
-        } else {
-          use_winch
-        },
-        tokio_runtime: None,
-      },
-    )?;
-
-    // Create shared state. In the future we might want to instantiate multiple to avoid cross
-    // SQLite-connection/thread synchronization.
-    let store = SqliteStore::new(&rt).await?;
-    let functions = store
-      .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
-      .await?;
-
-    if !functions.is_empty() {
-      sync_runtimes.push((store, functions));
-    }
-  }
-
-  return Ok(sync_runtimes);
-}
-
 pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, WasmError> + Send + Sync;
 
 pub fn wasm_runtime_builder(
   path_to_component: PathBuf,
   shared_state: Arc<SharedState>,
   tokio_runtime: Option<tokio::runtime::Handle>,
-  runtime_root_fs: Option<PathBuf>,
   dev: bool,
 ) -> Box<WasmRuntimeBuilder> {
   return Box::new(move || {
@@ -89,52 +39,51 @@ pub fn wasm_runtime_builder(
       path_to_component.clone(),
       shared_state.clone(),
       RuntimeOptions {
-        fs_root_path: runtime_root_fs.clone(),
-        // https://github.com/trailbaseio/trailbase/issues/206
-        use_winch: if cfg!(target_os = "macos") {
-          false
-        } else {
-          dev
-        },
+        use_winch: use_winch(dev),
         tokio_runtime: tokio_runtime.clone(),
       },
     );
   });
 }
 
-pub fn wasm_runtime_builders(
-  path_to_components: PathBuf,
-  conn: trailbase_sqlite::Connection,
-  tokio_runtime: Option<tokio::runtime::Handle>,
-  db_path: PathBuf,
-  runtime_root_fs: Option<PathBuf>,
-  shared_kv_store: Option<KvStore>,
+pub async fn sync_wasm_runtime_for_sqlite(
+  path_to_component: PathBuf,
+  shared_state: Arc<SharedState>,
   dev: bool,
-) -> Vec<Box<WasmRuntimeBuilder>> {
-  let shared_state = Arc::new(SharedState {
-    conn: Some(conn),
-    kv_store: shared_kv_store.unwrap_or_default(),
-    db_path,
-    fs_root_path: runtime_root_fs.clone(),
-  });
+) -> Result<Option<(SqliteStore, SqliteFunctions)>, AnyError> {
+  let rt = Runtime::init(
+    path_to_component,
+    shared_state.clone(),
+    RuntimeOptions {
+      // https://github.com/trailbaseio/trailbase/issues/206
+      use_winch: use_winch(dev),
+      // No async runtime needed for SQLite functions.
+      tokio_runtime: None,
+    },
+  )?;
 
-  let components = find_wasm_components(&path_to_components);
-  if components.is_empty() {
-    debug!("No WASM component found in {path_to_components:?}");
-  }
+  // Create re-usable shared store, i.e. runtime state, to minimize per-call overhead.
+  //
+  // NOTE: Only Rust guests currently support interleaving.
+  let store = SqliteStore::new(&rt).await?;
+  let functions = store
+    .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
+    .await?;
 
-  return components
-    .into_iter()
-    .map(|path| {
-      return wasm_runtime_builder(
-        path,
-        shared_state.clone(),
-        tokio_runtime.clone(),
-        runtime_root_fs.clone(),
-        dev,
-      );
-    })
-    .collect();
+  return if functions.is_empty() {
+    Ok(None)
+  } else {
+    Ok(Some((store, functions)))
+  };
+}
+
+fn use_winch(dev: bool) -> bool {
+  return if cfg!(target_os = "macos") {
+    // https://github.com/trailbaseio/trailbase/issues/206
+    false
+  } else {
+    dev
+  };
 }
 
 pub struct Job {

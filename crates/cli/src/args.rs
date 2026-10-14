@@ -142,13 +142,9 @@ pub struct ServerArgs {
   #[arg(long, env, default_value_t = false)]
   pub spa: bool,
 
-  /// Optional path to sandboxed FS root for WASM runtime.
-  #[arg(long, env, value_hint = ValueHint::DirPath)]
-  pub runtime_root_fs: Option<String>,
-
   /// Optional path to MaxmindDB geoip database. Can be used to map logged IPs to a geo location.
   #[arg(long, env, value_hint = ValueHint::FilePath)]
-  pub geoip_db_path: Option<String>,
+  pub geoip_db_path: Option<std::path::PathBuf>,
 
   /// Start with DBs and config in read-only mode, i.e. all writes will fail. Only supported with
   /// SQLite. Writes to the HTTP access logs DB are excluded.
@@ -174,6 +170,14 @@ pub struct ServerArgs {
   /// Number of threads the WASM runtime uses (Default: #cpus).
   #[arg(long, env)]
   pub runtime_threads: Option<usize>,
+
+  /// Optional list of additional WASM components to load besides `<depot>/wasm/*.wasm`.
+  #[arg(long, env, value_hint = ValueHint::FilePath)]
+  pub runtime_extra_components: Option<Vec<std::path::PathBuf>>,
+
+  /// Optional path to sandboxed root Filesystem accessible by WASM guests.
+  #[arg(long, env, value_hint = ValueHint::DirPath)]
+  pub runtime_root_fs: Option<std::path::PathBuf>,
 
   /// Postgres URL, like: postgresql://<user>:<pass>@localhost:<port>/<db>.
   #[arg(long, env, value_hint = ValueHint::Url)]
