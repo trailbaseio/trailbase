@@ -1,3 +1,10 @@
+## v0.34.6
+
+- Use `TextArea` inputs for `TEXT` columns in the admin UI row editor to allow for whitespaces. @jessepeterson 🙏
+- Add a new `trail run --runtime-extra-components` flag to allow specifying components beyond `<depot>/wasm/`.
+- Add CI integration tests covering JS/TS wasm guests.
+- Update dependencies.
+
 ## v0.34.5
 
 - Add (dynamic) auto-completion support to CLI. Install with:
