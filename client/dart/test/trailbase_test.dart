@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:logging/logging.dart';
+import 'package:test/test.dart';
+import 'package:totp_authenticator/totp_authenticator.dart';
 import 'package:trailbase/src/operations.dart';
 import 'package:trailbase/trailbase.dart';
-import 'package:test/test.dart';
-import 'package:http/http.dart' as http;
-import 'package:totp_authenticator/totp_authenticator.dart';
+
+import 'util/start_server.dart';
 
 const port = 4006;
 const address = '127.0.0.1:${port}';
@@ -162,48 +164,6 @@ Future<Client> connect() async {
   return client;
 }
 
-Future<Process> initTrailBase() async {
-  final result = await Process.run('python3', ['../runner.py', 'build']);
-  if (result.exitCode > 0) {
-    throw Exception(
-        'Cargo build failed.\n\nstdout: ${result.stdout}\n\nstderr: ${result.stderr}\n');
-  }
-
-  final process = await Process.start('python3', [
-    '../runner.py',
-    'run',
-    '--port=${port}',
-    // We want at least some parallelism to experience isolate-local state.
-    '--runtime-threads=2',
-  ]);
-
-  process.stderr.listen(stderr.add);
-  process.stdout.listen(stdout.add);
-
-  final uri = Uri.parse('http://${address}/api/healthcheck');
-  for (int i = 0; i < 200; ++i) {
-    try {
-      final response = await http.get(uri);
-      if (response.statusCode == HttpStatus.ok) {
-        return process;
-      }
-    } catch (err) {
-      print('Trying to connect to TrailBase');
-    }
-
-    if (await process.exitCode
-            .timeout(Duration(milliseconds: 500), onTimeout: () => -1) >=
-        0) {
-      break;
-    }
-  }
-
-  process.kill(ProcessSignal.sigkill);
-  final exitCode = await process.exitCode;
-
-  throw Exception('Cargo run failed: ${exitCode}.');
-}
-
 Future<List<Event>> take(Stream<Event> stream, int n) {
   const timeout = Duration(seconds: 10);
 
@@ -214,13 +174,19 @@ Future<List<Event>> take(Stream<Event> stream, int n) {
 }
 
 Future<void> main() async {
+  Logger.root.level = Level.INFO;
+  Logger.root.onRecord.listen((record) {
+    print('${record.level.name}: ${record.time}: ${record.message}');
+  });
+
   if (!Directory.current.path.endsWith('dart')) {
     throw Exception('Unexpected working directory');
   }
 
   // If port is set to 4000, we consider this an externally brought up instance.
   if (port != 4000) {
-    final process = await initTrailBase();
+    final process =
+        await startServer(port: port, timeout: Duration(minutes: 10));
 
     tearDownAll(() async {
       process.kill(ProcessSignal.sigkill);
