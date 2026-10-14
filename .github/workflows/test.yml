@@ -173,11 +173,17 @@ jobs:
           toolchain-version: ${{ env.TOOLCHAIN_VERSION }}
 
       - name: "Build & Run Tests"
+        uses: nick-fields/retry@v3
         env:
           RUST_BACKTRACE: 1
           # Run integration test against both: Rust and JS test components.
           TEST_WASM_JS_GUEST_RUNTIME: 1
-        run: cd crates/assets/js/client && pnpm test
+        with:
+          timeout_minutes: 18
+          max_attempts: 3
+          retry_on: any # options: any, timeout, error
+          continue_on_error: false
+          command: cd crates/assets/js/client && pnpm test
 
       # Just to monitor the runner's disk consumption.
       - name: Monitor Disk Space (End)

@@ -37,7 +37,7 @@ Future<Process> startServer({
   while (true) {
     final code = await exitCode();
     if (code > 0) {
-      throw Exception('server exited abnormaly with code: ${code}.');
+      throw Exception('server exited abnormally with code: ${code}.');
     }
 
     try {

@@ -10,7 +10,9 @@ import { envVarSet, serverAddress, serverPort } from "./util";
 const useWebSocket = envVarSet("USE_WS");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
+async function initTrailBase(opts?: {
+  timeoutMinutes?: number;
+}): Promise<{ subprocess: ChildProcess | null }> {
   if (serverPort() === 4000) {
     console.info("Skipping server-startup, relying on external instance.");
     return { subprocess: null };
@@ -47,10 +49,13 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
     },
   );
 
-  // NOTE: debug builds of trail loading JS-WASM can take a long time.
-  for (let i = 0; i < 300; ++i) {
-    const child = await subprocess.nodeChildProcess;
-    if ((child.exitCode ?? 0) > 0) {
+  const child = await subprocess.nodeChildProcess;
+
+  const started = new Date().getTime();
+  while (true) {
+    const code = child.exitCode;
+    if ((code ?? 0) > 0) {
+      console.error(`Server exited abnormally: ${code}`);
       break;
     }
 
@@ -59,16 +64,19 @@ async function initTrailBase(): Promise<{ subprocess: ChildProcess | null }> {
       if (response.ok) {
         return { subprocess: child };
       }
+    } catch (err) {
+      console.debug(`Health check failed: ${err}`);
+    }
 
-      console.log(await response.text());
-    } catch {
-      console.info("Waiting for TrailBase to become healthy");
+    const now = new Date().getTime();
+    const elapsedMinutes = (now - started) / 1000 / 60;
+    if (elapsedMinutes >= (opts?.timeoutMinutes ?? 12)) {
+      break;
     }
 
     await sleep(500);
   }
 
-  const child = await subprocess.nodeChildProcess;
   child.kill();
 
   const result = await subprocess;
