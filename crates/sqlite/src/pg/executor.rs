@@ -1,6 +1,5 @@
 use log::*;
 use std::sync::Arc;
-use tokio::sync::oneshot;
 
 use crate::error::Error;
 use crate::params::Params;
@@ -140,7 +139,7 @@ impl Executor {
     E: Send + 'static,
     Error: From<E>,
   {
-    let (sender, receiver) = oneshot::channel::<Result<R, E>>();
+    let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, E>>();
 
     self
       .sender
