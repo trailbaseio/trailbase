@@ -4,6 +4,7 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
+use trailbase_sqlite::unpack_other_error;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
@@ -116,35 +117,59 @@ pub async fn create_record_handler(
     1 => {
       let (record, files) = records_and_files.swap_remove(0);
 
-      // QUESTION: Could we pull ACL check and insert operation into the same `conn.call_writer`
-      // interaction to minimize slushing?
-      let mut lazy_params = build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
-      api
-        .check_record_level_access(
-          Permission::Create,
-          None,
-          Some(&mut lazy_params),
-          user.as_ref(),
-        )
-        .await?;
+      let connection_type = conn.connection_type();
+      let api = api.clone();
 
-      let (params, files) = lazy_params
-        .consume()
-        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+      // FIXME: file writes. We used to write files before updating the DB to make sure referenced
+      // files are valid. Can we preserve this somehow? It's probably enough to write before
+      // returning the record id.
+      let (write_result, _files) = conn
+        .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
+          let mut lazy_params =
+            build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
 
-      let record_id = run_insert_or_replace_query(
-        conn,
-        state.objectstore(),
-        table_name,
-        api.columns(),
-        conflict_resolution_strategy,
-        &pk_meta.column.name,
-        params,
-        files,
-      )
-      .await?;
+          api
+            .sync_check_record_level_access(
+              &mut conn,
+              Permission::Create,
+              None,
+              Some(&mut lazy_params),
+              user.as_ref(),
+            )
+            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-      vec![extract_record_id(record_id)?]
+          let (params, files) = lazy_params.consume().map_err(|_err| {
+            trailbase_sqlite::Error::Other(RecordError::BadRequest("Invalid Parameters").into())
+          })?;
+
+          let query = WriteQuery::new_insert_or_replace(
+            connection_type,
+            api.table_name(),
+            api.columns(),
+            &api.record_pk_column().column.name,
+            conflict_resolution_strategy,
+            params,
+          )
+          .map_err(|err| {
+            trailbase_sqlite::Error::Other(RecordError::Internal(err.into()).into())
+          })?;
+
+          let write_result = query.apply_sync(&mut conn)?;
+
+          return Ok((write_result, files));
+        })
+        .await
+        .map_err(|err| {
+          // Unpack potentially packed RecordError.
+          return match unpack_other_error::<RecordError>(err) {
+            Ok(schema_lookup_err) => schema_lookup_err,
+            Err(sql_err) => sql_err.into(),
+          };
+        })?;
+
+      vec![extract_record_id(write_result.pk_value.unwrap_or_else(
+        || trailbase_sqlite::Value::Integer(write_result.rowid),
+      ))?]
     }
     _ => {
       let mut queries: Vec<(
