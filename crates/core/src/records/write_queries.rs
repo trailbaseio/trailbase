@@ -196,9 +196,9 @@ pub(crate) async fn run_queries(
   let all_files: FileMetadataContents = all_files
     .into_iter()
     .enumerate()
-    .flat_map(|(i, files)| {
-      if let Some(files) = files {
-        match queries_with_files.entry(files.0) {
+    .flat_map(|(i, entry)| {
+      if let Some((table_name, files)) = entry {
+        match queries_with_files.entry(table_name) {
           Entry::Occupied(mut entry) => {
             entry.get_mut().push(i);
           }
@@ -206,8 +206,9 @@ pub(crate) async fn run_queries(
             entry.insert(vec![i]);
           }
         }
-        return files.1;
+        return files;
       }
+
       return vec![];
     })
     .collect();

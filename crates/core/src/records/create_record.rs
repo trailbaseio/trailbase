@@ -2,7 +2,6 @@ use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
 use utoipa::{IntoParams, ToSchema};
@@ -12,7 +11,7 @@ use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, LazyParams};
 use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
-use crate::records::{Permission, RecordError};
+use crate::records::{Permission, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Default, Deserialize, IntoParams)]
@@ -95,70 +94,48 @@ pub async fn create_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
-  let records_and_files: Vec<RecordAndFiles> = match either_request {
+  let mut records_and_files: Vec<RecordAndFiles> = match either_request {
     Either::Json(value) => extract_records(value)?,
     Either::Multipart(value, files) => vec![(extract_record(value)?, Some(files))],
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let mut params_list: Vec<(Arc<InsertParams>, FileMetadataContents)> =
-    Vec::with_capacity(records_and_files.len());
-
-  for (mut record, files) in records_and_files {
-    if api.insert_autofill_missing_user_id_columns()
-      && let Some(ref user) = user
-    {
-      for column_index in api.user_id_columns() {
-        let col_name = &api.columns()[*column_index].column.name;
-        if !record.contains_key(col_name) {
-          record.insert(
-            col_name.to_owned(),
-            serde_json::Value::String(uuid_to_b64(&user.uuid)),
-          );
-        }
-      }
-    }
-
-    let mut lazy_params = LazyParams::for_insert(
-      &api,
-      state.json_schema_registry().load_full(),
-      record,
-      files,
-    );
-
-    // NOTE: We're currently serializing the async checks, we could parallelize them however it's
-    // unclear if this would be much faster. Batching might help.
-    api
-      .check_record_level_access(
-        Permission::Create,
-        None,
-        Some(&mut lazy_params),
-        user.as_ref(),
-      )
-      .await?;
-
-    params_list.push(
-      lazy_params
-        .consume()
-        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?,
-    );
+  if records_and_files.is_empty() {
+    return Err(RecordError::BadRequest("no values provided"));
   }
 
+  let conn = api.conn();
+
+  let table_name: &QualifiedNameEscaped = api.table_name();
   let pk_meta = api.record_pk_column();
   let conflict_resolution_strategy = api
     .insert_conflict_resolution_strategy()
     .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
 
-  let record_ids: Vec<String> = match params_list.len() {
-    0 => {
-      return Err(RecordError::BadRequest("no values provided"));
-    }
+  let record_ids: Vec<String> = match records_and_files.len() {
     1 => {
-      let (params, files) = params_list.swap_remove(0);
+      let (record, files) = records_and_files.swap_remove(0);
+
+      // QUESTION: Could we pull ACL check and insert operation into the same `conn.call_writer`
+      // interaction to minimize slushing?
+      let mut lazy_params = build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
+      api
+        .check_record_level_access(
+          Permission::Create,
+          None,
+          Some(&mut lazy_params),
+          user.as_ref(),
+        )
+        .await?;
+
+      let (params, files) = lazy_params
+        .consume()
+        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
       let record_id = run_insert_or_replace_query(
-        api.conn(),
+        conn,
         state.objectstore(),
-        api.table_name(),
+        table_name,
         api.columns(),
         conflict_resolution_strategy,
         &pk_meta.column.name,
@@ -170,26 +147,42 @@ pub async fn create_record_handler(
       vec![extract_record_id(record_id)?]
     }
     _ => {
-      let conn = api.conn();
-      let queries = params_list
-        .into_iter()
-        .map(|params| -> Result<_, RecordError> {
-          let table_name: &QualifiedNameEscaped = api.table_name();
-          let (params, files) = params;
+      let mut queries: Vec<(
+        WriteQuery,
+        Option<(QualifiedNameEscaped, FileMetadataContents)>,
+      )> = Vec::with_capacity(records_and_files.len());
+      for (record, files) in records_and_files {
+        let mut lazy_params = build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
 
-          let query = WriteQuery::new_insert_or_replace(
-            conn.connection_type(),
-            &table_name,
-            api.columns(),
-            &pk_meta.column.name,
-            conflict_resolution_strategy,
-            params,
+        api
+          .check_record_level_access(
+            Permission::Create,
+            None,
+            Some(&mut lazy_params),
+            user.as_ref(),
           )
-          .map_err(|err| RecordError::Internal(err.into()))?;
+          .await?;
 
-          return Ok((query, Some((table_name.clone(), files))));
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+        let (params, files) = lazy_params
+          .consume()
+          .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
+        let query = WriteQuery::new_insert_or_replace(
+          conn.connection_type(),
+          &table_name,
+          api.columns(),
+          &pk_meta.column.name,
+          conflict_resolution_strategy,
+          params,
+        )
+        .map_err(|err| RecordError::Internal(err.into()))?;
+
+        if files.is_empty() {
+          queries.push((query, None));
+        } else {
+          queries.push((query, Some((table_name.clone(), files))));
+        }
+      }
 
       run_queries(conn, state.objectstore(), queries)
         .await
@@ -205,6 +198,31 @@ pub async fn create_record_handler(
   }
 
   return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());
+}
+
+fn build_lazy_insert_params<'a>(
+  state: &AppState,
+  api: &'a RecordApi,
+  user: Option<&User>,
+  mut record: JsonRow,
+  files: Option<Vec<FileUploadInput>>,
+) -> LazyParams<'a, InsertParams> {
+  // Optionally insert user.
+  if api.insert_autofill_missing_user_id_columns()
+    && let Some(ref user) = user
+  {
+    for column_index in api.user_id_columns() {
+      let col_name = &api.columns()[*column_index].column.name;
+      if !record.contains_key(col_name) {
+        record.insert(
+          col_name.to_owned(),
+          serde_json::Value::String(uuid_to_b64(&user.uuid)),
+        );
+      }
+    }
+  }
+
+  return LazyParams::for_insert(api, state.json_schema_registry().load_full(), record, files);
 }
 
 #[inline]
