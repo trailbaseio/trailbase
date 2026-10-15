@@ -39,7 +39,7 @@ pub async fn json_schema_handler(
   return Ok(Json(build_api_json_schema(&state, &api, request.mode)?));
 }
 
-fn build_api_json_schema_internal(
+pub(super) fn build_api_json_schema_internal(
   state: &AppState,
   api: &RecordApi,
   mode: JsonSchemaMode,
@@ -71,26 +71,6 @@ fn build_api_json_schema_internal(
     mode,
   )
   .map_err(|err| RecordError::Internal(err.into()));
-}
-
-#[cfg(debug_assertions)]
-pub fn validate_api_json_schema(
-  state: &AppState,
-  api: &RecordApi,
-  mode: JsonSchemaMode,
-  value: &serde_json::Value,
-) -> Result<(), RecordError> {
-  let (validator, json_schema) = build_api_json_schema_internal(state, api, mode)?;
-
-  let result = validator.evaluate(value);
-  let errors: Vec<_> = result.iter_errors().collect();
-  if errors.is_empty() {
-    return Ok(());
-  }
-
-  return Err(RecordError::Internal(
-    format!("Json value '{value}' does not match '{json_schema}: {errors:?}' ").into(),
-  ));
 }
 
 pub fn build_api_json_schema(

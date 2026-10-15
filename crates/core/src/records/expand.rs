@@ -15,7 +15,7 @@ pub(crate) struct ExpandedTable<'a> {
   pub foreign_column_name: String,
 }
 
-pub(crate) fn expand_tables<'s>(
+pub(crate) fn build_expand_tables_params<'s>(
   record_api: &'s RecordApi,
   connection_metadata: &'s ConnectionMetadata,
   expand: &[impl AsRef<str>],

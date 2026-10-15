@@ -4,6 +4,7 @@ use axum::{
   extract::{Path, Query, RawQuery, State},
 };
 use base64::prelude::*;
+use compact_str::{CompactString, ToCompactString};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -18,7 +19,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::encryption::{KeyType, decrypt, encrypt, generate_random_key};
 use crate::listing::{WhereClause, build_filter_where_clause, limit_or_default};
-use crate::records::expand::{ExpandedTable, expand_tables};
+use crate::records::expand::{ExpandedTable, build_expand_tables_params};
 use crate::records::{Permission, RecordError};
 use crate::util::row_id_column;
 
@@ -134,8 +135,8 @@ pub async fn list_records_handler(
       return RecordError::BadRequest("Invalid query");
     })?;
 
-  // Where clause contains column filters and cursor depending on what's present.
-  // NOTE: This will also drop any filters for unknown columns, thus avoiding SQL injections.
+  // Where clause contains column filters and cursor depending on what's present. This will drop any
+  // filters for columns unknown, thus preventing any SQL template injection.
   let WhereClause {
     clause: filter_clause,
     mut params,
@@ -222,21 +223,21 @@ pub async fn list_records_handler(
     },
   );
 
-  let metadata = api.connection_metadata();
   let config_expand = api.expand();
-  let expanded_tables = match query_expand {
-    Some(expand) => {
-      // NOTE: This will drop any unknown expand column, thus avoiding SQL injections.
+  let expanded_tables = query_expand
+    .map(|expand| {
+      let metadata = api.connection_metadata();
+
+      // This will drop any unknown expanded columns, thus also prevent any SQL template injection.
       for col_name in &expand.columns {
         if !config_expand.iter().any(|c| *c == col_name) {
           return Err(RecordError::BadRequest("Invalid expansion"));
         }
       }
 
-      expand_tables(&api, metadata, &expand.columns)?
-    }
-    None => vec![],
-  };
+      return build_expand_tables_params(&api, metadata, &expand.columns);
+    })
+    .transpose()?;
 
   // NOTE: The template relies on load-bearing underscores for "_rowid_" and "_total_count_" to
   // have them be stripped later on by `rows_to_json`.
@@ -250,7 +251,7 @@ pub async fn list_records_handler(
       filter_clause: &filter_clause,
       cursor_clause: cursor_clause.as_deref(),
       order_clause: &order_clause,
-      expanded_tables: &expanded_tables,
+      expanded_tables: expanded_tables.as_deref().unwrap_or_default(),
       count: count.unwrap_or(false),
       offset: offset.is_some(),
       is_table,
@@ -265,7 +266,7 @@ pub async fn list_records_handler(
       filter_clause: &filter_clause,
       cursor_clause: cursor_clause.as_deref(),
       order_clause: &order_clause,
-      expanded_tables: &expanded_tables,
+      expanded_tables: expanded_tables.as_deref().unwrap_or_default(),
       count: count.unwrap_or(false),
       offset: offset.is_some(),
       is_table,
@@ -331,20 +332,15 @@ pub async fn list_records_handler(
     None
   };
 
-  let records = if expanded_tables.is_empty() {
-    rows
-      .iter()
-      .map(|row| record_to_json_expand_ref(api.columns(), config_expand, row, None))
-      .collect::<Result<Vec<_>, JsonError>>()
-      .map_err(|err| RecordError::Internal(err.into()))?
-  } else {
+  let records = if let Some(expanded_tables) = expanded_tables
+    && !expanded_tables.is_empty()
+  {
     rows
       .iter_mut()
       .map(|row| {
         let mut curr = row.split_off(api.columns().len());
 
-        let mut expand: Vec<(compact_str::CompactString, _)> =
-          Vec::with_capacity(expanded_tables.len());
+        let mut expand: Vec<(CompactString, _)> = Vec::with_capacity(expanded_tables.len());
         for expanded in &expanded_tables {
           let next = curr.split_off(expanded.num_columns);
 
@@ -353,7 +349,7 @@ pub async fn list_records_handler(
               .map_err(|err| RecordError::Internal(err.into()))?;
 
           expand.push((
-            compact_str::CompactString::from(&expanded.local_column_name),
+            expanded.local_column_name.to_compact_string(),
             foreign_value,
           ));
 
@@ -364,6 +360,12 @@ pub async fn list_records_handler(
           .map_err(|err| RecordError::Internal(err.into()));
       })
       .collect::<Result<Vec<_>, RecordError>>()?
+  } else {
+    rows
+      .iter()
+      .map(|row| record_to_json_expand_ref(api.columns(), config_expand, row, None))
+      .collect::<Result<Vec<_>, JsonError>>()
+      .map_err(|err| RecordError::Internal(err.into()))?
   };
 
   #[cfg(any(feature = "geos", feature = "geos-static"))]
@@ -379,17 +381,6 @@ pub async fn list_records_handler(
       .map_err(|err| RecordError::Internal(err.into()))?,
     )));
   }
-
-  // #[cfg(debug_assertions)]
-  // for record in &records {
-  //   crate::records::json_schema::validate_api_json_schema(
-  //     &state,
-  //     &api,
-  //     trailbase_schema::json_schema::JsonSchemaMode::Select,
-  //     // Expensive.
-  //     &serde_json::Value::Object(record.clone()),
-  //   )?;
-  // }
 
   return Ok(Json(ListOrGeoJSONResponse::List(ListResponse {
     cursor,
@@ -636,7 +627,8 @@ mod tests {
 
     let api = state.lookup_record_api("api").unwrap();
 
-    let expanded_tables = expand_tables(&api, &connection_metadata, &["index"]).unwrap();
+    let expanded_tables =
+      build_expand_tables_params(&api, &connection_metadata, &["index"]).unwrap();
 
     assert_eq!(expanded_tables.len(), 1);
     assert_eq!(expanded_tables[0].local_column_name, "index");

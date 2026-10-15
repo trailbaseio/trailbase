@@ -1,5 +1,6 @@
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
+use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
 use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
 use trailbase_schema::json_schema::FileUploads;
@@ -7,12 +8,9 @@ use trailbase_schema::json_schema::FileUploads;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::RawJson;
-use crate::records::expand::expand_tables;
+use crate::records::expand::build_expand_tables_params;
 use crate::records::files::read_file_into_response;
-use crate::records::read_queries::{
-  ExpandedSelectQueryResult, run_expanded_select_query, run_get_file_query, run_get_files_query,
-  run_select_query,
-};
+use crate::records::read_queries::{run_get_file_query, run_get_files_query, run_select_query};
 use crate::records::{Permission, RecordError};
 
 #[derive(Debug, Default, Deserialize)]
@@ -57,84 +55,80 @@ pub async fn read_record_handler(
       .collect::<Vec<_>>()
   };
 
-  if let Some(query_expand) = query.expand
-    && !query_expand.is_empty()
-  {
-    let config_expand = api.expand();
+  let config_expand = api.expand();
+  let query_expand = query.expand.as_ref().map(|expand| {
+    expand
+      .split(",")
+      .filter(|fragment| !fragment.is_empty())
+      .collect::<Vec<_>>()
+  });
+  let expanded_tables = query_expand
+    .map(|expanded_columns| {
+      let metadata = api.connection_metadata();
 
-    // Input validation, i.e. only accept columns that are also configured.
-    let query_expand: Vec<_> = query_expand.split(",").collect();
-    for col_name in &query_expand {
-      if !config_expand.iter().any(|c| *c == col_name) {
-        return Err(RecordError::BadRequest("Invalid expansion"));
+      // This will drop any unknown expanded columns, thus also prevent any SQL template injection.
+      for col_name in &expanded_columns {
+        if !config_expand.iter().any(|c| *c == col_name) {
+          return Err(RecordError::BadRequest("Invalid expansion"));
+        }
       }
-    }
 
-    let metadata = api.connection_metadata();
-    let expanded_tables = expand_tables(&api, metadata, &query_expand)?;
+      return build_expand_tables_params(&api, metadata, &expanded_columns);
+    })
+    .transpose()?;
 
-    let Some(ExpandedSelectQueryResult { root, foreign_rows }) = run_expanded_select_query(
-      api.conn(),
-      api.table_name(),
-      &column_names(),
-      &pk_meta.column.name,
-      record_id,
-      &expanded_tables,
-    )
-    .await?
-    else {
-      return Err(RecordError::RecordNotFound);
-    };
-
-    // Alloc a map from column name to value that's pre-filled with with Value::Null for all
-    // expandable columns.
-    let mut expand: Vec<(compact_str::CompactString, _)> =
-      Vec::with_capacity(expanded_tables.len());
-    for (col_name, (metadata, row)) in std::iter::zip(query_expand, foreign_rows) {
-      let foreign_value = record_to_json_expand(&metadata.column_metadata, &[], &row, None)
-        .map_err(|err| RecordError::Internal(err.into()))?;
-
-      expand.push((compact_str::CompactString::from(col_name), foreign_value));
-    }
-
-    return Ok(RawJson(
-      record_to_json_expand(api.columns(), config_expand, &root, Some(expand))
-        .map_err(|err| RecordError::Internal(err.into()))?,
-    ));
-  }
-
-  let Some(row) = run_select_query(
+  let Some(mut row) = run_select_query(
     api.conn(),
     api.table_name(),
     &column_names(),
     &pk_meta.column.name,
     record_id,
+    expanded_tables.as_deref().unwrap_or_default(),
   )
   .await?
   else {
     return Err(RecordError::RecordNotFound);
   };
 
-  let json_response = trailbase_schema::json::Value::Object(
-    record_to_json_expand_ref(api.columns(), api.expand(), &row, None)
-      .map_err(|err| RecordError::Internal(err.into()))?,
-  );
-
-  #[cfg(debug_assertions)]
+  let json_obj = if let Some(expanded_tables) = expanded_tables
+    && !expanded_tables.is_empty()
   {
-    // Expensive.
-    let value: serde_json::Value = json_response.clone().into();
+    let mut curr = row.split_off(api.columns().len());
 
-    crate::records::json_schema::validate_api_json_schema(
-      &state,
-      &api,
-      trailbase_schema::json_schema::JsonSchemaMode::Select,
-      &value,
-    )?;
-  }
+    let mut expand: Vec<(CompactString, _)> = Vec::with_capacity(expanded_tables.len());
+    for expanded in &expanded_tables {
+      let next = curr.split_off(expanded.num_columns);
+
+      let foreign_value =
+        record_to_json_expand(&expanded.metadata.column_metadata, &[], &curr, None)
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+      expand.push((
+        expanded.local_column_name.to_compact_string(),
+        foreign_value,
+      ));
+
+      curr = next;
+    }
+
+    record_to_json_expand_ref(api.columns(), config_expand, &row, Some(expand))
+      .map_err(|err| RecordError::Internal(err.into()))?
+  } else {
+    record_to_json_expand_ref(api.columns(), config_expand, &row, None)
+      .map_err(|err| RecordError::Internal(err.into()))?
+  };
+
+  #[cfg(test)]
+  test_only_validate_api_json_schema(
+    &state,
+    &api,
+    trailbase_schema::json_schema::JsonSchemaMode::Select,
+    // Expensive clone.
+    &trailbase_schema::json::Value::Object(json_obj.clone()).into(),
+  )?;
 
   return Ok(RawJson(
-    serde_json::value::to_raw_value(&json_response)
+    serde_json::value::to_raw_value(&trailbase_schema::json::Value::Object(json_obj))
       .map_err(|err| RecordError::Internal(err.into()))?,
   ));
 }
@@ -247,6 +241,27 @@ pub async fn get_uploaded_files_from_record_handler(
   return read_file_into_response(&state, file_upload)
     .await
     .map_err(|err| RecordError::Internal(err.into()));
+}
+
+#[cfg(test)]
+pub fn test_only_validate_api_json_schema(
+  state: &AppState,
+  api: &crate::records::RecordApi,
+  mode: trailbase_schema::json_schema::JsonSchemaMode,
+  value: &serde_json::Value,
+) -> Result<(), RecordError> {
+  let (validator, json_schema) =
+    crate::records::json_schema::build_api_json_schema_internal(state, api, mode)?;
+
+  let result = validator.evaluate(value);
+  let errors: Vec<_> = result.iter_errors().collect();
+  if errors.is_empty() {
+    return Ok(());
+  }
+
+  return Err(RecordError::Internal(
+    format!("Json value '{value}' does not match '{json_schema}: {errors:?}' ").into(),
+  ));
 }
 
 #[cfg(test)]

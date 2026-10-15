@@ -6,7 +6,7 @@ use trailbase_sqlite::Value;
 
 use crate::records::error::RecordError;
 use crate::records::expand::ExpandedTable;
-use crate::schema_metadata::{JsonColumnMetadata, TableMetadata};
+use crate::schema_metadata::JsonColumnMetadata;
 
 pub(crate) async fn run_select_query(
   conn: &trailbase_sqlite::Connection,
@@ -14,59 +14,18 @@ pub(crate) async fn run_select_query(
   column_names: &[&str],
   pk_column: &str,
   pk_value: Value,
+  expanded_tables: &[ExpandedTable<'_>],
 ) -> Result<Option<trailbase_sqlite::Row>, RecordError> {
   let sql = ReadRecordQueryTemplate {
     table_name,
     column_names,
     pk_column_name: pk_column,
-    expanded_tables: &[],
+    expanded_tables: expanded_tables,
   }
   .render()
   .map_err(|err| RecordError::Internal(err.into()))?;
 
   return Ok(conn.read_query_row(sql, [pk_value]).await?);
-}
-
-pub(crate) struct ExpandedSelectQueryResult<'a> {
-  pub root: trailbase_sqlite::Row,
-  pub foreign_rows: Vec<(&'a TableMetadata, trailbase_sqlite::Row)>,
-}
-
-pub(crate) async fn run_expanded_select_query<'a>(
-  conn: &trailbase_sqlite::Connection,
-  table_name: &QualifiedNameEscaped,
-  column_names: &[&str],
-  pk_column: &str,
-  pk_value: Value,
-  expanded_tables: &[ExpandedTable<'a>],
-) -> Result<Option<ExpandedSelectQueryResult<'a>>, RecordError> {
-  let sql = ReadRecordQueryTemplate {
-    table_name,
-    column_names,
-    pk_column_name: pk_column,
-    expanded_tables,
-  }
-  .render()
-  .map_err(|err| RecordError::Internal(err.into()))?;
-
-  let Some(mut row) = conn.read_query_row(sql, [pk_value]).await? else {
-    return Ok(None);
-  };
-
-  let mut foreign_rows: Vec<(&TableMetadata, trailbase_sqlite::Row)> =
-    Vec::with_capacity(expanded_tables.len());
-
-  let mut curr = row.split_off(column_names.len());
-  for expanded_table in expanded_tables {
-    let next = curr.split_off(expanded_table.num_columns);
-    foreign_rows.push((expanded_table.metadata, curr));
-    curr = next;
-  }
-
-  return Ok(Some(ExpandedSelectQueryResult {
-    root: row,
-    foreign_rows,
-  }));
 }
 
 pub(crate) async fn run_get_file_query(
