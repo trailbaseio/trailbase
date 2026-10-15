@@ -19,6 +19,7 @@ pub(crate) async fn run_select_query(
     table_name,
     column_names,
     pk_column_name: pk_column,
+    expanded_tables: &[],
   }
   .render()
   .map_err(|err| RecordError::Internal(err.into()))?;
@@ -39,7 +40,7 @@ pub(crate) async fn run_expanded_select_query<'a>(
   pk_value: Value,
   expanded_tables: &[ExpandedTable<'a>],
 ) -> Result<Option<ExpandedSelectQueryResult<'a>>, RecordError> {
-  let sql = ReadRecordExpandedQueryTemplate {
+  let sql = ReadRecordQueryTemplate {
     table_name,
     column_names,
     pk_column_name: pk_column,
@@ -142,18 +143,10 @@ pub(crate) async fn run_get_files_query(
 }
 
 #[derive(Template)]
-#[template(escape = "none", path = "read_record_query_expanded.sql")]
-struct ReadRecordExpandedQueryTemplate<'a> {
-  table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
-  pk_column_name: &'a str,
-  expanded_tables: &'a [ExpandedTable<'a>],
-}
-
-#[derive(Template)]
 #[template(escape = "none", path = "read_record_query.sql")]
 struct ReadRecordQueryTemplate<'a> {
   table_name: &'a QualifiedNameEscaped,
   column_names: &'a [&'a str],
   pk_column_name: &'a str,
+  expanded_tables: &'a [ExpandedTable<'a>],
 }
