@@ -6,7 +6,7 @@ use crate::traits::SyncConnection as SyncConnectionTrait;
 use crate::r#type::ConnectionType;
 
 pub struct SyncConnection<'a> {
-  pub(crate) conn: &'a mut rusqlite::Connection,
+  pub(crate) conn: &'a rusqlite::Connection,
 }
 
 impl<'a> SyncConnectionTrait for SyncConnection<'a> {
@@ -55,7 +55,7 @@ impl SyncConnectionTrait for rusqlite::Connection {
 }
 
 #[inline]
-pub(super) fn query_row(
+pub(crate) fn query_row(
   conn: &rusqlite::Connection,
   sql: impl AsRef<str>,
   params: impl Params,
@@ -70,7 +70,7 @@ pub(super) fn query_row(
 }
 
 #[inline]
-pub(super) fn query_rows(
+pub(crate) fn query_rows(
   conn: &rusqlite::Connection,
   sql: impl AsRef<str>,
   params: impl Params,
@@ -81,7 +81,7 @@ pub(super) fn query_rows(
 }
 
 #[inline]
-pub(super) fn execute(
+pub(crate) fn execute(
   conn: &rusqlite::Connection,
   sql: impl AsRef<str>,
   params: impl Params,
@@ -96,7 +96,7 @@ pub(super) fn execute(
 }
 
 #[inline]
-pub(super) fn execute_batch(
+pub(crate) fn execute_batch(
   conn: &rusqlite::Connection,
   sql: impl AsRef<str>,
 ) -> Result<(), Error> {

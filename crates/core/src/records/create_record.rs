@@ -4,13 +4,16 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
+use trailbase_sqlite::unpack_other_error;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, LazyParams};
-use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
+use crate::records::params::{
+  FileMetadataContents, InsertParams, JsonRow, LazyParams, ToParamsEnum,
+};
+use crate::records::write_queries::{WriteQuery, run_queries};
 use crate::records::{Permission, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -116,35 +119,64 @@ pub async fn create_record_handler(
     1 => {
       let (record, files) = records_and_files.swap_remove(0);
 
-      // QUESTION: Could we pull ACL check and insert operation into the same `conn.call_writer`
-      // interaction to minimize slushing?
-      let mut lazy_params = build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
-      api
-        .check_record_level_access(
-          Permission::Create,
-          None,
-          Some(&mut lazy_params),
-          user.as_ref(),
-        )
-        .await?;
+      let connection_type = conn.connection_type();
+      let api = api.clone();
 
-      let (params, files) = lazy_params
+      // TODO: Pull table-level access check ahead of yield. If we do this everywhere, we can get
+      // rid of LazyParams entirely.
+      // FIXME: file writes. We used to write files before updating the DB to make sure referenced
+      // files are valid. Can we preserve this somehow? It's probably enough to write before
+      // returning the record id.
+      // Maybe the bigger question what is easier to clean-up: a file write after a DB failure, or a
+      // DB write after a file write failure.
+      let (params, _files) = build_lazy_insert_params(&state, &api, user.as_ref(), record, files)
         .consume()
-        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+        .map_err(|_err| {
+          trailbase_sqlite::Error::Other(RecordError::BadRequest("Invalid Parameters").into())
+        })?;
 
-      let record_id = run_insert_or_replace_query(
-        conn,
-        state.objectstore(),
-        table_name,
-        api.columns(),
-        conflict_resolution_strategy,
-        &pk_meta.column.name,
-        params,
-        files,
-      )
-      .await?;
+      let write_result = conn
+        .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
+          api
+            .sync_eager_check_record_level_access(
+              &mut conn,
+              Permission::Create,
+              None,
+              params.params_enum(),
+              user.as_ref(),
+            )
+            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
-      vec![extract_record_id(record_id)?]
+          // TODO: We could push the template rendering off the executor. And just pass:
+          //   struct { ops: Vec<(Acl, Op)> }
+          let query = WriteQuery::new_insert_or_replace(
+            connection_type,
+            api.table_name(),
+            api.columns(),
+            &api.record_pk_column().column.name,
+            conflict_resolution_strategy,
+            params,
+          )
+          .map_err(|err| {
+            trailbase_sqlite::Error::Other(RecordError::Internal(err.into()).into())
+          })?;
+
+          let write_result = query.apply_sync(&mut conn)?;
+
+          return Ok(write_result);
+        })
+        .await
+        .map_err(|err| {
+          // Unpack potentially packed RecordError.
+          return match unpack_other_error::<RecordError>(err) {
+            Ok(schema_lookup_err) => schema_lookup_err,
+            Err(sql_err) => sql_err.into(),
+          };
+        })?;
+
+      vec![extract_record_id(write_result.pk_value.unwrap_or_else(
+        || trailbase_sqlite::Value::Integer(write_result.rowid),
+      ))?]
     }
     _ => {
       let mut queries: Vec<(

@@ -1,16 +1,19 @@
+use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
+use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
 use trailbase_schema::json_schema::FileUploads;
+use trailbase_sqlite::{SyncConnectionTrait, unpack_other_error};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::RawJson;
-use crate::records::expand::build_expand_tables_params;
+use crate::records::expand::{ExpandedTable, build_expand_tables_params};
 use crate::records::files::read_file_into_response;
-use crate::records::read_queries::{run_get_file_query, run_get_files_query, run_select_query};
+use crate::records::read_queries::{run_get_file_query, run_get_files_query};
 use crate::records::{Permission, RecordError};
 
 #[derive(Debug, Default, Deserialize)]
@@ -42,19 +45,6 @@ pub async fn read_record_handler(
 
   let record_id = api.primary_key_to_value(record)?;
 
-  api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), None, user.as_ref())
-    .await?;
-
-  let pk_meta = api.record_pk_column();
-  let column_names = || {
-    api
-      .columns()
-      .iter()
-      .map(|meta| meta.column.name.as_str())
-      .collect::<Vec<_>>()
-  };
-
   let config_expand = api.expand();
   let query_expand = query.expand.as_ref().map(|expand| {
     expand
@@ -77,18 +67,52 @@ pub async fn read_record_handler(
     })
     .transpose()?;
 
-  let Some(mut row) = run_select_query(
-    api.conn(),
-    api.table_name(),
-    &column_names(),
-    &pk_meta.column.name,
-    record_id,
-    expanded_tables.as_deref().unwrap_or_default(),
-  )
-  .await?
-  else {
-    return Err(RecordError::RecordNotFound);
-  };
+  let sql = ReadRecordQueryTemplate {
+    table_name: api.table_name(),
+    column_names: &api
+      .columns()
+      .iter()
+      .map(|meta| meta.column.name.as_str())
+      .collect::<Vec<_>>(),
+    pk_column_name: &api.record_pk_column().column.name,
+    expanded_tables: expanded_tables.as_deref().unwrap_or_default(),
+  }
+  .render()
+  .map_err(|err| RecordError::Internal(err.into()))?;
+
+  let mut row = api
+    .conn()
+    .call_reader({
+      let api = api.clone();
+
+      move |mut conn| -> Result<_, trailbase_sqlite::Error> {
+        api
+          .sync_eager_check_record_level_access(
+            &mut conn,
+            Permission::Read,
+            Some(&record_id),
+            None,
+            user.as_ref(),
+          )
+          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+
+        let row = conn
+          .query_row(&sql, (record_id,))?
+          .ok_or(trailbase_sqlite::Error::Other(
+            RecordError::RecordNotFound.into(),
+          ))?;
+
+        return Ok(row);
+      }
+    })
+    .await
+    .map_err(|err| {
+      // Unpack potentially packed RecordError.
+      return match unpack_other_error::<RecordError>(err) {
+        Ok(schema_lookup_err) => schema_lookup_err,
+        Err(sql_err) => sql_err.into(),
+      };
+    })?;
 
   let json_obj = if let Some(expanded_tables) = expanded_tables
     && !expanded_tables.is_empty()
@@ -262,6 +286,15 @@ pub fn test_only_validate_api_json_schema(
   return Err(RecordError::Internal(
     format!("Json value '{value}' does not match '{json_schema}: {errors:?}' ").into(),
   ));
+}
+
+#[derive(Template)]
+#[template(escape = "none", path = "read_record_query.sql")]
+struct ReadRecordQueryTemplate<'a> {
+  table_name: &'a QualifiedNameEscaped,
+  column_names: &'a [&'a str],
+  pk_column_name: &'a str,
+  expanded_tables: &'a [ExpandedTable<'a>],
 }
 
 #[cfg(test)]
