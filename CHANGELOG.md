@@ -1,3 +1,9 @@
+## v0.34.7
+
+- Update Wasmtime to address security advisories.
+- Internal: normalize flows between RecordApi read, read with FK expansion and list operations.
+- Update dependencies.
+
 ## v0.34.6
 
 - Use `TextArea` inputs for `TEXT` columns in the admin UI row editor to allow for whitespaces. @jessepeterson 🙏
