@@ -62,14 +62,11 @@ impl trailbase_sqlite::Params for ArcInsertParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    #[cfg(test)]
-    assert_eq!(1, Arc::strong_count(&self.0));
-
     for NamedParam {
       placeholder, value, ..
     } in &self.0.params
     {
-      if let Some(idx) = stmt.parameter_index(&placeholder)? {
+      if let Some(idx) = stmt.parameter_index(placeholder)? {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
@@ -186,14 +183,11 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    #[cfg(test)]
-    assert_eq!(1, Arc::strong_count(&self.0));
-
     for NamedParam {
       placeholder, value, ..
     } in &self.0.params
     {
-      if let Some(idx) = stmt.parameter_index(&placeholder)? {
+      if let Some(idx) = stmt.parameter_index(placeholder)? {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
@@ -386,82 +380,6 @@ impl UpdateParams {
 pub enum Params {
   Insert(Arc<InsertParams>),
   Update(Arc<UpdateParams>),
-}
-
-/// A lazy representation of SQL query parameters derived from the request json to share between
-/// handler and the policy engine.
-///
-/// If the request gets rejected by the policy we want to avoid parsing the request JSON and if the
-/// engine requires a parse we don't want to re-parse in the handler.
-pub enum LazyParams<'a, T: 'static> {
-  Builder(
-    Option<Box<dyn (FnOnce() -> Result<(T, FileMetadataContents), ParamsError>) + Send + 'a>>,
-  ),
-  Params(Result<(Arc<T>, FileMetadataContents), ParamsError>),
-}
-
-impl<'a, T: 'static> LazyParams<'a, T> {
-  pub fn params(&mut self) -> Result<&'_ (Arc<T>, FileMetadataContents), &ParamsError> {
-    return match self {
-      LazyParams::Params(result) => result.as_ref(),
-      LazyParams::Builder(builder) => {
-        let Some(builder) = std::mem::take(builder) else {
-          unreachable!("empty builder");
-        };
-
-        *self = Self::Params(builder().map(|(p, f)| (Arc::new(p), f)));
-        let LazyParams::Params(result) = self else {
-          unreachable!("just assigned");
-        };
-        result.as_ref()
-      }
-    };
-  }
-
-  pub fn consume(self) -> Result<(Arc<T>, FileMetadataContents), ParamsError> {
-    return match self {
-      LazyParams::Params(result) => result,
-      LazyParams::Builder(builder) => match builder {
-        Some(f) => f().map(|(p, f)| (Arc::new(p), f)),
-        None => unreachable!("missing builder"),
-      },
-    };
-  }
-}
-
-impl<'a> LazyParams<'a, InsertParams> {
-  pub fn for_insert<S: ColumnAccessor + Sync>(
-    accessor: &'a S,
-    json_schema_registry: Arc<JsonSchemaRegistry>,
-    json_row: JsonRow,
-    multipart_files: Option<Vec<FileUploadInput>>,
-  ) -> Self {
-    return LazyParams::Builder(Some(Box::new(move || {
-      return InsertParams::new(accessor, &json_schema_registry, json_row, multipart_files);
-    })));
-  }
-}
-
-impl<'a> LazyParams<'a, UpdateParams> {
-  pub fn for_update<S: ColumnAccessor + Sync>(
-    accessor: &'a S,
-    json_schema_registry: Arc<JsonSchemaRegistry>,
-    json_row: JsonRow,
-    multipart_files: Option<Vec<FileUploadInput>>,
-    primary_key_column: String,
-    primary_key_value: Value,
-  ) -> Self {
-    return LazyParams::Builder(Some(Box::new(move || {
-      return UpdateParams::new(
-        accessor,
-        &json_schema_registry,
-        json_row,
-        multipart_files,
-        primary_key_column,
-        primary_key_value,
-      );
-    })));
-  }
 }
 
 fn extract_files_from_multipart<S: ColumnAccessor>(

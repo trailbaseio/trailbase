@@ -156,7 +156,7 @@ impl Connection {
       .exec
       .call_writer(move |conn: &mut rusqlite::Connection| -> Result<R, E> {
         let tx = conn.transaction().map_err(Error::Rusqlite)?;
-        return Ok(function(Transaction { tx })?);
+        return function(Transaction { tx });
       })
       .await;
   }

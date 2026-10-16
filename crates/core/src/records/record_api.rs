@@ -1,5 +1,6 @@
 use askama::Template;
 use compact_str::CompactString;
+use std::assert_matches;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -13,7 +14,7 @@ use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, V
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::constants::USER_TABLE;
-use crate::records::params::{LazyParams, Params, ToParamsEnum};
+use crate::records::params::{Params, ToParamsEnum};
 use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
@@ -150,12 +151,8 @@ struct RequestParams {
 impl RequestParams {
   fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params) -> Self {
     let present_fields = match &request_params {
-      Params::Insert(p) => {
-        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
-      }
-      Params::Update(p) => {
-        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
-      }
+      Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
+      Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
     };
 
     return Self {
@@ -173,31 +170,6 @@ struct RecordAclParams {
 }
 
 impl RecordAclParams {
-  fn new<P>(
-    p: Permission,
-    user: Option<&User>,
-    record_id: Option<Value>,
-    all_column_names: &Arc<Vec<CompactString>>,
-    request_params: Option<&mut LazyParams<'_, P>>,
-  ) -> Result<Self, RecordError>
-  where
-    Arc<P>: ToParamsEnum,
-  {
-    return Self::eager(
-      p,
-      user,
-      record_id,
-      all_column_names,
-      request_params
-        .map(|p| {
-          p.params()
-            .map_err(|_| RecordError::BadRequest("invalid params"))
-        })
-        .transpose()?
-        .and_then(|(p, _files)| p.params_enum()),
-    );
-  }
-
   fn eager(
     p: Permission,
     user: Option<&User>,
@@ -225,41 +197,37 @@ impl trailbase_sqlite::Params for RecordAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    match self.params {
-      Some(params) => {
-        if let Some(idx) = stmt.parameter_index(":__fields")? {
-          stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
-        }
+    if let Some(params) = self.params {
+      if let Some(idx) = stmt.parameter_index(":__fields")? {
+        stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
+      }
 
-        let request_params = match &params.request_params {
-          Params::Insert(p) => &p.params,
-          Params::Update(p) => &p.params,
-        };
+      let request_params = match &params.request_params {
+        Params::Insert(p) => &p.params,
+        Params::Update(p) => &p.params,
+      };
 
-        // TODO: We could first sort the `request_params` by column index and then move i, j indexes
-        // in lockstep to avoid repeat scans and move more work off the executor.
-        for (column_index, column_name) in params.all_column_names.iter().enumerate() {
-          if let Some(idx) = stmt.parameter_index(&column_name)? {
-            stmt.bind_parameter(
-              idx,
-              request_params
-                .iter()
-                .find_map(|p| {
-                  // NOTE: Consider matching here by column_name and removing the index.
-                  if p.column_index == column_index {
-                    debug_assert_eq!(p.placeholder, *column_name);
-                    Some(ToSqlProxy::Borrowed((&p.value).into()))
-                  } else {
-                    None
-                  }
-                })
-                .unwrap_or(ToSqlProxy::Borrowed(ValueRef::Null))
-                .into(),
-            )?;
-          }
+      // TODO: We could first sort the `request_params` by column index and then move i, j indexes
+      // in lockstep to avoid repeat scans and move more work off the executor.
+      for (column_index, column_name) in params.all_column_names.iter().enumerate() {
+        if let Some(idx) = stmt.parameter_index(column_name)? {
+          stmt.bind_parameter(
+            idx,
+            request_params
+              .iter()
+              .find_map(|p| {
+                // NOTE: Consider matching here by column_name and removing the index.
+                if p.column_index == column_index {
+                  debug_assert_eq!(p.placeholder, *column_name);
+                  Some(ToSqlProxy::Borrowed((&p.value).into()))
+                } else {
+                  None
+                }
+              })
+              .unwrap_or(ToSqlProxy::Borrowed(ValueRef::Null)),
+          )?;
         }
       }
-      _ => {}
     }
 
     if let Some(idx) = stmt.parameter_index(":__user_id")? {
@@ -641,16 +609,19 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
+  ///
+  /// QUESTION: should we deprecate this function?
   pub async fn check_record_level_access<P>(
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
   ) -> Result<(), RecordError>
   where
     Arc<P>: ToParamsEnum,
   {
+    assert_matches!(p, Permission::Schema | Permission::Read);
+
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -658,59 +629,19 @@ impl RecordApi {
       return Ok(());
     };
 
-    if self
-      .check_record_level_access_impl(
-        access_query,
-        RecordAclParams::new(
-          p,
-          user,
-          record_id.cloned(),
-          &self.state.schema.column_names,
-          request_params,
-        )?,
-      )
-      .await
-    {
-      return Ok(());
-    }
-
-    return Err(RecordError::Forbidden);
-  }
-
-  pub fn sync_check_record_level_access<T: SyncConnectionTrait, P>(
-    &self,
-    conn: &mut T,
-    p: Permission,
-    record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_, P>>,
-    user: Option<&User>,
-  ) -> Result<(), RecordError>
-  where
-    Arc<P>: ToParamsEnum,
-  {
-    // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(p, user)?;
-
-    let Some(access_query) = self.state.cached_access_query(p) else {
-      return Ok(());
-    };
-
-    let params = RecordAclParams::new(
+    let params = RecordAclParams::eager(
       p,
       user,
       record_id.cloned(),
       &self.state.schema.column_names,
-      request_params,
+      None,
     )?;
 
-    return match conn
-      .query_row(access_query, params)
-      .ok()
-      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
-    {
-      Some(allowed) if allowed => Ok(()),
-      _ => Err(RecordError::Forbidden),
-    };
+    return self
+      .state
+      .conn
+      .call_reader(|mut conn| Self::check_record_level_access_impl(&mut conn, access_query, params))
+      .await;
   }
 
   pub fn sync_eager_check_record_level_access<T: SyncConnectionTrait>(
@@ -736,39 +667,36 @@ impl RecordApi {
       request_params,
     )?;
 
-    return match conn
-      .query_row(access_query, params)
-      .ok()
-      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
-    {
-      Some(allowed) if allowed => Ok(()),
-      _ => Err(RecordError::Forbidden),
-    };
+    return Self::check_record_level_access_impl(conn, access_query, params);
   }
 
   #[inline]
-  async fn check_record_level_access_impl(
-    &self,
-    query: impl AsRef<str> + Send + 'static,
+  fn check_record_level_access_impl(
+    conn: &mut impl SyncConnectionTrait,
+    access_query: impl AsRef<str> + Send + 'static,
     params: impl trailbase_sqlite::Params + Send + 'static,
-  ) -> bool {
+  ) -> Result<(), RecordError> {
     #[cfg(debug_assertions)]
-    let q = query.as_ref().to_string();
+    let q = access_query.as_ref().to_string();
 
     #[allow(unreachable_code)]
-    return match self.state.conn.read_query_row_get(query, params, 0).await {
-      Ok(Some(allowed)) => allowed,
-      Ok(None) => {
-        #[cfg(debug_assertions)]
-        panic!("RLA query '{q}' returned no result");
-
-        false
+    return match conn.query_row(access_query, params).and_then(|row| {
+      row
+        .ok_or(trailbase_sqlite::Error::QueryReturnedNoRows)
+        .and_then(|r| Ok(r.get::<bool>(0)?))
+    }) {
+      Ok(allowed) => {
+        if allowed {
+          Ok(())
+        } else {
+          Err(RecordError::Forbidden)
+        }
       }
       Err(_err) => {
         #[cfg(debug_assertions)]
         panic!("RLA query '{q}' failed: {_err}");
 
-        false
+        Err(RecordError::Forbidden)
       }
     };
   }
@@ -792,17 +720,15 @@ impl RecordApi {
       return Ok(());
     };
 
-    if self
-      .check_record_level_access_impl(
-        subscription_read_access_query,
-        SubscriptionAclParams::new(record, user),
-      )
-      .await
-    {
-      return Ok(());
-    }
+    let params = SubscriptionAclParams::new(record, user);
 
-    return Err(RecordError::Forbidden);
+    return self
+      .state
+      .conn
+      .call_reader(|mut conn| {
+        Self::check_record_level_access_impl(&mut conn, subscription_read_access_query, params)
+      })
+      .await;
   }
 
   #[inline]

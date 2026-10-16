@@ -6,7 +6,8 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::records::write_queries::run_delete_query;
+use crate::records::files::delete_files_marked_for_deletion;
+use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
 
 /// Delete record.
@@ -32,21 +33,48 @@ pub async fn delete_record_handler(
 
   let record_id = api.primary_key_to_value(record)?;
 
-  api
-    .check_record_level_access::<()>(Permission::Delete, Some(&record_id), None, user.as_ref())
+  let conn = api.conn();
+  let connection_type = conn.connection_type();
+
+  let write_result = conn
+    .call_writer({
+      let api = api.clone();
+
+      move |mut conn| -> Result<_, RecordError> {
+        api.sync_eager_check_record_level_access(
+          &mut conn,
+          Permission::Delete,
+          Some(&record_id),
+          None,
+          user.as_ref(),
+        )?;
+
+        let query = WriteQuery::new_delete(
+          connection_type,
+          api.table_name(),
+          &api.record_pk_column().column.name,
+          record_id,
+        )?;
+
+        return Ok(query.apply_sync(&mut conn)?);
+      }
+    })
     .await?;
 
-  let pk_meta = api.record_pk_column();
-
-  run_delete_query(
-    api.conn(),
-    state.objectstore(),
-    api.table_name(),
-    &pk_meta.column.name,
-    record_id,
-    api.has_file_columns(),
-  )
-  .await?;
+  if api.has_file_columns() {
+    tokio::spawn(async move {
+      if let Err(err) = delete_files_marked_for_deletion(
+        api.conn(),
+        state.objectstore(),
+        api.table_name(),
+        &[write_result.rowid],
+      )
+      .await
+      {
+        log::error!("Failed to delete files: {err}");
+      }
+    });
+  }
 
   return Ok((StatusCode::OK, "deleted").into_response());
 }

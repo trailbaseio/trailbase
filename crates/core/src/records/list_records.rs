@@ -93,8 +93,8 @@ pub async fn list_records_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  // WARN: We do different access checking here because the access rule is used as a filter query
-  // on the table, i.e. no access -> empty results.
+  // NOTE: We only check table-level access here. The per-record filtering is part of the query to
+  // hide inaccessible records..
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
   let conn = api.conn();

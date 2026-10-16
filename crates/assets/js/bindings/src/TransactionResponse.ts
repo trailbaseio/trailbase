@@ -3,6 +3,6 @@ import type { TransactionResult } from "./TransactionResult";
 
 export type TransactionResponse = { 
 /**
- * A 1:1 mapping of opreations to results.
+ * A 1:1 mapping of operations to results.
  */
 results: Array<TransactionResult>, };

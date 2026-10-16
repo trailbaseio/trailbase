@@ -1,6 +1,7 @@
 use axum::extract::{Json, State};
-use base64::prelude::*;
+use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use ts_rs::TS;
@@ -9,11 +10,12 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
-use crate::records::params::LazyParams;
+use crate::records::create_record::{build_insert_params, extract_record_id};
+use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
+use crate::records::params::{ToParamsEnum, UpdateParams};
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
-use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -48,8 +50,22 @@ pub enum TransactionResult {
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct TransactionResponse {
-  /// A 1:1 mapping of opreations to results.
+  /// A 1:1 mapping of operations to results.
   pub results: Vec<TransactionResult>,
+}
+
+pub(crate) struct Op {
+  pub api: RecordApi,
+  pub query: WriteQuery,
+  pub file_handling: Option<(AsyncFileManager, AsyncFileCommitter)>,
+}
+
+pub(crate) enum OpResult {
+  Ok {
+    id: trailbase_sqlite::Value,
+    file_manager: Option<AsyncFileManager>,
+  },
+  IgnoredConflict,
 }
 
 /// Execute a batch of transactions.
@@ -80,29 +96,120 @@ pub async fn record_transactions_handler(
     _ => {}
   }
 
-  let Some(first_api) = request.operations.first().and_then(|op| {
-    let api_name = match op {
-      Operation::Create { api_name, .. } => api_name,
-      Operation::Update { api_name, .. } => api_name,
-      Operation::Delete { api_name, .. } => api_name,
-    };
+  let mut expected_db_name: Option<String> = None;
+  let ops = request
+    .operations
+    .into_iter()
+    .map(|op| -> Result<Op, RecordError> {
+      return match op {
+        Operation::Create { api_name, value } => {
+          let api = get_api(&state, &api_name)?;
+          let db_name = get_db_name(api.qualified_name());
+          if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
+            return Err(RecordError::BadRequest("DB mismatch"));
+          }
 
-    return get_api(&state, api_name).ok();
-  }) else {
-    return Err(RecordError::BadRequest("empty ops?"));
-  };
+          let (params, files) =
+            build_insert_params(&state, &api, user.as_ref(), extract_record(value)?, None)
+              .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-  let conn = first_api.conn().clone();
-  let results = if request.transaction.unwrap_or(false) {
+          let params = Arc::new(params);
+
+          let query = WriteQuery::new_insert_or_replace(
+            api.conn().connection_type(),
+            api.table_name(),
+            api.columns(),
+            &api.record_pk_column().column.name,
+            api
+              .insert_conflict_resolution_strategy()
+              .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined),
+            params.clone(),
+          )?;
+
+          Ok(Op {
+            api,
+            query,
+            file_handling: if files.is_empty() {
+              None
+            } else {
+              Some(AsyncFileManager::new(state.objectstore().clone(), files))
+            },
+          })
+        }
+        Operation::Update {
+          api_name,
+          record_id,
+          value,
+        } => {
+          let api = get_api(&state, &api_name)?;
+          let db_name = get_db_name(api.qualified_name());
+          if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
+            return Err(RecordError::BadRequest("DB mismatch"));
+          }
+
+          let (params, files) = UpdateParams::new(
+            &api,
+            &state.json_schema_registry().load(),
+            extract_record(value)?,
+            None,
+            api.record_pk_column().column.name.clone(),
+            api.primary_key_to_value(record_id)?,
+          )
+          .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
+          let params = Arc::new(params);
+
+          let query = WriteQuery::new_update(
+            api.conn().connection_type(),
+            api.table_name(),
+            params.clone(),
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+          Ok(Op {
+            api,
+            query,
+            file_handling: if files.is_empty() {
+              None
+            } else {
+              Some(AsyncFileManager::new(state.objectstore().clone(), files))
+            },
+          })
+        }
+        Operation::Delete {
+          api_name,
+          record_id,
+        } => {
+          let api = get_api(&state, &api_name)?;
+          let db_name = get_db_name(api.qualified_name());
+          if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
+            return Err(RecordError::BadRequest("DB mismatch"));
+          }
+
+          let query = WriteQuery::new_delete(
+            api.conn().connection_type(),
+            api.table_name(),
+            &api.record_pk_column().column.name,
+            api.primary_key_to_value(record_id)?,
+          )
+          .map_err(|err| RecordError::Internal(err.into()))?;
+
+          Ok(Op {
+            api,
+            query,
+            file_handling: None,
+          })
+        }
+      };
+    })
+    .collect::<Result<Vec<_>, _>>()?;
+
+  let conn = ops[0].api.conn().clone();
+
+  let op_results = if request.transaction.unwrap_or(false) {
     conn
       .transaction(move |mut tx| -> Result<_, RecordError> {
-        let results = apply_ops(
-          &state,
-          &mut tx,
-          user.as_ref(),
-          &first_api,
-          request.operations,
-        )?;
+        let results = apply_ops(&mut tx, user.as_ref(), ops)?;
 
         tx.commit()?;
 
@@ -112,30 +219,38 @@ pub async fn record_transactions_handler(
   } else {
     conn
       .call_writer(move |mut conn| -> Result<_, RecordError> {
-        let results = apply_ops(
-          &state,
-          &mut conn,
-          user.as_ref(),
-          &first_api,
-          request.operations,
-        )?;
-
-        return Ok(results);
+        return apply_ops(&mut conn, user.as_ref(), ops);
       })
       .await?
   };
 
-  return Ok(Json(TransactionResponse { results }));
-}
+  // TODO: We currently do not trigger file deletions eagerly and rely on periodic cleanup. We may
+  // want to revisit.
+  let results = join_all(op_results.into_iter().map(
+    |op_result| -> BoxFuture<'static, TransactionResult> {
+      return match op_result {
+        OpResult::Ok { id, file_manager } => {
+          if let Some(mut file_manager) = file_manager {
+            return Box::pin(async move {
+              file_manager.release().await;
+              return TransactionResult::Id(extract_record_id(id).unwrap_or_default());
+            });
+          }
 
-#[inline]
-fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, RecordError> {
-  return match value {
-    trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
-    trailbase_sqlite::Value::Text(text) => Ok(text),
-    trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
-    _ => Err(RecordError::BadRequest("Unexpected data type")),
-  };
+          std::future::ready(TransactionResult::Id(
+            extract_record_id(id).unwrap_or_default(),
+          ))
+          .boxed()
+        }
+        OpResult::IgnoredConflict => {
+          std::future::ready(TransactionResult::Error("INSERT CONFLICT".into())).boxed()
+        }
+      };
+    },
+  ))
+  .await;
+
+  return Ok(Json(TransactionResponse { results }));
 }
 
 #[inline]
@@ -166,48 +281,27 @@ fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
 }
 
 /// Applies operations and returns a list of ids.
-fn apply_ops<T: SyncConnection>(
-  state: &AppState,
-  conn: &mut T,
+pub(crate) fn apply_ops(
+  conn: &mut impl SyncConnection,
   user: Option<&User>,
-  api: &RecordApi,
-  ops: Vec<Operation>,
-) -> Result<Vec<TransactionResult>, RecordError> {
-  let expected_db_name = get_db_name(api.qualified_name());
-
-  let results: Vec<TransactionResult> = ops
+  ops: Vec<Op>,
+) -> Result<Vec<OpResult>, RecordError> {
+  return ops
     .into_iter()
-    .map(|op| -> Result<TransactionResult, RecordError> {
-      return match op {
-        Operation::Create { api_name, value } => {
-          let api = get_api(state, &api_name)?;
-          if get_db_name(api.qualified_name()) != expected_db_name {
-            return Err(RecordError::BadRequest("DB mismatch"));
-          }
+    .map(|op| -> Result<OpResult, RecordError> {
+      let Op {
+        api,
+        query,
+        file_handling,
+      } = op;
 
-          let mut record = extract_record(value)?;
-
-          if api.insert_autofill_missing_user_id_columns()
-            && let Some(user) = user
-          {
-            for column_index in api.user_id_columns() {
-              let col_name = &api.columns()[*column_index].column.name;
-              if !record.contains_key(col_name) {
-                record.insert(
-                  col_name.to_owned(),
-                  serde_json::Value::String(uuid_to_b64(&user.uuid)),
-                );
-              }
-            }
-          }
-
-          let mut lazy_params =
-            LazyParams::for_insert(&api, state.json_schema_registry().load_full(), record, None);
-          api.sync_check_record_level_access(
+      return match &query {
+        WriteQuery::Insert { params, .. } => {
+          api.sync_eager_check_record_level_access(
             conn,
             Permission::Create,
             None,
-            Some(&mut lazy_params),
+            params.params_enum(),
             user,
           )?;
 
@@ -215,130 +309,78 @@ fn apply_ops<T: SyncConnection>(
             .insert_conflict_resolution_strategy()
             .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
 
-          let (params, files) = lazy_params
-            .consume()
-            .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?;
-
-          let query = WriteQuery::new_insert_or_replace(
-            conn.connection_type(),
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            conflict_resolution_strategy,
-            params,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
-          if !files.is_empty() {
-            return Err(RecordError::BadRequest(
-              "transactions do not (yet) implement file handling",
-            ));
-          }
+          let file_manager = if let Some((file_manager, file_committer)) = file_handling {
+            file_committer.start_async_write();
+            Some(file_manager)
+          } else {
+            None
+          };
 
           match query.apply_sync(conn) {
-            Ok(result) => Ok(TransactionResult::Id(extract_record_id(
-              result
+            Ok(result) => Ok(OpResult::Ok {
+              id: result
                 .pk_value
-                .ok_or_else(|| RecordError::Internal("insert missing id".into()))?,
-            )?)),
-            // Skip over errors for `Ignore` conflict strategy.
+                .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
+              file_manager,
+            }),
+            // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
             Err(err)
               if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Ignore
                 && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
             {
-              Ok(TransactionResult::Error(err.to_string()))
+              Ok(OpResult::IgnoredConflict)
             }
             Err(err) => Err(RecordError::Internal(err.into())),
           }
         }
-        Operation::Update {
-          api_name,
-          record_id: record_id_str,
-          value,
-        } => {
-          let api = get_api(state, &api_name)?;
-          if get_db_name(api.qualified_name()) != expected_db_name {
-            return Err(RecordError::BadRequest("DB mismatch"));
-          }
-
-          let record = extract_record(value)?;
-          let record_id = api.primary_key_to_value(record_id_str.clone())?;
-          let pk_meta = api.record_pk_column();
-
-          let mut lazy_params = LazyParams::for_update(
-            &api,
-            state.json_schema_registry().load_full(),
-            record,
-            None,
-            pk_meta.column.name.clone(),
-            record_id.clone(),
-          );
-
-          api.sync_check_record_level_access(
+        WriteQuery::Update { params, .. } => {
+          api.sync_eager_check_record_level_access(
             conn,
             Permission::Update,
-            Some(&record_id),
-            Some(&mut lazy_params),
+            Some(&params.pk_column_value),
+            params.params_enum(),
             user,
           )?;
 
-          let (params, files) = lazy_params
-            .consume()
-            .map_err(|_| RecordError::BadRequest("Invalid Parameters"))?;
+          let file_manager = if let Some((file_manager, file_committer)) = file_handling {
+            file_committer.start_async_write();
+            Some(file_manager)
+          } else {
+            None
+          };
 
-          let query = WriteQuery::new_update(conn.connection_type(), api.table_name(), params)
-            .map_err(|err| RecordError::Internal(err.into()))?;
-
-          if !files.is_empty() {
-            return Err(RecordError::BadRequest(
-              "transactions do not (yet) implement file handling",
-            ));
-          }
-
-          let _ = query
+          let id = params.pk_column_value.clone();
+          let _result = query
             .apply_sync(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(TransactionResult::Id(record_id_str))
+          Ok(OpResult::Ok { id, file_manager })
         }
-        Operation::Delete {
-          api_name,
-          record_id: record_id_str,
+        WriteQuery::Delete {
+          pk_value: record_id,
+          ..
         } => {
-          let api = get_api(state, &api_name)?;
-          if get_db_name(api.qualified_name()) != expected_db_name {
-            return Err(RecordError::BadRequest("DB mismatch"));
-          }
-
-          let record_id = api.primary_key_to_value(record_id_str.clone())?;
-
-          api.sync_check_record_level_access::<_, ()>(
+          api.sync_eager_check_record_level_access(
             conn,
             Permission::Delete,
-            Some(&record_id),
+            Some(record_id),
             None,
             user,
           )?;
 
-          let query = WriteQuery::new_delete(
-            conn.connection_type(),
-            api.table_name(),
-            &api.record_pk_column().column.name,
-            record_id.clone(),
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
-          let _ = query
+          let id = record_id.clone();
+          let _result = query
             .apply_sync(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(TransactionResult::Id(record_id_str))
+          Ok(OpResult::Ok {
+            id,
+            file_manager: None,
+          })
         }
       };
     })
-    .collect::<Result<Vec<_>, _>>()?;
-
-  return Ok(results);
+    .collect();
 }
 
 #[cfg(test)]
