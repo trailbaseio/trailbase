@@ -57,9 +57,9 @@ impl Executor {
   pub fn new<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opt: Options,
-  ) -> Result<Self, Error>
+  ) -> Result<Self, E>
   where
-    Error: From<E>,
+    E: From<Error>,
   {
     let Options {
       busy_timeout,
@@ -67,13 +67,17 @@ impl Executor {
       read_only,
     } = opt;
 
-    let new_conn = |read_only: bool| -> Result<rusqlite::Connection, Error> {
+    let new_conn = |read_only: bool| -> Result<rusqlite::Connection, E> {
       let conn = builder()?;
       if read_only {
-        conn.pragma_update(None, "query_only", true)?;
+        conn
+          .pragma_update(None, "query_only", true)
+          .map_err(|err| Error::Rusqlite(err))?;
       }
       if let Some(busy_timeout) = busy_timeout {
-        conn.busy_timeout(busy_timeout)?;
+        conn
+          .busy_timeout(busy_timeout)
+          .map_err(|err| Error::Rusqlite(err))?;
       }
       return Ok(conn);
     };
@@ -209,12 +213,11 @@ impl Executor {
   }
 
   #[inline]
-  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(&mut rusqlite::Connection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, E>>();
 
@@ -229,14 +232,13 @@ impl Executor {
   }
 
   #[inline]
-  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(&rusqlite::Connection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
-    let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, Error>>();
+    let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, E>>();
 
     self
       .reader

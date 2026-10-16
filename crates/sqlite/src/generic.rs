@@ -72,9 +72,9 @@ impl Connection {
   pub fn with_opts<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opts: crate::sqlite::executor::Options,
-  ) -> Result<Self, Error>
+  ) -> Result<Self, E>
   where
-    Error: From<E>,
+    E: From<Error>,
   {
     return Ok(Self::new(Executor::Sqlite(Arc::new(
       crate::sqlite::executor::Executor::new(builder, opts.clone())?,
@@ -83,7 +83,9 @@ impl Connection {
 
   pub fn open_in_memory() -> Result<Self, Error> {
     let inst = Self::with_opts(
-      rusqlite::Connection::open_in_memory,
+      || -> Result<_, Error> {
+        return Ok(rusqlite::Connection::open_in_memory()?);
+      },
       crate::sqlite::executor::Options {
         num_threads: Some(1),
         ..Default::default()
@@ -182,12 +184,11 @@ impl Connection {
     };
   }
 
-  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     return match self.exec {
       Executor::Sqlite(ref exec) => {
@@ -207,12 +208,11 @@ impl Connection {
     };
   }
 
-  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     return match self.exec {
       Executor::Sqlite(ref exec) => {
@@ -232,26 +232,25 @@ impl Connection {
     };
   }
 
-  pub async fn transaction<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn transaction<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(Transaction) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     return match self.exec {
       Executor::Sqlite(ref exec) => {
         exec
-          .call_writer::<_, R, Error>(move |conn: &mut rusqlite::Connection| {
-            let tx = conn.transaction()?;
+          .call_writer(move |conn: &mut rusqlite::Connection| {
+            let tx = conn.transaction().map_err(Error::Rusqlite)?;
             return Ok(function(Transaction::Sqlite(tx))?);
           })
           .await
       }
       Executor::Pg(ref exec) => {
         exec
-          .call::<_, R, Error>(move |conn: &mut postgres::Client| {
-            let tx = conn.transaction()?;
+          .call(move |conn: &mut postgres::Client| {
+            let tx = conn.transaction().map_err(Error::Postgres)?;
             return Ok(function(Transaction::Pg(tx))?);
           })
           .await

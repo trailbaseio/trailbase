@@ -6,7 +6,7 @@ use serde::Deserialize;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
 use trailbase_schema::json_schema::FileUploads;
-use trailbase_sqlite::{SyncConnectionTrait, unpack_other_error};
+use trailbase_sqlite::SyncConnectionTrait;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
@@ -85,34 +85,23 @@ pub async fn read_record_handler(
     .call_reader({
       let api = api.clone();
 
-      move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-        api
-          .sync_eager_check_record_level_access(
-            &mut conn,
-            Permission::Read,
-            Some(&record_id),
-            None,
-            user.as_ref(),
-          )
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+      move |mut conn| -> Result<_, RecordError> {
+        api.sync_eager_check_record_level_access(
+          &mut conn,
+          Permission::Read,
+          Some(&record_id),
+          None,
+          user.as_ref(),
+        )?;
 
         let row = conn
           .query_row(&sql, (record_id,))?
-          .ok_or(trailbase_sqlite::Error::Other(
-            RecordError::RecordNotFound.into(),
-          ))?;
+          .ok_or(RecordError::RecordNotFound)?;
 
         return Ok(row);
       }
     })
-    .await
-    .map_err(|err| {
-      // Unpack potentially packed RecordError.
-      return match unpack_other_error::<RecordError>(err) {
-        Ok(schema_lookup_err) => schema_lookup_err,
-        Err(sql_err) => sql_err.into(),
-      };
-    })?;
+    .await?;
 
   let json_obj = if let Some(expanded_tables) = expanded_tables
     && !expanded_tables.is_empty()

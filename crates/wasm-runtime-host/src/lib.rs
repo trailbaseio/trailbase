@@ -825,7 +825,7 @@ mod tests {
     };
 
     let conn = trailbase_sqlite::Connection::with_opts(
-      move || -> Result<_, rusqlite::Error> {
+      move || -> Result<_, trailbase_sqlite::Error> {
         // Consume the rusqlite connection, only works for one thread.
         let mut lock = conn.lock();
         return Ok(lock.take().unwrap());
