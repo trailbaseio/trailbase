@@ -183,23 +183,37 @@ impl RecordAclParams {
   where
     Arc<P>: ToParamsEnum,
   {
+    return Self::eager(
+      p,
+      user,
+      record_id,
+      all_column_names,
+      request_params
+        .map(|p| {
+          p.params()
+            .map_err(|_| RecordError::BadRequest("invalid params"))
+        })
+        .transpose()?
+        .and_then(|(p, _files)| p.params_enum()),
+    );
+  }
+
+  fn eager(
+    p: Permission,
+    user: Option<&User>,
+    record_id: Option<Value>,
+    all_column_names: &Arc<Vec<CompactString>>,
+    request_params: Option<Params>,
+  ) -> Result<Self, RecordError> {
     return Ok(Self {
       user: user.map(|u| u.uuid.into_bytes()),
       record_id,
       params: match p {
-        Permission::Create | Permission::Update => {
-          let (params, _files) = request_params
-            .ok_or_else(|| RecordError::Internal("missing insert/update params".into()))?
-            .params()
-            .map_err(|_| RecordError::BadRequest("invalid params"))?;
-
-          Some(RequestParams::new(
-            all_column_names.clone(),
-            params
-              .params_enum()
-              .ok_or_else(|| RecordError::BadRequest("invalid params"))?,
-          ))
-        }
+        Permission::Create | Permission::Update => Some(RequestParams::new(
+          all_column_names.clone(),
+          request_params
+            .ok_or_else(|| RecordError::Internal("missing insert/update params".into()))?,
+        )),
         Permission::Read | Permission::Delete | Permission::Schema => None,
       },
     });
@@ -682,6 +696,39 @@ impl RecordApi {
     };
 
     let params = RecordAclParams::new(
+      p,
+      user,
+      record_id.cloned(),
+      &self.state.schema.column_names,
+      request_params,
+    )?;
+
+    return match conn
+      .query_row(access_query, params)
+      .ok()
+      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
+    {
+      Some(allowed) if allowed => Ok(()),
+      _ => Err(RecordError::Forbidden),
+    };
+  }
+
+  pub fn sync_eager_check_record_level_access<T: SyncConnectionTrait>(
+    &self,
+    conn: &mut T,
+    p: Permission,
+    record_id: Option<&Value>,
+    request_params: Option<Params>,
+    user: Option<&User>,
+  ) -> Result<(), RecordError> {
+    // First check table level access and if present check row-level access based on access rule.
+    self.check_table_level_access(p, user)?;
+
+    let Some(access_query) = self.state.cached_access_query(p) else {
+      return Ok(());
+    };
+
+    let params = RecordAclParams::eager(
       p,
       user,
       record_id.cloned(),

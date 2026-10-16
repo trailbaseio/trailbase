@@ -10,8 +10,10 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, LazyParams};
-use crate::records::write_queries::{WriteQuery, run_insert_or_replace_query, run_queries};
+use crate::records::params::{
+  FileMetadataContents, InsertParams, JsonRow, LazyParams, ToParamsEnum,
+};
+use crate::records::write_queries::{WriteQuery, run_queries};
 use crate::records::{Permission, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -120,27 +122,30 @@ pub async fn create_record_handler(
       let connection_type = conn.connection_type();
       let api = api.clone();
 
+      // TODO: Pull table-level access check ahead of yield. If we do this everywhere, we can get
+      // rid of LazyParams entirely.
       // FIXME: file writes. We used to write files before updating the DB to make sure referenced
       // files are valid. Can we preserve this somehow? It's probably enough to write before
       // returning the record id.
-      let (write_result, _files) = conn
-        .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-          let mut lazy_params =
-            build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
+      // Maybe the bigger question what is easier to clean-up: a file write after a DB failure, or a
+      // DB write after a file write failure.
+      let (params, _files) = build_lazy_insert_params(&state, &api, user.as_ref(), record, files)
+        .consume()
+        .map_err(|_err| {
+          trailbase_sqlite::Error::Other(RecordError::BadRequest("Invalid Parameters").into())
+        })?;
 
+      let write_result = conn
+        .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
           api
-            .sync_check_record_level_access(
+            .sync_eager_check_record_level_access(
               &mut conn,
               Permission::Create,
               None,
-              Some(&mut lazy_params),
+              params.params_enum(),
               user.as_ref(),
             )
             .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
-
-          let (params, files) = lazy_params.consume().map_err(|_err| {
-            trailbase_sqlite::Error::Other(RecordError::BadRequest("Invalid Parameters").into())
-          })?;
 
           let query = WriteQuery::new_insert_or_replace(
             connection_type,
@@ -156,7 +161,7 @@ pub async fn create_record_handler(
 
           let write_result = query.apply_sync(&mut conn)?;
 
-          return Ok((write_result, files));
+          return Ok(write_result);
         })
         .await
         .map_err(|err| {
