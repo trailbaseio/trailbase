@@ -1,10 +1,12 @@
 use axum::extract::{Path, State};
+use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::params::{JsonRow, LazyParams};
-use crate::records::write_queries::run_update_query;
+use crate::records::files::{FileManager, delete_files_marked_for_deletion};
+use crate::records::params::{JsonRow, ToParamsEnum, UpdateParams};
+use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
 
 /// Update existing record.
@@ -38,38 +40,66 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
+  let conn = api.conn();
+  let connection_type = conn.connection_type();
 
-  let mut lazy_params = LazyParams::for_update(
+  let (params, files) = UpdateParams::new(
     &api,
-    state.json_schema_registry().load_full(),
+    &state.json_schema_registry().load(),
     request,
     multipart_files,
     api.record_pk_column().column.name.clone(),
     record_id.clone(),
-  );
+  )
+  .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-  api
-    .check_record_level_access(
-      Permission::Update,
-      Some(&record_id),
-      Some(&mut lazy_params),
-      user.as_ref(),
-    )
+  // TODO: Remove the Arc when no longer needed, i.e. all acl + ops in the same place.
+  let params = Arc::new(params);
+
+  // We're storing any files to the object store first to make sure the DB entry is valid right
+  // after commit and not racily pointing to soon-to-be-written files.
+  let file_manager = if !files.is_empty() {
+    Some(FileManager::write(state.objectstore(), files).await?)
+  } else {
+    None
+  };
+
+  let write_result = conn
+    .call_writer({
+      let api = api.clone();
+      let query = WriteQuery::new_update(connection_type, api.table_name(), params.clone())?;
+
+      move |mut conn| -> Result<_, RecordError> {
+        api.sync_eager_check_record_level_access(
+          &mut conn,
+          Permission::Update,
+          Some(&record_id),
+          params.params_enum(),
+          user.as_ref(),
+        )?;
+
+        return Ok(query.apply_sync(&mut conn)?);
+      }
+    })
     .await?;
 
-  let (params, files) = lazy_params
-    .consume()
-    .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+  // Successful write, do not cleanup written files.
+  if let Some(mut file_manager) = file_manager {
+    file_manager.release();
 
-  run_update_query(
-    api.conn(),
-    state.objectstore(),
-    api.table_name(),
-    params,
-    files,
-  )
-  .await
-  .map_err(|err| RecordError::Internal(err.into()))?;
+    tokio::spawn(async move {
+      if let Err(err) = delete_files_marked_for_deletion(
+        api.conn(),
+        state.objectstore(),
+        api.table_name(),
+        &[write_result.rowid],
+      )
+      .await
+      {
+        log::error!("Failed to delete files: {err}");
+      }
+    });
+  }
 
   return Ok(());
 }

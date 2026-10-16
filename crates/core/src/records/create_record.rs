@@ -9,8 +9,9 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::config::proto;
 use crate::extract::Either;
-use crate::records::files::FileManager;
+use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
   FileMetadataContents, InsertParams, JsonRow, LazyParams, ParamsError, ToParamsEnum,
 };
@@ -109,6 +110,7 @@ pub async fn create_record_handler(
   }
 
   let conn = api.conn();
+  let connection_type = conn.connection_type();
 
   let table_name: &QualifiedNameEscaped = api.table_name();
   let pk_meta = api.record_pk_column();
@@ -119,9 +121,6 @@ pub async fn create_record_handler(
   let record_ids: Vec<String> = match records_and_files.len() {
     1 => {
       let (record, files) = records_and_files.swap_remove(0);
-
-      let connection_type = conn.connection_type();
-      let api = api.clone();
 
       // TODO: Pull table-level access check ahead of yield. If we do this everywhere, we can get
       // rid of LazyParams entirely.
@@ -140,35 +139,50 @@ pub async fn create_record_handler(
       };
 
       let write_result = conn
-        .call_writer(move |mut conn| -> Result<_, RecordError> {
-          api.sync_eager_check_record_level_access(
-            &mut conn,
-            Permission::Create,
-            None,
-            params.params_enum(),
-            user.as_ref(),
-          )?;
-
-          // TODO: We could push the template rendering off the executor. And just pass:
-          //   struct { ops: Vec<(Acl, Op)> }
+        .call_writer({
+          let api = api.clone();
           let query = WriteQuery::new_insert_or_replace(
             connection_type,
             api.table_name(),
             api.columns(),
             &api.record_pk_column().column.name,
             conflict_resolution_strategy,
-            params,
+            params.clone(),
           )?;
 
-          let write_result = query.apply_sync(&mut conn)?;
+          move |mut conn| -> Result<_, RecordError> {
+            api.sync_eager_check_record_level_access(
+              &mut conn,
+              Permission::Create,
+              None,
+              params.params_enum(),
+              user.as_ref(),
+            )?;
 
-          return Ok(write_result);
+            return Ok(query.apply_sync(&mut conn)?);
+          }
         })
         .await?;
 
       if let Some(mut file_manager) = file_manager {
         // Successful insert, release and do not cleanup written files.
         file_manager.release();
+
+        if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Replace {
+          tokio::spawn(async move {
+            let table_name = api.table_name().clone();
+            if let Err(err) = delete_files_marked_for_deletion(
+              api.conn(),
+              state.objectstore(),
+              &table_name,
+              &[write_result.rowid],
+            )
+            .await
+            {
+              log::error!("Failed to delete files: {err}");
+            }
+          });
+        }
       }
 
       vec![extract_record_id(write_result.pk_value.unwrap_or(

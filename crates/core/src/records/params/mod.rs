@@ -62,9 +62,6 @@ impl trailbase_sqlite::Params for ArcInsertParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    #[cfg(test)]
-    assert_eq!(1, Arc::strong_count(&self.0));
-
     for NamedParam {
       placeholder, value, ..
     } in &self.0.params
@@ -186,9 +183,6 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    #[cfg(test)]
-    assert_eq!(1, Arc::strong_count(&self.0));
-
     for NamedParam {
       placeholder, value, ..
     } in &self.0.params

@@ -667,6 +667,9 @@ mod tests {
       .await
       .unwrap();
 
+    // Yield to give deletions a change to run async.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
     let mut read_dir = tokio::fs::read_dir(state.data_dir().uploads_path())
       .await
       .unwrap();
@@ -879,6 +882,9 @@ mod tests {
     )
     .await
     .unwrap();
+
+    // Yield to give deletions a change to run async.
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Make sure the _file_deletions have been processed
     let pending_deletions = state
