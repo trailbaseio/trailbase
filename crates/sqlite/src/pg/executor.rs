@@ -132,12 +132,11 @@ impl Executor {
   }
 
   #[inline]
-  pub async fn call<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(&mut postgres::Client) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     let (sender, receiver) = crossfire::oneshot::oneshot::<Result<R, E>>();
 
@@ -292,8 +291,9 @@ mod tests {
 
     exec
       .call(|client| {
-        return client.batch_execute(
-          "
+        return client
+          .batch_execute(
+            "
             CREATE TABLE IF NOT EXISTS test_table(
               id     SERIAL PRIMARY KEY,
               data   TEXT NOT NULL
@@ -301,7 +301,8 @@ mod tests {
 
             INSERT INTO test_table (data) VALUES ('a'), ('b');
           ",
-        );
+          )
+          .map_err(Error::Postgres);
       })
       .await
       .unwrap();
@@ -342,15 +343,17 @@ mod tests {
 
     exec
       .call(|client| {
-        return client.execute(
-          "
+        return client
+          .execute(
+            "
             CREATE TABLE IF NOT EXISTS test_table_poc_named_params(
               id     SERIAL PRIMARY KEY,
               data   TEXT NOT NULL
             );
           ",
-          &[],
-        );
+            &[],
+          )
+          .map_err(Error::Postgres);
       })
       .await
       .unwrap();

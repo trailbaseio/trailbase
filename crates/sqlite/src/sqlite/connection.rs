@@ -26,9 +26,9 @@ pub struct Connection {
 }
 
 impl Connection {
-  pub fn new<E>(builder: impl Fn() -> Result<rusqlite::Connection, E>) -> Result<Self, Error>
+  pub fn new<E>(builder: impl Fn() -> Result<rusqlite::Connection, E>) -> Result<Self, E>
   where
-    Error: From<E>,
+    E: From<Error>,
   {
     return Self::with_opts(builder, Options::default());
   }
@@ -36,9 +36,9 @@ impl Connection {
   pub fn with_opts<E>(
     builder: impl Fn() -> Result<rusqlite::Connection, E>,
     opt: Options,
-  ) -> Result<Self, Error>
+  ) -> Result<Self, E>
   where
-    Error: From<E>,
+    E: From<Error>,
   {
     return Ok(Self {
       id: UNIQUE_CONN_ID.fetch_add(1, Ordering::SeqCst),
@@ -53,7 +53,9 @@ impl Connection {
   /// Will return `Err` if the underlying SQLite open call fails.
   pub fn open_in_memory() -> Result<Self, Error> {
     let conn = Self::with_opts(
-      rusqlite::Connection::open_in_memory,
+      || -> Result<_, Error> {
+        return Ok(rusqlite::Connection::open_in_memory()?);
+      },
       Options {
         num_threads: Some(1),
         ..Default::default()
@@ -109,12 +111,11 @@ impl Connection {
   /// NOTE: use-cases:
   ///  * RecordAPI non-transaction batch inserts.
   ///  * Log-writer batch insertions (could use a different driver :shrug:).
-  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call_writer<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     return self
       .exec
@@ -124,12 +125,11 @@ impl Connection {
       .await;
   }
 
-  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     return self
       .exec
@@ -146,17 +146,16 @@ impl Connection {
   ///    let tx = conn.transaction();
   ///
   /// To avoid blocking the calling thread.
-  pub async fn transaction<F, R, E>(&self, function: F) -> Result<R, Error>
+  pub async fn transaction<F, R, E>(&self, function: F) -> Result<R, E>
   where
     F: FnOnce(Transaction) -> Result<R, E> + Send + 'static,
     R: Send + 'static,
-    E: Send + 'static,
-    Error: From<E>,
+    E: Send + From<Error> + 'static,
   {
     return self
       .exec
-      .call_writer::<_, R, Error>(move |conn: &mut rusqlite::Connection| {
-        let tx = conn.transaction()?;
+      .call_writer(move |conn: &mut rusqlite::Connection| -> Result<R, E> {
+        let tx = conn.transaction().map_err(Error::Rusqlite)?;
         return Ok(function(Transaction { tx })?);
       })
       .await;

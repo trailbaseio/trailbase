@@ -3,7 +3,6 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
-use trailbase_sqlite::unpack_other_error;
 use ts_rs::TS;
 use utoipa::ToSchema;
 
@@ -96,66 +95,46 @@ pub async fn record_transactions_handler(
   let conn = first_api.conn().clone();
   let results = if request.transaction.unwrap_or(false) {
     conn
-      .transaction({
-        move |mut tx| -> Result<_, trailbase_sqlite::Error> {
-          let results = apply_ops(
-            &state,
-            &mut tx,
-            user.as_ref(),
-            &first_api,
-            request.operations,
-          )
-          .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+      .transaction(move |mut tx| -> Result<_, RecordError> {
+        let results = apply_ops(
+          &state,
+          &mut tx,
+          user.as_ref(),
+          &first_api,
+          request.operations,
+        )?;
 
-          tx.commit()?;
+        tx.commit()?;
 
-          return Ok(results);
-        }
+        return Ok(results);
       })
-      .await
-      .map_err(|err| {
-        // Unpack potentially packed RecordError.
-        return match unpack_other_error::<RecordError>(err) {
-          Ok(schema_lookup_err) => schema_lookup_err,
-          Err(sql_err) => sql_err.into(),
-        };
-      })?
+      .await?
   } else {
     conn
-      .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
+      .call_writer(move |mut conn| -> Result<_, RecordError> {
         let results = apply_ops(
           &state,
           &mut conn,
           user.as_ref(),
           &first_api,
           request.operations,
-        )
-        .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+        )?;
 
         return Ok(results);
       })
-      .await
-      .map_err(|err| {
-        // Unpack potentially packed RecordError.
-        return match unpack_other_error::<RecordError>(err) {
-          Ok(schema_lookup_err) => schema_lookup_err,
-          Err(sql_err) => sql_err.into(),
-        };
-      })?
+      .await?
   };
 
   return Ok(Json(TransactionResponse { results }));
 }
 
 #[inline]
-fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, trailbase_sqlite::Error> {
+fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, RecordError> {
   return match value {
     trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
     trailbase_sqlite::Value::Text(text) => Ok(text),
     trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
-    _ => Err(trailbase_sqlite::Error::Other(
-      "Unexpected data type".into(),
-    )),
+    _ => Err(RecordError::BadRequest("Unexpected data type")),
   };
 }
 

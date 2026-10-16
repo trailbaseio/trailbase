@@ -60,7 +60,7 @@ async fn close_success_test() {
   let db_path = tmp_dir.path().join("main.sqlite");
 
   let conn = Connection::with_opts(
-    move || rusqlite::Connection::open(&db_path),
+    move || rusqlite::Connection::open(&db_path).map_err(Error::Rusqlite),
     Options {
       num_threads: Some(3),
       ..Default::default()
@@ -138,13 +138,13 @@ async fn close_failure_test() {
 
   conn
     .exec
-    .call_writer(|conn| {
+    .call_writer(|conn| -> Result<_, Error> {
       // Leak a prepared statement to make the database uncloseable
       // See https://www.sqlite.org/c3ref/close.html for details regarding this behaviour
       let stmt = Box::new(conn.prepare("INSERT INTO person VALUES (1, ?1);").unwrap());
       Box::leak(stmt);
 
-      return Ok::<_, rusqlite::Error>(());
+      return Ok(());
     })
     .await
     .unwrap();
@@ -573,7 +573,7 @@ fn test_busy() {
   let db_path = tmp_dir.path().join("main.sqlite");
 
   let conn = Connection::with_opts(
-    move || -> Result<_, rusqlite::Error> {
+    move || -> Result<_, Error> {
       let conn = rusqlite::Connection::open(&db_path)?;
 
       // NOTE: The busy handler should NEVER be triggered, since exclusive locking happens on the
@@ -658,7 +658,7 @@ async fn test_backup() {
   let aux_path = tmp_dir.path().join("aux.db");
 
   let conn = Connection::with_opts(
-    || rusqlite::Connection::open(&src_path),
+    || rusqlite::Connection::open(&src_path).map_err(Error::Rusqlite),
     Options {
       ..Default::default()
     },

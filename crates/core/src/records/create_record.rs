@@ -4,7 +4,6 @@ use base64::prelude::*;
 use serde::{Deserialize, Serialize};
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
-use trailbase_sqlite::unpack_other_error;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
@@ -136,16 +135,14 @@ pub async fn create_record_handler(
         })?;
 
       let write_result = conn
-        .call_writer(move |mut conn| -> Result<_, trailbase_sqlite::Error> {
-          api
-            .sync_eager_check_record_level_access(
-              &mut conn,
-              Permission::Create,
-              None,
-              params.params_enum(),
-              user.as_ref(),
-            )
-            .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
+        .call_writer(move |mut conn| -> Result<_, RecordError> {
+          api.sync_eager_check_record_level_access(
+            &mut conn,
+            Permission::Create,
+            None,
+            params.params_enum(),
+            user.as_ref(),
+          )?;
 
           // TODO: We could push the template rendering off the executor. And just pass:
           //   struct { ops: Vec<(Acl, Op)> }
@@ -156,26 +153,16 @@ pub async fn create_record_handler(
             &api.record_pk_column().column.name,
             conflict_resolution_strategy,
             params,
-          )
-          .map_err(|err| {
-            trailbase_sqlite::Error::Other(RecordError::Internal(err.into()).into())
-          })?;
+          )?;
 
           let write_result = query.apply_sync(&mut conn)?;
 
           return Ok(write_result);
         })
-        .await
-        .map_err(|err| {
-          // Unpack potentially packed RecordError.
-          return match unpack_other_error::<RecordError>(err) {
-            Ok(schema_lookup_err) => schema_lookup_err,
-            Err(sql_err) => sql_err.into(),
-          };
-        })?;
+        .await?;
 
-      vec![extract_record_id(write_result.pk_value.unwrap_or_else(
-        || trailbase_sqlite::Value::Integer(write_result.rowid),
+      vec![extract_record_id(write_result.pk_value.unwrap_or(
+        trailbase_sqlite::Value::Integer(write_result.rowid),
       ))?]
     }
     _ => {
@@ -241,7 +228,7 @@ fn build_lazy_insert_params<'a>(
 ) -> LazyParams<'a, InsertParams> {
   // Optionally insert user.
   if api.insert_autofill_missing_user_id_columns()
-    && let Some(ref user) = user
+    && let Some(user) = user
   {
     for column_index in api.user_id_columns() {
       let col_name = &api.columns()[*column_index].column.name;

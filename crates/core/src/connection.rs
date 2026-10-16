@@ -7,7 +7,7 @@ use thiserror::Error;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_schema::db::metadata::ConnectionMetadata;
 
-pub use trailbase_sqlite::{Connection, unpack_other_error};
+pub use trailbase_sqlite::Connection;
 
 use crate::data_dir::DataDir;
 use crate::migrations::{
@@ -533,14 +533,7 @@ async fn init_db_sqlite<'a>(
       })),
       ..Default::default()
     },
-  )
-  .map_err(|err| {
-    // Unpack potentially packed ConnectionError.
-    return match unpack_other_error::<ConnectionError>(err) {
-      Ok(schema_lookup_err) => schema_lookup_err,
-      Err(sql_err) => sql_err.into(),
-    };
-  })?;
+  )?;
 
   // Apply migrations.
   //
