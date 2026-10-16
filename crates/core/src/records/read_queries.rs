@@ -1,32 +1,10 @@
-use askama::Template;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::Value;
 
 use crate::records::error::RecordError;
-use crate::records::expand::ExpandedTable;
 use crate::schema_metadata::JsonColumnMetadata;
-
-pub(crate) async fn run_select_query(
-  conn: &trailbase_sqlite::Connection,
-  table_name: &QualifiedNameEscaped,
-  column_names: &[&str],
-  pk_column: &str,
-  pk_value: Value,
-  expanded_tables: &[ExpandedTable<'_>],
-) -> Result<Option<trailbase_sqlite::Row>, RecordError> {
-  let sql = ReadRecordQueryTemplate {
-    table_name,
-    column_names,
-    pk_column_name: pk_column,
-    expanded_tables: expanded_tables,
-  }
-  .render()
-  .map_err(|err| RecordError::Internal(err.into()))?;
-
-  return Ok(conn.read_query_row(sql, [pk_value]).await?);
-}
 
 pub(crate) async fn run_get_file_query(
   conn: &trailbase_sqlite::Connection,
@@ -99,13 +77,4 @@ pub(crate) async fn run_get_files_query(
     }
     _ => Err(RecordError::BadRequest("Not a files list")),
   };
-}
-
-#[derive(Template)]
-#[template(escape = "none", path = "read_record_query.sql")]
-struct ReadRecordQueryTemplate<'a> {
-  table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
-  pk_column_name: &'a str,
-  expanded_tables: &'a [ExpandedTable<'a>],
 }

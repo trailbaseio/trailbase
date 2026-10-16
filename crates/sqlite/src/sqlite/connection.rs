@@ -124,6 +124,21 @@ impl Connection {
       .await;
   }
 
+  pub async fn call_reader<F, R, E>(&self, function: F) -> Result<R, Error>
+  where
+    F: FnOnce(SyncConnection) -> Result<R, E> + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
+    Error: From<E>,
+  {
+    return self
+      .exec
+      .call_reader(|conn| {
+        return function(SyncConnection { conn });
+      })
+      .await;
+  }
+
   /// Transactions
   ///
   /// Note: we us an async API rather than a sync blocking API, e.g.:

@@ -147,6 +147,8 @@ pub async fn create_record_handler(
             )
             .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?;
 
+          // TODO: We could push the template rendering off the executor. And just pass:
+          //   struct { ops: Vec<(Acl, Op)> }
           let query = WriteQuery::new_insert_or_replace(
             connection_type,
             api.table_name(),
