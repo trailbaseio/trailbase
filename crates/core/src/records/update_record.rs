@@ -58,6 +58,8 @@ pub async fn update_record_handler(
 
   // We're storing any files to the object store first to make sure the DB entry is valid right
   // after commit and not racily pointing to soon-to-be-written files.
+  //
+  // FIXME: We should only write after acl check!
   let file_manager = if !files.is_empty() {
     Some(FileManager::write(state.objectstore(), files).await?)
   } else {

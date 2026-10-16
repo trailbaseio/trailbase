@@ -132,6 +132,8 @@ pub async fn create_record_handler(
 
       // We're storing any files to the object store first to make sure the DB entry is valid right
       // after commit and not racily pointing to soon-to-be-written files.
+      //
+      // FIXME: We should only write after acl check!
       let file_manager = if !files.is_empty() {
         Some(FileManager::write(state.objectstore(), files).await?)
       } else {
@@ -194,6 +196,7 @@ pub async fn create_record_handler(
         WriteQuery,
         Option<(QualifiedNameEscaped, FileMetadataContents)>,
       )> = Vec::with_capacity(records_and_files.len());
+
       for (record, files) in records_and_files {
         let mut lazy_params = build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
 
@@ -268,7 +271,7 @@ fn build_lazy_insert_params<'a>(
   return LazyParams::for_insert(api, state.json_schema_registry().load_full(), record, files);
 }
 
-fn build_insert_params<'a>(
+pub(crate) fn build_insert_params<'a>(
   state: &AppState,
   api: &'a RecordApi,
   user: Option<&User>,
@@ -299,7 +302,9 @@ fn build_insert_params<'a>(
 }
 
 #[inline]
-fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, trailbase_sqlite::Error> {
+pub(crate) fn extract_record_id(
+  value: trailbase_sqlite::Value,
+) -> Result<String, trailbase_sqlite::Error> {
   return match value {
     trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
     trailbase_sqlite::Value::Text(text) => Ok(text),
