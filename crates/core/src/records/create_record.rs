@@ -2,6 +2,7 @@ use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
 use utoipa::{IntoParams, ToSchema};
@@ -9,8 +10,9 @@ use utoipa::{IntoParams, ToSchema};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
+use crate::records::files::FileManager;
 use crate::records::params::{
-  FileMetadataContents, InsertParams, JsonRow, LazyParams, ToParamsEnum,
+  FileMetadataContents, InsertParams, JsonRow, LazyParams, ParamsError, ToParamsEnum,
 };
 use crate::records::write_queries::{WriteQuery, run_queries};
 use crate::records::{Permission, RecordApi, RecordError};
@@ -123,16 +125,19 @@ pub async fn create_record_handler(
 
       // TODO: Pull table-level access check ahead of yield. If we do this everywhere, we can get
       // rid of LazyParams entirely.
-      // FIXME: file writes. We used to write files before updating the DB to make sure referenced
-      // files are valid. Can we preserve this somehow? It's probably enough to write before
-      // returning the record id.
-      // Maybe the bigger question what is easier to clean-up: a file write after a DB failure, or a
-      // DB write after a file write failure.
-      let (params, _files) = build_lazy_insert_params(&state, &api, user.as_ref(), record, files)
-        .consume()
-        .map_err(|_err| {
-          trailbase_sqlite::Error::Other(RecordError::BadRequest("Invalid Parameters").into())
-        })?;
+      let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
+        .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
+      // TODO: Remove the Arc when no longer needed, i.e. all acl + ops in the same place.
+      let params = Arc::new(params);
+
+      // We're storing any files to the object store first to make sure the DB entry is valid right
+      // after commit and not racily pointing to soon-to-be-written files.
+      let file_manager = if !files.is_empty() {
+        Some(FileManager::write(state.objectstore(), files).await?)
+      } else {
+        None
+      };
 
       let write_result = conn
         .call_writer(move |mut conn| -> Result<_, RecordError> {
@@ -160,6 +165,11 @@ pub async fn create_record_handler(
           return Ok(write_result);
         })
         .await?;
+
+      if let Some(mut file_manager) = file_manager {
+        // Successful insert, release and do not cleanup written files.
+        file_manager.release();
+      }
 
       vec![extract_record_id(write_result.pk_value.unwrap_or(
         trailbase_sqlite::Value::Integer(write_result.rowid),
@@ -242,6 +252,36 @@ fn build_lazy_insert_params<'a>(
   }
 
   return LazyParams::for_insert(api, state.json_schema_registry().load_full(), record, files);
+}
+
+fn build_insert_params<'a>(
+  state: &AppState,
+  api: &'a RecordApi,
+  user: Option<&User>,
+  mut record: JsonRow,
+  files: Option<Vec<FileUploadInput>>,
+) -> Result<(InsertParams, FileMetadataContents), ParamsError> {
+  // Optionally insert user.
+  if api.insert_autofill_missing_user_id_columns()
+    && let Some(user) = user
+  {
+    for column_index in api.user_id_columns() {
+      let col_name = &api.columns()[*column_index].column.name;
+      if !record.contains_key(col_name) {
+        record.insert(
+          col_name.to_owned(),
+          serde_json::Value::String(uuid_to_b64(&user.uuid)),
+        );
+      }
+    }
+  }
+
+  return InsertParams::new(
+    api,
+    &state.json_schema_registry().load_full(),
+    record,
+    files,
+  );
 }
 
 #[inline]
