@@ -5,15 +5,16 @@ use futures_util::future::{BoxFuture, join_all};
 use itertools::{Either, Itertools};
 use log::*;
 use object_store::{ObjectStore, ObjectStoreExt};
+use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio::task::JoinHandle;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{ConnectionType, params};
 
 use crate::app_state::AppState;
-use crate::metadata;
 use crate::records::params::FileMetadataContents;
 
 #[derive(Debug, Error)]
@@ -280,7 +281,8 @@ pub(crate) async fn delete_pending_files_impl(
 pub type FileWriteError = (String, object_store::Error);
 
 pub(crate) struct FileManager {
-  cleanup: Option<Box<dyn FnOnce() + Send + Sync>>,
+  store: Arc<dyn ObjectStore>,
+  written_files: Vec<FileUpload>,
 }
 
 impl FileManager {
@@ -308,104 +310,92 @@ impl FileManager {
       return Err(errs);
     }
 
-    let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = if written_files.is_empty() {
-      None
-    } else {
-      let store = store.clone();
-      Some(Box::new(move || {
-        tokio::spawn(async move {
-          for file in written_files {
-            let path = object_store::path::Path::from(file.objectstore_id());
-            if let Err(err) = store.delete(&path).await {
-              warn!("Failed to cleanup just written file: {err}");
-            }
-          }
-        });
-      }))
-    };
-
-    return Ok(Self { cleanup });
+    return Ok(Self {
+      store: store.clone(),
+      written_files,
+    });
   }
 
   /// Call to prevent RAII clean-up and thus persist the write.
   pub(crate) fn release(&mut self) {
-    self.cleanup = None;
+    self.written_files.clear();
   }
 }
 
 impl Drop for FileManager {
   fn drop(&mut self) {
-    if let Some(f) = std::mem::take(&mut self.cleanup) {
-      f();
+    let written_files = std::mem::take(&mut self.written_files);
+
+    if !written_files.is_empty() {
+      let store = self.store.clone();
+
+      tokio::spawn(async move {
+        for file in written_files {
+          let path = object_store::path::Path::from(file.objectstore_id());
+          if let Err(err) = store.delete(&path).await {
+            warn!("Failed to cleanup just written file: {err}");
+          }
+        }
+      });
     }
   }
 }
 
+pub(crate) struct AsyncFileCommitter {
+  commit: Box<dyn FnOnce() + Send>,
+}
+
+impl AsyncFileCommitter {
+  pub(crate) fn start_async_write(self) {
+    let AsyncFileCommitter { commit } = self;
+    commit();
+  }
+}
+
 pub(crate) struct AsyncFileManager {
-  cleanup: Option<Box<dyn FnOnce() + Send + Sync>>,
+  written_files: Arc<Mutex<Option<JoinHandle<Result<FileManager, Vec<FileWriteError>>>>>>,
 }
 
 impl AsyncFileManager {
-  pub(crate) fn write(
-    rt: tokio::runtime::Handle,
-    store: &Arc<dyn ObjectStore>,
+  pub(crate) fn new(
+    store: Arc<dyn ObjectStore>,
     files: FileMetadataContents,
-  ) -> Self {
-    let result = rt.spawn({
-      let store = store.clone();
-      async move {
-        let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
-        for (metadata, contents) in files {
-          // QUESTION: In the content-less case, i.e. pure metadata (e.g. from round-tripping
-          // prior inputs) case, should we validate that the referenced data (still) exists and was
-          // previously associated with the record.
+  ) -> (Self, AsyncFileCommitter) {
+    let written_files: Arc<Mutex<Option<JoinHandle<Result<FileManager, Vec<FileWriteError>>>>>> =
+      Arc::new(Mutex::new(None));
 
-          // NOTE: We currently write sequentially to simplify cleanup. We could do it in parallel but
-          // would need to track success.
-          let Some(contents) = contents else {
-            continue;
-          };
+    let rt = tokio::runtime::Handle::current();
+    let committer = AsyncFileCommitter {
+      commit: Box::new({
+        let written_files = written_files.clone();
 
-          let path = object_store::path::Path::from(metadata.objectstore_id());
-
-          let mut writer = store.put_multipart(&path).await?;
-          writer.put_part(contents.into()).await?;
-          writer.complete().await?;
-
-          written_files.push(metadata);
+        move || {
+          *written_files.lock() =
+            Some(rt.spawn(async move { FileManager::write(&store, files).await }));
         }
-
-        Ok::<_, object_store::Error>(written_files)
-      }
-    });
-
-    let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = {
-      let store = store.clone();
-      Some(Box::new(move || {
-        rt.spawn(async move {
-          let written_files = result.await.unwrap().unwrap();
-          for file in written_files {
-            let path = object_store::path::Path::from(file.objectstore_id());
-            if let Err(err) = store.delete(&path).await {
-              warn!("Failed to cleanup just written file: {err}");
-            }
-          }
-        });
-      }))
+      }),
     };
 
-    return Self { cleanup };
+    return (Self { written_files }, committer);
   }
 
-  pub(crate) fn release(&mut self) {
-    self.cleanup = None;
+  pub(crate) async fn release(&mut self) {
+    if let Some(join) = std::mem::take(&mut *self.written_files.lock()) {
+      if let Ok(Ok(mut manager)) = join.await {
+        manager.release();
+      };
+    }
   }
 }
 
 impl Drop for AsyncFileManager {
   fn drop(&mut self) {
-    if let Some(cleanup) = std::mem::take(&mut self.cleanup) {
-      cleanup();
+    if let Some(join) = std::mem::take(&mut *self.written_files.lock()) {
+      tokio::spawn(async move {
+        if let Ok(Ok(manager)) = join.await {
+          drop(manager);
+        };
+      });
     }
   }
 }
