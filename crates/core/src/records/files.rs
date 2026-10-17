@@ -1,7 +1,8 @@
 use axum::body::Body;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
-use itertools::Itertools;
+use futures_util::future::{BoxFuture, join_all};
+use itertools::{Either, Itertools};
 use log::*;
 use object_store::{ObjectStore, ObjectStoreExt};
 use std::collections::HashSet;
@@ -12,6 +13,7 @@ use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{ConnectionType, params};
 
 use crate::app_state::AppState;
+use crate::metadata;
 use crate::records::params::FileMetadataContents;
 
 #[derive(Debug, Error)]
@@ -275,6 +277,8 @@ pub(crate) async fn delete_pending_files_impl(
   return Ok(());
 }
 
+pub type FileWriteError = (String, object_store::Error);
+
 pub(crate) struct FileManager {
   cleanup: Option<Box<dyn FnOnce() + Send + Sync>>,
 }
@@ -283,22 +287,25 @@ impl FileManager {
   pub(crate) async fn write(
     store: &Arc<dyn ObjectStore>,
     files: FileMetadataContents,
-  ) -> Result<Self, object_store::Error> {
-    let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
-    for (metadata, contents) in files {
-      // TODO: In the content-less case, i.e. pure metadata (e.g. from round-tripping
-      // prior inputs) case, should we validate that the referenced data (still) exists and was
-      // previously associated with the record.
-      if let Some(contents) = contents {
-        // TODO: We could write files in parallel.
-        let path = object_store::path::Path::from(metadata.objectstore_id());
+  ) -> Result<Self, Vec<FileWriteError>> {
+    let results = join_all(
+      files
+        .into_iter()
+        .filter_map(|(metadata, contents)| write_contents(store, metadata, contents)),
+    )
+    .await;
 
-        let mut writer = store.put_multipart(&path).await?;
-        writer.put_part(contents.into()).await?;
-        writer.complete().await?;
+    let (written_files, errs): (Vec<FileUpload>, Vec<FileWriteError>) =
+      results.into_iter().partition_map(|r| match r {
+        Ok(v) => Either::Left(v),
+        Err(e) => Either::Right(e),
+      });
 
-        written_files.push(metadata);
-      }
+    // NOTE: we don't do any clean-up for write failures, i.e. the DB may reference files that
+    // cannot be found later. This may just be ok resulting in subsequent NOT_FOUND :shrug:.
+    // We could retry or eventually unwind the DB write.
+    if written_files.is_empty() && !errs.is_empty() {
+      return Err(errs);
     }
 
     let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = if written_files.is_empty() {
@@ -320,6 +327,7 @@ impl FileManager {
     return Ok(Self { cleanup });
   }
 
+  /// Call to prevent RAII clean-up and thus persist the write.
   pub(crate) fn release(&mut self) {
     self.cleanup = None;
   }
@@ -331,4 +339,101 @@ impl Drop for FileManager {
       f();
     }
   }
+}
+
+pub(crate) struct AsyncFileManager {
+  cleanup: Option<Box<dyn FnOnce() + Send + Sync>>,
+}
+
+impl AsyncFileManager {
+  pub(crate) fn write(
+    rt: tokio::runtime::Handle,
+    store: &Arc<dyn ObjectStore>,
+    files: FileMetadataContents,
+  ) -> Self {
+    let result = rt.spawn({
+      let store = store.clone();
+      async move {
+        let mut written_files = Vec::<FileUpload>::with_capacity(files.len());
+        for (metadata, contents) in files {
+          // QUESTION: In the content-less case, i.e. pure metadata (e.g. from round-tripping
+          // prior inputs) case, should we validate that the referenced data (still) exists and was
+          // previously associated with the record.
+
+          // NOTE: We currently write sequentially to simplify cleanup. We could do it in parallel but
+          // would need to track success.
+          let Some(contents) = contents else {
+            continue;
+          };
+
+          let path = object_store::path::Path::from(metadata.objectstore_id());
+
+          let mut writer = store.put_multipart(&path).await?;
+          writer.put_part(contents.into()).await?;
+          writer.complete().await?;
+
+          written_files.push(metadata);
+        }
+
+        Ok::<_, object_store::Error>(written_files)
+      }
+    });
+
+    let cleanup: Option<Box<dyn FnOnce() + Send + Sync>> = {
+      let store = store.clone();
+      Some(Box::new(move || {
+        rt.spawn(async move {
+          let written_files = result.await.unwrap().unwrap();
+          for file in written_files {
+            let path = object_store::path::Path::from(file.objectstore_id());
+            if let Err(err) = store.delete(&path).await {
+              warn!("Failed to cleanup just written file: {err}");
+            }
+          }
+        });
+      }))
+    };
+
+    return Self { cleanup };
+  }
+
+  pub(crate) fn release(&mut self) {
+    self.cleanup = None;
+  }
+}
+
+impl Drop for AsyncFileManager {
+  fn drop(&mut self) {
+    if let Some(cleanup) = std::mem::take(&mut self.cleanup) {
+      cleanup();
+    }
+  }
+}
+
+fn write_contents(
+  store: &Arc<dyn object_store::ObjectStore>,
+  metadata: FileUpload,
+  contents: Option<Vec<u8>>,
+) -> Option<BoxFuture<'static, Result<FileUpload, FileWriteError>>> {
+  // NOTE: The contents may be empty if prior writes are being round-tripped, e.g.
+  // write-after-read.
+  let Some(contents) = contents else {
+    return None;
+  };
+
+  let store = store.clone();
+  return Some(Box::pin(async move {
+    let id = metadata.objectstore_id();
+    let path = object_store::path::Path::from(id);
+
+    let err = |err: object_store::Error| -> FileWriteError {
+      return (path.to_string(), err);
+    };
+
+    let mut writer = store.put_multipart(&path).await.map_err(err)?;
+    writer.put_part(contents.into()).await.map_err(err)?;
+    writer.complete().await.map_err(err)?;
+
+    Ok(metadata)
+  }));
 }

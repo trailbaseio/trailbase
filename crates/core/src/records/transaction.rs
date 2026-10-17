@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::records::create_record::{build_insert_params, extract_record_id};
-use crate::records::files::FileManager;
+use crate::records::files::{FileManager, FileWriteError};
 use crate::records::params::{FileMetadataContents, ToParamsEnum, UpdateParams};
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
@@ -58,7 +58,7 @@ pub struct Op {
   api: RecordApi,
   query: WriteQuery,
   file_manager: Option<
-    Box<dyn FnOnce() -> BoxFuture<'static, Result<FileManager, object_store::Error>> + Send>,
+    Box<dyn FnOnce() -> BoxFuture<'static, Result<FileManager, Vec<FileWriteError>>> + Send>,
   >,
 }
 

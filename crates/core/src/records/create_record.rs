@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
-use crate::records::files::{FileManager, delete_files_marked_for_deletion};
+use crate::records::files::{AsyncFileManager, FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
   FileMetadataContents, InsertParams, JsonRow, LazyParams, ParamsError, ToParamsEnum,
 };
@@ -134,15 +134,17 @@ pub async fn create_record_handler(
       // after commit and not racily pointing to soon-to-be-written files.
       //
       // FIXME: We should only write after acl check!
-      let file_manager = if !files.is_empty() {
-        Some(FileManager::write(state.objectstore(), files).await?)
-      } else {
-        None
-      };
+      // let file_manager = if !files.is_empty() {
+      //   Some(FileManager::write(state.objectstore(), files).await?)
+      // } else {
+      //   None
+      // };
 
       let write_result = conn
         .call_writer({
+          let rt = tokio::runtime::Handle::current();
           let api = api.clone();
+          let objectstore = state.objectstore().clone();
           let query = WriteQuery::new_insert_or_replace(
             connection_type,
             api.table_name(),
@@ -161,31 +163,49 @@ pub async fn create_record_handler(
               user.as_ref(),
             )?;
 
-            return Ok(query.apply_sync(&mut conn)?);
+            rt.spawn(async {
+              panic!("RAN");
+            });
+
+            let file_manager = if !files.is_empty() {
+              Some(AsyncFileManager::write(rt, &objectstore, files))
+            } else {
+              None
+            };
+
+            let write_result = query.apply_sync(&mut conn);
+
+            if let Some(mut file_manager) = file_manager
+              && write_result.is_ok()
+            {
+              file_manager.release();
+            }
+
+            return Ok(write_result?);
           }
         })
         .await?;
 
-      if let Some(mut file_manager) = file_manager {
-        // Successful insert, release and do not cleanup written files.
-        file_manager.release();
-
-        if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Replace {
-          tokio::spawn(async move {
-            let table_name = api.table_name().clone();
-            if let Err(err) = delete_files_marked_for_deletion(
-              api.conn(),
-              state.objectstore(),
-              &table_name,
-              &[write_result.rowid],
-            )
-            .await
-            {
-              log::error!("Failed to delete files: {err}");
-            }
-          });
-        }
-      }
+      // if let Some(mut file_manager) = file_manager {
+      //   // Successful insert, release and do not cleanup written files.
+      //   file_manager.release();
+      //
+      //   if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Replace {
+      //     tokio::spawn(async move {
+      //       let table_name = api.table_name().clone();
+      //       if let Err(err) = delete_files_marked_for_deletion(
+      //         api.conn(),
+      //         state.objectstore(),
+      //         &table_name,
+      //         &[write_result.rowid],
+      //       )
+      //       .await
+      //       {
+      //         log::error!("Failed to delete files: {err}");
+      //       }
+      //     });
+      //   }
+      // }
 
       vec![extract_record_id(write_result.pk_value.unwrap_or(
         trailbase_sqlite::Value::Integer(write_result.rowid),
