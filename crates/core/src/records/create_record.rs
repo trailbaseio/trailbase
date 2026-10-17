@@ -126,11 +126,8 @@ pub async fn create_record_handler(
     1 => {
       let (record, files) = records_and_files.swap_remove(0);
 
-      // TODO: Pull table-level access check ahead of yield.
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
         .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-
-      // TODO: Remove the Arc when no longer needed, i.e. all acl + ops in the same place.
       let params = Arc::new(params);
 
       let (file_manager, file_committer) = if !files.is_empty() {
@@ -154,6 +151,7 @@ pub async fn create_record_handler(
           )?;
 
           move |mut conn| -> Result<_, RecordError> {
+            // TODO: Pull table-level access check ahead of yield.
             api.sync_eager_check_record_level_access(
               &mut conn,
               Permission::Create,
@@ -274,9 +272,9 @@ pub async fn create_record_handler(
   return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());
 }
 
-pub(crate) fn build_insert_params<'a>(
+pub(crate) fn build_insert_params(
   state: &AppState,
-  api: &'a RecordApi,
+  api: &RecordApi,
   user: Option<&User>,
   mut record: JsonRow,
   files: Option<Vec<FileUploadInput>>,

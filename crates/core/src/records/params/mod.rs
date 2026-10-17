@@ -66,7 +66,7 @@ impl trailbase_sqlite::Params for ArcInsertParams {
       placeholder, value, ..
     } in &self.0.params
     {
-      if let Some(idx) = stmt.parameter_index(&placeholder)? {
+      if let Some(idx) = stmt.parameter_index(placeholder)? {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }
@@ -187,7 +187,7 @@ impl trailbase_sqlite::Params for ArcUpdateParams {
       placeholder, value, ..
     } in &self.0.params
     {
-      if let Some(idx) = stmt.parameter_index(&placeholder)? {
+      if let Some(idx) = stmt.parameter_index(placeholder)? {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(value.into()))?;
       };
     }

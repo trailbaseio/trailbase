@@ -367,7 +367,7 @@ pub(crate) fn apply_ops(
           api.sync_eager_check_record_level_access(
             conn,
             Permission::Delete,
-            Some(&record_id),
+            Some(record_id),
             None,
             user,
           )?;

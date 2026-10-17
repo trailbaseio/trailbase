@@ -762,7 +762,7 @@ fn start_sighup_reload_task(state: AppState) {
       // Reload config:
       match crate::config::load_or_init_config_textproto(
         state.data_dir(),
-        &state.connection_manager(),
+        state.connection_manager(),
       )
       .await
       {

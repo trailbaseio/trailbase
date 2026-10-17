@@ -53,7 +53,7 @@ pub(crate) async fn build_metadata_and_maybe_file_deletions(
     return Ok(ConnectionMetadata::from_schemas(
       tables,
       views,
-      &json_schema_registry,
+      json_schema_registry,
     )?);
   }
 

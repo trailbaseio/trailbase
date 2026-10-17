@@ -452,7 +452,7 @@ impl AppState {
     hash: Option<String>,
   ) -> Result<(), ConfigError> {
     let connection_manager = self.connection_manager();
-    validate_config(&connection_manager, &config).await?;
+    validate_config(connection_manager, &config).await?;
 
     match hash {
       Some(hash) => {
@@ -491,7 +491,7 @@ impl AppState {
     }
 
     // Write new config to the file system.
-    write_config_and_vault_textproto(self.data_dir(), &connection_manager, &new_config).await?;
+    write_config_and_vault_textproto(self.data_dir(), connection_manager, &new_config).await?;
 
     // After updating the config we need to poll record apis to make sure they're up-to-date.
     let _wait_for_snapshot_update = self.state.record_apis.ptr().await;

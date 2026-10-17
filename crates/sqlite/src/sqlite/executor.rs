@@ -72,12 +72,10 @@ impl Executor {
       if read_only {
         conn
           .pragma_update(None, "query_only", true)
-          .map_err(|err| Error::Rusqlite(err))?;
+          .map_err(Error::Rusqlite)?;
       }
       if let Some(busy_timeout) = busy_timeout {
-        conn
-          .busy_timeout(busy_timeout)
-          .map_err(|err| Error::Rusqlite(err))?;
+        conn.busy_timeout(busy_timeout).map_err(Error::Rusqlite)?;
       }
       return Ok(conn);
     };
@@ -228,7 +226,7 @@ impl Executor {
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 
-    return Ok(receiver.await.map_err(|_| Error::ConnectionClosed)??);
+    return receiver.await.map_err(|_| Error::ConnectionClosed)?;
   }
 
   #[inline]
@@ -243,7 +241,7 @@ impl Executor {
     self
       .reader
       .send(ReaderMessage::RunConst(Box::new(move |conn| {
-        sender.send(function(conn).map_err(|err| err.into()));
+        sender.send(function(conn));
       })))
       .map_err(|_| Error::ConnectionClosed)?;
 

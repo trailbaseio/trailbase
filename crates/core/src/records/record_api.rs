@@ -151,12 +151,8 @@ struct RequestParams {
 impl RequestParams {
   fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params) -> Self {
     let present_fields = match &request_params {
-      Params::Insert(p) => {
-        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
-      }
-      Params::Update(p) => {
-        strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())).into()
-      }
+      Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
+      Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
     };
 
     return Self {
@@ -201,41 +197,37 @@ impl trailbase_sqlite::Params for RecordAclParams {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
-    match self.params {
-      Some(params) => {
-        if let Some(idx) = stmt.parameter_index(":__fields")? {
-          stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
-        }
+    if let Some(params) = self.params {
+      if let Some(idx) = stmt.parameter_index(":__fields")? {
+        stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
+      }
 
-        let request_params = match &params.request_params {
-          Params::Insert(p) => &p.params,
-          Params::Update(p) => &p.params,
-        };
+      let request_params = match &params.request_params {
+        Params::Insert(p) => &p.params,
+        Params::Update(p) => &p.params,
+      };
 
-        // TODO: We could first sort the `request_params` by column index and then move i, j indexes
-        // in lockstep to avoid repeat scans and move more work off the executor.
-        for (column_index, column_name) in params.all_column_names.iter().enumerate() {
-          if let Some(idx) = stmt.parameter_index(&column_name)? {
-            stmt.bind_parameter(
-              idx,
-              request_params
-                .iter()
-                .find_map(|p| {
-                  // NOTE: Consider matching here by column_name and removing the index.
-                  if p.column_index == column_index {
-                    debug_assert_eq!(p.placeholder, *column_name);
-                    Some(ToSqlProxy::Borrowed((&p.value).into()))
-                  } else {
-                    None
-                  }
-                })
-                .unwrap_or(ToSqlProxy::Borrowed(ValueRef::Null))
-                .into(),
-            )?;
-          }
+      // TODO: We could first sort the `request_params` by column index and then move i, j indexes
+      // in lockstep to avoid repeat scans and move more work off the executor.
+      for (column_index, column_name) in params.all_column_names.iter().enumerate() {
+        if let Some(idx) = stmt.parameter_index(column_name)? {
+          stmt.bind_parameter(
+            idx,
+            request_params
+              .iter()
+              .find_map(|p| {
+                // NOTE: Consider matching here by column_name and removing the index.
+                if p.column_index == column_index {
+                  debug_assert_eq!(p.placeholder, *column_name);
+                  Some(ToSqlProxy::Borrowed((&p.value).into()))
+                } else {
+                  None
+                }
+              })
+              .unwrap_or(ToSqlProxy::Borrowed(ValueRef::Null)),
+          )?;
         }
       }
-      _ => {}
     }
 
     if let Some(idx) = stmt.parameter_index(":__user_id")? {

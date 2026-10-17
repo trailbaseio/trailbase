@@ -352,8 +352,10 @@ impl AsyncFileCommitter {
   }
 }
 
+type AsyncFileManagerResult = Result<FileManager, Vec<FileWriteError>>;
+
 pub(crate) struct AsyncFileManager {
-  written_files: Arc<Mutex<Option<JoinHandle<Result<FileManager, Vec<FileWriteError>>>>>>,
+  written_files: Arc<Mutex<Option<JoinHandle<AsyncFileManagerResult>>>>,
 }
 
 impl AsyncFileManager {
@@ -361,7 +363,7 @@ impl AsyncFileManager {
     store: Arc<dyn ObjectStore>,
     files: FileMetadataContents,
   ) -> (Self, AsyncFileCommitter) {
-    let written_files: Arc<Mutex<Option<JoinHandle<Result<FileManager, Vec<FileWriteError>>>>>> =
+    let written_files: Arc<Mutex<Option<JoinHandle<AsyncFileManagerResult>>>> =
       Arc::new(Mutex::new(None));
 
     let rt = tokio::runtime::Handle::current();
@@ -380,10 +382,11 @@ impl AsyncFileManager {
   }
 
   pub(crate) async fn release(&mut self) {
-    if let Some(join) = std::mem::take(&mut *self.written_files.lock()) {
-      if let Ok(Ok(mut manager)) = join.await {
-        manager.release();
-      };
+    let join = std::mem::take(&mut *self.written_files.lock());
+    if let Some(join) = join
+      && let Ok(Ok(mut manager)) = join.await
+    {
+      manager.release();
     }
   }
 }
@@ -407,9 +410,7 @@ fn write_contents(
 ) -> Option<BoxFuture<'static, Result<FileUpload, FileWriteError>>> {
   // NOTE: The contents may be empty if prior writes are being round-tripped, e.g.
   // write-after-read.
-  let Some(contents) = contents else {
-    return None;
-  };
+  let contents = contents?;
 
   let store = store.clone();
   return Some(Box::pin(async move {

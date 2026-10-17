@@ -52,8 +52,6 @@ pub async fn update_record_handler(
     record_id.clone(),
   )
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-
-  // TODO: Remove the Arc when no longer needed, i.e. all acl + ops in the same place.
   let params = Arc::new(params);
 
   // We're storing any files to the object store first to make sure the DB entry is valid right

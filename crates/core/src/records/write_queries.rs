@@ -179,6 +179,7 @@ impl WriteQuery {
   }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_insert_or_replace_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,

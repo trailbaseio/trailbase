@@ -63,7 +63,7 @@ pub async fn trigger_backup_handler(
   let data_dir = state.data_dir();
 
   let result =
-    crate::backup::backup_all(data_dir, &state.connection_manager(), &state.get_config()).await;
+    crate::backup::backup_all(data_dir, state.connection_manager(), &state.get_config()).await;
 
   if let Err(err) = crate::backup::delete_backups(data_dir, backup_window_size).await {
     log::warn!("Failed to clean-up backups: {err}");

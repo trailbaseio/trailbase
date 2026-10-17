@@ -79,12 +79,6 @@ impl From<trailbase_sqlite::from_sql::FromSqlError> for RecordError {
   }
 }
 
-// impl From<object_store::Error> for RecordError {
-//   fn from(err: object_store::Error) -> Self {
-//     return RecordError::Internal(err.into());
-//   }
-// }
-
 impl From<Vec<crate::records::files::FileWriteError>> for RecordError {
   fn from(err: Vec<crate::records::files::FileWriteError>) -> Self {
     return RecordError::Internal(format!("{err:?}").into());
