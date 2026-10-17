@@ -11,7 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
-use crate::records::files::{AsyncFileManager, FileManager, delete_files_marked_for_deletion};
+use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
   FileMetadataContents, InsertParams, JsonRow, LazyParams, ParamsError, ToParamsEnum,
 };

@@ -1,5 +1,5 @@
 use axum::extract::{Json, State};
-use futures_util::future::BoxFuture;
+use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use trailbase_schema::QualifiedName;
@@ -11,8 +11,8 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::records::create_record::{build_insert_params, extract_record_id};
-use crate::records::files::{FileManager, FileWriteError};
-use crate::records::params::{FileMetadataContents, ToParamsEnum, UpdateParams};
+use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
+use crate::records::params::{ToParamsEnum, UpdateParams};
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
@@ -50,16 +50,22 @@ pub enum TransactionResult {
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
 pub struct TransactionResponse {
-  /// A 1:1 mapping of opreations to results.
+  /// A 1:1 mapping of operations to results.
   pub results: Vec<TransactionResult>,
 }
 
-pub struct Op {
+pub(crate) struct Op {
   api: RecordApi,
   query: WriteQuery,
-  file_manager: Option<
-    Box<dyn FnOnce() -> BoxFuture<'static, Result<FileManager, Vec<FileWriteError>>> + Send>,
-  >,
+  file_handling: Option<(AsyncFileManager, AsyncFileCommitter)>,
+}
+
+pub(crate) enum OpResult {
+  Ok {
+    id: String,
+    file_manager: Option<AsyncFileManager>,
+  },
+  IgnoredConflict,
 }
 
 /// Execute a batch of transactions.
@@ -123,15 +129,10 @@ pub async fn record_transactions_handler(
           Ok(Op {
             api,
             query,
-            file_manager: if files.is_empty() {
+            file_handling: if files.is_empty() {
               None
             } else {
-              Some(Box::new({
-                let objectstore = state.objectstore().clone();
-                move || {
-                  return Box::pin(async move { FileManager::write(&objectstore, files).await });
-                }
-              }))
+              Some(AsyncFileManager::new(state.objectstore().clone(), files))
             },
           })
         }
@@ -168,15 +169,10 @@ pub async fn record_transactions_handler(
           Ok(Op {
             api,
             query,
-            file_manager: if files.is_empty() {
+            file_handling: if files.is_empty() {
               None
             } else {
-              Some(Box::new({
-                let objectstore = state.objectstore().clone();
-                move || {
-                  return Box::pin(async move { FileManager::write(&objectstore, files).await });
-                }
-              }))
+              Some(AsyncFileManager::new(state.objectstore().clone(), files))
             },
           })
         }
@@ -201,7 +197,7 @@ pub async fn record_transactions_handler(
           Ok(Op {
             api,
             query,
-            file_manager: None,
+            file_handling: None,
           })
         }
       };
@@ -210,7 +206,7 @@ pub async fn record_transactions_handler(
 
   let conn = ops[0].api.conn().clone();
 
-  let results = if request.transaction.unwrap_or(false) {
+  let op_results = if request.transaction.unwrap_or(false) {
     conn
       .transaction(move |mut tx| -> Result<_, RecordError> {
         let results = apply_ops(&mut tx, user.as_ref(), ops)?;
@@ -227,6 +223,29 @@ pub async fn record_transactions_handler(
       })
       .await?
   };
+
+  // TODO: We currently do not trigger file deletions eagerly and rely on periodic cleanup. We may
+  // want to revisit.
+  let results = join_all(op_results.into_iter().map(
+    |op_result| -> BoxFuture<'static, TransactionResult> {
+      return match op_result {
+        OpResult::Ok { id, file_manager } => {
+          if let Some(mut file_manager) = file_manager {
+            return Box::pin(async move {
+              file_manager.release().await;
+              return TransactionResult::Id(id);
+            });
+          }
+
+          std::future::ready(TransactionResult::Id(id)).boxed()
+        }
+        OpResult::IgnoredConflict => {
+          std::future::ready(TransactionResult::Error("INSERT CONFLICT".into())).boxed()
+        }
+      };
+    },
+  ))
+  .await;
 
   return Ok(Json(TransactionResponse { results }));
 }
@@ -263,14 +282,14 @@ fn apply_ops(
   conn: &mut impl SyncConnection,
   user: Option<&User>,
   ops: Vec<Op>,
-) -> Result<Vec<TransactionResult>, RecordError> {
+) -> Result<Vec<OpResult>, RecordError> {
   return ops
     .into_iter()
-    .map(|op| -> Result<TransactionResult, RecordError> {
+    .map(|op| -> Result<OpResult, RecordError> {
       let Op {
         api,
         query,
-        file_manager,
+        file_handling,
       } = op;
 
       return match &query {
@@ -287,24 +306,28 @@ fn apply_ops(
             .insert_conflict_resolution_strategy()
             .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
 
-          if file_manager.is_some() {
-            return Err(RecordError::BadRequest(
-              "transactions do not (yet) implement file handling",
-            ));
-          }
+          let file_manager = if let Some((file_manager, file_committer)) = file_handling {
+            file_committer.start_async_write();
+            Some(file_manager)
+          } else {
+            None
+          };
 
           match query.apply_sync(conn) {
-            Ok(result) => Ok(TransactionResult::Id(extract_record_id(
-              result
-                .pk_value
-                .ok_or_else(|| RecordError::Internal("insert missing id".into()))?,
-            )?)),
+            Ok(result) => Ok(OpResult::Ok {
+              id: extract_record_id(
+                result
+                  .pk_value
+                  .ok_or_else(|| RecordError::Internal("insert missing id".into()))?,
+              )?,
+              file_manager,
+            }),
             // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
             Err(err)
               if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Ignore
                 && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
             {
-              Ok(TransactionResult::Error(err.to_string()))
+              Ok(OpResult::IgnoredConflict)
             }
             Err(err) => Err(RecordError::Internal(err.into())),
           }
@@ -318,21 +341,25 @@ fn apply_ops(
             user,
           )?;
 
-          if file_manager.is_some() {
-            return Err(RecordError::BadRequest(
-              "transactions do not (yet) implement file handling",
-            ));
-          }
+          let file_manager = if let Some((file_manager, file_committer)) = file_handling {
+            file_committer.start_async_write();
+            Some(file_manager)
+          } else {
+            None
+          };
 
           let result = query
             .apply_sync(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(TransactionResult::Id(extract_record_id(
-            result
-              .pk_value
-              .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
-          )?))
+          Ok(OpResult::Ok {
+            id: extract_record_id(
+              result
+                .pk_value
+                .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
+            )?,
+            file_manager,
+          })
         }
         WriteQuery::Delete {
           pk_value: record_id,
@@ -350,15 +377,18 @@ fn apply_ops(
             .apply_sync(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
-          Ok(TransactionResult::Id(extract_record_id(
-            result
-              .pk_value
-              .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
-          )?))
+          Ok(OpResult::Ok {
+            id: extract_record_id(
+              result
+                .pk_value
+                .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
+            )?,
+            file_manager: None,
+          })
         }
       };
     })
-    .collect::<Result<Vec<_>, _>>();
+    .collect();
 }
 
 #[cfg(test)]
