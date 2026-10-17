@@ -1,11 +1,8 @@
 use askama::Template;
 use object_store::ObjectStore;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
-use trailbase_sqlite::traits::SyncTransaction;
 use trailbase_sqlite::{Connection, ConnectionType, Value};
 
 use crate::config::proto;
@@ -180,75 +177,6 @@ impl WriteQuery {
       }
     };
   }
-}
-
-pub(crate) async fn run_queries(
-  conn: &Connection,
-  objectstore: &Arc<dyn ObjectStore>,
-  queries: Vec<(
-    WriteQuery,
-    Option<(QualifiedNameEscaped, FileMetadataContents)>,
-  )>,
-) -> Result<Vec<trailbase_sqlite::Value>, RecordError> {
-  let (queries, all_files): (Vec<_>, Vec<_>) = queries.into_iter().unzip();
-
-  let mut queries_with_files = HashMap::<QualifiedNameEscaped, Vec<usize>>::new();
-  let all_files: FileMetadataContents = all_files
-    .into_iter()
-    .enumerate()
-    .flat_map(|(i, entry)| {
-      if let Some((table_name, files)) = entry {
-        match queries_with_files.entry(table_name) {
-          Entry::Occupied(mut entry) => {
-            entry.get_mut().push(i);
-          }
-          Entry::Vacant(entry) => {
-            entry.insert(vec![i]);
-          }
-        }
-        return files;
-      }
-
-      return vec![];
-    })
-    .collect();
-
-  // We're storing any files to the object store first to make sure the DB entry is valid right
-  // after commit and not racily pointing to soon-to-be-written files.
-  let file_manager = if all_files.is_empty() {
-    None
-  } else {
-    Some(FileManager::write(objectstore, all_files).await?)
-  };
-
-  let result: Vec<WriteQueryResult> = conn
-    .transaction(move |mut tx| -> Result<_, trailbase_sqlite::Error> {
-      let rows: Vec<WriteQueryResult> = queries
-        .into_iter()
-        .map(|query| query.apply_sync(&mut tx))
-        .collect::<Result<Vec<_>, _>>()?;
-
-      tx.commit()?;
-
-      return Ok(rows);
-    })
-    .await?;
-
-  if let Some(mut file_manager) = file_manager {
-    // Successful transaction, do not cleanup written files. Then clean files marked for deletion.
-    file_manager.release();
-
-    for (table_name, indexes) in queries_with_files {
-      let rowids: Vec<_> = indexes.into_iter().map(|i| result[i].rowid).collect();
-      if let Err(err) =
-        delete_files_marked_for_deletion(conn, objectstore, &table_name, &rowids).await
-      {
-        log::debug!("Failed deleting files: {err}");
-      }
-    }
-  }
-
-  return Ok(result.into_iter().filter_map(|r| r.pk_value).collect());
 }
 
 pub(crate) async fn run_insert_or_replace_query(

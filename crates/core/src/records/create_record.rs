@@ -1,10 +1,11 @@
 use axum::extract::{Json, Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
+use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json_schema::FileUploadInput;
+use trailbase_sqlite::traits::SyncTransaction;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::app_state::AppState;
@@ -13,9 +14,10 @@ use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
-  FileMetadataContents, InsertParams, JsonRow, LazyParams, ParamsError, ToParamsEnum,
+  FileMetadataContents, InsertParams, JsonRow, ParamsError, ToParamsEnum,
 };
-use crate::records::write_queries::{WriteQuery, run_queries};
+use crate::records::transaction::{Op, OpResult};
+use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -31,6 +33,10 @@ pub struct CreateRecordQuery {
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
 pub struct CreateRecordResponse {
   /// Url-Safe base64 encoded ids of the newly created record.
+  ///
+  /// TODO: When conflicting inserts are ignored, unlike for transactions, we currently return an
+  /// awkward "skipped" id. Maybe we should just remove batch inserts in favor of transactions or at
+  /// least have the clients call the transaction endpoint instead.
   pub ids: Vec<String>,
 }
 
@@ -112,8 +118,6 @@ pub async fn create_record_handler(
   let conn = api.conn();
   let connection_type = conn.connection_type();
 
-  let table_name: &QualifiedNameEscaped = api.table_name();
-  let pk_meta = api.record_pk_column();
   let conflict_resolution_strategy = api
     .insert_conflict_resolution_strategy()
     .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
@@ -198,50 +202,69 @@ pub async fn create_record_handler(
       ))?]
     }
     _ => {
-      let mut queries: Vec<(
-        WriteQuery,
-        Option<(QualifiedNameEscaped, FileMetadataContents)>,
-      )> = Vec::with_capacity(records_and_files.len());
-
-      for (record, files) in records_and_files {
-        let mut lazy_params = build_lazy_insert_params(&state, &api, user.as_ref(), record, files);
-
-        api
-          .check_record_level_access(
-            Permission::Create,
-            None,
-            Some(&mut lazy_params),
-            user.as_ref(),
-          )
-          .await?;
-
-        let (params, files) = lazy_params
-          .consume()
-          .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-
-        let query = WriteQuery::new_insert_or_replace(
-          conn.connection_type(),
-          &table_name,
-          api.columns(),
-          &pk_meta.column.name,
-          conflict_resolution_strategy,
-          params,
-        )
-        .map_err(|err| RecordError::Internal(err.into()))?;
-
-        if files.is_empty() {
-          queries.push((query, None));
-        } else {
-          queries.push((query, Some((table_name.clone(), files))));
-        }
-      }
-
-      run_queries(conn, state.objectstore(), queries)
-        .await
-        .map_err(|err| RecordError::Internal(err.into()))?
+      let ops = records_and_files
         .into_iter()
-        .map(extract_record_id)
-        .collect::<Result<Vec<_>, _>>()?
+        .map(|(record, files)| -> Result<_, RecordError> {
+          let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
+            .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
+
+          let params = Arc::new(params);
+
+          let query = WriteQuery::new_insert_or_replace(
+            connection_type,
+            api.table_name(),
+            api.columns(),
+            &api.record_pk_column().column.name,
+            conflict_resolution_strategy,
+            params.clone(),
+          )?;
+
+          Ok(Op {
+            api: api.clone(),
+            query,
+            file_handling: if files.is_empty() {
+              None
+            } else {
+              Some(AsyncFileManager::new(state.objectstore().clone(), files))
+            },
+          })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+      // We use a transaction here so that if any of the ACL checks or writes fails, the entire
+      // write will fail.
+      let op_results = conn
+        .transaction(move |mut tx| -> Result<Vec<OpResult>, RecordError> {
+          let results = crate::records::transaction::apply_ops(&mut tx, user.as_ref(), ops)?;
+
+          tx.commit()?;
+
+          return Ok(results);
+        })
+        .await?;
+
+      // TODO: We currently do not trigger file deletions eagerly and rely on periodic cleanup. We may
+      // want to revisit.
+      let results = join_all(op_results.into_iter().map(
+        |op_result| -> BoxFuture<'static, Result<String, RecordError>> {
+          return match op_result {
+            OpResult::Ok { id, file_manager } => {
+              if let Some(mut file_manager) = file_manager {
+                return Box::pin(async move {
+                  file_manager.release().await;
+                  return extract_record_id(id);
+                });
+              }
+
+              std::future::ready(extract_record_id(id)).boxed()
+            }
+            OpResult::IgnoredConflict => std::future::ready(Ok("skipped".to_string())).boxed(),
+          };
+        },
+      ))
+      .await;
+
+      results.into_iter().collect::<Result<Vec<_>, _>>()?
     }
   };
 
@@ -252,30 +275,30 @@ pub async fn create_record_handler(
   return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());
 }
 
-fn build_lazy_insert_params<'a>(
-  state: &AppState,
-  api: &'a RecordApi,
-  user: Option<&User>,
-  mut record: JsonRow,
-  files: Option<Vec<FileUploadInput>>,
-) -> LazyParams<'a, InsertParams> {
-  // Optionally insert user.
-  if api.insert_autofill_missing_user_id_columns()
-    && let Some(user) = user
-  {
-    for column_index in api.user_id_columns() {
-      let col_name = &api.columns()[*column_index].column.name;
-      if !record.contains_key(col_name) {
-        record.insert(
-          col_name.to_owned(),
-          serde_json::Value::String(uuid_to_b64(&user.uuid)),
-        );
-      }
-    }
-  }
-
-  return LazyParams::for_insert(api, state.json_schema_registry().load_full(), record, files);
-}
+// fn build_lazy_insert_params<'a>(
+//   state: &AppState,
+//   api: &'a RecordApi,
+//   user: Option<&User>,
+//   mut record: JsonRow,
+//   files: Option<Vec<FileUploadInput>>,
+// ) -> LazyParams<'a, InsertParams> {
+//   // Optionally insert user.
+//   if api.insert_autofill_missing_user_id_columns()
+//     && let Some(user) = user
+//   {
+//     for column_index in api.user_id_columns() {
+//       let col_name = &api.columns()[*column_index].column.name;
+//       if !record.contains_key(col_name) {
+//         record.insert(
+//           col_name.to_owned(),
+//           serde_json::Value::String(uuid_to_b64(&user.uuid)),
+//         );
+//       }
+//     }
+//   }
+//
+//   return LazyParams::for_insert(api, state.json_schema_registry().load_full(), record, files);
+// }
 
 pub(crate) fn build_insert_params<'a>(
   state: &AppState,
@@ -308,16 +331,12 @@ pub(crate) fn build_insert_params<'a>(
 }
 
 #[inline]
-pub(crate) fn extract_record_id(
-  value: trailbase_sqlite::Value,
-) -> Result<String, trailbase_sqlite::Error> {
+pub(crate) fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, RecordError> {
   return match value {
     trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
     trailbase_sqlite::Value::Text(text) => Ok(text),
     trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
-    _ => Err(trailbase_sqlite::Error::Other(
-      "Unexpected data type".into(),
-    )),
+    _ => Err(RecordError::Internal("Unexpected data type".into())),
   };
 }
 

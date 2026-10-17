@@ -55,14 +55,14 @@ pub struct TransactionResponse {
 }
 
 pub(crate) struct Op {
-  api: RecordApi,
-  query: WriteQuery,
-  file_handling: Option<(AsyncFileManager, AsyncFileCommitter)>,
+  pub api: RecordApi,
+  pub query: WriteQuery,
+  pub file_handling: Option<(AsyncFileManager, AsyncFileCommitter)>,
 }
 
 pub(crate) enum OpResult {
   Ok {
-    id: String,
+    id: trailbase_sqlite::Value,
     file_manager: Option<AsyncFileManager>,
   },
   IgnoredConflict,
@@ -233,11 +233,14 @@ pub async fn record_transactions_handler(
           if let Some(mut file_manager) = file_manager {
             return Box::pin(async move {
               file_manager.release().await;
-              return TransactionResult::Id(id);
+              return TransactionResult::Id(extract_record_id(id).unwrap_or_default());
             });
           }
 
-          std::future::ready(TransactionResult::Id(id)).boxed()
+          std::future::ready(TransactionResult::Id(
+            extract_record_id(id).unwrap_or_default(),
+          ))
+          .boxed()
         }
         OpResult::IgnoredConflict => {
           std::future::ready(TransactionResult::Error("INSERT CONFLICT".into())).boxed()
@@ -278,7 +281,7 @@ fn get_api(state: &AppState, api_name: &str) -> Result<RecordApi, RecordError> {
 }
 
 /// Applies operations and returns a list of ids.
-fn apply_ops(
+pub(crate) fn apply_ops(
   conn: &mut impl SyncConnection,
   user: Option<&User>,
   ops: Vec<Op>,
@@ -315,11 +318,9 @@ fn apply_ops(
 
           match query.apply_sync(conn) {
             Ok(result) => Ok(OpResult::Ok {
-              id: extract_record_id(
-                result
-                  .pk_value
-                  .ok_or_else(|| RecordError::Internal("insert missing id".into()))?,
-              )?,
+              id: result
+                .pk_value
+                .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
               file_manager,
             }),
             // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
@@ -353,11 +354,9 @@ fn apply_ops(
             .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(OpResult::Ok {
-            id: extract_record_id(
-              result
-                .pk_value
-                .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
-            )?,
+            id: result
+              .pk_value
+              .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
             file_manager,
           })
         }
@@ -378,11 +377,9 @@ fn apply_ops(
             .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(OpResult::Ok {
-            id: extract_record_id(
-              result
-                .pk_value
-                .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
-            )?,
+            id: result
+              .pk_value
+              .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
             file_manager: None,
           })
         }
