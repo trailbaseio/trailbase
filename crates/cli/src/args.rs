@@ -350,7 +350,7 @@ fn host_and_port_completer(current: &std::ffi::OsStr) -> Vec<CompletionCandidate
       }
     }
 
-    return vec![CompletionCandidate::new(&format!("{current}:4000"))];
+    return vec![CompletionCandidate::new(format!("{current}:4000"))];
   }
 
   return Vec::new();

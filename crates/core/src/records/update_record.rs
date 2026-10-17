@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::files::{FileManager, delete_files_marked_for_deletion};
+use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{JsonRow, ToParamsEnum, UpdateParams};
 use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
@@ -54,14 +54,11 @@ pub async fn update_record_handler(
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
   let params = Arc::new(params);
 
-  // We're storing any files to the object store first to make sure the DB entry is valid right
-  // after commit and not racily pointing to soon-to-be-written files.
-  //
-  // FIXME: We should only write after acl check!
-  let file_manager = if !files.is_empty() {
-    Some(FileManager::write(state.objectstore(), files).await?)
+  let (file_manager, file_committer) = if !files.is_empty() {
+    let (file_manager, file_committer) = AsyncFileManager::new(state.objectstore().clone(), files);
+    (Some(file_manager), Some(file_committer))
   } else {
-    None
+    (None, None)
   };
 
   let write_result = conn
@@ -78,6 +75,12 @@ pub async fn update_record_handler(
           user.as_ref(),
         )?;
 
+        // We're storing any files to the object store first to make sure the DB entry is valid right
+        // after commit and not racily pointing to soon-to-be-written files.
+        if let Some(file_committer) = file_committer {
+          file_committer.start_async_write();
+        }
+
         return Ok(query.apply_sync(&mut conn)?);
       }
     })
@@ -85,7 +88,7 @@ pub async fn update_record_handler(
 
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
-    file_manager.release();
+    file_manager.release().await;
 
     tokio::spawn(async move {
       if let Err(err) = delete_files_marked_for_deletion(

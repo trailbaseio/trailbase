@@ -549,7 +549,7 @@ async fn async_main(
           return Ok(());
         }
 
-        api::backup_all(&data_dir, &state.connection_manager(), &state.get_config()).await?;
+        api::backup_all(&data_dir, state.connection_manager(), &state.get_config()).await?;
         api::delete_backups(&data_dir, backup_window_size).await?;
 
         eprintln!("Backup succeeded.");
