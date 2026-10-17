@@ -1,5 +1,6 @@
 use askama::Template;
 use compact_str::CompactString;
+use std::assert_matches;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -13,7 +14,7 @@ use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, V
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::constants::USER_TABLE;
-use crate::records::params::{LazyParams, Params, ToParamsEnum};
+use crate::records::params::{Params, ToParamsEnum};
 use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
@@ -173,31 +174,6 @@ struct RecordAclParams {
 }
 
 impl RecordAclParams {
-  fn new<P>(
-    p: Permission,
-    user: Option<&User>,
-    record_id: Option<Value>,
-    all_column_names: &Arc<Vec<CompactString>>,
-    request_params: Option<&mut LazyParams<'_, P>>,
-  ) -> Result<Self, RecordError>
-  where
-    Arc<P>: ToParamsEnum,
-  {
-    return Self::eager(
-      p,
-      user,
-      record_id,
-      all_column_names,
-      request_params
-        .map(|p| {
-          p.params()
-            .map_err(|_| RecordError::BadRequest("invalid params"))
-        })
-        .transpose()?
-        .and_then(|(p, _files)| p.params_enum()),
-    );
-  }
-
   fn eager(
     p: Permission,
     user: Option<&User>,
@@ -641,16 +617,19 @@ impl RecordApi {
   }
 
   /// Check if the given user (if any) can access a record given the request and the operation.
+  ///
+  /// QUESTION: should we deprecate this function?
   pub async fn check_record_level_access<P>(
     &self,
     p: Permission,
     record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_, P>>,
     user: Option<&User>,
   ) -> Result<(), RecordError>
   where
     Arc<P>: ToParamsEnum,
   {
+    assert_matches!(p, Permission::Schema | Permission::Read);
+
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -658,59 +637,19 @@ impl RecordApi {
       return Ok(());
     };
 
-    if self
-      .check_record_level_access_impl(
-        access_query,
-        RecordAclParams::new(
-          p,
-          user,
-          record_id.cloned(),
-          &self.state.schema.column_names,
-          request_params,
-        )?,
-      )
-      .await
-    {
-      return Ok(());
-    }
-
-    return Err(RecordError::Forbidden);
-  }
-
-  pub fn sync_check_record_level_access<T: SyncConnectionTrait, P>(
-    &self,
-    conn: &mut T,
-    p: Permission,
-    record_id: Option<&Value>,
-    request_params: Option<&mut LazyParams<'_, P>>,
-    user: Option<&User>,
-  ) -> Result<(), RecordError>
-  where
-    Arc<P>: ToParamsEnum,
-  {
-    // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(p, user)?;
-
-    let Some(access_query) = self.state.cached_access_query(p) else {
-      return Ok(());
-    };
-
-    let params = RecordAclParams::new(
+    let params = RecordAclParams::eager(
       p,
       user,
       record_id.cloned(),
       &self.state.schema.column_names,
-      request_params,
+      None,
     )?;
 
-    return match conn
-      .query_row(access_query, params)
-      .ok()
-      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
-    {
-      Some(allowed) if allowed => Ok(()),
-      _ => Err(RecordError::Forbidden),
-    };
+    return self
+      .state
+      .conn
+      .call_reader(|mut conn| Self::check_record_level_access_impl(&mut conn, access_query, params))
+      .await;
   }
 
   pub fn sync_eager_check_record_level_access<T: SyncConnectionTrait>(
@@ -736,39 +675,36 @@ impl RecordApi {
       request_params,
     )?;
 
-    return match conn
-      .query_row(access_query, params)
-      .ok()
-      .and_then(|row| row.and_then(|r| r.get::<bool>(0).ok()))
-    {
-      Some(allowed) if allowed => Ok(()),
-      _ => Err(RecordError::Forbidden),
-    };
+    return Self::check_record_level_access_impl(conn, access_query, params);
   }
 
   #[inline]
-  async fn check_record_level_access_impl(
-    &self,
-    query: impl AsRef<str> + Send + 'static,
+  fn check_record_level_access_impl(
+    conn: &mut impl SyncConnectionTrait,
+    access_query: impl AsRef<str> + Send + 'static,
     params: impl trailbase_sqlite::Params + Send + 'static,
-  ) -> bool {
+  ) -> Result<(), RecordError> {
     #[cfg(debug_assertions)]
-    let q = query.as_ref().to_string();
+    let q = access_query.as_ref().to_string();
 
     #[allow(unreachable_code)]
-    return match self.state.conn.read_query_row_get(query, params, 0).await {
-      Ok(Some(allowed)) => allowed,
-      Ok(None) => {
-        #[cfg(debug_assertions)]
-        panic!("RLA query '{q}' returned no result");
-
-        false
+    return match conn.query_row(access_query, params).and_then(|row| {
+      row
+        .ok_or(trailbase_sqlite::Error::QueryReturnedNoRows)
+        .and_then(|r| Ok(r.get::<bool>(0)?))
+    }) {
+      Ok(allowed) => {
+        if allowed {
+          Ok(())
+        } else {
+          Err(RecordError::Forbidden)
+        }
       }
       Err(_err) => {
         #[cfg(debug_assertions)]
         panic!("RLA query '{q}' failed: {_err}");
 
-        false
+        Err(RecordError::Forbidden)
       }
     };
   }
@@ -792,17 +728,15 @@ impl RecordApi {
       return Ok(());
     };
 
-    if self
-      .check_record_level_access_impl(
-        subscription_read_access_query,
-        SubscriptionAclParams::new(record, user),
-      )
-      .await
-    {
-      return Ok(());
-    }
+    let params = SubscriptionAclParams::new(record, user);
 
-    return Err(RecordError::Forbidden);
+    return self
+      .state
+      .conn
+      .call_reader(|mut conn| {
+        Self::check_record_level_access_impl(&mut conn, subscription_read_access_query, params)
+      })
+      .await;
   }
 
   #[inline]

@@ -126,8 +126,7 @@ pub async fn create_record_handler(
     1 => {
       let (record, files) = records_and_files.swap_remove(0);
 
-      // TODO: Pull table-level access check ahead of yield. If we do this everywhere, we can get
-      // rid of LazyParams entirely.
+      // TODO: Pull table-level access check ahead of yield.
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
         .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
@@ -274,31 +273,6 @@ pub async fn create_record_handler(
 
   return Ok(Json(CreateRecordResponse { ids: record_ids }).into_response());
 }
-
-// fn build_lazy_insert_params<'a>(
-//   state: &AppState,
-//   api: &'a RecordApi,
-//   user: Option<&User>,
-//   mut record: JsonRow,
-//   files: Option<Vec<FileUploadInput>>,
-// ) -> LazyParams<'a, InsertParams> {
-//   // Optionally insert user.
-//   if api.insert_autofill_missing_user_id_columns()
-//     && let Some(user) = user
-//   {
-//     for column_index in api.user_id_columns() {
-//       let col_name = &api.columns()[*column_index].column.name;
-//       if !record.contains_key(col_name) {
-//         record.insert(
-//           col_name.to_owned(),
-//           serde_json::Value::String(uuid_to_b64(&user.uuid)),
-//         );
-//       }
-//     }
-//   }
-//
-//   return LazyParams::for_insert(api, state.json_schema_registry().load_full(), record, files);
-// }
 
 pub(crate) fn build_insert_params<'a>(
   state: &AppState,

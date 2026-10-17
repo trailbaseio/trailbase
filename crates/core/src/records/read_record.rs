@@ -176,7 +176,7 @@ pub async fn get_uploaded_file_from_record_handler(
   let record_id = api.primary_key_to_value(record)?;
 
   let Ok(()) = api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), None, user.as_ref())
+    .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
     .await
   else {
     return Err(RecordError::Forbidden);
@@ -231,7 +231,7 @@ pub async fn get_uploaded_files_from_record_handler(
 
   let record_id = api.primary_key_to_value(record)?;
   api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), None, user.as_ref())
+    .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
     .await?;
 
   let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {

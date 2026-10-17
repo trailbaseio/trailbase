@@ -33,7 +33,7 @@ pub async fn json_schema_handler(
   };
 
   api
-    .check_record_level_access::<()>(Permission::Schema, None, None, user.as_ref())
+    .check_record_level_access::<()>(Permission::Schema, None, user.as_ref())
     .await?;
 
   return Ok(Json(build_api_json_schema(&state, &api, request.mode)?));

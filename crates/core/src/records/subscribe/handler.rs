@@ -177,7 +177,7 @@ pub async fn subscribe_sse(
     _ => {
       let record_id = api.primary_key_to_value(record)?;
       api
-        .check_record_level_access::<()>(Permission::Read, Some(&record_id), None, user.as_ref())
+        .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
         .await?;
 
       let (receiver, subscription) = state
