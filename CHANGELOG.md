@@ -1,3 +1,14 @@
+## v0.35.0
+
+- Fewer yields during record handling.
+  - Doubles the insert throughput and results roughly 10% faster reads.
+- Enable file writes as part of transactions and batch-operations.
+- Batch insertions now return a fake "skipped" id, when an insertion conflict was ignored based on the API's policy. 
+  - This is more in line with the transaction endpoint's behavior but technically a breaking change. This will only matter to you if you're using batch insertions, with an ignore policy and relying on ids of ignored insertions being stripped from the response.
+  - In the future, we may want to remove batch insertions entirely in favor of the newer and more general transactions.
+- Internal: allow more flexible error types from SQL executor reducing the need for (un)packing.
+- Update dependencies.
+
 ## v0.34.7
 
 - Update Wasmtime to address security advisories.
