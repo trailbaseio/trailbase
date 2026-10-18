@@ -1,18 +1,16 @@
-use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
-use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
 use trailbase_schema::json_schema::FileUploads;
-use trailbase_sqlite::SyncConnectionTrait;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::RawJson;
-use crate::records::expand::{ExpandedTable, build_expand_tables_params};
+use crate::records::expand::build_expand_tables_params;
 use crate::records::files::read_file_into_response;
+use crate::records::queries::ReadRecordApiQuery;
 use crate::records::read_queries::{run_get_file_query, run_get_files_query};
 use crate::records::{Permission, RecordError};
 
@@ -67,39 +65,15 @@ pub async fn read_record_handler(
     })
     .transpose()?;
 
-  let sql = ReadRecordQueryTemplate {
-    table_name: api.table_name(),
-    column_names: &api
-      .columns()
-      .iter()
-      .map(|meta| meta.column.name.as_str())
-      .collect::<Vec<_>>(),
-    pk_column_name: &api.record_pk_column().column.name,
-    expanded_tables: expanded_tables.as_deref().unwrap_or_default(),
-  }
-  .render()
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  let query = ReadRecordApiQuery::new(api.clone(), record_id, expanded_tables.as_deref())?;
+  query.check_table_level_access(user.as_ref())?;
 
-  // TODO: Merge ACL check into a ReadQuery in line with Insert, Update, ... .
   let mut row = api
     .conn()
     .call_reader({
-      let api = api.clone();
-
       move |mut conn| -> Result<_, RecordError> {
-        api.check_table_and_record_level_access(
-          &mut conn,
-          Permission::Read,
-          Some(&record_id),
-          None,
-          user.as_ref(),
-        )?;
-
-        let row = conn
-          .query_row(&sql, (record_id,))?
-          .ok_or(RecordError::RecordNotFound)?;
-
-        return Ok(row);
+        query.check_record_level_access(&mut conn, user.as_ref())?;
+        return query.read(&mut conn);
       }
     })
     .await?;
@@ -306,15 +280,6 @@ pub fn test_only_validate_api_json_schema(
   return Err(RecordError::Internal(
     format!("Json value '{value}' does not match '{json_schema}: {errors:?}' ").into(),
   ));
-}
-
-#[derive(Template)]
-#[template(escape = "none", path = "read_record_query.sql")]
-struct ReadRecordQueryTemplate<'a> {
-  table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
-  pk_column_name: &'a str,
-  expanded_tables: &'a [ExpandedTable<'a>],
 }
 
 #[cfg(test)]

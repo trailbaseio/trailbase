@@ -13,8 +13,8 @@ use crate::constants::AVATAR_TABLE;
 use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::params::{InsertParams, JsonRow};
+use crate::records::queries::run_insert_or_replace_query;
 use crate::records::read_queries::run_get_file_query;
-use crate::records::write_queries::run_insert_or_replace_query;
 use crate::util::uuid_to_b64;
 
 #[utoipa::path(

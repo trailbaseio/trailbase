@@ -6,7 +6,7 @@ use crate::extract::Either;
 use crate::records::RecordError;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{JsonRow, UpdateParams};
-use crate::records::write_queries::UpdateRecordApiQuery;
+use crate::records::queries::UpdateRecordApiQuery;
 
 /// Update existing record.
 #[utoipa::path(

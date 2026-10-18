@@ -13,10 +13,10 @@ use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
 use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
 use crate::records::params::UpdateParams;
-use crate::records::record_api::RecordApi;
-use crate::records::write_queries::{
+use crate::records::queries::{
   DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
 };
+use crate::records::record_api::RecordApi;
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]

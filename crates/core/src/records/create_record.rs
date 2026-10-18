@@ -13,8 +13,8 @@ use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, ParamsError};
+use crate::records::queries::InsertOrReplaceRecordApiQuery;
 use crate::records::transaction::{Op, OpResult, WriteQuery};
-use crate::records::write_queries::InsertOrReplaceRecordApiQuery;
 use crate::records::{RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 

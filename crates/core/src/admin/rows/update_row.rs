@@ -9,7 +9,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::params::UpdateParams;
-use crate::records::write_queries::run_update_query;
+use crate::records::queries::run_update_query;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]

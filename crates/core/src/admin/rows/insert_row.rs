@@ -9,7 +9,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::params::InsertParams;
-use crate::records::write_queries::run_insert_or_replace_query;
+use crate::records::queries::run_insert_or_replace_query;
 use crate::util::row_id_column;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]

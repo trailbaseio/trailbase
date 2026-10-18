@@ -13,7 +13,7 @@ use ts_rs::TS;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
-use crate::records::write_queries::run_delete_query;
+use crate::records::queries::run_delete_query;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
