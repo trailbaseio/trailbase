@@ -1,6 +1,5 @@
 use askama::Template;
 use compact_str::CompactString;
-use std::assert_matches;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -14,7 +13,7 @@ use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, V
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::constants::USER_TABLE;
-use crate::records::params::{Params, ToParamsEnum};
+use crate::records::params::Params;
 use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
@@ -142,15 +141,15 @@ pub struct RecordApi {
   state: Arc<RecordApiState>,
 }
 
-struct RequestParams {
+struct RequestParams<'a> {
   all_column_names: Arc<Vec<CompactString>>,
   present_fields: String,
-  request_params: Params,
+  request_params: Params<'a>,
 }
 
-impl RequestParams {
-  fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params) -> Self {
-    let present_fields = match &request_params {
+impl<'a> RequestParams<'a> {
+  fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params<'a>) -> Self {
+    let present_fields = match request_params {
       Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
       Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
     };
@@ -163,19 +162,19 @@ impl RequestParams {
   }
 }
 
-struct RecordAclParams {
+struct RecordAclParams<'a> {
   user: Option<[u8; 16]>,
   record_id: Option<Value>,
-  params: Option<RequestParams>,
+  params: Option<RequestParams<'a>>,
 }
 
-impl RecordAclParams {
-  fn eager(
+impl<'a> RecordAclParams<'a> {
+  fn new(
     p: Permission,
     user: Option<&User>,
     record_id: Option<Value>,
     all_column_names: &Arc<Vec<CompactString>>,
-    request_params: Option<Params>,
+    request_params: Option<Params<'a>>,
   ) -> Result<Self, RecordError> {
     return Ok(Self {
       user: user.map(|u| u.uuid.into_bytes()),
@@ -192,7 +191,7 @@ impl RecordAclParams {
   }
 }
 
-impl trailbase_sqlite::Params for RecordAclParams {
+impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -202,7 +201,7 @@ impl trailbase_sqlite::Params for RecordAclParams {
         stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
       }
 
-      let request_params = match &params.request_params {
+      let request_params = match params.request_params {
         Params::Insert(p) => &p.params,
         Params::Update(p) => &p.params,
       };
@@ -608,43 +607,7 @@ impl RecordApi {
     return self.state.insert_conflict_resolution_strategy;
   }
 
-  /// Check if the given user (if any) can access a record given the request and the operation.
-  ///
-  /// QUESTION: should we deprecate this function?
-  pub async fn check_record_level_access<P>(
-    &self,
-    p: Permission,
-    record_id: Option<&Value>,
-    user: Option<&User>,
-  ) -> Result<(), RecordError>
-  where
-    Arc<P>: ToParamsEnum,
-  {
-    assert_matches!(p, Permission::Schema | Permission::Read);
-
-    // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(p, user)?;
-
-    let Some(access_query) = self.state.cached_access_query(p) else {
-      return Ok(());
-    };
-
-    let params = RecordAclParams::eager(
-      p,
-      user,
-      record_id.cloned(),
-      &self.state.schema.column_names,
-      None,
-    )?;
-
-    return self
-      .state
-      .conn
-      .call_reader(|mut conn| Self::check_record_level_access_impl(&mut conn, access_query, params))
-      .await;
-  }
-
-  pub fn sync_eager_check_record_level_access<T: SyncConnectionTrait>(
+  pub fn check_table_and_record_level_access<T: SyncConnectionTrait>(
     &self,
     conn: &mut T,
     p: Permission,
@@ -659,7 +622,31 @@ impl RecordApi {
       return Ok(());
     };
 
-    let params = RecordAclParams::eager(
+    let params = RecordAclParams::new(
+      p,
+      user,
+      record_id.cloned(),
+      &self.state.schema.column_names,
+      request_params,
+    )?;
+
+    return Self::check_record_level_access_impl(conn, access_query, params);
+  }
+
+  /// Only checks record-level access. A separate table-level access check is required.
+  pub fn check_record_level_access_only<T: SyncConnectionTrait>(
+    &self,
+    conn: &mut T,
+    p: Permission,
+    record_id: Option<&Value>,
+    request_params: Option<Params>,
+    user: Option<&User>,
+  ) -> Result<(), RecordError> {
+    let Some(access_query) = self.state.cached_access_query(p) else {
+      return Ok(());
+    };
+
+    let params = RecordAclParams::new(
       p,
       user,
       record_id.cloned(),
@@ -673,8 +660,8 @@ impl RecordApi {
   #[inline]
   fn check_record_level_access_impl(
     conn: &mut impl SyncConnectionTrait,
-    access_query: impl AsRef<str> + Send + 'static,
-    params: impl trailbase_sqlite::Params + Send + 'static,
+    access_query: impl AsRef<str>,
+    params: impl trailbase_sqlite::Params,
   ) -> Result<(), RecordError> {
     #[cfg(debug_assertions)]
     let q = access_query.as_ref().to_string();

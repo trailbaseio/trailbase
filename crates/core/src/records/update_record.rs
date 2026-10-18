@@ -1,13 +1,12 @@
 use axum::extract::{Path, State};
-use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
+use crate::records::RecordError;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{JsonRow, ToParamsEnum, UpdateParams};
-use crate::records::write_queries::WriteQuery;
-use crate::records::{Permission, RecordError};
+use crate::records::params::{JsonRow, UpdateParams};
+use crate::records::queries::UpdateRecordApiQuery;
 
 /// Update existing record.
 #[utoipa::path(
@@ -41,7 +40,6 @@ pub async fn update_record_handler(
 
   let record_id = api.primary_key_to_value(record)?;
   let conn = api.conn();
-  let connection_type = conn.connection_type();
 
   let (params, files) = UpdateParams::new(
     &api,
@@ -52,7 +50,6 @@ pub async fn update_record_handler(
     record_id.clone(),
   )
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-  let params = Arc::new(params);
 
   let (file_manager, file_committer) = if !files.is_empty() {
     let (file_manager, file_committer) = AsyncFileManager::new(state.objectstore().clone(), files);
@@ -61,28 +58,20 @@ pub async fn update_record_handler(
     (None, None)
   };
 
+  let query = UpdateRecordApiQuery::new(api.clone(), params)?;
+  query.check_table_level_access(user.as_ref())?;
+
   let write_result = conn
-    .call_writer({
-      let api = api.clone();
-      let query = WriteQuery::new_update(connection_type, api.table_name(), params.clone())?;
+    .call_writer(move |mut conn| -> Result<_, RecordError> {
+      query.check_record_level_access(&mut conn, user.as_ref())?;
 
-      move |mut conn| -> Result<_, RecordError> {
-        api.sync_eager_check_record_level_access(
-          &mut conn,
-          Permission::Update,
-          Some(&record_id),
-          params.params_enum(),
-          user.as_ref(),
-        )?;
-
-        // We're storing any files to the object store first to make sure the DB entry is valid right
-        // after commit and not racily pointing to soon-to-be-written files.
-        if let Some(file_committer) = file_committer {
-          file_committer.start_async_write();
-        }
-
-        return Ok(query.apply_sync(&mut conn)?);
+      // We're storing any files to the object store first to make sure the DB entry is valid right
+      // after commit and not racily pointing to soon-to-be-written files.
+      if let Some(file_committer) = file_committer {
+        file_committer.start_async_write();
       }
+
+      return Ok(query.apply(&mut conn)?);
     })
     .await?;
 

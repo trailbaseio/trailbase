@@ -1,7 +1,6 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -10,7 +9,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::params::UpdateParams;
-use crate::records::write_queries::run_update_query;
+use crate::records::queries::run_update_query;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
@@ -86,7 +85,7 @@ pub async fn update_row_handler(
     &conn,
     state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
-    Arc::new(params),
+    params,
     files,
   )
   .await?;

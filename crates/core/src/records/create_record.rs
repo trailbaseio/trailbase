@@ -3,7 +3,6 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::json_schema::FileUploadInput;
 use trailbase_sqlite::traits::SyncTransaction;
 use utoipa::{IntoParams, ToSchema};
@@ -13,12 +12,10 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{
-  FileMetadataContents, InsertParams, JsonRow, ParamsError, ToParamsEnum,
-};
-use crate::records::transaction::{Op, OpResult};
-use crate::records::write_queries::WriteQuery;
-use crate::records::{Permission, RecordApi, RecordError};
+use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, ParamsError};
+use crate::records::queries::InsertOrReplaceRecordApiQuery;
+use crate::records::transaction::{Op, OpResult, WriteQuery};
+use crate::records::{RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Default, Deserialize, IntoParams)]
@@ -116,8 +113,6 @@ pub async fn create_record_handler(
   }
 
   let conn = api.conn();
-  let connection_type = conn.connection_type();
-
   let conflict_resolution_strategy = api
     .insert_conflict_resolution_strategy()
     .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
@@ -128,7 +123,6 @@ pub async fn create_record_handler(
 
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
         .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-      let params = Arc::new(params);
 
       let (file_manager, file_committer) = if !files.is_empty() {
         let (file_manager, file_committer) =
@@ -138,38 +132,20 @@ pub async fn create_record_handler(
         (None, None)
       };
 
+      let query = InsertOrReplaceRecordApiQuery::new(api.clone(), params)?;
+      query.check_table_level_access(user.as_ref())?;
+
       let write_result = conn
-        .call_writer({
-          let api = api.clone();
-          let query = WriteQuery::new_insert_or_replace(
-            connection_type,
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            conflict_resolution_strategy,
-            params.clone(),
-          )?;
+        .call_writer(move |mut conn| -> Result<_, RecordError> {
+          query.check_record_level_access(&mut conn, user.as_ref())?;
 
-          move |mut conn| -> Result<_, RecordError> {
-            // TODO: Pull table-level access check ahead of yield.
-            api.sync_eager_check_record_level_access(
-              &mut conn,
-              Permission::Create,
-              None,
-              params.params_enum(),
-              user.as_ref(),
-            )?;
-
-            // We're storing any files to the object store first to make sure the DB entry is valid right
-            // after commit and not racily pointing to soon-to-be-written files.
-            if let Some(file_committer) = file_committer {
-              file_committer.start_async_write();
-            }
-
-            let write_result = query.apply_sync(&mut conn);
-
-            return Ok(write_result?);
+          // We're storing any files to the object store first to make sure the DB entry is valid right
+          // after commit and not racily pointing to soon-to-be-written files.
+          if let Some(file_committer) = file_committer {
+            file_committer.start_async_write();
           }
+
+          return Ok(query.apply(&mut conn)?);
         })
         .await?;
 
@@ -205,16 +181,7 @@ pub async fn create_record_handler(
           let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
             .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let params = Arc::new(params);
-
-          let query = WriteQuery::new_insert_or_replace(
-            connection_type,
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            conflict_resolution_strategy,
-            params.clone(),
-          )?;
+          let query = WriteQuery::Insert(InsertOrReplaceRecordApiQuery::new(api.clone(), params)?);
 
           Ok(Op {
             api: api.clone(),

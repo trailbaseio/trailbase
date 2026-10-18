@@ -1,20 +1,19 @@
-use askama::Template;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
-use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::json::{record_to_json_expand, record_to_json_expand_ref};
-use trailbase_schema::json_schema::FileUploads;
-use trailbase_sqlite::SyncConnectionTrait;
+use trailbase_schema::json_schema::{FileUpload, FileUploads};
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::RawJson;
-use crate::records::expand::{ExpandedTable, build_expand_tables_params};
+use crate::records::RecordError;
+use crate::records::expand::build_expand_tables_params;
 use crate::records::files::read_file_into_response;
-use crate::records::read_queries::{run_get_file_query, run_get_files_query};
-use crate::records::{Permission, RecordError};
+use crate::records::queries::ReadFileRecordApiQuery;
+use crate::records::queries::ReadRecordApiQuery;
+use crate::schema_metadata::JsonColumnMetadata;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct ReadRecordQuery {
@@ -67,38 +66,15 @@ pub async fn read_record_handler(
     })
     .transpose()?;
 
-  let sql = ReadRecordQueryTemplate {
-    table_name: api.table_name(),
-    column_names: &api
-      .columns()
-      .iter()
-      .map(|meta| meta.column.name.as_str())
-      .collect::<Vec<_>>(),
-    pk_column_name: &api.record_pk_column().column.name,
-    expanded_tables: expanded_tables.as_deref().unwrap_or_default(),
-  }
-  .render()
-  .map_err(|err| RecordError::Internal(err.into()))?;
+  let query = ReadRecordApiQuery::new(api.clone(), record_id, expanded_tables.as_deref())?;
+  query.check_table_level_access(user.as_ref())?;
 
   let mut row = api
     .conn()
     .call_reader({
-      let api = api.clone();
-
       move |mut conn| -> Result<_, RecordError> {
-        api.sync_eager_check_record_level_access(
-          &mut conn,
-          Permission::Read,
-          Some(&record_id),
-          None,
-          user.as_ref(),
-        )?;
-
-        let row = conn
-          .query_row(&sql, (record_id,))?
-          .ok_or(RecordError::RecordNotFound)?;
-
-        return Ok(row);
+        query.check_record_level_access(&mut conn, user.as_ref())?;
+        return query.read(&mut conn);
       }
     })
     .await?;
@@ -173,29 +149,25 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  let record_id = api.primary_key_to_value(record)?;
-
-  let Ok(()) = api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
-    .await
-  else {
-    return Err(RecordError::Forbidden);
-  };
-
-  let pk_meta = api.record_pk_column();
-
   let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {
-    return Err(RecordError::BadRequest("Invalid field/column name"));
+    return Err(RecordError::BadRequest("invalid column name"));
   };
 
-  let file_upload = run_get_file_query(
-    api.conn(),
-    api.table_name(),
-    column_metadata,
-    &pk_meta.column.name,
-    record_id,
-  )
-  .await?;
+  let record_id = api.primary_key_to_value(record)?;
+  let query =
+    ReadFileRecordApiQuery::new_single_file_upload(api.clone(), column_metadata, record_id)?;
+  query.check_table_level_access(user.as_ref())?;
+
+  let json = api
+    .conn()
+    .call_reader(move |mut conn| {
+      query.check_record_level_access(&mut conn, user.as_ref())?;
+      return query.read(&mut conn);
+    })
+    .await?;
+
+  let file_upload: FileUpload =
+    serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?;
 
   return read_file_into_response(&state, file_upload)
     .await
@@ -229,22 +201,53 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
-  let record_id = api.primary_key_to_value(record)?;
-  api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
-    .await?;
-
   let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {
-    return Err(RecordError::BadRequest("Invalid field/column name"));
+    return Err(RecordError::BadRequest("invalid column name"));
   };
-  let FileUploads(file_uploads) = run_get_files_query(
-    api.conn(),
-    api.table_name(),
-    column_metadata,
-    &api.record_pk_column().column.name,
-    record_id,
-  )
-  .await?;
+
+  let Some(JsonColumnMetadata::SchemaName(name)) = &column_metadata.json else {
+    return Err(RecordError::BadRequest("not a file column"));
+  };
+
+  let record_id = api.primary_key_to_value(record)?;
+
+  let FileUploads(file_uploads) = match name.as_str() {
+    "std.FileUploads" => {
+      let query =
+        ReadFileRecordApiQuery::new_file_uploads(api.clone(), column_metadata, record_id)?;
+      query.check_table_level_access(user.as_ref())?;
+
+      let json = api
+        .conn()
+        .call_reader(move |mut conn| {
+          query.check_record_level_access(&mut conn, user.as_ref())?;
+          return query.read(&mut conn);
+        })
+        .await?;
+
+      serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?
+    }
+    "std.FileUpload" => {
+      let query =
+        ReadFileRecordApiQuery::new_single_file_upload(api.clone(), column_metadata, record_id)?;
+      query.check_table_level_access(user.as_ref())?;
+
+      let json = api
+        .conn()
+        .call_reader(move |mut conn| {
+          query.check_record_level_access(&mut conn, user.as_ref())?;
+          return query.read(&mut conn);
+        })
+        .await?;
+
+      FileUploads(vec![
+        serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))?,
+      ])
+    }
+    _ => {
+      return Err(RecordError::BadRequest("column mismatch"));
+    }
+  };
 
   let file_upload = file_uploads
     .into_iter()
@@ -275,15 +278,6 @@ pub fn test_only_validate_api_json_schema(
   return Err(RecordError::Internal(
     format!("Json value '{value}' does not match '{json_schema}: {errors:?}' ").into(),
   ));
-}
-
-#[derive(Template)]
-#[template(escape = "none", path = "read_record_query.sql")]
-struct ReadRecordQueryTemplate<'a> {
-  table_name: &'a QualifiedNameEscaped,
-  column_names: &'a [&'a str],
-  pk_column_name: &'a str,
-  expanded_tables: &'a [ExpandedTable<'a>],
 }
 
 #[cfg(test)]

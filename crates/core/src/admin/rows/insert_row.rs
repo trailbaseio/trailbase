@@ -1,7 +1,6 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
@@ -10,7 +9,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::params::InsertParams;
-use crate::records::write_queries::run_insert_or_replace_query;
+use crate::records::queries::run_insert_or_replace_query;
 use crate::util::row_id_column;
 
 #[derive(Debug, Serialize, Deserialize, TS, utoipa::ToSchema)]
@@ -63,7 +62,7 @@ pub async fn insert_row_handler(
     row_id_column(conn.connection_type()),
     // NOTE: We "fancy" parse JSON string values, since the UI currently ships everything as a
     // string. We could consider pushing some more type-awareness into the ui.
-    Arc::new(InsertParams::for_admin_insert(table_metadata, request.row)?),
+    InsertParams::for_admin_insert(table_metadata, request.row)?,
     /* files= */ vec![],
   )
   .await?;

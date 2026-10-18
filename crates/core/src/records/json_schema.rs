@@ -32,8 +32,25 @@ pub async fn json_schema_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  api.check_table_level_access(Permission::Schema, user.as_ref())?;
+
+  // NOTE:  Micro optimization: since there's no subsequent DB interaction, we could first check if
+  // there even is a schema access rule and only then invoke `call_reader`.
   api
-    .check_record_level_access::<()>(Permission::Schema, None, user.as_ref())
+    .conn()
+    .call_reader({
+      let api = api.clone();
+
+      move |mut conn| {
+        return api.check_record_level_access_only(
+          &mut conn,
+          Permission::Schema,
+          None,
+          None,
+          user.as_ref(),
+        );
+      }
+    })
     .await?;
 
   return Ok(Json(build_api_json_schema(&state, &api, request.mode)?));

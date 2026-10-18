@@ -33,31 +33,15 @@ pub struct NamedParam {
   pub value: Value,
 }
 
-pub trait ToParamsEnum {
-  fn params_enum(&self) -> Option<Params>;
-}
-
-impl ToParamsEnum for Arc<()> {
-  fn params_enum(&self) -> Option<Params> {
-    return None;
-  }
-}
-
 #[derive(Debug)]
 pub struct InsertParams {
   /// List of named params with their respective placeholders, e.g.:
   pub params: Vec<NamedParam>,
 }
 
-impl ToParamsEnum for Arc<InsertParams> {
-  fn params_enum(&self) -> Option<Params> {
-    return Some(Params::Insert(self.clone()));
-  }
-}
+pub struct InsertParamsRef<'a>(pub &'a InsertParams);
 
-pub struct ArcInsertParams(pub Arc<InsertParams>);
-
-impl trailbase_sqlite::Params for ArcInsertParams {
+impl<'a> trailbase_sqlite::Params for InsertParamsRef<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -170,15 +154,9 @@ pub struct UpdateParams {
   pub pk_column_value: Value,
 }
 
-impl ToParamsEnum for Arc<UpdateParams> {
-  fn params_enum(&self) -> Option<Params> {
-    return Some(Params::Update(self.clone()));
-  }
-}
+pub struct UpdateParamsRef<'a>(pub &'a UpdateParams);
 
-pub struct ArcUpdateParams(pub Arc<UpdateParams>);
-
-impl trailbase_sqlite::Params for ArcUpdateParams {
+impl<'a> trailbase_sqlite::Params for UpdateParamsRef<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -377,9 +355,9 @@ impl UpdateParams {
 /// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
 /// be filtered out and the json values will be translated into SQLite values.
 #[derive(Debug)]
-pub enum Params {
-  Insert(Arc<InsertParams>),
-  Update(Arc<UpdateParams>),
+pub enum Params<'a> {
+  Insert(&'a InsertParams),
+  Update(&'a UpdateParams),
 }
 
 fn extract_files_from_multipart<S: ColumnAccessor>(
@@ -598,93 +576,11 @@ mod tests {
   use serde_json::json;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::Table;
-  use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 
   use super::*;
-  use crate::config::proto;
   use crate::records::test_utils::json_row_from_value;
-  use crate::records::write_queries::WriteQuery;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
-
-  #[test]
-  fn test_empty_insert_params() {
-    let table_name = "test_table".to_string();
-
-    let allocator = Bump::new();
-    let table: Table = (&parse_into_statement(
-      &allocator,
-      &format!(
-        "CREATE TABLE {table_name} (
-          id      INTEGER PRIMARY KEY,
-          data    TEXT
-        ) STRICT;"
-      ),
-    )
-    .unwrap()
-    .unwrap())
-      .try_into()
-      .unwrap();
-
-    let registry =
-      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
-    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
-    let qualified_name = QualifiedNameEscaped::new(&QualifiedName {
-      name: table_name.clone(),
-      database_schema: None,
-    });
-
-    struct Input {
-      input: serde_json::Value,
-      expected_params: usize,
-    }
-
-    for i in [
-      Input {
-        input: json!({}),
-        expected_params: 0,
-      },
-      Input {
-        input: json!({"unknown_column": 5}),
-        expected_params: 0,
-      },
-      Input {
-        input: json!({"data": "test"}),
-        expected_params: 1,
-      },
-      Input {
-        input: json!({"id": 5, "data": "test"}),
-        expected_params: 2,
-      },
-    ] {
-      let (params, _files) = InsertParams::new(
-        &metadata,
-        &registry,
-        json_row_from_value(i.input).unwrap(),
-        None,
-      )
-      .unwrap();
-
-      let query = WriteQuery::new_insert_or_replace(
-        trailbase_sqlite::ConnectionType::Sqlite,
-        &qualified_name,
-        &metadata.column_metadata,
-        "id",
-        proto::ConflictResolutionStrategy::Replace,
-        Arc::new(params),
-      )
-      .unwrap();
-
-      let WriteQuery::Insert { query, params } = query else {
-        panic!("not an insert");
-      };
-
-      assert_eq!(i.expected_params, params.params.len());
-
-      // Make sure it's a valid query
-      assert!(parse_into_statement(&allocator, &query).is_ok(), "{query}")
-    }
-  }
 
   #[test]
   fn test_non_trivial_insert_params() {

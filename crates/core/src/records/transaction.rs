@@ -1,7 +1,6 @@
 use axum::extract::{Json, State};
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use ts_rs::TS;
@@ -10,12 +9,14 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
+use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
 use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
-use crate::records::params::{ToParamsEnum, UpdateParams};
+use crate::records::params::UpdateParams;
+use crate::records::queries::{
+  DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
+};
 use crate::records::record_api::RecordApi;
-use crate::records::write_queries::WriteQuery;
-use crate::records::{Permission, RecordError};
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -52,6 +53,12 @@ pub enum TransactionResult {
 pub struct TransactionResponse {
   /// A 1:1 mapping of operations to results.
   pub results: Vec<TransactionResult>,
+}
+
+pub(crate) enum WriteQuery {
+  Insert(InsertOrReplaceRecordApiQuery),
+  Update(UpdateRecordApiQuery),
+  Delete(DeleteRecordApiQuery),
 }
 
 pub(crate) struct Op {
@@ -113,22 +120,9 @@ pub async fn record_transactions_handler(
             build_insert_params(&state, &api, user.as_ref(), extract_record(value)?, None)
               .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let params = Arc::new(params);
-
-          let query = WriteQuery::new_insert_or_replace(
-            api.conn().connection_type(),
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            api
-              .insert_conflict_resolution_strategy()
-              .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined),
-            params.clone(),
-          )?;
-
           Ok(Op {
+            query: WriteQuery::Insert(InsertOrReplaceRecordApiQuery::new(api.clone(), params)?),
             api,
-            query,
             file_handling: if files.is_empty() {
               None
             } else {
@@ -157,18 +151,9 @@ pub async fn record_transactions_handler(
           )
           .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let params = Arc::new(params);
-
-          let query = WriteQuery::new_update(
-            api.conn().connection_type(),
-            api.table_name(),
-            params.clone(),
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
           Ok(Op {
+            query: WriteQuery::Update(UpdateRecordApiQuery::new(api.clone(), params)?),
             api,
-            query,
             file_handling: if files.is_empty() {
               None
             } else {
@@ -186,17 +171,12 @@ pub async fn record_transactions_handler(
             return Err(RecordError::BadRequest("DB mismatch"));
           }
 
-          let query = WriteQuery::new_delete(
-            api.conn().connection_type(),
-            api.table_name(),
-            &api.record_pk_column().column.name,
-            api.primary_key_to_value(record_id)?,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
-
           Ok(Op {
+            query: WriteQuery::Delete(DeleteRecordApiQuery::new(
+              api.clone(),
+              api.primary_key_to_value(record_id)?,
+            )?),
             api,
-            query,
             file_handling: None,
           })
         }
@@ -295,19 +275,10 @@ pub(crate) fn apply_ops(
         file_handling,
       } = op;
 
-      return match &query {
-        WriteQuery::Insert { params, .. } => {
-          api.sync_eager_check_record_level_access(
-            conn,
-            Permission::Create,
-            None,
-            params.params_enum(),
-            user,
-          )?;
-
-          let conflict_resolution_strategy = api
-            .insert_conflict_resolution_strategy()
-            .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
+      return match query {
+        WriteQuery::Insert(query) => {
+          query.check_table_level_access(user)?;
+          query.check_record_level_access(conn, user)?;
 
           let file_manager = if let Some((file_manager, file_committer)) = file_handling {
             file_committer.start_async_write();
@@ -316,31 +287,32 @@ pub(crate) fn apply_ops(
             None
           };
 
-          match query.apply_sync(conn) {
+          match query.apply(conn) {
             Ok(result) => Ok(OpResult::Ok {
               id: result
                 .pk_value
                 .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
               file_manager,
             }),
-            // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
-            Err(err)
+            Err(err) => {
+              let conflict_resolution_strategy = api
+                .insert_conflict_resolution_strategy()
+                .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
+
               if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Ignore
-                && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
-            {
-              Ok(OpResult::IgnoredConflict)
+                && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows)
+              {
+                // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
+                Ok(OpResult::IgnoredConflict)
+              } else {
+                Err(RecordError::Internal(err.into()))
+              }
             }
-            Err(err) => Err(RecordError::Internal(err.into())),
           }
         }
-        WriteQuery::Update { params, .. } => {
-          api.sync_eager_check_record_level_access(
-            conn,
-            Permission::Update,
-            Some(&params.pk_column_value),
-            params.params_enum(),
-            user,
-          )?;
+        WriteQuery::Update(query) => {
+          query.check_table_level_access(user)?;
+          query.check_record_level_access(conn, user)?;
 
           let file_manager = if let Some((file_manager, file_committer)) = file_handling {
             file_committer.start_async_write();
@@ -349,32 +321,23 @@ pub(crate) fn apply_ops(
             None
           };
 
-          let id = params.pk_column_value.clone();
-          let _result = query
-            .apply_sync(conn)
-            .map_err(|err| RecordError::Internal(err.into()))?;
+          let _result = query.apply(conn)?;
 
-          Ok(OpResult::Ok { id, file_manager })
+          Ok(OpResult::Ok {
+            id: query.pk_value(),
+            file_manager,
+          })
         }
-        WriteQuery::Delete {
-          pk_value: record_id,
-          ..
-        } => {
-          api.sync_eager_check_record_level_access(
-            conn,
-            Permission::Delete,
-            Some(record_id),
-            None,
-            user,
-          )?;
+        WriteQuery::Delete(query) => {
+          query.check_table_level_access(user)?;
+          query.check_record_level_access(conn, user)?;
 
-          let id = record_id.clone();
           let _result = query
-            .apply_sync(conn)
+            .apply(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(OpResult::Ok {
-            id,
+            id: query.pk_value(),
             file_manager: None,
           })
         }
