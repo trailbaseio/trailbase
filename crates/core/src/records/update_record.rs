@@ -5,7 +5,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{JsonRow, ToParamsEnum, UpdateParams};
+use crate::records::params::{JsonRow, UpdateParams};
 use crate::records::write_queries::{UpdateRecordApiQuery, WriteQuery};
 use crate::records::{Permission, RecordError};
 

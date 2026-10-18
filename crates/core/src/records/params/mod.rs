@@ -35,26 +35,10 @@ pub struct NamedParam {
   pub value: Value,
 }
 
-pub trait ToParamsEnum {
-  fn params_enum(&self) -> Option<Params<'_>>;
-}
-
-impl ToParamsEnum for Arc<()> {
-  fn params_enum(&self) -> Option<Params<'_>> {
-    return None;
-  }
-}
-
 #[derive(Debug)]
 pub struct InsertParams {
   /// List of named params with their respective placeholders, e.g.:
   pub params: Vec<NamedParam>,
-}
-
-impl ToParamsEnum for Arc<InsertParams> {
-  fn params_enum(&self) -> Option<Params<'_>> {
-    return Some(Params::Insert(CowArc::Owned(self.clone())));
-  }
 }
 
 pub struct ArcInsertParams<'a>(pub CowArc<'a, InsertParams>);
@@ -170,12 +154,6 @@ pub struct UpdateParams {
   /// Primary key column name & value.
   pub pk_column_name: String,
   pub pk_column_value: Value,
-}
-
-impl ToParamsEnum for Arc<UpdateParams> {
-  fn params_enum(&self) -> Option<Params<'_>> {
-    return Some(Params::Update(CowArc::Owned(self.clone())));
-  }
 }
 
 pub struct ArcUpdateParams<'a>(pub CowArc<'a, UpdateParams>);

@@ -176,8 +176,25 @@ pub async fn subscribe_sse(
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
+      api.check_table_level_access(Permission::Read, user.as_ref())?;
+
       api
-        .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
+        .conn()
+        .call_reader({
+          let api = api.clone();
+          let user = user.clone();
+          let record_id = record_id.clone();
+
+          move |mut conn| {
+            return api.check_record_level_access_only(
+              &mut conn,
+              Permission::Read,
+              Some(&record_id),
+              None,
+              user.as_ref(),
+            );
+          }
+        })
         .await?;
 
       let (receiver, subscription) = state
@@ -442,7 +459,22 @@ pub async fn subscribe_ws(
         // setting custom headers for the UPGRADE HTTP request. We could maybe use cookies in some
         // places but instead expect an explicit authorization.
         if let Err(_) = api
-          .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
+          .conn()
+          .call_reader({
+            let api = api.clone();
+            let user = user.clone();
+            let record_id = record_id.clone();
+
+            move |mut conn| {
+              return api.check_table_and_record_level_access(
+                &mut conn,
+                Permission::Read,
+                Some(&record_id),
+                None,
+                user.as_ref(),
+              );
+            }
+          })
           .await
         {
           abort(&mut ws_sender, Code::Policy, "unauthorized").await;

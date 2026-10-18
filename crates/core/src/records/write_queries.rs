@@ -106,7 +106,7 @@ impl InsertOrReplaceRecordApiQuery {
     conn: &mut impl SyncConnectionTrait,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
-    return self.api.sync_eager_check_record_level_access(
+    return self.api.check_record_level_access_only(
       conn,
       Permission::Create,
       None,
@@ -190,7 +190,7 @@ impl UpdateRecordApiQuery {
     conn: &mut impl SyncConnectionTrait,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
-    return self.api.sync_eager_check_record_level_access(
+    return self.api.check_record_level_access_only(
       conn,
       Permission::Update,
       Some(&self.query.params.pk_column_value),
@@ -275,7 +275,7 @@ impl DeleteRecordApiQuery {
     conn: &mut impl SyncConnectionTrait,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
-    return self.api.sync_eager_check_record_level_access(
+    return self.api.check_record_level_access_only(
       conn,
       Permission::Delete,
       Some(&self.query.pk_value),
@@ -295,7 +295,7 @@ impl DeleteRecordApiQuery {
 pub enum WriteQuery {
   Insert(InsertOrReplaceRecordApiQuery),
   Update(UpdateRecordApiQuery),
-  Delete { query: String, pk_value: Value },
+  Delete(DeleteRecordApiQuery),
 }
 
 pub struct WriteQueryResult {
@@ -316,19 +316,8 @@ impl WriteQuery {
     return Ok(Self::Update(UpdateRecordApiQuery::new(api, params)?));
   }
 
-  pub fn new_delete(
-    connection_type: ConnectionType,
-    table_name: &QualifiedNameEscaped,
-    pk_column_name: &str,
-    pk_value: Value,
-  ) -> Result<Self, RecordError> {
-    return Ok(Self::Delete {
-      query: format!(
-        r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {row_id}"#,
-        row_id = row_id_column(connection_type)
-      ),
-      pk_value,
-    });
+  pub fn new_delete(api: RecordApi, pk_value: Value) -> Result<Self, RecordError> {
+    return Ok(Self::Delete(DeleteRecordApiQuery::new(api, pk_value)?));
   }
 
   pub(super) fn apply_sync(
@@ -338,16 +327,7 @@ impl WriteQuery {
     return match self {
       Self::Insert(query) => query.apply(conn),
       Self::Update(query) => query.apply(conn),
-      Self::Delete { query, pk_value } => {
-        if let Some(row) = conn.query_row(query, (pk_value,))? {
-          Ok(WriteQueryResult {
-            rowid: row.get(0)?,
-            pk_value: None,
-          })
-        } else {
-          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-        }
-      }
+      Self::Delete(query) => query.apply(conn),
     };
   }
 }

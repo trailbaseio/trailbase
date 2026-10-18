@@ -80,13 +80,14 @@ pub async fn read_record_handler(
   .render()
   .map_err(|err| RecordError::Internal(err.into()))?;
 
+  // TODO: Merge ACL check into a ReadQuery in line with Insert, Update, ... .
   let mut row = api
     .conn()
     .call_reader({
       let api = api.clone();
 
       move |mut conn| -> Result<_, RecordError> {
-        api.sync_eager_check_record_level_access(
+        api.check_table_and_record_level_access(
           &mut conn,
           Permission::Read,
           Some(&record_id),
@@ -173,14 +174,27 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  // TODO: Merge ACL check into a ReadFileQuery in line with Insert, Update, ... .
   let record_id = api.primary_key_to_value(record)?;
+  api.check_table_level_access(Permission::Read, user.as_ref())?;
 
-  let Ok(()) = api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
-    .await
-  else {
-    return Err(RecordError::Forbidden);
-  };
+  api
+    .conn()
+    .call_reader({
+      let api = api.clone();
+      let record_id = record_id.clone();
+
+      move |mut conn| {
+        return api.check_record_level_access_only(
+          &mut conn,
+          Permission::Read,
+          Some(&record_id),
+          None,
+          user.as_ref(),
+        );
+      }
+    })
+    .await?;
 
   let pk_meta = api.record_pk_column();
 
@@ -229,9 +243,26 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  // TODO: Merge ACL check into a ReadFilesQuery in line with Insert, Update, ... .
   let record_id = api.primary_key_to_value(record)?;
+  api.check_table_level_access(Permission::Read, user.as_ref())?;
+
   api
-    .check_record_level_access::<()>(Permission::Read, Some(&record_id), user.as_ref())
+    .conn()
+    .call_reader({
+      let api = api.clone();
+      let record_id = record_id.clone();
+
+      move |mut conn| {
+        return api.check_record_level_access_only(
+          &mut conn,
+          Permission::Read,
+          Some(&record_id),
+          None,
+          user.as_ref(),
+        );
+      }
+    })
     .await?;
 
   let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {

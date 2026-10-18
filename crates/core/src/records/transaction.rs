@@ -12,7 +12,7 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::records::create_record::{build_insert_params, extract_record_id};
 use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
-use crate::records::params::{ToParamsEnum, UpdateParams};
+use crate::records::params::UpdateParams;
 use crate::records::record_api::RecordApi;
 use crate::records::write_queries::WriteQuery;
 use crate::records::{Permission, RecordError};
@@ -169,13 +169,8 @@ pub async fn record_transactions_handler(
             return Err(RecordError::BadRequest("DB mismatch"));
           }
 
-          let query = WriteQuery::new_delete(
-            api.conn().connection_type(),
-            api.table_name(),
-            &api.record_pk_column().column.name,
-            api.primary_key_to_value(record_id)?,
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
+          let query = WriteQuery::new_delete(api.clone(), api.primary_key_to_value(record_id)?)
+            .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(Op {
             api,
@@ -278,7 +273,7 @@ pub(crate) fn apply_ops(
         file_handling,
       } = op;
 
-      return match &query {
+      return match query {
         WriteQuery::Insert(query) => {
           query.check_table_level_access(user)?;
           query.check_record_level_access(conn, user)?;
@@ -331,25 +326,16 @@ pub(crate) fn apply_ops(
             file_manager,
           })
         }
-        WriteQuery::Delete {
-          pk_value: record_id,
-          ..
-        } => {
-          api.sync_eager_check_record_level_access(
-            conn,
-            Permission::Delete,
-            Some(record_id),
-            None,
-            user,
-          )?;
+        WriteQuery::Delete(query) => {
+          query.check_table_level_access(user)?;
+          query.check_record_level_access(conn, user)?;
 
-          let id = record_id.clone();
           let _result = query
-            .apply_sync(conn)
+            .apply(conn)
             .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(OpResult::Ok {
-            id,
+            id: query.pk_value(),
             file_manager: None,
           })
         }

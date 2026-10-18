@@ -14,7 +14,7 @@ use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, V
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::constants::USER_TABLE;
-use crate::records::params::{Params, ToParamsEnum};
+use crate::records::params::Params;
 use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
@@ -608,20 +608,14 @@ impl RecordApi {
     return self.state.insert_conflict_resolution_strategy;
   }
 
-  /// Check if the given user (if any) can access a record given the request and the operation.
-  ///
-  /// QUESTION: should we deprecate this function?
-  pub async fn check_record_level_access<P>(
+  pub fn check_table_and_record_level_access<T: SyncConnectionTrait>(
     &self,
+    conn: &mut T,
     p: Permission,
     record_id: Option<&Value>,
+    request_params: Option<Params>,
     user: Option<&User>,
-  ) -> Result<(), RecordError>
-  where
-    Arc<P>: ToParamsEnum,
-  {
-    assert_matches!(p, Permission::Schema | Permission::Read);
-
+  ) -> Result<(), RecordError> {
     // First check table level access and if present check row-level access based on access rule.
     self.check_table_level_access(p, user)?;
 
@@ -634,17 +628,14 @@ impl RecordApi {
       user,
       record_id.cloned(),
       &self.state.schema.column_names,
-      None,
+      request_params,
     )?;
 
-    return self
-      .state
-      .conn
-      .call_reader(|mut conn| Self::check_record_level_access_impl(&mut conn, access_query, params))
-      .await;
+    return Self::check_record_level_access_impl(conn, access_query, params);
   }
 
-  pub fn sync_eager_check_record_level_access<T: SyncConnectionTrait>(
+  /// Only checks record-level access. A separate table-level access check is required.
+  pub fn check_record_level_access_only<T: SyncConnectionTrait>(
     &self,
     conn: &mut T,
     p: Permission,
@@ -652,9 +643,6 @@ impl RecordApi {
     request_params: Option<Params>,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
-    // First check table level access and if present check row-level access based on access rule.
-    self.check_table_level_access(p, user)?;
-
     let Some(access_query) = self.state.cached_access_query(p) else {
       return Ok(());
     };
