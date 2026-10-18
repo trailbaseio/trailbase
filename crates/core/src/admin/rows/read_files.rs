@@ -12,7 +12,7 @@ use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::connection::ConnectionEntry;
 use crate::records::files::read_file_into_response;
-use crate::records::read_queries::run_get_files_query;
+use crate::records::queries::run_get_files_query;
 
 #[derive(Debug, Deserialize, TS, IntoParams)]
 #[ts(export)]

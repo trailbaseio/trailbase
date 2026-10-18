@@ -9,7 +9,6 @@ pub(crate) mod json_schema;
 pub(crate) mod list_records;
 pub(crate) mod params;
 pub(crate) mod queries;
-pub(crate) mod read_queries;
 pub(crate) mod read_record;
 pub(crate) mod subscribe;
 pub(crate) mod util;

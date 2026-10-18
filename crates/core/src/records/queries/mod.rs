@@ -2,19 +2,23 @@ use object_store::ObjectStore;
 use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
+use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use trailbase_sqlite::{Connection, Value};
 
 use crate::config::proto;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, InsertParams, UpdateParams};
+use crate::schema_metadata::JsonColumnMetadata;
 
 mod delete;
+mod file;
 mod insert;
 mod read;
 mod update;
 
 pub use delete::DeleteRecordApiQuery;
+pub use file::ReadFileRecordApiQuery;
 pub use insert::InsertOrReplaceRecordApiQuery;
 pub use read::ReadRecordApiQuery;
 pub use update::UpdateRecordApiQuery;
@@ -129,4 +133,60 @@ pub(crate) async fn run_delete_query(
   }
 
   return Ok(rowid);
+}
+
+pub(crate) async fn run_get_file_query(
+  conn: &trailbase_sqlite::Connection,
+  table_name: &QualifiedNameEscaped,
+  file_column_meta: &ColumnMetadata,
+  pk_column: &str,
+  pk_value: Value,
+) -> Result<FileUpload, RecordError> {
+  let query = file::ReadFileQuery::new(
+    "std.FileUpload",
+    table_name,
+    file_column_meta,
+    pk_column,
+    pk_value,
+  )?;
+
+  let json = conn
+    .call_reader(move |mut conn| query.read(&mut conn))
+    .await?;
+
+  return serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()));
+}
+
+pub(crate) async fn run_get_files_query(
+  conn: &trailbase_sqlite::Connection,
+  table_name: &QualifiedNameEscaped,
+  file_column_meta: &ColumnMetadata,
+  pk_column: &str,
+  pk_value: Value,
+) -> Result<FileUploads, RecordError> {
+  let Some(JsonColumnMetadata::SchemaName(name)) = &file_column_meta.json else {
+    return Err(RecordError::BadRequest("not a file column"));
+  };
+
+  return match name.as_str() {
+    "std.FileUploads" => {
+      let query = file::ReadFileQuery::new(
+        "std.FileUploads",
+        table_name,
+        file_column_meta,
+        pk_column,
+        pk_value,
+      )?;
+
+      let json = conn
+        .call_reader(move |mut conn| query.read(&mut conn))
+        .await?;
+
+      serde_json::from_str(&json).map_err(|err| RecordError::Internal(err.into()))
+    }
+    "std.FileUpload" => Ok(FileUploads(vec![
+      run_get_file_query(conn, table_name, file_column_meta, pk_column, pk_value).await?,
+    ])),
+    _ => Err(RecordError::BadRequest("column mismatch")),
+  };
 }
