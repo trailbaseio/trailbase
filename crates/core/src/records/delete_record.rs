@@ -7,7 +7,7 @@ use axum::{
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::records::files::delete_files_marked_for_deletion;
-use crate::records::write_queries::WriteQuery;
+use crate::records::write_queries::{DeleteRecordApiQuery, WriteQuery};
 use crate::records::{Permission, RecordError};
 
 /// Delete record.
@@ -32,31 +32,16 @@ pub async fn delete_record_handler(
   }
 
   let record_id = api.primary_key_to_value(record)?;
-
   let conn = api.conn();
-  let connection_type = conn.connection_type();
+
+  let query = DeleteRecordApiQuery::new(api.clone(), record_id)?;
+  query.check_table_level_access(user.as_ref())?;
 
   let write_result = conn
     .call_writer({
-      let api = api.clone();
-
       move |mut conn| -> Result<_, RecordError> {
-        api.sync_eager_check_record_level_access(
-          &mut conn,
-          Permission::Delete,
-          Some(&record_id),
-          None,
-          user.as_ref(),
-        )?;
-
-        let query = WriteQuery::new_delete(
-          connection_type,
-          api.table_name(),
-          &api.record_pk_column().column.name,
-          record_id,
-        )?;
-
-        return Ok(query.apply_sync(&mut conn)?);
+        query.check_record_level_access(&mut conn, user.as_ref())?;
+        return Ok(query.apply(&mut conn)?);
       }
     })
     .await?;

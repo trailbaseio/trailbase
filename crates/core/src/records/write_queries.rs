@@ -3,7 +3,7 @@ use object_store::ObjectStore;
 use std::sync::Arc;
 use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
-use trailbase_sqlite::{Connection, ConnectionType, Value};
+use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value};
 
 use crate::auth::User;
 use crate::config::proto;
@@ -58,7 +58,7 @@ impl InsertOrReplaceQuery {
 
   pub fn apply(
     &self,
-    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+    conn: &mut impl SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return if let Some(mut row) =
       conn.query_row(&self.query, ArcInsertParams(CowArc::Borrowed(&self.params)))?
@@ -103,7 +103,7 @@ impl InsertOrReplaceRecordApiQuery {
 
   pub fn check_record_level_access(
     &self,
-    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+    conn: &mut impl SyncConnectionTrait,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
     return self.api.sync_eager_check_record_level_access(
@@ -117,7 +117,176 @@ impl InsertOrReplaceRecordApiQuery {
 
   pub fn apply(
     &self,
-    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+    conn: &mut impl SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return self.query.apply(conn);
+  }
+}
+
+#[derive(Debug)]
+pub struct UpdateQuery {
+  query: String,
+  params: UpdateParams,
+}
+
+impl UpdateQuery {
+  pub fn new(
+    connection_type: ConnectionType,
+    table_name: &QualifiedNameEscaped,
+    params: UpdateParams,
+  ) -> Result<Self, RecordError> {
+    let query = UpdateRecordQueryTemplate {
+      table_name,
+      params: &params.params,
+      pk_column_name: &params.pk_column_name,
+      returning: Some(row_id_column(connection_type)),
+    }
+    .render()
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok(UpdateQuery { query, params });
+  }
+
+  pub fn apply(
+    &self,
+    conn: &mut impl SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return if let Some(row) =
+      conn.query_row(&self.query, ArcUpdateParams(CowArc::Borrowed(&self.params)))?
+    {
+      Ok(WriteQueryResult {
+        rowid: row.get(0)?,
+        pk_value: None,
+      })
+    } else {
+      Err(trailbase_sqlite::Error::QueryReturnedNoRows)
+    };
+  }
+}
+
+pub struct UpdateRecordApiQuery {
+  api: RecordApi,
+  query: UpdateQuery,
+}
+
+impl UpdateRecordApiQuery {
+  pub fn new(api: RecordApi, params: UpdateParams) -> Result<Self, RecordError> {
+    return Ok(Self {
+      query: UpdateQuery::new(api.conn().connection_type(), api.table_name(), params)?,
+      api,
+    });
+  }
+
+  pub fn pk_value(&self) -> Value {
+    return self.query.params.pk_column_value.clone();
+  }
+
+  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
+    return self.api.check_table_level_access(Permission::Update, user);
+  }
+
+  pub fn check_record_level_access(
+    &self,
+    conn: &mut impl SyncConnectionTrait,
+    user: Option<&User>,
+  ) -> Result<(), RecordError> {
+    return self.api.sync_eager_check_record_level_access(
+      conn,
+      Permission::Update,
+      Some(&self.query.params.pk_column_value),
+      Some(Params::Update(CowArc::Borrowed(&self.query.params))),
+      user,
+    );
+  }
+
+  pub fn apply(
+    &self,
+    conn: &mut impl SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return self.query.apply(conn);
+  }
+}
+
+#[derive(Debug)]
+pub struct DeleteQuery {
+  query: String,
+  pk_value: Value,
+}
+
+impl DeleteQuery {
+  pub fn new(
+    connection_type: ConnectionType,
+    table_name: &QualifiedNameEscaped,
+    pk_column_name: &str,
+    pk_value: Value,
+  ) -> Result<Self, RecordError> {
+    return Ok(Self {
+      query: format!(
+        r#"DELETE FROM {table_name} WHERE "{pk_column_name}" = $1 RETURNING {row_id}"#,
+        row_id = row_id_column(connection_type)
+      ),
+      pk_value,
+    });
+  }
+
+  pub fn apply(
+    &self,
+    conn: &mut impl SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return if let Some(row) = conn.query_row(&self.query, (&self.pk_value,))? {
+      Ok(WriteQueryResult {
+        rowid: row.get(0)?,
+        pk_value: None,
+      })
+    } else {
+      Err(trailbase_sqlite::Error::QueryReturnedNoRows)
+    };
+  }
+}
+
+pub struct DeleteRecordApiQuery {
+  api: RecordApi,
+  query: DeleteQuery,
+}
+
+impl DeleteRecordApiQuery {
+  pub fn new(api: RecordApi, record_id: Value) -> Result<Self, RecordError> {
+    return Ok(Self {
+      query: DeleteQuery::new(
+        api.conn().connection_type(),
+        api.table_name(),
+        &api.record_pk_column().column.name,
+        record_id,
+      )?,
+      api,
+    });
+  }
+
+  pub fn pk_value(&self) -> Value {
+    return self.query.pk_value.clone();
+  }
+
+  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
+    return self.api.check_table_level_access(Permission::Delete, user);
+  }
+
+  pub fn check_record_level_access(
+    &self,
+    conn: &mut impl SyncConnectionTrait,
+    user: Option<&User>,
+  ) -> Result<(), RecordError> {
+    return self.api.sync_eager_check_record_level_access(
+      conn,
+      Permission::Delete,
+      Some(&self.query.pk_value),
+      None,
+      user,
+    );
+  }
+
+  pub fn apply(
+    &self,
+    conn: &mut impl SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return self.query.apply(conn);
   }
@@ -125,14 +294,8 @@ impl InsertOrReplaceRecordApiQuery {
 
 pub enum WriteQuery {
   Insert(InsertOrReplaceRecordApiQuery),
-  Update {
-    query: String,
-    params: Arc<UpdateParams>,
-  },
-  Delete {
-    query: String,
-    pk_value: Value,
-  },
+  Update(UpdateRecordApiQuery),
+  Delete { query: String, pk_value: Value },
 }
 
 pub struct WriteQueryResult {
@@ -149,21 +312,8 @@ impl WriteQuery {
     )?));
   }
 
-  pub fn new_update(
-    connection_type: ConnectionType,
-    table_name: &QualifiedNameEscaped,
-    params: Arc<UpdateParams>,
-  ) -> Result<Self, RecordError> {
-    let query = UpdateRecordQueryTemplate {
-      table_name,
-      params: &params.params,
-      pk_column_name: &params.pk_column_name,
-      returning: Some(row_id_column(connection_type)),
-    }
-    .render()
-    .map_err(|err| RecordError::Internal(err.into()))?;
-
-    return Ok(Self::Update { query, params });
+  pub fn new_update(api: RecordApi, params: UpdateParams) -> Result<Self, RecordError> {
+    return Ok(Self::Update(UpdateRecordApiQuery::new(api, params)?));
   }
 
   pub fn new_delete(
@@ -183,20 +333,11 @@ impl WriteQuery {
 
   pub(super) fn apply_sync(
     self,
-    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+    conn: &mut impl SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
       Self::Insert(query) => query.apply(conn),
-      Self::Update { query, params } => {
-        if let Some(row) = conn.query_row(query, ArcUpdateParams(params))? {
-          Ok(WriteQueryResult {
-            rowid: row.get(0)?,
-            pk_value: None,
-          })
-        } else {
-          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-        }
-      }
+      Self::Update(query) => query.apply(conn),
       Self::Delete { query, pk_value } => {
         if let Some(row) = conn.query_row(query, (pk_value,))? {
           Ok(WriteQueryResult {
@@ -221,7 +362,7 @@ pub(crate) async fn run_insert_or_replace_query(
   return_column_name: &str,
   params: InsertParams,
   files: FileMetadataContents,
-) -> Result<trailbase_sqlite::Value, RecordError> {
+) -> Result<Value, RecordError> {
   let query = InsertOrReplaceQuery::new(
     conn.connection_type(),
     table_name,
@@ -265,10 +406,10 @@ pub(crate) async fn run_update_query(
   conn: &Connection,
   objectstore: &Arc<dyn ObjectStore>,
   table_name: &QualifiedNameEscaped,
-  params: Arc<UpdateParams>,
+  params: UpdateParams,
   files: FileMetadataContents,
 ) -> Result<(), RecordError> {
-  let query = WriteQuery::new_update(conn.connection_type(), table_name, params)?;
+  let query = UpdateQuery::new(conn.connection_type(), table_name, params)?;
 
   // We're storing any files to the object store first to make sure the DB entry is valid right
   // after commit and not racily pointing to soon-to-be-written files.
@@ -279,7 +420,7 @@ pub(crate) async fn run_update_query(
   };
 
   let WriteQueryResult { rowid, pk_value: _ } = conn
-    .call_writer(|mut conn| query.apply_sync(&mut conn))
+    .call_writer(move |mut conn| query.apply(&mut conn))
     .await?;
 
   // Successful write, do not cleanup written files.
@@ -301,10 +442,10 @@ pub(crate) async fn run_delete_query(
   pk_value: Value,
   has_file_columns: bool,
 ) -> Result<i64, RecordError> {
-  let query = WriteQuery::new_delete(conn.connection_type(), table_name, pk_column, pk_value)?;
+  let query = DeleteQuery::new(conn.connection_type(), table_name, pk_column, pk_value)?;
 
   let WriteQueryResult { rowid, pk_value: _ } = conn
-    .call_writer(|mut conn| query.apply_sync(&mut conn))
+    .call_writer(move |mut conn| query.apply(&mut conn))
     .await?;
 
   if has_file_columns {
@@ -489,7 +630,7 @@ mod tests {
       assert_eq!(i.expected_params, params.params.len());
 
       let query = InsertOrReplaceQuery::new(
-        trailbase_sqlite::ConnectionType::Sqlite,
+        ConnectionType::Sqlite,
         &qualified_name,
         &metadata.column_metadata,
         "id",

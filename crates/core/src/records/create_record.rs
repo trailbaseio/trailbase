@@ -114,8 +114,6 @@ pub async fn create_record_handler(
   }
 
   let conn = api.conn();
-  let connection_type = conn.connection_type();
-
   let conflict_resolution_strategy = api
     .insert_conflict_resolution_strategy()
     .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
@@ -139,18 +137,16 @@ pub async fn create_record_handler(
       query.check_table_level_access(user.as_ref())?;
 
       let write_result = conn
-        .call_writer({
-          move |mut conn| -> Result<_, RecordError> {
-            query.check_record_level_access(&mut conn, user.as_ref())?;
+        .call_writer(move |mut conn| -> Result<_, RecordError> {
+          query.check_record_level_access(&mut conn, user.as_ref())?;
 
-            // We're storing any files to the object store first to make sure the DB entry is valid right
-            // after commit and not racily pointing to soon-to-be-written files.
-            if let Some(file_committer) = file_committer {
-              file_committer.start_async_write();
-            }
-
-            return Ok(query.apply(&mut conn)?);
+          // We're storing any files to the object store first to make sure the DB entry is valid right
+          // after commit and not racily pointing to soon-to-be-written files.
+          if let Some(file_committer) = file_committer {
+            file_committer.start_async_write();
           }
+
+          return Ok(query.apply(&mut conn)?);
         })
         .await?;
 

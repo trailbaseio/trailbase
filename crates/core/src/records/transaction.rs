@@ -146,14 +146,8 @@ pub async fn record_transactions_handler(
           )
           .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let params = Arc::new(params);
-
-          let query = WriteQuery::new_update(
-            api.conn().connection_type(),
-            api.table_name(),
-            params.clone(),
-          )
-          .map_err(|err| RecordError::Internal(err.into()))?;
+          let query = WriteQuery::new_update(api.clone(), params)
+            .map_err(|err| RecordError::Internal(err.into()))?;
 
           Ok(Op {
             api,
@@ -319,14 +313,9 @@ pub(crate) fn apply_ops(
             }
           }
         }
-        WriteQuery::Update { params, .. } => {
-          api.sync_eager_check_record_level_access(
-            conn,
-            Permission::Update,
-            Some(&params.pk_column_value),
-            params.params_enum(),
-            user,
-          )?;
+        WriteQuery::Update(query) => {
+          query.check_table_level_access(user)?;
+          query.check_record_level_access(conn, user)?;
 
           let file_manager = if let Some((file_manager, file_committer)) = file_handling {
             file_committer.start_async_write();
@@ -335,12 +324,12 @@ pub(crate) fn apply_ops(
             None
           };
 
-          let id = params.pk_column_value.clone();
-          let _result = query
-            .apply_sync(conn)
-            .map_err(|err| RecordError::Internal(err.into()))?;
+          let _result = query.apply(conn)?;
 
-          Ok(OpResult::Ok { id, file_manager })
+          Ok(OpResult::Ok {
+            id: query.pk_value(),
+            file_manager,
+          })
         }
         WriteQuery::Delete {
           pk_value: record_id,

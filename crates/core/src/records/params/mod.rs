@@ -178,9 +178,9 @@ impl ToParamsEnum for Arc<UpdateParams> {
   }
 }
 
-pub struct ArcUpdateParams(pub Arc<UpdateParams>);
+pub struct ArcUpdateParams<'a>(pub CowArc<'a, UpdateParams>);
 
-impl trailbase_sqlite::Params for ArcUpdateParams {
+impl<'a> trailbase_sqlite::Params for ArcUpdateParams<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -600,12 +600,9 @@ mod tests {
   use serde_json::json;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
   use trailbase_schema::db::sqlite::Table;
-  use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
 
   use super::*;
-  use crate::config::proto;
   use crate::records::test_utils::json_row_from_value;
-  use crate::records::write_queries::InsertOrReplaceQuery;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
 

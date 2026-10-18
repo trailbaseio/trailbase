@@ -86,7 +86,7 @@ pub async fn update_row_handler(
     &conn,
     state.objectstore(),
     &QualifiedNameEscaped::new(&table_metadata.schema.name),
-    Arc::new(params),
+    params,
     files,
   )
   .await?;
