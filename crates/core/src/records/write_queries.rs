@@ -5,13 +5,91 @@ use trailbase_schema::db::QualifiedNameEscaped;
 use trailbase_schema::db::metadata::ColumnMetadata;
 use trailbase_sqlite::{Connection, ConnectionType, Value};
 
+use crate::auth::User;
 use crate::config::proto;
+use crate::records::Permission;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
-  ArcInsertParams, ArcUpdateParams, FileMetadataContents, InsertParams, NamedParam, UpdateParams,
+  ArcInsertParams, ArcUpdateParams, CowArc, FileMetadataContents, InsertParams, NamedParam, Params,
+  UpdateParams,
 };
+use crate::records::record_api::RecordApi;
 use crate::util::row_id_column;
+
+pub struct InsertOrReplaceQuery {
+  api: RecordApi,
+  query: String,
+  params: InsertParams,
+}
+
+impl InsertOrReplaceQuery {
+  pub fn new(api: RecordApi, params: InsertParams) -> Result<Self, RecordError> {
+    let table_name = api.table_name();
+    let column_metadata = api.columns();
+    let pk_column_name = &api.record_pk_column().column.name;
+    let conflict_resolution = api
+      .insert_conflict_resolution_strategy()
+      .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
+
+    let row_id_column = row_id_column(api.conn().connection_type());
+    let query = CreateOrReplaceRecordQueryTemplate {
+      table_name,
+      params: &params.params,
+      pk_column_name,
+      column_metadata: match conflict_resolution {
+        proto::ConflictResolutionStrategy::Replace => column_metadata,
+        proto::ConflictResolutionStrategy::Ignore => &[],
+        proto::ConflictResolutionStrategy::Abort | proto::ConflictResolutionStrategy::Undefined => {
+          &[]
+        }
+      },
+      ignore_conflict: matches!(
+        conflict_resolution,
+        proto::ConflictResolutionStrategy::Ignore
+      ),
+      returning: &[row_id_column, pk_column_name],
+    }
+    .render()
+    .map_err(|err| RecordError::Internal(err.into()))?;
+
+    return Ok(Self { api, query, params });
+  }
+
+  pub fn apply(
+    self,
+    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return if let Some(mut row) =
+      conn.query_row(self.query, ArcInsertParams(CowArc::Borrowed(&self.params)))?
+    {
+      Ok(WriteQueryResult {
+        rowid: row.get(0)?,
+        pk_value: Some(row.consume_value(1)?),
+      })
+    } else {
+      Err(trailbase_sqlite::Error::QueryReturnedNoRows)
+    };
+  }
+
+  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
+    return self.api.check_table_level_access(Permission::Create, user);
+  }
+
+  pub fn check_record_level_access(
+    &self,
+    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+    user: Option<&User>,
+  ) -> Result<(), RecordError> {
+    return self.api.sync_eager_check_record_level_access(
+      conn,
+      Permission::Create,
+      None,
+      Some(Params::Insert(CowArc::Borrowed(&self.params))),
+      user,
+    );
+  }
+}
 
 #[derive(Debug)]
 pub enum WriteQuery {
@@ -30,7 +108,9 @@ pub enum WriteQuery {
 }
 
 pub struct WriteQueryResult {
+  /// Row-id (SQLite) or ctid (Postgres) of affected record. Always present.
   pub rowid: i64,
+  /// Primary key value. Only present on inserts.
   pub pk_value: Option<Value>,
 }
 
@@ -105,7 +185,7 @@ impl WriteQuery {
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
       Self::Insert { query, params, .. } => {
-        if let Some(mut row) = conn.query_row(query, ArcInsertParams(params))? {
+        if let Some(mut row) = conn.query_row(query, ArcInsertParams(CowArc::Borrowed(&*params)))? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: Some(row.consume_value(1)?),

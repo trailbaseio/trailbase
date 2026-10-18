@@ -142,14 +142,14 @@ pub struct RecordApi {
   state: Arc<RecordApiState>,
 }
 
-struct RequestParams {
+struct RequestParams<'a> {
   all_column_names: Arc<Vec<CompactString>>,
   present_fields: String,
-  request_params: Params,
+  request_params: Params<'a>,
 }
 
-impl RequestParams {
-  fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params) -> Self {
+impl<'a> RequestParams<'a> {
+  fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params<'a>) -> Self {
     let present_fields = match &request_params {
       Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
       Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
@@ -163,19 +163,19 @@ impl RequestParams {
   }
 }
 
-struct RecordAclParams {
+struct RecordAclParams<'a> {
   user: Option<[u8; 16]>,
   record_id: Option<Value>,
-  params: Option<RequestParams>,
+  params: Option<RequestParams<'a>>,
 }
 
-impl RecordAclParams {
-  fn eager(
+impl<'a> RecordAclParams<'a> {
+  fn new(
     p: Permission,
     user: Option<&User>,
     record_id: Option<Value>,
     all_column_names: &Arc<Vec<CompactString>>,
-    request_params: Option<Params>,
+    request_params: Option<Params<'a>>,
   ) -> Result<Self, RecordError> {
     return Ok(Self {
       user: user.map(|u| u.uuid.into_bytes()),
@@ -192,7 +192,7 @@ impl RecordAclParams {
   }
 }
 
-impl trailbase_sqlite::Params for RecordAclParams {
+impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -629,7 +629,7 @@ impl RecordApi {
       return Ok(());
     };
 
-    let params = RecordAclParams::eager(
+    let params = RecordAclParams::new(
       p,
       user,
       record_id.cloned(),
@@ -659,7 +659,7 @@ impl RecordApi {
       return Ok(());
     };
 
-    let params = RecordAclParams::eager(
+    let params = RecordAclParams::new(
       p,
       user,
       record_id.cloned(),
@@ -673,8 +673,8 @@ impl RecordApi {
   #[inline]
   fn check_record_level_access_impl(
     conn: &mut impl SyncConnectionTrait,
-    access_query: impl AsRef<str> + Send + 'static,
-    params: impl trailbase_sqlite::Params + Send + 'static,
+    access_query: impl AsRef<str>,
+    params: impl trailbase_sqlite::Params,
   ) -> Result<(), RecordError> {
     #[cfg(debug_assertions)]
     let q = access_query.as_ref().to_string();

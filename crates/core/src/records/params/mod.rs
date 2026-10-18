@@ -15,8 +15,10 @@ use crate::records::RecordApi;
 use crate::records::util::named_placeholder;
 use crate::schema_metadata::{JsonColumnMetadata, TableMetadata};
 
+pub mod cow_arc;
 mod error;
 
+pub use cow_arc::CowArc;
 pub use error::ParamsError;
 
 /// Contains Metadata (i.e. column contents) and file contents.
@@ -34,11 +36,11 @@ pub struct NamedParam {
 }
 
 pub trait ToParamsEnum {
-  fn params_enum(&self) -> Option<Params>;
+  fn params_enum(&self) -> Option<Params<'_>>;
 }
 
 impl ToParamsEnum for Arc<()> {
-  fn params_enum(&self) -> Option<Params> {
+  fn params_enum(&self) -> Option<Params<'_>> {
     return None;
   }
 }
@@ -50,14 +52,14 @@ pub struct InsertParams {
 }
 
 impl ToParamsEnum for Arc<InsertParams> {
-  fn params_enum(&self) -> Option<Params> {
-    return Some(Params::Insert(self.clone()));
+  fn params_enum(&self) -> Option<Params<'_>> {
+    return Some(Params::Insert(CowArc::Owned(self.clone())));
   }
 }
 
-pub struct ArcInsertParams(pub Arc<InsertParams>);
+pub struct ArcInsertParams<'a>(pub CowArc<'a, InsertParams>);
 
-impl trailbase_sqlite::Params for ArcInsertParams {
+impl<'a> trailbase_sqlite::Params for ArcInsertParams<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -171,8 +173,8 @@ pub struct UpdateParams {
 }
 
 impl ToParamsEnum for Arc<UpdateParams> {
-  fn params_enum(&self) -> Option<Params> {
-    return Some(Params::Update(self.clone()));
+  fn params_enum(&self) -> Option<Params<'_>> {
+    return Some(Params::Update(CowArc::Owned(self.clone())));
   }
 }
 
@@ -377,9 +379,9 @@ impl UpdateParams {
 /// To construct a `Params`, the request will be transformed, i.e. fields for unknown columns will
 /// be filtered out and the json values will be translated into SQLite values.
 #[derive(Debug)]
-pub enum Params {
-  Insert(Arc<InsertParams>),
-  Update(Arc<UpdateParams>),
+pub enum Params<'a> {
+  Insert(CowArc<'a, InsertParams>),
+  Update(CowArc<'a, UpdateParams>),
 }
 
 fn extract_files_from_multipart<S: ColumnAccessor>(

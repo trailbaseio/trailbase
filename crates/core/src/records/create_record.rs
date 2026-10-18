@@ -17,7 +17,7 @@ use crate::records::params::{
   FileMetadataContents, InsertParams, JsonRow, ParamsError, ToParamsEnum,
 };
 use crate::records::transaction::{Op, OpResult};
-use crate::records::write_queries::WriteQuery;
+use crate::records::write_queries::{InsertOrReplaceQuery, WriteQuery};
 use crate::records::{Permission, RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -128,7 +128,6 @@ pub async fn create_record_handler(
 
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
         .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
-      let params = Arc::new(params);
 
       let (file_manager, file_committer) = if !files.is_empty() {
         let (file_manager, file_committer) =
@@ -138,27 +137,13 @@ pub async fn create_record_handler(
         (None, None)
       };
 
+      let query = InsertOrReplaceQuery::new(api.clone(), params)?;
+      query.check_table_level_access(user.as_ref())?;
+
       let write_result = conn
         .call_writer({
-          let api = api.clone();
-          let query = WriteQuery::new_insert_or_replace(
-            connection_type,
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            conflict_resolution_strategy,
-            params.clone(),
-          )?;
-
           move |mut conn| -> Result<_, RecordError> {
-            // TODO: Pull table-level access check ahead of yield.
-            api.sync_eager_check_record_level_access(
-              &mut conn,
-              Permission::Create,
-              None,
-              params.params_enum(),
-              user.as_ref(),
-            )?;
+            query.check_record_level_access(&mut conn, user.as_ref())?;
 
             // We're storing any files to the object store first to make sure the DB entry is valid right
             // after commit and not racily pointing to soon-to-be-written files.
@@ -166,9 +151,7 @@ pub async fn create_record_handler(
               file_committer.start_async_write();
             }
 
-            let write_result = query.apply_sync(&mut conn);
-
-            return Ok(write_result?);
+            return Ok(query.apply(&mut conn)?);
           }
         })
         .await?;
