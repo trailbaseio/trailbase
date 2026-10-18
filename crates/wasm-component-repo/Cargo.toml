@@ -19,7 +19,7 @@ trailbase-wasm-runtime-host = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.8"
 wit-component = "0.262.0"
-zip = { version = "9.0.4", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 
 [build-dependencies]
 trailbase-build = { workspace = true }

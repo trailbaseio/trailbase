@@ -53,7 +53,7 @@ strip = "debuginfo" # ("symbols", "debuginfo", "none")
 opt-level = 1
 
 [workspace.dependencies]
-arc-swap = { version = "1.9.2", default-features = false }
+arc-swap = { version = "1.9.3", default-features = false }
 argon2 = { version = "^0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash"] }
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std", "config"] }
 axum = { version = "^0.8.9", default-features = false, features = ["multipart"] }
@@ -62,7 +62,7 @@ bytes = { version = "1.12.1", features = ["serde"] }
 chrono = { version = "0.4.45", default-features = false }
 clap = { version = "^4.6.7", features=["derive", "env"] }
 cron = "0.17.0"
-crossfire = { version = "3.1.20", default-features = false, features = ["tokio"] }
+crossfire = { version = "3.1.21", default-features = false, features = ["tokio"] }
 env_logger = { version = "^0.11.11", default-features = false, features = ["auto-color", "humantime"] }
 flume = { version = "0.12.0", default-features = false, features = ["select", "async"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["alloc", "spin"] }
