@@ -105,7 +105,7 @@ pub async fn create_avatar_handler(
     &AVATAR_TABLE_METADATA.column_metadata,
     proto::ConflictResolutionStrategy::Replace,
     "user",
-    Arc::new(params),
+    params,
     files,
   )
   .await

@@ -13,12 +13,10 @@ use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
-use crate::records::params::{
-  FileMetadataContents, InsertParams, JsonRow, ParamsError, ToParamsEnum,
-};
+use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, ParamsError};
 use crate::records::transaction::{Op, OpResult};
-use crate::records::write_queries::{InsertOrReplaceQuery, WriteQuery};
-use crate::records::{Permission, RecordApi, RecordError};
+use crate::records::write_queries::{InsertOrReplaceRecordApiQuery, WriteQuery};
+use crate::records::{RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
 #[derive(Clone, Debug, Default, Deserialize, IntoParams)]
@@ -137,7 +135,7 @@ pub async fn create_record_handler(
         (None, None)
       };
 
-      let query = InsertOrReplaceQuery::new(api.clone(), params)?;
+      let query = InsertOrReplaceRecordApiQuery::new(api.clone(), params)?;
       query.check_table_level_access(user.as_ref())?;
 
       let write_result = conn
@@ -188,16 +186,7 @@ pub async fn create_record_handler(
           let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
             .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let params = Arc::new(params);
-
-          let query = WriteQuery::new_insert_or_replace(
-            connection_type,
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            conflict_resolution_strategy,
-            params.clone(),
-          )?;
+          let query = WriteQuery::new_insert_or_replace(api.clone(), params)?;
 
           Ok(Op {
             api: api.clone(),

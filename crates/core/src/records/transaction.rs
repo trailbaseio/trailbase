@@ -113,18 +113,7 @@ pub async fn record_transactions_handler(
             build_insert_params(&state, &api, user.as_ref(), extract_record(value)?, None)
               .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let params = Arc::new(params);
-
-          let query = WriteQuery::new_insert_or_replace(
-            api.conn().connection_type(),
-            api.table_name(),
-            api.columns(),
-            &api.record_pk_column().column.name,
-            api
-              .insert_conflict_resolution_strategy()
-              .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined),
-            params.clone(),
-          )?;
+          let query = WriteQuery::new_insert_or_replace(api.clone(), params)?;
 
           Ok(Op {
             api,
@@ -296,18 +285,9 @@ pub(crate) fn apply_ops(
       } = op;
 
       return match &query {
-        WriteQuery::Insert { params, .. } => {
-          api.sync_eager_check_record_level_access(
-            conn,
-            Permission::Create,
-            None,
-            params.params_enum(),
-            user,
-          )?;
-
-          let conflict_resolution_strategy = api
-            .insert_conflict_resolution_strategy()
-            .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
+        WriteQuery::Insert(query) => {
+          query.check_table_level_access(user)?;
+          query.check_record_level_access(conn, user)?;
 
           let file_manager = if let Some((file_manager, file_committer)) = file_handling {
             file_committer.start_async_write();
@@ -316,21 +296,27 @@ pub(crate) fn apply_ops(
             None
           };
 
-          match query.apply_sync(conn) {
+          match query.apply(conn) {
             Ok(result) => Ok(OpResult::Ok {
               id: result
                 .pk_value
                 .unwrap_or(trailbase_sqlite::Value::Integer(result.rowid)),
               file_manager,
             }),
-            // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
-            Err(err)
+            Err(err) => {
+              let conflict_resolution_strategy = api
+                .insert_conflict_resolution_strategy()
+                .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
+
               if conflict_resolution_strategy == proto::ConflictResolutionStrategy::Ignore
-                && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows) =>
-            {
-              Ok(OpResult::IgnoredConflict)
+                && matches!(err, trailbase_sqlite::Error::QueryReturnedNoRows)
+              {
+                // Skip over QueryReturnedNoRow errors for `Ignore` conflict strategy.
+                Ok(OpResult::IgnoredConflict)
+              } else {
+                Err(RecordError::Internal(err.into()))
+              }
             }
-            Err(err) => Err(RecordError::Internal(err.into())),
           }
         }
         WriteQuery::Update { params, .. } => {

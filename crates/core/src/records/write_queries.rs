@@ -17,111 +17,20 @@ use crate::records::params::{
 use crate::records::record_api::RecordApi;
 use crate::util::row_id_column;
 
+#[derive(Debug)]
 pub struct InsertOrReplaceQuery {
-  api: RecordApi,
   query: String,
   params: InsertParams,
 }
 
 impl InsertOrReplaceQuery {
-  pub fn new(api: RecordApi, params: InsertParams) -> Result<Self, RecordError> {
-    let table_name = api.table_name();
-    let column_metadata = api.columns();
-    let pk_column_name = &api.record_pk_column().column.name;
-    let conflict_resolution = api
-      .insert_conflict_resolution_strategy()
-      .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
-
-    let row_id_column = row_id_column(api.conn().connection_type());
-    let query = CreateOrReplaceRecordQueryTemplate {
-      table_name,
-      params: &params.params,
-      pk_column_name,
-      column_metadata: match conflict_resolution {
-        proto::ConflictResolutionStrategy::Replace => column_metadata,
-        proto::ConflictResolutionStrategy::Ignore => &[],
-        proto::ConflictResolutionStrategy::Abort | proto::ConflictResolutionStrategy::Undefined => {
-          &[]
-        }
-      },
-      ignore_conflict: matches!(
-        conflict_resolution,
-        proto::ConflictResolutionStrategy::Ignore
-      ),
-      returning: &[row_id_column, pk_column_name],
-    }
-    .render()
-    .map_err(|err| RecordError::Internal(err.into()))?;
-
-    return Ok(Self { api, query, params });
-  }
-
-  pub fn apply(
-    self,
-    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
-  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
-    return if let Some(mut row) =
-      conn.query_row(self.query, ArcInsertParams(CowArc::Borrowed(&self.params)))?
-    {
-      Ok(WriteQueryResult {
-        rowid: row.get(0)?,
-        pk_value: Some(row.consume_value(1)?),
-      })
-    } else {
-      Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-    };
-  }
-
-  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
-    return self.api.check_table_level_access(Permission::Create, user);
-  }
-
-  pub fn check_record_level_access(
-    &self,
-    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
-    user: Option<&User>,
-  ) -> Result<(), RecordError> {
-    return self.api.sync_eager_check_record_level_access(
-      conn,
-      Permission::Create,
-      None,
-      Some(Params::Insert(CowArc::Borrowed(&self.params))),
-      user,
-    );
-  }
-}
-
-#[derive(Debug)]
-pub enum WriteQuery {
-  Insert {
-    query: String,
-    params: Arc<InsertParams>,
-  },
-  Update {
-    query: String,
-    params: Arc<UpdateParams>,
-  },
-  Delete {
-    query: String,
-    pk_value: Value,
-  },
-}
-
-pub struct WriteQueryResult {
-  /// Row-id (SQLite) or ctid (Postgres) of affected record. Always present.
-  pub rowid: i64,
-  /// Primary key value. Only present on inserts.
-  pub pk_value: Option<Value>,
-}
-
-impl WriteQuery {
-  pub fn new_insert_or_replace(
+  pub fn new(
     connection_type: ConnectionType,
     table_name: &QualifiedNameEscaped,
     column_metadata: &[ColumnMetadata],
     pk_column_name: &str,
     conflict_resolution: proto::ConflictResolutionStrategy,
-    params: Arc<InsertParams>,
+    params: InsertParams,
   ) -> Result<Self, RecordError> {
     let row_id_column = row_id_column(connection_type);
     let query = CreateOrReplaceRecordQueryTemplate {
@@ -144,7 +53,100 @@ impl WriteQuery {
     .render()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
-    return Ok(Self::Insert { query, params });
+    return Ok(Self { query, params });
+  }
+
+  pub fn apply(
+    &self,
+    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return if let Some(mut row) =
+      conn.query_row(&self.query, ArcInsertParams(CowArc::Borrowed(&self.params)))?
+    {
+      Ok(WriteQueryResult {
+        rowid: row.get(0)?,
+        pk_value: Some(row.consume_value(1)?),
+      })
+    } else {
+      Err(trailbase_sqlite::Error::QueryReturnedNoRows)
+    };
+  }
+}
+
+pub struct InsertOrReplaceRecordApiQuery {
+  api: RecordApi,
+  query: InsertOrReplaceQuery,
+}
+
+impl InsertOrReplaceRecordApiQuery {
+  pub fn new(api: RecordApi, params: InsertParams) -> Result<Self, RecordError> {
+    let conflict_resolution = api
+      .insert_conflict_resolution_strategy()
+      .unwrap_or(proto::ConflictResolutionStrategy::Undefined);
+
+    return Ok(Self {
+      query: InsertOrReplaceQuery::new(
+        api.conn().connection_type(),
+        api.table_name(),
+        api.columns(),
+        &api.record_pk_column().column.name,
+        conflict_resolution,
+        params,
+      )?,
+      api,
+    });
+  }
+
+  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
+    return self.api.check_table_level_access(Permission::Create, user);
+  }
+
+  pub fn check_record_level_access(
+    &self,
+    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+    user: Option<&User>,
+  ) -> Result<(), RecordError> {
+    return self.api.sync_eager_check_record_level_access(
+      conn,
+      Permission::Create,
+      None,
+      Some(Params::Insert(CowArc::Borrowed(&self.query.params))),
+      user,
+    );
+  }
+
+  pub fn apply(
+    &self,
+    conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
+  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
+    return self.query.apply(conn);
+  }
+}
+
+pub enum WriteQuery {
+  Insert(InsertOrReplaceRecordApiQuery),
+  Update {
+    query: String,
+    params: Arc<UpdateParams>,
+  },
+  Delete {
+    query: String,
+    pk_value: Value,
+  },
+}
+
+pub struct WriteQueryResult {
+  /// Row-id (SQLite) or ctid (Postgres) of affected record. Always present.
+  pub rowid: i64,
+  /// Primary key value. Only present on inserts.
+  pub pk_value: Option<Value>,
+}
+
+impl WriteQuery {
+  pub fn new_insert_or_replace(api: RecordApi, params: InsertParams) -> Result<Self, RecordError> {
+    return Ok(Self::Insert(InsertOrReplaceRecordApiQuery::new(
+      api, params,
+    )?));
   }
 
   pub fn new_update(
@@ -184,16 +186,7 @@ impl WriteQuery {
     conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return match self {
-      Self::Insert { query, params, .. } => {
-        if let Some(mut row) = conn.query_row(query, ArcInsertParams(CowArc::Borrowed(&*params)))? {
-          Ok(WriteQueryResult {
-            rowid: row.get(0)?,
-            pk_value: Some(row.consume_value(1)?),
-          })
-        } else {
-          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-        }
-      }
+      Self::Insert(query) => query.apply(conn),
       Self::Update { query, params } => {
         if let Some(row) = conn.query_row(query, ArcUpdateParams(params))? {
           Ok(WriteQueryResult {
@@ -226,10 +219,10 @@ pub(crate) async fn run_insert_or_replace_query(
   column_metadata: &[ColumnMetadata],
   conflict_resolution: proto::ConflictResolutionStrategy,
   return_column_name: &str,
-  params: Arc<InsertParams>,
+  params: InsertParams,
   files: FileMetadataContents,
 ) -> Result<trailbase_sqlite::Value, RecordError> {
-  let query = WriteQuery::new_insert_or_replace(
+  let query = InsertOrReplaceQuery::new(
     conn.connection_type(),
     table_name,
     column_metadata,
@@ -247,7 +240,7 @@ pub(crate) async fn run_insert_or_replace_query(
   };
 
   let WriteQueryResult { rowid, pk_value } = conn
-    .call_writer(|mut conn| query.apply_sync(&mut conn))
+    .call_writer(move |mut conn| query.apply(&mut conn))
     .await?;
 
   let Some(return_value) = pk_value else {
@@ -346,8 +339,16 @@ struct CreateOrReplaceRecordQueryTemplate<'a> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  use serde_json::json;
   use trailbase_schema::db::parse_sql::{Bump, parse_into_statement};
-  use trailbase_schema::db::sqlite::QualifiedName;
+  use trailbase_schema::db::sqlite::Table;
+  use trailbase_schema::db::{QualifiedName, QualifiedNameEscaped};
+
+  use crate::config::proto;
+  use crate::records::test_utils::json_row_from_value;
+  use crate::records::write_queries::InsertOrReplaceQuery;
+  use crate::schema_metadata::TableMetadata;
 
   fn sanitize_template(template: &str) {
     let allocator = Bump::new();
@@ -424,6 +425,84 @@ mod tests {
       .unwrap();
 
       sanitize_template(&query);
+    }
+  }
+
+  #[test]
+  fn test_empty_insert_params() {
+    let table_name = "test_table".to_string();
+
+    let allocator = Bump::new();
+    let table: Table = (&parse_into_statement(
+      &allocator,
+      &format!(
+        "CREATE TABLE {table_name} (
+          id      INTEGER PRIMARY KEY,
+          data    TEXT
+        ) STRICT;"
+      ),
+    )
+    .unwrap()
+    .unwrap())
+      .try_into()
+      .unwrap();
+
+    let registry =
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
+    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
+    let qualified_name = QualifiedNameEscaped::new(&QualifiedName {
+      name: table_name.clone(),
+      database_schema: None,
+    });
+
+    struct Input {
+      input: serde_json::Value,
+      expected_params: usize,
+    }
+
+    for i in [
+      Input {
+        input: json!({}),
+        expected_params: 0,
+      },
+      Input {
+        input: json!({"unknown_column": 5}),
+        expected_params: 0,
+      },
+      Input {
+        input: json!({"data": "test"}),
+        expected_params: 1,
+      },
+      Input {
+        input: json!({"id": 5, "data": "test"}),
+        expected_params: 2,
+      },
+    ] {
+      let (params, _files) = InsertParams::new(
+        &metadata,
+        &registry,
+        json_row_from_value(i.input).unwrap(),
+        None,
+      )
+      .unwrap();
+
+      assert_eq!(i.expected_params, params.params.len());
+
+      let query = InsertOrReplaceQuery::new(
+        trailbase_sqlite::ConnectionType::Sqlite,
+        &qualified_name,
+        &metadata.column_metadata,
+        "id",
+        proto::ConflictResolutionStrategy::Replace,
+        params,
+      )
+      .unwrap();
+
+      // Make sure it's a valid query
+      assert!(
+        parse_into_statement(&allocator, &query.query).is_ok(),
+        "{query:?}"
+      )
     }
   }
 }

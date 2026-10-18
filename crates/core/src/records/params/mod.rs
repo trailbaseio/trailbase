@@ -605,88 +605,9 @@ mod tests {
   use super::*;
   use crate::config::proto;
   use crate::records::test_utils::json_row_from_value;
-  use crate::records::write_queries::WriteQuery;
+  use crate::records::write_queries::InsertOrReplaceQuery;
   use crate::schema_metadata::TableMetadata;
   use crate::util::id_to_b64;
-
-  #[test]
-  fn test_empty_insert_params() {
-    let table_name = "test_table".to_string();
-
-    let allocator = Bump::new();
-    let table: Table = (&parse_into_statement(
-      &allocator,
-      &format!(
-        "CREATE TABLE {table_name} (
-          id      INTEGER PRIMARY KEY,
-          data    TEXT
-        ) STRICT;"
-      ),
-    )
-    .unwrap()
-    .unwrap())
-      .try_into()
-      .unwrap();
-
-    let registry =
-      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap();
-    let metadata = TableMetadata::new(&registry, table.clone(), &[table]).unwrap();
-    let qualified_name = QualifiedNameEscaped::new(&QualifiedName {
-      name: table_name.clone(),
-      database_schema: None,
-    });
-
-    struct Input {
-      input: serde_json::Value,
-      expected_params: usize,
-    }
-
-    for i in [
-      Input {
-        input: json!({}),
-        expected_params: 0,
-      },
-      Input {
-        input: json!({"unknown_column": 5}),
-        expected_params: 0,
-      },
-      Input {
-        input: json!({"data": "test"}),
-        expected_params: 1,
-      },
-      Input {
-        input: json!({"id": 5, "data": "test"}),
-        expected_params: 2,
-      },
-    ] {
-      let (params, _files) = InsertParams::new(
-        &metadata,
-        &registry,
-        json_row_from_value(i.input).unwrap(),
-        None,
-      )
-      .unwrap();
-
-      let query = WriteQuery::new_insert_or_replace(
-        trailbase_sqlite::ConnectionType::Sqlite,
-        &qualified_name,
-        &metadata.column_metadata,
-        "id",
-        proto::ConflictResolutionStrategy::Replace,
-        Arc::new(params),
-      )
-      .unwrap();
-
-      let WriteQuery::Insert { query, params } = query else {
-        panic!("not an insert");
-      };
-
-      assert_eq!(i.expected_params, params.params.len());
-
-      // Make sure it's a valid query
-      assert!(parse_into_statement(&allocator, &query).is_ok(), "{query}")
-    }
-  }
 
   #[test]
   fn test_non_trivial_insert_params() {
