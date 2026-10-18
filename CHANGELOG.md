@@ -1,7 +1,7 @@
 ## v0.35.0
 
-- Fewer yields during record handling.
-  - Doubles the insert throughput and results roughly 10% faster reads.
+- Fewer yields and thus less congestion during record handling.
+  - Doubles the insert throughput and results in roughly 10% faster reads.
 - Enable file writes as part of transactions and batch-operations.
 - Batch insertions now return a fake "skipped" id, when an insertion conflict was ignored based on the API's policy.
   - This is more in line with the transaction endpoint's behavior but technically a breaking change. This will only matter to you if you're using batch insertions, with an ignore policy and relying on ids of ignored insertions being stripped from the response.

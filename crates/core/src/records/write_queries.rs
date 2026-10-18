@@ -99,47 +99,6 @@ impl WriteQuery {
     });
   }
 
-  async fn apply_async(
-    self,
-    conn: &trailbase_sqlite::Connection,
-  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
-    return match self {
-      Self::Insert { query, params } => {
-        if let Some(mut row) = conn.write_query_row(query, ArcInsertParams(params)).await? {
-          Ok(WriteQueryResult {
-            rowid: row.get(0)?,
-            pk_value: Some(row.consume_value(1)?),
-          })
-        } else {
-          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-        }
-      }
-      Self::Update { query, params } => {
-        if let Some(rowid) = conn
-          .write_query_row_get(query, ArcUpdateParams(params), 0)
-          .await?
-        {
-          Ok(WriteQueryResult {
-            rowid,
-            pk_value: None,
-          })
-        } else {
-          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-        }
-      }
-      Self::Delete { query, pk_value } => {
-        if let Some(rowid) = conn.write_query_row_get(query, [pk_value], 0).await? {
-          Ok(WriteQueryResult {
-            rowid,
-            pk_value: None,
-          })
-        } else {
-          Err(trailbase_sqlite::Error::QueryReturnedNoRows)
-        }
-      }
-    };
-  }
-
   pub(super) fn apply_sync(
     self,
     conn: &mut impl trailbase_sqlite::SyncConnectionTrait,
@@ -166,7 +125,7 @@ impl WriteQuery {
         }
       }
       Self::Delete { query, pk_value } => {
-        if let Some(row) = conn.query_row(query, [pk_value])? {
+        if let Some(row) = conn.query_row(query, (pk_value,))? {
           Ok(WriteQueryResult {
             rowid: row.get(0)?,
             pk_value: None,
@@ -207,7 +166,10 @@ pub(crate) async fn run_insert_or_replace_query(
     Some(FileManager::write(objectstore, files).await?)
   };
 
-  let WriteQueryResult { rowid, pk_value } = query.apply_async(conn).await?;
+  let WriteQueryResult { rowid, pk_value } = conn
+    .call_writer(|mut conn| query.apply_sync(&mut conn))
+    .await?;
+
   let Some(return_value) = pk_value else {
     return Err(RecordError::Internal("missing pk".into()));
   };
@@ -243,7 +205,9 @@ pub(crate) async fn run_update_query(
     Some(FileManager::write(objectstore, files).await?)
   };
 
-  let WriteQueryResult { rowid, pk_value: _ } = query.apply_async(conn).await?;
+  let WriteQueryResult { rowid, pk_value: _ } = conn
+    .call_writer(|mut conn| query.apply_sync(&mut conn))
+    .await?;
 
   // Successful write, do not cleanup written files.
   if let Some(mut file_manager) = file_manager {
@@ -266,7 +230,9 @@ pub(crate) async fn run_delete_query(
 ) -> Result<i64, RecordError> {
   let query = WriteQuery::new_delete(conn.connection_type(), table_name, pk_column, pk_value)?;
 
-  let WriteQueryResult { rowid, pk_value: _ } = query.apply_async(conn).await?;
+  let WriteQueryResult { rowid, pk_value: _ } = conn
+    .call_writer(|mut conn| query.apply_sync(&mut conn))
+    .await?;
 
   if has_file_columns {
     delete_files_marked_for_deletion(conn, objectstore, table_name, &[rowid])
