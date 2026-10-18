@@ -1,3 +1,8 @@
+## v0.35.1
+
+- Major post-v0.35 clean-up: simpler ownership, less reference counting and more consistent flows across acrions.
+- Update dependencies.
+
 ## v0.35.0
 
 - Fewer yields and thus less congestion during record handling.
