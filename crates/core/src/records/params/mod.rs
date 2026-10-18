@@ -15,10 +15,8 @@ use crate::records::RecordApi;
 use crate::records::util::named_placeholder;
 use crate::schema_metadata::{JsonColumnMetadata, TableMetadata};
 
-pub mod cow_arc;
 mod error;
 
-pub use cow_arc::CowArc;
 pub use error::ParamsError;
 
 /// Contains Metadata (i.e. column contents) and file contents.
@@ -41,9 +39,9 @@ pub struct InsertParams {
   pub params: Vec<NamedParam>,
 }
 
-pub struct ArcInsertParams<'a>(pub CowArc<'a, InsertParams>);
+pub struct InsertParamsRef<'a>(pub &'a InsertParams);
 
-impl<'a> trailbase_sqlite::Params for ArcInsertParams<'a> {
+impl<'a> trailbase_sqlite::Params for InsertParamsRef<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -156,9 +154,9 @@ pub struct UpdateParams {
   pub pk_column_value: Value,
 }
 
-pub struct ArcUpdateParams<'a>(pub CowArc<'a, UpdateParams>);
+pub struct UpdateParamsRef<'a>(pub &'a UpdateParams);
 
-impl<'a> trailbase_sqlite::Params for ArcUpdateParams<'a> {
+impl<'a> trailbase_sqlite::Params for UpdateParamsRef<'a> {
   fn bind<S: trailbase_sqlite::Statement>(
     self,
     stmt: &mut S,
@@ -358,8 +356,8 @@ impl UpdateParams {
 /// be filtered out and the json values will be translated into SQLite values.
 #[derive(Debug)]
 pub enum Params<'a> {
-  Insert(CowArc<'a, InsertParams>),
-  Update(CowArc<'a, UpdateParams>),
+  Insert(&'a InsertParams),
+  Update(&'a UpdateParams),
 }
 
 fn extract_files_from_multipart<S: ColumnAccessor>(

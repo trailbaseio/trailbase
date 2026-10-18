@@ -3,7 +3,6 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::prelude::*;
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::json_schema::FileUploadInput;
 use trailbase_sqlite::traits::SyncTransaction;
 use utoipa::{IntoParams, ToSchema};
@@ -14,8 +13,8 @@ use crate::config::proto;
 use crate::extract::Either;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileMetadataContents, InsertParams, JsonRow, ParamsError};
-use crate::records::transaction::{Op, OpResult};
-use crate::records::write_queries::{InsertOrReplaceRecordApiQuery, WriteQuery};
+use crate::records::transaction::{Op, OpResult, WriteQuery};
+use crate::records::write_queries::InsertOrReplaceRecordApiQuery;
 use crate::records::{RecordApi, RecordError};
 use crate::util::uuid_to_b64;
 
@@ -182,7 +181,7 @@ pub async fn create_record_handler(
           let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
             .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let query = WriteQuery::new_insert_or_replace(api.clone(), params)?;
+          let query = WriteQuery::Insert(InsertOrReplaceRecordApiQuery::new(api.clone(), params)?);
 
           Ok(Op {
             api: api.clone(),

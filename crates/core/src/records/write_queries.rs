@@ -11,11 +11,18 @@ use crate::records::Permission;
 use crate::records::error::RecordError;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
-  ArcInsertParams, ArcUpdateParams, CowArc, FileMetadataContents, InsertParams, NamedParam, Params,
-  UpdateParams,
+  FileMetadataContents, InsertParams, InsertParamsRef, NamedParam, Params, UpdateParams,
+  UpdateParamsRef,
 };
 use crate::records::record_api::RecordApi;
 use crate::util::row_id_column;
+
+pub struct WriteQueryResult {
+  /// Row-id (SQLite) or ctid (Postgres) of affected record. Always present.
+  pub rowid: i64,
+  /// Primary key value. Only present on inserts.
+  pub pk_value: Option<Value>,
+}
 
 #[derive(Debug)]
 pub struct InsertOrReplaceQuery {
@@ -60,9 +67,7 @@ impl InsertOrReplaceQuery {
     &self,
     conn: &mut impl SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
-    return if let Some(mut row) =
-      conn.query_row(&self.query, ArcInsertParams(CowArc::Borrowed(&self.params)))?
-    {
+    return if let Some(mut row) = conn.query_row(&self.query, InsertParamsRef(&self.params))? {
       Ok(WriteQueryResult {
         rowid: row.get(0)?,
         pk_value: Some(row.consume_value(1)?),
@@ -110,7 +115,7 @@ impl InsertOrReplaceRecordApiQuery {
       conn,
       Permission::Create,
       None,
-      Some(Params::Insert(CowArc::Borrowed(&self.query.params))),
+      Some(Params::Insert(&self.query.params)),
       user,
     );
   }
@@ -151,9 +156,7 @@ impl UpdateQuery {
     &self,
     conn: &mut impl SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
-    return if let Some(row) =
-      conn.query_row(&self.query, ArcUpdateParams(CowArc::Borrowed(&self.params)))?
-    {
+    return if let Some(row) = conn.query_row(&self.query, UpdateParamsRef(&self.params))? {
       Ok(WriteQueryResult {
         rowid: row.get(0)?,
         pk_value: None,
@@ -194,7 +197,7 @@ impl UpdateRecordApiQuery {
       conn,
       Permission::Update,
       Some(&self.query.params.pk_column_value),
-      Some(Params::Update(CowArc::Borrowed(&self.query.params))),
+      Some(Params::Update(&self.query.params)),
       user,
     );
   }
@@ -289,46 +292,6 @@ impl DeleteRecordApiQuery {
     conn: &mut impl SyncConnectionTrait,
   ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
     return self.query.apply(conn);
-  }
-}
-
-pub enum WriteQuery {
-  Insert(InsertOrReplaceRecordApiQuery),
-  Update(UpdateRecordApiQuery),
-  Delete(DeleteRecordApiQuery),
-}
-
-pub struct WriteQueryResult {
-  /// Row-id (SQLite) or ctid (Postgres) of affected record. Always present.
-  pub rowid: i64,
-  /// Primary key value. Only present on inserts.
-  pub pk_value: Option<Value>,
-}
-
-impl WriteQuery {
-  pub fn new_insert_or_replace(api: RecordApi, params: InsertParams) -> Result<Self, RecordError> {
-    return Ok(Self::Insert(InsertOrReplaceRecordApiQuery::new(
-      api, params,
-    )?));
-  }
-
-  pub fn new_update(api: RecordApi, params: UpdateParams) -> Result<Self, RecordError> {
-    return Ok(Self::Update(UpdateRecordApiQuery::new(api, params)?));
-  }
-
-  pub fn new_delete(api: RecordApi, pk_value: Value) -> Result<Self, RecordError> {
-    return Ok(Self::Delete(DeleteRecordApiQuery::new(api, pk_value)?));
-  }
-
-  pub(super) fn apply_sync(
-    self,
-    conn: &mut impl SyncConnectionTrait,
-  ) -> Result<WriteQueryResult, trailbase_sqlite::Error> {
-    return match self {
-      Self::Insert(query) => query.apply(conn),
-      Self::Update(query) => query.apply(conn),
-      Self::Delete(query) => query.apply(conn),
-    };
   }
 }
 

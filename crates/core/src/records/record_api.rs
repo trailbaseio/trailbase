@@ -1,6 +1,5 @@
 use askama::Template;
 use compact_str::CompactString;
-use std::assert_matches;
 use std::collections::HashMap;
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
@@ -150,7 +149,7 @@ struct RequestParams<'a> {
 
 impl<'a> RequestParams<'a> {
   fn new(all_column_names: Arc<Vec<CompactString>>, request_params: Params<'a>) -> Self {
-    let present_fields = match &request_params {
+    let present_fields = match request_params {
       Params::Insert(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
       Params::Update(p) => strings_to_json_array(p.params.iter().map(|p| p.column_name.as_str())),
     };
@@ -202,7 +201,7 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
         stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
       }
 
-      let request_params = match &params.request_params {
+      let request_params = match params.request_params {
         Params::Insert(p) => &p.params,
         Params::Update(p) => &p.params,
       };

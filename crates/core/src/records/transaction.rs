@@ -1,7 +1,6 @@
 use axum::extract::{Json, State};
 use futures_util::future::{BoxFuture, FutureExt, join_all};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use trailbase_schema::QualifiedName;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use ts_rs::TS;
@@ -10,12 +9,14 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
+use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
 use crate::records::files::{AsyncFileCommitter, AsyncFileManager};
 use crate::records::params::UpdateParams;
 use crate::records::record_api::RecordApi;
-use crate::records::write_queries::WriteQuery;
-use crate::records::{Permission, RecordError};
+use crate::records::write_queries::{
+  DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
+};
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -52,6 +53,12 @@ pub enum TransactionResult {
 pub struct TransactionResponse {
   /// A 1:1 mapping of operations to results.
   pub results: Vec<TransactionResult>,
+}
+
+pub(crate) enum WriteQuery {
+  Insert(InsertOrReplaceRecordApiQuery),
+  Update(UpdateRecordApiQuery),
+  Delete(DeleteRecordApiQuery),
 }
 
 pub(crate) struct Op {
@@ -113,11 +120,9 @@ pub async fn record_transactions_handler(
             build_insert_params(&state, &api, user.as_ref(), extract_record(value)?, None)
               .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let query = WriteQuery::new_insert_or_replace(api.clone(), params)?;
-
           Ok(Op {
+            query: WriteQuery::Insert(InsertOrReplaceRecordApiQuery::new(api.clone(), params)?),
             api,
-            query,
             file_handling: if files.is_empty() {
               None
             } else {
@@ -146,12 +151,9 @@ pub async fn record_transactions_handler(
           )
           .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
-          let query = WriteQuery::new_update(api.clone(), params)
-            .map_err(|err| RecordError::Internal(err.into()))?;
-
           Ok(Op {
+            query: WriteQuery::Update(UpdateRecordApiQuery::new(api.clone(), params)?),
             api,
-            query,
             file_handling: if files.is_empty() {
               None
             } else {
@@ -169,12 +171,12 @@ pub async fn record_transactions_handler(
             return Err(RecordError::BadRequest("DB mismatch"));
           }
 
-          let query = WriteQuery::new_delete(api.clone(), api.primary_key_to_value(record_id)?)
-            .map_err(|err| RecordError::Internal(err.into()))?;
-
           Ok(Op {
+            query: WriteQuery::Delete(DeleteRecordApiQuery::new(
+              api.clone(),
+              api.primary_key_to_value(record_id)?,
+            )?),
             api,
-            query,
             file_handling: None,
           })
         }

@@ -1,7 +1,7 @@
 use axum::extract::{Path, State};
 use axum::response::Response;
 use const_format::formatcp;
-use std::sync::{Arc, LazyLock};
+use std::sync::LazyLock;
 use trailbase_schema::db::metadata::{ColumnMetadata, TableMetadata};
 use trailbase_schema::db::sqlite::{Column, ColumnOption, QualifiedName, Table};
 use trailbase_schema::json_schema::FileUploadInput;

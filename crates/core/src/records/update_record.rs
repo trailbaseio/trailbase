@@ -1,13 +1,12 @@
 use axum::extract::{Path, State};
-use std::sync::Arc;
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
+use crate::records::RecordError;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{JsonRow, UpdateParams};
-use crate::records::write_queries::{UpdateRecordApiQuery, WriteQuery};
-use crate::records::{Permission, RecordError};
+use crate::records::write_queries::UpdateRecordApiQuery;
 
 /// Update existing record.
 #[utoipa::path(
@@ -41,7 +40,6 @@ pub async fn update_record_handler(
 
   let record_id = api.primary_key_to_value(record)?;
   let conn = api.conn();
-  let connection_type = conn.connection_type();
 
   let (params, files) = UpdateParams::new(
     &api,

@@ -6,9 +6,9 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
+use crate::records::RecordError;
 use crate::records::files::delete_files_marked_for_deletion;
-use crate::records::write_queries::{DeleteRecordApiQuery, WriteQuery};
-use crate::records::{Permission, RecordError};
+use crate::records::write_queries::DeleteRecordApiQuery;
 
 /// Delete record.
 #[utoipa::path(
