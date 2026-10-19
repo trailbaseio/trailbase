@@ -5,7 +5,7 @@ import { LineChart } from "@/components/LineChart.tsx";
 import { ScatterChart } from "@/components/ScatterChart.tsx";
 
 import { data as supabaseUtilization } from "./supabase_utilization";
-import insertTrailBase from "./insert_tb_2025-04-03.json";
+import insertTrailBase from "./insert_tb_2026-10-19.json";
 import insertPocketBase from "./insert_pb_2025-02-05.json";
 import fibTrailBase from "./fib_tb.json";
 import fibPocketBase from "./fib_pb.json";
@@ -114,11 +114,12 @@ const durations100k = {
     data: [4.3673],
     backgroundColor: colors.trailbase2,
   },
-  // TB: Inserted 100000 rows in 3.855656919s (2025-04-03)
+  // TB: Inserted 100k rows in 3.855656919s (2025-04-03)
+  // TB: Inserted 100k rows in 3.169063354s (2026-10-19 v0.35.1)
   trailbase_rust: {
     // Inserted 100000 messages, took 00:00:05.7071809 (limit=64) (C#)
     label: "TrailBase Rust",
-    data: [3.8556],
+    data: [3.16906],
     backgroundColor: colors.trailbase2,
   },
   drizzle: {
@@ -213,11 +214,19 @@ export function PocketBaseAndTrailBaseReadLatencies() {
   //         p75=301.269µs
   //         p90=347.464µs
   //         p95=381.137µs
+  //
+  // 2026-10-19 (v0.35.1)
+  //Read 1000000 rows in 19.146669132s
+  // Latencies:
+  //         p50=257.744µs
+  //         p75=313.849µs
+  //         p90=383.219µs
+  //         p95=440.636µs
   const readTrailbaseRustMicroS = {
-    p50: 259.522,
-    p75: 301.269,
-    p90: 347.464,
-    p95: 381.137,
+    p50: 257.744,
+    p75: 313.849,
+    p90: 282.219,
+    p95: 440.636,
   };
 
   // 2024-10-12
@@ -331,11 +340,19 @@ export function PocketBaseAndTrailBaseInsertLatencies() {
   //         p75=636.6µs
   //         p90=703.655µs
   //         p95=742.587µs
+  //
+  // 2026-10-19 (v0.35.1)
+  // Inserted 10000 rows in 300.800338ms
+  // Latencies:
+  //         p50=434.364µs
+  //         p75=522.6µs
+  //         p90=579.747µs
+  //         p95=607.008µs
   const insertTrailbaseRustMicroS = {
-    p50: 567.222,
-    p75: 636.6,
-    p90: 703.655,
-    p95: 742.587,
+    p50: 434.364,
+    p75: 522.6,
+    p90: 579.747,
+    p95: 607.008,
   };
 
   // 2024-10-12
@@ -502,8 +519,8 @@ export function PocketBaseAndTrailBaseUsageChart() {
   const trailbaseUtilization = insertTrailBase as Datum[];
   const pocketbaseUtilization = insertPocketBase as Datum[];
 
-  const trailbaseTimeOffset = -0.35 * 1000;
-  const pocketbaseTimeOffset = -1.3 * 1000;
+  const trailbaseTimeOffset = -0.0 * 1000;
+  const pocketbaseTimeOffset = -1.6 * 1000;
 
   const data: ChartData<"scatter"> = {
     datasets: [

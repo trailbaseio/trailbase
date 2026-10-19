@@ -55,12 +55,13 @@ export const demoLink = "https://demo.trailbase.io";
 
       * Rust: one of the lowest overhead languages,
       * Axum: one of the fastest HTTP servers,
-      * SQLite: one of the fastest full-SQL databases,
+      * SQLite: one of the fastest full-SQL databases (PG is an option),
       * Wasmtime: compiles custom endpoints to efficient native code.
 
-      TrailBase's APIs are [11x faster than PocketBase's and almost 40x faster than SupaBase's
-      with a fraction of the footprint](/reference/benchmarks) allowing you to
-      serve millions of customers from a tiny box.
+      TrailBase's APIs are roughly
+      [14x faster than PocketBase's and almost 48x faster than Supabase's while using a 1/50th of Supabase's memory footprint at full tilt](/reference/benchmarks)
+      allowing you to serve tens of thousands of concurrent users
+      [from a tiny box](https://github.com/burggraf/twelve-dollar-server-challenge/blob/0595abad0a853e9ff97e83e03571c1ca8400c437/results/trailbase/README.md).
     </div>
 
     <div slot="second">

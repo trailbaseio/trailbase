@@ -21,18 +21,30 @@ TrailBase is merely the sum of its parts. It's the result of marrying one of
 the lowest-overhead languages, one of the fastest HTTP servers, and one of the
 lightest relational SQL databases, while mostly avoiding extra expenditures.
 We can expect it to go fast but how fast exactly? Let's compare it to a few
-amazing, and certainly more weathered alternatives such as SupaBase,
-PocketBase, and vanilla SQLite.
+amazing, and certainly more weathered alternatives such as
+[Supabase](https://supabase.com/), [PocketBase](https://pocketbase.io/), and
+vanilla SQLite.
 
-<Aside type="note" title="Update: TrailBase v0.9.0+">
-  The SQLite execution model changed in v0.3.0 and caching improved in v0.9.0
-  providing some solid performance gains.
+<Aside type="note" title="Update: TrailBase v0.35.1">
+  We've updated the TrailBase client numbers - as representative for the best
+  possible case - to the latest v0.35.1.
+  The other clients are tested against a stale v0.9. That said, we expect these
+  numbers not too change, since TB got faster and the tests were already
+  bottlenecked on the client-side.
+</Aside>
+
+<Aside type="note" title="Update: External BaaS Benchmarks">
+  You no longer need to trust our benchmarks alone. Mark Burggraf has run an
+  [8-way BaaS benchmark comparison](https://github.com/burggraf/baas-bench/tree/main/results/realworld-api-v3/project-management-capacity#results).
+  While TrailBase wins, the tested version suffered from a severe regression.
+  Depending on the workload, using upstream the numbers would be 3x to 5x
+  better - stay tuned.
 </Aside>
 
 <Aside type="note" title="Update: PocketBase v0.24+">
   Insertions got streamlined in recent PocketBase releases providing some 30%
   uplift in our benchmarks. Most benchmarks are run using v0.25.0.
-  The JS benchmarks use v0.22.21.
+  The JS benchmarks use still use the older v0.22.21.
 </Aside>
 
 ### Disclaimer
@@ -79,7 +91,7 @@ features like authorization, i.e. more table look-ups.
 
 Looking at the other, more similar setups, the measurement suggests that for
 this test TrailBase can insert 100k records 170 times faster than Payload[^4],
-almost 40 times faster than SupaBase[^5], and comfortably 11 times faster
+almost 40 times faster than Supabase[^5], and comfortably 11 times faster
 than PocketBase [^1].
 
 ### Utilization
@@ -102,21 +114,21 @@ TrailBase finishing earlier.
 They load roughly 4 to 5 CPUs, with PocketBase's utilization being more
 variable [^6].
 
-In terms of memory consumption, they're also both fairly similar consuming
-between 90MB and 150MB  making them suitable for a tiny VPS or a toaster.
+In terms of memory consumption, they're also both consuming around 150MB making
+them suitable for a tiny VPS or a toaster[^7].
 Note that RSS is not an accurate measure of how much memory a process needs but
-rather how much memory has been allocated from the OS. Allocators will
+rather how much memory has been requested from the OS. Allocators will
 typically retrieve large chunks of memory and only occasionally return memory
 based on usage, fragmentation and strategy.
 This is also why the allocated memory doesn't drop after the load goes away.
 Independently, fragmentation is a problem where a garbage-collector running
 compactions can help.
 
-Now shifting to SupaBase, things get a bit more involved due to its
+Now shifting to Supabase, things get a bit more involved due to its
 [layered architecture](https://supabase.com/docs/guides/getting-started/architecture)
 including a dozen separate services providing various functionality:
 
-_SupaBase Memory Usage_
+_Supabase Memory Usage_
 
 <div class="flex justify-center">
   <div class="h-[340px] w-[90%]">
@@ -124,16 +136,16 @@ _SupaBase Memory Usage_
   </div>
 </div>
 
-Looking at SupaBase's memory usage, it increased from from roughly 6GB at rest to
+Looking at Supabase's memory usage, it increased from from roughly 6GB at rest to
 7GB fully loaded.
-This means that out of the box, SupaBase has roughly 50 times the memory
+This means that out of the box, Supabase has roughly 50 times the memory
 footprint of either PocketBase or TrailBase.
-In all fairness, a lot of SupaBase's functionality isn't needed for this benchmark
+In all fairness, a lot of Supabase's functionality isn't needed for this benchmark
 and it might be possible to shed less critical services, e.g. removing
 *supabase-analytics* would save ~40% of memory.
 That said, we don't know how feasible this is in practice.
 
-_SupaBase CPU utilization_
+_Supabase CPU utilization_
 
 <div class="flex justify-center">
   <div class="h-[340px] w-[90%]">
@@ -159,9 +171,9 @@ lower for TrailBase.
 Curiously, TrailBase is fast enough that we're being bottlenecked by the client
 runtime. The minimum latency you can expect from Dart and Node.js is around
 3-5ms.
-Looking at other runtimes, TrailBase's read latencies for C# were 21x lower
-compared to PocketBase and 39x for Rust.
-Insertion latencies were 8x lower for C# and 64x for Rust.
+Looking at other runtimes, TrailBase's read latencies (p50) were 24x lower for
+C# compared to PocketBase and 65x for Rust.
+Insertion latencies (p50) were 8x lower for C# and 52x for Rust.
 
 <div class="flex justify-center h-[340px] w-[90%]">
   <div class="w-[50%]">
@@ -237,7 +249,7 @@ The write latencies are bit more interesting. Unsurprisingly modern
 copy-on-write (CoW) file systems have a bit more overhead. The relative ranking
 is roughly in line with
 [Phoronix'](https://www.phoronix.com/review/linux-611-filesystems/2)
-results[^7], with the added OpenZFS (2.2.7) falling in line with its peers.
+results[^8], with the added OpenZFS (2.2.7) falling in line with its peers.
 Also, the differences are attenuated due to the constant overhead TrailBase
 adds over vanilla SQLite.
 
@@ -338,7 +350,7 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
     magnitude, the competition would have likely performed better.
 
 [^5]:
-    The SupaBase benchmark setup skips row-level access checks. Technically,
+    The Supabase benchmark setup skips row-level access checks. Technically,
     this is in its favor from a performance standpoint, however looking at the
     overall load on its constituents with PG being only a sliver, it probably
     would not make much of an overall difference nor would PG17's vectorization,
@@ -352,6 +364,11 @@ The benchmarks are available on [GitHub](https://github.com/trailbaseio/trailbas
     This could also indicate a contention or thrashing issue 🤷.
 
 [^7]:
+    Note that they maintain their memory footprint even after the traffic stops.
+    This is a property of the allocator in use, i.e. to hold on and recycle
+    memory. This behavior can be easily tuned.
+
+[^8]:
     Despite being close, XFS' and ext4's relative ranking is swapped, which
     could be due to a variety of reason like mount options, kernel version,
     hardware, ...
