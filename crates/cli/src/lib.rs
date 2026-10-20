@@ -7,7 +7,7 @@ pub mod mcp;
 
 pub use args::{
   AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, EmailArgs,
-  JsonSchemaModeArg, SubCommands, UserSubCommands,
+  JsonSchemaModeArg, MigrationCommands, SubCommands, UserSubCommands,
 };
 
 pub use args::OpenApiSubCommands;

@@ -21,8 +21,8 @@ use trailbase_wasm_component_repo::{
 };
 
 use trailbase_cli::{
-  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, OpenApiSubCommands,
-  SubCommands, UserSubCommands,
+  AdminSubCommands, BackupSubCommands, CommandLineArgs, ComponentSubCommands, MigrationCommands,
+  OpenApiSubCommands, SubCommands, UserSubCommands,
 };
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
@@ -131,21 +131,44 @@ async fn async_main(
 
       println!("{}", serde_json::to_string_pretty(&json_schema)?);
     }
-    SubCommands::Migration { suffix, db } => {
-      let filename = api::new_unique_migration_filename(suffix.as_deref().unwrap_or("update"));
-      let dir = data_dir
-        .migrations_path()
-        .join(db.as_deref().unwrap_or("main"));
-      let path = dir.join(filename);
+    SubCommands::Migration { cmd } => {
+      match cmd {
+        Some(MigrationCommands::New { suffix, db }) => {
+          let filename = api::new_unique_migration_filename(suffix.as_deref().unwrap_or("update"));
+          let dir = data_dir
+            .migrations_path()
+            .join(db.as_deref().unwrap_or("main"));
+          let path = dir.join(filename);
 
-      if !dir.exists() {
-        std::fs::create_dir_all(dir)?;
-      }
+          if !dir.exists() {
+            std::fs::create_dir_all(dir)?;
+          }
 
-      let mut migration_file = std::fs::File::create_new(&path)?;
-      migration_file.write_all(b"-- new database migration\n")?;
+          let mut migration_file = std::fs::File::create_new(&path)?;
+          migration_file.write_all(b"-- new database migration\n")?;
 
-      eprintln!("Created empty migration file: {path:?}");
+          eprintln!("Created empty migration file: {path:?}");
+        }
+        Some(MigrationCommands::Apply) => {
+          let (new_db, _state) = AppState::init(InitArgs {
+            data_dir,
+            public_url,
+            ..Default::default()
+          })
+          .await?;
+
+          if new_db {
+            eprintln!("Fresh database initialized");
+          } else {
+            eprintln!("Migrations applied");
+          }
+        }
+        None => {
+          CommandLineArgs::command()
+            .find_subcommand_mut("migration")
+            .map(|cmd| cmd.print_help());
+        }
+      };
     }
     SubCommands::Admin { cmd } => {
       let (_new_db, state) = AppState::init(InitArgs {

@@ -76,10 +76,8 @@ pub enum SubCommands {
   },
   /// Creates new empty migration file.
   Migration {
-    /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
-    suffix: Option<String>,
-    /// Optional database name
-    db: Option<String>,
+    #[command(subcommand)]
+    cmd: Option<MigrationCommands>,
   },
   /// Manage admin users (list, demote, promote).
   Admin {
@@ -98,7 +96,7 @@ pub enum SubCommands {
     #[command(subcommand)]
     cmd: Option<ComponentSubCommands>,
   },
-  /// Manage Backups.
+  /// Manage backups.
   Backups {
     #[command(subcommand)]
     cmd: Option<BackupSubCommands>,
@@ -217,6 +215,17 @@ pub enum OpenApiSubCommands {
     #[arg(long)]
     admin: bool,
   },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum MigrationCommands {
+  New {
+    /// Optional database name (Default: "main").
+    db: Option<String>,
+    /// Optional suffix used for the generated migration file: U<timestamp>__<suffix>.sql.
+    suffix: Option<String>,
+  },
+  Apply,
 }
 
 #[derive(Subcommand, Debug, Clone)]
