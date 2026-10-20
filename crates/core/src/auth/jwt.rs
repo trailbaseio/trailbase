@@ -1,4 +1,4 @@
-use crate::auth::user::DbUser;
+use crate::auth::user::DbUserAndTenant;
 use crate::rand::random_alphanumeric;
 use crate::util::{id_to_b64, uuid_to_b64};
 use compact_str::{CompactString, ToCompactString};
@@ -74,13 +74,22 @@ pub struct AuthTokenClaims {
   /// Optional username.
   pub username: Option<CompactString>,
 
+  /// Url-safe Base64 encoded id of the active tenant.
+  pub tenant: Option<String>,
+
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
   pub csrf_token: CompactString,
 }
 
 impl AuthTokenClaims {
-  pub(crate) fn new(db_user: &DbUser, auth_token_ttl: &chrono::Duration) -> Self {
+  pub(crate) fn new(
+    DbUserAndTenant {
+      user: db_user,
+      tenant,
+    }: &DbUserAndTenant,
+    auth_token_ttl: &chrono::Duration,
+  ) -> Self {
     assert!(db_user.unverified_email.is_none());
 
     let now = chrono::Utc::now();
@@ -94,6 +103,7 @@ impl AuthTokenClaims {
       provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
       username: db_user.username.clone(),
+      tenant: tenant.map(|uuid| id_to_b64(&uuid)),
       csrf_token: random_alphanumeric(24).to_compact_string(),
     };
   }
@@ -374,6 +384,8 @@ mod tests {
 
   use super::*;
 
+  use crate::auth::user::{DbUser, DbUserAndTenant};
+
   #[test]
   fn test_decode_encode() {
     let jwt = test_jwt_helper();
@@ -385,7 +397,13 @@ mod tests {
       ..Default::default()
     };
 
-    let claims = AuthTokenClaims::new(&db_user, &crate::constants::DEFAULT_AUTH_TOKEN_TTL);
+    let claims = AuthTokenClaims::new(
+      &DbUserAndTenant {
+        user: db_user,
+        tenant: None,
+      },
+      &crate::constants::DEFAULT_AUTH_TOKEN_TTL,
+    );
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());
