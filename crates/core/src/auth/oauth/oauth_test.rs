@@ -162,6 +162,7 @@ async fn test_oauth_login_flow_without_pkce() {
       mfa_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
+      tenant: None,
     }),
     cookies.clone(),
   )
@@ -278,6 +279,7 @@ async fn test_oauth_login_flow_with_pkce() {
       mfa_redirect_uri: None,
       response_type: Some(ResponseType::Code),
       pkce_code_challenge: Some(pkce_code_challenge.as_str().to_string()),
+      tenant: None,
     }),
     cookies.clone(),
   )
@@ -440,6 +442,7 @@ async fn test_apple_oauth_login_uses_form_post_response_mode() {
       mfa_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
+      tenant: None,
     }),
     cookies.clone(),
   )
@@ -503,6 +506,7 @@ async fn test_oauth_login_flow_with_form_post_callback() {
       mfa_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
+      tenant: None,
     }),
     cookies.clone(),
   )
@@ -589,6 +593,7 @@ async fn test_oauth_callback_rejects_invalid_state() {
       mfa_redirect_uri: None,
       response_type: None,
       pkce_code_challenge: None,
+      tenant: None,
     }),
     cookies.clone(),
   )

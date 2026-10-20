@@ -12,6 +12,7 @@ use crate::auth::options::OAuthEntry;
 use crate::auth::util::{SameSite, new_cookie};
 use crate::config::proto;
 use crate::constants::COOKIE_OAUTH_STATE;
+use crate::util::uuid_to_b64;
 
 /// Log in via external OAuth provider.
 #[utoipa::path(
@@ -63,7 +64,10 @@ pub(crate) async fn login_with_external_auth_provider(
     .url();
 
   let oauth_state = match login_params {
-    LoginParams::Password { redirect_uri } => OAuthStateClaims {
+    LoginParams::Password {
+      redirect_uri,
+      tenant,
+    } => OAuthStateClaims {
       // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
       exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
       csrf_secret: csrf_state.secret().to_string(),
@@ -71,12 +75,12 @@ pub(crate) async fn login_with_external_auth_provider(
       redirect_uri,
       response_type: None,
       user_pkce_code_challenge: None,
-      // FIXME: wire through.
-      tenant: None,
+      tenant: tenant.as_ref().map(uuid_to_b64),
     },
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
       pkce_code_challenge,
+      tenant,
     } => OAuthStateClaims {
       // Set short-lived CSRF and PkceCodeVerifier cookies for the callback.
       exp: (chrono::Utc::now() + Duration::seconds(5 * 60)).timestamp(),
@@ -85,8 +89,7 @@ pub(crate) async fn login_with_external_auth_provider(
       user_pkce_code_challenge: Some(pkce_code_challenge),
       response_type: Some(ResponseType::Code),
       redirect_uri: Some(redirect_uri),
-      // FIXME: wire through.
-      tenant: None,
+      tenant: tenant.as_ref().map(uuid_to_b64),
     },
   };
 
