@@ -82,7 +82,7 @@ pub(crate) async fn auth_code_to_token_handler(
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _),
     refresh_token: Some((refresh_token, _)),
-  } = mint_new_tokens(&state, &db_user, None).await?
+  } = mint_new_tokens(&state, db_user, None).await?
   else {
     return Err(AuthError::Internal("expected refresh token".into()));
   };
