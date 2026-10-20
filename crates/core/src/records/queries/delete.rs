@@ -54,7 +54,7 @@ impl DeleteRecordApiQuery {
   pub fn new(api: RecordApi, record_id: Value) -> Result<Self, RecordError> {
     return Ok(Self {
       query: DeleteQuery::new(
-        api.conn().connection_type(),
+        api.connection_type(),
         api.table_name(),
         &api.record_pk_column().column.name,
         record_id,
@@ -65,10 +65,6 @@ impl DeleteRecordApiQuery {
 
   pub fn pk_value(&self) -> Value {
     return self.query.pk_value.clone();
-  }
-
-  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
-    return self.api.check_table_level_access(Permission::Delete, user);
   }
 
   pub fn check_record_level_access(

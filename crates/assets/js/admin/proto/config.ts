@@ -618,9 +618,15 @@ export interface OAuthProviderConfig {
   displayName?:
     | string
     | undefined;
-  /** Urls */
-  authUrl?: string | undefined;
-  tokenUrl?: string | undefined;
+  /** Auth URL. */
+  authUrl?:
+    | string
+    | undefined;
+  /** Token URL. */
+  tokenUrl?:
+    | string
+    | undefined;
+  /** User information URL. */
   userApiUrl?:
     | string
     | undefined;
@@ -852,10 +858,21 @@ export interface RecordApiConfig {
     | string
     | undefined;
   /**
-   * Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
-   * Can only reference configured databases.
+   * Attached databases for APIs using separate (multi) DBs.
+   *
+   * This will `ATTACH <traildepot>/data/<name>.db AS <name>`. Only databases
+   * listed in `DatabaseConfig` are allowed to be referenced. `main` must not
+   * be referenced, it's always included and needed for ACL checks against the
+   * user table.
+   *
+   * Commonly for TABLE-backed APIs, only a single attached DB will be needed.
+   * However, VIEW-backed APIs may combine multiple D
    */
   attachedDatabases: string[];
+  /** Template to for multi-tenant APIs. */
+  tenantTemplate?:
+    | string
+    | undefined;
   /** Strategy to be used on insert if a table constraint is violated. */
   conflictResolution?:
     | ConflictResolutionStrategy
@@ -934,6 +951,15 @@ export interface RecordApiConfig {
   listingHardLimit?: bigint | undefined;
 }
 
+export interface TenantTemplateConfig {
+  /**
+   * Name of the golden template used for a set of tenants.
+   *
+   * Schema migrations are expected under <depot>/templates/<name>.
+   */
+  name?: string | undefined;
+}
+
 export interface JsonSchemaConfig {
   name?: string | undefined;
   schema?: string | undefined;
@@ -956,6 +982,7 @@ export interface Config {
   jobs: JobsConfig | undefined;
   databases: DatabaseConfig[];
   recordApis: RecordApiConfig[];
+  tenantTemplates: TenantTemplateConfig[];
   schemas: JsonSchemaConfig[];
 }
 
@@ -2742,6 +2769,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     for (const v of message.attachedDatabases) {
       writer.uint32(26).string(v!);
     }
+    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
+      writer.uint32(130).string(message.tenantTemplate);
+    }
     if (message.conflictResolution !== undefined && message.conflictResolution !== 0) {
       writer.uint32(40).int32(message.conflictResolution);
     }
@@ -2822,6 +2852,14 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
             }
 
             message.attachedDatabases.push(reader.string());
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.tenantTemplate = reader.string();
             continue;
           }
           case 5: {
@@ -2973,6 +3011,11 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
         : globalThis.Array.isArray(object?.attached_databases)
         ? object.attached_databases.map((e: any) => globalThis.String(e))
         : [],
+      tenantTemplate: isSet(object.tenantTemplate)
+        ? globalThis.String(object.tenantTemplate)
+        : isSet(object.tenant_template)
+        ? globalThis.String(object.tenant_template)
+        : undefined,
       conflictResolution: isSet(object.conflictResolution)
         ? conflictResolutionStrategyFromJSON(object.conflictResolution)
         : isSet(object.conflict_resolution)
@@ -3050,6 +3093,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     if (message.attachedDatabases?.length) {
       obj.attachedDatabases = message.attachedDatabases;
     }
+    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
+      obj.tenantTemplate = message.tenantTemplate;
+    }
     if (message.conflictResolution !== undefined && message.conflictResolution !== 0) {
       obj.conflictResolution = conflictResolutionStrategyToJSON(message.conflictResolution);
     }
@@ -3100,6 +3146,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.name = object.name ?? "";
     message.tableName = object.tableName ?? "";
     message.attachedDatabases = object.attachedDatabases?.map((e) => e) || [];
+    message.tenantTemplate = object.tenantTemplate ?? "";
     message.conflictResolution = object.conflictResolution ?? 0;
     message.autofillMissingUserIdColumns = object.autofillMissingUserIdColumns ?? false;
     message.enableSubscriptions = object.enableSubscriptions ?? false;
@@ -3115,6 +3162,73 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.listingHardLimit = (object.listingHardLimit !== undefined && object.listingHardLimit !== null)
       ? BigInt(object.listingHardLimit)
       : 0n;
+    return message;
+  },
+};
+
+function createBaseTenantTemplateConfig(): TenantTemplateConfig {
+  return {};
+}
+
+export const TenantTemplateConfig: MessageFns<TenantTemplateConfig> = {
+  encode(message: TenantTemplateConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== undefined && message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TenantTemplateConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTenantTemplateConfig();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TenantTemplateConfig {
+    return { name: isSet(object.name) ? globalThis.String(object.name) : undefined };
+  },
+
+  toJSON(message: TenantTemplateConfig): unknown {
+    const obj: any = {};
+    if (message.name !== undefined && message.name !== "") {
+      obj.name = message.name;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TenantTemplateConfig>, I>>(base?: I): TenantTemplateConfig {
+    return TenantTemplateConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TenantTemplateConfig>, I>>(object: I): TenantTemplateConfig {
+    const message = createBaseTenantTemplateConfig();
+    message.name = object.name ?? "";
     return message;
   },
 };
@@ -3279,6 +3393,7 @@ function createBaseConfig(): Config {
     jobs: undefined,
     databases: [],
     recordApis: [],
+    tenantTemplates: [],
     schemas: [],
   };
 }
@@ -3302,6 +3417,9 @@ export const Config: MessageFns<Config> = {
     }
     for (const v of message.recordApis) {
       RecordApiConfig.encode(v!, writer.uint32(90).fork()).join();
+    }
+    for (const v of message.tenantTemplates) {
+      TenantTemplateConfig.encode(v!, writer.uint32(98).fork()).join();
     }
     for (const v of message.schemas) {
       JsonSchemaConfig.encode(v!, writer.uint32(170).fork()).join();
@@ -3370,6 +3488,14 @@ export const Config: MessageFns<Config> = {
             message.recordApis.push(RecordApiConfig.decode(reader, reader.uint32()));
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.tenantTemplates.push(TenantTemplateConfig.decode(reader, reader.uint32()));
+            continue;
+          }
           case 21: {
             if (tag !== 170) {
               break;
@@ -3404,6 +3530,11 @@ export const Config: MessageFns<Config> = {
         : globalThis.Array.isArray(object?.record_apis)
         ? object.record_apis.map((e: any) => RecordApiConfig.fromJSON(e))
         : [],
+      tenantTemplates: globalThis.Array.isArray(object?.tenantTemplates)
+        ? object.tenantTemplates.map((e: any) => TenantTemplateConfig.fromJSON(e))
+        : globalThis.Array.isArray(object?.tenant_templates)
+        ? object.tenant_templates.map((e: any) => TenantTemplateConfig.fromJSON(e))
+        : [],
       schemas: globalThis.Array.isArray(object?.schemas)
         ? object.schemas.map((e: any) => JsonSchemaConfig.fromJSON(e))
         : [],
@@ -3430,6 +3561,9 @@ export const Config: MessageFns<Config> = {
     if (message.recordApis?.length) {
       obj.recordApis = message.recordApis.map((e) => RecordApiConfig.toJSON(e));
     }
+    if (message.tenantTemplates?.length) {
+      obj.tenantTemplates = message.tenantTemplates.map((e) => TenantTemplateConfig.toJSON(e));
+    }
     if (message.schemas?.length) {
       obj.schemas = message.schemas.map((e) => JsonSchemaConfig.toJSON(e));
     }
@@ -3455,6 +3589,7 @@ export const Config: MessageFns<Config> = {
       : undefined;
     message.databases = object.databases?.map((e) => DatabaseConfig.fromPartial(e)) || [];
     message.recordApis = object.recordApis?.map((e) => RecordApiConfig.fromPartial(e)) || [];
+    message.tenantTemplates = object.tenantTemplates?.map((e) => TenantTemplateConfig.fromPartial(e)) || [];
     message.schemas = object.schemas?.map((e) => JsonSchemaConfig.fromPartial(e)) || [];
     return message;
   },

@@ -6,9 +6,9 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::auth::user::User;
-use crate::records::RecordError;
 use crate::records::files::delete_files_marked_for_deletion;
 use crate::records::queries::DeleteRecordApiQuery;
+use crate::records::{Permission, RecordError};
 
 /// Delete record.
 #[utoipa::path(
@@ -31,11 +31,12 @@ pub async fn delete_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
+  api.check_table_level_access(Permission::Delete, user.as_ref())?;
+
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn();
+  let conn = api.conn(user.as_ref()).await?;
 
   let query = DeleteRecordApiQuery::new(api.clone(), record_id)?;
-  query.check_table_level_access(user.as_ref())?;
 
   let write_result = conn
     .call_writer({
@@ -49,7 +50,7 @@ pub async fn delete_record_handler(
   if api.has_file_columns() {
     tokio::spawn(async move {
       if let Err(err) = delete_files_marked_for_deletion(
-        api.conn(),
+        &conn,
         state.objectstore(),
         api.table_name(),
         &[write_result.rowid],

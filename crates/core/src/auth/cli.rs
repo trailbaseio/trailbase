@@ -197,19 +197,20 @@ pub async fn mint_auth_tokens(
   state: &AppState,
   user: UserReference,
 ) -> Result<AuthTokens, AuthError> {
-  return mint_auth_tokens_impl(state, user.lookup_user(state.user_conn()).await?).await;
+  return mint_auth_tokens_impl(state, &user.lookup_user(state.user_conn()).await?, None).await;
 }
 
 pub(crate) async fn mint_auth_tokens_impl(
   state: &AppState,
-  db_user: DbUser,
+  db_user: &DbUser,
+  tenant_id: Option<uuid::Uuid>,
 ) -> Result<AuthTokens, AuthError> {
   let auth_and_refresh_token_ttl = (Duration::hours(12), Duration::hours(0));
 
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(state, &db_user, Some(auth_and_refresh_token_ttl)).await?;
+  } = mint_new_tokens(state, db_user, tenant_id, Some(auth_and_refresh_token_ttl)).await?;
 
   let auth_token = state
     .jwt()

@@ -79,7 +79,6 @@ pub(crate) async fn build_metadata_and_maybe_file_deletions(
     });
 }
 
-// FIXME: Table name is unqualified.
 pub async fn lookup_and_parse_table_schema(
   conn: &trailbase_sqlite::Connection,
   table_name: &str,

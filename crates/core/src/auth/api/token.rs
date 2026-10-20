@@ -1,7 +1,7 @@
 use axum::extract::{Json, State};
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
-use trailbase_sqlite::params;
+use trailbase_sqlite::{SyncConnectionTrait, params};
 use ts_rs::TS;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -57,7 +57,7 @@ pub(crate) async fn auth_code_to_token_handler(
 
   const AUTH_CODE_QUERY: &str = formatcp!(
     "\
-      SELECT user FROM '{AUTHORIZATION_CODE_TABLE}' \
+      SELECT user, tenant FROM '{AUTHORIZATION_CODE_TABLE}' \
       WHERE \
         authorization_code = $1 \
           AND pkce_code_challenge = $2 \
@@ -65,12 +65,20 @@ pub(crate) async fn auth_code_to_token_handler(
     "
   );
 
-  let Some(user_id) = state
+  let Some((user_id, tenant_id)) = state
     .session_conn()
-    .read_query_row_get(
-      AUTH_CODE_QUERY,
-      params!(authorization_code, pkce_code_challenge),
-      0,
+    .call_reader(
+      |mut conn| -> Result<Option<([u8; 16], Option<[u8; 16]>)>, trailbase_sqlite::Error> {
+        let row = conn.query_row(
+          AUTH_CODE_QUERY,
+          params!(authorization_code, pkce_code_challenge),
+        )?;
+        let Some(row) = row else {
+          return Ok(None);
+        };
+
+        return Ok(Some((row.get(0)?, row.get(1)?)));
+      },
     )
     .await?
   else {
@@ -82,7 +90,7 @@ pub(crate) async fn auth_code_to_token_handler(
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _),
     refresh_token: Some((refresh_token, _)),
-  } = mint_new_tokens(&state, &db_user, None).await?
+  } = mint_new_tokens(&state, &db_user, tenant_id.map(Uuid::from_bytes), None).await?
   else {
     return Err(AuthError::Internal("expected refresh token".into()));
   };

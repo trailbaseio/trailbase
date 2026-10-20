@@ -13,6 +13,7 @@ use trailbase_sqlite::{Connection, ConnectionType, SyncConnectionTrait, Value, V
 
 use crate::auth::user::User;
 use crate::config::proto;
+use crate::connection::ConnectionManager;
 use crate::constants::USER_TABLE;
 use crate::records::params::Params;
 use crate::records::subscribe::event::EventPayload;
@@ -173,6 +174,7 @@ impl<'a> RequestParams<'a> {
 
 struct RecordAclParams<'a> {
   user: Option<[u8; 16]>,
+  tenant: Option<[u8; 16]>,
   record_id: Option<Value>,
   params: Option<RequestParams<'a>>,
 }
@@ -187,6 +189,7 @@ impl<'a> RecordAclParams<'a> {
   ) -> Result<Self, RecordError> {
     return Ok(Self {
       user: user.map(|u| u.id.into_bytes()),
+      tenant: user.and_then(|u| u.tenant.as_ref().map(|t| t.id.into_bytes())),
       record_id,
       params: match p {
         Permission::Create | Permission::Update => Some(RequestParams::new(
@@ -250,6 +253,14 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
       }
     }
 
+    if let Some(idx) = debug_is_some!(stmt.parameter_index(":__tenant_id")?) {
+      if let Some(tenant) = self.tenant {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&tenant)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
+    }
+
     if !is_insert && let Some(idx) = debug_is_some!(stmt.parameter_index(":__record_id")?) {
       if let Some(id) = self.record_id {
         stmt.bind_parameter(idx, ToSqlProxy::Owned(id))?;
@@ -262,9 +273,18 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
   }
 }
 
+enum ApiConnection {
+  SingleTenant(trailbase_sqlite::Connection),
+  MultiTenant {
+    mgr: ConnectionManager,
+    tenant_template: String,
+  },
+}
+
 struct RecordApiState {
+  user_conn: trailbase_sqlite::Connection,
   /// Cached connection for access checks and subscription state construction.
-  conn: trailbase_sqlite::Connection,
+  conn: ApiConnection,
   /// Cached connection metadata.
   metadata: Arc<ConnectionMetadata>,
 
@@ -299,6 +319,7 @@ struct RecordApiState {
 
 impl RecordApiState {
   pub(crate) fn from_table(
+    connection_manager: &ConnectionManager,
     conn: Connection,
     metadata: Arc<ConnectionMetadata>,
     table_metadata: &TableMetadata,
@@ -307,6 +328,7 @@ impl RecordApiState {
     assert_name(&config, table_metadata.name());
 
     return Self::from_impl(
+      connection_manager,
       conn,
       metadata,
       RecordApiSchema::from_table(table_metadata, &config)?,
@@ -315,6 +337,7 @@ impl RecordApiState {
   }
 
   pub(crate) fn from_view(
+    connection_manager: &ConnectionManager,
     conn: Connection,
     metadata: Arc<ConnectionMetadata>,
     view_metadata: &ViewMetadata,
@@ -323,6 +346,7 @@ impl RecordApiState {
     assert_name(&config, view_metadata.name());
 
     return Self::from_impl(
+      connection_manager,
       conn,
       metadata,
       RecordApiSchema::from_view(view_metadata, &config)?,
@@ -331,6 +355,7 @@ impl RecordApiState {
   }
 
   fn from_impl(
+    connection_manager: &ConnectionManager,
     conn: Connection,
     metadata: Arc<ConnectionMetadata>,
     schema: RecordApiSchema,
@@ -422,7 +447,15 @@ impl RecordApiState {
     };
 
     return Ok(RecordApiState {
-      conn,
+      user_conn: connection_manager.main_entry().connection,
+      conn: if let Some(tenant_template) = config.tenant_template.clone() {
+        ApiConnection::MultiTenant {
+          mgr: connection_manager.clone(),
+          tenant_template,
+        }
+      } else {
+        ApiConnection::SingleTenant(conn)
+      },
       metadata,
 
       schema,
@@ -486,6 +519,7 @@ impl RecordApiState {
 
 impl RecordApi {
   pub(crate) fn build(
+    connection_manager: &ConnectionManager,
     conn: trailbase_sqlite::Connection,
     metadata: Arc<trailbase_schema::db::metadata::ConnectionMetadata>,
     config: proto::RecordApiConfig,
@@ -495,6 +529,7 @@ impl RecordApi {
     if let Some(table_metadata) = metadata.get_table(&table_name) {
       return Ok(Self {
         state: Arc::new(RecordApiState::from_table(
+          connection_manager,
           conn,
           metadata.clone(),
           table_metadata,
@@ -504,6 +539,7 @@ impl RecordApi {
     } else if let Some(view_metadata) = metadata.get_view(&table_name) {
       return Ok(Self {
         state: Arc::new(RecordApiState::from_view(
+          connection_manager,
           conn,
           metadata.clone(),
           view_metadata,
@@ -536,8 +572,46 @@ impl RecordApi {
     return &self.state.schema.attached_databases;
   }
 
-  pub fn conn(&self) -> &trailbase_sqlite::Connection {
-    return &self.state.conn;
+  pub fn connection_type(&self) -> trailbase_sqlite::ConnectionType {
+    // If we ever allowed SQLite users + Postgres DBs, we would need to change this proxy.
+    return self.state.user_conn.connection_type();
+  }
+
+  pub fn single_tenant_conn(&self) -> &trailbase_sqlite::Connection {
+    return match &self.state.conn {
+      ApiConnection::SingleTenant(conn) => &conn,
+      ApiConnection::MultiTenant { .. } => {
+        panic!("misconfiguration");
+      }
+    };
+  }
+
+  /// Returns the DB connection serving the API call.
+  pub async fn conn(
+    &self,
+    user: Option<&User>,
+  ) -> Result<trailbase_sqlite::Connection, RecordError> {
+    return match &self.state.conn {
+      ApiConnection::SingleTenant(conn) => Ok(conn.clone()),
+      ApiConnection::MultiTenant {
+        mgr,
+        tenant_template,
+      } => {
+        let Some(tenant) = user.as_ref().and_then(|u| u.tenant.as_ref()) else {
+          return Err(RecordError::Forbidden);
+        };
+
+        Ok(
+          mgr
+            .build_for_tenant(&tenant_template, Some(tenant.id))
+            .await
+            .map_err(|err| {
+              RecordError::Internal(format!("Failed to open connection: {err}").into())
+            })?
+            .connection,
+        )
+      }
+    };
   }
 
   // NOTE: We use this for expansions when we follow FKs (read, list, json schema) as well as
@@ -720,7 +794,7 @@ impl RecordApi {
 
     return self
       .state
-      .conn
+      .user_conn
       .call_reader(move |mut conn| {
         Self::check_record_level_access_impl(&mut conn, &subscription_read_access_query, params)
       })
@@ -733,10 +807,30 @@ impl RecordApi {
     p: Permission,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
-    if (user.is_some() && self.has_access(Entity::Authenticated, p))
-      || self.has_access(Entity::World, p)
+    if let ApiConnection::MultiTenant {
+      ref tenant_template,
+      ..
+    } = self.state.conn
     {
-      return Ok(());
+      let Some(user) = user else {
+        return Err(RecordError::Forbidden);
+      };
+
+      let Some(ref tenant) = user.tenant else {
+        return Err(RecordError::Forbidden);
+      };
+
+      if *tenant_template == tenant.template && self.has_access(Entity::Authenticated, p) {
+        return Ok(());
+      }
+    } else {
+      if self.has_access(Entity::World, p) {
+        return Ok(());
+      }
+
+      if user.is_some() && self.has_access(Entity::Authenticated, p) {
+        return Ok(());
+      }
     }
 
     return Err(RecordError::Forbidden);
@@ -781,6 +875,7 @@ impl std::ops::Deref for RecordApiByName {
 
 struct SubscriptionAclParams {
   user: Option<[u8; 16]>,
+  tenant: Option<[u8; 16]>,
   params: Arc<EventPayload>,
 }
 
@@ -789,6 +884,7 @@ impl SubscriptionAclParams {
     return Self {
       params: event.clone(),
       user: user.map(|u| u.id.into_bytes()),
+      tenant: user.and_then(|u| u.tenant.as_ref().map(|t| t.id.into_bytes())),
     };
   }
 }
@@ -824,6 +920,14 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       }
     }
 
+    if let Some(idx) = debug_is_some!(stmt.parameter_index(":__tenant_id")?) {
+      if let Some(tenant) = self.tenant {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&tenant)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
+    }
+
     return Ok(());
   }
 }
@@ -854,7 +958,7 @@ fn build_read_delete_schema_query(
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
-        (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_, \
+        (SELECT CAST(:__user_id AS uuid) AS id, CAST(:__tenant_id AS uuid) AS tenant) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
     )
@@ -864,7 +968,7 @@ fn build_read_delete_schema_query(
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
-        (SELECT :__user_id AS id) AS _USER_, \
+        (SELECT :__user_id AS id, :__tenant_id AS tenant) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
     )

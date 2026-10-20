@@ -93,11 +93,12 @@ pub(crate) async fn apple_native_signin_handler(
     }
   };
 
+  // NOTE: We don't have a way to infer or explicitly pass a tenant.
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(&state, &db_user, None).await?;
+  } = mint_new_tokens(&state, &db_user, /* tenant_id= */ None, None).await?;
 
   let auth_token = state
     .jwt()

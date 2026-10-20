@@ -5,8 +5,9 @@ use trailbase_sqlite::{Connection, ConnectionType};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::auth::AuthError;
+use crate::auth::user::DbUser;
 use crate::auth::util::{user_by_email, user_by_username};
-use crate::auth::{AuthError, DbUser};
 
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -67,9 +68,10 @@ pub struct LoginResult {
   pub csrf_token: String,
 }
 
-pub async fn login_user_for_test(
+pub async fn login_user_with_tenant_for_test(
   state: &AppState,
   user: UserIdentifier,
+  tenant_id: Option<uuid::Uuid>,
   password: &str,
 ) -> Result<LoginResult, AuthError> {
   let db_user: DbUser = match &user {
@@ -81,10 +83,12 @@ pub async fn login_user_for_test(
   // Validates password and rate limits attempts.
   crate::auth::password::check_user_password(&db_user, password.to_string()).await?;
 
+  let id = db_user.uuid();
+
   let crate::auth::tokens::FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = crate::auth::tokens::mint_new_tokens(state, &db_user, None).await?;
+  } = crate::auth::tokens::mint_new_tokens(state, &db_user, tenant_id, None).await?;
 
   let auth_token = state
     .jwt()
@@ -92,11 +96,19 @@ pub async fn login_user_for_test(
     .map_err(|err| AuthError::Internal(err.into()))?;
 
   return Ok(LoginResult {
-    id: db_user.uuid(),
+    id,
     auth_token,
     refresh_token: refresh_token.map(|(token, _ttl)| token),
     csrf_token: auth_token_claims.csrf_token.into_string(),
   });
+}
+
+pub async fn login_user_for_test(
+  state: &AppState,
+  user: UserIdentifier,
+  password: &str,
+) -> Result<LoginResult, AuthError> {
+  return login_user_with_tenant_for_test(state, user, None, password).await;
 }
 
 pub struct TestUserAndLogin {

@@ -45,8 +45,8 @@ impl From<trailbase_sqlite::Error> for RecordError {
               // when constructing the SqlValue::Text input parameter and then in the actual SQLite
               // extension function, i.e. a CHECK violation should be caught early. For everything
               // else error on the side of a client-error.
-              #[cfg(debug_assertions)]
-              log::debug!("generic SQLite error code=1: {err}");
+              #[cfg(test)]
+              log::warn!("generic SQLite error code=1: {err} {_msg:?}");
 
               Self::BadRequest("rejected")
             }

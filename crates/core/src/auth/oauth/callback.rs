@@ -24,6 +24,7 @@ use crate::constants::{
   DEFAULT_AUTHORIZATION_CODE_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::rand::random_alphanumeric;
+use crate::util::b64_to_uuid;
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct CallbackQuery {
@@ -106,6 +107,7 @@ async fn callback_from_external_auth_provider_impl(
     response_type,
     redirect_uri,
     exp: _,
+    tenant,
   } = state
     .jwt()
     .decode::<OAuthStateClaims>(
@@ -135,6 +137,7 @@ async fn callback_from_external_auth_provider_impl(
         oauth_entry,
         redirect_uri,
         auth_code,
+        tenant,
         pkce_code_verifier,
         user_pkce_code_challenge,
       )
@@ -147,6 +150,7 @@ async fn callback_from_external_auth_provider_impl(
         oauth_entry,
         redirect_uri,
         auth_code,
+        tenant,
         pkce_code_verifier,
         has_root,
       )
@@ -162,17 +166,23 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   oauth_entry: &OAuthEntry,
   redirect: Option<String>,
   auth_code: String,
+  tenant_id: Option<String>,
   server_pkce_code_verifier: String,
   has_root: bool,
 ) -> Result<Response, AuthError> {
   let db_user =
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
+  let tenant_id: Option<uuid::Uuid> = tenant_id
+    .as_deref()
+    .map(b64_to_uuid)
+    .transpose()
+    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?;
 
   let FreshTokens {
     auth_token_claims: (auth_token_claims, auth_token_ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(state, &db_user, None).await?;
+  } = mint_new_tokens(state, &db_user, tenant_id, None).await?;
 
   let auth_token = state
     .jwt()
@@ -227,6 +237,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
   oauth_entry: &OAuthEntry,
   redirect: Option<String>,
   auth_code: String,
+  tenant: Option<String>,
   server_pkce_code_verifier: String,
   user_pkce_code_challenge: Option<String>,
 ) -> Result<Response, AuthError> {
@@ -240,6 +251,12 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
 
   let db_user =
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
+  let tenant = tenant
+    .as_deref()
+    .map(b64_to_uuid)
+    .transpose()
+    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?
+    .map(|id| id.into_bytes());
 
   // For the auth_code flow we generate a random code.
   let authorization_code = random_alphanumeric(VERIFICATION_CODE_LENGTH);
@@ -247,9 +264,9 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
   const QUERY: &str = formatcp!(
     "\
       INSERT INTO \
-        '{AUTHORIZATION_CODE_TABLE}' (user, authorization_code, pkce_code_challenge, expires) \
+        '{AUTHORIZATION_CODE_TABLE}' (user, tenant, authorization_code, pkce_code_challenge, expires) \
       VALUES \
-        ($1, $2, $3, $4)
+        ($1, $2, $3, $4, $5)
     "
   );
 
@@ -259,6 +276,7 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
       QUERY,
       params!(
         db_user.id,
+        tenant,
         authorization_code.clone(),
         user_pkce_code_challenge,
         (Utc::now() + DEFAULT_AUTHORIZATION_CODE_TTL).timestamp(),

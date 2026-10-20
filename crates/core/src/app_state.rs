@@ -6,15 +6,17 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
 use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
+use trailbase_schema::db::metadata::ConnectionMetadata;
 
 use crate::aes::KeyType;
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
+use crate::auth::tenant::list_tenants;
 use crate::config::{
   ConfigError, Textproto, load_or_init_config_textproto, proto, validate_config,
   write_config_and_vault_textproto,
 };
-use crate::connection::{ConnectionEntry, ConnectionError, ConnectionManager};
+use crate::connection::{ConnectionEntry, ConnectionManager};
 use crate::constants::USER_TABLE;
 use crate::data_dir::DataDir;
 use crate::email::Mailer;
@@ -23,7 +25,7 @@ use crate::metadata::load_check_and_update_metadata_textproto;
 use crate::rand::random_alphanumeric;
 use crate::records::file_token::get_or_init_aes256_file_key;
 use crate::records::subscribe::manager::SubscriptionManager;
-use crate::records::{RecordApi, RecordApiByName};
+use crate::records::{RecordApi, RecordApiByName, RecordError};
 use crate::scheduler::{BuildJobOptions, JobRegistry, build_job_registry_from_config};
 
 #[derive(Default)]
@@ -155,6 +157,52 @@ impl AppState {
 
     // Load the `<depot>/metadata.textproto`.
     load_check_and_update_metadata_textproto(&args.data_dir).await?;
+
+    let main_conn = connection_manager.main_entry().connection.clone();
+
+    // TODO: Initialize tenant DBs:
+    //  * Read tenants from DB.
+    //  * Read templates from config and validate.
+    //  * Apply per-template migrations to all tenants
+    //    * Dry run.
+    //    * If all succeed, commit.
+    //
+    // Eventually, we want a more flexible lifecycle, i.e.:
+    //  * Create a new DB eagerly when a new tenant is added in the admin UI.
+    //    * We don't ever want lazy creation of tenant DBs on request path unless there's a good reason for such extra complexity.
+    //  * P4: Apply new migrations on SIGHUP (we don't do this right for any DBs.
+    {
+      let templates: Vec<_> = config
+        .tenant_templates
+        .iter()
+        .filter_map(|t| {
+          return if let Some(ref name) = t.name
+            && !name.is_empty()
+          {
+            Some(name.to_owned())
+          } else {
+            None
+          };
+        })
+        .collect();
+
+      for template in &templates {
+        // Create <depot>/data/<template_name>/ dir.
+        std::fs::create_dir_all(args.data_dir.tenant_db_dir(template))?;
+        // Create <depot>/templates/<template_name>/ dir.
+        std::fs::create_dir_all(args.data_dir.template_migrations_dir(template))?;
+      }
+
+      let tenants = list_tenants(&main_conn).await?;
+      for tenant in tenants {
+        if templates.iter().all(|t| *t != tenant.template) {
+          return Err(InitError::CustomInit(format!(
+            "template {} not found",
+            tenant.template
+          )));
+        }
+      }
+    }
 
     let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
@@ -603,45 +651,55 @@ async fn build_record_apis_impl(
   prev: Option<Arc<HashSet<RecordApiByName>>>,
   record_api_configs: Arc<Vec<proto::RecordApiConfig>>,
 ) -> HashSet<RecordApiByName> {
-  // Re-use existing connection when possible to keep subscriptions alive.
-  //
-  // WARN: We need to be very careful to how we rebuild RecordAPIs, since long-lived
-  // subscriptions may be tied to specific connections. So we need to keep connection alive
-  // whenever possible, e.g. an ACL changing for one API isn't a good reason to drop
-  // subscriptions on all APIs.
-  let get_conn =
-    async move |api_name: &str, attached_databases: &[String]| -> Result<_, ConnectionError> {
-      let ConnectionEntry {
-        connection: conn,
-        metadata,
-      } = if attached_databases.is_empty() {
-        connection_manager.main_entry().clone()
-      } else {
-        connection_manager
-          .get_entry(
-            /* attach_main= */ true,
-            Some(attached_databases.iter().cloned().collect()),
-          )
-          .await?
-      };
+  // Re-use existing connection when possible to keep subscriptions alive. We need to be very
+  // careful to how we rebuild RecordAPIs, since long-lived subscriptions may be tied to specific
+  // connections. So we need to keep connection alive whenever possible, e.g. an ACL changing for
+  // one API isn't a good reason to drop subscriptions on all APIs.
+  async fn get_conn(
+    connection_manager: &ConnectionManager,
+    prev: Option<&Arc<HashSet<RecordApiByName>>>,
+    config: &proto::RecordApiConfig,
+  ) -> Result<(trailbase_sqlite::Connection, Arc<ConnectionMetadata>), RecordError> {
+    let attached_databases = &config.attached_databases;
 
-      if let Some(candidate_api) = prev
-        .as_ref()
-        .and_then(|prev: &Arc<HashSet<RecordApiByName>>| {
-          return prev.iter().find(|api| api.api_name() == api_name);
-        })
-        && candidate_api.attached_databases() == attached_databases
-      {
-        // NOTE: We must use latest metadata to work correctly on schema changes.
-        return Ok((candidate_api.conn().clone(), metadata));
-      };
-
-      return Ok((conn, metadata));
+    let ConnectionEntry {
+      connection: conn,
+      metadata,
+    } = if let Some(ref tenant_template) = config.tenant_template {
+      connection_manager
+        .build_for_tenant(tenant_template, None)
+        .await
+        .map_err(|err| {
+          RecordError::Internal(format!("Failed to build golden conn: {err}").into())
+        })?
+    } else if attached_databases.is_empty() {
+      connection_manager.main_entry().clone()
+    } else {
+      // NOTE: "main" has to always be attached. `_user` et al. are needed for the ACL checks on
+      // the same connection.
+      connection_manager
+        .get_entry(
+          /* attach_main= */ true,
+          Some(attached_databases.iter().cloned().collect()),
+        )
+        .await
+        .map_err(|err| RecordError::Internal(format!("Failed to get connection: {err}").into()))?
     };
+
+    if let Some(candidate_api) = prev.and_then(|prev: &Arc<HashSet<RecordApiByName>>| {
+      return prev.iter().find(|api| api.api_name() == config.name());
+    }) && candidate_api.attached_databases() == attached_databases
+    {
+      // NOTE: We must use latest metadata to work correctly on schema changes.
+      return Ok((candidate_api.conn(None).await?, metadata));
+    };
+
+    return Ok((conn, metadata));
+  }
 
   let mut next: HashSet<RecordApiByName> = HashSet::new();
   for config in record_api_configs.iter() {
-    let (conn, metadata) = match get_conn(config.name(), &config.attached_databases).await {
+    let (conn, metadata) = match get_conn(&connection_manager, prev.as_ref(), config).await {
       Ok(x) => x,
       Err(err) => {
         log::error!("Failed to get conn for record API {}: {err}", config.name());
@@ -649,7 +707,9 @@ async fn build_record_apis_impl(
       }
     };
 
-    match RecordApi::build(conn, metadata, config.clone()) {
+    // TODO: With RecordApi::build now having access to the ConnectionManager, we can move all this
+    // logic there.
+    match RecordApi::build(&connection_manager, conn, metadata, config.clone()) {
       Ok(api) => {
         next.insert(RecordApiByName(api));
       }

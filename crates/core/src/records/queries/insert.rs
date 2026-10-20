@@ -79,7 +79,7 @@ impl InsertOrReplaceRecordApiQuery {
 
     return Ok(Self {
       query: InsertOrReplaceQuery::new(
-        api.conn().connection_type(),
+        api.connection_type(),
         api.table_name(),
         api.columns(),
         &api.record_pk_column().column.name,
@@ -88,10 +88,6 @@ impl InsertOrReplaceRecordApiQuery {
       )?,
       api,
     });
-  }
-
-  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
-    return self.api.check_table_level_access(Permission::Create, user);
   }
 
   pub fn check_record_level_access(

@@ -45,15 +45,20 @@ impl From<ConnectionError> for trailbase_sqlite::Error {
 
 #[derive(Debug)]
 pub struct AttachedDatabase {
+  /// Name the DB should be attached as.
   pub schema_name: String,
-  pub path: PathBuf,
+  /// Path to the DB file.
+  pub file: PathBuf,
+  /// Path to *.sql migrations that should be applied..
+  pub migrations: Option<PathBuf>,
 }
 
 impl AttachedDatabase {
   pub fn from_data_dir(data_dir: &DataDir, name: impl std::string::ToString) -> Self {
     let name = name.to_string();
     return AttachedDatabase {
-      path: data_dir.data_path().join(format!("{name}.db")),
+      file: data_dir.data_path().join(format!("{name}.db")),
+      migrations: Some(data_dir.migrations_path().join(&name)),
       schema_name: name,
     };
   }
@@ -282,6 +287,60 @@ impl ConnectionManager {
         num_threads: Some(1),
       })
       .await;
+  }
+
+  pub(crate) async fn build_for_tenant(
+    &self,
+    tenant_template: &str,
+    tenant_id: Option<uuid::Uuid>,
+  ) -> Result<ConnectionEntry, ConnectionError> {
+    if self.state.pg_uri.is_some() {
+      return Err(ConnectionError::InvalidSetting("PG not supported"));
+    }
+
+    let tenant_dir = self.state.data_dir.data_path().join(tenant_template);
+    // FIXME: We should not create the paths dynamically.
+    let _ = std::fs::create_dir_all(&tenant_dir);
+
+    let tenant_db_path = if let Some(tenant_id) = tenant_id {
+      tenant_dir.join(format!("{tenant_id}.db"))
+    } else {
+      // TODO: Somewhat hacky: we create a pristine DB just to derive metadata.
+      tenant_dir.join(format!("golden.db"))
+    };
+
+    let migrations_path = self
+      .state
+      .data_dir
+      .root()
+      .join("templates")
+      .join(tenant_template);
+
+    let (conn, metadata, _new_db) = init_db_sqlite(
+      Some(&self.state.data_dir.main_db_path()),
+      InitDbOptions {
+        migrations: None,
+        // migrations: Some(Migrations {
+        //   main: true,
+        //   path: &migration_path,
+        // }),
+        json_registry: &self.state.json_schema_registry,
+        runtimes: &self.state.sqlite_function_runtimes,
+        attach: vec![AttachedDatabase {
+          file: tenant_db_path,
+          schema_name: tenant_template.to_string(),
+          migrations: Some(migrations_path),
+        }],
+        num_threads: Some(1),
+        read_only: Some(self.state.read_only),
+      },
+    )
+    .await?;
+
+    return Ok(ConnectionEntry {
+      connection: conn,
+      metadata: Arc::new(metadata),
+    });
   }
 
   /// Builds new connections, does not cache. Caching is handled by `get_*` methods above.
@@ -555,8 +614,7 @@ async fn init_db_sqlite<'a>(
 
   let conn = trailbase_sqlite::Connection::with_opts(
     {
-      let json_registry = json_registry.clone();
-      let runtimes = runtimes.clone();
+      let (json_registry, runtimes) = (json_registry.clone(), runtimes.clone());
 
       move || -> Result<rusqlite::Connection, ConnectionError> {
         return build_rusqlite_connection(data_path, json_registry.clone(), &runtimes);
@@ -594,25 +652,26 @@ async fn init_db_sqlite<'a>(
     }
   };
 
-  for AttachedDatabase { schema_name, path } in &attach {
-    log::debug!("Attaching '{schema_name}': {path:?}, {migrations:?}");
+  for AttachedDatabase {
+    schema_name,
+    file,
+    migrations,
+  } in &attach
+  {
+    log::debug!("Attaching '{schema_name}': {file:?}, {migrations:?}");
 
     // Before attaching secondary DBs, we must ensure their schemas are up-to-date.
-    if let Some(ref migrations) = migrations {
+    if let Some(migrations) = migrations {
       let mut secondary =
-        build_rusqlite_connection(Some(path), opts.json_registry.clone(), opts.runtimes)?;
+        build_rusqlite_connection(Some(file), opts.json_registry.clone(), opts.runtimes)?;
 
       // Apply migrations.
       //
       // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-      apply_base_migrations(
-        &mut secondary,
-        Some(&migrations.path.join(schema_name)),
-        schema_name,
-      )?;
+      apply_base_migrations(&mut secondary, Some(&migrations), schema_name)?;
     }
 
-    conn.attach(&path.to_string_lossy(), schema_name).await?;
+    conn.attach(&file.to_string_lossy(), schema_name).await?;
   }
 
   // Lastly, after attaching all DBs, build connection metadata.
@@ -735,7 +794,8 @@ mod tests {
         runtimes: &vec![],
         attach: vec![AttachedDatabase {
           schema_name: "foo".to_string(),
-          path: data_dir.data_path().join("foo.db"),
+          file: data_dir.data_path().join("foo.db"),
+          migrations: Some(data_dir.migrations_path().join("foo")),
         }],
         num_threads: None,
         read_only: None,

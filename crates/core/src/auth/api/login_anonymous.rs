@@ -98,7 +98,8 @@ pub async fn login_anonymous_user_handler(
       Ok(user) => {
         return crate::auth::api::login::build_auth_token_flow_response_with_ttl(
           &state,
-          &user,
+          user,
+          /* tenant= */ None,
           &cookies,
           redirect_uri,
           json,

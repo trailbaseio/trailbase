@@ -3,6 +3,7 @@ use axum::{
   http::request::Parts,
 };
 use compact_str::CompactString;
+use serde::{Deserialize, Serialize};
 use trailbase_sqlite::Row;
 use uuid::Uuid;
 
@@ -10,6 +11,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::tokens::extract_tokens_from_request_parts;
+use crate::util::b64_to_uuid;
 
 #[derive(Debug, Default, Clone)]
 pub struct DbUser {
@@ -103,9 +105,27 @@ impl DbUser {
 /// Representing an authenticated and *valid* user, as opposed to [`DbUser`], which is merely an
 /// entry for any user including users that haven't been validated.
 #[derive(Clone, Debug)]
-pub struct User {
-  /// UUID representation of the current user..
+pub struct DbUserAndTenant {
+  pub user: DbUser,
+  pub tenant: Option<Tenant>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct Tenant {
   pub id: Uuid,
+  pub template: String,
+}
+
+/// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry
+/// for any user including users that haven't been validated.
+#[derive(Clone, Debug)]
+pub struct User {
+  /// UUID representation of the current user.
+  pub id: Uuid,
+  /// UUID representation of the currently active tenant association.
+  pub tenant: Option<Tenant>,
+
   /// E-mail of the current user.
   pub email: Option<CompactString>,
   /// Username of the current user.
@@ -125,11 +145,11 @@ impl User {
   /// Construct new verified [User] from [AuthTokenClaims]. This is used when picking
   /// credentials/tokens from headers/cookies.
   pub(crate) fn from_token_claims(claims: AuthTokenClaims) -> Result<Self, AuthError> {
-    let id = crate::util::b64_to_uuid(&claims.sub)
-      .map_err(|_err| AuthError::BadRequest("invalid user id"))?;
+    let id = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
 
     return Ok(Self {
       id,
+      tenant: claims.tenant,
       email: claims.email,
       username: claims.username,
       csrf_token: claims.csrf_token,
@@ -154,6 +174,7 @@ impl User {
 
     return Self {
       id: user_id,
+      tenant: None,
       email: email.map(|s| s.to_compact_string()),
       username: username.map(|s| s.to_compact_string()),
       csrf_token: crate::rand::random_alphanumeric(24).to_compact_string(),

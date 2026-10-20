@@ -57,17 +57,13 @@ pub struct UpdateRecordApiQuery {
 impl UpdateRecordApiQuery {
   pub fn new(api: RecordApi, params: UpdateParams) -> Result<Self, RecordError> {
     return Ok(Self {
-      query: UpdateQuery::new(api.conn().connection_type(), api.table_name(), params)?,
+      query: UpdateQuery::new(api.connection_type(), api.table_name(), params)?,
       api,
     });
   }
 
   pub fn pk_value(&self) -> Value {
     return self.query.params.pk_column_value.clone();
-  }
-
-  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
-    return self.api.check_table_level_access(Permission::Update, user);
   }
 
   pub fn check_record_level_access(

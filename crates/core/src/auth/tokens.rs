@@ -5,12 +5,12 @@ use axum::{
 use chrono::Duration;
 use const_format::formatcp;
 use tower_cookies::Cookies;
-use trailbase_sqlite::params;
+use trailbase_sqlite::{SyncConnectionTrait, params};
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::AuthTokenClaims;
-use crate::auth::user::DbUser;
+use crate::auth::user::{DbUser, Tenant};
 use crate::auth::util::{SameSite, new_cookie};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_REFRESH_TOKEN, HEADER_REFRESH_TOKEN, REFRESH_TOKEN_LENGTH,
@@ -173,14 +173,48 @@ pub struct FreshTokens {
 
 pub(crate) async fn mint_new_tokens(
   state: &AppState,
-  user: &DbUser,
+  db_user: &DbUser,
+  tenant_id: Option<uuid::Uuid>,
   auth_and_refresh_token_ttl: Option<(Duration, Duration)>,
 ) -> Result<FreshTokens, AuthError> {
-  if user.unverified_email.is_some() {
+  if db_user.unverified_email.is_some() {
     return Err(AuthError::Internal(
       "Cannot mint tokens for unverified user".into(),
     ));
   }
+
+  let tenant: Option<Tenant> = if let Some(tenant_id) = tenant_id {
+    const CHECK_TENANT_QUERY: &str = formatcp!(
+      "\
+        SELECT _tenant.template FROM _tenant \
+          INNER JOIN _tenant_member ON _tenant_member.tenant = _tenant.id \
+        WHERE \
+          _tenant_member.user = $1 AND \
+          _tenant_member.tenant = $2; \
+      "
+    );
+
+    let tenant_template: Option<String> = state
+      .user_conn()
+      .read_query_row_get(
+        CHECK_TENANT_QUERY,
+        params!(db_user.id, tenant_id.into_bytes()),
+        0,
+      )
+      .await?
+      .unwrap_or_default();
+
+    let Some(tenant_template) = tenant_template else {
+      return Err(AuthError::Unauthorized);
+    };
+
+    Some(Tenant {
+      id: tenant_id,
+      template: tenant_template,
+    })
+  } else {
+    None
+  };
 
   let (auth_token_ttl, refresh_token_ttl) =
     auth_and_refresh_token_ttl.unwrap_or_else(|| state.access_config(|c| c.auth.token_ttls()));
@@ -190,15 +224,22 @@ pub(crate) async fn mint_new_tokens(
     let refresh_token = random_alphanumeric(REFRESH_TOKEN_LENGTH);
     let expires = (chrono::Utc::now() + refresh_token_ttl).timestamp();
 
+    // TODO: Check user connection for tenant membership. Either pass in user connection as well or
+    // open main in session (probably the former).
     const SESSION_INSERT_QUERY: &str = formatcp!(
-      "INSERT INTO \"{SESSION_TABLE}\" (user, refresh_token, expires) VALUES ($1, $2, $3)"
+      "INSERT INTO \"{SESSION_TABLE}\" (user, tenant, refresh_token, expires) VALUES ($1, $2, $3, $4)"
     );
 
     state
       .session_conn()
       .execute(
         SESSION_INSERT_QUERY,
-        params!(user.id, refresh_token.clone(), expires),
+        params!(
+          db_user.id,
+          tenant_id.map(|id| id.into_bytes()),
+          refresh_token.clone(),
+          expires
+        ),
       )
       .await?;
 
@@ -208,7 +249,10 @@ pub(crate) async fn mint_new_tokens(
   };
 
   return Ok(FreshTokens {
-    auth_token_claims: (AuthTokenClaims::new(user, &auth_token_ttl), auth_token_ttl),
+    auth_token_claims: (
+      AuthTokenClaims::new(&db_user, tenant, &auth_token_ttl),
+      auth_token_ttl,
+    ),
     refresh_token,
   });
 }
@@ -223,16 +267,25 @@ pub(crate) async fn reauth_with_refresh_token(
   // ticking with last login. This may be especially useful for anonymous auth.
   const SESSION_QUERY: &str = formatcp!(
     "\
-      SELECT user \
-      FROM '{SESSION_TABLE}' \
+      SELECT user, tenant FROM '{SESSION_TABLE}' \
       WHERE \
-        refresh_token = $1 AND expires > UNIXEPOCH() \
+        refresh_token = $1 AND expires > UNIXEPOCH(); \
     "
   );
 
-  let Some(user_id) = state
+  let Some((user_id, tenant_id)) = state
     .session_conn()
-    .read_query_row_get::<[u8; 16]>(SESSION_QUERY, params!(refresh_token), 0)
+    .call_reader(|mut conn| -> Result<_, trailbase_sqlite::Error> {
+      let row = conn.query_row(SESSION_QUERY, params!(refresh_token))?;
+      let Some(row) = row else {
+        return Ok(None);
+      };
+
+      return Ok(Some((
+        row.get::<[u8; 16]>(0)?,
+        row.get::<Option<[u8; 16]>>(1)?,
+      )));
+    })
     .await?
   else {
     // Row not found case, typically expected in one of 4 cases:
@@ -246,37 +299,86 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
-  const USER_QUERY: &str = formatcp!(
-    r#"SELECT {columns} FROM "{USER_TABLE}" WHERE id = $1 AND unverified_email IS NULL"#,
-    columns = DbUser::COLUMNS
-  );
+  let (db_user, tenant): (DbUser, Option<Tenant>) = if let Some(tenant_id) = tenant_id {
+    const USER_AND_TENANT_QUERY: &str = formatcp!(
+      "\
+        SELECT {user_columns}, _tenant.template AS template FROM \"{USER_TABLE}\" \
+          INNER JOIN _tenant_member ON _tenant_member.user = id \
+          INNER JOIN _tenant        ON _tenant_member.tenant = _tenant.id \
+        WHERE \
+          id = $1 AND \
+          unverified_email IS NULL AND \
+          _tenant_member.tenant = $2; \
+      ",
+      user_columns = DbUser::COLUMNS
+    );
 
-  let Some(db_user) = state
-    .user_conn()
-    .read_query_row(USER_QUERY, params!(user_id))
-    .await?
-    .map(DbUser::from_row)
-    .transpose()?
-  else {
-    // Row not found case, typically expected in one of 5 cases:
-    //  1. Above where clause doesn't match, e.g. refresh token expired.
-    //  2. Token was actively deleted and thus revoked.
-    //  3. User explicitly logged out, which will delete **all** sessions for that user.
-    //  4. Database was overwritten, e.g. by tests or periodic reset for the demo.
-    //  5. User's email is not verified (yet), e.g. right after promoting an anonymous user.
-    #[cfg(debug_assertions)]
-    log::debug!("User not found or unverified");
+    fn from_row(
+      row: trailbase_sqlite::Row,
+      tenant_id: [u8; 16],
+    ) -> Result<(DbUser, Tenant), AuthError> {
+      // Sanity check.
+      debug_assert_eq!(Some("template"), row.column(12).map(|c| c.name.as_str()));
 
-    return Err(AuthError::Unauthorized);
+      let tenant_template: String = row.get(12).map_err(|err| AuthError::Internal(err.into()))?;
+
+      return Ok((
+        DbUser::from_row(row)?,
+        Tenant {
+          id: uuid::Uuid::from_bytes(tenant_id),
+          template: tenant_template,
+        },
+      ));
+    }
+
+    let (db_user, tenant) = state
+      .user_conn()
+      .read_query_row(USER_AND_TENANT_QUERY, params!(user_id, tenant_id))
+      .await?
+      .map(|row| from_row(row, tenant_id))
+      .transpose()?
+      .ok_or_else(|| {
+        #[cfg(debug_assertions)]
+        log::debug!("User not found, tenant membership stale or unverified");
+
+        return AuthError::Unauthorized;
+      })?;
+
+    (db_user, Some(tenant))
+  } else {
+    const USER_QUERY: &str = formatcp!(
+      "\
+        SELECT {columns} FROM \"{USER_TABLE}\" \
+        WHERE \
+          id = $1 AND \
+          unverified_email IS NULL; \
+      ",
+      columns = DbUser::COLUMNS
+    );
+
+    let db_user = state
+      .user_conn()
+      .read_query_row(USER_QUERY, params!(user_id))
+      .await?
+      .map(DbUser::from_row)
+      .transpose()?
+      .ok_or_else(|| {
+        #[cfg(debug_assertions)]
+        log::debug!("User not found or unverified");
+
+        return AuthError::Unauthorized;
+      })?;
+
+    (db_user, None)
   };
 
   debug_assert!(
     db_user.unverified_email.is_none(),
-    "unverified user, should have been caught by above query"
+    "unverified user, should have been caught by query above"
   );
 
   return Ok((
-    AuthTokenClaims::new(&db_user, &auth_token_ttl),
+    AuthTokenClaims::new(&db_user, tenant, &auth_token_ttl),
     auth_token_ttl,
   ));
 }
