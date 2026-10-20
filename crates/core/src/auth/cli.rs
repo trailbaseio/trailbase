@@ -214,7 +214,7 @@ pub(crate) async fn mint_auth_tokens_impl(
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(state, &db_user, Some(auth_and_refresh_token_ttl)).await?;
+  } = mint_new_tokens(state, db_user, Some(auth_and_refresh_token_ttl)).await?;
 
   let auth_token = state
     .jwt()
