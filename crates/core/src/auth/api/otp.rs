@@ -333,7 +333,7 @@ pub async fn login_otp_handler(
 
   return build_auth_token_flow_response(
     &state,
-    &db_user,
+    db_user,
     &cookies,
     redirect_uri.map(|uri| uri.to_string()),
     json,

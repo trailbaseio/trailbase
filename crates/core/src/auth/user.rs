@@ -103,6 +103,28 @@ impl DbUser {
 /// Representing an authenticated and *valid* user, as opposed to [`DbUser`], which is merely an
 /// entry for any user including users that haven't been validated.
 #[derive(Clone, Debug)]
+pub struct DbUserAndTenant {
+  pub user: DbUser,
+  pub tenant: Option<[u8; 16]>,
+}
+
+impl DbUserAndTenant {
+  // pub const COLUMNS: &str = formatcp!("{}, tenant", DbUser::COLUMNS);
+
+  pub fn from_row(row: Row) -> Result<Self, AuthError> {
+    // Sanity check.
+    debug_assert_eq!(Some("tenant"), row.column(12).map(|c| c.name.as_str()));
+
+    return Ok(Self {
+      tenant: row.get(12).map_err(|err| AuthError::Internal(err.into()))?,
+      user: DbUser::from_row(row)?,
+    });
+  }
+}
+
+/// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry
+/// for any user including users that haven't been validated.
+#[derive(Clone, Debug)]
 pub struct User {
   /// UUID representation of the current user..
   pub id: Uuid,
