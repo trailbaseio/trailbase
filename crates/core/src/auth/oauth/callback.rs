@@ -15,7 +15,7 @@ use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::DbUser;
+use crate::auth::user::{DbUser, DbUserAndTenant};
 use crate::auth::util::{SameSite, new_cookie, remove_cookie, validate_redirect};
 use crate::auth::{AuthError, HasRoot};
 use crate::config::proto;
@@ -172,7 +172,16 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     auth_token_claims: (auth_token_claims, auth_token_ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(state, db_user, None).await?;
+  } = mint_new_tokens(
+    state,
+    &DbUserAndTenant {
+      user: db_user,
+      // FIXME: Round-trip tenant with OAuthStateClaims.
+      tenant: None,
+    },
+    None,
+  )
+  .await?;
 
   let auth_token = state
     .jwt()

@@ -6,6 +6,7 @@ use uuid::Uuid;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::api::login::LoginResponse;
+use crate::auth::user::DbUserAndTenant;
 
 #[derive(Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
@@ -39,7 +40,14 @@ pub async fn mint_auth_tokens(
     auth_token,
     refresh_token,
     csrf_token,
-  } = crate::auth::cli::mint_auth_tokens_impl(&state, db_user).await?;
+  } = crate::auth::cli::mint_auth_tokens_impl(
+    &state,
+    &DbUserAndTenant {
+      user: db_user,
+      tenant: None,
+    },
+  )
+  .await?;
 
   return Ok(Json(LoginResponse {
     auth_token,
