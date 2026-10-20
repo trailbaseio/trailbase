@@ -11,7 +11,7 @@ use validator::ValidateEmail;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::DbUser;
+use crate::auth::user::{DbUser, DbUserAndTenant};
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
 };
@@ -186,7 +186,15 @@ pub async fn login_with_password_for_test(
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(state, db_user, None).await?;
+  } = mint_new_tokens(
+    state,
+    &DbUserAndTenant {
+      user: db_user,
+      tenant: None,
+    },
+    None,
+  )
+  .await?;
 
   let auth_token = state
     .jwt()
