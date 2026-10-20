@@ -24,6 +24,7 @@ pub(crate) struct LoginInputParams {
   pub mfa_redirect_uri: Option<String>,
   pub response_type: Option<ResponseType>,
   pub pkce_code_challenge: Option<String>,
+  pub tenant: Option<String>,
 }
 
 impl LoginInputParams {
@@ -40,6 +41,9 @@ impl LoginInputParams {
     if let Some(pkce_code_challenge) = other.pkce_code_challenge {
       self.pkce_code_challenge.get_or_insert(pkce_code_challenge);
     }
+    if let Some(tenant) = other.tenant {
+      self.tenant.get_or_insert(tenant);
+    }
     return self;
   }
 }
@@ -47,11 +51,15 @@ impl LoginInputParams {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum LoginParams {
   /// Access token flow.
-  Password { redirect_uri: Option<String> },
+  Password {
+    redirect_uri: Option<String>,
+    tenant: Option<uuid::Uuid>,
+  },
   /// Authorization code flow.
   AuthorizationCodeFlowWithPkce {
     redirect_uri: String,
     pkce_code_challenge: String,
+    tenant: Option<uuid::Uuid>,
   },
 }
 
@@ -61,6 +69,25 @@ pub(crate) fn build_and_validate_input_params(
 ) -> Result<LoginParams, AuthError> {
   let redirect_uri = validate_redirect(state, params.redirect_uri)?;
   let _mfa_redirect_uri = validate_redirect(state, params.mfa_redirect_uri)?;
+
+  let tenant = params
+    .tenant
+    .as_deref()
+    .map(|t| -> Result<_, AuthError> {
+      let uuid = uuid::Uuid::from_slice(
+        &BASE64_URL_SAFE
+          .decode(t)
+          .map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
+      )
+      .map_err(|_err| AuthError::BadRequest("invalid 'tenant'"))?;
+
+      if uuid.get_version_num() != 4 {
+        return Err(AuthError::BadRequest("invalid 'tenant'"));
+      }
+
+      return Ok(uuid);
+    })
+    .transpose()?;
 
   return match params.response_type.as_ref() {
     Some(ResponseType::Code) => {
@@ -79,6 +106,7 @@ pub(crate) fn build_and_validate_input_params(
       Ok(LoginParams::AuthorizationCodeFlowWithPkce {
         redirect_uri,
         pkce_code_challenge,
+        tenant,
       })
     }
     Some(ResponseType::Token) | None => {
@@ -88,7 +116,10 @@ pub(crate) fn build_and_validate_input_params(
         ));
       }
 
-      Ok(LoginParams::Password { redirect_uri })
+      Ok(LoginParams::Password {
+        redirect_uri,
+        tenant,
+      })
     }
   };
 }
@@ -97,6 +128,7 @@ pub(crate) fn build_and_validate_input_params(
 mod tests {
   use super::*;
   use crate::app_state::test_state;
+  use crate::util::uuid_to_b64;
 
   #[tokio::test]
   async fn test_login_params_building() {
@@ -106,6 +138,7 @@ mod tests {
       LoginParams::AuthorizationCodeFlowWithPkce {
         redirect_uri: "/redirect".to_string(),
         pkce_code_challenge: BASE64_URL_SAFE.encode("challenge"),
+        tenant: None,
       },
       build_and_validate_input_params(
         &state,
@@ -114,14 +147,18 @@ mod tests {
           mfa_redirect_uri: Some("/totp".to_string()),
           response_type: Some(ResponseType::Code),
           pkce_code_challenge: Some(BASE64_URL_SAFE.encode("challenge")),
+          tenant: None,
         },
       )
       .unwrap()
     );
 
+    let tenant = uuid::Uuid::new_v4();
+
     assert_eq!(
       LoginParams::Password {
         redirect_uri: Some("/redirect".to_string()),
+        tenant: Some(tenant.clone())
       },
       build_and_validate_input_params(
         &state,
@@ -130,6 +167,7 @@ mod tests {
           mfa_redirect_uri: None,
           response_type: None,
           pkce_code_challenge: None,
+          tenant: Some(uuid_to_b64(&tenant)),
         },
       )
       .unwrap()
@@ -144,6 +182,7 @@ mod tests {
           mfa_redirect_uri: None,
           response_type: None,
           pkce_code_challenge: None,
+          tenant: Some(uuid_to_b64(&uuid::Uuid::new_v4())),
         },
       )
       .is_err()
