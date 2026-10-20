@@ -173,9 +173,11 @@ pub struct FreshTokens {
 
 pub(crate) async fn mint_new_tokens(
   state: &AppState,
-  user: DbUser,
+  db_user_and_tenant: &DbUserAndTenant,
   auth_and_refresh_token_ttl: Option<(Duration, Duration)>,
 ) -> Result<FreshTokens, AuthError> {
+  let DbUserAndTenant { user, tenant } = db_user_and_tenant;
+
   if user.unverified_email.is_some() {
     return Err(AuthError::Internal(
       "Cannot mint tokens for unverified user".into(),
@@ -184,9 +186,6 @@ pub(crate) async fn mint_new_tokens(
 
   let (auth_token_ttl, refresh_token_ttl) =
     auth_and_refresh_token_ttl.unwrap_or_else(|| state.access_config(|c| c.auth.token_ttls()));
-
-  // FIXME: wire tenant id through from logins.
-  let tenant: Option<[u8; 16]> = None;
 
   let refresh_token = if refresh_token_ttl.num_seconds() > 0 {
     // Unlike the JWT auth tokens, refresh tokens are opaque.
@@ -201,7 +200,12 @@ pub(crate) async fn mint_new_tokens(
       .session_conn()
       .execute(
         SESSION_INSERT_QUERY,
-        params!(user.id, tenant, refresh_token.clone(), expires),
+        params!(
+          user.id,
+          tenant.map(|t| t.to_vec()),
+          refresh_token.clone(),
+          expires
+        ),
       )
       .await?;
 
@@ -212,7 +216,7 @@ pub(crate) async fn mint_new_tokens(
 
   return Ok(FreshTokens {
     auth_token_claims: (
-      AuthTokenClaims::new(&DbUserAndTenant { user, tenant }, &auth_token_ttl),
+      AuthTokenClaims::new(&db_user_and_tenant, &auth_token_ttl),
       auth_token_ttl,
     ),
     refresh_token,
