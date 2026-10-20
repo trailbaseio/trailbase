@@ -97,7 +97,7 @@ pub(crate) async fn apple_native_signin_handler(
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(&state, &db_user, None).await?;
+  } = mint_new_tokens(&state, db_user, None).await?;
 
   let auth_token = state
     .jwt()

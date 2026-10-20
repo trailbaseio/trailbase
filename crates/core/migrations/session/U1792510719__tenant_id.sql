@@ -1,0 +1,1 @@
+ALTER TABLE _session ADD COLUMN tenant BLOB;

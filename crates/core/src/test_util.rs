@@ -81,10 +81,12 @@ pub async fn login_user_for_test(
   // Validates password and rate limits attempts.
   crate::auth::password::check_user_password(&db_user, password.to_string()).await?;
 
+  let id = db_user.uuid();
+
   let crate::auth::tokens::FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = crate::auth::tokens::mint_new_tokens(state, &db_user, None).await?;
+  } = crate::auth::tokens::mint_new_tokens(state, db_user, None).await?;
 
   let auth_token = state
     .jwt()
@@ -92,7 +94,7 @@ pub async fn login_user_for_test(
     .map_err(|err| AuthError::Internal(err.into()))?;
 
   return Ok(LoginResult {
-    id: db_user.uuid(),
+    id,
     auth_token,
     refresh_token: refresh_token.map(|(token, _ttl)| token),
     csrf_token: auth_token_claims.csrf_token.into_string(),

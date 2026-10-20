@@ -211,7 +211,7 @@ pub(crate) async fn login_handler(
   return match login_params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json, has_root).await
+      build_auth_token_flow_response(&state, db_user, &cookies, redirect_uri, json, has_root).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
@@ -269,7 +269,7 @@ async fn check_credentials(
 /// to get the tokens to your app.
 pub(crate) async fn build_auth_token_flow_response_with_ttl(
   state: &AppState,
-  db_user: &DbUser,
+  db_user: DbUser,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
@@ -342,7 +342,7 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
 
 pub(crate) async fn build_auth_token_flow_response(
   state: &AppState,
-  db_user: &DbUser,
+  db_user: DbUser,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
@@ -514,7 +514,7 @@ pub(crate) async fn login_mfa_handler(
   return match params {
     // Auth-token flow.
     LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, &db_user, &cookies, redirect_uri, json, has_root).await
+      build_auth_token_flow_response(&state, db_user, &cookies, redirect_uri, json, has_root).await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
