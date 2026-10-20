@@ -7,6 +7,7 @@ use mini_moka::sync::Cache;
 use serde::Deserialize;
 use std::sync::LazyLock;
 use tower_cookies::Cookies;
+use trailbase_sqlite::SyncConnectionTrait;
 use trailbase_sqlite::params;
 use ts_rs::TS;
 use utoipa::{IntoParams, ToSchema};
@@ -24,11 +25,12 @@ use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::random_numeric_and_uppercase;
-use crate::util::urlencode;
+use crate::util::{b64_to_id, urlencode};
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub struct RequestOtpParams {
   pub redirect_uri: Option<String>,
+  pub tenant: Option<String>,
 }
 
 #[derive(Debug, Deserialize, ToSchema, TS)]
@@ -109,8 +111,9 @@ pub async fn request_otp_handler(
     }
   };
 
-  let (db_user, redirect_uri, success_response): (
+  let (db_user, tenant, redirect_uri, success_response): (
     DbUser,
+    Option<String>,
     Option<String>,
     Box<dyn FnOnce() -> Response + Send>,
   ) = match user_identifier {
@@ -136,7 +139,12 @@ pub async fn request_otp_handler(
 
       debug_assert_eq!(Some(normalized_email.as_str()), db_user.email.as_deref());
 
-      (db_user, redirect_uri, Box::new(success_response))
+      (
+        db_user,
+        params.tenant,
+        redirect_uri,
+        Box::new(success_response),
+      )
     }
     UserIdentifier::Username(username) => {
       let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
@@ -156,7 +164,12 @@ pub async fn request_otp_handler(
         return Ok(success_response());
       };
 
-      (db_user, redirect_uri, Box::new(success_response))
+      (
+        db_user,
+        params.tenant,
+        redirect_uri,
+        Box::new(success_response),
+      )
     }
   };
 
@@ -178,8 +191,8 @@ pub async fn request_otp_handler(
   let otp_code = random_numeric_and_uppercase(OTP_CODE_LENGTH);
   const UPDATE_OTP_QUERY: &str = formatcp!(
     "\
-      INSERT OR REPLACE INTO '{OTP_CODE_TABLE}' (user, email, otp_code, expires) \
-      VALUES ($1, $2, $3, $4) \
+      INSERT OR REPLACE INTO '{OTP_CODE_TABLE}' (user, tenant, email, otp_code, expires) \
+      VALUES ($1, $2, $3, $4, $5) \
     "
   );
 
@@ -189,6 +202,11 @@ pub async fn request_otp_handler(
       UPDATE_OTP_QUERY,
       params!(
         db_user.id,
+        tenant
+          .as_deref()
+          .map(b64_to_id)
+          .transpose()
+          .map_err(|_err| AuthError::BadRequest("invalid tenant"))?,
         normalized_email.clone(),
         otp_code.clone(),
         (Utc::now() + OTP_TTL).timestamp(),
@@ -232,7 +250,7 @@ pub struct LoginOtpRequest {
   params(LoginOtpParams),
   request_body = LoginOtpRequest,
   responses(
-    (status = 200, description = "Auth tokens for JSONl logins.", body = LoginResponse),
+    (status = 200, description = "Auth tokens for JSON logins.", body = LoginResponse),
     (status = 303, description = "For form logins."),
     (status = 400, description = "Bad request"),
   )
@@ -257,7 +275,7 @@ pub async fn login_otp_handler(
   let LoginOtpRequest { params } = request;
 
   let redirect_uri = validate_redirect(&state, query.redirect_uri.or(params.redirect_uri))?;
-  let Some(otp_code) = query.code.as_deref().or(params.code.as_deref()) else {
+  let Some(otp_code) = query.code.or(params.code).map(|c| c.trim().to_string()) else {
     // TODO: Add redirect for non-json
     return Err(AuthError::BadRequest("missing code"));
   };
@@ -265,7 +283,7 @@ pub async fn login_otp_handler(
   let email = query.email.as_deref().or(params.email.as_deref());
   let username = query.username.as_deref().or(params.username.as_deref());
 
-  let user_id = match (email, username) {
+  let (user_id, tenant_id) = match (email, username) {
     (Some(email), _) => {
       let normalized_email = validate_and_normalize_email_address(email)?;
 
@@ -273,7 +291,7 @@ pub async fn login_otp_handler(
 
       const LOOKUP_OTP_QUERY: &str = formatcp!(
         "\
-          SELECT user FROM '{OTP_CODE_TABLE}' \
+          SELECT user, tenant FROM '{OTP_CODE_TABLE}' \
           WHERE  \
             email = $1 AND \
             otp_code = $2 AND \
@@ -283,10 +301,15 @@ pub async fn login_otp_handler(
 
       state
         .session_conn()
-        .read_query_row_get(
-          LOOKUP_OTP_QUERY,
-          params!(normalized_email, otp_code.trim().to_string()),
-          0,
+        .call_reader(
+          |mut conn| -> Result<Option<([u8; 16], Option<[u8; 16]>)>, trailbase_sqlite::Error> {
+            let row = conn.query_row(LOOKUP_OTP_QUERY, params!(normalized_email, otp_code))?;
+            let Some(row) = row else {
+              return Ok(None);
+            };
+
+            return Ok(Some((row.get(0)?, row.get(1)?)));
+          },
         )
         .await?
         .ok_or(AuthError::Unauthorized)?
@@ -297,18 +320,15 @@ pub async fn login_otp_handler(
 
       rate_limit_otp_logins(normalized_username.clone())?;
 
-      let Ok(DbUser {
-        email: Some(email), ..
-      }) = user_by_username(&state, &normalized_username).await
-      else {
+      let Ok(DbUser { id, .. }) = user_by_username(&state, &normalized_username).await else {
         return Err(AuthError::Unauthorized);
       };
 
       const LOOKUP_OTP_QUERY: &str = formatcp!(
         "\
-          SELECT user FROM '{OTP_CODE_TABLE}' \
+          SELECT user, tenant FROM '{OTP_CODE_TABLE}' \
           WHERE  \
-            email = $1 AND \
+            user = $1 AND \
             otp_code = $2 AND \
             UNIXEPOCH() < expires \
         "
@@ -316,10 +336,15 @@ pub async fn login_otp_handler(
 
       state
         .session_conn()
-        .read_query_row_get(
-          LOOKUP_OTP_QUERY,
-          params!(email, otp_code.trim().to_string()),
-          0,
+        .call_reader(
+          move |mut conn| -> Result<Option<([u8; 16], Option<[u8; 16]>)>, trailbase_sqlite::Error> {
+            let row = conn.query_row(LOOKUP_OTP_QUERY, params!(id, otp_code))?;
+            let Some(row) = row else {
+              return Ok(None);
+            };
+
+            return Ok(Some((row.get(0)?, row.get(1)?)));
+          },
         )
         .await?
         .ok_or(AuthError::Unauthorized)?
@@ -334,6 +359,10 @@ pub async fn login_otp_handler(
   return build_auth_token_flow_response(
     &state,
     db_user,
+    tenant_id
+      .map(|id| uuid::Uuid::from_slice(&id))
+      .transpose()
+      .map_err(|_| AuthError::BadRequest("invalid 'tenant'"))?,
     &cookies,
     redirect_uri.map(|uri| uri.to_string()),
     json,
