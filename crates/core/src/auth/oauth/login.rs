@@ -71,6 +71,8 @@ pub(crate) async fn login_with_external_auth_provider(
       redirect_uri,
       response_type: None,
       user_pkce_code_challenge: None,
+      // FIXME: wire through.
+      tenant: None,
     },
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
@@ -83,6 +85,8 @@ pub(crate) async fn login_with_external_auth_provider(
       user_pkce_code_challenge: Some(pkce_code_challenge),
       response_type: Some(ResponseType::Code),
       redirect_uri: Some(redirect_uri),
+      // FIXME: wire through.
+      tenant: None,
     },
   };
 
