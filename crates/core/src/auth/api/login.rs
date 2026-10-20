@@ -154,6 +154,7 @@ pub(crate) async fn login_handler(
       mfa_redirect_uri: params.mfa_redirect_uri.clone(),
       response_type: params.response_type,
       pkce_code_challenge: params.pkce_code_challenge,
+      tenant: params.tenant,
     }),
   )?;
 
@@ -210,17 +211,31 @@ pub(crate) async fn login_handler(
   // Otherwise build auth token or authorization code responses.
   return match login_params {
     // Auth-token flow.
-    LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, db_user, &cookies, redirect_uri, json, has_root).await
+    LoginParams::Password {
+      redirect_uri,
+      tenant,
+    } => {
+      build_auth_token_flow_response(
+        &state,
+        db_user,
+        tenant,
+        &cookies,
+        redirect_uri,
+        json,
+        has_root,
+      )
+      .await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
       pkce_code_challenge,
+      tenant,
     } => {
       build_authorization_code_flow_and_pkce_response(
         &state,
         &db_user,
+        tenant,
         redirect_uri,
         pkce_code_challenge,
       )
@@ -270,6 +285,7 @@ async fn check_credentials(
 pub(crate) async fn build_auth_token_flow_response_with_ttl(
   state: &AppState,
   db_user: DbUser,
+  tenant: Option<uuid::Uuid>,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
@@ -281,8 +297,7 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
       state,
       &DbUserAndTenant {
         user: db_user,
-        // FIXME: wire tenant through.
-        tenant: None,
+        tenant: tenant.map(|t| t.into_bytes()),
       },
       auth_and_refresh_token_ttl,
     )
@@ -352,13 +367,14 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
 pub(crate) async fn build_auth_token_flow_response(
   state: &AppState,
   db_user: DbUser,
+  tenant: Option<uuid::Uuid>,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
   has_root: bool,
 ) -> Result<Response, AuthError> {
   return build_auth_token_flow_response_with_ttl(
-    state, db_user, cookies, redirect, is_json, has_root, None,
+    state, db_user, tenant, cookies, redirect, is_json, has_root, None,
   )
   .await;
 }
@@ -389,6 +405,7 @@ pub(crate) async fn build_auth_token_flow_response(
 async fn build_authorization_code_flow_and_pkce_response(
   state: &AppState,
   db_user: &DbUser,
+  tenant: Option<uuid::Uuid>,
   redirect: String,
   pkce_code_challenge: String,
 ) -> Result<Response, AuthError> {
@@ -398,9 +415,9 @@ async fn build_authorization_code_flow_and_pkce_response(
   const QUERY: &str = formatcp!(
     "\
       INSERT INTO \
-        '{AUTHORIZATION_CODE_TABLE}' (user, authorization_code, pkce_code_challenge, expires) \
+        '{AUTHORIZATION_CODE_TABLE}' (user, tenant, authorization_code, pkce_code_challenge, expires) \
       VALUES \
-        ($1, $2, $3, $4)
+        ($1, $2, $3, $4, $5)
     "
   );
 
@@ -410,6 +427,7 @@ async fn build_authorization_code_flow_and_pkce_response(
       QUERY,
       params!(
         db_user.id,
+        tenant.map(|uuid| uuid.into_bytes()),
         authorization_code.clone(),
         pkce_code_challenge,
         (Utc::now() + DEFAULT_AUTHORIZATION_CODE_TTL).timestamp(),
@@ -464,6 +482,7 @@ pub(crate) async fn login_mfa_handler(
           pkce_code_challenge,
           redirect_uri,
           mfa_redirect_uri,
+          tenant,
         },
     },
     json,
@@ -487,6 +506,7 @@ pub(crate) async fn login_mfa_handler(
       mfa_redirect_uri: mfa_redirect_uri.clone(),
       response_type,
       pkce_code_challenge,
+      tenant,
     }),
   )?;
 
@@ -522,17 +542,31 @@ pub(crate) async fn login_mfa_handler(
   // Otherwise build auth token or authorization code responses.
   return match params {
     // Auth-token flow.
-    LoginParams::Password { redirect_uri } => {
-      build_auth_token_flow_response(&state, db_user, &cookies, redirect_uri, json, has_root).await
+    LoginParams::Password {
+      redirect_uri,
+      tenant,
+    } => {
+      build_auth_token_flow_response(
+        &state,
+        db_user,
+        tenant,
+        &cookies,
+        redirect_uri,
+        json,
+        has_root,
+      )
+      .await
     }
     // Authorization-code flow.
     LoginParams::AuthorizationCodeFlowWithPkce {
       redirect_uri,
       pkce_code_challenge,
+      tenant,
     } => {
       build_authorization_code_flow_and_pkce_response(
         &state,
         &db_user,
+        tenant,
         redirect_uri,
         pkce_code_challenge,
       )
