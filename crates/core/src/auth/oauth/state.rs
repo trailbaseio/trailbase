@@ -43,6 +43,9 @@ pub(crate) struct OAuthStateClaims {
 
   /// Redirect target.
   pub redirect_uri: Option<String>,
+
+  /// Optional url-safe base64 tenant id.
+  pub tenant: Option<String>,
 }
 
 #[cfg(test)]
@@ -61,6 +64,7 @@ mod tests {
       user_pkce_code_challenge: Some("client challenge".to_string()),
       response_type: Some(ResponseType::Code),
       redirect_uri: Some("custom-sheme://test".to_string()),
+      tenant: None,
     };
 
     let encoded = state.jwt().encode(&oauth_state).unwrap();
