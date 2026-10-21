@@ -146,6 +146,7 @@ pub struct LoginQuery {
   mfa_redirect_uri: Option<String>,
   response_type: Option<String>,
   pkce_code_challenge: Option<String>,
+  tenant: Option<String>,
   alert: Option<String>,
 }
 
@@ -191,6 +192,7 @@ async fn ui_login_handler(
       ),
       auth::hidden_input("response_type", query.response_type.as_ref()),
       auth::hidden_input("pkce_code_challenge", query.pkce_code_challenge.as_ref()),
+      auth::hidden_input("tenant", query.tenant.as_ref()),
     ]
     .join("\n"),
     alert: query.alert.as_deref().unwrap_or_default(),
