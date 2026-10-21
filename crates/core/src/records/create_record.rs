@@ -255,7 +255,7 @@ pub(crate) fn build_insert_params(
       if !record.contains_key(col_name) {
         record.insert(
           col_name.to_owned(),
-          serde_json::Value::String(uuid_to_b64(&user.uuid)),
+          serde_json::Value::String(uuid_to_b64(&user.id)),
         );
       }
     }

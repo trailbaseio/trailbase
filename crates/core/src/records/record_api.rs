@@ -177,7 +177,7 @@ impl<'a> RecordAclParams<'a> {
     request_params: Option<Params<'a>>,
   ) -> Result<Self, RecordError> {
     return Ok(Self {
-      user: user.map(|u| u.uuid.into_bytes()),
+      user: user.map(|u| u.id.into_bytes()),
       record_id,
       params: match p {
         Permission::Create | Permission::Update => Some(RequestParams::new(
@@ -748,7 +748,7 @@ impl SubscriptionAclParams {
   fn new(event: &Arc<EventPayload>, user: Option<&User>) -> Self {
     return Self {
       params: event.clone(),
-      user: user.map(|u| u.uuid.into_bytes()),
+      user: user.map(|u| u.id.into_bytes()),
     };
   }
 }

@@ -380,7 +380,7 @@ pub(crate) async fn is_admin(state: &AppState, user_id: &uuid::Uuid) -> bool {
 
   return match state
     .user_conn()
-    .read_query_row_get::<i64>(QUERY, params!(user_id.as_bytes().to_vec()), 0)
+    .read_query_row_get::<i64>(QUERY, params!(user_id.into_bytes()), 0)
     .await
   {
     Ok(Some(row)) => row > 0,

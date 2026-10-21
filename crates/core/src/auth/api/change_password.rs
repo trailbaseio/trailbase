@@ -89,7 +89,7 @@ pub async fn change_password_handler(
     return Err(err);
   }
 
-  let db_user = user_by_id(&state, &user.uuid).await?;
+  let db_user = user_by_id(&state, &user.id).await?;
 
   // Optionally validate old password.
   // TODO: It would probably be good practice to check TOTP as well for users of multi-factor
@@ -124,7 +124,7 @@ pub async fn change_password_handler(
     .execute(
       QUERY,
       named_params! {
-        ":user_id": user.uuid.into_bytes().to_vec(),
+        ":user_id": user.id.into_bytes(),
         ":new_password_hash": new_password_hash,
         ":old_password_hash": old_password_hash,
       },

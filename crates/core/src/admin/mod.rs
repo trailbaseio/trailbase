@@ -154,7 +154,7 @@ async fn assert_admin_api_access(
 
   // IMPORTANT: We cannot trust the admin bit in the auth-token, since it may be stale. We need to
   // query the DB.
-  if !is_admin(&state, &user.uuid).await {
+  if !is_admin(&state, &user.id).await {
     return Err(AuthError::Forbidden);
   }
 

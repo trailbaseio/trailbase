@@ -156,7 +156,7 @@ pub async fn list_records_handler(
     ),
     (
       Cow::Borrowed(":__user_id"),
-      user.map_or(Value::Null, |u| Into::<Value>::into(u.uuid.as_bytes())),
+      user.map_or(Value::Null, |u| Into::<Value>::into(u.id.as_bytes())),
     ),
   ]);
 

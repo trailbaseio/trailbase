@@ -133,7 +133,7 @@ pub async fn change_username_handler(
       UPDATE_USERNAME_QUERY,
       named_params! {
         ":new_username": new_username,
-        ":id": user.uuid.as_bytes().to_vec(),
+        ":id": user.id.into_bytes(),
       },
     )
     .await

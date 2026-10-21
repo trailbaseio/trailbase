@@ -102,7 +102,7 @@ pub async fn promote_anonymous_user_handler(
     return Err(err);
   }
 
-  let db_user = user_by_id(&state, &user.uuid).await?;
+  let db_user = user_by_id(&state, &user.id).await?;
   if db_user.password_hash.is_some() || db_user.provider_id > 0 {
     return Err(AuthError::FailedDependency("not an anonymous user".into()));
   }
@@ -131,7 +131,7 @@ pub async fn promote_anonymous_user_handler(
     .execute(
       QUERY,
       named_params! {
-        ":user_id": user.uuid.into_bytes().to_vec(),
+        ":user_id": user.id.into_bytes(),
         ":new_password_hash": new_password_hash,
         ":unverified_email": normalized_email.clone(),
         ":username": username,
@@ -144,7 +144,7 @@ pub async fn promote_anonymous_user_handler(
     1 => {
       if let Some(ref email) = normalized_email {
         let claims =
-          EmailVerificationTokenClaims::new(&user.uuid, email.clone(), chrono::Duration::hours(4));
+          EmailVerificationTokenClaims::new(&user.id, email.clone(), chrono::Duration::hours(4));
         let token = state
           .jwt()
           .encode(&claims)

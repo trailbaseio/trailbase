@@ -9,6 +9,7 @@ use trailbase_wasm_runtime_axum::{AnyError, Job, KvStore, Runtime, WasmRuntimeBu
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::config::proto;
+use crate::util::uuid_to_b64;
 use crate::{AppState, DataDir, User};
 
 pub use trailbase_wasm_runtime_axum::{SqliteFunctions, SqliteStore};
@@ -208,7 +209,7 @@ pub(crate) async fn install_routes_and_jobs(
         .ok()
         .flatten()
         .map(|u| HttpContextUser {
-          id: u.id,
+          id: uuid_to_b64(&u.id),
           email: u.email,
           username: u.username,
           csrf_token: u.csrf_token,

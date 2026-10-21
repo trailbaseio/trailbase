@@ -728,7 +728,7 @@ async fn session_exists(state: &AppState, user_id: Uuid) -> bool {
     .session_conn()
     .read_query_row_get(
       format!("SELECT EXISTS(SELECT 1 FROM {SESSION_TABLE} WHERE user = $1)"),
-      (user_id.into_bytes().to_vec(),),
+      (user_id.into_bytes(),),
       0,
     )
     .await

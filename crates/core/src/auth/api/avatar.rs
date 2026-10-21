@@ -87,7 +87,7 @@ pub async fn create_avatar_handler(
 
   let record = JsonRow::from_iter([(
     "user".to_string(),
-    serde_json::Value::String(uuid_to_b64(&user.uuid)),
+    serde_json::Value::String(uuid_to_b64(&user.id)),
   )]);
 
   let (params, files) = InsertParams::new(
@@ -127,7 +127,7 @@ pub async fn delete_avatar_handler(
   const QUERY: &str = formatcp!("DELETE FROM '{AVATAR_TABLE}' WHERE user = $1");
 
   let main_conn = &state.connection_manager().main_entry().connection;
-  main_conn.execute(QUERY, (user.uuid.into_bytes(),)).await?;
+  main_conn.execute(QUERY, (user.id.into_bytes(),)).await?;
 
   return Ok(());
 }
@@ -252,7 +252,7 @@ mod tests {
     user: User,
     body: &[u8],
   ) -> Result<uuid::Uuid, anyhow::Error> {
-    let user_id = user.uuid;
+    let user_id = user.id;
 
     create_avatar_handler(
       State(state.clone()),

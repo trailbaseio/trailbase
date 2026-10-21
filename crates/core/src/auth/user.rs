@@ -2,7 +2,6 @@ use axum::{
   extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
   http::request::Parts,
 };
-use serde::{Deserialize, Serialize};
 use trailbase_sqlite::Row;
 use uuid::Uuid;
 
@@ -40,18 +39,17 @@ impl DbUser {
   pub const COLUMNS: &str = "id, email, unverified_email, username, password_hash, admin, totp_secret, created, updated, provider_id, provider_user_id, provider_avatar_url";
 
   pub fn uuid(&self) -> Uuid {
-    let uuid = Uuid::from_bytes(self.id);
-    return uuid;
+    return Uuid::from_bytes(self.id);
   }
 
   pub fn from_row(row: Row) -> Result<Self, AuthError> {
     #[inline]
     fn from_row_impl(mut row: Row) -> Result<DbUser, trailbase_sqlite::from_sql::FromSqlError> {
       // Sanity check.
-      debug_assert_eq!(Some("id"), row.column(0).map(|c| c.name.as_str()));
-      debug_assert_eq!(Some("username"), row.column(3).map(|c| c.name.as_str()));
-      debug_assert_eq!(Some("totp_secret"), row.column(6).map(|c| c.name.as_str()));
-      debug_assert_eq!(Some("provider_id"), row.column(9).map(|c| c.name.as_str()));
+      #[cfg(debug_assertions)]
+      for (i, column) in DbUser::COLUMNS.split(",").enumerate() {
+        assert_eq!(Some(column.trim()), row.column(i).map(|c| c.name.as_str()));
+      }
 
       return Ok(DbUser {
         id: row.get(0)?,
@@ -79,12 +77,7 @@ impl DbUser {
     let timestamp = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 
     return Self {
-      id: uuid::Uuid::new_v7(uuid::timestamp::Timestamp::from_unix(
-        uuid::NoContext,
-        timestamp,
-        0,
-      ))
-      .into_bytes(),
+      id: uuid::Uuid::new_v4().into_bytes(),
       email: Some(email.to_string()),
       unverified_email: None,
       username: None,
@@ -100,20 +93,18 @@ impl DbUser {
   }
 }
 
-/// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry
-/// for any user including users that haven't been validated.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+/// Representing an authenticated and *valid* user, as opposed to [`DbUser`], which is merely an
+/// entry for any user including users that haven't been validated.
+#[derive(Clone, Debug)]
 pub struct User {
-  /// Url-safe Base64 encoded id of the current user.
-  pub id: String,
+  /// UUID representation of the current user..
+  pub id: Uuid,
   /// E-mail of the current user.
   pub email: Option<String>,
   /// Username of the current user.
   pub username: Option<String>,
-  /// Convenience UUID representation of [id] above.
-  pub uuid: Uuid,
 
-  /// The "expected" CSRF token as included in the auth token claims [User] was constructed from.
+  /// The "expected" CSRF token as included in the auth token claims [`User`] was constructed from.
   pub csrf_token: String,
 }
 
@@ -127,13 +118,12 @@ impl User {
   /// Construct new verified [User] from [AuthTokenClaims]. This is used when picking
   /// credentials/tokens from headers/cookies.
   pub(crate) fn from_token_claims(claims: AuthTokenClaims) -> Result<Self, AuthError> {
-    let uuid = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
+    let id = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
 
     return Ok(Self {
-      id: claims.sub,
+      id,
       email: claims.email,
       username: claims.username,
-      uuid,
       csrf_token: claims.csrf_token,
     });
   }
@@ -153,10 +143,9 @@ impl User {
     username: Option<&str>,
   ) -> Self {
     return Self {
-      id: crate::util::uuid_to_b64(&user_id),
+      id: user_id,
       email: email.map(|s| s.to_string()),
       username: username.map(|s| s.to_string()),
-      uuid: user_id,
       csrf_token: crate::rand::random_alphanumeric(20),
     };
   }
@@ -176,7 +165,7 @@ where
         .auth_token_claims,
     )?;
 
-    tracing::Span::current().record("user_id", user.uuid.to_u128_le());
+    tracing::Span::current().record("user_id", user.id.as_u128());
 
     return Ok(user);
   }
@@ -196,7 +185,7 @@ where
     if let Ok(tokens) = extract_tokens_from_request_parts(&AppState::from_ref(state), parts).await {
       let user = User::from_token_claims(tokens.auth_token_claims)?;
 
-      tracing::Span::current().record("user_id", user.uuid.to_u128_le());
+      tracing::Span::current().record("user_id", user.id.as_u128());
 
       return Ok(Some(user));
     }

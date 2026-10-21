@@ -119,12 +119,12 @@ pub async fn register_totp_confirm_handler(
   const UPDATE_QUERY: &str =
     formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
 
-  let user_id_bytes = user.uuid.into_bytes().to_vec();
-  let secret = totp.secret().to_base32();
-
   state
     .user_conn()
-    .execute(UPDATE_QUERY, params!(secret, user_id_bytes))
+    .execute(
+      UPDATE_QUERY,
+      params!(totp.secret().to_base32(), user.id.into_bytes()),
+    )
     .await?;
 
   return Ok((StatusCode::OK, "TOTP enabled").into_response());
@@ -183,10 +183,12 @@ pub async fn unregister_totp_handler(
   const UPDATE_QUERY: &str =
     formatcp!(r#"UPDATE "{USER_TABLE}" SET totp_secret = $1 WHERE id = $2"#);
 
-  let user_id_bytes = user.uuid.into_bytes().to_vec();
   state
     .user_conn()
-    .execute(UPDATE_QUERY, params!(Option::<String>::None, user_id_bytes))
+    .execute(
+      UPDATE_QUERY,
+      params!(Option::<String>::None, user.id.into_bytes()),
+    )
     .await?;
 
   return Ok((StatusCode::OK, "TOTP disabled").into_response());

@@ -480,7 +480,7 @@ async fn test_auth_password_login_flow_with_pkce() {
 
   // Make sure this didn't create a session. User is not logged in before actually upgrading
   // using  the "auth code" + "code verifier".
-  assert!(!session_exists(&state, user.uuid).await);
+  assert!(!session_exists(&state, user.id).await);
 
   // And now upgrade to tokens, i.e. complete log-in.
   let Json(token_response): Json<TokenResponse> = auth_code_to_token_handler(
@@ -502,11 +502,11 @@ async fn test_auth_password_login_flow_with_pkce() {
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
-    user.uuid.into_bytes()
+    user.id.into_bytes()
   );
   assert_eq!(decoded_claims.email, Some(email));
 
-  assert!(session_exists(&state, user.uuid).await);
+  assert!(session_exists(&state, user.id).await);
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
@@ -516,7 +516,7 @@ async fn test_auth_password_login_flow_with_pkce() {
   )
   .await
   .unwrap();
-  assert!(!session_exists(&state, user.uuid).await);
+  assert!(!session_exists(&state, user.id).await);
 }
 
 #[tokio::test]
@@ -598,7 +598,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     .unwrap();
   assert_eq!(
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
-    user.uuid.into_bytes()
+    user.id.into_bytes()
   );
   assert_eq!(decoded_claims.email, Some(email));
 
@@ -606,7 +606,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     .session_conn()
     .read_query_row_get(
       format!("SELECT refresh_token FROM {SESSION_TABLE} WHERE user = $1;"),
-      (user.uuid.into_bytes().to_vec(),),
+      (user.id.into_bytes(),),
       0,
     )
     .await
@@ -614,7 +614,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     .unwrap();
   assert_eq!(refresh_token, login_response.refresh_token);
 
-  assert!(session_exists(&state, user.uuid).await);
+  assert!(session_exists(&state, user.id).await);
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
@@ -624,7 +624,7 @@ async fn test_auth_password_login_flow_without_pkce() {
   )
   .await
   .unwrap();
-  assert!(!session_exists(&state, user.uuid).await);
+  assert!(!session_exists(&state, user.id).await);
 }
 
 #[tokio::test]
@@ -831,14 +831,14 @@ async fn test_auth_reset_password_flow() {
     let tokens = login_with_password(&state, &email, &new_password)
       .await
       .unwrap();
-    assert_eq!(tokens.id, user.uuid);
+    assert_eq!(tokens.id, user.id);
     state
       .jwt()
       .decode::<AuthTokenClaims>(&tokens.auth_token)
       .unwrap();
   }
 
-  assert!(session_exists(&state, user.uuid).await);
+  assert!(session_exists(&state, user.id).await);
   let _ = logout_handler(
     State(state.clone()),
     Query(LogoutParams::default()),
@@ -848,12 +848,12 @@ async fn test_auth_reset_password_flow() {
   )
   .await
   .unwrap();
-  assert!(!session_exists(&state, user.uuid).await);
+  assert!(!session_exists(&state, user.id).await);
 
   let tokens = login_with_password(&state, &email, &new_password)
     .await
     .unwrap();
-  assert_eq!(tokens.id, user.uuid);
+  assert_eq!(tokens.id, user.id);
   state
     .jwt()
     .decode::<AuthTokenClaims>(&tokens.auth_token)
@@ -951,7 +951,7 @@ async fn test_auth_change_email_flow() {
     .user_conn()
     .read_query_row_get(
       format!(r#"SELECT email FROM "{USER_TABLE}" WHERE id = $1"#),
-      params!(user.uuid.into_bytes()),
+      params!(user.id.into_bytes()),
       0,
     )
     .await
@@ -1183,7 +1183,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
   .await
   .unwrap();
 
-  assert!(!session_exists(&state, user.uuid).await);
+  assert!(!session_exists(&state, user.id).await);
 
   // Test refresh flow.
   let tokens = login_with_password_for_test(
@@ -1216,7 +1216,7 @@ async fn test_auth_delete_user_flow() {
     .await
     .unwrap();
 
-  assert!(session_exists(&state, user.uuid).await);
+  assert!(session_exists(&state, user.id).await);
 
   // Delete user flow.
   delete_handler(State(state.clone()), user.clone(), Cookies::default())
@@ -1227,7 +1227,7 @@ async fn test_auth_delete_user_flow() {
     .user_conn()
     .read_query_row_get(
       format!(r#"SELECT EXISTS(SELECT * FROM "{USER_TABLE}" WHERE id = $1)"#),
-      params!(user.uuid.into_bytes()),
+      params!(user.id.into_bytes()),
       0,
     )
     .await
@@ -1236,7 +1236,7 @@ async fn test_auth_delete_user_flow() {
 
   assert!(!user_exists);
 
-  assert!(!session_exists(&state, user.uuid).await);
+  assert!(!session_exists(&state, user.id).await);
 }
 
 #[tokio::test]

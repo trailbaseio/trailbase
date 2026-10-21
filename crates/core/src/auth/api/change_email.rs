@@ -105,7 +105,7 @@ pub async fn change_email_request_handler(
 
         let rows_affected = state
           .user_conn()
-          .execute(UNSET_EMAIL_QUERY, params!(user.uuid.into_bytes()))
+          .execute(UNSET_EMAIL_QUERY, params!(user.id.into_bytes()))
           .await?;
 
         return match rows_affected {
@@ -126,7 +126,7 @@ pub async fn change_email_request_handler(
     }
   };
 
-  let Ok(db_user) = user_by_id(&state, &user.uuid).await else {
+  let Ok(db_user) = user_by_id(&state, &user.id).await else {
     return Err(AuthError::Forbidden);
   };
 
