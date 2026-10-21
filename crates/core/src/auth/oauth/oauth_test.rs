@@ -251,7 +251,7 @@ async fn test_oauth_login_flow_without_pkce() {
   // And we have tokens.
   let auth_token = cookies.get(COOKIE_AUTH_TOKEN).unwrap().value().to_string();
   let decoded_claims = state.jwt().decode::<AuthTokenClaims>(&auth_token).unwrap();
-  assert_eq!(db_user.email, decoded_claims.email);
+  assert_eq!(db_user.email.as_deref(), decoded_claims.email.as_deref());
   let refresh_token = cookies
     .get(COOKIE_REFRESH_TOKEN)
     .unwrap()
@@ -571,7 +571,7 @@ async fn test_oauth_login_flow_with_form_post_callback() {
   // And we have tokens.
   let auth_token = cookies.get(COOKIE_AUTH_TOKEN).unwrap().value().to_string();
   let decoded_claims = state.jwt().decode::<AuthTokenClaims>(&auth_token).unwrap();
-  assert_eq!(db_user.email, decoded_claims.email);
+  assert_eq!(db_user.email.as_deref(), decoded_claims.email.as_deref());
 }
 
 #[tokio::test]

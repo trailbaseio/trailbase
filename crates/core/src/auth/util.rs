@@ -197,7 +197,7 @@ pub async fn login_with_password_for_test(
       .encode(&tokens.auth_token_claims)
       .map_err(|err| AuthError::Internal(err.into()))?,
     refresh_token: tokens.refresh_token,
-    csrf_token: tokens.auth_token_claims.csrf_token,
+    csrf_token: tokens.auth_token_claims.csrf_token.into_string(),
   }));
 }
 

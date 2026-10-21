@@ -62,11 +62,9 @@ impl ReadRecordApiQuery {
     &self,
     conn: &mut impl SyncConnectionTrait,
   ) -> Result<trailbase_sqlite::Row, RecordError> {
-    return Ok(
-      conn
-        .query_row(&self.query, (&self.record_id,))?
-        .ok_or(RecordError::RecordNotFound)?,
-    );
+    return conn
+      .query_row(&self.query, (&self.record_id,))?
+      .ok_or(RecordError::RecordNotFound);
   }
 }
 

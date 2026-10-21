@@ -1333,6 +1333,7 @@ dependencies = [
  "castaway",
  "cfg-if",
  "itoa",
+ "serde",
  "static_assertions",
  "zmij",
 ]
@@ -8829,6 +8830,7 @@ dependencies = [
  "chrono",
  "clap",
  "clap_complete",
+ "compact_str",
  "env_logger",
  "itertools 0.15.0",
  "jsonwebtoken",

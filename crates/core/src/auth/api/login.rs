@@ -290,7 +290,7 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
         .encode(&tokens.auth_token_claims)
         .map_err(|err| AuthError::Internal(err.into()))?,
       refresh_token: tokens.refresh_token,
-      csrf_token: tokens.auth_token_claims.csrf_token,
+      csrf_token: tokens.auth_token_claims.csrf_token.into_string(),
     });
   };
 

@@ -47,7 +47,7 @@ base64 = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 client-ip = "0.2.1"
-compact_str = "0.10.0"
+compact_str = { workspace = true }
 const_format = "0.2.36"
 cron = { workspace = true }
 ed25519-dalek = { version = "3.0.0", features = ["pkcs8", "pem", "rand_core"] }

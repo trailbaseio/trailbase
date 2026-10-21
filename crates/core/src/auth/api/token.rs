@@ -96,6 +96,6 @@ pub(crate) async fn auth_code_to_token_handler(
   return Ok(Json(TokenResponse {
     auth_token,
     refresh_token: tokens.refresh_token,
-    csrf_token: tokens.auth_token_claims.csrf_token,
+    csrf_token: tokens.auth_token_claims.csrf_token.into_string(),
   }));
 }

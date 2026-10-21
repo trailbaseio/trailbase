@@ -61,7 +61,7 @@ pub async fn email_verification_request_handler(
     return Ok(success_response());
   };
 
-  debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+  debug_assert_eq!(Some(normalized_email.as_str()), user.email.as_deref());
 
   let claims = EmailVerificationTokenClaims::new(
     &user.uuid(),

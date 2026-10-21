@@ -7,6 +7,7 @@ use base64::prelude::*;
 use chrono::TimeZone;
 use clap::{CommandFactory, Parser};
 use clap_complete::{CompleteEnv, generate};
+use compact_str::CompactString;
 use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
@@ -337,18 +338,18 @@ async fn async_main(
           struct ExportUserCommon {
             id: uuid::Uuid,
             #[serde(skip_serializing_if = "Option::is_none")]
-            username: Option<String>,
-            password_hash: String,
+            username: Option<CompactString>,
+            password_hash: CompactString,
             admin: bool,
             #[serde(skip_serializing_if = "Option::is_none")]
-            totp_secret: Option<String>,
+            totp_secret: Option<CompactString>,
             created: i64,
             updated: i64,
           }
 
           #[derive(Serialize)]
           struct WithEmail {
-            email: String,
+            email: CompactString,
             verified: bool,
             #[serde(flatten)]
             common: ExportUserCommon,

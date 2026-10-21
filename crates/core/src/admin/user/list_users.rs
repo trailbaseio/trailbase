@@ -36,12 +36,12 @@ impl From<DbUser> for UserJson {
   fn from(value: DbUser) -> Self {
     UserJson {
       id: Uuid::from_bytes(value.id).to_string(),
-      email: value.email,
-      unverified_email: value.unverified_email,
-      username: value.username,
+      email: value.email.map(String::from),
+      unverified_email: value.unverified_email.map(String::from),
+      username: value.username.map(String::from),
       admin: value.admin,
       provider_id: value.provider_id,
-      provider_user_id: value.provider_user_id,
+      provider_user_id: value.provider_user_id.map(String::from),
       created: value.created,
       updated: value.updated,
     }

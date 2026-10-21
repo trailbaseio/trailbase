@@ -210,9 +210,9 @@ pub(crate) async fn install_routes_and_jobs(
         .flatten()
         .map(|u| HttpContextUser {
           id: uuid_to_b64(&u.id),
-          email: u.email,
-          username: u.username,
-          csrf_token: u.csrf_token,
+          email: u.email.map(|e| e.into_string()),
+          username: u.username.map(|u| u.into_string()),
+          csrf_token: u.csrf_token.into_string(),
         })
     });
   }

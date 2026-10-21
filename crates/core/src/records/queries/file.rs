@@ -31,7 +31,7 @@ impl ReadFileQuery {
 
     let query = format!(
       r#"SELECT "{column_name}" FROM {table_name} WHERE "{pk_column_name}" = $1"#,
-      column_name = &file_column_meta.column.name,
+      column_name = file_column_meta.column.name,
     );
 
     return Ok(Self { query, pk_value });

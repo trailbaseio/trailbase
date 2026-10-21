@@ -2,6 +2,7 @@ use axum::{
   extract::{FromRef, FromRequestParts, OptionalFromRequestParts},
   http::request::Parts,
 };
+use compact_str::CompactString;
 use trailbase_sqlite::Row;
 use uuid::Uuid;
 
@@ -13,14 +14,14 @@ use crate::{app_state::AppState, util::b64_to_uuid};
 #[derive(Debug, Default, Clone)]
 pub struct DbUser {
   pub id: [u8; 16],
-  pub email: Option<String>,
-  pub unverified_email: Option<String>,
-  pub username: Option<String>,
-  pub password_hash: Option<String>,
+  pub email: Option<CompactString>,
+  pub unverified_email: Option<CompactString>,
+  pub username: Option<CompactString>,
+  pub password_hash: Option<CompactString>,
   pub admin: bool,
 
   // TOTP secret for multi-factor.
-  pub totp_secret: Option<String>,
+  pub totp_secret: Option<CompactString>,
 
   pub created: i64,
   pub updated: i64,
@@ -29,8 +30,8 @@ pub struct DbUser {
   //
   // NOTE: provider_id corresponds to proto::config::OAuthProviderId.
   pub provider_id: i64,
-  pub provider_user_id: Option<String>,
-  pub provider_avatar_url: Option<String>,
+  pub provider_user_id: Option<CompactString>,
+  pub provider_avatar_url: Option<CompactString>,
 }
 
 impl DbUser {
@@ -73,15 +74,21 @@ impl DbUser {
 
   #[cfg(test)]
   pub fn new_for_test(email: &str, password: &str) -> Self {
+    use compact_str::ToCompactString;
+
     let now = std::time::SystemTime::now();
     let timestamp = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
 
     return Self {
       id: uuid::Uuid::new_v4().into_bytes(),
-      email: Some(email.to_string()),
+      email: Some(email.to_compact_string()),
       unverified_email: None,
       username: None,
-      password_hash: Some(crate::auth::password::hash_password_impl(password).unwrap()),
+      password_hash: Some(
+        crate::auth::password::hash_password_impl(password)
+          .unwrap()
+          .to_compact_string(),
+      ),
       admin: false,
       totp_secret: None,
       created: timestamp as i64,
@@ -100,12 +107,12 @@ pub struct User {
   /// UUID representation of the current user..
   pub id: Uuid,
   /// E-mail of the current user.
-  pub email: Option<String>,
+  pub email: Option<CompactString>,
   /// Username of the current user.
-  pub username: Option<String>,
+  pub username: Option<CompactString>,
 
   /// The "expected" CSRF token as included in the auth token claims [`User`] was constructed from.
-  pub csrf_token: String,
+  pub csrf_token: CompactString,
 }
 
 impl PartialEq for User {
@@ -142,11 +149,13 @@ impl User {
     email: Option<&str>,
     username: Option<&str>,
   ) -> Self {
+    use compact_str::ToCompactString;
+
     return Self {
       id: user_id,
-      email: email.map(|s| s.to_string()),
-      username: username.map(|s| s.to_string()),
-      csrf_token: crate::rand::random_alphanumeric(20),
+      email: email.map(|s| s.to_compact_string()),
+      username: username.map(|s| s.to_compact_string()),
+      csrf_token: crate::rand::random_alphanumeric(24).to_compact_string(),
     };
   }
 }

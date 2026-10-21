@@ -93,7 +93,7 @@ pub async fn reset_password_request_handler(
         return Ok(success_response(redirect_uri));
       };
 
-      debug_assert_eq!(Some(&normalized_email), user.email.as_ref());
+      debug_assert_eq!(Some(normalized_email.as_str()), user.email.as_deref());
 
       (normalized_email, redirect_uri)
     }
@@ -114,7 +114,7 @@ pub async fn reset_password_request_handler(
         return Ok(success_response(redirect_uri));
       };
 
-      (email, redirect_uri)
+      (email.into_string(), redirect_uri)
     }
   };
 

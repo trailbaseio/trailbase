@@ -45,6 +45,6 @@ pub(crate) async fn refresh_handler(
 
   return Ok(Json(RefreshResponse {
     auth_token,
-    csrf_token: claims.csrf_token,
+    csrf_token: claims.csrf_token.into_string(),
   }));
 }

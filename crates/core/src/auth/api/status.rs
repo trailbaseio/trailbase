@@ -69,7 +69,7 @@ pub(crate) async fn login_status_handler(
     return Ok(Json(LoginStatusResponse {
       auth_token: Some(auth_token),
       refresh_token: Some(refresh_token),
-      csrf_token: Some(claims.csrf_token),
+      csrf_token: Some(claims.csrf_token.into_string()),
     }));
   } else {
     // Fall back case: we don't have a refresh token so we cannot validate if a session is still
@@ -85,7 +85,7 @@ pub(crate) async fn login_status_handler(
     return Ok(Json(LoginStatusResponse {
       auth_token: Some(auth_token),
       refresh_token: None,
-      csrf_token: Some(auth_token_claims.csrf_token),
+      csrf_token: Some(auth_token_claims.csrf_token.into_string()),
     }));
   }
 }

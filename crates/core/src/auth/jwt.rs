@@ -1,6 +1,7 @@
 use crate::auth::user::DbUser;
 use crate::rand::random_alphanumeric;
 use crate::util::{id_to_b64, uuid_to_b64};
+use compact_str::{CompactString, ToCompactString};
 use ed25519_dalek::pkcs8::spki::der::pem::LineEnding;
 use ed25519_dalek::pkcs8::{EncodePrivateKey, EncodePublicKey};
 use ed25519_dalek::{SigningKey, VerifyingKey};
@@ -26,8 +27,8 @@ pub enum JwtHelperError {
 }
 
 #[repr(u8)]
-#[allow(unused)]
 enum TokenType {
+  #[allow(unused)]
   Unknown,
   Auth,
   PendingAuth,
@@ -40,7 +41,7 @@ enum TokenType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AuthTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
-  pub sub: String,
+  pub sub: CompactString,
   /// Unix timestamp in seconds when the token was minted.
   pub iat: i64,
   /// Expiration timestamp
@@ -68,14 +69,14 @@ pub struct AuthTokenClaims {
   pub provider: u8,
 
   /// E-mail address of the [sub].
-  pub email: Option<String>,
+  pub email: Option<CompactString>,
 
   /// Optional username.
-  pub username: Option<String>,
+  pub username: Option<CompactString>,
 
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
-  pub csrf_token: String,
+  pub csrf_token: CompactString,
 }
 
 impl AuthTokenClaims {
@@ -84,7 +85,7 @@ impl AuthTokenClaims {
 
     let now = chrono::Utc::now();
     return AuthTokenClaims {
-      sub: id_to_b64(&db_user.id),
+      sub: id_to_b64(&db_user.id).to_compact_string(),
       exp: (now + *auth_token_ttl).timestamp(),
       iat: now.timestamp(),
       r#type: TokenType::Auth as u8,
@@ -93,7 +94,7 @@ impl AuthTokenClaims {
       provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
       username: db_user.username.clone(),
-      csrf_token: random_alphanumeric(20),
+      csrf_token: random_alphanumeric(24).to_compact_string(),
     };
   }
 
@@ -369,6 +370,8 @@ pub(crate) fn test_jwt_helper() -> JwtHelper {
 
 #[cfg(test)]
 mod tests {
+  use compact_str::ToCompactString;
+
   use super::*;
 
   #[test]
@@ -377,7 +380,7 @@ mod tests {
 
     let db_user = DbUser {
       id: uuid::Uuid::new_v4().into_bytes(),
-      email: Some("foo@bar.com".to_string()),
+      email: Some("foo@bar.com".to_compact_string()),
       admin: false,
       ..Default::default()
     };

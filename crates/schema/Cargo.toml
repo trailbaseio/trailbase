@@ -14,7 +14,7 @@ geos = ["dep:geos"]
 
 [dependencies]
 base64 = { version = "0.23.1", default-features = false, features = ["alloc"] }
-compact_str = "0.10.0"
+compact_str = { workspace = true }
 fallible-iterator = "0.3.0"
 geos = { workspace = true, optional = true }
 infer = "0.22.0"

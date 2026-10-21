@@ -114,7 +114,7 @@ pub(crate) async fn apple_native_signin_handler(
   return Ok(Json(LoginResponse {
     auth_token,
     refresh_token,
-    csrf_token: auth_token_claims.csrf_token,
+    csrf_token: auth_token_claims.csrf_token.into_string(),
   }));
 }
 

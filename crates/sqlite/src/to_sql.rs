@@ -1,3 +1,5 @@
+use compact_str::CompactString;
+
 use crate::value::Value;
 use crate::value_ref::ValueRef;
 
@@ -27,15 +29,6 @@ macro_rules! from_value(
             #[inline]
             fn from(t: $t) -> Self { ToSqlProxy::Owned(t.into())}
         }
-        impl From<Option<$t>> for ToSqlProxy<'_> {
-            #[inline]
-            fn from(t: Option<$t>) -> Self {
-                match t {
-                    Some(t) => ToSqlProxy::Owned(t.into()),
-                    None => ToSqlProxy::Owned(Value::Null),
-                }
-            }
-        }
     )
 );
 
@@ -47,25 +40,32 @@ from_value!(Vec<u8>);
 from_value!(Value);
 
 impl<'a, const N: usize> From<[u8; N]> for ToSqlProxy<'a> {
-  fn from(t: [u8; N]) -> Self {
-    return ToSqlProxy::Owned(Value::Blob(t.to_vec()));
+  fn from(bytes: [u8; N]) -> Self {
+    return ToSqlProxy::Owned(Value::Blob(bytes.to_vec()));
   }
 }
 
 impl<'a, const N: usize> From<&'a [u8; N]> for ToSqlProxy<'a> {
-  fn from(t: &'a [u8; N]) -> Self {
-    ToSqlProxy::Borrowed(ValueRef::Blob(t))
+  fn from(bytes: &'a [u8; N]) -> Self {
+    ToSqlProxy::Borrowed(ValueRef::Blob(bytes))
   }
 }
 
-// Impl for rusqlite.
-impl<'a> rusqlite::ToSql for ToSqlProxy<'a> {
-  #[inline]
-  fn to_sql(&self) -> Result<rusqlite::types::ToSqlOutput<'_>, rusqlite::Error> {
-    Ok(match *self {
-      ToSqlProxy::Borrowed(v) => rusqlite::types::ToSqlOutput::Borrowed(v.into()),
-      ToSqlProxy::Owned(ref v) => rusqlite::types::ToSqlOutput::Borrowed(v.into()),
-    })
+impl<'a> From<CompactString> for ToSqlProxy<'a> {
+  fn from(s: CompactString) -> Self {
+    ToSqlProxy::Owned(s.into())
+  }
+}
+
+impl<'a, T> From<Option<T>> for ToSqlProxy<'a>
+where
+  T: Into<ToSqlProxy<'a>>,
+{
+  fn from(t: Option<T>) -> Self {
+    match t {
+      Some(t) => t.into(),
+      None => ToSqlProxy::Borrowed(ValueRef::Null),
+    }
   }
 }
 
@@ -78,5 +78,16 @@ impl<'a> TryFrom<ToSqlProxy<'a>> for Value {
       ToSqlProxy::Borrowed(v) => Ok(v.try_into()?),
       ToSqlProxy::Owned(v) => Ok(v),
     }
+  }
+}
+
+// Impl for rusqlite.
+impl<'a> rusqlite::ToSql for ToSqlProxy<'a> {
+  #[inline]
+  fn to_sql(&self) -> Result<rusqlite::types::ToSqlOutput<'_>, rusqlite::Error> {
+    Ok(match *self {
+      ToSqlProxy::Borrowed(v) => rusqlite::types::ToSqlOutput::Borrowed(v.into()),
+      ToSqlProxy::Owned(ref v) => rusqlite::types::ToSqlOutput::Borrowed(v.into()),
+    })
   }
 }

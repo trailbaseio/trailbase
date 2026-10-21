@@ -1,3 +1,5 @@
+use compact_str::CompactString;
+
 use crate::from_sql::FromSqlError;
 
 pub type Blob = Vec<u8>;
@@ -53,6 +55,13 @@ impl From<String> for Value {
   }
 }
 
+impl From<CompactString> for Value {
+  #[inline]
+  fn from(s: CompactString) -> Self {
+    return Self::Text(s.into_string());
+  }
+}
+
 impl From<Vec<u8>> for Value {
   #[inline]
   fn from(v: Vec<u8>) -> Self {
@@ -80,6 +89,17 @@ impl TryFrom<Value> for String {
   fn try_from(value: Value) -> Result<Self, Self::Error> {
     return match value {
       Value::Text(s) => Ok(s),
+      _ => Err(Self::Error::InvalidType),
+    };
+  }
+}
+
+impl TryFrom<Value> for CompactString {
+  type Error = FromSqlError;
+
+  fn try_from(value: Value) -> Result<Self, Self::Error> {
+    return match value {
+      Value::Text(s) => Ok(s.into()),
       _ => Err(Self::Error::InvalidType),
     };
   }

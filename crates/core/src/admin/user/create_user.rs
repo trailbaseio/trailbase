@@ -121,8 +121,11 @@ pub async fn create_user_handler(
   if let Some(ref email) = user.email
     && !request.verified
   {
-    let claims =
-      EmailVerificationTokenClaims::new(&user.uuid(), email.clone(), chrono::Duration::hours(4));
+    let claims = EmailVerificationTokenClaims::new(
+      &user.uuid(),
+      email.to_string(),
+      chrono::Duration::hours(4),
+    );
 
     let token = state
       .jwt()

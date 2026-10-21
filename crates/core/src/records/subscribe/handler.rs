@@ -458,7 +458,7 @@ pub async fn subscribe_ws(
         // NOTE: Access checking can only happen post upgrade, since browsers & Node.js don't allow
         // setting custom headers for the UPGRADE HTTP request. We could maybe use cookies in some
         // places but instead expect an explicit authorization.
-        if let Err(_) = api
+        let result = api
           .conn()
           .call_reader({
             let api = api.clone();
@@ -475,8 +475,9 @@ pub async fn subscribe_ws(
               );
             }
           })
-          .await
-        {
+          .await;
+
+        if result.is_err() {
           abort(&mut ws_sender, Code::Policy, "unauthorized").await;
           return;
         }

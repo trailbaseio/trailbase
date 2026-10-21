@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::str::Utf8Error;
 
+use compact_str::CompactString;
+
 use crate::value_ref::ValueRef;
 
 /// Enum listing possible errors from [`FromSql`] trait.
@@ -141,6 +143,13 @@ impl FromSql for String {
   #[inline]
   fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
     return value.as_str().map(ToString::to_string);
+  }
+}
+
+impl FromSql for CompactString {
+  #[inline]
+  fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+    return value.as_str().map(CompactString::from);
   }
 }
 

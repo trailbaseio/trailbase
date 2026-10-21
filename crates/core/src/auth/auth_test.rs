@@ -504,7 +504,7 @@ async fn test_auth_password_login_flow_with_pkce() {
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
     user.id.into_bytes()
   );
-  assert_eq!(decoded_claims.email, Some(email));
+  assert_eq!(decoded_claims.email.as_deref(), Some(email.as_str()));
 
   assert!(session_exists(&state, user.id).await);
   let _ = logout_handler(
@@ -600,7 +600,7 @@ async fn test_auth_password_login_flow_without_pkce() {
     BASE64_URL_SAFE.decode(&decoded_claims.sub).unwrap(),
     user.id.into_bytes()
   );
-  assert_eq!(decoded_claims.email, Some(email));
+  assert_eq!(decoded_claims.email.as_deref(), Some(email.as_str()));
 
   let refresh_token: String = state
     .session_conn()
@@ -875,7 +875,7 @@ async fn test_auth_change_email_flow() {
       user.clone(),
       Query(Default::default()),
       Either::Form(change_email::ChangeEmailRequest {
-        csrf_token: user.csrf_token.clone(),
+        csrf_token: user.csrf_token.to_string(),
         old_email: None,
         new_email: Some(new_email.clone()),
         ..Default::default()
@@ -892,7 +892,7 @@ async fn test_auth_change_email_flow() {
       user.clone(),
       Query(Default::default()),
       Either::Json(change_email::ChangeEmailRequest {
-        csrf_token: user.csrf_token.clone(),
+        csrf_token: user.csrf_token.to_string(),
         old_email: Some(email.clone()),
         new_email: None,
         ..Default::default()
@@ -907,7 +907,7 @@ async fn test_auth_change_email_flow() {
     user.clone(),
     Query(Default::default()),
     Either::Form(change_email::ChangeEmailRequest {
-      csrf_token: user.csrf_token.clone(),
+      csrf_token: user.csrf_token.to_string(),
       old_email: Some(email.clone()),
       new_email: Some(new_email.clone()),
       ..Default::default()
@@ -1107,7 +1107,7 @@ async fn test_auth_register_username_only() {
     .unwrap();
 
   assert!(user.email.is_none());
-  assert_eq!(Some(&username), user.username.as_ref());
+  assert_eq!(Some(username.as_str()), user.username.as_deref());
 
   login_handler(
     State(state.clone()),
@@ -1165,7 +1165,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
     user.clone(),
     Query(Default::default()),
     Either::Json(change_email::ChangeEmailRequest {
-      csrf_token: user.csrf_token.clone(),
+      csrf_token: user.csrf_token.to_string(),
       new_email: None,
       ..Default::default()
     }),
@@ -1267,7 +1267,7 @@ async fn test_auth_otp_flow_using_email() {
     assert_eq!(before, mailer.get_logs().len(), "{:?}", mailer.get_logs());
   }
 
-  assert_eq!(Some(&email), user.email.as_ref());
+  assert_eq!(Some(email.as_str()), user.email.as_deref());
 
   // NOTE: We return a success response on unknown user to avoid leaks.
   otp::request_otp_handler(
@@ -1288,7 +1288,7 @@ async fn test_auth_otp_flow_using_email() {
     State(state.clone()),
     Query(Default::default()),
     Either::Form(otp::RequestOtpRequest::Email {
-      email: user.email.as_ref().unwrap().clone(),
+      email: user.email.as_ref().unwrap().to_string(),
       params: Default::default(),
     }),
   )
@@ -1316,7 +1316,7 @@ async fn test_auth_otp_flow_using_email() {
       Cookies::default(),
       Either::Form(otp::LoginOtpRequest {
         params: otp::LoginOtpParams {
-          email: user.email.clone(),
+          email: user.email.map(|e| e.into_string()),
           code: Some("InvalidCode".to_string()),
           ..Default::default()
         }
@@ -1391,7 +1391,7 @@ async fn test_auth_otp_flow_using_username() {
   .await
   .unwrap();
 
-  assert_eq!(Some(&username), user.username.as_ref());
+  assert_eq!(Some(username.as_str()), user.username.as_deref());
 
   // NOTE: We return a success response on unknown user to avoid leaks.
   otp::request_otp_handler(
