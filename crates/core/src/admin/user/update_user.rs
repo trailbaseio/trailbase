@@ -107,25 +107,25 @@ pub async fn update_user_handler(
       named_params! {
           ":id": user_id_bytes,
           ":email": if let Some(email) = email {
-              Value::Text(email)
+              Value::Text(email.into())
           } else {
               Value::Null
           },
           ":unverified_email": if let Some(unverified_email) = unverified_email {
-              Value::Text(unverified_email)
+              Value::Text(unverified_email.into())
           } else {
               Value::Null
           },
           ":username": if let Some(username) = username{
               if !username.is_empty() {
-              Value::Text(validate_and_normalize_username(&username)?)
+              Value::Text(validate_and_normalize_username(&username)?.into())
               } else {
-              Value::Text(username)
+              Value::Text(username.into())
               }
           } else {
               Value::Null
           },
-          ":password_hash": hashed_password.map_or(Value::Null, Value::Text),
+          ":password_hash": hashed_password.map_or(Value::Null, |t| Value::Text(t.into())),
       },
     )
     .await?

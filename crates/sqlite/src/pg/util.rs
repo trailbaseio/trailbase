@@ -245,7 +245,7 @@ mod tests {
       .unwrap();
 
     assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($1)", sql);
-    assert_eq!(Value::Text("foo".to_string()), *params.first().unwrap());
+    assert_eq!(Value::Text("foo".into()), *params.first().unwrap());
 
     let (sql, params) = PgStatement::new("INSERT INTO 'table' (col) VALUES (:p0), (:__p1)")
       .unwrap()
@@ -254,7 +254,7 @@ mod tests {
 
     assert_eq!("INSERT INTO 'table' (col) VALUES ($1), ($2)", sql);
     assert_eq!(
-      vec![Value::Text("p0".to_string()), Value::Text("p1".to_string())],
+      vec![Value::Text("p0".into()), Value::Text("p1".into())],
       params,
     );
 
@@ -266,10 +266,7 @@ mod tests {
 
     assert_eq!("INSERT INTO 'table' (c0, c1) VALUES ($1, $2);", sql);
     assert_eq!(
-      vec![
-        Value::Text("file".to_string()),
-        Value::Text("files".to_string())
-      ],
+      vec![Value::Text("file".into()), Value::Text("files".into())],
       params,
     );
   }

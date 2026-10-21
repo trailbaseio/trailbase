@@ -87,7 +87,7 @@ impl TryFrom<SqlValue> for trailbase_sqlite::Value {
       SqlValue::Null => Value::Null,
       SqlValue::Integer(v) => Value::Integer(v),
       SqlValue::Real(v) => Value::Real(v),
-      SqlValue::Text(v) => Value::Text(v),
+      SqlValue::Text(v) => Value::Text(v.into()),
       SqlValue::Blob(b) => match b {
         Blob::Array(v) => Value::Blob(v),
         Blob::Base64UrlSafe(v) => {
@@ -108,7 +108,7 @@ impl From<trailbase_sqlite::Value> for SqlValue {
       Value::Null => SqlValue::Null,
       Value::Integer(v) => SqlValue::Integer(v),
       Value::Real(v) => SqlValue::Real(v),
-      Value::Text(v) => SqlValue::Text(v),
+      Value::Text(v) => SqlValue::Text(v.into()),
       Value::Blob(v) => SqlValue::Blob(Blob::Base64UrlSafe(BASE64_URL_SAFE.encode(v))),
     };
   }
@@ -123,7 +123,7 @@ impl From<&trailbase_sqlite::Value> for SqlValue {
       Value::Null => SqlValue::Null,
       Value::Integer(v) => SqlValue::Integer(*v),
       Value::Real(v) => SqlValue::Real(*v),
-      Value::Text(v) => SqlValue::Text(v.clone()),
+      Value::Text(v) => SqlValue::Text(v.to_string()),
       Value::Blob(v) => SqlValue::Blob(Blob::Base64UrlSafe(BASE64_URL_SAFE.encode(v))),
     };
   }

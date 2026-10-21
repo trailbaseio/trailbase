@@ -43,7 +43,7 @@ impl postgres::types::ToSql for Value {
             let value = serde_json::from_str::<serde_json::Value>(v)?;
             value.to_sql(ty, out)?
           }
-          _ => v.to_sql(ty, out)?,
+          _ => v.to_string().to_sql(ty, out)?,
         };
       }
       Value::Blob(v) => {
@@ -79,11 +79,11 @@ impl<'a> postgres::types::FromSql<'a> for Value {
       "int8" => Ok(Value::Integer(i64::from_sql(ty, raw)?)),
       "float4" => Ok(Value::Real(f32::from_sql(ty, raw)? as f64)),
       "float8" => Ok(Value::Real(f64::from_sql(ty, raw)?)),
-      "text" | "citext" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?)),
-      "json" => Ok(Value::Text(String::from_sql(ty, raw)?)),
+      "text" | "citext" | "varchar" | "name" => Ok(Value::Text(String::from_sql(ty, raw)?.into())),
+      "json" => Ok(Value::Text(String::from_sql(ty, raw)?.into())),
       "jsonb" => {
         let value = serde_json::Value::from_sql(ty, raw)?;
-        Ok(Value::Text(serde_json::to_string(&value)?))
+        Ok(Value::Text(serde_json::to_string(&value)?.into()))
       }
       "bytea" | "uuid" => Ok(Value::Blob(Vec::<u8>::from_sql(ty, raw)?)),
       "tid" => {

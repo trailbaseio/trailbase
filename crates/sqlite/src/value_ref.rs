@@ -1,3 +1,5 @@
+use compact_str::CompactString;
+
 use crate::from_sql::{FromSqlError, FromSqlResult};
 use crate::value::Value;
 
@@ -153,9 +155,9 @@ impl TryFrom<ValueRef<'_>> for Value {
       ValueRef::Null => Ok(Self::Null),
       ValueRef::Integer(i) => Ok(Self::Integer(i)),
       ValueRef::Real(r) => Ok(Self::Real(r)),
-      ValueRef::Text(s) => std::str::from_utf8(s)
-        .map(|s| Self::Text(s.to_string()))
-        .map_err(Self::Error::Utf8Error),
+      ValueRef::Text(s) => Ok(Self::Text(
+        CompactString::from_utf8(s).map_err(Self::Error::Utf8Error)?,
+      )),
       ValueRef::Blob(b) => Ok(Self::Blob(b.to_vec())),
     };
   }

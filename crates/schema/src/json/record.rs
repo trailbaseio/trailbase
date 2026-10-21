@@ -123,7 +123,7 @@ pub fn record_to_json_expand_ref<'a>(
           }
           JsonColumnMetadata::SchemaName(_) | JsonColumnMetadata::Pattern(_) => Ok((
             column.name.as_str(),
-            Value::Raw(serde_json::value::RawValue::from_string(str.clone())?),
+            Value::Raw(serde_json::value::RawValue::from_string(str.to_string())?),
           )),
         };
       }
@@ -235,7 +235,7 @@ fn value_ref_to_flat_json_owned(value: &SqliteValue) -> Result<serde_json::Value
       *integer,
     ))),
     SqliteValue::Blob(blob) => Ok(serde_json::Value::String(BASE64_URL_SAFE.encode(blob))),
-    SqliteValue::Text(text) => Ok(serde_json::Value::String(text.clone())),
+    SqliteValue::Text(text) => Ok(serde_json::Value::String(text.to_string())),
   };
 }
 

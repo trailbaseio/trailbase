@@ -413,7 +413,7 @@ impl self::trailbase::database::sqlite::HostTransaction for State {
 fn to_sqlite_value(value: Value) -> trailbase_sqlite::Value {
   return match value {
     Value::Null => trailbase_sqlite::Value::Null,
-    Value::Text(s) => trailbase_sqlite::Value::Text(s),
+    Value::Text(s) => trailbase_sqlite::Value::Text(s.into()),
     Value::Real(f) => trailbase_sqlite::Value::Real(f),
     Value::Integer(i) => trailbase_sqlite::Value::Integer(i),
     Value::Blob(b) => trailbase_sqlite::Value::Blob(b),
@@ -423,7 +423,7 @@ fn to_sqlite_value(value: Value) -> trailbase_sqlite::Value {
 fn from_sqlite_value(value: trailbase_sqlite::Value) -> Value {
   return match value {
     trailbase_sqlite::Value::Null => Value::Null,
-    trailbase_sqlite::Value::Text(s) => Value::Text(s),
+    trailbase_sqlite::Value::Text(s) => Value::Text(s.into_string()),
     trailbase_sqlite::Value::Real(f) => Value::Real(f),
     trailbase_sqlite::Value::Integer(i) => Value::Integer(i),
     trailbase_sqlite::Value::Blob(b) => Value::Blob(b.to_vec()),

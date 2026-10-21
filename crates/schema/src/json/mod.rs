@@ -83,7 +83,7 @@ pub fn parse_string_to_sqlite_value(
 ) -> Result<SqliteValue, JsonError> {
   return Ok(match data_type {
     // Strict/storage types
-    ColumnDataType::Text | ColumnDataType::Any => SqliteValue::Text(value),
+    ColumnDataType::Text | ColumnDataType::Any => SqliteValue::Text(value.into()),
     ColumnDataType::Blob => SqliteValue::Blob(match (value.len(), value) {
       // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
       // would be more explicit rely on CHECK(...) column options.
@@ -105,7 +105,7 @@ fn strict_parse_string_to_sqlite_value(
   value: String,
 ) -> Result<SqliteValue, JsonError> {
   return match data_type {
-    ColumnDataType::Text | ColumnDataType::Any => Ok(SqliteValue::Text(value)),
+    ColumnDataType::Text | ColumnDataType::Any => Ok(SqliteValue::Text(value.into())),
     ColumnDataType::Blob => Ok(SqliteValue::Blob(match (value.len(), value) {
       // Special handling for text encoded UUIDs. Right now we're guessing based on length, it
       // would be more explicit rely on CHECK(...) column options.

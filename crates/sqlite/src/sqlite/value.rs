@@ -1,3 +1,5 @@
+use compact_str::CompactString;
+
 use crate::value::Value;
 use crate::value_ref::ValueRef;
 
@@ -10,7 +12,7 @@ impl From<Value> for rusqlite::types::Value {
       Value::Null => RusqliteValue::Null,
       Value::Integer(i) => RusqliteValue::Integer(i),
       Value::Real(f) => RusqliteValue::Real(f),
-      Value::Text(t) => RusqliteValue::Text(t),
+      Value::Text(t) => RusqliteValue::Text(t.into_string()),
       Value::Blob(b) => RusqliteValue::Blob(b.to_vec()),
     };
   }
@@ -42,7 +44,7 @@ impl TryFrom<rusqlite::types::ValueRef<'_>> for Value {
       rusqlite::types::ValueRef::Integer(i) => Ok(Self::Integer(i)),
       rusqlite::types::ValueRef::Real(r) => Ok(Self::Real(r)),
       rusqlite::types::ValueRef::Text(s) => Ok(Self::Text(
-        std::str::from_utf8(s)
+        CompactString::from_utf8(s)
           .map_err(Self::Error::Utf8Error)?
           .to_owned(),
       )),
@@ -68,6 +70,7 @@ impl rusqlite::types::ToSql for Value {
 }
 
 impl<'a> From<ValueRef<'a>> for rusqlite::types::ValueRef<'a> {
+  #[inline]
   fn from(value: ValueRef<'a>) -> rusqlite::types::ValueRef<'a> {
     use rusqlite::types::ValueRef as SqliteValueRef;
 

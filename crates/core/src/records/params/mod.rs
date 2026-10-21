@@ -1,4 +1,4 @@
-use compact_str::CompactString;
+use compact_str::{CompactString, ToCompactString};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -409,7 +409,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
           column_index: *index,
           placeholder: named_placeholder(&column.name),
           column_name: CompactString::from(&column.name),
-          value: Value::Text(serde_json::to_string(&file_metadata)?),
+          value: Value::Text(serde_json::to_string(&file_metadata)?.into()),
         });
       }
       "std.FileUploads" => {
@@ -417,7 +417,7 @@ fn extract_files_from_multipart<S: ColumnAccessor>(
           column_index: *index,
           placeholder: named_placeholder(&column.name),
           column_name: CompactString::from(&column.name),
-          value: Value::Text(serde_json::to_string(&file_metadata)?),
+          value: Value::Text(serde_json::to_string(&file_metadata)?.into()),
         });
       }
       _ => {
@@ -475,7 +475,7 @@ fn extract_params_and_files_from_json(
   match json_metadata {
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUpload" => {
       let (metadata, contents) = extract_param_and_file_from_json_value(value)?;
-      let param = Value::Text(serde_json::to_string(&metadata)?);
+      let param = Value::Text(serde_json::to_string(&metadata)?.into());
       return Ok((param, Some(vec![(metadata, contents)])));
     }
     JsonColumnMetadata::SchemaName(name) if name == "std.FileUploads" => {
@@ -491,12 +491,15 @@ fn extract_params_and_files_from_json(
         })
         .collect::<Result<Vec<_>, ParamsError>>()?;
 
-      let param = Value::Text(serde_json::to_string(&FileUploads(
-        uploads
-          .iter()
-          .map(|(metadata, _content)| metadata.clone())
-          .collect(),
-      ))?);
+      let param = Value::Text(
+        serde_json::to_string(&FileUploads(
+          uploads
+            .iter()
+            .map(|(metadata, _content)| metadata.clone())
+            .collect(),
+        ))?
+        .into(),
+      );
 
       return Ok((param, Some(uploads)));
     }
@@ -516,11 +519,11 @@ fn extract_params_and_files_from_json(
         .map_err(|err| ParamsError::NestedObject(format!("invalid json: {err}")))?;
 
       json_metadata.validate(json_schema_registry, &json_value)?;
-      Ok((Value::Text(s), None))
+      Ok((Value::Text(s.into()), None))
     }
     value => {
       json_metadata.validate(json_schema_registry, &value)?;
-      Ok((Value::Text(value.to_string()), None))
+      Ok((Value::Text(value.to_compact_string()), None))
     }
   };
 }

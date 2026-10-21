@@ -143,7 +143,7 @@ pub struct RecordApi {
 
 struct RequestParams<'a> {
   all_column_names: Arc<Vec<CompactString>>,
-  present_fields: String,
+  present_fields: CompactString,
   request_params: Params<'a>,
 }
 
@@ -995,17 +995,21 @@ fn assert_name(config: &proto::RecordApiConfig, name: &QualifiedName) {
 }
 
 #[inline]
-fn strings_to_json_array<'a, I>(iter: I) -> String
+fn strings_to_json_array<'a, I>(iter: I) -> CompactString
 where
   I: Iterator<Item = &'a str>,
 {
-  let mut out = String::with_capacity(256);
+  let mut out = CompactString::with_capacity(256);
 
   out.push('[');
-  for (i, s) in iter.enumerate() {
-    if i > 0 {
+  let mut first = true;
+  for s in iter {
+    if !first {
       out.push(',');
+    } else {
+      first = false;
     }
+
     write_json_string(&mut out, s);
   }
   out.push(']');
@@ -1014,7 +1018,7 @@ where
 }
 
 #[inline]
-fn write_json_string(out: &mut String, s: &str) {
+fn write_json_string(out: &mut CompactString, s: &str) {
   out.push('"');
   for c in s.chars() {
     match c {

@@ -401,7 +401,7 @@ async fn test_params() {
       "INSERT INTO person (id, name) VALUES (:id, :name)",
       [
         (":id", Value::Integer(1)),
-        (":name", Value::Text("Alice".to_string())),
+        (":name", Value::Text("Alice".into())),
       ],
     )
     .await
@@ -413,7 +413,7 @@ async fn test_params() {
       "INSERT INTO person (id, name) VALUES (:id, :name)",
       named_params! {
           ":id": id,
-          ":name": Value::Text("Eve".to_string()),
+          ":name": Value::Text("Eve".into()),
       },
     )
     .await
@@ -422,7 +422,7 @@ async fn test_params() {
   conn
     .execute(
       "INSERT INTO person (id, name) VALUES ($1, $2)",
-      [Value::Integer(2), Value::Text("Bob".to_string())],
+      [Value::Integer(2), Value::Text("Bob".into())],
     )
     .await
     .unwrap();

@@ -1,3 +1,4 @@
+use compact_str::ToCompactString;
 use regex::Regex;
 use trailbase_qs::{Combiner, CompareOp};
 use trailbase_schema::db::metadata::ColumnMetadata;
@@ -34,7 +35,7 @@ fn any_qs_value_to_sql(value: trailbase_qs::Value) -> trailbase_sqlite::Value {
       if let Ok(b) = BASE64_URL_SAFE.decode(&s) {
         Value::Blob(b)
       } else {
-        Value::Text(s.clone())
+        Value::Text(s.into())
       }
     }
     QsValue::Integer(i) => Value::Integer(i),
@@ -61,9 +62,9 @@ pub(crate) fn qs_value_to_sql_with_constraints(
       _ => Err(RecordError::BadRequest("Invalid query")),
     },
     ColumnDataType::Text => match value {
-      QsValue::String(s) => Ok(Value::Text(s)),
-      QsValue::Integer(i) => Ok(Value::Text(i.to_string())),
-      QsValue::Double(d) => Ok(Value::Text(d.to_string())),
+      QsValue::String(s) => Ok(Value::Text(s.into())),
+      QsValue::Integer(i) => Ok(Value::Text(i.to_compact_string())),
+      QsValue::Double(d) => Ok(Value::Text(d.to_compact_string())),
     },
     ColumnDataType::Integer => match value {
       QsValue::Integer(i) => Ok(Value::Integer(i)),
@@ -313,16 +314,13 @@ mod tests {
 
   #[test]
   fn test_basic_value_filter() {
-    let record = vec![(
-      "a".to_string(),
-      Value::Text("a value".to_string().to_string()),
-    )];
+    let record = vec![("a".to_string(), Value::Text("a value".into()))];
 
     assert!(apply_filter_recursively_to_record(
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::Equal,
-        value: Value::Text("a value".to_string()),
+        value: Value::Text("a value".into()),
       }),
       &record
     ));
@@ -331,7 +329,7 @@ mod tests {
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::NotEqual,
-        value: Value::Text("a value".to_string()),
+        value: Value::Text("a value".into()),
       }),
       &record
     ));
@@ -340,7 +338,7 @@ mod tests {
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::LessThanEqual,
-        value: Value::Text("a value".to_string()),
+        value: Value::Text("a value".into()),
       }),
       &record
     ));
@@ -349,7 +347,7 @@ mod tests {
       &ValueOrComposite::Value(ColumnOpValue {
         column: "a".to_string(),
         op: CompareOp::LessThan,
-        value: Value::Text("a value".to_string()),
+        value: Value::Text("a value".into()),
       }),
       &record
     ));

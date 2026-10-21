@@ -15,7 +15,7 @@ pub enum Value {
   /// The value is a floating point number.
   Real(f64),
   /// The value is a text string.
-  Text(String),
+  Text(CompactString),
   /// The value is a blob of data
   Blob(Blob),
 }
@@ -51,14 +51,14 @@ impl From<f64> for Value {
 impl From<String> for Value {
   #[inline]
   fn from(s: String) -> Self {
-    return Self::Text(s);
+    return Self::Text(s.into());
   }
 }
 
 impl From<CompactString> for Value {
   #[inline]
   fn from(s: CompactString) -> Self {
-    return Self::Text(s.into_string());
+    return Self::Text(s);
   }
 }
 
@@ -88,7 +88,7 @@ impl TryFrom<Value> for String {
 
   fn try_from(value: Value) -> Result<Self, Self::Error> {
     return match value {
-      Value::Text(s) => Ok(s),
+      Value::Text(s) => Ok(s.into_string()),
       _ => Err(Self::Error::InvalidType),
     };
   }

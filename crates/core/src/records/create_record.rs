@@ -273,7 +273,7 @@ pub(crate) fn build_insert_params(
 pub(crate) fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String, RecordError> {
   return match value {
     trailbase_sqlite::Value::Blob(blob) => Ok(BASE64_URL_SAFE.encode(blob)),
-    trailbase_sqlite::Value::Text(text) => Ok(text),
+    trailbase_sqlite::Value::Text(text) => Ok(text.into_string()),
     trailbase_sqlite::Value::Integer(i) => Ok(i.to_string()),
     _ => Err(RecordError::Internal("Unexpected data type".into())),
   };
