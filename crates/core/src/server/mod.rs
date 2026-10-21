@@ -295,6 +295,8 @@ impl Server {
           //   panic!("Failed to write configs: {err}");
           // }
         }
+
+        log::debug!("cleanup finished");
       });
 
       cleanup_sender
@@ -541,7 +543,7 @@ async fn shutdown_signal() {
           handle.metrics().num_alive_tasks()
         );
 
-        const SECONDS: usize = 10;
+        const SECONDS: usize = 60;
 
         for remaining in (0..SECONDS).rev() {
           tokio::select! {
@@ -554,12 +556,12 @@ async fn shutdown_signal() {
 
           if remaining > 0 {
             println!(
-              "Waiting {SECONDS}s for graceful shutdown (pending: {}): {remaining}s remaining.",
+              "Waiting {SECONDS}s for graceful shutdown (pending tasks: {}, flushing DB): {remaining}s remaining.",
               handle.metrics().num_alive_tasks()
             );
           } else {
             println!("Graceful shutdown failed. Shutting down");
-            std::process::exit(0);
+            std::process::exit(1);
           }
         }
       })

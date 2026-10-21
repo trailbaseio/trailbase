@@ -310,7 +310,7 @@ impl Connection {
     dir: impl AsRef<std::path::Path>,
     schema: Option<&str>,
   ) -> Result<(), Error> {
-    let Some(fname) = self.exec.path().await.and_then(|p| {
+    let Some(fname) = self.exec.path().and_then(|p| {
       std::path::PathBuf::from(p)
         .file_name()
         .map(|f| f.to_string_lossy().to_string())

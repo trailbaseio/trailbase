@@ -81,7 +81,7 @@ impl Executor {
     };
 
     let write_conn = new_conn(/* read_only= */ read_only.unwrap_or(false))?;
-    let path = write_conn.path().map(|p| p.to_string());
+    let path = write_conn.path().map(String::from);
     let in_memory = path.as_ref().is_none_or(|s| {
       // Returns empty string for in-memory databases.
       return s.is_empty();
@@ -173,11 +173,9 @@ impl Executor {
     return self.conns.read().0.len();
   }
 
-  pub async fn path(&self) -> Option<String> {
-    return self
-      .call_reader(|conn| Ok::<_, Error>(conn.path().map(|p| p.to_string())))
-      .await
-      .expect("");
+  pub fn path(&self) -> Option<String> {
+    let lock = self.conns.read();
+    return lock.0.get(0).and_then(|c| c.path().map(String::from));
   }
 
   #[inline]
@@ -292,8 +290,17 @@ impl Executor {
   }
 
   pub(crate) fn close_impl(&self) -> Result<(), Error> {
-    while self.reader.send(ReaderMessage::Terminate).is_ok() {
-      // Continue to close readers (as well as the reader/writer) while the channel is alive.
+    trace!("Closing: {:?}", self.path());
+
+    let readers = self.reader.get_rx_count();
+    for _ in 0..readers {
+      let _ = self.reader.send(ReaderMessage::Terminate);
+    }
+
+    // Poll for all readers (including the writer) to finish pending work before eventually
+    // stumbling on a terminate message and us safely closing the connections below.
+    while !self.reader.is_disconnected() {
+      std::thread::sleep(std::time::Duration::from_micros(50));
     }
 
     let mut errors = vec![];
@@ -311,6 +318,8 @@ impl Executor {
       warn!("Closing connection: {errors:?}");
       return Err(errors.swap_remove(0).into());
     }
+
+    trace!("Closed {:?}", self.path());
 
     return Ok(());
   }
@@ -377,7 +386,7 @@ fn writer_event_loop(
         }
       }
       Ok(_) => {
-        debug_assert!(false, "Unexpected select result");
+        unreachable!("Unexpected select result");
       }
       Err(crossfire::RecvError) => {
         break;

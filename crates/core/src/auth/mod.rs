@@ -189,12 +189,15 @@ fn build_shared_governor_conf(rate_limit: u32) -> Arc<Governor> {
     );
 
     // Periodically clean up governor.
-    tokio::spawn({
+    //
+    // NOTE: if we spawned a tokio task instead, we'd need an explicit shutdown to avoid blocking
+    // the graceful server shutdown.
+    std::thread::spawn({
       let governor_limiter = governor_conf.limiter().clone();
-      async move {
-        let interval = tokio::time::Duration::from_secs(60);
+      move || {
+        let interval = std::time::Duration::from_secs(60);
         loop {
-          tokio::time::sleep(interval).await;
+          std::thread::sleep(interval);
           log::trace!("rate limiting storage size: {}", governor_limiter.len());
           governor_limiter.retain_recent();
         }

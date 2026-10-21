@@ -490,7 +490,6 @@ impl Connection {
       Executor::Sqlite(ref exec) => {
         let fname = exec
           .path()
-          .await
           .and_then(|p| {
             std::path::PathBuf::from(p)
               .file_name()
