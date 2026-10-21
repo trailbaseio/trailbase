@@ -1,6 +1,13 @@
+## v0.35.2
+
+- Fix graceful DB shutdown for busy backlogs and extend wait time to allow logs to be written safely. This came to light as a result of increased throughput.
+- Tidy up `User` and `DbUser` memory representations resulting in ~5% throughput increases. As we keep pushing, even small optimizations start to matter.
+- Expand `trail migration` CLI command allowing to apply migrations w/o starting the server.
+- Update dependencies. Address Wasmtime's security advisories.
+
 ## v0.35.1
 
-- Major post-v0.35 clean-up: simpler ownership, less reference counting and more consistent flows across acrions.
+- Major post-v0.35 clean-up: simpler ownership, less reference counting and more consistent flows across actions.
 - Update dependencies.
 
 ## v0.35.0
