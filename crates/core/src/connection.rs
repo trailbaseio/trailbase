@@ -473,7 +473,10 @@ async fn init_db_sqlite<'a>(
   fn _implicitly_assert_db_sqlite_connection_type() {
     // Assert that we're not using th the polymorphic connection in production sqlite mode. The
     // below constructor only exists on the sqlite flavor.
-    trailbase_sqlite::Connection::new(|| rusqlite::Connection::open_in_memory()).unwrap();
+    trailbase_sqlite::Connection::new(|| -> Result<_, trailbase_sqlite::Error> {
+      return Ok(rusqlite::Connection::open_in_memory()?);
+    })
+    .unwrap();
   }
 
   if opts.attach.len() > 124 {
