@@ -279,27 +279,16 @@ async fn async_main(
           eprintln!("Sessions invalidated for '{user}'");
         }
         Some(UserSubCommands::Mint { user }) => {
-          let tokens = api::cli::mint_auth_tokens(
-            state.data_dir(),
-            state.user_conn(),
-            state.session_conn(),
-            UserReference::parse(&user)?,
-          )
-          .await?;
+          let tokens = api::cli::mint_auth_tokens(&state, UserReference::parse(&user)?).await?;
 
-          {
-            let AuthTokens {
-              ref auth_token,
-              ref refresh_token,
-            } = tokens;
-
-            eprintln!(
-              "\
+          eprintln!(
+            "\
               auth: \"Bearer {auth_token}\"\n\
               🔄: \"{refresh_token}\"\n\
-              ",
-            );
-          }
+            ",
+            auth_token = tokens.auth_token,
+            refresh_token = tokens.refresh_token.as_deref().unwrap_or("no-session"),
+          );
 
           println!(
             "{}",
@@ -623,18 +612,16 @@ async fn async_main(
           })
           .await?;
 
-          let tokens = api::cli::mint_auth_tokens(
-            state.data_dir(),
-            state.user_conn(),
-            state.session_conn(),
-            UserReference::parse(&user)?,
-          )
-          .await?;
+          let AuthTokens {
+            auth_token,
+            refresh_token,
+            csrf_token,
+          } = api::cli::mint_auth_tokens(&state, UserReference::parse(&user)?).await?;
 
           Tokens {
-            auth_token: tokens.auth_token,
-            refresh_token: Some(tokens.refresh_token),
-            csrf_token: None,
+            auth_token,
+            refresh_token: refresh_token,
+            csrf_token: Some(csrf_token),
           }
         }
         _ => {

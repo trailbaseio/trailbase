@@ -15,6 +15,7 @@ use crate::auth::api::totp::new_totp;
 use crate::auth::jwt::PendingAuthTokenClaims;
 use crate::auth::login_params::{LoginInputParams, LoginParams, build_and_validate_input_params};
 use crate::auth::password::{check_user_password, sleep_for_password_check_equivalent};
+use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::auth::util::{
   SameSite, new_cookie, remove_cookie, user_by_email, user_by_id, user_by_username,
@@ -66,7 +67,7 @@ enum UserIdentifier {
 #[ts(export)]
 pub struct LoginResponse {
   pub auth_token: String,
-  pub refresh_token: String,
+  pub refresh_token: Option<String>,
   pub csrf_token: String,
 }
 
@@ -273,44 +274,58 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
   redirect: Option<String>,
   is_json: bool,
   has_root: bool,
-  (auth_token_ttl, refresh_token_ttl): (Duration, Duration),
+  auth_and_refresh_token_ttl: Option<(Duration, Duration)>,
 ) -> Result<Response, AuthError> {
-  let build_new_tokens = async || {
-    let tokens = crate::auth::tokens::mint_new_tokens(
-      state.session_conn(),
-      db_user,
-      &auth_token_ttl,
-      &refresh_token_ttl,
-    )
-    .await?;
+  let build_new_tokens = async || -> Result<(String, FreshTokens), AuthError> {
+    let fresh_tokens = mint_new_tokens(state, db_user, auth_and_refresh_token_ttl).await?;
 
-    return Ok(LoginResponse {
-      auth_token: state
-        .jwt()
-        .encode(&tokens.auth_token_claims)
-        .map_err(|err| AuthError::Internal(err.into()))?,
-      refresh_token: tokens.refresh_token,
-      csrf_token: tokens.auth_token_claims.csrf_token.into_string(),
-    });
+    let auth_token = state
+      .jwt()
+      .encode(&fresh_tokens.auth_token_claims.0)
+      .map_err(|err| AuthError::Internal(err.into()))?;
+
+    return Ok((auth_token, fresh_tokens));
   };
 
   return match build_new_tokens().await {
-    Ok(response) if is_json => Ok(Json(response).into_response()),
-    Ok(response) => {
+    Ok((auth_token, fresh_tokens)) if is_json => {
+      let FreshTokens {
+        auth_token_claims: (auth_token_claims, _),
+        refresh_token,
+      } = fresh_tokens;
+
+      Ok(
+        Json(LoginResponse {
+          auth_token,
+          refresh_token: refresh_token.map(|(token, _ttl)| token),
+          csrf_token: auth_token_claims.csrf_token.into_string(),
+        })
+        .into_response(),
+      )
+    }
+    Ok((auth_token, fresh_tokens)) => {
+      let FreshTokens {
+        auth_token_claims: (_, auth_token_ttl),
+        refresh_token,
+      } = fresh_tokens;
+
       cookies.add(new_cookie(
         state,
         COOKIE_AUTH_TOKEN,
-        response.auth_token,
+        auth_token,
         auth_token_ttl,
         SameSite::Strict,
       ));
-      cookies.add(new_cookie(
-        state,
-        COOKIE_REFRESH_TOKEN,
-        response.refresh_token,
-        refresh_token_ttl,
-        SameSite::Strict,
-      ));
+
+      if let Some((refresh_token, ttl)) = refresh_token {
+        cookies.add(new_cookie(
+          state,
+          COOKIE_REFRESH_TOKEN,
+          refresh_token,
+          ttl,
+          SameSite::Strict,
+        ));
+      }
 
       if let Some(ref redirect) = redirect {
         Ok(Redirect::to(redirect).into_response())
@@ -334,13 +349,7 @@ pub(crate) async fn build_auth_token_flow_response(
   has_root: bool,
 ) -> Result<Response, AuthError> {
   return build_auth_token_flow_response_with_ttl(
-    state,
-    db_user,
-    cookies,
-    redirect,
-    is_json,
-    has_root,
-    state.access_config(|c| c.auth.token_ttls()),
+    state, db_user, cookies, redirect, is_json, has_root, None,
   )
   .await;
 }

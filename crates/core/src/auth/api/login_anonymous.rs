@@ -103,9 +103,7 @@ pub async fn login_anonymous_user_handler(
           redirect_uri,
           json,
           has_root,
-          // TODO: Separate config setting for anonymous token TTLs. Folks may want this to be
-          // longer than normal refresh token TTL in the absence of re-sign-in.
-          (auth_token_ttl, anonymous_refresh_token_ttl),
+          Some((auth_token_ttl, anonymous_refresh_token_ttl)),
         )
         .await;
       }

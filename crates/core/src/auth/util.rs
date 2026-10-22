@@ -10,6 +10,7 @@ use validator::ValidateEmail;
 
 use crate::AppState;
 use crate::auth::AuthError;
+use crate::auth::tokens::{FreshTokens, mint_new_tokens};
 use crate::auth::user::DbUser;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
@@ -158,7 +159,7 @@ pub(crate) fn validate_redirect<T: AsRef<str>>(
 pub struct NewTokens {
   pub id: uuid::Uuid,
   pub auth_token: String,
-  pub refresh_token: String,
+  pub refresh_token: Option<String>,
   pub csrf_token: String,
 }
 
@@ -181,23 +182,21 @@ pub async fn login_with_password_for_test(
   // Validates password and rate limits attempts.
   crate::auth::password::check_user_password(&db_user, password.to_string()).await?;
 
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-  let tokens = crate::auth::tokens::mint_new_tokens(
-    state.session_conn(),
-    &db_user,
-    &auth_token_ttl,
-    &refresh_token_ttl,
-  )
-  .await?;
+  let FreshTokens {
+    auth_token_claims: (auth_token_claims, _ttl),
+    refresh_token,
+  } = mint_new_tokens(state, &db_user, None).await?;
+
+  let auth_token = state
+    .jwt()
+    .encode(&auth_token_claims)
+    .map_err(|err| AuthError::Internal(err.into()))?;
 
   return Ok(Some(NewTokens {
     id: db_user.uuid(),
-    auth_token: state
-      .jwt()
-      .encode(&tokens.auth_token_claims)
-      .map_err(|err| AuthError::Internal(err.into()))?,
-    refresh_token: tokens.refresh_token,
-    csrf_token: tokens.auth_token_claims.csrf_token.into_string(),
+    auth_token,
+    refresh_token: refresh_token.map(|(token, _ttl)| token),
+    csrf_token: auth_token_claims.csrf_token.into_string(),
   }));
 }
 

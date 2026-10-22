@@ -235,7 +235,7 @@ mod tests {
     let request = Request::builder()
       .header(
         header::COOKIE,
-        format!("{COOKIE_REFRESH_TOKEN}={}", tokens.refresh_token),
+        format!("{COOKIE_REFRESH_TOKEN}={}", tokens.refresh_token.unwrap()),
       )
       .body(Body::empty())
       .unwrap();

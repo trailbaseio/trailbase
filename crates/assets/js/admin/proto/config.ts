@@ -462,18 +462,15 @@ export interface AuthConfig {
   /**
    * / Time-to-live in seconds for refresh tokens. [Default: 30 days]
    * /
-   * / When set to zero tokens will instantly expire basically disabling auth
-   * / token refresh. When set to a negative value, tokens will never expire.
+   * / When ttl is zero or negative, no refresh token will be minted.
    */
   refreshTokenTtlSec?:
     | bigint
     | undefined;
   /**
-   * / Time-to-live in seconds for anonymous-auth refresh tokens.
-   * / [Default: 90 days]
+   * / Time-to-live in seconds for anonymous-auth refresh tokens. [Default: 90 days]
    * /
-   * / When set to zero tokens will instantly expire basically disabling auth
-   * / token refresh. When set to a negative value, tokens will never expire.
+   * / When ttl is zero or negative, no refresh token will be minted.
    */
   anonymousRefreshTokenTtlSec?:
     | bigint

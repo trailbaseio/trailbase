@@ -5,7 +5,7 @@ use axum::{
 use chrono::Duration;
 use const_format::formatcp;
 use tower_cookies::Cookies;
-use trailbase_sqlite::{Connection, params};
+use trailbase_sqlite::params;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
@@ -167,39 +167,48 @@ fn extract_tokens_from_cookies(cookies: &Cookies) -> Option<CookieTokens> {
 
 /// Only difference to Tokens above, refresh token presence is guaranteed.
 pub struct FreshTokens {
-  pub auth_token_claims: AuthTokenClaims,
-  pub refresh_token: String,
+  pub auth_token_claims: (AuthTokenClaims, Duration),
+  pub refresh_token: Option<(String, Duration)>,
 }
 
 pub(crate) async fn mint_new_tokens(
-  session_conn: &Connection,
-  db_user: &DbUser,
-  auth_token_ttl: &Duration,
-  refresh_token_ttl: &Duration,
+  state: &AppState,
+  user: &DbUser,
+  auth_and_refresh_token_ttl: Option<(Duration, Duration)>,
 ) -> Result<FreshTokens, AuthError> {
-  if db_user.unverified_email.is_some() {
+  if user.unverified_email.is_some() {
     return Err(AuthError::Internal(
       "Cannot mint tokens for unverified user".into(),
     ));
   }
 
-  // Unlike JWT auth tokens, refresh tokens are opaque.
-  let refresh_token = random_alphanumeric(REFRESH_TOKEN_LENGTH);
-  let expires = if refresh_token_ttl.num_seconds() >= 0 {
-    (chrono::Utc::now() + *refresh_token_ttl).timestamp()
+  let (auth_token_ttl, refresh_token_ttl) =
+    auth_and_refresh_token_ttl.unwrap_or_else(|| state.access_config(|c| c.auth.token_ttls()));
+
+  let refresh_token = if refresh_token_ttl.num_seconds() > 0 {
+    // Unlike the JWT auth tokens, refresh tokens are opaque.
+    let refresh_token = random_alphanumeric(REFRESH_TOKEN_LENGTH);
+    let expires = (chrono::Utc::now() + refresh_token_ttl).timestamp();
+
+    const SESSION_INSERT_QUERY: &str = formatcp!(
+      "INSERT INTO \"{SESSION_TABLE}\" (user, refresh_token, expires) VALUES ($1, $2, $3)"
+    );
+
+    state
+      .session_conn()
+      .execute(
+        SESSION_INSERT_QUERY,
+        params!(user.id, refresh_token.clone(), expires),
+      )
+      .await?;
+
+    Some((refresh_token, refresh_token_ttl))
   } else {
-    i64::MAX
+    None
   };
 
-  const QUERY: &str =
-    formatcp!("INSERT INTO '{SESSION_TABLE}' (user, refresh_token, expires) VALUES ($1, $2, $3)");
-
-  session_conn
-    .execute(QUERY, params!(db_user.id, refresh_token.clone(), expires))
-    .await?;
-
   return Ok(FreshTokens {
-    auth_token_claims: AuthTokenClaims::new(db_user, auth_token_ttl),
+    auth_token_claims: (AuthTokenClaims::new(&user, &auth_token_ttl), auth_token_ttl),
     refresh_token,
   });
 }
@@ -237,8 +246,6 @@ pub(crate) async fn reauth_with_refresh_token(
     return Err(AuthError::Unauthorized);
   };
 
-  // NOTE: The `verified` condition mirrors `mint_new_tokens`: a user with an email must have it
-  // verified before we hand out tokens. Anonymous users are exempt, since they have no email.
   const USER_QUERY: &str = formatcp!(
     r#"SELECT {columns} FROM "{USER_TABLE}" WHERE id = $1 AND unverified_email IS NULL"#,
     columns = DbUser::COLUMNS

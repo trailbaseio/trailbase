@@ -93,18 +93,11 @@ pub(crate) async fn apple_native_signin_handler(
     }
   };
 
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
   let FreshTokens {
-    auth_token_claims,
+    auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(
-    state.session_conn(),
-    &db_user,
-    &auth_token_ttl,
-    &refresh_token_ttl,
-  )
-  .await?;
+  } = mint_new_tokens(&state, &db_user, None).await?;
 
   let auth_token = state
     .jwt()
@@ -113,7 +106,7 @@ pub(crate) async fn apple_native_signin_handler(
 
   return Ok(Json(LoginResponse {
     auth_token,
-    refresh_token,
+    refresh_token: refresh_token.map(|(token, _ttl)| token),
     csrf_token: auth_token_claims.csrf_token.into_string(),
   }));
 }
@@ -193,7 +186,7 @@ mod tests {
     .0;
 
     assert!(!response.auth_token.is_empty());
-    assert!(!response.refresh_token.is_empty());
+    assert!(response.refresh_token.is_some_and(|t| !t.is_empty()));
 
     // The account was created with the verified email from the token.
     let db_user = user_by_provider_id(
@@ -204,6 +197,7 @@ mod tests {
     .await
     .unwrap()
     .unwrap();
+
     assert_eq!(
       db_user.email.as_deref(),
       Some("user@privaterelay.appleid.com")

@@ -589,7 +589,12 @@ async fn test_auth_password_login_flow_without_pkce() {
     serde_json::from_slice(&body).unwrap()
   };
 
-  assert!(login_response.refresh_token != "");
+  assert!(
+    login_response
+      .refresh_token
+      .as_ref()
+      .is_some_and(|t| !t.is_empty())
+  );
   assert!(login_response.csrf_token != "");
 
   let decoded_claims = state
@@ -612,7 +617,10 @@ async fn test_auth_password_login_flow_without_pkce() {
     .await
     .unwrap()
     .unwrap();
-  assert_eq!(refresh_token, login_response.refresh_token);
+  assert_eq!(
+    refresh_token,
+    login_response.refresh_token.as_deref().unwrap()
+  );
 
   assert!(session_exists(&state, user.id).await);
   let _ = logout_handler(
@@ -726,7 +734,7 @@ async fn test_auth_token_refresh_flow() {
   let Json(refreshed_tokens) = refresh_handler(
     State(state.clone()),
     Json(RefreshRequest {
-      refresh_token: tokens.refresh_token,
+      refresh_token: tokens.refresh_token.unwrap(),
     }),
   )
   .await
@@ -1198,7 +1206,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
   let Json(_refreshed_tokens) = refresh_handler(
     State(state.clone()),
     Json(RefreshRequest {
-      refresh_token: tokens.refresh_token,
+      refresh_token: tokens.refresh_token.unwrap(),
     }),
   )
   .await
@@ -1633,7 +1641,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
   let Json(_refreshed_tokens) = refresh_handler(
     State(state.clone()),
     Json(RefreshRequest {
-      refresh_token: login_response.refresh_token.clone(),
+      refresh_token: login_response.refresh_token.clone().unwrap(),
     }),
   )
   .await
@@ -1659,7 +1667,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
     refresh_handler(
       State(state.clone()),
       Json(RefreshRequest {
-        refresh_token: login_response.refresh_token.clone(),
+        refresh_token: login_response.refresh_token.clone().unwrap(),
       }),
     )
     .await,
@@ -1681,7 +1689,7 @@ async fn test_auth_refresh_after_anonymous_promotion() {
   let Json(_refreshed_tokens) = refresh_handler(
     State(state.clone()),
     Json(RefreshRequest {
-      refresh_token: login_response.refresh_token,
+      refresh_token: login_response.refresh_token.unwrap(),
     }),
   )
   .await

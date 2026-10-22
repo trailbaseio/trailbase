@@ -1,4 +1,5 @@
 use base64::prelude::*;
+use chrono::Duration;
 use const_format::formatcp;
 use serde::{Deserialize, Serialize};
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
@@ -6,7 +7,7 @@ use trailbase_sqlite::{Connection, params};
 use uuid::Uuid;
 use validator::ValidateEmail;
 
-use crate::DataDir;
+use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::hash_password;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
@@ -193,34 +194,37 @@ pub async fn invalidate_sessions(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AuthTokens {
   pub auth_token: String,
-  pub refresh_token: String,
+  pub refresh_token: Option<String>,
+  pub csrf_token: String,
 }
 
 pub async fn mint_auth_tokens(
-  data_dir: &DataDir,
-  user_conn: &trailbase_sqlite::Connection,
-  session_conn: &trailbase_sqlite::Connection,
+  state: &AppState,
   user: UserReference,
 ) -> Result<AuthTokens, AuthError> {
-  let jwt = crate::api::JwtHelper::init_from_path(data_dir)
-    .await
-    .map_err(|err| AuthError::FailedDependency(err.into()))?;
-  let db_user = user.lookup_user(user_conn).await?;
+  return mint_auth_tokens_impl(state, user.lookup_user(state.user_conn()).await?).await;
+}
 
-  let auth_token_ttl = chrono::Duration::hours(12);
-  let refresh_token_ttl = chrono::Duration::hours(12);
+pub(crate) async fn mint_auth_tokens_impl(
+  state: &AppState,
+  db_user: DbUser,
+) -> Result<AuthTokens, AuthError> {
+  let auth_and_refresh_token_ttl = (Duration::hours(12), Duration::hours(0));
+
   let FreshTokens {
-    auth_token_claims,
+    auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(session_conn, &db_user, &auth_token_ttl, &refresh_token_ttl).await?;
+  } = mint_new_tokens(state, &db_user, Some(auth_and_refresh_token_ttl)).await?;
 
-  let auth_token = jwt
+  let auth_token = state
+    .jwt()
     .encode(&auth_token_claims)
     .map_err(|err| AuthError::Internal(err.into()))?;
 
   return Ok(AuthTokens {
     auth_token,
-    refresh_token,
+    refresh_token: refresh_token.map(|(token, _ttl)| token),
+    csrf_token: auth_token_claims.csrf_token.into_string(),
   });
 }
 

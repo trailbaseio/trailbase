@@ -168,20 +168,11 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   let db_user =
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
 
-  // Mint user token and start a session.
-  let (auth_token_ttl, refresh_token_ttl) = state.access_config(|c| c.auth.token_ttls());
-
   let FreshTokens {
-    auth_token_claims,
+    auth_token_claims: (auth_token_claims, auth_token_ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(
-    state.session_conn(),
-    &db_user,
-    &auth_token_ttl,
-    &refresh_token_ttl,
-  )
-  .await?;
+  } = mint_new_tokens(state, &db_user, None).await?;
 
   let auth_token = state
     .jwt()
@@ -198,13 +189,15 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     // from the external oauth provider and thus not to be same site..
     SameSite::Lax,
   ));
-  cookies.add(new_cookie(
-    state,
-    COOKIE_REFRESH_TOKEN,
-    refresh_token,
-    refresh_token_ttl,
-    SameSite::Strict,
-  ));
+  if let Some((refresh_token, ttl)) = refresh_token {
+    cookies.add(new_cookie(
+      state,
+      COOKIE_REFRESH_TOKEN,
+      refresh_token,
+      ttl,
+      SameSite::Strict,
+    ));
+  }
 
   // NOTE: we're removing the OAUTH_STATE cookie deliberately late in case there are any
   // transient issues, letting users retry.
