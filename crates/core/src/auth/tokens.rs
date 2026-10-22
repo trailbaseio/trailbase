@@ -192,6 +192,8 @@ pub(crate) async fn mint_new_tokens(
     let refresh_token = random_alphanumeric(REFRESH_TOKEN_LENGTH);
     let expires = (chrono::Utc::now() + refresh_token_ttl).timestamp();
 
+    // TODO: Check user connection for tenant membership. Either pass in user connection as well or
+    // open main in session (probably the former).
     const SESSION_INSERT_QUERY: &str = formatcp!(
       "INSERT INTO \"{SESSION_TABLE}\" (user, tenant, refresh_token, expires) VALUES ($1, $2, $3, $4)"
     );
@@ -200,12 +202,7 @@ pub(crate) async fn mint_new_tokens(
       .session_conn()
       .execute(
         SESSION_INSERT_QUERY,
-        params!(
-          user.id,
-          tenant.map(|t| t.to_vec()),
-          refresh_token.clone(),
-          expires
-        ),
+        params!(user.id, tenant.clone(), refresh_token.clone(), expires),
       )
       .await?;
 
@@ -270,7 +267,7 @@ pub(crate) async fn reauth_with_refresh_token(
     const USER_AND_TENANT_QUERY: &str = formatcp!(
       "\
         SELECT {columns}, mem.tenant FROM \"{USER_TABLE}\" \
-          RIGHT JOIN _membership AS mem ON mem.user = id \
+          RIGHT JOIN _tenant_member AS mem ON mem.user = id \
         WHERE \
           id = $1 AND \
           unverified_email IS NULL AND \
@@ -293,7 +290,12 @@ pub(crate) async fn reauth_with_refresh_token(
       })?
   } else {
     const USER_QUERY: &str = formatcp!(
-      r#"SELECT {columns} FROM "{USER_TABLE}" WHERE id = $1 AND unverified_email IS NULL"#,
+      "\
+        SELECT {columns} FROM \"{USER_TABLE}\" \
+        WHERE \
+          id = $1 AND \
+          unverified_email IS NULL \
+      ",
       columns = DbUser::COLUMNS
     );
 
