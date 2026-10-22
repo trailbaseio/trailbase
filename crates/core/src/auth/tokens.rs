@@ -184,6 +184,21 @@ pub(crate) async fn mint_new_tokens(
     ));
   }
 
+  if let Some(tenant) = tenant {
+    const CHECK_TENANT_QUERY: &str =
+      formatcp!("SELECT EXISTS(SELECT 1 FROM \"_tenant_member\" WHERE user = $1 AND tenant = $2)");
+
+    let exists = state
+      .user_conn()
+      .read_query_row_get(CHECK_TENANT_QUERY, params!(user.id, tenant.clone()), 0)
+      .await?
+      .unwrap_or(false);
+
+    if !exists {
+      return Err(AuthError::Unauthorized);
+    }
+  }
+
   let (auth_token_ttl, refresh_token_ttl) =
     auth_and_refresh_token_ttl.unwrap_or_else(|| state.access_config(|c| c.auth.token_ttls()));
 
