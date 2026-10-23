@@ -19,8 +19,16 @@ impl DataDir {
     return &self.0;
   }
 
+  pub fn data_path(&self) -> PathBuf {
+    return self.0.join("data/");
+  }
+
   pub fn main_db_path(&self) -> PathBuf {
     return self.data_path().join("main.db");
+  }
+
+  pub fn tenant_db_dir(&self, template: &str) -> PathBuf {
+    return self.data_path().join(format!("{template}/"));
   }
 
   pub fn session_db_path(&self) -> PathBuf {
@@ -33,10 +41,6 @@ impl DataDir {
 
   pub fn queue_db_path(&self) -> PathBuf {
     return self.data_path().join("queue.db");
-  }
-
-  pub fn data_path(&self) -> PathBuf {
-    return self.0.join("data/");
   }
 
   pub fn config_path(&self) -> PathBuf {
@@ -63,6 +67,14 @@ impl DataDir {
     return self.secrets_path().join("keys/");
   }
 
+  pub fn templates_path(&self) -> PathBuf {
+    return self.0.join("templates/");
+  }
+
+  pub fn template_migrations_dir(&self, template: &str) -> PathBuf {
+    return self.templates_path().join(format!("{template}/"));
+  }
+
   pub fn wasm_path(&self) -> PathBuf {
     return self.0.join("wasm/");
   }
@@ -70,6 +82,7 @@ impl DataDir {
   pub(crate) async fn ensure_directory_structure(&self) -> std::io::Result<()> {
     let directories = [
       self.data_path(),
+      self.templates_path(),
       self.config_path(),
       self.backup_path(),
       self.migrations_path().join("main"),

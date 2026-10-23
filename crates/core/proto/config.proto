@@ -58,15 +58,17 @@ message OAuthProviderConfig {
 
   optional OAuthProviderId provider_id = 3;
 
-  // Settings for generic OpenID Connect provider. Name is implicitly provided
-  // via the `AuthConfig.oauth_providers` map key.
+  // Below: settings for generic OpenID Connect (OIDC) provider. Name is implicitly
+  // provided via the `AuthConfig.oauth_providers` map key.
 
   // Name to display in auth and admin UI.
   optional string display_name = 11;
 
-  // Urls
+  // Auth URL.
   optional string auth_url = 12;
+  // Token URL.
   optional string token_url = 13;
+  // User information URL.
   optional string user_api_url = 14;
 
   // User-info scopes to request. [Default: ["openid", "email", "profile"]]
@@ -340,6 +342,9 @@ message RecordApiConfig {
   // tell the proxy to keep listening and not cache.
   optional bool enable_subscriptions = 9;
 
+  // The tenant template to use, if this is a multi-tenant IP.
+  optional string tenant_template = 16;
+
   // Access control lists.
   repeated PermissionFlag acl_world = 7;
   repeated PermissionFlag acl_authenticated = 8;
@@ -391,6 +396,13 @@ message RecordApiConfig {
   optional uint64 listing_hard_limit = 22;
 }
 
+message TenantTemplateConfig {
+  // Name of the golden template used for a set of tenants.
+  //
+  // Schema migrations are expected under <depot>/templates/<name>.
+  optional string name = 1;
+}
+
 message JsonSchemaConfig {
   optional string name = 1;
   optional string schema = 2;
@@ -413,6 +425,7 @@ message Config {
   repeated DatabaseConfig databases = 8;
 
   repeated RecordApiConfig record_apis = 11;
+  repeated TenantTemplateConfig tenant_templates = 12;
 
   repeated JsonSchemaConfig schemas = 21;
 }
