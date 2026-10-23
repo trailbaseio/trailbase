@@ -29,6 +29,7 @@ pub(crate) async fn add_record_api(
     conflict_resolution: None,
     autofill_missing_user_id_columns: None,
     enable_subscriptions: None,
+    tenant_template: None,
     excluded_columns: vec![],
     create_access_rule: access_rules.create,
     read_access_rule: access_rules.read,
