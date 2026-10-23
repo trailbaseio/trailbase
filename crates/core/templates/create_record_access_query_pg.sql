@@ -2,7 +2,7 @@ WITH _REQ_FIELDS_(_) AS (SELECT value FROM json_array_elements_text(:__fields))
 SELECT
   CAST(({{ create_access_rule }}) AS INTEGER)
 FROM
-  (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_
+  (SELECT CAST(:__user_id AS uuid) AS id, CAST(:__tenant_id AS uuid) AS tenant) AS _USER_
   {%- if !column_metadata.is_empty() -%},
   (SELECT
     {%- for metadata in column_metadata -%}
