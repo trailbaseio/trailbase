@@ -18,6 +18,14 @@ use crate::records::subscribe::event::EventPayload;
 use crate::records::util::named_placeholder;
 use crate::records::{Permission, RecordError};
 
+macro_rules! debug_is_some {
+  ($e:expr) => {{
+    let opt = $e;
+    debug_assert!(opt.is_some());
+    opt
+  }};
+}
+
 #[derive(Debug)]
 pub(crate) struct RecordApiSchema {
   /// Schema metadata
@@ -196,20 +204,24 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
     self,
     stmt: &mut S,
   ) -> Result<(), trailbase_sqlite::Error> {
+    let mut is_insert = false;
     if let Some(params) = self.params {
-      if let Some(idx) = stmt.parameter_index(":__fields")? {
+      if let Some(idx) = debug_is_some!(stmt.parameter_index(":__fields")?) {
         stmt.bind_parameter(idx, ToSqlProxy::Owned(Value::Text(params.present_fields)))?;
       }
 
       let request_params = match params.request_params {
-        Params::Insert(p) => &p.params,
+        Params::Insert(p) => {
+          is_insert = true;
+          &p.params
+        }
         Params::Update(p) => &p.params,
       };
 
       // TODO: We could first sort the `request_params` by column index and then move i, j indexes
       // in lockstep to avoid repeat scans and move more work off the executor.
       for (column_index, column_name) in params.all_column_names.iter().enumerate() {
-        if let Some(idx) = stmt.parameter_index(column_name)? {
+        if let Some(idx) = debug_is_some!(stmt.parameter_index(column_name)?) {
           stmt.bind_parameter(
             idx,
             request_params
@@ -229,7 +241,7 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
       }
     }
 
-    if let Some(idx) = stmt.parameter_index(":__user_id")? {
+    if let Some(idx) = debug_is_some!(stmt.parameter_index(":__user_id")?) {
       if let Some(user) = self.user {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
       } else {
@@ -237,7 +249,7 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
       }
     }
 
-    if let Some(idx) = stmt.parameter_index(":__record_id")? {
+    if !is_insert && let Some(idx) = debug_is_some!(stmt.parameter_index(":__record_id")?) {
       if let Some(id) = self.record_id {
         stmt.bind_parameter(idx, ToSqlProxy::Owned(id))?;
       } else {
@@ -630,7 +642,7 @@ impl RecordApi {
       request_params,
     )?;
 
-    return Self::check_record_level_access_impl(conn, access_query, params);
+    return Self::check_record_level_access_impl(conn, &access_query, params);
   }
 
   /// Only checks record-level access. A separate table-level access check is required.
@@ -654,34 +666,30 @@ impl RecordApi {
       request_params,
     )?;
 
-    return Self::check_record_level_access_impl(conn, access_query, params);
+    return Self::check_record_level_access_impl(conn, &access_query, params);
   }
 
   #[inline]
   fn check_record_level_access_impl(
     conn: &mut impl SyncConnectionTrait,
-    access_query: impl AsRef<str>,
+    access_query: &str,
     params: impl trailbase_sqlite::Params,
   ) -> Result<(), RecordError> {
-    #[cfg(debug_assertions)]
-    let q = access_query.as_ref().to_string();
-
-    #[allow(unreachable_code)]
     return match conn.query_row(access_query, params).and_then(|row| {
       row
         .ok_or(trailbase_sqlite::Error::QueryReturnedNoRows)
         .and_then(|r| Ok(r.get::<bool>(0)?))
     }) {
-      Ok(allowed) => {
-        if allowed {
-          Ok(())
-        } else {
-          Err(RecordError::Forbidden)
-        }
-      }
-      Err(_err) => {
-        #[cfg(debug_assertions)]
-        panic!("RLA query '{q}' failed: {_err}");
+      Ok(allowed) if allowed => Ok(()),
+      Ok(_allowed) => Err(RecordError::Forbidden),
+      #[cfg_attr(test, allow(unreachable_code))]
+      Err(err) => {
+        #[cfg(test)]
+        panic!("RLA query '{access_query}' failed: {err}");
+
+        log::warn!(
+          "RecordApi failing closed. Access query '{access_query}' needs to yield TRUE/FALSE, instead produced error: {err}"
+        );
 
         Err(RecordError::Forbidden)
       }
@@ -712,8 +720,8 @@ impl RecordApi {
     return self
       .state
       .conn
-      .call_reader(|mut conn| {
-        Self::check_record_level_access_impl(&mut conn, subscription_read_access_query, params)
+      .call_reader(move |mut conn| {
+        Self::check_record_level_access_impl(&mut conn, &subscription_read_access_query, params)
       })
       .await;
   }
@@ -740,8 +748,8 @@ impl RecordApi {
 }
 
 struct SubscriptionAclParams {
-  params: Arc<EventPayload>,
   user: Option<[u8; 16]>,
+  params: Arc<EventPayload>,
 }
 
 impl SubscriptionAclParams {
@@ -765,8 +773,8 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       | EventPayload::Update { ref record, .. }
       | EventPayload::Delete { ref record, .. } => {
         for (name, v) in record.iter() {
-          // QUESTION: Can we push the placeholder construction off?
-          if let Some(idx) = stmt.parameter_index(&named_placeholder(name))? {
+          // Micro-optimization: can we push the placeholder construction off?
+          if let Some(idx) = debug_is_some!(stmt.parameter_index(&named_placeholder(name))?) {
             stmt.bind_parameter(idx, ToSqlProxy::Borrowed(v.into()))?;
           };
         }
@@ -776,7 +784,7 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       }
     }
 
-    if let Some(idx) = stmt.parameter_index(":__user_id")? {
+    if let Some(idx) = debug_is_some!(stmt.parameter_index(":__user_id")?) {
       if let Some(user) = self.user {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
       } else {
