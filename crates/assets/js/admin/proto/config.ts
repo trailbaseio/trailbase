@@ -154,17 +154,17 @@ export function oAuthProviderIdToJSON(object: OAuthProviderId): string {
  * NOTE: W/o email there's no way to contact users.
  */
 export enum UserIdentifier {
-  /** USER_IDENTIFIER_UNDEFINED - / Behaves like ONLY_EMAIL for legacy reasons. */
+  /** USER_IDENTIFIER_UNDEFINED - Behaves like ONLY_EMAIL for legacy reasons. */
   USER_IDENTIFIER_UNDEFINED = 0,
-  /** ONLY_EMAIL - / Only email. Doesn't work for anonymous login. */
+  /** ONLY_EMAIL - Only email. Doesn't work for anonymous login. */
   ONLY_EMAIL = 1,
-  /** ONLY_USERNAME - / Only username. No email allowed. */
+  /** ONLY_USERNAME - Only username. No email allowed. */
   ONLY_USERNAME = 2,
-  /** REQUIRE_EMAIL - / Requires email and allows an optional username. */
+  /** REQUIRE_EMAIL - Requires email and allows an optional username. */
   REQUIRE_EMAIL = 3,
-  /** REQUIRE_USERNAME - / Requires username and allows an optional email. */
+  /** REQUIRE_USERNAME - Requires username and allows an optional email. */
   REQUIRE_USERNAME = 4,
-  /** REQUIRE_EMAIL_AND_USERNAME - / Requires both email and username. */
+  /** REQUIRE_EMAIL_AND_USERNAME - Requires both email and username. */
   REQUIRE_EMAIL_AND_USERNAME = 5,
   UNRECOGNIZED = -1,
 }
@@ -286,22 +286,22 @@ export function systemJobIdToJSON(object: SystemJobId): string {
 }
 
 /**
- * / Sqlite specific (as opposed to standard SQL) constrained-violation
- * / resolution strategy upon insert.
+ * Sqlite specific (as opposed to standard SQL) constrained-violation
+ * resolution strategy upon insert.
  */
 export enum ConflictResolutionStrategy {
   CONFLICT_RESOLUTION_STRATEGY_UNDEFINED = 0,
-  /** ABORT - / SQL default: Keep transaction open and abort the current statement. */
+  /** ABORT - SQL default: Keep transaction open and abort the current statement. */
   ABORT = 1,
   /**
-   * IGNORE - / Skip the statement and continue. Mostly matters in the context of batches
-   * / and transaction. Rather than aborting, subsequent operations will
-   * / continue.
+   * IGNORE - Skip the statement and continue. Mostly matters in the context of batches
+   * and transaction. Rather than aborting, subsequent operations will
+   * continue.
    */
   IGNORE = 4,
   /**
-   * REPLACE - / Replaces the conflicting row in case of a collision (e.g. unique
-   * / constraint).
+   * REPLACE - Replaces the conflicting row in case of a collision (e.g. unique
+   * constraint).
    */
   REPLACE = 5,
   UNRECOGNIZED = -1,
@@ -354,7 +354,7 @@ export enum PermissionFlag {
   UPDATE = 4,
   /** DELETE - Database record delete. */
   DELETE = 8,
-  /** SCHEMA - / Lookup JSON schema for the given record api . */
+  /** SCHEMA - Lookup JSON schema for the given record api . */
   SCHEMA = 16,
   UNRECOGNIZED = -1,
 }
@@ -434,117 +434,123 @@ export interface OAuthProviderConfig {
   providerId?:
     | OAuthProviderId
     | undefined;
-  /** / Name to display in auth and admin UI. */
+  /** Name to display in auth and admin UI. */
   displayName?:
     | string
     | undefined;
-  /** / Urls */
-  authUrl?: string | undefined;
-  tokenUrl?: string | undefined;
+  /** Auth URL. */
+  authUrl?:
+    | string
+    | undefined;
+  /** Token URL. */
+  tokenUrl?:
+    | string
+    | undefined;
+  /** User information URL. */
   userApiUrl?:
     | string
     | undefined;
   /**
-   * / User-info scopes to request. [Default: ["openid", "email", "profile"]]
-   * /
-   * / NOTE: Claims not covered by the requested scopes won't be returned by the
-   * / provider's user-info endpoint, e.g. dropping the "email" scope requires a
-   * / username-based `UserIdentifier`.
+   * User-info scopes to request. [Default: ["openid", "email", "profile"]]
+   *
+   * NOTE: Claims not covered by the requested scopes won't be returned by the
+   * provider's user-info endpoint, e.g. dropping the "email" scope requires a
+   * username-based `UserIdentifier`.
    */
   scopes: string[];
 }
 
 export interface AuthConfig {
-  /** / Time-to-live in seconds for auth tokens. [Default: 1h] */
+  /** Time-to-live in seconds for auth tokens. [Default: 1h] */
   authTokenTtlSec?:
     | bigint
     | undefined;
   /**
-   * / Time-to-live in seconds for refresh tokens. [Default: 30 days]
-   * /
-   * / When ttl is zero or negative, no refresh token will be minted.
+   * Time-to-live in seconds for refresh tokens. [Default: 30 days]
+   *
+   * When ttl is zero or negative, no refresh token will be minted.
    */
   refreshTokenTtlSec?:
     | bigint
     | undefined;
   /**
-   * / Time-to-live in seconds for anonymous-auth refresh tokens. [Default: 90 days]
-   * /
-   * / When ttl is zero or negative, no refresh token will be minted.
+   * Time-to-live in seconds for anonymous-auth refresh tokens. [Default: 90 days]
+   *
+   * When ttl is zero or negative, no refresh token will be minted.
    */
   anonymousRefreshTokenTtlSec?:
     | bigint
     | undefined;
-  /** / Disables password-based sign-up. Does not affect already registered users. */
+  /** Disables password-based sign-up. Does not affect already registered users. */
   disablePasswordAuth?:
     | boolean
     | undefined;
   /**
-   * / Whether sign-in via OTP codes (e.g. sent via Email) should be allowed.
-   * / This may be less secure since ultimately you're delegating operational
-   * / security to a user's inbox.
+   * Whether sign-in via OTP codes (e.g. sent via Email) should be allowed.
+   * This may be less secure since ultimately you're delegating operational
+   * security to a user's inbox.
    */
   enableOtpSignin?:
     | boolean
     | undefined;
   /**
-   * / Allow the creation of ephemeral user-accounts, e.g. for a frictionless
-   * / trial.
+   * Allow the creation of ephemeral user-accounts, e.g. for a frictionless
+   * trial.
    */
   enableAnonymousSignin?:
     | boolean
     | undefined;
-  /** / Minimal password length. [Default: 8] */
+  /** Minimal password length. [Default: 8] */
   passwordMinimalLength?:
     | number
     | undefined;
-  /** / Password must contain lower and upper-case letters. */
+  /** Password must contain lower and upper-case letters. */
   passwordMustContainUpperAndLowerCase?:
     | boolean
     | undefined;
-  /** / Password must contain digits in addition to alphabetic characters.. */
+  /** Password must contain digits in addition to alphabetic characters.. */
   passwordMustContainDigits?:
     | boolean
     | undefined;
-  /** / Password must contain special, non-alphanumeric, characters. */
+  /** Password must contain special, non-alphanumeric, characters. */
   passwordMustContainSpecialCharacters?:
     | boolean
     | undefined;
-  /** / Map of configured OAuth providers. */
+  /** Map of configured OAuth providers. */
   oauthProviders: { [key: string]: OAuthProviderConfig };
   /**
-   * / List of custom URI schemes allowed as auth redirects.
-   * /
-   * / This is useful for mobile apps, desktop or SPAs where an app registers a
-   * / custom scheme for calls it wants to handle.
+   * List of custom URI schemes allowed as auth redirects.
+   *
+   * This is useful for mobile apps, desktop or SPAs where an app registers a
+   * custom scheme for calls it wants to handle.
    */
   customUriSchemes: string[];
-  /** / List of explicitly allowed redirect uris. */
+  /** List of explicitly allowed redirect uris. */
   redirectUriAllowlist: string[];
   /**
-   * / Policy covering user registration and change (username|email) flows around
-   * / what user identifier is expected and accepted. [Default: ONLY_EMAIL]
+   * Policy covering user registration and change (username|email) flows around
+   * what user identifier is expected and accepted. [Default: ONLY_EMAIL]
    */
   userIdentifier?:
     | UserIdentifier
     | undefined;
   /**
-   * / When using "Sign-in with Apple" in native Mac or iOS apps, the auth flow
-   * / differs significantly from the web-based OAuth flows. The client signs in
-   * / with Apple directly using the user's iCloud account. The client then
-   * / forwards an apple-signed JWT identity token that can be exchanged for
-   * / TrailBase tokens:
-   * /   https://developer.apple.com/documentation/signinwithapple/authenticating-users-with-sign-in-with-apple
-   * /
-   * / The tokens audience (`aud`) is validated against the "client id", which
-   * / unlike for OAuth is the app `Bundle ID` instead of the `Service ID` (i.e.
-   * / only configuring the Apple OAuth flow is insufficient for native sign-in):
-   * /   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
-   * /
-   * / NOTE: while not explicitly required, Apple may reject apps from their
-   * / stores if they provide a social login w/o also providing an Apple option
-   * / using their native `AuthenticationServices`:
-   * /   https://acceptmy.app/guides/sign-in-with-apple-rejection.
+   * When using "Sign-in with Apple" in native Mac or iOS apps, the auth flow
+   * differs significantly from the web-based OAuth flows. The client signs in
+   * with Apple directly using the user's iCloud account. The client then
+   * forwards an apple-signed JWT identity token that can be exchanged for
+   * TrailBase tokens:
+   *   https://developer.apple.com/documentation/signinwithapple/authenticating-users-with-sign-in-with-apple
+   *
+   * The tokens audience (`aud`) is validated against the "client id", which
+   * unlike for OAuth is the app `Bundle ID` instead of the `Service ID` (i.e.
+   * only configuring the Apple OAuth flow is insufficient for native sign-in):
+   *   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
+   *
+   * NOTE: while not explicitly required, Apple may reject apps from their
+   * stores if they provide a social login w/o also providing an Apple option
+   * using their native `AuthenticationServices`:
+   *   https://acceptmy.app/guides/sign-in-with-apple-rejection.
    */
   appleNativeClientId?: string | undefined;
 }
@@ -560,158 +566,162 @@ export interface S3StorageConfig {
   bucketName?:
     | string
     | undefined;
-  /** / S3 access key, a.k.a. username. */
+  /** S3 access key, a.k.a. username. */
   accessKey?:
     | string
     | undefined;
-  /** / S3 secret access key, a.k.a. password. */
+  /** S3 secret access key, a.k.a. password. */
   secretAccessKey?: string | undefined;
 }
 
 export interface ServerConfig {
   /**
-   * / Application name presented to users, e.g. when sending emails.
-   * / [Default: "TrailBase"]
+   * Application name presented to users, e.g. when sending emails.
+   * [Default: "TrailBase"]
    */
   applicationName?:
     | string
     | undefined;
   /**
-   * / Your final, deployed URL. This url is used to build canonical urls
-   * / for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
+   * Your final, deployed URL. This url is used to build canonical urls
+   * for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
    */
   siteUrl?:
     | string
     | undefined;
   /**
-   * /  Max age of logs that will be retained during period logs cleanup. Note
-   * /  that this implies that some older logs may persist until the cleanup job
-   * /  reruns. [Default: 7 days]
+   * Max age of logs that will be retained during period logs cleanup. Note
+   *  that this implies that some older logs may persist until the cleanup job
+   *  reruns. [Default: 7 days]
    */
   logsRetentionSec?:
     | bigint
     | undefined;
-  /** / If present will use S3 setup over local file-system based storage. */
+  /** If present will use S3 setup over local file-system based storage. */
   s3StorageConfig?:
     | S3StorageConfig
     | undefined;
-  /** / If enabled, batches of transactions can be submitted for atomic execution */
+  /** If enabled, batches of transactions can be submitted for atomic execution */
   enableRecordTransactions?:
     | boolean
     | undefined;
-  /** / Request size limit. [Default: 10MB] */
+  /** Request size limit. [Default: 10MB] */
   requestSizeLimitBytes?:
     | bigint
     | undefined;
   /**
-   * / Limits the request per IP per second to auth POST APIs for abuse
-   * / protection. If TrailBase is behind a proxy, make sure to set
-   * / "X-Forwarded-For". [Default: disabled]
-   * /
-   * / Note that login endpoints have additional fixed rate limits
-   * / on a per credentials level.
+   * Limits the request per IP per second to auth POST APIs for abuse
+   * protection. If TrailBase is behind a proxy, make sure to set
+   * "X-Forwarded-For". [Default: disabled]
+   *
+   * Note that login endpoints have additional fixed rate limits
+   * on a per credentials level.
    */
   authIpRateLimit?:
     | number
     | undefined;
-  /** / Limits how many backups are kept at any time. [Default: 5] */
+  /** Limits how many backups are kept at any time. [Default: 5] */
   backupWindowSize?: bigint | undefined;
 }
 
 export interface SystemJob {
-  /** / Identifies the system job by its id. */
+  /** Identifies the system job by its id. */
   id?:
     | SystemJobId
     | undefined;
   /**
-   * / Cron spec: shorthand or 7-components: (sec, min, hour, day of month, /
-   * / month, day of week, year).
+   * Cron spec: shorthand or 7-components: (sec, min, hour, day of month, /
+   * month, day of week, year).
    */
   schedule?:
     | string
     | undefined;
-  /** / Disable the system job. */
+  /** Disable the system job. */
   disabled?:
     | boolean
     | undefined;
-  /** / Timeout in milliseconds. */
+  /** Timeout in milliseconds. */
   timeout?: bigint | undefined;
 }
 
 export interface JobsConfig {
   /**
-   * / System jobs overrides.
-   * /
-   * / NOTE: This is technically a map from id to config, however enums are not
-   * / allowed as map keys.
+   * System jobs overrides.
+   *
+   * NOTE: This is technically a map from id to config, however enums are not
+   * allowed as map keys.
    */
   systemJobs: SystemJob[];
 }
 
 export interface RecordApiConfig {
-  /** / API name, i.e. unique name used to access data via HTTP. */
+  /** API name, i.e. unique name used to access data via HTTP. */
   name?:
     | string
     | undefined;
-  /** / Referenced table to be exposed. */
+  /** Referenced table to be exposed. */
   tableName?:
     | string
     | undefined;
   /**
-   * / Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
-   * / Can only reference configured databases.
+   * Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
+   * Can only reference configured databases.
    */
   attachedDatabases: string[];
-  /** / Strategy to be used on insert if a table constraint is violated. */
+  /** Strategy to be used on insert if a table constraint is violated. */
   conflictResolution?:
     | ConflictResolutionStrategy
     | undefined;
   /**
-   * / Fill columns referencing _user(id) automatically from current user's
-   * / authentication context if present. Can be useful for static clients, such
-   * / as HTML forms, otherwise it's recommended to have the client provide user
-   * / ids explicitly and to keep this feature off.
+   * Fill columns referencing _user(id) automatically from current user's
+   * authentication context if present. Can be useful for static clients, such
+   * as HTML forms, otherwise it's recommended to have the client provide user
+   * ids explicitly and to keep this feature off.
    */
   autofillMissingUserIdColumns?:
     | boolean
     | undefined;
   /**
-   * / Allow subscribing to data changes in realtime using SSE streaming.
-   * /
-   * / NOTE: If you're using a reverse proxy, this will likely require
-   * / configuration changes to allow for server-side streaming HTTP, e.g.
-   * / tell the proxy to keep listening and not cache.
+   * Allow subscribing to data changes in realtime using SSE streaming.
+   *
+   * NOTE: If you're using a reverse proxy, this will likely require
+   * configuration changes to allow for server-side streaming HTTP, e.g.
+   * tell the proxy to keep listening and not cache.
    */
   enableSubscriptions?:
     | boolean
     | undefined;
-  /** / Access control lists. */
+  /** The tenant template to use, if this is a multi-tenant IP. */
+  tenantTemplate?:
+    | string
+    | undefined;
+  /** Access control lists. */
   aclWorld: PermissionFlag[];
   aclAuthenticated: PermissionFlag[];
   /**
-   * / Columns excluded from this API.
-   * /
-   * / Excluded columns are completely inaccessible via this API. This is
-   * / different from columns with names prefixed by "_", which are considered
-   * / hidden. This means they can still be inserted, updated and access checked
-   * / unlike excluded columns.
+   * Columns excluded from this API.
+   *
+   * Excluded columns are completely inaccessible via this API. This is
+   * different from columns with names prefixed by "_", which are considered
+   * hidden. This means they can still be inserted, updated and access checked
+   * unlike excluded columns.
    */
   excludedColumns: string[];
   /**
-   * / Access rules to be evaluated on request. Expected to be valid SQL
-   * / expression, where `SELECT <expr>` returns a unary boolean.
-   * /
-   * / The evaluator injects _USER_, _ROW_ and _REQ_ tables that can be
-   * / used for validating access, e.g.:
-   * /
-   * /   _USER_.id = _REQ_.owner
-   * /
-   * / ensures that the value provided for the `owner` column during an insert
-   * / matches the current authenticated user's id. One can also construct
-   * / arbitrary validations including sub-queries, e.g.:
-   * /
-   * /   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE
-   * /   allowed.user = _USER_.id)
+   * Access rules to be evaluated on request. Expected to be valid SQL
+   * expression, where `SELECT <expr>` returns a unary boolean.
+   *
+   * The evaluator injects _USER_, _ROW_ and _REQ_ tables that can be
+   * used for validating access, e.g.:
+   *
+   *   _USER_.id = _REQ_.owner
+   *
+   * ensures that the value provided for the `owner` column during an insert
+   * matches the current authenticated user's id. One can also construct
+   * arbitrary validations including sub-queries, e.g.:
+   *
+   *   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE
+   *   allowed.user = _USER_.id)
    */
   createAccessRule?: string | undefined;
   readAccessRule?: string | undefined;
@@ -721,16 +731,25 @@ export interface RecordApiConfig {
     | string
     | undefined;
   /**
-   * / A list of foreign key columns that *can* be expanded on read/list, i.e.
-   * / the foreign record will be inlined into the response. By default nothing
-   * / is expanded.
-   * /
-   * / Only columns and foreign tables with names not starting with "_", i.e. are
-   * / allowed to be expanded.
+   * A list of foreign key columns that *can* be expanded on read/list, i.e.
+   * the foreign record will be inlined into the response. By default nothing
+   * is expanded.
+   *
+   * Only columns and foreign tables with names not starting with "_", i.e. are
+   * allowed to be expanded.
    */
   expand: string[];
-  /** / Hard limit for listing records. [Default: 1024] */
+  /** Hard limit for listing records. [Default: 1024] */
   listingHardLimit?: bigint | undefined;
+}
+
+export interface TenantTemplateConfig {
+  /**
+   * Name of the golden template used for a set of tenants.
+   *
+   * Schema migrations are expected under <depot>/templates/<name>.
+   */
+  name?: string | undefined;
 }
 
 export interface JsonSchemaConfig {
@@ -739,7 +758,7 @@ export interface JsonSchemaConfig {
 }
 
 export interface DatabaseConfig {
-  /** / Name will be used as <traildepot>/(data/<name>.db|migrations/<name>/). */
+  /** Name will be used as <traildepot>/(data/<name>.db|migrations/<name>/). */
   name?: string | undefined;
 }
 
@@ -755,6 +774,7 @@ export interface Config {
   jobs: JobsConfig | undefined;
   databases: DatabaseConfig[];
   recordApis: RecordApiConfig[];
+  tenantTemplates: TenantTemplateConfig[];
   schemas: JsonSchemaConfig[];
 }
 
@@ -2439,6 +2459,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     if (message.enableSubscriptions !== undefined && message.enableSubscriptions !== false) {
       writer.uint32(72).bool(message.enableSubscriptions);
     }
+    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
+      writer.uint32(130).string(message.tenantTemplate);
+    }
     for (const v of message.aclWorld) {
       writer.uint32(56).int32(v!);
     }
@@ -2534,6 +2557,14 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
             }
 
             message.enableSubscriptions = reader.bool();
+            continue;
+          }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.tenantTemplate = reader.string();
             continue;
           }
           case 7: {
@@ -2676,6 +2707,11 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
         : isSet(object.enable_subscriptions)
         ? globalThis.Boolean(object.enable_subscriptions)
         : undefined,
+      tenantTemplate: isSet(object.tenantTemplate)
+        ? globalThis.String(object.tenantTemplate)
+        : isSet(object.tenant_template)
+        ? globalThis.String(object.tenant_template)
+        : undefined,
       aclWorld: globalThis.Array.isArray(object?.aclWorld)
         ? object.aclWorld.map((e: any) => permissionFlagFromJSON(e))
         : globalThis.Array.isArray(object?.acl_world)
@@ -2747,6 +2783,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     if (message.enableSubscriptions !== undefined && message.enableSubscriptions !== false) {
       obj.enableSubscriptions = message.enableSubscriptions;
     }
+    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
+      obj.tenantTemplate = message.tenantTemplate;
+    }
     if (message.aclWorld?.length) {
       obj.aclWorld = message.aclWorld.map((e) => permissionFlagToJSON(e));
     }
@@ -2791,6 +2830,7 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.conflictResolution = object.conflictResolution ?? 0;
     message.autofillMissingUserIdColumns = object.autofillMissingUserIdColumns ?? false;
     message.enableSubscriptions = object.enableSubscriptions ?? false;
+    message.tenantTemplate = object.tenantTemplate ?? "";
     message.aclWorld = object.aclWorld?.map((e) => e) || [];
     message.aclAuthenticated = object.aclAuthenticated?.map((e) => e) || [];
     message.excludedColumns = object.excludedColumns?.map((e) => e) || [];
@@ -2803,6 +2843,73 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.listingHardLimit = (object.listingHardLimit !== undefined && object.listingHardLimit !== null)
       ? BigInt(object.listingHardLimit)
       : 0n;
+    return message;
+  },
+};
+
+function createBaseTenantTemplateConfig(): TenantTemplateConfig {
+  return {};
+}
+
+export const TenantTemplateConfig: MessageFns<TenantTemplateConfig> = {
+  encode(message: TenantTemplateConfig, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== undefined && message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): TenantTemplateConfig {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseTenantTemplateConfig();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): TenantTemplateConfig {
+    return { name: isSet(object.name) ? globalThis.String(object.name) : undefined };
+  },
+
+  toJSON(message: TenantTemplateConfig): unknown {
+    const obj: any = {};
+    if (message.name !== undefined && message.name !== "") {
+      obj.name = message.name;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<TenantTemplateConfig>, I>>(base?: I): TenantTemplateConfig {
+    return TenantTemplateConfig.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<TenantTemplateConfig>, I>>(object: I): TenantTemplateConfig {
+    const message = createBaseTenantTemplateConfig();
+    message.name = object.name ?? "";
     return message;
   },
 };
@@ -2967,6 +3074,7 @@ function createBaseConfig(): Config {
     jobs: undefined,
     databases: [],
     recordApis: [],
+    tenantTemplates: [],
     schemas: [],
   };
 }
@@ -2990,6 +3098,9 @@ export const Config: MessageFns<Config> = {
     }
     for (const v of message.recordApis) {
       RecordApiConfig.encode(v!, writer.uint32(90).fork()).join();
+    }
+    for (const v of message.tenantTemplates) {
+      TenantTemplateConfig.encode(v!, writer.uint32(98).fork()).join();
     }
     for (const v of message.schemas) {
       JsonSchemaConfig.encode(v!, writer.uint32(170).fork()).join();
@@ -3058,6 +3169,14 @@ export const Config: MessageFns<Config> = {
             message.recordApis.push(RecordApiConfig.decode(reader, reader.uint32()));
             continue;
           }
+          case 12: {
+            if (tag !== 98) {
+              break;
+            }
+
+            message.tenantTemplates.push(TenantTemplateConfig.decode(reader, reader.uint32()));
+            continue;
+          }
           case 21: {
             if (tag !== 170) {
               break;
@@ -3092,6 +3211,11 @@ export const Config: MessageFns<Config> = {
         : globalThis.Array.isArray(object?.record_apis)
         ? object.record_apis.map((e: any) => RecordApiConfig.fromJSON(e))
         : [],
+      tenantTemplates: globalThis.Array.isArray(object?.tenantTemplates)
+        ? object.tenantTemplates.map((e: any) => TenantTemplateConfig.fromJSON(e))
+        : globalThis.Array.isArray(object?.tenant_templates)
+        ? object.tenant_templates.map((e: any) => TenantTemplateConfig.fromJSON(e))
+        : [],
       schemas: globalThis.Array.isArray(object?.schemas)
         ? object.schemas.map((e: any) => JsonSchemaConfig.fromJSON(e))
         : [],
@@ -3118,6 +3242,9 @@ export const Config: MessageFns<Config> = {
     if (message.recordApis?.length) {
       obj.recordApis = message.recordApis.map((e) => RecordApiConfig.toJSON(e));
     }
+    if (message.tenantTemplates?.length) {
+      obj.tenantTemplates = message.tenantTemplates.map((e) => TenantTemplateConfig.toJSON(e));
+    }
     if (message.schemas?.length) {
       obj.schemas = message.schemas.map((e) => JsonSchemaConfig.toJSON(e));
     }
@@ -3143,6 +3270,7 @@ export const Config: MessageFns<Config> = {
       : undefined;
     message.databases = object.databases?.map((e) => DatabaseConfig.fromPartial(e)) || [];
     message.recordApis = object.recordApis?.map((e) => RecordApiConfig.fromPartial(e)) || [];
+    message.tenantTemplates = object.tenantTemplates?.map((e) => TenantTemplateConfig.fromPartial(e)) || [];
     message.schemas = object.schemas?.map((e) => JsonSchemaConfig.fromPartial(e)) || [];
     return message;
   },

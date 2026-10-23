@@ -154,6 +154,8 @@ impl AppState {
     // Load the `<depot>/metadata.textproto`.
     load_check_and_update_metadata_textproto(&args.data_dir).await?;
 
+    let main_conn = connection_manager.main_entry().connection.clone();
+
     // TODO: Initialize tenant DBs:
     //  * Read tenants from DB.
     //  * Read templates from config and validate.
@@ -165,8 +167,38 @@ impl AppState {
     //  * Create a new DB eagerly when a new tenant is added in the admin UI.
     //    * We don't ever want lazy creation of tenant DBs on request path unless there's a good reason for such extra complexity.
     //  * P4: Apply new migrations on SIGHUP (we don't do this right for any DBs.
-    let main_conn = connection_manager.main_entry().connection.clone();
-    let tenants = list_tenants(&main_conn).await?;
+    {
+      let templates: Vec<_> = config
+        .tenant_templates
+        .iter()
+        .filter_map(|t| {
+          return if let Some(ref name) = t.name
+            && !name.is_empty()
+          {
+            Some(name.to_owned())
+          } else {
+            None
+          };
+        })
+        .collect();
+
+      for template in &templates {
+        // Create <depot>/data/<template_name>/ dir.
+        std::fs::create_dir_all(args.data_dir.tenant_db_dir(template))?;
+        // Create <depot>/templates/<template_name>/ dir.
+        std::fs::create_dir_all(args.data_dir.template_migrations_dir(template))?;
+      }
+
+      let tenants = list_tenants(&main_conn).await?;
+      for tenant in tenants {
+        if templates.iter().all(|t| *t != tenant.template) {
+          return Err(InitError::CustomInit(format!(
+            "template {} not found",
+            tenant.template
+          )));
+        }
+      }
+    }
 
     let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
