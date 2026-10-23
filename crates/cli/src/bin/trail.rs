@@ -620,7 +620,7 @@ async fn async_main(
 
           Tokens {
             auth_token,
-            refresh_token: refresh_token,
+            refresh_token,
             csrf_token: Some(csrf_token),
           }
         }
