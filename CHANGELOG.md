@@ -1,3 +1,9 @@
+## v0.35.3
+
+- Make refresh tokens optional allowing to run off sessions entirely in favor of purely stateless tokens.
+- When RecordApi RLA queries fail, log the error to `stderr` to avoid silently failing malformed queries.
+- Update dependencies. Addresses Tokio security advisories.
+
 ## v0.35.2
 
 - Fix graceful DB shutdown for busy backlogs and extend wait time to allow logs to be written safely. This came to light as a result of increased throughput.
