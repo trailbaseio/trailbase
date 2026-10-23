@@ -10,6 +10,7 @@ use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::tokens::extract_tokens_from_request_parts;
+use crate::util::b64_to_uuid;
 
 #[derive(Debug, Default, Clone)]
 pub struct DbUser {
@@ -126,8 +127,11 @@ impl DbUserAndTenant {
 /// for any user including users that haven't been validated.
 #[derive(Clone, Debug)]
 pub struct User {
-  /// UUID representation of the current user..
+  /// UUID representation of the current user.
   pub id: Uuid,
+  /// UUID representation of the currently active tenant association.
+  pub tenant: Option<Uuid>,
+
   /// E-mail of the current user.
   pub email: Option<CompactString>,
   /// Username of the current user.
@@ -147,11 +151,17 @@ impl User {
   /// Construct new verified [User] from [AuthTokenClaims]. This is used when picking
   /// credentials/tokens from headers/cookies.
   pub(crate) fn from_token_claims(claims: AuthTokenClaims) -> Result<Self, AuthError> {
-    let id = crate::util::b64_to_uuid(&claims.sub)
-      .map_err(|_err| AuthError::BadRequest("invalid user id"))?;
+    let id = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
+    let tenant = claims
+      .tenant
+      .as_deref()
+      .map(b64_to_uuid)
+      .transpose()
+      .map_err(|_err| AuthError::BadRequest("invalid tenant id"))?;
 
     return Ok(Self {
       id,
+      tenant,
       email: claims.email,
       username: claims.username,
       csrf_token: claims.csrf_token,
@@ -176,6 +186,7 @@ impl User {
 
     return Self {
       id: user_id,
+      tenant: None,
       email: email.map(|s| s.to_compact_string()),
       username: username.map(|s| s.to_compact_string()),
       csrf_token: crate::rand::random_alphanumeric(24).to_compact_string(),

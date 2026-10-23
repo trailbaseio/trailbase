@@ -1,5 +1,6 @@
 pub mod cli;
 pub mod jwt;
+pub mod tenant;
 pub mod user;
 
 pub(crate) mod api;

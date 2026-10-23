@@ -24,7 +24,7 @@ use crate::constants::{
   DEFAULT_AUTHORIZATION_CODE_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::rand::random_alphanumeric;
-use crate::util::b64_to_id;
+use crate::util::b64_to_uuid;
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct CallbackQuery {
@@ -174,9 +174,10 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
   let tenant = tenant
     .as_deref()
-    .map(b64_to_id)
+    .map(b64_to_uuid)
     .transpose()
-    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?;
+    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?
+    .map(|id| id.into_bytes());
 
   let FreshTokens {
     auth_token_claims: (auth_token_claims, auth_token_ttl),
@@ -261,9 +262,10 @@ async fn callback_from_oauth_provider_using_auth_code_flow(
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
   let tenant = tenant
     .as_deref()
-    .map(b64_to_id)
+    .map(b64_to_uuid)
     .transpose()
-    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?;
+    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?
+    .map(|id| id.into_bytes());
 
   // For the auth_code flow we generate a random code.
   let authorization_code = random_alphanumeric(VERIFICATION_CODE_LENGTH);
