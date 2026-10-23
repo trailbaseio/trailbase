@@ -9,6 +9,7 @@ use trailbase_reactive::{AsyncReactive, DeriveInput, Reactive};
 
 use crate::auth::jwt::JwtHelper;
 use crate::auth::options::AuthOptions;
+use crate::auth::tenant::list_tenants;
 use crate::config::{
   ConfigError, Textproto, load_or_init_config_textproto, proto, validate_config,
   write_config_and_vault_textproto,
@@ -153,6 +154,20 @@ impl AppState {
     // Load the `<depot>/metadata.textproto`.
     load_check_and_update_metadata_textproto(&args.data_dir).await?;
 
+    // TODO: Initialize tenant DBs:
+    //  * Read tenants from DB.
+    //  * Read templates from config and validate.
+    //  * Apply per-template migrations to all tenants
+    //    * Dry run.
+    //    * If all succeed, commit.
+    //
+    // Eventually, we want a more flexible lifecycle, i.e.:
+    //  * Create a new DB eagerly when a new tenant is added in the admin UI.
+    //    * We don't ever want lazy creation of tenant DBs on request path unless there's a good reason for such extra complexity.
+    //  * P4: Apply new migrations on SIGHUP (we don't do this right for any DBs.
+    let main_conn = connection_manager.main_entry().connection.clone();
+    let tenants = list_tenants(&main_conn).await?;
+
     let jwt = JwtHelper::init_from_path(&args.data_dir).await?;
 
     // Init geoip if present.
@@ -197,8 +212,6 @@ impl AppState {
         config.derive(|c| c.record_apis.clone()),
       )
       .await;
-
-      let main_conn = connection_manager.main_entry().connection.clone();
 
       AppState {
         state: Arc::new(InternalState {
