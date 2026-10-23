@@ -173,6 +173,7 @@ impl<'a> RequestParams<'a> {
 
 struct RecordAclParams<'a> {
   user: Option<[u8; 16]>,
+  tenant: Option<[u8; 16]>,
   record_id: Option<Value>,
   params: Option<RequestParams<'a>>,
 }
@@ -187,6 +188,7 @@ impl<'a> RecordAclParams<'a> {
   ) -> Result<Self, RecordError> {
     return Ok(Self {
       user: user.map(|u| u.id.into_bytes()),
+      tenant: user.and_then(|u| u.tenant.map(|t| t.into_bytes())),
       record_id,
       params: match p {
         Permission::Create | Permission::Update => Some(RequestParams::new(
@@ -245,6 +247,14 @@ impl<'a> trailbase_sqlite::Params for RecordAclParams<'a> {
     if let Some(idx) = debug_is_some!(stmt.parameter_index(":__user_id")?) {
       if let Some(user) = self.user {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&user)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
+    }
+
+    if let Some(idx) = debug_is_some!(stmt.parameter_index(":__tenant_id")?) {
+      if let Some(tenant) = self.tenant {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&tenant)))?;
       } else {
         stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
       }
@@ -781,6 +791,7 @@ impl std::ops::Deref for RecordApiByName {
 
 struct SubscriptionAclParams {
   user: Option<[u8; 16]>,
+  tenant: Option<[u8; 16]>,
   params: Arc<EventPayload>,
 }
 
@@ -789,6 +800,7 @@ impl SubscriptionAclParams {
     return Self {
       params: event.clone(),
       user: user.map(|u| u.id.into_bytes()),
+      tenant: user.and_then(|u| u.tenant.map(|t| t.into_bytes())),
     };
   }
 }
@@ -824,6 +836,14 @@ impl trailbase_sqlite::Params for SubscriptionAclParams {
       }
     }
 
+    if let Some(idx) = debug_is_some!(stmt.parameter_index(":__tenant_id")?) {
+      if let Some(tenant) = self.tenant {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Blob(&tenant)))?;
+      } else {
+        stmt.bind_parameter(idx, ToSqlProxy::Borrowed(ValueRef::Null))?;
+      }
+    }
+
     return Ok(());
   }
 }
@@ -854,7 +874,7 @@ fn build_read_delete_schema_query(
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
-        (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_, \
+        (SELECT CAST(:__user_id AS uuid) AS id, CAST(:__tenant_id AS uuid) AS tenant) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
     )
@@ -864,7 +884,7 @@ fn build_read_delete_schema_query(
       SELECT \
         CAST(({access_rule}) AS INTEGER) \
       FROM \
-        (SELECT :__user_id AS id) AS _USER_, \
+        (SELECT :__user_id AS id, :__tenant_id AS tenant) AS _USER_, \
         (SELECT * FROM {qualified_table_name} WHERE \"{pk_column_name}\" = :__record_id) AS _ROW_ \
     ",
     )

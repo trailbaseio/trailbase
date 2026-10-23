@@ -25,7 +25,7 @@ use crate::constants::OTP_CODE_TABLE;
 use crate::email::Email;
 use crate::extract::Either;
 use crate::rand::random_numeric_and_uppercase;
-use crate::util::{b64_to_id, urlencode};
+use crate::util::{b64_to_uuid, urlencode};
 
 #[derive(Debug, Default, Deserialize, IntoParams, ToSchema, TS)]
 pub struct RequestOtpParams {
@@ -204,9 +204,10 @@ pub async fn request_otp_handler(
         db_user.id,
         tenant
           .as_deref()
-          .map(b64_to_id)
+          .map(b64_to_uuid)
           .transpose()
-          .map_err(|_err| AuthError::BadRequest("invalid tenant"))?,
+          .map_err(|_err| AuthError::BadRequest("invalid tenant"))?
+          .map(|id| id.into_bytes()),
         normalized_email.clone(),
         otp_code.clone(),
         (Utc::now() + OTP_TTL).timestamp(),
