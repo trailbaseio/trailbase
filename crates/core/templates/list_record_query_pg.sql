@@ -3,7 +3,7 @@ WITH
   total_count AS (
     SELECT COUNT(*) AS _value_
     FROM
-      (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
+      (SELECT CAST(:__user_id AS uuid) AS id, CAST(:__tenant_id AS uuid) AS tenant) AS _USER_,
       {{ table_name }} as _ROW_
     WHERE
       ({{ read_access_clause }}) AND ({{ filter_clause }})
@@ -20,7 +20,7 @@ SELECT
 {%- if count -%}, total_count._value_ AS _total_count_{%- endif %}
 {%- if is_table -%}, _ROW_.ctid AS _rowid_{%- endif %}
 FROM
-  (SELECT CAST(:__user_id AS uuid) AS id) AS _USER_,
+  (SELECT CAST(:__user_id AS uuid) AS id, CAST(:__tenant_id AS uuid) AS tenant) AS _USER_,
 {%- if count %}
   total_count,
 {%- endif %}
