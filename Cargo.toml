@@ -77,10 +77,10 @@ jsonwebtoken = { version = "11.1.0", default-features = false, features = ["use_
 litegis = { version = "0.0.7", default-features = false }
 log = { version = "0.4.34", default-features = false }
 mimalloc = { version = "^0.1.52", default-features = false }
-minijinja = { version = "3.0.1", default-features = false }
+minijinja = { version = "3.0.3", default-features = false }
 oliphaunt-pgwire-server = { version = "0.2.1", features = ["extension-citext", "extension-pgcrypto"] }
 oliphaunt-wasix = { version = "0.3.2", features = ["extension-citext", "extension-pgcrypto"] }
-parking_lot = { version = "0.12.5", default-features = false, features = ["send_guard", "arc_lock"] }
+parking_lot = { version = "0.13.0", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.3"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
 rmcp-openapi = { git = "https://github.com/ignatz/rmcp-openapi-minimal.git", branch = "main" }
@@ -91,7 +91,7 @@ serde_json = { version = "^1.0.154", default-features = false, features = ["raw_
 serde_qs = { version = "1.1.3", default-features = false, features = [] }
 sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-alpha.4-fork", default-features = false }
 sqlite3-parser = "0.17.0"
-tokio = { version = "^1.54.0", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio = { version = "^1.54.1", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
