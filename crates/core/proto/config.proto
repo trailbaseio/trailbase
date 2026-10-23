@@ -58,22 +58,24 @@ message OAuthProviderConfig {
 
   optional OAuthProviderId provider_id = 3;
 
-  /// Settings for generic OpenID Connect provider. Name is implicitly provided
-  /// via the `AuthConfig.oauth_providers` map key.
+  // Below: settings for generic OpenID Connect (OIDC) provider. Name is implicitly
+  // provided via the `AuthConfig.oauth_providers` map key.
 
-  /// Name to display in auth and admin UI.
+  // Name to display in auth and admin UI.
   optional string display_name = 11;
 
-  /// Urls
+  // Auth URL.
   optional string auth_url = 12;
+  // Token URL.
   optional string token_url = 13;
+  // User information URL.
   optional string user_api_url = 14;
 
-  /// User-info scopes to request. [Default: ["openid", "email", "profile"]]
-  ///
-  /// NOTE: Claims not covered by the requested scopes won't be returned by the
-  /// provider's user-info endpoint, e.g. dropping the "email" scope requires a
-  /// username-based `UserIdentifier`.
+  // User-info scopes to request. [Default: ["openid", "email", "profile"]]
+  //
+  // NOTE: Claims not covered by the requested scopes won't be returned by the
+  // provider's user-info endpoint, e.g. dropping the "email" scope requires a
+  // username-based `UserIdentifier`.
   repeated string scopes = 15;
 }
 
@@ -82,88 +84,88 @@ message OAuthProviderConfig {
 //
 // NOTE: W/o email there's no way to contact users.
 enum UserIdentifier {
-  /// Behaves like ONLY_EMAIL for legacy reasons.
+  // Behaves like ONLY_EMAIL for legacy reasons.
   USER_IDENTIFIER_UNDEFINED = 0;
-  /// Only email. Doesn't work for anonymous login.
+  // Only email. Doesn't work for anonymous login.
   ONLY_EMAIL = 1;
-  /// Only username. No email allowed.
+  // Only username. No email allowed.
   ONLY_USERNAME = 2;
-  /// Requires email and allows an optional username.
+  // Requires email and allows an optional username.
   REQUIRE_EMAIL = 3;
-  /// Requires username and allows an optional email.
+  // Requires username and allows an optional email.
   REQUIRE_USERNAME = 4;
-  /// Requires both email and username.
+  // Requires both email and username.
   REQUIRE_EMAIL_AND_USERNAME = 5;
 }
 
 message AuthConfig {
-  /// Time-to-live in seconds for auth tokens. [Default: 1h]
+  // Time-to-live in seconds for auth tokens. [Default: 1h]
   optional int64 auth_token_ttl_sec = 1;
-  /// Time-to-live in seconds for refresh tokens. [Default: 30 days]
-  ///
-  /// When ttl is zero or negative, no refresh token will be minted.
+  // Time-to-live in seconds for refresh tokens. [Default: 30 days]
+  //
+  // When ttl is zero or negative, no refresh token will be minted.
   optional int64 refresh_token_ttl_sec = 2;
-  /// Time-to-live in seconds for anonymous-auth refresh tokens. [Default: 90 days]
-  ///
-  /// When ttl is zero or negative, no refresh token will be minted.
+  // Time-to-live in seconds for anonymous-auth refresh tokens. [Default: 90 days]
+  //
+  // When ttl is zero or negative, no refresh token will be minted.
   optional int64 anonymous_refresh_token_ttl_sec = 9;
 
-  /// Disables password-based sign-up. Does not affect already registered users.
+  // Disables password-based sign-up. Does not affect already registered users.
   optional bool disable_password_auth = 3;
 
-  /// Whether sign-in via OTP codes (e.g. sent via Email) should be allowed.
-  /// This may be less secure since ultimately you're delegating operational
-  /// security to a user's inbox.
+  // Whether sign-in via OTP codes (e.g. sent via Email) should be allowed.
+  // This may be less secure since ultimately you're delegating operational
+  // security to a user's inbox.
   optional bool enable_otp_signin = 8;
 
-  /// Allow the creation of ephemeral user-accounts, e.g. for a frictionless
-  /// trial.
+  // Allow the creation of ephemeral user-accounts, e.g. for a frictionless
+  // trial.
   optional bool enable_anonymous_signin = 12;
 
-  /// Minimal password length. [Default: 8]
+  // Minimal password length. [Default: 8]
   optional uint32 password_minimal_length = 4;
 
-  /// Password must contain lower and upper-case letters.
+  // Password must contain lower and upper-case letters.
   optional bool password_must_contain_upper_and_lower_case = 5;
 
-  /// Password must contain digits in addition to alphabetic characters..
+  // Password must contain digits in addition to alphabetic characters..
   optional bool password_must_contain_digits = 6;
 
-  /// Password must contain special, non-alphanumeric, characters.
+  // Password must contain special, non-alphanumeric, characters.
   optional bool password_must_contain_special_characters = 7;
 
-  /// Map of configured OAuth providers.
+  // Map of configured OAuth providers.
   map<string, OAuthProviderConfig> oauth_providers = 11;
 
-  /// List of custom URI schemes allowed as auth redirects.
-  ///
-  /// This is useful for mobile apps, desktop or SPAs where an app registers a
-  /// custom scheme for calls it wants to handle.
+  // List of custom URI schemes allowed as auth redirects.
+  //
+  // This is useful for mobile apps, desktop or SPAs where an app registers a
+  // custom scheme for calls it wants to handle.
   repeated string custom_uri_schemes = 21;
 
-  /// List of explicitly allowed redirect uris.
+  // List of explicitly allowed redirect uris.
   repeated string redirect_uri_allowlist = 22;
 
-  /// Policy covering user registration and change (username|email) flows around
-  /// what user identifier is expected and accepted. [Default: ONLY_EMAIL]
+  // Policy covering user registration and change (username|email) flows around
+  // what user identifier is expected and accepted. [Default: ONLY_EMAIL]
   optional UserIdentifier user_identifier = 31;
 
-  /// When using "Sign-in with Apple" in native Mac or iOS apps, the auth flow
-  /// differs significantly from the web-based OAuth flows. The client signs in
-  /// with Apple directly using the user's iCloud account. The client then
-  /// forwards an apple-signed JWT identity token that can be exchanged for
-  /// TrailBase tokens:
-  ///   https://developer.apple.com/documentation/signinwithapple/authenticating-users-with-sign-in-with-apple
-  ///
-  /// The tokens audience (`aud`) is validated against the "client id", which
-  /// unlike for OAuth is the app `Bundle ID` instead of the `Service ID` (i.e.
-  /// only configuring the Apple OAuth flow is insufficient for native sign-in):
-  ///   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
-  ///
-  /// NOTE: while not explicitly required, Apple may reject apps from their
-  /// stores if they provide a social login w/o also providing an Apple option
-  /// using their native `AuthenticationServices`:
-  ///   https://acceptmy.app/guides/sign-in-with-apple-rejection.
+  // When using "Sign-in with Apple" in native Mac or iOS apps, the auth flow
+  // differs significantly from the web-based OAuth flows. The client signs in
+  // with Apple directly using the user's iCloud account. The client then
+  // forwards an apple-signed JWT identity token that can be exchanged for
+  // TrailBase tokens:
+  //   https://developer.apple.com/documentation/signinwithapple/authenticating-users-with-sign-in-with-apple
+  //
+  // The tokens audience (`aud`) is validated against the "client id", which
+  // unlike for OAuth is the app `Bundle ID` instead of the `Service ID` (i.e.
+  // only configuring the Apple OAuth flow is insufficient for native sign-in):
+  //   https://developer.apple.com/documentation/signinwithapple/verifying-a-user#Verify-the-identity-token
+  //
+  // NOTE: while not explicitly required, Apple may reject apps from their
+  // stores if they provide a social login w/o also providing an Apple option
+  // using their native `AuthenticationServices`:
+  //   https://acceptmy.app/guides/sign-in-with-apple-rejection.
   optional string apple_native_client_id = 32;
 }
 
@@ -173,44 +175,44 @@ message S3StorageConfig {
 
   optional string bucket_name = 5;
 
-  /// S3 access key, a.k.a. username.
+  // S3 access key, a.k.a. username.
   optional string access_key = 8;
-  /// S3 secret access key, a.k.a. password.
+  // S3 secret access key, a.k.a. password.
   optional string secret_access_key = 9 [ (secret) = true ];
 }
 
 message ServerConfig {
-  /// Application name presented to users, e.g. when sending emails.
-  /// [Default: "TrailBase"]
+  // Application name presented to users, e.g. when sending emails.
+  // [Default: "TrailBase"]
   optional string application_name = 1;
 
-  /// Your final, deployed URL. This url is used to build canonical urls
-  /// for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
+  // Your final, deployed URL. This url is used to build canonical urls
+  // for emails, OAuth redirects, ... . [Default: "http://localhost:4000"]
   optional string site_url = 2;
 
-  ///  Max age of logs that will be retained during period logs cleanup. Note
-  ///  that this implies that some older logs may persist until the cleanup job
-  ///  reruns. [Default: 7 days]
+  //  Max age of logs that will be retained during period logs cleanup. Note
+  //  that this implies that some older logs may persist until the cleanup job
+  //  reruns. [Default: 7 days]
   optional int64 logs_retention_sec = 11;
 
-  /// If present will use S3 setup over local file-system based storage.
+  // If present will use S3 setup over local file-system based storage.
   optional S3StorageConfig s3_storage_config = 13;
 
-  /// If enabled, batches of transactions can be submitted for atomic execution
+  // If enabled, batches of transactions can be submitted for atomic execution
   optional bool enable_record_transactions = 14;
 
-  /// Request size limit. [Default: 10MB]
+  // Request size limit. [Default: 10MB]
   optional uint64 request_size_limit_bytes = 15;
 
-  /// Limits the request per IP per second to auth POST APIs for abuse
-  /// protection. If TrailBase is behind a proxy, make sure to set
-  /// "X-Forwarded-For". [Default: disabled]
-  ///
-  /// Note that login endpoints have additional fixed rate limits
-  /// on a per credentials level.
+  // Limits the request per IP per second to auth POST APIs for abuse
+  // protection. If TrailBase is behind a proxy, make sure to set
+  // "X-Forwarded-For". [Default: disabled]
+  //
+  // Note that login endpoints have additional fixed rate limits
+  // on a per credentials level.
   optional uint32 auth_ip_rate_limit = 16;
 
-  /// Limits how many backups are kept at any time. [Default: 5]
+  // Limits how many backups are kept at any time. [Default: 5]
   optional uint64 backup_window_size = 17;
 }
 
@@ -226,40 +228,40 @@ enum SystemJobId {
 }
 
 message SystemJob {
-  /// Identifies the system job by its id.
+  // Identifies the system job by its id.
   optional SystemJobId id = 1;
 
-  /// Cron spec: shorthand or 7-components: (sec, min, hour, day of month, /
-  /// month, day of week, year).
+  // Cron spec: shorthand or 7-components: (sec, min, hour, day of month, /
+  // month, day of week, year).
   optional string schedule = 2;
 
-  /// Disable the system job.
+  // Disable the system job.
   optional bool disabled = 3;
 
-  /// Timeout in milliseconds.
+  // Timeout in milliseconds.
   optional uint64 timeout = 4;
 }
 
 message JobsConfig {
-  /// System jobs overrides.
-  ///
-  /// NOTE: This is technically a map from id to config, however enums are not
-  /// allowed as map keys.
+  // System jobs overrides.
+  //
+  // NOTE: This is technically a map from id to config, however enums are not
+  // allowed as map keys.
   repeated SystemJob system_jobs = 1;
 }
 
-/// Sqlite specific (as opposed to standard SQL) constrained-violation
-/// resolution strategy upon insert.
+// Sqlite specific (as opposed to standard SQL) constrained-violation
+// resolution strategy upon insert.
 enum ConflictResolutionStrategy {
   CONFLICT_RESOLUTION_STRATEGY_UNDEFINED = 0;
-  /// SQL default: Keep transaction open and abort the current statement.
+  // SQL default: Keep transaction open and abort the current statement.
   ABORT = 1;
-  /// Skip the statement and continue. Mostly matters in the context of batches
-  /// and transaction. Rather than aborting, subsequent operations will
-  /// continue.
+  // Skip the statement and continue. Mostly matters in the context of batches
+  // and transaction. Rather than aborting, subsequent operations will
+  // continue.
   IGNORE = 4;
-  /// Replaces the conflicting row in case of a collision (e.g. unique
-  /// constraint).
+  // Replaces the conflicting row in case of a collision (e.g. unique
+  // constraint).
   REPLACE = 5;
 }
 
@@ -274,77 +276,87 @@ enum PermissionFlag {
   UPDATE = 4;
   // Database record delete.
   DELETE = 8;
-  /// Lookup JSON schema for the given record api .
+  // Lookup JSON schema for the given record api .
   SCHEMA = 16;
 }
 
 message RecordApiConfig {
-  /// API name, i.e. unique name used to access data via HTTP.
+  // API name, i.e. unique name used to access data via HTTP.
   optional string name = 1;
-  /// Referenced table to be exposed.
+  // Referenced table to be exposed.
   optional string table_name = 2;
-  /// Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
-  /// Can only reference configured databases.
+  // Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
+  // Can only reference configured databases.
   repeated string attached_databases = 3;
 
-  /// Strategy to be used on insert if a table constraint is violated.
+  // Strategy to be used on insert if a table constraint is violated.
   optional ConflictResolutionStrategy conflict_resolution = 5;
 
-  /// Fill columns referencing _user(id) automatically from current user's
-  /// authentication context if present. Can be useful for static clients, such
-  /// as HTML forms, otherwise it's recommended to have the client provide user
-  /// ids explicitly and to keep this feature off.
+  // Fill columns referencing _user(id) automatically from current user's
+  // authentication context if present. Can be useful for static clients, such
+  // as HTML forms, otherwise it's recommended to have the client provide user
+  // ids explicitly and to keep this feature off.
   optional bool autofill_missing_user_id_columns = 6;
 
-  /// Allow subscribing to data changes in realtime using SSE streaming.
-  ///
-  /// NOTE: If you're using a reverse proxy, this will likely require
-  /// configuration changes to allow for server-side streaming HTTP, e.g.
-  /// tell the proxy to keep listening and not cache.
+  // Allow subscribing to data changes in realtime using SSE streaming.
+  //
+  // NOTE: If you're using a reverse proxy, this will likely require
+  // configuration changes to allow for server-side streaming HTTP, e.g.
+  // tell the proxy to keep listening and not cache.
   optional bool enable_subscriptions = 9;
 
-  /// Access control lists.
+  // The tenant template to use, if this is a multi-tenant IP.
+  optional string tenant_template = 16;
+
+  // Access control lists.
   repeated PermissionFlag acl_world = 7;
   repeated PermissionFlag acl_authenticated = 8;
 
-  /// Columns excluded from this API.
-  ///
-  /// Excluded columns are completely inaccessible via this API. This is
-  /// different from columns with names prefixed by "_", which are considered
-  /// hidden. This means they can still be inserted, updated and access checked
-  /// unlike excluded columns.
+  // Columns excluded from this API.
+  //
+  // Excluded columns are completely inaccessible via this API. This is
+  // different from columns with names prefixed by "_", which are considered
+  // hidden. This means they can still be inserted, updated and access checked
+  // unlike excluded columns.
   repeated string excluded_columns = 10;
 
-  /// Access rules to be evaluated on request. Expected to be valid SQL
-  /// expression, where `SELECT <expr>` returns a unary boolean.
-  ///
-  /// The evaluator injects _USER_, _ROW_ and _REQ_ tables that can be
-  /// used for validating access, e.g.:
-  ///
-  ///   _USER_.id = _REQ_.owner
-  ///
-  /// ensures that the value provided for the `owner` column during an insert
-  /// matches the current authenticated user's id. One can also construct
-  /// arbitrary validations including sub-queries, e.g.:
-  ///
-  ///   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE
-  ///   allowed.user = _USER_.id)
+  // Access rules to be evaluated on request. Expected to be valid SQL
+  // expression, where `SELECT <expr>` returns a unary boolean.
+  //
+  // The evaluator injects _USER_, _ROW_ and _REQ_ tables that can be
+  // used for validating access, e.g.:
+  //
+  //   _USER_.id = _REQ_.owner
+  //
+  // ensures that the value provided for the `owner` column during an insert
+  // matches the current authenticated user's id. One can also construct
+  // arbitrary validations including sub-queries, e.g.:
+  //
+  //   _USER_.id = _REQ_.owner AND EXISTS(SELECT FROM allowed WHERE
+  //   allowed.user = _USER_.id)
   optional string create_access_rule = 11;
   optional string read_access_rule = 12;
   optional string update_access_rule = 13;
   optional string delete_access_rule = 14;
   optional string schema_access_rule = 15;
 
-  /// A list of foreign key columns that *can* be expanded on read/list, i.e.
-  /// the foreign record will be inlined into the response. By default nothing
-  /// is expanded.
-  ///
-  /// Only columns and foreign tables with names not starting with "_", i.e. are
-  /// allowed to be expanded.
+  // A list of foreign key columns that *can* be expanded on read/list, i.e.
+  // the foreign record will be inlined into the response. By default nothing
+  // is expanded.
+  //
+  // Only columns and foreign tables with names not starting with "_", i.e. are
+  // allowed to be expanded.
   repeated string expand = 21;
 
-  /// Hard limit for listing records. [Default: 1024]
+  // Hard limit for listing records. [Default: 1024]
   optional uint64 listing_hard_limit = 22;
+}
+
+message TenantTemplateConfig {
+  // Name of the golden template used for a set of tenants.
+  //
+  // Schema migrations are expected under <depot>/templates/<name>.
+  optional string name = 1;
 }
 
 message JsonSchemaConfig {
@@ -353,7 +365,7 @@ message JsonSchemaConfig {
 }
 
 message DatabaseConfig {
-  /// Name will be used as <traildepot>/(data/<name>.db|migrations/<name>/).
+  // Name will be used as <traildepot>/(data/<name>.db|migrations/<name>/).
   optional string name = 1;
 }
 
@@ -369,6 +381,7 @@ message Config {
   repeated DatabaseConfig databases = 8;
 
   repeated RecordApiConfig record_apis = 11;
+  repeated TenantTemplateConfig tenant_templates = 12;
 
   repeated JsonSchemaConfig schemas = 21;
 }
