@@ -227,6 +227,13 @@ impl JobRegistry {
     debug!("Running job {id}: {}", job.name());
     return Some(job.run_now().await);
   }
+
+  pub fn stop(&self) {
+    let mut jobs = self.jobs.lock();
+    for t in jobs.values_mut() {
+      t.stop();
+    }
+  }
 }
 
 impl Drop for JobRegistry {

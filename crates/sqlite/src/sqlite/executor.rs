@@ -305,6 +305,9 @@ impl Executor {
 
     let mut errors = vec![];
     let conns: ConnectionVec = std::mem::take(&mut self.conns.write());
+    if let Some(conn) = conns.0.first() {
+      let _ = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE");
+    }
     for conn in conns.0 {
       // NOTE: rusqlite's `Connection::close()` returns itself, to allow users to retry
       // failed closes. We on the other, may be left in a partially closed state with multiple
@@ -359,7 +362,13 @@ fn writer_event_loop(
       Ok(rx) if rx == reader_receiver => {
         match reader_receiver.read_select(rx) {
           Ok(m) => match m {
-            ReaderMessage::Terminate => break,
+            ReaderMessage::Terminate => {
+              while let Ok(WriterMessage::RunMut(f)) = writer_receiver.try_recv() {
+                let mut lock = conns.write();
+                f(&mut lock.0[0]);
+              }
+              break;
+            }
             ReaderMessage::RunConst(f) => {
               let lock = conns.read();
               f(&lock.0[0]);

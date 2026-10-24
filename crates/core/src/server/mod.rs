@@ -267,18 +267,19 @@ impl Server {
 
     // Install a SIGHUP/hangup signal handler to reload config and WASM runtimes (in dev mode).
     #[cfg(unix)]
-    start_sighup_reload_task(self.state.clone());
+    let sighup_handle = start_sighup_reload_task(self.state.clone());
 
     // Graceful shutdown is handled by axum (this is independent from SIGHUP handler above).
     let cleanup_sender = {
       let (cleanup_sender, cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
+      let state = self.state.clone();
 
       tokio::spawn(async move {
         if cleanup_receiver.await.is_ok() {
           log::debug!("cleanup started");
 
           // Shutdown established subscriptions streams.
-          self.state.subscription_manager().shutdown();
+          state.subscription_manager().shutdown();
 
           // NOTE: Disabled since prost-reflect prints map entries in random order (uses
           // HashMap internally).
@@ -340,6 +341,13 @@ impl Server {
       }
 
       set.join_all().await;
+    }
+
+    #[cfg(unix)]
+    sighup_handle.abort();
+
+    if let Err(err) = self.state.close().await {
+      error!("Failed to close databases: {err}");
     }
 
     println!("Shut down gracefully 👋");
@@ -711,11 +719,11 @@ fn load_tls(
 }
 
 #[cfg(unix)]
-fn start_sighup_reload_task(state: AppState) {
+fn start_sighup_reload_task(state: AppState) -> tokio::task::JoinHandle<()> {
   // An infinite stream of hangup signals.
   let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
 
-  tokio::spawn(async move {
+  return tokio::spawn(async move {
     loop {
       stream.recv().await;
 
