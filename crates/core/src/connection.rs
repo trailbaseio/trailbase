@@ -415,6 +415,21 @@ impl ConnectionManager {
 
     return Ok(());
   }
+
+  pub async fn close(&self) -> Result<(), ConnectionError> {
+    for (_key, entry) in self.state.connections.iter() {
+      if let Err(err) = entry.connection.clone().close().await {
+        log::warn!("Failed to close secondary connection: {err}");
+      }
+    }
+    self.state.connections.clear();
+
+    if let Err(err) = self.main_entry().connection.close().await {
+      log::warn!("Failed to close main connection: {err}");
+    }
+
+    return Ok(());
+  }
 }
 
 struct InitDbOptions<'a> {

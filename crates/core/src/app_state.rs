@@ -372,6 +372,28 @@ impl AppState {
     return &self.state.subscription_manager;
   }
 
+  pub async fn close(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    self.subscription_manager().shutdown();
+    self.jobs().stop();
+
+    // Give in-flight background logs a brief moment to finish before closing
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    if let Err(err) = self.logs_conn().clone().close().await {
+      log::warn!("Failed to close logs database: {err}");
+    }
+
+    if let Err(err) = self.session_conn().clone().close().await {
+      log::warn!("Failed to close session database: {err}");
+    }
+
+    if let Err(err) = self.connection_manager().close().await {
+      log::warn!("Failed to close database connections: {err}");
+    }
+
+    return Ok(());
+  }
+
   pub async fn rebuild_connection_metadata(
     &self,
   ) -> Result<(), crate::connection::ConnectionError> {
