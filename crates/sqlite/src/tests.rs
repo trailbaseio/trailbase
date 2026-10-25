@@ -574,7 +574,7 @@ fn test_busy() {
 
   let conn = Connection::with_opts(
     move || -> Result<_, Error> {
-      let conn = rusqlite::Connection::open(&db_path)?;
+      let mut conn = rusqlite::Connection::open(&db_path)?;
 
       // NOTE: The busy handler should NEVER be triggered, since exclusive locking happens on the
       // `Connection` level. BUSY_TIMEOUT would only trigger if multiple SQLite connections

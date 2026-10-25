@@ -308,8 +308,15 @@ impl Executor {
     let conns = std::mem::take(&mut self.conns.write().0);
     for (idx, conn) in conns.into_iter().enumerate().rev() {
       if idx == 0 {
-        if let Err(err) = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
-          log::warn!("WAL truncation failed: {err}");
+        match conn.wal_checkpoint_v2::<&str>(None, rusqlite::wal::CheckpointMode::TRUNCATE) {
+          Ok((log, ckpt)) => {
+            if log < 0 || ckpt < 0 {
+              log::warn!("DB {path:?} not in WAL mode");
+            }
+          }
+          Err(err) => {
+            log::warn!("WAL truncation failed {path:?}: {err}");
+          }
         }
       }
 
@@ -322,7 +329,7 @@ impl Executor {
     }
 
     if !errors.is_empty() {
-      warn!("Closing connection: {errors:?}");
+      warn!("Closing connection {path:?}: {errors:?}");
       return Err(errors.swap_remove(0).into());
     }
 

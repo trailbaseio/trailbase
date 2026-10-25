@@ -73,7 +73,7 @@ pub(crate) fn from_row(row: &rusqlite::Row, cols: Rc<ColVec<Column>>) -> Result<
 pub(crate) fn columns(stmt: &rusqlite::Statement<'_>) -> ColVec<Column> {
   return stmt
     .columns()
-    .iter()
+    .into_iter()
     .map(|c| Column {
       name: c.name().into(),
       decl_type: c.decl_type().map_or(ValueType::Undefined, |s| {

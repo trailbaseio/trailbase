@@ -25,7 +25,7 @@ pub struct PreupdateHookEvent {
 }
 
 pub fn uninstall_hook(conn: &Connection) -> Result<(), RecordError> {
-  let lock = conn
+  let mut lock = conn
     .write_lock()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
@@ -40,7 +40,7 @@ pub fn install_hook(
   conn: &Connection,
 ) -> Result<flume::Receiver<(usize, PreupdateHookEvent)>, RecordError> {
   let (sender, receiver) = flume::bounded(CAPACITY);
-  let lock = conn
+  let mut lock = conn
     .write_lock()
     .map_err(|err| RecordError::Internal(err.into()))?;
 
