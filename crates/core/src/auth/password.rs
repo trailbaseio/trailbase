@@ -1,5 +1,7 @@
 use rand::RngExt;
+use std::sync::LazyLock;
 use std::time::Duration;
+use tokio::sync::Semaphore;
 
 use crate::auth::AuthError;
 use crate::auth::user::DbUser;
@@ -76,18 +78,7 @@ pub(crate) fn hash_password_impl(password: &str) -> Result<String, AuthError> {
 /// have AVX and hundreds in debug builds), so we push work into a background thread with a fixed
 /// timeout to prevent the async runtime from locking up.
 pub async fn hash_password(password: String) -> Result<String, AuthError> {
-  return tokio::time::timeout(
-    HASHING_TIMEOUT,
-    tokio::task::spawn_blocking(move || hash_password_impl(&password)),
-  )
-  .await
-  .map_err(|_| AuthError::Timeout)?
-  .map_err(|_err| {
-    return cfg_select! {
-      debug_assertions => AuthError::Internal(_err.into()),
-      _ => AuthError::Internal("busy".into()),
-    };
-  })?;
+  bounded_spawn_blocking_with_timeout(move || hash_password_impl(&password)).await?
 }
 
 /// Checks the given password against a known user's hash. Will further ensure that an email
@@ -117,22 +108,14 @@ pub async fn check_user_password(db_user: &DbUser, password: String) -> Result<(
   }
 
   let started = std::time::Instant::now();
-  let result = tokio::time::timeout(
-    HASHING_TIMEOUT,
-    tokio::task::spawn_blocking(move || {
-      return check_user_password_impl(&password, &password_hash);
-    }),
-  )
+  let result = bounded_spawn_blocking_with_timeout(move || {
+    check_user_password_impl(&password, &password_hash)
+  })
   .await;
 
   exponential_moving_average::update(started.elapsed());
 
-  return result.map_err(|_| AuthError::Timeout)?.map_err(|_err| {
-    return cfg_select! {
-      debug_assertions => AuthError::Internal(_err.into()),
-      _ => AuthError::Internal("busy".into()),
-    };
-  })?;
+  return result?;
 }
 
 mod exponential_moving_average {
@@ -194,7 +177,35 @@ fn get_password_check_equivalent_duration() -> Duration {
   return Duration::from_micros(std::cmp::max(0, avg + delta) as u64);
 }
 
-const HASHING_TIMEOUT: Duration = Duration::from_secs(5);
+async fn bounded_spawn_blocking_with_timeout<F, R>(f: F) -> Result<R, AuthError>
+where
+  F: FnOnce() -> R + Send + 'static,
+  R: Send + 'static,
+{
+  const HASHING_TIMEOUT: Duration = Duration::from_secs(5);
+  static SEMAPHORE: LazyLock<Semaphore> = LazyLock::new(|| {
+    let parallelism: usize = std::thread::available_parallelism().map_or(2, |n| n.into());
+    return Semaphore::new(parallelism);
+  });
+
+  let permit = tokio::time::timeout(HASHING_TIMEOUT, SEMAPHORE.acquire())
+    .await
+    .map_err(|_| AuthError::Timeout)?
+    .map_err(|_| AuthError::Internal("permit failure".into()))?;
+
+  return tokio::task::spawn_blocking(move || {
+    let result = f();
+    drop(permit);
+    return result;
+  })
+  .await
+  .map_err(|_err| {
+    return cfg_select! {
+      debug_assertions => AuthError::Internal(_err.into()),
+      _ => AuthError::Internal("busy".into()),
+    };
+  });
+}
 
 #[cfg(test)]
 mod tests {
