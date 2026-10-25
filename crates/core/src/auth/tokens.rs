@@ -208,7 +208,7 @@ pub(crate) async fn mint_new_tokens(
   };
 
   return Ok(FreshTokens {
-    auth_token_claims: (AuthTokenClaims::new(&user, &auth_token_ttl), auth_token_ttl),
+    auth_token_claims: (AuthTokenClaims::new(user, &auth_token_ttl), auth_token_ttl),
     refresh_token,
   });
 }

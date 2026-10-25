@@ -15,7 +15,6 @@ minijinja = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 trailbase-build = { workspace = true }
-trailbase-wasm-runtime-host = { workspace = true }
 trailbase-wasm-common = { workspace = true }
 url = "2.5.8"
 wit-component = "0.262.0"

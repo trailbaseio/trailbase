@@ -11,7 +11,7 @@ use compact_str::CompactString;
 use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
-use trailbase::api::cli::{AuthTokens, UserReference};
+use trailbase::api::cli::UserReference;
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::config::proto::Config;
 use trailbase::constants::USER_TABLE;
@@ -612,7 +612,7 @@ async fn async_main(
           })
           .await?;
 
-          let AuthTokens {
+          let trailbase::api::cli::AuthTokens {
             auth_token,
             refresh_token,
             csrf_token,
@@ -620,7 +620,7 @@ async fn async_main(
 
           Tokens {
             auth_token,
-            refresh_token: refresh_token,
+            refresh_token,
             csrf_token: Some(csrf_token),
           }
         }

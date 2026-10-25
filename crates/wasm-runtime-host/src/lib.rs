@@ -641,34 +641,6 @@ tokio::task_local! {
     pub(crate) static REQUEST_ID: u64;
 }
 
-pub fn find_wasm_components(components_path: impl AsRef<std::path::Path>) -> Vec<PathBuf> {
-  let Ok(dir) = std::fs::read_dir(components_path.as_ref()) else {
-    return vec![];
-  };
-
-  return dir
-    .into_iter()
-    .flat_map(|entry| {
-      let Ok(entry) = entry else {
-        return None;
-      };
-
-      let Ok(metadata) = entry.metadata() else {
-        return None;
-      };
-
-      if metadata.is_file() || metadata.is_symlink() {
-        let path = entry.path();
-        if path.extension()? == "wasm" {
-          return Some(path);
-        }
-      }
-
-      return None;
-    })
-    .collect();
-}
-
 fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
   let mut config = Config::new();
 

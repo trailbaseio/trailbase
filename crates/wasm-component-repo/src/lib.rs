@@ -6,7 +6,7 @@ use std::fs;
 use std::io::{Read, Seek};
 use std::path::Path;
 use std::sync::{Arc, LazyLock};
-use trailbase_wasm_runtime_host::find_wasm_components;
+use trailbase_wasm_common::find_wasm_components;
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 

@@ -3,6 +3,7 @@
 #![warn(clippy::await_holding_lock, clippy::inefficient_to_string)]
 
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use trailbase_sqlvalue::SqlValue;
 use ts_rs::TS;
 
@@ -75,7 +76,8 @@ pub struct HttpContextUser {
 }
 
 #[inline]
-pub fn component_path_to_name(path: &std::path::Path) -> Result<String, String> {
+pub fn component_path_to_name(path: impl AsRef<Path>) -> Result<String, String> {
+  let path = path.as_ref();
   return Ok(
     path
       .file_stem()
@@ -83,4 +85,32 @@ pub fn component_path_to_name(path: &std::path::Path) -> Result<String, String> 
       .ok_or_else(|| format!("failed to get component name from '{path:?}'"))?
       .to_string(),
   );
+}
+
+pub fn find_wasm_components(path: impl AsRef<Path>) -> Vec<PathBuf> {
+  let Ok(dir) = std::fs::read_dir(path.as_ref()) else {
+    return vec![];
+  };
+
+  return dir
+    .into_iter()
+    .flat_map(|entry| {
+      let Ok(entry) = entry else {
+        return None;
+      };
+
+      let Ok(metadata) = entry.metadata() else {
+        return None;
+      };
+
+      if metadata.is_file() || metadata.is_symlink() {
+        let path = entry.path();
+        if path.extension()? == "wasm" {
+          return Some(path);
+        }
+      }
+
+      return None;
+    })
+    .collect();
 }

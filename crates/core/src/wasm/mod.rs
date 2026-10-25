@@ -21,7 +21,7 @@ pub(crate) async fn build_sync_wasm_runtimes_for_sqlite(
   dev: bool,
 ) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
   let wasm_components_path = data_dir.wasm_path();
-  let mut components = trailbase_wasm_runtime_host::find_wasm_components(&wasm_components_path);
+  let mut components = trailbase_wasm_common::find_wasm_components(&wasm_components_path);
 
   if !extra_components.is_empty() {
     components.extend_from_slice(extra_components);
@@ -74,7 +74,7 @@ impl WasmState {
     dev: bool,
   ) -> Self {
     let wasm_components_path = data_dir.wasm_path();
-    let mut components = trailbase_wasm_runtime_host::find_wasm_components(&wasm_components_path);
+    let mut components = trailbase_wasm_common::find_wasm_components(&wasm_components_path);
 
     if !extra_components.is_empty() {
       components.extend_from_slice(extra_components);
