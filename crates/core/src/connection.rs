@@ -488,6 +488,8 @@ async fn init_db_sqlite<'a>(
     json_registry: Arc<JsonSchemaRegistry>,
     #[allow(unused)] runtimes: &[(SqliteStore, SqliteFunctions)],
   ) -> Result<rusqlite::Connection, ConnectionError> {
+    log::trace!("building SQLite connection: {db_path:?}");
+
     let conn = trailbase_extension::connect_sqlite(db_path, Some(json_registry))?;
 
     // Apply custom connection settings, e.g. PRAGMAs and client settings.
@@ -634,9 +636,11 @@ pub fn init_session_db(
 }
 
 pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
-  path: Option<PathBuf>,
+  db_path: Option<PathBuf>,
 ) -> Result<rusqlite::Connection, rusqlite::Error> {
-  let conn = if let Some(p) = path {
+  log::trace!("building SQLite connection w/o extensions: {db_path:?}");
+
+  let conn = if let Some(p) = db_path {
     use rusqlite::OpenFlags;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
       | OpenFlags::SQLITE_OPEN_CREATE

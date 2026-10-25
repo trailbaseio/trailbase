@@ -5,7 +5,6 @@ use axum::{
   response::{IntoResponse, Response},
 };
 use const_format::formatcp;
-// use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use trailbase_sqlite::{Value, named_params};
 use ts_rs::TS;

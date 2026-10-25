@@ -8,8 +8,6 @@ use thiserror::Error;
 pub enum AdminError {
   #[error("TrailbaseSqlite error: {0}")]
   TrailbaseSqlite(#[from] trailbase_sqlite::Error),
-  #[error("Rusqlite: {0}")]
-  Rusqlite(#[from] rusqlite::Error),
   #[error("Connection: {0}")]
   Connection(#[from] crate::connection::ConnectionError),
   #[error("FromSql: {0}")]

@@ -290,7 +290,8 @@ impl Executor {
   }
 
   pub(crate) fn close_impl(&self) -> Result<(), Error> {
-    trace!("Closing: {:?}", self.path());
+    let path = self.path();
+    trace!("Closing: {path:?}");
 
     let readers = self.reader.get_rx_count();
     for _ in 0..readers {
@@ -304,8 +305,14 @@ impl Executor {
     }
 
     let mut errors = vec![];
-    let conns: ConnectionVec = std::mem::take(&mut self.conns.write());
-    for conn in conns.0 {
+    let conns = std::mem::take(&mut self.conns.write().0);
+    for (idx, conn) in conns.into_iter().enumerate().rev() {
+      if idx == 0 {
+        if let Err(err) = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
+          log::warn!("WAL truncation failed: {err}");
+        }
+      }
+
       // NOTE: rusqlite's `Connection::close()` returns itself, to allow users to retry
       // failed closes. We on the other, may be left in a partially closed state with multiple
       // connections. Ignorance is bliss.
@@ -319,7 +326,7 @@ impl Executor {
       return Err(errors.swap_remove(0).into());
     }
 
-    trace!("Closed {:?}", self.path());
+    trace!("Closed {path:?}");
 
     return Ok(());
   }
