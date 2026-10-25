@@ -1,3 +1,10 @@
+## v0.35.4
+
+- Explicitly truncate SQLite WALs on shutdown.
+- Bound the number of password hashing threads.
+- Fix building the CLI w/o the default WASM feature.
+- Update dependencies. Addresses securiy advisories and bumps SQLite to v3.54.
+
 ## v0.35.3
 
 - Make refresh tokens optional allowing to run off sessions entirely in favor of purely stateless tokens.
