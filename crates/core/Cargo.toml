@@ -48,7 +48,7 @@ bytes = { workspace = true }
 chrono = { workspace = true }
 client-ip = "0.2.1"
 compact_str = { workspace = true }
-const_format = "0.2.36"
+const_format = "0.2.37"
 cron = { workspace = true }
 ed25519-dalek = { version = "3.0.0", features = ["pkcs8", "pem", "rand_core"] }
 fallible-iterator = "0.3.0"
@@ -65,7 +65,7 @@ hyper-util = "0.1.21"
 indexmap = "2.14.2"
 init-tracing-opentelemetry = { version = "0.43.0", features = ["tracing_subscriber_ext", "metrics"], optional = true }
 itertools = { workspace = true }
-jsonschema = { version = "0.60.0", default-features = false }
+jsonschema = { version = "0.60.1", default-features = false }
 jsonwebtoken = { workspace = true }
 lazy_static = "1.5.1"
 lettre = { version = "^0.11.23", default-features = false, features = ["tokio1-rustls-tls", "sendmail-transport", "smtp-transport", "builder"] }

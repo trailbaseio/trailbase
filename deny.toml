@@ -3,6 +3,7 @@ unmaintained = "workspace"
 ignore = [
   { id = "RUSTSEC-2023-0071", reason = "rsa: no safe upgrade available and only used for Signin-with-Apple pub-key RSA" },
   { id = "RUSTSEC-2026-0344", reason = "pinned by wasmtime" },
+  { id = "RUSTSEC-2026-0387", reason = "pinned by jsonwebtoken" },
 ]
 
 [sources]
