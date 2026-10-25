@@ -29,8 +29,10 @@ use trailbase_cli::{
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 fn init_logger(dev: bool, base_level: Option<&str>) {
+  // NOTE: "scanner" is a spammy custom log target of the lemon SQLite parser:
+  //  https://github.com/gwenn/lemon-rs/blob/f1b3ff556ca503152f948dbf63e644dd163b5e21/src/lexer/scan.rs#L156
   let default = format!(
-    "{},trailbase_refinery=warn,tracing::span=warn",
+    "{},trailbase_refinery=warn,tracing::span=warn,scanner=warn",
     base_level.unwrap_or("info")
   );
 
