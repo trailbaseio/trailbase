@@ -14,48 +14,40 @@ use crate::records::subscribe::state::{
   Subscription,
 };
 
-/// Internal, shareable state of the cloneable SubscriptionManager.
-struct ManagerState {
+pub struct SubscriptionManager {
   /// Record API configurations.
   record_apis: AsyncReactive<HashMap<String, RecordApi>>,
 
   /// Manages subscriptions for different connections based on `conn.id()`.
-  connections: RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>,
-}
-
-#[derive(Clone)]
-pub struct SubscriptionManager {
-  state: Arc<ManagerState>,
+  connections: Arc<RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>>,
 }
 
 impl SubscriptionManager {
   pub fn new(record_apis: AsyncReactive<HashMap<String, RecordApi>>) -> Self {
-    let state = Arc::new(ManagerState {
-      record_apis: record_apis.clone(),
-      connections: RwLock::new(HashMap::new()),
-    });
+    let connections = Arc::new(RwLock::new(HashMap::new()));
 
-    // FIXME: We get a deadlock with PG in tests. Needs further debugging.
-    #[cfg(not(feature = "pg-test"))]
-    {
-      let state = state.clone();
+    record_apis.add_observer({
+      let weak = Arc::downgrade(&connections);
 
-      record_apis.add_observer(move |record_apis| {
-        let mut lock = state.connections.write();
+      move |record_apis| {
+        let Some(connections) = weak.upgrade() else {
+          return;
+        };
+
+        let mut lock = connections.write();
 
         let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
-
         for api in record_apis.values() {
           if !api.enable_subscriptions() {
             continue;
           }
 
-          let id = api.conn().id();
+          let conn_id = api.conn().id();
 
           // TODO: Skip/cleanup subscriptions from existing entries for tables that not longer have
           // a corresponding API.
-          if let Some(existing) = old.remove(&id) {
-            let apis = filter_record_apis(id, record_apis);
+          if let Some(existing) = old.remove(&conn_id) {
+            let apis = filter_record_apis(conn_id, record_apis);
             let Some(first) = apis.values().nth(0) else {
               continue;
             };
@@ -67,17 +59,20 @@ impl SubscriptionManager {
               state.record_apis = apis;
             }
 
-            lock.insert(id, existing);
+            lock.insert(conn_id, existing);
           }
         }
-      });
-    }
+      }
+    });
 
-    return Self { state };
+    return Self {
+      record_apis,
+      connections,
+    };
   }
 
   pub fn shutdown(&self) {
-    let connections = self.state.connections.write();
+    let connections = self.connections.write();
     if !connections.is_empty() {
       for (db, conn) in connections.iter() {
         log::debug!("SubscriptionManager::shutdown (conn id = {db})");
@@ -151,22 +146,23 @@ impl SubscriptionManager {
   }
 
   pub async fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
-    let id: usize = api.conn().id();
-    let mut lock = self.state.connections.upgradable_read();
-    if let Some(state) = lock.get(&id) {
+    let conn_id: usize = api.conn().id();
+
+    let mut lock = self.connections.upgradable_read();
+    if let Some(state) = lock.get(&conn_id) {
       return state.clone();
     }
 
-    let record_apis = self.state.record_apis.ptr().await;
+    let record_apis = self.record_apis.ptr().await;
 
     return lock.with_upgraded(|m| {
-      return match m.entry(id) {
+      return match m.entry(conn_id) {
         Entry::Occupied(v) => v.get().clone(),
         Entry::Vacant(v) => {
           let state = Arc::new(PerConnectionState {
             state: Mutex::new(PerConnectionStateInternal {
               connection_metadata: api.connection_metadata().clone(),
-              record_apis: filter_record_apis(id, &record_apis),
+              record_apis: filter_record_apis(conn_id, &record_apis),
               conn: api.conn().clone(),
               subscriptions: Default::default(),
             }),
@@ -180,7 +176,7 @@ impl SubscriptionManager {
   #[cfg(test)]
   pub fn num_record_subscriptions(&self) -> usize {
     let mut count: usize = 0;
-    for state in self.state.connections.read().values() {
+    for state in self.connections.read().values() {
       for (_table_name, subs) in state.state.lock().subscriptions.iter() {
         for record in subs.record.values() {
           count += record.len();
@@ -193,7 +189,7 @@ impl SubscriptionManager {
   #[cfg(test)]
   pub fn num_table_subscriptions(&self) -> usize {
     let mut count: usize = 0;
-    for state in self.state.connections.read().values() {
+    for state in self.connections.read().values() {
       for (_table_name, subs) in state.state.lock().subscriptions.iter() {
         count += subs.table.len();
       }
