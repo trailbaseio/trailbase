@@ -13,13 +13,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.6.3",
-    "eslint": "^10.11.0",
-    "prettier": "^3.9.9",
+    "@types/node": "^26.6.5",
+    "eslint": "^10.13.0",
+    "prettier": "^3.9.10",
     "quicktype": "^23.3.25",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.0"
+    "typescript-eslint": "^8.72.0"
   },
   "dependencies": {
     "csv-parse": "^7.0.3",
