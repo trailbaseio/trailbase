@@ -24,7 +24,7 @@ mod update_record;
 mod validate;
 
 pub(crate) use error::RecordError;
-pub use record_api::RecordApi;
+pub use record_api::{RecordApi, RecordApiByName};
 pub(crate) use validate::validate_record_api_config;
 
 use crate::AppState;

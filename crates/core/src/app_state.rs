@@ -1,7 +1,7 @@
 use arc_swap::ArcSwap;
 use log::*;
 use object_store::ObjectStore;
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use trailbase_extension::jsonschema::JsonSchemaRegistry;
@@ -20,8 +20,8 @@ use crate::email::Mailer;
 use crate::init_error::InitError;
 use crate::metadata::load_check_and_update_metadata_textproto;
 use crate::rand::random_alphanumeric;
-use crate::records::RecordApi;
 use crate::records::subscribe::manager::SubscriptionManager;
+use crate::records::{RecordApi, RecordApiByName};
 use crate::scheduler::{BuildJobOptions, JobRegistry, build_job_registry_from_config};
 
 #[derive(Default)]
@@ -57,13 +57,13 @@ struct InternalState {
   data_dir: DataDir,
   start_time: std::time::SystemTime,
 
-  site_url: Reactive<Arc<Option<url::Url>>>,
+  site_url: Reactive<Option<url::Url>>,
   read_only: bool,
   dev: bool,
   demo: bool,
 
-  auth: Reactive<Arc<AuthOptions>>,
-  jobs: Reactive<Arc<JobRegistry>>,
+  auth: Reactive<AuthOptions>,
+  jobs: Reactive<JobRegistry>,
   mailer: Reactive<Mailer>,
   config: Reactive<proto::Config>,
   json_schema_registry: ArcSwap<JsonSchemaRegistry>,
@@ -77,7 +77,7 @@ struct InternalState {
 
   jwt: JwtHelper,
 
-  record_apis: AsyncReactive<HashMap<String, RecordApi>>,
+  record_apis: AsyncReactive<HashSet<RecordApiByName>>,
   subscription_manager: SubscriptionManager,
   object_store: Arc<dyn ObjectStore>,
 
@@ -177,18 +177,16 @@ impl AppState {
         move |config| {
           if let Some(ref public_url) = public_url {
             debug!("Public url provided: {public_url:?}");
-            return Arc::new(Some(public_url.clone()));
+            return Some(public_url.clone());
           }
 
-          return Arc::new(
-            build_site_url(config)
-              .map_err(|err| {
-                error!("Failed to parse `site_url`: {err}");
-                return err;
-              })
-              .ok()
-              .flatten(),
-          );
+          return build_site_url(config)
+            .map_err(|err| {
+              error!("Failed to parse `site_url`: {err}");
+              return err;
+            })
+            .ok()
+            .flatten();
         }
       });
 
@@ -209,10 +207,7 @@ impl AppState {
           dev: args.dev,
           demo: args.demo,
           auth: config.derive_unchecked(|c| {
-            Arc::new(AuthOptions::from_config(
-              c.server.site_url.as_deref(),
-              c.auth.clone(),
-            ))
+            return AuthOptions::from_config(c.server.site_url.as_deref(), c.auth.clone());
           }),
           jobs: config.derive_unchecked({
             let jobs_input = (
@@ -227,21 +222,19 @@ impl AppState {
 
               let (data_dir, conn_mgr, logs_conn, session_conn, object_store) = &jobs_input;
 
-              return Arc::new(
-                build_job_registry_from_config(BuildJobOptions {
-                  config: c,
-                  data_dir,
-                  read_only: args.read_only,
-                  connection_manager: conn_mgr,
-                  logs_conn,
-                  session_conn,
-                  object_store: object_store.clone(),
-                })
-                .unwrap_or_else(|err| {
-                  error!("Failed to build JobRegistry for cron jobs: {err}");
-                  return JobRegistry::new();
-                }),
-              );
+              return build_job_registry_from_config(BuildJobOptions {
+                config: c,
+                data_dir,
+                read_only: args.read_only,
+                connection_manager: conn_mgr,
+                logs_conn,
+                session_conn,
+                object_store: object_store.clone(),
+              })
+              .unwrap_or_else(|err| {
+                error!("Failed to build JobRegistry for cron jobs: {err}");
+                return JobRegistry::new();
+              });
             }
           }),
           mailer: config.derive_unchecked(Mailer::new_from_config),
@@ -392,6 +385,7 @@ impl AppState {
 
     // Rebuild RecordApi including schemas. This is necessary e.g. after schema changes.
     let connection_manager = self.state.connection_manager.clone();
+
     let record_api_config = Arc::new(config.record_apis.clone());
 
     self
@@ -412,15 +406,15 @@ impl AppState {
   }
 
   pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
-    return self.state.jobs.value();
+    return self.state.jobs.ptr();
   }
 
   pub(crate) fn auth_options(&self) -> Arc<AuthOptions> {
-    return self.state.auth.value();
+    return self.state.auth.ptr();
   }
 
   pub fn site_url(&self) -> Arc<Option<url::Url>> {
-    return self.state.site_url.value();
+    return self.state.site_url.ptr();
   }
 
   pub(crate) fn mailer(&self) -> Mailer {
@@ -432,7 +426,12 @@ impl AppState {
   }
 
   pub fn lookup_record_api(&self, name: &str) -> Option<RecordApi> {
-    return self.state.record_apis.snapshot().get(name).cloned();
+    return self
+      .state
+      .record_apis
+      .snapshot()
+      .get(name)
+      .map(|api| api.0.clone());
   }
 
   pub fn get_config(&self) -> Arc<proto::Config> {
@@ -551,7 +550,7 @@ pub(crate) fn update_json_schema_registry(
 async fn build_record_apis(
   connection_manager: ConnectionManager,
   record_api_configs: Reactive<Vec<proto::RecordApiConfig>>,
-) -> AsyncReactive<HashMap<String, RecordApi>> {
+) -> AsyncReactive<HashSet<RecordApiByName>> {
   return record_api_configs
     .derive_unchecked_async(move |DeriveInput { prev, dep: configs }| {
       return build_record_apis_impl(connection_manager.clone(), prev.cloned(), configs.clone());
@@ -561,9 +560,9 @@ async fn build_record_apis(
 
 async fn build_record_apis_impl(
   connection_manager: ConnectionManager,
-  prev: Option<Arc<HashMap<String, RecordApi>>>,
+  prev: Option<Arc<HashSet<RecordApiByName>>>,
   record_api_configs: Arc<Vec<proto::RecordApiConfig>>,
-) -> HashMap<String, RecordApi> {
+) -> HashSet<RecordApiByName> {
   // Re-use existing connection when possible to keep subscriptions alive.
   //
   // WARN: We need to be very careful to how we rebuild RecordAPIs, since long-lived
@@ -586,22 +585,21 @@ async fn build_record_apis_impl(
           .await?
       };
 
-      if let Some((_, candidate)) =
-        prev
-          .as_ref()
-          .and_then(|prev: &Arc<HashMap<String, RecordApi>>| {
-            return prev.iter().find(|(_name, api)| api.api_name() == api_name);
-          })
-        && candidate.attached_databases() == attached_databases
+      if let Some(candidate_api) = prev
+        .as_ref()
+        .and_then(|prev: &Arc<HashSet<RecordApiByName>>| {
+          return prev.iter().find(|api| api.api_name() == api_name);
+        })
+        && candidate_api.attached_databases() == attached_databases
       {
         // NOTE: We must use latest metadata to work correctly on schema changes.
-        return Ok((candidate.conn().clone(), metadata));
+        return Ok((candidate_api.conn().clone(), metadata));
       };
 
       return Ok((conn, metadata));
     };
 
-  let mut next: HashMap<String, RecordApi> = HashMap::new();
+  let mut next: HashSet<RecordApiByName> = HashSet::new();
   for config in record_api_configs.iter() {
     let (conn, metadata) = match get_conn(config.name(), &config.attached_databases).await {
       Ok(x) => x,
@@ -613,7 +611,7 @@ async fn build_record_apis_impl(
 
     match RecordApi::build(conn, metadata, config.clone()) {
       Ok(api) => {
-        next.insert(api.api_name().to_string(), api);
+        next.insert(RecordApiByName(api));
       }
       Err(err) => {
         log::error!("Failed to build record API {}: {err}", config.name());
@@ -831,17 +829,14 @@ mod test_utils {
       state: Arc::new(InternalState {
         data_dir,
         start_time: std::time::SystemTime::now(),
-        site_url: config.derive(|c| Arc::new(build_site_url(c).unwrap())),
+        site_url: config.derive(|c| build_site_url(c).unwrap()),
         read_only: false,
         dev: true,
         demo: is_demo.unwrap_or(false),
         auth: config.derive_unchecked(|c| {
-          Arc::new(AuthOptions::from_config(
-            c.server.site_url.as_deref(),
-            c.auth.clone(),
-          ))
+          return AuthOptions::from_config(c.server.site_url.as_deref(), c.auth.clone());
         }),
-        jobs: config.derive_unchecked(|_c| Arc::new(JobRegistry::new())),
+        jobs: config.derive_unchecked(|_c| JobRegistry::new()),
         mailer: mailer.map_or_else(
           || config.derive_unchecked(Mailer::new_from_config),
           |m| Reactive::new(m),

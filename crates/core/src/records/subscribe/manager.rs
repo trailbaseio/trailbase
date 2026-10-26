@@ -1,29 +1,30 @@
 use parking_lot::{Mutex, RwLock};
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use trailbase_qs::ValueOrComposite;
 use trailbase_reactive::AsyncReactive;
 
 use crate::auth::User;
-use crate::records::RecordApi;
 use crate::records::RecordError;
 use crate::records::subscribe::event::EventPayload;
 use crate::records::subscribe::state::{
   AutoCleanupEventStream, EventCandidate, PerConnectionState, PerConnectionStateInternal,
   Subscription,
 };
+use crate::records::{RecordApi, RecordApiByName};
 
 pub struct SubscriptionManager {
   /// Record API configurations.
-  record_apis: AsyncReactive<HashMap<String, RecordApi>>,
+  record_apis: AsyncReactive<HashSet<RecordApiByName>>,
 
   /// Manages subscriptions for different connections based on `conn.id()`.
   connections: Arc<RwLock<HashMap</* conn id= */ usize, Arc<PerConnectionState>>>>,
 }
 
 impl SubscriptionManager {
-  pub fn new(record_apis: AsyncReactive<HashMap<String, RecordApi>>) -> Self {
+  pub fn new(record_apis: AsyncReactive<HashSet<RecordApiByName>>) -> Self {
     let connections = Arc::new(RwLock::new(HashMap::new()));
 
     record_apis.add_observer({
@@ -37,7 +38,7 @@ impl SubscriptionManager {
         let mut lock = connections.write();
 
         let mut old: HashMap<usize, Arc<PerConnectionState>> = std::mem::take(&mut lock);
-        for api in record_apis.values() {
+        for api in record_apis.iter() {
           if !api.enable_subscriptions() {
             continue;
           }
@@ -48,7 +49,7 @@ impl SubscriptionManager {
           // a corresponding API.
           if let Some(existing) = old.remove(&conn_id) {
             let apis = filter_record_apis(conn_id, record_apis);
-            let Some(first) = apis.values().nth(0) else {
+            let Some(first) = apis.iter().nth(0) else {
               continue;
             };
 
@@ -200,19 +201,20 @@ impl SubscriptionManager {
 
 fn filter_record_apis(
   conn_id: usize,
-  record_apis: &HashMap<String, RecordApi>,
-) -> HashMap<String, RecordApi> {
+  record_apis: &HashSet<RecordApiByName>,
+) -> HashSet<RecordApiByName> {
   return record_apis
-    .values()
+    .iter()
     .flat_map(|api| {
       if !api.enable_subscriptions() {
         return None;
       }
-      if api.conn().id() == conn_id {
-        return Some((api.api_name().to_string(), api.clone()));
-      }
 
-      return None;
+      return if api.conn().id() == conn_id {
+        Some(RecordApiByName(api.0.clone()))
+      } else {
+        None
+      };
     })
     .collect();
 }

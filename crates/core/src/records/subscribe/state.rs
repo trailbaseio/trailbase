@@ -4,7 +4,7 @@ use log::*;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use pin_project_lite::pin_project;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::{Arc, Weak};
@@ -19,7 +19,7 @@ use crate::records::subscribe::event::{EventError, EventPayload, Record};
 use crate::records::subscribe::hook::{
   PreupdateHookEvent, RecordAction, install_hook, uninstall_hook,
 };
-use crate::records::{RecordApi, RecordError};
+use crate::records::{RecordApi, RecordApiByName, RecordError};
 use crate::schema_metadata::ConnectionMetadata;
 
 /// Composite id uniquely identifying a subscription.
@@ -155,7 +155,7 @@ impl Subscriptions {
 
 pub struct PerConnectionStateInternal {
   /// Metadata: always updated together when config -> record APIs change.
-  pub record_apis: HashMap<String, RecordApi>,
+  pub record_apis: HashSet<RecordApiByName>,
 
   /// Denormalized metadata. We could also grab this from:
   ///   `record_apis.read().nth(0).unwrap().connection_metadata()`.

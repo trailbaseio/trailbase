@@ -1,6 +1,7 @@
 use askama::Template;
 use compact_str::CompactString;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use trailbase_schema::db::metadata::{
   ColumnMetadata, ConnectionMetadata, TableMetadata, ViewMetadata, find_file_column_indexes,
@@ -744,6 +745,37 @@ impl RecordApi {
   #[inline]
   fn has_access(&self, e: Entity, p: Permission) -> bool {
     return (self.state.acl[e as usize] & (p as u8)) > 0;
+  }
+}
+
+pub struct RecordApiByName(pub RecordApi);
+
+// Hash only the `id` field
+impl Hash for RecordApiByName {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    return self.0.api_name().hash(state);
+  }
+}
+
+// Equality is based only on the `id` field
+impl PartialEq for RecordApiByName {
+  fn eq(&self, other: &Self) -> bool {
+    return self.0.api_name() == other.0.api_name();
+  }
+}
+impl Eq for RecordApiByName {}
+
+impl std::borrow::Borrow<str> for RecordApiByName {
+  fn borrow(&self) -> &str {
+    return self.0.api_name();
+  }
+}
+
+impl std::ops::Deref for RecordApiByName {
+  type Target = RecordApi;
+
+  fn deref(&self) -> &Self::Target {
+    return &self.0;
   }
 }
 
