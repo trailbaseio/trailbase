@@ -134,19 +134,16 @@ async fn validate_event(
   };
 }
 
-/// Stop a reverse proxy from buffering or recompressing the event stream.
+/// Stop a reverse proxy from buffering the event stream.
 ///
-/// nginx holds a chunked response until `proxy_buffer_size` fills unless the
-/// response sets `X-Accel-Buffering: no`. A cache that stores responses will
-/// also buffer a chunked body to do so; `no-store` opts out, while `no-cache`
-/// alone still allows storage. `no-transform` asks the edge not to gzip the
-/// stream. nginx's own gzip module ignores that directive; other edges honor
-/// it, and gzip otherwise holds a chunked body until the stream ends.
+/// Matches PocketBase's realtime handler: nginx holds a chunked response until
+/// `proxy_buffer_size` fills unless the response sets `X-Accel-Buffering: no`,
+/// and `no-store` keeps shared caches from storing the stream.
 fn with_unbuffered_sse_headers(mut response: Response) -> Response {
   let headers = response.headers_mut();
   headers.insert(
     axum::http::header::CACHE_CONTROL,
-    axum::http::HeaderValue::from_static("no-cache, no-store, no-transform"),
+    axum::http::HeaderValue::from_static("no-store"),
   );
   headers.insert(
     axum::http::HeaderName::from_static("x-accel-buffering"),

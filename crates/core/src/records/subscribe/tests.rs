@@ -231,7 +231,7 @@ async fn subscribe_sse_disables_proxy_buffering() {
         .get(axum::http::header::CACHE_CONTROL)
         .unwrap()
         .as_bytes(),
-      b"no-cache, no-store, no-transform",
+      b"no-store",
     );
     assert_eq!(
       headers
