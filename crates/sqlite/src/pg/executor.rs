@@ -237,38 +237,44 @@ fn event_loop(
 #[cfg(test)]
 pub async fn build_postgres_test_executor() -> Result<
   (
-    Arc<parking_lot::Mutex<Option<oliphaunt_pgwire_server::AsyncOliphauntServer>>>,
+    testcontainers_modules::testcontainers::ContainerAsync<
+      testcontainers_modules::postgres::Postgres,
+    >,
     Executor,
   ),
   Error,
 > {
   use postgres::{Client, NoTls};
+  use testcontainers_modules::postgres::Postgres;
+  use testcontainers_modules::testcontainers::{ImageExt, runners::AsyncRunner};
 
-  let db = oliphaunt_pgwire_server::AsyncOliphauntServer::builder()
+  let db = Postgres::default()
+    .with_init_sql(
+      b"\
+        CREATE EXTENSION IF NOT EXISTS citext; \
+        CREATE EXTENSION IF NOT EXISTS pgcrypto; \
+      "
+      .to_vec(),
+    )
+    .with_tag("18-alpine")
     .start()
     .await
     .unwrap();
-  let pg_uri = db.connection_string().to_string();
-  log::debug!("Started PgLite: {pg_uri}");
 
-  let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
-  crate::test_util::start_watchdog(
-    &db,
-    |db| {
-      log::info!("shutting down pglite");
-      if let Some(db) = db.lock().take() {
-        db.close_with_completion(|res| res.unwrap());
-      }
-    },
-    std::time::Duration::from_mins(8),
+  let host = db.get_host().await.unwrap();
+  let port = db.get_host_port_ipv4(5432).await.unwrap();
+  let pg_uri = format!(
+    "{scheme}://postgres:postgres@{host}:{port}/postgres",
+    scheme = "postgresql"
   );
+  log::debug!("Started PostgreSQL test container: {pg_uri}");
 
   return Ok((
     db,
     Executor::new(
       move || Client::connect(&pg_uri, NoTls),
       Options {
-        // IMPORTANT: PgLite only handles a single concurrent connection.
+        // IMPORTANT: The test executor uses a single connection.
         num_threads: Some(1),
       },
     )?,
@@ -286,7 +292,7 @@ mod tests {
   async fn postgres_basic_executor_test() {
     let (_db, exec) = build_postgres_test_executor().await.unwrap();
 
-    // IMPORTANT: PgLite only handles a single concurrent connection.
+    // IMPORTANT: The test executor uses a single connection.
     assert_eq!(1, exec.threads());
 
     exec
@@ -338,7 +344,7 @@ mod tests {
   async fn postgres_named_parameter_test() {
     let (_db, exec) = build_postgres_test_executor().await.unwrap();
 
-    // IMPORTANT: PgLite only handles a single concurrent connection.
+    // IMPORTANT: The test executor uses a single connection.
     assert_eq!(1, exec.threads());
 
     exec

@@ -19,53 +19,39 @@ use trailbase::{DataDir, Server, ServerOptions, SocketAddr};
 #[allow(unused)]
 struct PgSetup {
   pg_uri: String,
-  cleanup: Vec<Box<dyn std::any::Any + Send + Sync>>,
+  _container: testcontainers_modules::testcontainers::ContainerAsync<
+    testcontainers_modules::postgres::Postgres,
+  >,
 }
 
 #[cfg(all(test, feature = "pg-test"))]
 async fn start_pg() -> PgSetup {
-  let db = oliphaunt_pgwire_server::AsyncOliphauntServer::builder()
-    .extensions([
-      oliphaunt_wasix::Extension::PGCRYPTO,
-      // Enable case-insensitive text columns.
-      oliphaunt_wasix::Extension::CITEXT,
-      // Enable postgis.
-      // oliphaunt_wasix::Extension::POSTGIS,
-    ])
+  use testcontainers_modules::postgres::Postgres;
+  use testcontainers_modules::testcontainers::{ImageExt, runners::AsyncRunner};
+
+  let db = Postgres::default()
+    .with_init_sql(
+      b"\
+        CREATE EXTENSION IF NOT EXISTS pgcrypto; \
+        CREATE EXTENSION IF NOT EXISTS citext; \
+      "
+      .to_vec(),
+    )
+    .with_tag("18-alpine")
     .start()
     .await
     .unwrap();
 
-  let pg_uri = db.connection_string().to_string();
-
-  let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
-
-  // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
-  trailbase_sqlite::test_util::start_watchdog(
-    &db,
-    |db| {
-      if let Some(db) = db.lock().take() {
-        log::info!("shutting down pglite");
-        db.close_with_completion(|res| res.unwrap());
-
-        // Give the test a chance to terminate.
-        std::thread::sleep(std::time::Duration::from_secs(15));
-      } else {
-        log::info!("pglite already consumed");
-      }
-    },
-    std::time::Duration::from_mins(8),
+  let host = db.get_host().await.unwrap();
+  let port = db.get_host_port_ipv4(5432).await.unwrap();
+  let pg_uri = format!(
+    "{scheme}://postgres:postgres@{host}:{port}/postgres",
+    scheme = "postgresql"
   );
-
-  let pg_shutdown = scopeguard::guard(db, |db| {
-    if let Some(db) = db.lock().take() {
-      db.close_with_completion(|res| res.unwrap());
-    }
-  });
 
   return PgSetup {
     pg_uri,
-    cleanup: vec![Box::new(pg_shutdown)],
+    _container: db,
   };
 }
 

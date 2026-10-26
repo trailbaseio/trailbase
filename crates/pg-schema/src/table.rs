@@ -415,7 +415,7 @@ mod tests {
     assert_eq!(
       columns0[0],
       ColumnInformationSchema {
-        table_catalog: "template1".to_string(),
+        table_catalog: "postgres".to_string(),
         table_schema: "public".to_string(),
         table_name: "table0".to_string(),
         column_name: "id".to_string(),
@@ -439,7 +439,7 @@ mod tests {
     assert_eq!(
       columns1[0],
       ColumnInformationSchema {
-        table_catalog: "template1".to_string(),
+        table_catalog: "postgres".to_string(),
         table_schema: "public".to_string(),
         table_name: "table1".to_string(),
         column_name: "id".to_string(),
@@ -459,7 +459,7 @@ mod tests {
     assert_eq!(
       columns1[1],
       ColumnInformationSchema {
-        table_catalog: "template1".to_string(),
+        table_catalog: "postgres".to_string(),
         table_schema: "public".to_string(),
         table_name: "table1".to_string(),
         column_name: "fk0".to_string(),
@@ -481,7 +481,7 @@ mod tests {
     assert_eq!(
       columns1[2],
       ColumnInformationSchema {
-        table_catalog: "template1".to_string(),
+        table_catalog: "postgres".to_string(),
         table_schema: "public".to_string(),
         table_name: "table1".to_string(),
         column_name: "fk1".to_string(),
@@ -503,7 +503,7 @@ mod tests {
     assert_eq!(
       columns1[3],
       ColumnInformationSchema {
-        table_catalog: "template1".to_string(),
+        table_catalog: "postgres".to_string(),
         table_schema: "public".to_string(),
         table_name: "table1".to_string(),
         column_name: "a".to_string(),
@@ -522,7 +522,7 @@ mod tests {
     assert_eq!(
       columns1[4],
       ColumnInformationSchema {
-        table_catalog: "template1".to_string(),
+        table_catalog: "postgres".to_string(),
         table_schema: "public".to_string(),
         table_name: "table1".to_string(),
         column_name: "b".to_string(),

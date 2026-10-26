@@ -725,52 +725,33 @@ mod test_utils {
     data_dir.ensure_directory_structure().await.unwrap();
 
     #[cfg(not(feature = "pg-test"))]
-    let (pg_shutdown, pg_uri) = ((), None);
+    let (pg_container, pg_uri) = ((), None);
 
     #[cfg(feature = "pg-test")]
-    let (pg_shutdown, pg_uri) = {
-      // https://github.com/f0rr0/oliphaunt/blob/main/src/wasix/sdks/rust/src/oliphaunt/generated_extensions.rs
-      let extensions = [
-        oliphaunt_wasix::Extension::PGCRYPTO,
-        // Enable case-insensitive text columns.
-        oliphaunt_wasix::Extension::CITEXT,
-        // Enable postgis.
-        // oliphaunt_wasix::Extension::POSTGIS,
-      ];
+    let (pg_container, pg_uri) = {
+      use testcontainers_modules::postgres::Postgres;
+      use testcontainers_modules::testcontainers::{ImageExt, runners::AsyncRunner};
 
-      // Start the embedded Postgres.
-      let db = oliphaunt_pgwire_server::AsyncOliphauntServer::builder()
-        .extensions(extensions)
-        .listen(oliphaunt_pgwire_server::ServerListen::unix(
-          data_dir.main_db_path(),
-        ))
+      let db = Postgres::default()
+        .with_init_sql(
+          b"\
+            CREATE EXTENSION IF NOT EXISTS pgcrypto; \
+            CREATE EXTENSION IF NOT EXISTS citext; \
+          "
+          .to_vec(),
+        )
+        .with_tag("18-alpine")
         .start()
         .await?;
-      let pg_uri = db.connection_string().to_string();
 
-      let db = Arc::new(parking_lot::Mutex::new(Some(db)));
-
-      // NOTE: During CI, we have tests occasionally time out. This is an attempt at getting ahead.
-      trailbase_sqlite::test_util::start_watchdog(
-        &db,
-        |db| {
-          if let Some(db) = db.lock().take() {
-            info!("shutting down pglite");
-            db.close_with_completion(|res| res.unwrap());
-          } else {
-            info!("pglite already consumed");
-          }
-        },
-        std::time::Duration::from_mins(8),
+      let host = db.get_host().await?;
+      let port = db.get_host_port_ipv4(5432).await?;
+      let pg_uri = format!(
+        "{scheme}://postgres:postgres@{host}:{port}/postgres",
+        scheme = "postgresql"
       );
 
-      let pg_shutdown = scopeguard::guard(db, |db| {
-        if let Some(db) = db.lock().take() {
-          db.close_with_completion(|res| res.unwrap());
-        }
-      });
-
-      (pg_shutdown, Some(pg_uri))
+      (db, Some(pg_uri))
     };
 
     let TestStateOptions {
@@ -854,9 +835,7 @@ mod test_utils {
         #[cfg(feature = "wasm")]
         wasm: crate::wasm::WasmState::default(),
         pg_uri,
-        // NOTE: We gotta make sure `pg_db` is destroyed before the temp dir, otherwise it will
-        // write new artifacts to the already deleted dir.
-        test_cleanup: vec![Box::new(pg_shutdown), Box::new(temp_dir)],
+        test_cleanup: vec![Box::new(pg_container), Box::new(temp_dir)],
       }),
     });
   }

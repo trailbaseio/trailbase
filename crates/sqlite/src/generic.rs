@@ -717,7 +717,6 @@ static UNIQUE_CONN_ID: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(test)]
 mod tests {
-  use oliphaunt_pgwire_server::AsyncOliphauntServer;
   use serde::Deserialize;
 
   use super::*;
@@ -729,7 +728,7 @@ mod tests {
     let (_db, exec) = build_postgres_test_executor().await.unwrap();
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
-    // IMPORTANT: PgLite only handles a single concurrent connection.
+    // IMPORTANT: The test executor uses a single connection.
     assert_eq!(1, conn.threads());
 
     conn
@@ -795,29 +794,10 @@ mod tests {
 
   #[tokio::test]
   async fn generic_connection_w_postgres_test() {
-    let db = AsyncOliphauntServer::builder().start().await.unwrap();
-    let pg_uri = db.connection_string().to_string();
-    log::debug!("Started PgLite: {pg_uri}");
+    let (_db, exec) = build_postgres_test_executor().await.unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
-    let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
-    crate::test_util::start_watchdog(
-      &db,
-      |db| {
-        log::info!("shutting down pglite");
-        if let Some(db) = db.lock().take() {
-          db.close_with_completion(|res| res.unwrap());
-        }
-      },
-      std::time::Duration::from_mins(8),
-    );
-
-    let conn = Connection::pg_with_opts(PgOptions {
-      connection: PgConnection::Uri(pg_uri),
-      num_threads: Some(1),
-    })
-    .unwrap();
-
-    // IMPORTANT: PgLite only handles a single concurrent connection.
+    // IMPORTANT: The test executor uses a single connection.
     assert_eq!(1, conn.threads());
 
     let rows = conn.read_query_rows("SELECT 5", ()).await.unwrap();
@@ -872,27 +852,8 @@ mod tests {
 
   #[tokio::test]
   async fn generic_connection_w_postgres_create_simple_table_test() {
-    let db = AsyncOliphauntServer::builder().start().await.unwrap();
-    let pg_uri = db.connection_string().to_string();
-    log::debug!("Started PgLite: {pg_uri}");
-
-    let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
-    crate::test_util::start_watchdog(
-      &db,
-      |db| {
-        log::info!("shutting down pglite");
-        if let Some(db) = db.lock().take() {
-          db.close_with_completion(|res| res.unwrap());
-        }
-      },
-      std::time::Duration::from_mins(8),
-    );
-
-    let conn = Connection::pg_with_opts(PgOptions {
-      connection: PgConnection::Uri(pg_uri),
-      num_threads: Some(1),
-    })
-    .unwrap();
+    let (_db, exec) = build_postgres_test_executor().await.unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     conn
       .execute_batch(
@@ -925,27 +886,8 @@ mod tests {
 
   #[tokio::test]
   async fn generic_connection_w_postgres_create_more_complex_table_test() {
-    let db = AsyncOliphauntServer::builder().start().await.unwrap();
-    let pg_uri = db.connection_string().to_string();
-    log::debug!("Started PgLite: {pg_uri}");
-
-    let db = std::sync::Arc::new(parking_lot::Mutex::new(Some(db)));
-    crate::test_util::start_watchdog(
-      &db,
-      |db| {
-        log::info!("shutting down pglite");
-        if let Some(db) = db.lock().take() {
-          db.close_with_completion(|res| res.unwrap());
-        }
-      },
-      std::time::Duration::from_mins(8),
-    );
-
-    let conn = Connection::pg_with_opts(PgOptions {
-      connection: PgConnection::Uri(pg_uri),
-      num_threads: Some(1),
-    })
-    .unwrap();
+    let (_db, exec) = build_postgres_test_executor().await.unwrap();
+    let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     conn
       .execute_batch(
@@ -1104,8 +1046,6 @@ mod tests {
     let conn = Connection::new(Executor::Pg(Arc::new(exec)));
 
     {
-      // Make sure `oliphaunt-wasix`'s RNG works correctly.
-      // https://github.com/f0rr0/oliphaunt/issues/29
       let uuid0: [u8; 16] = conn
         .read_query_row_get("SELECT gen_random_uuid()", (), 0)
         .await

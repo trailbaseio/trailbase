@@ -78,8 +78,6 @@ litegis = { version = "0.0.8", default-features = false }
 log = { version = "0.4.34", default-features = false }
 mimalloc = { version = "^0.1.52", default-features = false }
 minijinja = { version = "3.0.3", default-features = false }
-oliphaunt-pgwire-server = { version = "0.2.1", features = ["extension-citext", "extension-pgcrypto"] }
-oliphaunt-wasix = { version = "0.3.2", features = ["extension-citext", "extension-pgcrypto"] }
 parking_lot = { version = "0.13.0", default-features = false, features = ["send_guard", "arc_lock"] }
 rand = "^0.10.3"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
@@ -93,6 +91,7 @@ sqlite-vec = { git = "https://github.com/ignatz/sqlite-vec", branch = "v0.1.10-a
 sqlite3-parser = "0.17.0"
 tokio = { version = "^1.54.1", default-features = false, features = ["fs", "io-std", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-rustls = { version = "0.26.6", default-features = false }
+testcontainers-modules = { version = "0.15.0", features = ["postgres"] }
 tracing = { version = "0.1.44", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["smallvec", "std", "fmt", "json"] }
 trailbase = { path = "crates/core", version = "0.2.0", default-features = false }
