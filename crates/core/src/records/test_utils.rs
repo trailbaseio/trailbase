@@ -17,7 +17,7 @@ pub(crate) async fn add_record_api(
   acls: Acls,
   access_rules: AccessRules,
 ) -> Result<(), crate::config::ConfigError> {
-  let mut config = (*state.get_config()).clone();
+  let mut config = (**state.get_config()).clone();
 
   config.record_apis.push(proto::RecordApiConfig {
     name: Some(api_name.to_string()),
@@ -46,7 +46,7 @@ pub(crate) async fn add_record_api_config(
   state: &AppState,
   api: proto::RecordApiConfig,
 ) -> Result<(), crate::config::ConfigError> {
-  let mut config = (*state.get_config()).clone();
+  let mut config = (**state.get_config()).clone();
   config.record_apis.push(api);
   return state.validate_and_update_config(config, None).await;
 }

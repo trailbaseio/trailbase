@@ -1,4 +1,5 @@
-use parking_lot::{Mutex, RwLock};
+use arc_swap::{ArcSwap, Guard};
+use parking_lot::Mutex;
 use std::fmt::Debug;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ type Observer<T> = Box<dyn FnMut(&Arc<T>) + Send + Sync>;
 
 #[derive(Default)]
 struct State<T> {
-  value: RwLock<Arc<T>>,
+  value: ArcSwap<T>,
   observers: Mutex<Vec<Observer<T>>>,
 }
 
@@ -38,37 +39,28 @@ impl<T> Reactive<T> {
   pub fn new(value: T) -> Self {
     Self {
       state: Arc::new(State {
-        value: RwLock::new(Arc::new(value)),
+        value: ArcSwap::from_pointee(value),
         observers: Default::default(),
       }),
     }
   }
-
-  // pub fn from(value: Arc<T>) -> Self {
-  //   Self {
-  //     state: Arc::new(State {
-  //       value: ArcSwap::from(value),
-  //       observers: Default::default(),
-  //     }),
-  //   }
-  // }
 
   /// Returns a clone/copy of the value inside the reactive.
   pub fn value(&self) -> T
   where
     T: Clone,
   {
-    return (**self.state.value.read()).clone();
+    return (**self.state.value.load()).clone();
   }
 
   /// Returns a copy of the internal pointer.
-  pub fn ptr(&self) -> Arc<T> {
-    return self.state.value.read().clone();
+  pub fn ptr(&self) -> Guard<Arc<T>> {
+    return self.state.value.load();
   }
 
   /// Perform some action with the reference to the inner value.
   pub fn with_value(&self, f: impl FnOnce(&T)) {
-    f(&self.state.value.read());
+    f(&*self.state.value.load());
   }
 
   /// Derive a new child reactive that changes whenever the parent reactive changes.
@@ -82,7 +74,7 @@ impl<T> Reactive<T> {
     // NOTE: This is racy. Time passes between derived initialization and registration of
     // observer, i.e. updates may get lost, thus the derived value representing a stale value until
     // next update.
-    let derived_val = f(&self.state.value.read());
+    let derived_val = f(&*self.state.value.load());
     let derived: Reactive<U> = Reactive::new(derived_val);
 
     self.add_observer({
@@ -103,7 +95,7 @@ impl<T> Reactive<T> {
     // NOTE: This is racy. Time passes between derived initialization and registration of
     // observer, i.e. updates may get lost, thus the derived value representing a stale value until
     // next update.
-    let derived_val = f(&self.state.value.read());
+    let derived_val = f(&*self.state.value.load());
     let derived: Reactive<U> = Reactive::new(derived_val);
 
     self.add_observer({
@@ -132,7 +124,7 @@ impl<T> Reactive<T> {
     // next update.
     let f = Arc::new(f);
     let derived: AsyncReactive<U> = AsyncReactive::new({
-      let val: Arc<T> = self.state.value.read().clone();
+      let val: Arc<T> = self.state.value.load_full();
       let f = f.clone();
       async move || {
         return f(DeriveInput {
@@ -208,17 +200,15 @@ impl<T> Reactive<T> {
   where
     T: PartialEq,
   {
-    let mut lock = self.state.value.upgradable_read();
-    let old_val: &T = &lock;
-    let new_val = f(old_val);
-    if &new_val != old_val {
-      lock.with_upgraded(|rw| {
-        *rw = Arc::new(new_val);
+    let old_val: &T = &self.state.value.load();
+    let new_val = Arc::new(f(old_val));
 
-        for obs in self.state.observers.lock().deref_mut() {
-          obs(rw);
-        }
-      });
+    if *new_val != *old_val {
+      self.state.value.swap(new_val.clone());
+
+      for obs in self.state.observers.lock().deref_mut() {
+        obs(&new_val);
+      }
     }
   }
 
@@ -250,16 +240,14 @@ impl<T> Reactive<T> {
   ///
   /// It is also faster than `update` for that reason
   pub fn update_unchecked(&self, f: impl FnOnce(&T) -> T) {
-    let mut lock = self.state.value.upgradable_read();
-    let new_val = Arc::new(f(&lock));
+    let old_val: &T = &self.state.value.load();
+    let new_val = Arc::new(f(old_val));
 
-    lock.with_upgraded(|rw| {
-      *rw = new_val;
+    self.state.value.swap(new_val.clone());
 
-      for obs in self.state.observers.lock().deref_mut() {
-        obs(rw);
-      }
-    });
+    for obs in self.state.observers.lock().deref_mut() {
+      obs(&new_val);
+    }
   }
 
   // pub fn update_unchecked_ptr(&self, f: impl FnOnce(&Arc<T>) -> T) {
@@ -285,9 +273,9 @@ impl<T> Reactive<T> {
   /// r.notify();
   /// ```
   pub fn notify(&self) {
-    let lock = self.state.value.read();
+    let value = self.state.value.load();
     for obs in self.state.observers.lock().deref_mut() {
-      obs(&lock);
+      obs(&value);
     }
   }
 }
@@ -295,7 +283,7 @@ impl<T> Reactive<T> {
 impl<T: Debug> Debug for Reactive<T> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_tuple("Reactive")
-      .field(&self.state.value.read())
+      .field(&self.state.value.load())
       .finish()
   }
 }
@@ -320,7 +308,7 @@ mod tests {
     base.set(5);
 
     // NOTE: This is lazy, i.e. the `ptr().await` will trigger the update.
-    assert_eq!(1, *derived.snapshot());
+    assert_eq!(1, **derived.snapshot());
     assert_eq!(6, *derived.ptr().await);
   }
 }

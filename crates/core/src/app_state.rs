@@ -1,4 +1,4 @@
-use arc_swap::ArcSwap;
+use arc_swap::{ArcSwap, Guard};
 use log::*;
 use object_store::ObjectStore;
 use std::collections::HashSet;
@@ -405,15 +405,15 @@ impl AppState {
     return &self.state.object_store;
   }
 
-  pub(crate) fn jobs(&self) -> Arc<JobRegistry> {
+  pub(crate) fn jobs(&self) -> Guard<Arc<JobRegistry>> {
     return self.state.jobs.ptr();
   }
 
-  pub(crate) fn auth_options(&self) -> Arc<AuthOptions> {
+  pub(crate) fn auth_options(&self) -> Guard<Arc<AuthOptions>> {
     return self.state.auth.ptr();
   }
 
-  pub fn site_url(&self) -> Arc<Option<url::Url>> {
+  pub fn site_url(&self) -> Guard<Arc<Option<url::Url>>> {
     return self.state.site_url.ptr();
   }
 
@@ -434,7 +434,7 @@ impl AppState {
       .map(|api| api.0.clone());
   }
 
-  pub fn get_config(&self) -> Arc<proto::Config> {
+  pub fn get_config(&self) -> Guard<Arc<proto::Config>> {
     return self.state.config.ptr();
   }
 

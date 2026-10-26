@@ -400,7 +400,7 @@ impl Mailer {
 }
 
 fn get_site_url(state: &AppState) -> url::Url {
-  return match *state.site_url() {
+  return match **state.site_url() {
     Some(ref site_url) => site_url.clone(),
     None => {
       // TODO: We should forward the actual server address.

@@ -1,6 +1,7 @@
+use arc_swap::{ArcSwap, Guard};
 use futures_util::FutureExt;
 use futures_util::future::{BoxFuture, Shared};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -8,7 +9,7 @@ type Observer<T> = Box<dyn FnMut(&Arc<T>) + Send + Sync>;
 
 struct State<T> {
   future: Mutex<Shared<BoxFuture<'static, Arc<T>>>>,
-  snapshot: RwLock<Arc<T>>,
+  snapshot: ArcSwap<T>,
   observers: Mutex<Vec<Observer<T>>>,
 }
 
@@ -41,7 +42,7 @@ impl<T: Send + Sync + 'static> AsyncReactive<T> {
             .boxed()
             .shared(),
         ),
-        snapshot: RwLock::new(first_value),
+        snapshot: ArcSwap::from(first_value),
         observers: Default::default(),
       }),
     };
@@ -53,8 +54,9 @@ impl<T: Send + Sync + 'static> AsyncReactive<T> {
     return fut.await.clone();
   }
 
-  pub fn snapshot(&self) -> Arc<T> {
-    return self.state.snapshot.read().clone();
+  #[inline]
+  pub fn snapshot(&self) -> Guard<Arc<T>> {
+    return self.state.snapshot.load();
   }
 
   /// Updates the reactive's value based on the given function.
@@ -77,7 +79,7 @@ impl<T: Send + Sync + 'static> AsyncReactive<T> {
       async move {
         let new_value = Arc::new(f(old_fut.await).await);
 
-        *state.snapshot.write() = new_value.clone();
+        state.snapshot.swap(new_value.clone());
 
         for obs in &mut *state.observers.lock() {
           obs(&new_value);
@@ -119,19 +121,19 @@ mod tests {
     let r = AsyncReactive::new(async || 1).await;
 
     assert_eq!(1, *r.ptr().await);
-    assert_eq!(1, *r.snapshot());
+    assert_eq!(1, **r.snapshot());
 
     let fut = r.update_unchecked(|old| {
       return Box::pin(async move { *old + 1 });
     });
-    assert_eq!(1, *r.snapshot());
+    assert_eq!(1, **r.snapshot());
     assert_eq!(2, *r.ptr().await);
-    assert_eq!(2, *r.snapshot());
+    assert_eq!(2, **r.snapshot());
 
     fut.await;
 
     assert_eq!(2, *r.ptr().await);
     assert_eq!(2, *r.ptr().await);
-    assert_eq!(2, *r.snapshot());
+    assert_eq!(2, **r.snapshot());
   }
 }

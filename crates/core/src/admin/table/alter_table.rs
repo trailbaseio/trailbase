@@ -176,7 +176,7 @@ pub async fn alter_table_handler(
 
     // Fix configuration: update all table references by existing APIs.
     if source_table_schema.name != target_table_name {
-      let mut config = (*state.get_config()).clone();
+      let mut config = (**state.get_config()).clone();
       let old_config_hash = proto::hash_config(&config);
 
       for api in &mut config.record_apis {

@@ -245,7 +245,7 @@ fn secure_tls_only(state: &AppState) -> bool {
     return false;
   }
 
-  if let Some(ref url) = *state.site_url() {
+  if let Some(ref url) = **state.site_url() {
     return url.scheme() == "https";
   }
   return false;
