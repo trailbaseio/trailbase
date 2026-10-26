@@ -1,9 +1,14 @@
+## v0.35.5
+
+- Fix DB connection destruction order issue that prevented SQLite from cleaning up auxiliary files.
+- Update Rust and JavaScript dependencies. Address `zstd-safe`'s security advisories.
+
 ## v0.35.4
 
 - Explicitly truncate SQLite WALs on shutdown.
 - Bound the number of password hashing threads.
 - Fix building the CLI w/o the default WASM feature.
-- Update dependencies. Addresses securiy advisories and bumps SQLite to v3.54.
+- Update dependencies. Addresses security advisories and bumps SQLite to v3.54.
 
 ## v0.35.3
 
