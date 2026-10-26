@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install node
 ENV PATH=/usr/local/node/bin:$PATH
-ENV NODE_VERSION=22.13.1
+ENV NODE_VERSION=24.22.0
 
 RUN curl -sL https://github.com/nodenv/node-build/archive/master.tar.gz | tar xz -C /tmp/ && \
     /tmp/node-build-master/bin/node-build "${NODE_VERSION}" /usr/local/node && \
@@ -41,7 +41,7 @@ COPY . .
 # Start by installing all JS dependencies upfront. This is to avoid
 # `node_modules` collisions due to parallel installs later-on while building
 # packages for various crates.
-RUN pnpm -r install --frozen-lockfile
+RUN pnpm -r install --prefer-frozen-lockfile
 
 
 FROM base-builder AS auth-ui-builder
