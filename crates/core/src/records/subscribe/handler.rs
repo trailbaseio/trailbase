@@ -134,6 +134,24 @@ async fn validate_event(
   };
 }
 
+/// Stop a reverse proxy from buffering the event stream.
+///
+/// Matches PocketBase's realtime handler: nginx holds a chunked response until
+/// `proxy_buffer_size` fills unless the response sets `X-Accel-Buffering: no`,
+/// and `no-store` keeps shared caches from storing the stream.
+fn with_unbuffered_sse_headers(mut response: Response) -> Response {
+  let headers = response.headers_mut();
+  headers.insert(
+    axum::http::header::CACHE_CONTROL,
+    axum::http::HeaderValue::from_static("no-store"),
+  );
+  headers.insert(
+    axum::http::HeaderName::from_static("x-accel-buffering"),
+    axum::http::HeaderValue::from_static("no"),
+  );
+  return response;
+}
+
 pub async fn subscribe_sse(
   state: AppState,
   api: RecordApi,
@@ -158,7 +176,7 @@ pub async fn subscribe_sse(
         expected_candidate_seq: AtomicI64::default(),
       });
 
-      Ok(
+      Ok(with_unbuffered_sse_headers(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
           let seq = seq.clone();
           let args = args.clone();
@@ -172,7 +190,7 @@ pub async fn subscribe_sse(
         }))
         .keep_alive(KeepAlive::default())
         .into_response(),
-      )
+      ))
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
@@ -208,7 +226,7 @@ pub async fn subscribe_sse(
         expected_candidate_seq: AtomicI64::default(),
       });
 
-      Ok(
+      Ok(with_unbuffered_sse_headers(
         Sse::new(
           receiver
             .then(move |ev: EventCandidate| {
@@ -242,7 +260,7 @@ pub async fn subscribe_sse(
         )
         .keep_alive(KeepAlive::default())
         .into_response(),
-      )
+      ))
     }
   };
 }
