@@ -267,7 +267,7 @@ impl Server {
 
     // Install a SIGHUP/hangup signal handler to reload config and WASM runtimes (in dev mode).
     #[cfg(unix)]
-    start_sighup_reload_task(self.state.clone());
+    let sighup_handler = start_sighup_reload_task(self.state.clone());
 
     // Graceful shutdown is handled by axum (this is independent from SIGHUP handler above).
     let cleanup_sender = {
@@ -276,6 +276,10 @@ impl Server {
       tokio::spawn(async move {
         if cleanup_receiver.await.is_ok() {
           log::debug!("cleanup started");
+
+          // Stop listening for SIGHUP/reload signals.
+          #[cfg(unix)]
+          sighup_handler.abort();
 
           // Shutdown established subscriptions streams.
           self.state.subscription_manager().shutdown();
@@ -711,11 +715,11 @@ fn load_tls(
 }
 
 #[cfg(unix)]
-fn start_sighup_reload_task(state: AppState) {
+fn start_sighup_reload_task(state: AppState) -> tokio::task::JoinHandle<()> {
   // An infinite stream of hangup signals.
   let mut stream = signal::unix::signal(signal::unix::SignalKind::hangup()).expect("startup");
 
-  tokio::spawn(async move {
+  return tokio::spawn(async move {
     loop {
       stream.recv().await;
 
