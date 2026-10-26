@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use crate::sqlite::connection::{Connection, Options};
 use crate::sqlite::extract_row_id;
 use crate::{Database, Error, SyncConnectionTrait, Value, ValueType};
+use crate::{named_params, params};
 
 #[tokio::test]
 async fn open_in_memory_test() {
@@ -57,10 +58,14 @@ async fn call_failure_test() {
 #[tokio::test]
 async fn close_success_test() {
   let tmp_dir = tempfile::TempDir::new().unwrap();
-  let db_path = tmp_dir.path().join("main.sqlite");
+  let db_path = tmp_dir.path().join("main.db");
 
   let conn = Connection::with_opts(
-    move || rusqlite::Connection::open(&db_path).map_err(Error::Rusqlite),
+    move || -> Result<_, Error> {
+      let conn = rusqlite::Connection::open(&db_path)?;
+      trailbase_extension::apply_default_pragmas(&conn)?;
+      return Ok(conn);
+    },
     Options {
       num_threads: Some(3),
       ..Default::default()
@@ -71,27 +76,40 @@ async fn close_success_test() {
   assert_eq!(3, conn.threads());
 
   conn
-    .execute("CREATE TABLE 'test' (id INTEGER PRIMARY KEY)", ())
-    .await
-    .unwrap();
-  conn
-    .execute_batch(
-      r#"
-        INSERT INTO 'test' (id) VALUES (1);
-        INSERT INTO 'test' (id) VALUES (2);
-      "#,
+    .execute(
+      "CREATE TABLE 'test' (id INTEGER PRIMARY KEY, value INTEGER)",
+      (),
     )
     .await
     .unwrap();
 
-  let rows = conn
-    .read_query_rows("SELECT * FROM 'test'", ())
-    .await
-    .unwrap();
+  const N: usize = 100;
+  for i in 0..N {
+    conn
+      .execute("INSERT INTO 'test' (value) VALUES ($1);", params!(i as i64))
+      .await
+      .unwrap();
+  }
 
-  assert_eq!(rows.len(), 2);
+  assert_eq!(
+    N,
+    conn
+      .read_query_rows("SELECT * FROM 'test'", ())
+      .await
+      .unwrap()
+      .len()
+  );
 
   assert!(conn.close().await.is_ok());
+
+  // Make sure there are no auxiliary files left (i.e. -wal, -shm).
+  let contents: Vec<_> = std::fs::read_dir(tmp_dir.path())
+    .unwrap()
+    .into_iter()
+    .map(|entry| entry.unwrap().path())
+    .collect();
+
+  assert_eq!(1, contents.len(), "{contents:?}");
 }
 
 #[tokio::test]
@@ -570,7 +588,7 @@ fn test_busy() {
     .unwrap();
 
   let tmp_dir = tempfile::TempDir::new().unwrap();
-  let db_path = tmp_dir.path().join("main.sqlite");
+  let db_path = tmp_dir.path().join("main.db");
 
   let conn = Connection::with_opts(
     move || -> Result<_, Error> {

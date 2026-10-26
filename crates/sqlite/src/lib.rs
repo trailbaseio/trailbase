@@ -76,7 +76,3 @@ macro_rules! named_params {
         [$(($param_name as &str, Into::<$crate::to_sql::ToSqlProxy>::into($param_val))),+]
     };
 }
-
-#[cfg(test)]
-#[path = "tests.rs"]
-mod tests;

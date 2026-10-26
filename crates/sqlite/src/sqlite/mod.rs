@@ -9,3 +9,6 @@ pub(super) mod value;
 
 pub use batch::execute_batch;
 pub use util::{extract_record_values, extract_row_id, from_rows};
+
+#[cfg(test)]
+mod tests;

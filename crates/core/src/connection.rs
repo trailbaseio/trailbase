@@ -666,3 +666,73 @@ pub(crate) fn connect_rusqlite_without_default_extensions_and_schemas(
 }
 
 const PREPARED_STATEMENT_CACHE_CAPACITY: usize = 256;
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[tokio::test]
+  async fn sqlite_cleans_up_auxiliary_files_on_close() {
+    let tmp_dir = temp_dir::TempDir::new().unwrap();
+    let data_dir = DataDir(tmp_dir.path().to_path_buf());
+    data_dir.ensure_directory_structure().await.unwrap();
+
+    let json_schema_registry = Arc::new(
+      trailbase_schema::json_schema::registry::build_json_schema_registry(vec![]).unwrap(),
+    );
+
+    let (conn, _metadata, new_db) = init_db_sqlite(InitDbOptions {
+      data_path: Some(&data_dir.main_db_path()),
+      migration_path: Some(&data_dir.migrations_path()),
+      is_main_db: true,
+      json_registry: &json_schema_registry,
+      runtimes: &vec![],
+      attach: vec![AttachedDatabase {
+        schema_name: "foo".to_string(),
+        path: data_dir.data_path().join("foo.db"),
+      }],
+      num_threads: None,
+      read_only: None,
+    })
+    .await
+    .unwrap();
+
+    assert!(new_db);
+
+    conn
+      .execute(
+        "CREATE TABLE 'test' (id INTEGER PRIMARY KEY, value INTEGER)",
+        (),
+      )
+      .await
+      .unwrap();
+
+    const N: usize = 100;
+    for i in 0..N {
+      conn
+        .execute("INSERT INTO 'test' (value) VALUES ($1);", (i as i64,))
+        .await
+        .unwrap();
+    }
+
+    assert_eq!(
+      N,
+      conn
+        .read_query_rows("SELECT * FROM 'test'", ())
+        .await
+        .unwrap()
+        .len()
+    );
+
+    assert!(conn.close().await.is_ok());
+
+    // Make sure there are no auxiliary files left (i.e. -wal, -shm).
+    let contents: Vec<_> = std::fs::read_dir(data_dir.data_path())
+      .unwrap()
+      .into_iter()
+      .map(|entry| entry.unwrap().path())
+      .collect();
+
+    assert_eq!(2, contents.len(), "{contents:?}");
+  }
+}

@@ -53,4 +53,5 @@ itertools = { workspace = true }
 oliphaunt-pgwire-server = { workspace = true }
 rand = { workspace = true }
 tempfile = "3.27.0"
+trailbase-extension = { workspace = true }
 uuid = { workspace = true }
