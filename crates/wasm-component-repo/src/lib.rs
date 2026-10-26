@@ -271,10 +271,10 @@ impl ComponentReference {
   }
 }
 
-impl TryFrom<&str> for ComponentReference {
-  type Error = String;
+impl core::str::FromStr for ComponentReference {
+  type Err = String;
 
-  fn try_from(reference: &str) -> Result<Self, Self::Error> {
-    return ComponentReference::parse(reference);
+  fn from_str(value: &str) -> Result<Self, Self::Err> {
+    return ComponentReference::parse(value);
   }
 }

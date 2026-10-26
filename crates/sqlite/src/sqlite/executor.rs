@@ -175,7 +175,7 @@ impl Executor {
 
   pub fn path(&self) -> Option<String> {
     let lock = self.conns.read();
-    return lock.0.get(0).and_then(|c| c.path().map(String::from));
+    return lock.0.first().and_then(|c| c.path().map(String::from));
   }
 
   #[inline]

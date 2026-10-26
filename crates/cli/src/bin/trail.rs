@@ -11,6 +11,7 @@ use compact_str::CompactString;
 use itertools::Itertools;
 use serde::Serialize;
 use std::io::Write;
+use std::str::FromStr;
 use trailbase::api::cli::UserReference;
 use trailbase::api::{self, Email, JsonSchemaMode};
 use trailbase::config::proto::Config;
@@ -421,7 +422,7 @@ async fn async_main(
     SubCommands::Components { cmd } => {
       match cmd {
         Some(ComponentSubCommands::Add { reference }) => {
-          let paths = match ComponentReference::try_from(reference.as_str())? {
+          let paths = match ComponentReference::from_str(&reference)? {
             ComponentReference::Name(name) => {
               let component_def = find_component(&name).ok_or("component not found")?;
               let (url, bytes) = download_component(&component_def).await?;
@@ -450,7 +451,7 @@ async fn async_main(
           eprintln!("Added: {paths:?}");
         }
         Some(ComponentSubCommands::Remove { reference }) => {
-          match ComponentReference::try_from(reference.as_str())? {
+          match ComponentReference::from_str(&reference)? {
             ComponentReference::Url(_) => {
               return Err("URLs not supported for component removal".into());
             }

@@ -30,7 +30,7 @@ geos = ["dep:litegis", "dep:geos", "trailbase-schema/geos"]
 geos-static = ["litegis/static", "dep:geos", "trailbase-schema/geos"]
 pg = ["dep:trailbase-pg-schema", "trailbase-sqlite/generic"]
 pg-test = ["pg"]
-wasm = ["dep:trailbase-wasm-runtime-axum", "dep:trailbase-wasm-runtime-host"]
+wasm = ["dep:trailbase-wasm-runtime-axum", "dep:trailbase-wasm-runtime-host", "dep:trailbase-auth-config"]
 # Enable axum's "ws" feature: https://doc.rust-lang.org/cargo/reference/features.html#dependency-features
 ws = ["axum/ws"]
 
@@ -106,10 +106,9 @@ tower-http = { version = "^0.7.1", default-features = false, features = ["cors",
 tower-service = { version = "0.3.3", default-features = false }
 tower_governor = { version = "0.8.0", default-features = false, features = ["axum"] }
 tracing = { workspace = true }
-tracing-opentelemetry-instrumentation-sdk = "0.42.1"
 tracing-subscriber = { workspace = true }
 trailbase-assets = { workspace = true }
-trailbase-auth-config = { workspace = true }
+trailbase-auth-config = { workspace = true, optional = true }
 trailbase-build = { workspace = true }
 trailbase-extension = { workspace = true }
 trailbase-pg-schema = { workspace = true, optional = true }
@@ -149,3 +148,4 @@ schemars = "1.2.3"
 temp-dir = "0.2.0"
 testcontainers-modules = { workspace = true }
 tower = { version = "0.5.3", features = ["util"] }
+tracing-opentelemetry-instrumentation-sdk = "0.42.1"

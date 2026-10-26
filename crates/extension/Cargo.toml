@@ -18,7 +18,6 @@ base64 = { workspace = true }
 bcrypt = "0.19.3"
 jsonschema = { version = "0.60.1", default-features = false }
 maxminddb = "0.32.0"
-parking_lot = { workspace = true }
 quick_cache = { version = "0.7.0", default-features = false }
 regex = "1.13.1"
 # NOTE: rusqlite must not enable "bundled" for the .so built to work.

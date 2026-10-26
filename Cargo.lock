@@ -8118,7 +8118,6 @@ dependencies = [
  "bcrypt",
  "jsonschema 0.60.1",
  "maxminddb",
- "parking_lot 0.13.0",
  "quick_cache",
  "regex",
  "rusqlite",
