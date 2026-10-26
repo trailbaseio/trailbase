@@ -134,6 +134,27 @@ async fn validate_event(
   };
 }
 
+/// Stop a reverse proxy from buffering or recompressing the event stream.
+///
+/// nginx holds a chunked response until `proxy_buffer_size` fills unless the
+/// response sets `X-Accel-Buffering: no`. A cache that stores responses will
+/// also buffer a chunked body to do so; `no-store` opts out, while `no-cache`
+/// alone still allows storage. `no-transform` asks the edge not to gzip the
+/// stream. nginx's own gzip module ignores that directive; other edges honor
+/// it, and gzip otherwise holds a chunked body until the stream ends.
+fn with_unbuffered_sse_headers(mut response: Response) -> Response {
+  let headers = response.headers_mut();
+  headers.insert(
+    axum::http::header::CACHE_CONTROL,
+    axum::http::HeaderValue::from_static("no-cache, no-store, no-transform"),
+  );
+  headers.insert(
+    axum::http::HeaderName::from_static("x-accel-buffering"),
+    axum::http::HeaderValue::from_static("no"),
+  );
+  return response;
+}
+
 pub async fn subscribe_sse(
   state: AppState,
   api: RecordApi,
@@ -158,7 +179,7 @@ pub async fn subscribe_sse(
         expected_candidate_seq: AtomicI64::default(),
       });
 
-      Ok(
+      Ok(with_unbuffered_sse_headers(
         Sse::new(receiver.filter_map(move |ev: EventCandidate| {
           let seq = seq.clone();
           let args = args.clone();
@@ -172,7 +193,7 @@ pub async fn subscribe_sse(
         }))
         .keep_alive(KeepAlive::default())
         .into_response(),
-      )
+      ))
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
@@ -208,7 +229,7 @@ pub async fn subscribe_sse(
         expected_candidate_seq: AtomicI64::default(),
       });
 
-      Ok(
+      Ok(with_unbuffered_sse_headers(
         Sse::new(
           receiver
             .then(move |ev: EventCandidate| {
@@ -242,7 +263,7 @@ pub async fn subscribe_sse(
         )
         .keep_alive(KeepAlive::default())
         .into_response(),
-      )
+      ))
     }
   };
 }
