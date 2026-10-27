@@ -17,7 +17,7 @@ ${DISTDIR}/server/entry-server.js: $(shell find ${APPDIR}/src/ -type f)
 	pnpm run build
 
 ${TRAILDEPOT}/wasm/collab_clicker_ssr_rust_guest.wasm: guests/rust/src/*.rs
-	cargo build -p collab-clicker-ssr-guest --target wasm32-wasip2 --no-default-features --features=bundle --release \
+	cargo build -p collab-clicker-ssr-guest --target wasm32-wasip2 --no-default-features --release \
 		&& rm -rf ${TRAILDEPOT}/wasm/* \
 		&& mkdir -p ${TRAILDEPOT}/wasm/ \
 		&& cp ../../target/wasm32-wasip2/release/collab_clicker_ssr_guest.wasm $@
