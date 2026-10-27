@@ -169,7 +169,7 @@ pub async fn subscribe_sse(
             return async move {
               let (ref seq, ref validate_args) = *seq_and_validate_args;
 
-              validate_event(&validate_args, ev)
+              validate_event(validate_args, ev)
                 .await
                 .unwrap_or_default()
                 .map(|ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))))
@@ -228,7 +228,7 @@ pub async fn subscribe_sse(
                 return async move {
                   let (ref seq, ref validate_args) = *seq_and_validate_args;
 
-                  match validate_event(&validate_args, ev).await {
+                  match validate_event(validate_args, ev).await {
                     Ok(None) => stream::empty().boxed(),
                     Ok(Some(ev)) => stream::once(std::future::ready(
                       ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),

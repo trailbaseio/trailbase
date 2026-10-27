@@ -88,9 +88,6 @@ struct ConnectionManagerState {
 }
 
 // A manager for multi-DB SQLite connections.
-//
-// NOTE: Performance-wise it's beneficial to share Connections to benefit from its internal locking
-// instead of relying on SQLite's own file locking.
 #[derive(Clone)]
 pub struct ConnectionManager {
   state: Arc<ConnectionManagerState>,
@@ -290,6 +287,8 @@ impl ConnectionManager {
   }
 
   pub(crate) async fn build(&self, opts: BuildOptions) -> Result<ConnectionEntry, ConnectionError> {
+    log::debug!("build({opts:?})");
+
     #[cfg(all(test, not(feature = "pg-test")))]
     if opts.is_main && opts.attached_databases.is_none() {
       // Some code doesn't use cached connections to avoid side-effects (e.g. admin query handler).
@@ -414,6 +413,23 @@ impl ConnectionManager {
     }
 
     return Ok(());
+  }
+
+  /// Closes all currently managed connections.
+  ///
+  /// Connections will cleanly shut down when their last reference is dropped. However, you can use
+  /// this method to explicitly close all managed connections. This means that anyone else holding
+  /// references to these shared connections, will have a safe but defunct connection.
+  pub async fn close(&self) {
+    for (_key, entry) in self.state.connections.drain() {
+      if let Err(err) = entry.connection.close().await {
+        log::warn!("Failed to close connection: {err}");
+      }
+    }
+
+    if let Err(err) = self.main_entry().connection.close().await {
+      log::warn!("Failed to close main connection: {err}");
+    }
   }
 }
 

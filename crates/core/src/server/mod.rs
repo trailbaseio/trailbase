@@ -254,6 +254,13 @@ impl Server {
   }
 
   pub async fn serve(self) -> Result<(), AnyError> {
+    let Server {
+      state,
+      main_router,
+      admin_router,
+      tls,
+    } = self;
+
     // Make sure TLS provider is installed. Required for both incoming and outgoing traffic,
     // including traffic from WASM components, e.g. `fetch("https://example.com")`.
     if crypto::CryptoProvider::get_default().is_none() {
@@ -267,40 +274,44 @@ impl Server {
 
     // Install a SIGHUP/hangup signal handler to reload config and WASM runtimes (in dev mode).
     #[cfg(unix)]
-    let sighup_handler = start_sighup_reload_task(self.state.clone());
+    let sighup_handler = start_sighup_reload_task(state.clone());
 
     // Graceful shutdown is handled by axum (this is independent from SIGHUP handler above).
     let cleanup_sender = {
       let (cleanup_sender, cleanup_receiver) = tokio::sync::oneshot::channel::<()>();
 
-      tokio::spawn(async move {
-        if cleanup_receiver.await.is_ok() {
-          log::debug!("cleanup started");
+      tokio::spawn({
+        let state = state.clone();
 
-          // Stop listening for SIGHUP/reload signals.
-          #[cfg(unix)]
-          sighup_handler.abort();
+        async move {
+          if cleanup_receiver.await.is_ok() {
+            debug!("cleanup started");
 
-          // Shutdown established subscriptions streams.
-          self.state.subscription_manager().shutdown();
+            // Stop listening for SIGHUP/reload signals.
+            #[cfg(unix)]
+            sighup_handler.abort();
 
-          // NOTE: Disabled since prost-reflect prints map entries in random order (uses
-          // HashMap internally).
-          // https://github.com/andrewhickman/prost-reflect/issues/201
-          //
-          // Write the latest config state back to disk. Right now we only do this in debug builds
-          // to make sure our checked-in configurations are stable and up-to-date.
-          // #[cfg(debug_assertions)]
-          // if let Err(err) = self
-          //   .state
-          //   .validate_and_update_config((*self.state.get_config()).clone(), None)
-          //   .await
-          // {
-          //   panic!("Failed to write configs: {err}");
-          // }
+            // Shutdown established subscriptions streams.
+            state.subscription_manager().shutdown();
+
+            // NOTE: Disabled since prost-reflect prints map entries in random order (uses
+            // HashMap internally).
+            // https://github.com/andrewhickman/prost-reflect/issues/201
+            //
+            // Write the latest config state back to disk. Right now we only do this in debug builds
+            // to make sure our checked-in configurations are stable and up-to-date.
+            // #[cfg(debug_assertions)]
+            // if let Err(err) = self
+            //   .state
+            //   .validate_and_update_config((*self.state.get_config()).clone(), None)
+            //   .await
+            // {
+            //   panic!("Failed to write configs: {err}");
+            // }
+          }
+
+          debug!("cleanup finished");
         }
-
-        log::debug!("cleanup finished");
       });
 
       cleanup_sender
@@ -308,8 +319,8 @@ impl Server {
 
     // Finally start to listen.
     {
-      let protocol = if self.tls.is_some() { "https" } else { "http" };
-      let (is_uds, base_uri) = match self.main_router.0 {
+      let protocol = if tls.is_some() { "https" } else { "http" };
+      let (is_uds, base_uri) = match main_router.0 {
         SocketAddr::Uds(ref path) => (true, format!("unix:{}", path.to_string_lossy())),
         SocketAddr::Tcp(ref a) => (false, format!("{protocol}://{a}")),
       };
@@ -317,13 +328,12 @@ impl Server {
 
       let mut set = JoinSet::new();
 
-      if let Some((admin_addr, admin_router)) = self.admin_router {
+      if let Some((admin_addr, admin_router)) = admin_router {
         if let SocketAddr::Tcp(aa) = admin_addr {
           admin_uri = Some(format!("{protocol}://{aa}/_/admin/"));
         }
 
-        let cloned_tls = self
-          .tls
+        let cloned_tls = tls
           .as_ref()
           .map(|(cert, key)| (cert.clone(), key.clone_key()));
 
@@ -333,8 +343,8 @@ impl Server {
       }
 
       set.spawn({
-        let (addr, router) = self.main_router;
-        async move { start_listen(addr, router, self.tls, Some(cleanup_sender)).await }
+        let (addr, router) = main_router;
+        async move { start_listen(addr, router, tls, Some(cleanup_sender)).await }
       });
 
       if let Some(admin_uri) = admin_uri {
@@ -344,6 +354,16 @@ impl Server {
       }
 
       set.join_all().await;
+    }
+
+    // Now that the HTTP server has shut down, explicit close DBs rather than relying on implicit
+    // drops and drop-order. After this point, any shared connections that are still held will
+    // return errors for any operation.
+    state.connection_manager().close().await;
+    for conn in [state.session_conn(), state.logs_conn()] {
+      if let Err(err) = conn.close().await {
+        warn!("Failed to close connection: {err}")
+      }
     }
 
     println!("Shut down gracefully 👋");
@@ -542,7 +562,7 @@ async fn shutdown_signal() {
       rt.block_on(async {
         use tokio::time::*;
 
-        log::debug!(
+        debug!(
           "Shutdown watchdog started. Pending tasks: {}",
           handle.metrics().num_alive_tasks()
         );
@@ -603,8 +623,9 @@ async fn start_listen(
   let graceful_shutdown = async {
     shutdown_signal().await;
 
-    if let Some(cleanup) = cleanup_sender {
-      let _ = cleanup.send(());
+    // Notify listeners.
+    if let Some(sender) = cleanup_sender {
+      let _ = sender.send(());
     }
   };
 

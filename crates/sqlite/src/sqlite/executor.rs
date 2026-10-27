@@ -49,7 +49,9 @@ pub(crate) struct Executor {
 
 impl Drop for Executor {
   fn drop(&mut self) {
-    let _ = self.close_impl();
+    // We don't want to truncate the WAL on close on implicit closure to avoid overhead on other
+    // connections that may still use the same underlying DB.
+    let _ = self.close_impl(/* truncate = */ false);
   }
 }
 
@@ -222,9 +224,9 @@ impl Executor {
       .send(WriterMessage::RunMut(Box::new(move |conn| {
         sender.send(function(conn));
       })))
-      .map_err(|_| Error::ConnectionClosed)?;
+      .map_err(sender_closed)?;
 
-    return receiver.await.map_err(|_| Error::ConnectionClosed)?;
+    return receiver.await.map_err(receiver_closed)?;
   }
 
   #[inline]
@@ -241,9 +243,9 @@ impl Executor {
       .send(ReaderMessage::RunConst(Box::new(move |conn| {
         sender.send(function(conn));
       })))
-      .map_err(|_| Error::ConnectionClosed)?;
+      .map_err(sender_closed)?;
 
-    return receiver.await.map_err(|_| Error::ConnectionClosed)?;
+    return receiver.await.map_err(receiver_closed)?;
   }
 
   #[inline]
@@ -289,7 +291,7 @@ impl Executor {
       .await;
   }
 
-  pub(crate) fn close_impl(&self) -> Result<(), Error> {
+  pub(crate) fn close_impl(&self, truncate: bool) -> Result<(), Error> {
     let path = self.path();
     trace!("Closing: {path:?}");
 
@@ -304,25 +306,31 @@ impl Executor {
       std::thread::sleep(std::time::Duration::from_micros(50));
     }
 
+    // NOTE: We need to close in reverse order to hit the RW connection last and allow final cleanup
+    // to succeed.
     let mut errors = vec![];
-    let conns = std::mem::take(&mut self.conns.write().0);
-    for (idx, conn) in conns.into_iter().enumerate().rev() {
-      if idx == 0 {
+    for (idx, conn) in std::mem::take(&mut self.conns.write().0)
+      .into_iter()
+      .enumerate()
+      .rev()
+    {
+      if idx == 0 && truncate {
         match conn.wal_checkpoint_v2::<&str>(None, rusqlite::wal::CheckpointMode::TRUNCATE) {
           Ok((log, ckpt)) => {
             if log < 0 || ckpt < 0 {
-              log::warn!("DB {path:?} not in WAL mode");
+              warn!("DB {path:?} not in WAL mode");
             }
           }
           Err(err) => {
-            log::warn!("WAL truncation failed {path:?}: {err}");
+            info!(
+              "WAL truncation failed {path:?}: {err}. This is not an issue and expected if multiple connections to the same DB are concurrently being shutting down."
+            );
           }
         }
       }
 
       // NOTE: rusqlite's `Connection::close()` returns itself, to allow users to retry
-      // failed closes. We on the other, may be left in a partially closed state with multiple
-      // connections. Ignorance is bliss.
+      // failure.
       if let Err((_self, err)) = conn.close() {
         errors.push(err);
       };
@@ -330,7 +338,7 @@ impl Executor {
 
     if !errors.is_empty() {
       warn!("Closing connection {path:?}: {errors:?}");
-      return Err(errors.swap_remove(0).into());
+      return Err(errors.swap_remove(errors.len() - 1).into());
     }
 
     trace!("Closed {path:?}");
@@ -409,4 +417,22 @@ fn writer_event_loop(
   }
 
   debug!("writer thread shut down");
+}
+
+/// The sender (writer and readers) will be closed after all the executor threads have terminated
+/// dropping the read ends.
+#[inline]
+fn sender_closed<T>(_: crossfire::SendError<T>) -> Error {
+  error!("Use of closed Sqlite connection.");
+
+  return Error::ConnectionClosed;
+}
+
+/// The receiver will be closed if work was submitted while connection is concurrently being shut
+/// down, i.e. task makes it onto the buffer before read ends are dropped.
+#[inline]
+fn receiver_closed(err: crossfire::RecvError) -> Error {
+  error!("Use Sqlite connection concurrently being shut down: {err}");
+
+  return Error::ConnectionClosed;
 }

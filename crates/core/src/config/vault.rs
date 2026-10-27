@@ -76,7 +76,7 @@ fn recursively_merge_vault_and_env(
         // we cannot merge the client_id_secret only if the client_id is set via env vars,
         // otherwise the message to merge into should already exist.
         if !msg.has_field(&field_descr) {
-          debug!(
+          trace!(
             "Unsupported: merging of secrets into uninitialized nested messages. Skipping: {}",
             field_descr.name()
           );

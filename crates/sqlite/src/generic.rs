@@ -549,13 +549,13 @@ impl Connection {
 
   /// Close the database connection.
   ///
-  /// WARN: that since connections are clonable, closing one connection may affect others.
-  /// Alternatively just drop the connection and the underlying connection will be cleaned
-  /// up when all references have been dropped.
-  pub async fn close(self) -> Result<(), Error> {
+  /// WARN: since connections are clonable, closing one connection may affect shared owners.
+  /// If you're unsure, you can just drop the connection and the underlying implementation
+  /// will clean up when all references have been dropped.
+  pub async fn close(&self) -> Result<(), Error> {
     return match self.exec {
-      Executor::Sqlite(exec) => exec.close_impl(),
-      Executor::Pg(exec) => exec.close_impl(),
+      Executor::Sqlite(ref exec) => exec.close_impl(/* truncate= */ true),
+      Executor::Pg(ref exec) => exec.close_impl(),
     };
   }
 }

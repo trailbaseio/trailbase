@@ -377,7 +377,7 @@ impl ColumnDataType {
       "INT" => Self::Integer,
       "REAL" => Self::Real,
       _ => {
-        debug!("Unexpected data type: {type_name:?}");
+        trace!("Unexpected data type: {type_name:?}");
         return None;
       }
     });
@@ -821,24 +821,22 @@ impl<'b> TryFrom<&'b sqlite3_parser::ast::Stmt<'b>> for Table {
             } = def;
 
             let name = unquote_name(col_name);
-            assert!(!name.is_empty());
+            debug_assert!(!name.is_empty());
 
-            let (type_name, affinity_type, data_type): (
-              String,
-              ColumnAffinityType,
-              ColumnDataType,
-            ) = match col_type {
-              Some(x) => (
-                x.name.to_string(),
-                ColumnAffinityType::from_type_name(x.name),
-                ColumnDataType::from_type_name(x.name).unwrap_or(ColumnDataType::Any),
-              ),
-              None => (
-                "".to_string(),
-                ColumnAffinityType::from_type_name(""),
-                ColumnDataType::Any,
-              ),
-            };
+            let (type_name, affinity_type, data_type): (&str, ColumnAffinityType, ColumnDataType) =
+              match col_type {
+                Some(x) => (
+                  x.name,
+                  ColumnAffinityType::from_type_name(x.name),
+                  ColumnDataType::from_type_name(x.name).unwrap_or(ColumnDataType::Any),
+                ),
+                None => (
+                  "",
+                  // Number if fallback affinity
+                  ColumnAffinityType::Numeric,
+                  ColumnDataType::Any,
+                ),
+              };
 
             let options: Vec<ColumnOption> = constraints
               .iter()
@@ -847,7 +845,7 @@ impl<'b> TryFrom<&'b sqlite3_parser::ast::Stmt<'b>> for Table {
 
             return Column {
               name,
-              type_name,
+              type_name: type_name.to_string(),
               data_type,
               affinity_type,
               options,
@@ -1688,10 +1686,7 @@ fn unquote_string(s: &str) -> String {
   }
 
   return match n[0] {
-    b'"' | b'`' | b'\'' | b'[' => {
-      assert!(n.len() >= 2, "string: {s}");
-      s[1..n.len() - 1].to_string()
-    }
+    b'"' | b'`' | b'\'' | b'[' => s[1..n.len() - 1].to_string(),
     _ => s.to_string(),
   };
 }

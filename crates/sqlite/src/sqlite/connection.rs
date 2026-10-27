@@ -350,11 +350,11 @@ impl Connection {
 
   /// Close the database connection.
   ///
-  /// WARN: that since connections are clonable, closing one connection may affect others.
-  /// Alternatively just drop the connection and the underlying connection will be cleaned
-  /// up when all references have been dropped.
-  pub async fn close(self) -> Result<(), Error> {
-    return self.exec.close_impl();
+  /// WARN: since connections are clonable, closing one connection may affect shared owners.
+  /// If you're unsure, you can just drop the connection and the underlying implementation
+  /// will clean up when all references have been dropped.
+  pub async fn close(&self) -> Result<(), Error> {
+    return self.exec.close_impl(/* truncate= */ true);
   }
 }
 

@@ -1,6 +1,7 @@
 use futures_util::future::join_all;
 use rusqlite::hooks::PreUpdateCase;
 use rusqlite::{ErrorCode, ffi};
+use std::assert_matches;
 use std::borrow::Cow;
 
 use crate::sqlite::connection::{Connection, Options};
@@ -40,7 +41,7 @@ async fn call_failure_test() {
     .await;
 
   assert!(match result.unwrap_err() {
-    crate::Error::Rusqlite(e) => {
+    Error::Rusqlite(e) => {
       e == rusqlite::Error::SqlInputError {
         error: ffi::Error {
           code: ErrorCode::Unknown,
@@ -83,22 +84,16 @@ async fn close_success_test() {
     .await
     .unwrap();
 
+  const INSERT_QUERY: &str = "INSERT INTO 'test' (value) VALUES (NULL) RETURNING *;";
+
   const N: usize = 100;
-  for i in 0..N {
-    conn
-      .execute("INSERT INTO 'test' (value) VALUES ($1);", params!(i as i64))
-      .await
-      .unwrap();
+  for _ in 0..N {
+    conn.write_query_row(INSERT_QUERY, ()).await.unwrap();
   }
 
-  assert_eq!(
-    N,
-    conn
-      .read_query_rows("SELECT * FROM 'test'", ())
-      .await
-      .unwrap()
-      .len()
-  );
+  const READ_QUERY: &str = "SELECT * FROM 'test'";
+
+  assert_eq!(N, conn.read_query_rows(READ_QUERY, ()).await.unwrap().len());
 
   assert!(conn.close().await.is_ok());
 
@@ -110,34 +105,41 @@ async fn close_success_test() {
     .collect();
 
   assert_eq!(1, contents.len(), "{contents:?}");
+
+  // Test post-close behavior
+  assert_matches!(
+    conn.read_query_rows(READ_QUERY, ()).await,
+    Err(Error::ConnectionClosed)
+  );
+  assert_matches!(
+    conn.write_query_row(INSERT_QUERY, ()).await,
+    Err(Error::ConnectionClosed)
+  );
 }
 
 #[tokio::test]
 async fn double_close_test() {
   let conn = Connection::open_in_memory().unwrap();
 
-  let conn2 = conn.clone();
+  let clone = conn.clone();
 
   assert!(conn.close().await.is_ok());
-  assert!(conn2.close().await.is_ok());
+  assert!(conn.close().await.is_ok());
+  assert!(clone.close().await.is_ok());
 }
 
 #[tokio::test]
 async fn close_call_test() {
   let conn = Connection::open_in_memory().unwrap();
+  let cloned = conn.clone();
+  conn.close().await.unwrap();
 
-  let conn2 = conn.clone();
-
-  assert!(conn.close().await.is_ok());
-
-  let result = conn2
-    .call_writer(|mut conn| conn.execute("SELECT 1;", ()))
-    .await;
-
-  assert!(matches!(
-    result.unwrap_err(),
-    crate::Error::ConnectionClosed
-  ));
+  assert_matches!(
+    cloned
+      .call_writer(|mut conn| conn.execute("SELECT 1;", ()))
+      .await,
+    Err(Error::ConnectionClosed),
+  );
 }
 
 #[tokio::test]
@@ -170,7 +172,7 @@ async fn close_failure_test() {
   let err = conn.close().await.unwrap_err();
   assert!(
     match &err {
-      crate::Error::Rusqlite(e) => {
+      Error::Rusqlite(e) => {
         *e == rusqlite::Error::SqliteFailure(
           ffi::Error {
             code: ErrorCode::DatabaseBusy,
@@ -194,7 +196,8 @@ async fn debug_format_test() {
 
 #[tokio::test]
 async fn test_error_source() {
-  let error = crate::Error::Rusqlite(rusqlite::Error::InvalidQuery);
+  let error = Error::Rusqlite(rusqlite::Error::InvalidQuery);
+
   assert_eq!(
     std::error::Error::source(&error)
       .and_then(|e| e.downcast_ref::<rusqlite::Error>())
@@ -221,7 +224,7 @@ async fn test_ergonomic_errors() {
     .and_then(|e| e.downcast_ref::<MyError>())
     .unwrap();
 
-  assert!(matches!(err, MyError::MySpecificError));
+  assert_matches!(err, MyError::MySpecificError);
 }
 
 #[tokio::test]
@@ -259,13 +262,10 @@ async fn test_execute_and_query() {
     .await
     .unwrap();
   assert_eq!(2, rows.len());
-  assert!(matches!(
-    rows.column(0).unwrap().decl_type,
-    ValueType::Integer
-  ));
+  assert_matches!(rows.column(0).unwrap().decl_type, ValueType::Integer);
   assert_eq!(rows.column(0).unwrap().name, "id");
 
-  assert!(matches!(rows.column(1).unwrap().decl_type, ValueType::Text));
+  assert_matches!(rows.column(1).unwrap().decl_type, ValueType::Text);
   assert_eq!(rows.column(1).unwrap().name, "name");
 
   conn
@@ -655,10 +655,10 @@ fn test_busy() {
 async fn test_execute_returning_rows() {
   let conn = Connection::open_in_memory().unwrap();
 
-  assert!(matches!(
+  assert_matches!(
     conn.execute("SELECT 4;", ()).await,
     Err(Error::ExecuteReturnedResults)
-  ));
+  );
 
   // Make sure rusqlite and trailabse_sqlite consistently succeed for `execute_batch()`.
   conn.execute_batch("SELECT 4;").await.unwrap();
