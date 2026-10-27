@@ -1,6 +1,7 @@
 use axum::extract::{Path, RawQuery, Request, State};
+use axum::http::{self, HeaderName, HeaderValue};
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
-use axum::response::{IntoResponse, Response};
+use axum::response::{AppendHeaders, IntoResponse, Response};
 use futures_util::StreamExt;
 use futures_util::stream;
 use serde::Deserialize;
@@ -134,24 +135,6 @@ async fn validate_event(
   };
 }
 
-/// Stop a reverse proxy from buffering the event stream.
-///
-/// Matches PocketBase's realtime handler: nginx holds a chunked response until
-/// `proxy_buffer_size` fills unless the response sets `X-Accel-Buffering: no`,
-/// and `no-store` keeps shared caches from storing the stream.
-fn with_unbuffered_sse_headers(mut response: Response) -> Response {
-  let headers = response.headers_mut();
-  headers.insert(
-    axum::http::header::CACHE_CONTROL,
-    axum::http::HeaderValue::from_static("no-store"),
-  );
-  headers.insert(
-    axum::http::HeaderName::from_static("x-accel-buffering"),
-    axum::http::HeaderValue::from_static("no"),
-  );
-  return response;
-}
-
 pub async fn subscribe_sse(
   state: AppState,
   api: RecordApi,
@@ -176,21 +159,24 @@ pub async fn subscribe_sse(
         expected_candidate_seq: AtomicI64::default(),
       });
 
-      Ok(with_unbuffered_sse_headers(
-        Sse::new(receiver.filter_map(move |ev: EventCandidate| {
-          let seq = seq.clone();
-          let args = args.clone();
+      Ok(
+        (
+          AppendHeaders(PROXY_NO_BUFFER_HEADER),
+          Sse::new(receiver.filter_map(move |ev: EventCandidate| {
+            let seq = seq.clone();
+            let args = args.clone();
 
-          return async move {
-            validate_event(args.clone(), ev)
-              .await
-              .unwrap_or_default()
-              .map(|ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))))
-          };
-        }))
-        .keep_alive(KeepAlive::default())
-        .into_response(),
-      ))
+            return async move {
+              validate_event(args.clone(), ev)
+                .await
+                .unwrap_or_default()
+                .map(|ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))))
+            };
+          }))
+          .keep_alive(KeepAlive::default()),
+        )
+          .into_response(),
+      )
     }
     _ => {
       let record_id = api.primary_key_to_value(record)?;
@@ -226,41 +212,46 @@ pub async fn subscribe_sse(
         expected_candidate_seq: AtomicI64::default(),
       });
 
-      Ok(with_unbuffered_sse_headers(
-        Sse::new(
-          receiver
-            .then(move |ev: EventCandidate| {
-              let seq = seq.clone();
-              let args = args.clone();
+      Ok(
+        (
+          AppendHeaders(PROXY_NO_BUFFER_HEADER),
+          Sse::new(
+            receiver
+              .then(move |ev: EventCandidate| {
+                let seq = seq.clone();
+                let args = args.clone();
 
-              return async move {
-                match validate_event(args.clone(), ev).await {
-                  Ok(None) => stream::empty().boxed(),
-                  Ok(Some(ev)) => stream::once(std::future::ready(
-                    ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
-                  ))
-                  .boxed(),
-                  Err(_) => {
-                    // Death sentence for record subscriptions to not have access
-                    stream::iter(vec![
-                      // First send an error event to the user.
-                      ACCESS_DENIED_EVENT
-                        .clone()
-                        .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
-                      // Then terminate the stream via the `take_while` below.
-                      Err(RecordError::Forbidden),
-                    ])
-                    .boxed()
+                return async move {
+                  match validate_event(args.clone(), ev).await {
+                    Ok(None) => stream::empty().boxed(),
+                    Ok(Some(ev)) => stream::once(std::future::ready(
+                      ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                    ))
+                    .boxed(),
+                    Err(_) => {
+                      // Death sentence for record subscriptions to not have access
+                      stream::iter(vec![
+                        // First send an error event to the user.
+                        ACCESS_DENIED_EVENT
+                          .clone()
+                          .into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
+                        // Then terminate the stream via the `take_while` below.
+                        Err(RecordError::Forbidden),
+                      ])
+                      .boxed()
+                    }
                   }
-                }
-              };
-            })
-            .flatten()
-            .take_while(|event: &Result<SseEvent, RecordError>| std::future::ready(event.is_ok())),
+                };
+              })
+              .flatten()
+              .take_while(|event: &Result<SseEvent, RecordError>| {
+                std::future::ready(event.is_ok())
+              }),
+          )
+          .keep_alive(KeepAlive::default()),
         )
-        .keep_alive(KeepAlive::default())
-        .into_response(),
-      ))
+          .into_response(),
+      )
     }
   };
 }
@@ -535,6 +526,16 @@ static EVENT_LOSS_EVENT: LazyLock<Arc<EventPayload>> = LazyLock::new(|| {
     message: None,
   }))
 });
+
+// Instruct proxies not to buffer "realtime" streams to avoid delays.
+//
+// Context:
+//  * https://github.com/pocketbase/pocketbase/discussions/480.
+//  * https://learn.microsoft.com/nb-no/azure/application-gateway/use-server-sent-events#cache-control-no-cache
+const PROXY_NO_BUFFER_HEADER: [(HeaderName, HeaderValue); 1] = [(
+  http::HeaderName::from_static("x-accel-buffering"),
+  HeaderValue::from_static("no"),
+)];
 
 #[cfg(test)]
 mod tests {

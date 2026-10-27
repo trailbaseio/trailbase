@@ -201,8 +201,9 @@ async fn subscribe_to_records(
 #[tokio::test]
 async fn subscribe_sse_disables_proxy_buffering() {
   let state = setup_world_readable().await;
-  let conn = state.conn().clone();
-  conn
+
+  state
+    .conn()
     .execute(
       "INSERT INTO test (id, text) VALUES ($1, 'foo')",
       [trailbase_sqlite::Value::Integer(0)],
@@ -211,36 +212,28 @@ async fn subscribe_sse_disables_proxy_buffering() {
     .unwrap();
 
   let api = state.lookup_record_api("api_name").unwrap();
+
   // Both arms of subscribe_sse: the whole table, and one record.
   for record in ["*", "0"] {
     let response = subscribe_sse(state.clone(), api.clone(), record.to_string(), None, None)
       .await
       .unwrap();
 
-    assert_eq!(200, response.status());
+    assert!(response.status().is_success());
+
     let headers = response.headers();
     assert_eq!(
-      headers
-        .get(axum::http::header::CONTENT_TYPE)
-        .unwrap()
-        .as_bytes(),
-      b"text/event-stream",
+      "text/event-stream",
+      headers.get(axum::http::header::CONTENT_TYPE).unwrap(),
     );
     assert_eq!(
-      headers
-        .get(axum::http::header::CACHE_CONTROL)
-        .unwrap()
-        .as_bytes(),
-      b"no-store",
-    );
-    assert_eq!(
+      vec!["no-cache"],
       headers
         .get_all(axum::http::header::CACHE_CONTROL)
         .iter()
-        .count(),
-      1,
+        .collect::<Vec<_>>(),
     );
-    assert_eq!(headers.get("x-accel-buffering").unwrap().as_bytes(), b"no",);
+    assert_eq!("no", headers.get("x-accel-buffering").unwrap());
   }
 }
 
