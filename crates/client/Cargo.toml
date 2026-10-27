@@ -45,7 +45,7 @@ futures-util = { workspace = true }
 libtest-mimic = "0.8.2"
 log = { workspace = true }
 reqwest = { version = "0.13.5", features = ["stream", "multipart", "json"] }
-rustix = { version = "1.1.5", features = ["process"] }
+rustix = { version = "1.1.6", features = ["process"] }
 temp-dir = "0.2.0"
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "process"] }
 totp-rs = { version = "^6.0.0", default-features = false, features = ["otpauth"] }
