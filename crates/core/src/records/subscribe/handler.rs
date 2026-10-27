@@ -99,7 +99,7 @@ struct ValidateEventArgs {
 }
 
 async fn validate_event(
-  args: Arc<ValidateEventArgs>,
+  args: &ValidateEventArgs,
   ev: EventCandidate,
 ) -> Result<Option<Arc<EventPayload>>, RecordError> {
   if ev.seq != args.expected_candidate_seq.fetch_add(1, Ordering::SeqCst) {
@@ -142,8 +142,6 @@ pub async fn subscribe_sse(
   filter: Option<ValueOrComposite>,
   user: Option<User>,
 ) -> Result<Response, RecordError> {
-  let seq = Arc::new(AtomicI64::default());
-
   return match record.as_str() {
     "*" => {
       api.check_table_level_access(Permission::Read, user.as_ref())?;
@@ -153,21 +151,25 @@ pub async fn subscribe_sse(
         .add_sse_table_subscription(api, user, filter)
         .await?;
 
-      let args = Arc::new(ValidateEventArgs {
-        state,
-        subscription,
-        expected_candidate_seq: AtomicI64::default(),
-      });
+      let seq_and_validate_args = Arc::new((
+        AtomicI64::default(),
+        ValidateEventArgs {
+          state,
+          subscription,
+          expected_candidate_seq: AtomicI64::default(),
+        },
+      ));
 
       Ok(
         (
           AppendHeaders(PROXY_NO_BUFFER_HEADER),
           Sse::new(receiver.filter_map(move |ev: EventCandidate| {
-            let seq = seq.clone();
-            let args = args.clone();
+            let seq_and_validate_args = seq_and_validate_args.clone();
 
             return async move {
-              validate_event(args.clone(), ev)
+              let (ref seq, ref validate_args) = *seq_and_validate_args;
+
+              validate_event(&validate_args, ev)
                 .await
                 .unwrap_or_default()
                 .map(|ev| ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))))
@@ -206,11 +208,14 @@ pub async fn subscribe_sse(
         .add_sse_record_subscription(api, record_id, user)
         .await?;
 
-      let args = Arc::new(ValidateEventArgs {
-        state,
-        subscription,
-        expected_candidate_seq: AtomicI64::default(),
-      });
+      let seq_and_validate_args = Arc::new((
+        AtomicI64::default(),
+        ValidateEventArgs {
+          state,
+          subscription,
+          expected_candidate_seq: AtomicI64::default(),
+        },
+      ));
 
       Ok(
         (
@@ -218,11 +223,12 @@ pub async fn subscribe_sse(
           Sse::new(
             receiver
               .then(move |ev: EventCandidate| {
-                let seq = seq.clone();
-                let args = args.clone();
+                let seq_and_validate_args = seq_and_validate_args.clone();
 
                 return async move {
-                  match validate_event(args.clone(), ev).await {
+                  let (ref seq, ref validate_args) = *seq_and_validate_args;
+
+                  match validate_event(&validate_args, ev).await {
                     Ok(None) => stream::empty().boxed(),
                     Ok(Some(ev)) => stream::once(std::future::ready(
                       ev.into_sse_event(Some(seq.fetch_add(1, Ordering::SeqCst))),
@@ -326,15 +332,15 @@ pub async fn subscribe_ws(
     sender: &mut S,
     is_record_subscription: bool,
   ) {
-    let args = Arc::new(ValidateEventArgs {
+    let validate_args = ValidateEventArgs {
       state,
       subscription,
       expected_candidate_seq: AtomicI64::default(),
-    });
+    };
 
     let mut pinned_receiver = std::pin::pin!(receiver);
     while let Some(ev) = pinned_receiver.next().await {
-      let payload = match validate_event(args.clone(), ev).await {
+      let payload = match validate_event(&validate_args, ev).await {
         Ok(Some(payload)) => payload,
         Ok(None) => {
           continue;
