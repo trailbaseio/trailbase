@@ -182,7 +182,11 @@ impl Executor {
 
   #[inline]
   pub fn write_lock(&self) -> Result<LockGuard<'_>, LockError> {
-    return Ok(LockGuard::new(self.conns.write()));
+    let guard = self.conns.write();
+    if guard.0.is_empty() {
+      return Err(LockError::Shutdown);
+    }
+    return Ok(LockGuard::new(guard));
   }
 
   #[inline]
@@ -190,12 +194,15 @@ impl Executor {
     &self,
     duration: tokio::time::Duration,
   ) -> Result<ArcLockGuard, LockError> {
-    return Ok(ArcLockGuard {
-      guard: self
-        .conns
-        .try_write_arc_for(duration)
-        .ok_or(LockError::Timeout)?,
-    });
+    let guard = self
+      .conns
+      .try_write_arc_for(duration)
+      .ok_or(LockError::Timeout)?;
+
+    if guard.0.is_empty() {
+      return Err(LockError::Shutdown);
+    }
+    return Ok(ArcLockGuard { guard });
   }
 
   #[inline]

@@ -502,6 +502,26 @@ impl AppState {
   pub(crate) fn wasm(&self) -> &crate::wasm::WasmState {
     return &self.state.wasm;
   }
+
+  pub(crate) async fn shutdown(self) -> Result<(), String> {
+    let Some(state) = Arc::into_inner(self.state) else {
+      return Err("Pending AppState references. Explicit shutdown skipped.".into());
+    };
+
+    #[cfg(feature = "wasm")]
+    drop(state.wasm);
+
+    drop(state.jobs);
+
+    state.connection_manager.close().await;
+    for conn in [state.session_conn, state.logs_conn] {
+      if let Err(err) = conn.close().await {
+        warn!("Failed to close connection: {err}")
+      }
+    }
+
+    return Ok(());
+  }
 }
 
 /// Returns true if schemas were registered.

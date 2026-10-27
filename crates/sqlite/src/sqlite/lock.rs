@@ -6,6 +6,8 @@ use crate::sqlite::executor::ConnectionVec;
 pub enum LockError {
   #[error("Timeout")]
   Timeout,
+  #[error("Shutdown")]
+  Shutdown,
   #[error("NotSupported")]
   NotSupported,
 }

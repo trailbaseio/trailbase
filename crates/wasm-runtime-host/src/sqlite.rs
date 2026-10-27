@@ -28,7 +28,7 @@ pub(crate) async fn acquire_transaction_lock_with_timeout(
         });
       }
       Err(LockError::Timeout) => {
-        // Sleep a little.
+        // Sleep a little and try again.
         tokio::time::sleep(Duration::from_micros(200)).await;
 
         if std::time::SystemTime::now() > try_until {
@@ -36,8 +36,8 @@ pub(crate) async fn acquire_transaction_lock_with_timeout(
         }
         continue;
       }
-      Err(LockError::NotSupported) => {
-        return Err(LockError::NotSupported);
+      Err(err) => {
+        return Err(err);
       }
     }
   }

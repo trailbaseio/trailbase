@@ -356,14 +356,11 @@ impl Server {
       set.join_all().await;
     }
 
-    // Now that the HTTP server has shut down, explicit close DBs rather than relying on implicit
-    // drops and drop-order. After this point, any shared connections that are still held will
-    // return errors for any operation.
-    state.connection_manager().close().await;
-    for conn in [state.session_conn(), state.logs_conn()] {
-      if let Err(err) = conn.close().await {
-        warn!("Failed to close connection: {err}")
-      }
+    // Now that the HTTP server has shut down, explicit drop WASM runtimes and close DBs rather than
+    // relying on implicit drops and drop-order. After this point, any shared connections that are
+    // still held will return errors for any operation.
+    if let Err(err) = state.shutdown().await {
+      warn!("{err}");
     }
 
     println!("Shut down gracefully 👋");
