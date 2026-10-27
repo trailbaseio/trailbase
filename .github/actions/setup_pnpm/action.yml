@@ -4,7 +4,7 @@ description: 'Installs pnpm and restores/saves the pnpm store cache'
 runs:
   using: "composite"
   steps:
-    - uses: pnpm/setup@v2
+    - uses: pnpm/setup@v3
       with:
         runtime: node@24
         version: "^12.4.2"
