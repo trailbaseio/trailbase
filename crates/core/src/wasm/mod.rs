@@ -6,10 +6,11 @@ use trailbase_reactive::Reactive;
 use trailbase_wasm_common::HttpContextUser;
 use trailbase_wasm_common::manifest::Metadata;
 use trailbase_wasm_runtime_axum::{AnyError, Job};
-pub use trailbase_wasm_runtime_host::InitArgs;
-pub use trailbase_wasm_runtime_host::functions::{SqliteFunction, SqliteStore};
 use trailbase_wasm_runtime_host::{KvStore, Runtime, RuntimeOptions, use_winch};
 use utoipa_axum::router::OpenApiRouter;
+
+pub use trailbase_wasm_runtime_host::InitArgs;
+pub use trailbase_wasm_runtime_host::sqlite_function_runtime::{SqliteFunction, SqliteStore};
 
 use crate::config::proto;
 use crate::scheduler::JobRegistry;

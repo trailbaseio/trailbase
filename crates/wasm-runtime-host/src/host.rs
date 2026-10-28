@@ -128,7 +128,9 @@ impl WasiHttpHooks for Hooks {
       host = request.uri().host().unwrap_or_default(),
       path = request.uri().path(),
       name = crate::component_path_to_name(&self.wasm_source_file).unwrap_or_default(),
-      id = crate::REQUEST_ID.try_with(|id| *id).unwrap_or_default(),
+      id = crate::http_runtime::REQUEST_ID
+        .try_with(|id| *id)
+        .unwrap_or_default(),
     );
 
     return match request.uri().host() {
@@ -144,7 +146,7 @@ impl WasiHttpHooks for Hooks {
             ));
           })?;
 
-          let res = crate::sqlite::handle_sqlite_request(&db_path, conn, request).await?;
+          let res = crate::sqlite_host::handle_sqlite_request(&db_path, conn, request).await?;
           Ok((
             res.map(BodyExt::boxed_unsync),
             Box::new(async { Ok(()) }) as Box<dyn Future<Output = _> + Send>,
@@ -249,13 +251,13 @@ pub struct TransactionImpl {
   // necessary. W/o the task, this could just be an `OwnedTx`. The Mutex is an async Mutex to
   // prevent blocking the watcher task, e.g. if a transaction is blocked on a long-running
   // `tx.query`.
-  tx: Arc<Mutex<Option<crate::sqlite::OwnedTx>>>,
+  tx: Arc<Mutex<Option<crate::sqlite_host::OwnedTx>>>,
 }
 
 impl TransactionImpl {
   async fn new(conn: trailbase_sqlite::Connection) -> Result<Self, TxError> {
     let db_lock =
-      crate::sqlite::acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
+      crate::sqlite_host::acquire_transaction_lock_with_timeout(conn, Duration::from_secs(2))
         .await
         .map_err(|err| TxError::Other(err.to_string()))?;
 

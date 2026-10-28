@@ -537,8 +537,12 @@ async fn init_db_sqlite<'a>(
     // Install SQLite extension methods/functions registered by WASM components.
     #[cfg(feature = "wasm")]
     for (store, functions) in runtimes {
-      trailbase_wasm_runtime_host::functions::setup_connection(&conn, store.clone(), functions)
-        .map_err(trailbase_extension::Error::Rusqlite)?;
+      trailbase_wasm_runtime_host::sqlite_function_runtime::setup_connection(
+        &conn,
+        store.clone(),
+        functions,
+      )
+      .map_err(trailbase_extension::Error::Rusqlite)?;
     }
 
     return Ok(conn);
