@@ -54,7 +54,7 @@ impl DeleteRecordApiQuery {
   pub fn new(api: RecordApi, record_id: Value) -> Result<Self, RecordError> {
     return Ok(Self {
       query: DeleteQuery::new(
-        api.conn().connection_type(),
+        api.connection_type(),
         api.table_name(),
         &api.record_pk_column().column.name,
         record_id,

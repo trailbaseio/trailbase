@@ -218,7 +218,7 @@ impl PerConnectionState {
   }
 
   fn add_hook(self: &Arc<Self>, api: RecordApi) -> Result<(), RecordError> {
-    let conn = api.conn().clone();
+    let conn = api.conn(None).clone();
     let state = self.clone();
 
     let receiver = install_hook(&conn)?;
@@ -276,7 +276,7 @@ impl PerConnectionState {
     let pk_column = &api.record_pk_column().column.name;
 
     let Some(row_id): Option<i64> = api
-      .conn()
+      .conn(None)
       .read_query_row_get(
         format!(r#"SELECT _rowid_ FROM {table_name} WHERE "{pk_column}" = $1"#),
         [record],
