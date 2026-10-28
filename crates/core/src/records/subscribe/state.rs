@@ -271,7 +271,7 @@ impl PerConnectionState {
       // NOTE: It's important that the handler already did ACL checking to not allow unprivileged
       // record enumerations.
       return api
-        .conn()
+        .conn(None)
         .read_query_row_get(
           format!(
             "SELECT _rowid_ FROM {table_name} WHERE \"{pk_column}\" = $1",

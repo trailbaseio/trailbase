@@ -79,7 +79,7 @@ impl InsertOrReplaceRecordApiQuery {
 
     return Ok(Self {
       query: InsertOrReplaceQuery::new(
-        api.conn().connection_type(),
+        api.connection_type(),
         api.table_name(),
         api.columns(),
         &api.record_pk_column().column.name,

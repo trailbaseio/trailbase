@@ -39,7 +39,7 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn();
+  let conn = api.conn(user.as_ref().and_then(|u| u.tenant));
 
   let (params, files) = UpdateParams::new(
     &api,
@@ -81,7 +81,7 @@ pub async fn update_record_handler(
 
     tokio::spawn(async move {
       if let Err(err) = delete_files_marked_for_deletion(
-        api.conn(),
+        &conn,
         state.objectstore(),
         api.table_name(),
         &[write_result.rowid],
