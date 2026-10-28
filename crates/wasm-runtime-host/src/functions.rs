@@ -24,7 +24,7 @@ impl SqliteStore {
     // Create re-usable shared store, i.e. runtime state, to minimize per-call overhead. Note that
     // only Rust guests currently support interleaving, which means JS guests providing SQLite
     // functions will not work with this integration.
-    let store = SqliteStore::new(&runtime).await?;
+    let store = SqliteStore::new(runtime).await?;
     let functions = store
       .initialize_sqlite_functions(InitArgs { version })
       .await?;

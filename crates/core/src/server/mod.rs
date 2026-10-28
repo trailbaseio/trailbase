@@ -129,7 +129,7 @@ impl Server {
         .wasm()
         .install_routes_and_jobs(state.version(), &state.jobs())
         .await
-        .map_err(|err| InitError::ScriptError(err))?
+        .map_err(InitError::ScriptError)?
       {
         if let Some((wasm_router, has_wasm_root)) = result.router {
           has_root |= has_wasm_root;

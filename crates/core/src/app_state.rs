@@ -134,7 +134,7 @@ impl AppState {
             args.dev,
           )
           .await
-          .map_err(|err| InitError::ScriptError(err))?
+          .map_err(InitError::ScriptError)?
         }
         _ => vec![],
       },

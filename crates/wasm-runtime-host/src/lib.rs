@@ -59,37 +59,42 @@ pub struct RuntimeOptions {
   pub tokio_runtime: Option<tokio::runtime::Handle>,
 }
 
-pub trait StoreBuilder<S> {
-  fn new_store(&self, engine: &Engine, wasm_source_file: PathBuf) -> Result<Store<S>, Error>;
-}
-
 // NOTE: Tentatively generic to maybe split state between HttpStore and SqliteStore in the future
 // :shrug:.
-struct RuntimeInternal<T: StoreBuilder<State>> {
-  engine: Engine,
-  linker: Linker<State>,
-
+struct RuntimeInternal {
   /// Path to original .wasm component file.
   component_path: PathBuf,
+
+  /// Wasmtime props.
+  engine: Engine,
+  linker: Linker<State>,
   component: Component,
 
-  store_builder: T,
-
+  /// Our props
+  shared_state: Arc<SharedState>,
   rt_handle: tokio::runtime::Handle,
+
+  /// In-flight number of requests.
   local_in_flight: AtomicUsize,
+}
+
+impl Drop for RuntimeInternal {
+  fn drop(&mut self) {
+    log::debug!("Dropped WASM runtime: {:?}", self.component_path);
+  }
 }
 
 /// Holds everything one needs to instantiate state for a component and run it, e.g. wasmtime
 /// engine, linker, compiled component, state/store builder, etc.
 #[derive(Clone)]
 pub struct Runtime {
-  state: Arc<RuntimeInternal<Arc<SharedState>>>,
+  state: Arc<RuntimeInternal>,
 }
 
 impl Runtime {
   pub fn init(
     wasm_source_file: PathBuf,
-    store_builder: Arc<SharedState>,
+    shared_state: Arc<SharedState>,
     opts: RuntimeOptions,
   ) -> Result<Self, Error> {
     let engine = {
@@ -151,7 +156,7 @@ impl Runtime {
       linker,
       component_path: wasm_source_file,
       component,
-      store_builder,
+      shared_state,
       rt_handle,
       local_in_flight: AtomicUsize::new(0),
     });
@@ -164,10 +169,11 @@ impl Runtime {
   }
 
   async fn new_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
-    let mut store = self
-      .state
-      .store_builder
-      .new_store(&self.state.engine, self.component_path().to_path_buf())?;
+    let mut store = build_new_store(
+      &self.state.engine,
+      &self.state.shared_state,
+      self.component_path().to_path_buf(),
+    )?;
 
     let instance_pre = self
       .state
@@ -208,8 +214,12 @@ pub struct InitArgs {
   pub version: Option<String>,
 }
 
-impl StoreBuilder<State> for Arc<SharedState> {
-  fn new_store(&self, engine: &Engine, wasm_source_file: PathBuf) -> Result<Store<State>, Error> {
+fn build_new_store(
+  engine: &Engine,
+  shared_state: &Arc<SharedState>,
+  wasm_source_file: PathBuf,
+) -> Result<Store<State>, Error> {
+  let wasi_ctx = {
     let mut wasi_ctx = WasiCtxBuilder::new();
     wasi_ctx.inherit_stdio();
     wasi_ctx.stdin(wasmtime_wasi::p2::pipe::ClosedInputStream);
@@ -221,29 +231,31 @@ impl StoreBuilder<State> for Arc<SharedState> {
     wasi_ctx.allow_udp(false);
     wasi_ctx.allow_ip_name_lookup(true);
 
-    if let Some(ref path) = self.fs_root_path {
+    if let Some(ref path) = shared_state.fs_root_path {
       wasi_ctx
         .preopened_dir(path, "/", FsPerms::ReadOnly)
         .map_err(|err| Error::Other(err.to_string()))?;
     }
 
-    return Ok(Store::new(
-      engine,
-      State {
-        resource_table: ResourceTable::new(),
-        wasi_ctx: wasi_ctx.build(),
-        http_ctx: WasiHttpCtx::new(),
-        hooks: host::Hooks {
-          shared: self.clone(),
-          wasm_source_file,
-        },
-        kv: WasiKeyValueCtx::new(self.kv_store.clone()),
-        #[allow(deprecated)]
-        tx: tokio::sync::Mutex::new(TransactionImpl::default()),
-        shared: self.clone(),
+    wasi_ctx.build()
+  };
+
+  return Ok(Store::new(
+    engine,
+    State {
+      resource_table: ResourceTable::new(),
+      wasi_ctx,
+      http_ctx: WasiHttpCtx::new(),
+      hooks: host::Hooks {
+        shared: shared_state.clone(),
+        wasm_source_file,
       },
-    ));
-  }
+      kv: WasiKeyValueCtx::new(shared_state.kv_store.clone()),
+      #[allow(deprecated)]
+      tx: tokio::sync::Mutex::new(TransactionImpl::default()),
+      shared: shared_state.clone(),
+    },
+  ));
 }
 
 struct StoreAndBindings {

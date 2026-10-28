@@ -64,7 +64,7 @@ pub use self::trailbase::database::sqlite::{Transaction, TxError, Value};
 pub struct SharedState {
   pub conn: Option<trailbase_sqlite::Connection>,
   pub kv_store: trailbase_wasi_keyvalue::Store,
-  // Path from where to attach databases, i.e.: <depot>/data/.
+  /// Path from where to attach databases, i.e.: <depot>/data/.
   pub db_path: PathBuf,
   pub fs_root_path: Option<PathBuf>,
 }
