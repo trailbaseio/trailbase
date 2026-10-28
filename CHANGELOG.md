@@ -1,3 +1,10 @@
+## v0.35.7
+
+- Enable HTTP2 negotiation to allow Browsers to multiplex more SSE streams.
+- Untangle WASM SQLite extension function runtime from WASM HTTP handlers and tidy up implementation. Properly wire binary version to SQLite function initialization.
+- Refine shutdown order: drop more sooner.
+- Update dependencies.
+
 ## v0.35.6
 
 - Add `X-Accel-Buffering=no` header to SSE connections to simplify reverse-proxy configuration and accidental buffering, which may delay events. @rb365 🙏
