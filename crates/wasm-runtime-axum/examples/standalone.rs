@@ -4,9 +4,8 @@ use futures_util::future::BoxFuture;
 use std::sync::Arc;
 use trailbase_sqlite::Connection;
 use trailbase_wasm_common::HttpContextUser;
-use trailbase_wasm_runtime_axum::{
-  InstallResult, SharedState, install_routes_and_jobs, wasm_runtime_builder,
-};
+use trailbase_wasm_runtime_axum::{InstallResult, install_routes_and_jobs};
+use trailbase_wasm_runtime_host::{Runtime, RuntimeOptions, SharedState};
 
 #[derive(Debug, Clone)]
 pub struct State;
@@ -44,8 +43,15 @@ async fn main() {
     fs_root_path: None,
   });
 
-  let runtimes_builder = wasm_runtime_builder(args.path, shared_state, None, /* dev= */ false);
-  let runtime = runtimes_builder().unwrap();
+  let runtime = Runtime::init(
+    args.path,
+    shared_state,
+    RuntimeOptions {
+      use_winch: false,
+      tokio_runtime: None,
+    },
+  )
+  .unwrap();
 
   let InstallResult {
     router,

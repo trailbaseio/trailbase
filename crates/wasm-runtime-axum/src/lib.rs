@@ -8,9 +8,7 @@ use futures_util::future::BoxFuture;
 use http_body_util::{BodyExt, combinators::UnsyncBoxBody};
 use hyper::StatusCode;
 use log::*;
-use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Arc;
 use tokio::time::Duration;
 use trailbase_wasm_common::manifest::{
   HttpMethodType, HttpRoute as HttpRouteManifest, InitManifest, Job as JobManifest, Metadata,
@@ -18,73 +16,10 @@ use trailbase_wasm_common::manifest::{
 use trailbase_wasm_common::{
   HttpContext, HttpContextKind, HttpContextUser, component_path_to_name,
 };
-use trailbase_wasm_runtime_host::{Error as WasmError, InitArgs, RuntimeOptions};
+use trailbase_wasm_runtime_host::{Error as WasmError, HttpStore, InitArgs, Runtime};
 use utoipa_axum::router::{OpenApiRouter, UtoipaMethodRouter};
 
-pub use trailbase_wasm_runtime_host::functions::{SqliteFunctions, SqliteStore};
-pub use trailbase_wasm_runtime_host::{HttpStore, KvStore, Runtime, SharedState};
-
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
-
-pub type WasmRuntimeBuilder = dyn Fn() -> Result<Runtime, WasmError> + Send + Sync;
-
-pub fn wasm_runtime_builder(
-  path_to_component: PathBuf,
-  shared_state: Arc<SharedState>,
-  tokio_runtime: Option<tokio::runtime::Handle>,
-  dev: bool,
-) -> Box<WasmRuntimeBuilder> {
-  return Box::new(move || {
-    return Runtime::init(
-      path_to_component.clone(),
-      shared_state.clone(),
-      RuntimeOptions {
-        use_winch: use_winch(dev),
-        tokio_runtime: tokio_runtime.clone(),
-      },
-    );
-  });
-}
-
-pub async fn sync_wasm_runtime_for_sqlite(
-  path_to_component: PathBuf,
-  shared_state: Arc<SharedState>,
-  dev: bool,
-) -> Result<Option<(SqliteStore, SqliteFunctions)>, AnyError> {
-  let rt = Runtime::init(
-    path_to_component,
-    shared_state.clone(),
-    RuntimeOptions {
-      // https://github.com/trailbaseio/trailbase/issues/206
-      use_winch: use_winch(dev),
-      // No async runtime needed for SQLite functions.
-      tokio_runtime: None,
-    },
-  )?;
-
-  // Create re-usable shared store, i.e. runtime state, to minimize per-call overhead.
-  //
-  // NOTE: Only Rust guests currently support interleaving.
-  let store = SqliteStore::new(&rt).await?;
-  let functions = store
-    .initialize_sqlite_functions(trailbase_wasm_runtime_host::InitArgs { version: None })
-    .await?;
-
-  return if functions.is_empty() {
-    Ok(None)
-  } else {
-    Ok(Some((store, functions)))
-  };
-}
-
-fn use_winch(dev: bool) -> bool {
-  return if cfg!(target_os = "macos") {
-    // https://github.com/trailbaseio/trailbase/issues/206
-    false
-  } else {
-    dev
-  };
-}
 
 pub struct Job {
   pub name: String,

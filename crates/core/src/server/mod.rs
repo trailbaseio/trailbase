@@ -125,13 +125,13 @@ impl Server {
 
     #[cfg(feature = "wasm")]
     {
-      for rt in state.wasm().runtimes() {
-        if let crate::wasm::InstallResult {
-          router: Some((wasm_router, has_wasm_root)),
-        } = crate::wasm::install_routes_and_jobs(&state, rt.clone())
-          .await
-          .map_err(|err| InitError::ScriptError(err.to_string()))?
-        {
+      for result in state
+        .wasm()
+        .install_routes_and_jobs(state.version(), &state.jobs())
+        .await
+        .map_err(|err| InitError::ScriptError(err))?
+      {
+        if let Some((wasm_router, has_wasm_root)) = result.router {
           has_root |= has_wasm_root;
           custom_routers.push(wasm_router);
         }

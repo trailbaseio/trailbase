@@ -5,21 +5,23 @@ use trailbase_auth_config::{AuthConfig, LoginIdentifier, OAuthProvider, Registra
 use trailbase_reactive::Reactive;
 use trailbase_wasm_common::HttpContextUser;
 use trailbase_wasm_common::manifest::Metadata;
-use trailbase_wasm_runtime_axum::{AnyError, Job, KvStore, Runtime, WasmRuntimeBuilder};
+use trailbase_wasm_runtime_axum::{AnyError, Job};
+pub use trailbase_wasm_runtime_host::functions::{SqliteFunction, SqliteStore};
+use trailbase_wasm_runtime_host::{KvStore, Runtime, RuntimeOptions, use_winch};
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::config::proto;
+use crate::scheduler::JobRegistry;
 use crate::util::uuid_to_b64;
 use crate::{AppState, DataDir, User};
-
-pub use trailbase_wasm_runtime_axum::{SqliteFunctions, SqliteStore};
 
 pub(crate) async fn build_sync_wasm_runtimes_for_sqlite(
   data_dir: &DataDir,
   extra_components: &[PathBuf],
   fs_root_path: Option<PathBuf>,
   dev: bool,
-) -> Result<Vec<(SqliteStore, SqliteFunctions)>, AnyError> {
+) -> Result<Vec<(SqliteStore, Vec<SqliteFunction>)>, AnyError> {
+  let version = trailbase_build::get_version_info!();
   let wasm_components_path = data_dir.wasm_path();
   let mut components = trailbase_wasm_common::find_wasm_components(&wasm_components_path);
 
@@ -40,20 +42,31 @@ pub(crate) async fn build_sync_wasm_runtimes_for_sqlite(
     fs_root_path,
   });
 
-  let mut sync_runtimes = Vec::<(SqliteStore, SqliteFunctions)>::with_capacity(components.len());
+  let mut runtimes = Vec::with_capacity(components.len());
   for path in components {
-    if let Some(result) =
-      trailbase_wasm_runtime_axum::sync_wasm_runtime_for_sqlite(path, shared_state.clone(), dev)
-        .await?
+    let runtime = Runtime::init(
+      path,
+      shared_state.clone(),
+      RuntimeOptions {
+        use_winch: use_winch(dev),
+        // No async runtime needed for SQLite functions.
+        tokio_runtime: None,
+      },
+    )?;
+
+    if let Some(store_and_functions) =
+      SqliteStore::init(&runtime, version.git_version_tag.clone()).await?
     {
-      sync_runtimes.push(result)
+      runtimes.push(store_and_functions);
     }
   }
 
-  return Ok(sync_runtimes);
+  return Ok(runtimes);
 }
 
 type WasmMetadataAndRuntime = (Option<Metadata>, Runtime);
+type WasmRuntimeBuilder =
+  dyn Fn() -> Result<Runtime, trailbase_wasm_runtime_host::Error> + Send + Sync;
 
 #[derive(Default)]
 pub struct WasmState {
@@ -61,6 +74,11 @@ pub struct WasmState {
   runtimes: Vec<Arc<RwLock<WasmMetadataAndRuntime>>>,
   /// WASM runtime builders needed to rebuild above runtimes, e.g. when hot-reloading.
   builders: Vec<Box<WasmRuntimeBuilder>>,
+}
+
+pub struct InstallResult {
+  /// Tuple of router and whether that router has GET "/" route.
+  pub router: Option<(OpenApiRouter<AppState>, bool)>,
 }
 
 impl WasmState {
@@ -119,13 +137,20 @@ impl WasmState {
 
     let builders: Vec<_> = components
       .into_iter()
-      .map(|path| {
-        return trailbase_wasm_runtime_axum::wasm_runtime_builder(
-          path,
-          shared_state.clone(),
-          tokio_rt.clone(),
-          dev,
-        );
+      .map(|path| -> Box<WasmRuntimeBuilder> {
+        let shared_state = shared_state.clone();
+        let tokio_runtime = tokio_rt.clone();
+
+        return Box::new(move || {
+          return Runtime::init(
+            path.clone(),
+            shared_state.clone(),
+            RuntimeOptions {
+              use_winch: use_winch(dev),
+              tokio_runtime: tokio_runtime.clone(),
+            },
+          );
+        });
       })
       .collect();
 
@@ -184,41 +209,28 @@ impl WasmState {
 
     return Ok(());
   }
+
+  pub async fn install_routes_and_jobs(
+    &self,
+    version: trailbase_build::version::VersionInfo,
+    job_registry: &JobRegistry,
+  ) -> Result<Vec<InstallResult>, AnyError> {
+    let mut results = Vec::<InstallResult>::with_capacity(self.runtimes.len());
+    for rt in &self.runtimes {
+      results.push(
+        install_routes_and_jobs_impl(version.git_version_tag.clone(), job_registry, rt.clone())
+          .await?,
+      );
+    }
+    return Ok(results);
+  }
 }
 
-#[derive(Default)]
-pub(crate) struct InstallResult {
-  /// Tuple of router and whether that router has GET "/" route.
-  pub router: Option<(OpenApiRouter<AppState>, bool)>,
-}
-
-pub(crate) async fn install_routes_and_jobs(
-  state: &AppState,
+async fn install_routes_and_jobs_impl(
+  version: Option<String>,
+  job_registry: &JobRegistry,
   runtime: Arc<RwLock<(Option<Metadata>, Runtime)>>,
 ) -> Result<InstallResult, AnyError> {
-  use axum::extract::OptionalFromRequestParts;
-  use axum::http::request::Parts;
-
-  fn extract_user<'a>(
-    parts: &'a mut Parts,
-    s: &'a AppState,
-  ) -> futures_util::future::BoxFuture<'a, Option<HttpContextUser>> {
-    return Box::pin(async {
-      User::from_request_parts(parts, s)
-        .await
-        .ok()
-        .flatten()
-        .map(|u| HttpContextUser {
-          id: uuid_to_b64(&u.id),
-          email: u.email.map(|e| e.into_string()),
-          username: u.username.map(|u| u.into_string()),
-          csrf_token: u.csrf_token.into_string(),
-        })
-    });
-  }
-
-  let version = state.version().git_version_tag.clone();
-
   let mut metadata_and_rt = runtime.write().await;
   let component_name = metadata_and_rt
     .1
@@ -251,10 +263,7 @@ pub(crate) async fn install_routes_and_jobs(
     timeout,
   } in jobs
   {
-    let Some(job) = state
-      .jobs()
-      .new_job(None, name, schedule, timeout, callback)
-    else {
+    let Some(job) = job_registry.new_job(None, name, schedule, timeout, callback) else {
       return Err("Failed to add job".into());
     };
 
@@ -262,6 +271,25 @@ pub(crate) async fn install_routes_and_jobs(
   }
 
   return Ok(InstallResult { router });
+}
+
+fn extract_user<'a>(
+  parts: &'a mut axum::http::request::Parts,
+  s: &'a AppState,
+) -> futures_util::future::BoxFuture<'a, Option<HttpContextUser>> {
+  use axum::extract::OptionalFromRequestParts;
+  return Box::pin(async {
+    User::from_request_parts(parts, s)
+      .await
+      .ok()
+      .flatten()
+      .map(|u| HttpContextUser {
+        id: uuid_to_b64(&u.id),
+        email: u.email.map(|e| e.into_string()),
+        username: u.username.map(|u| u.into_string()),
+        csrf_token: u.csrf_token.into_string(),
+      })
+  });
 }
 
 fn build_auth_config(config: &proto::Config) -> AuthConfig {

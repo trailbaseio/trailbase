@@ -134,7 +134,7 @@ impl AppState {
             args.dev,
           )
           .await
-          .map_err(|err| InitError::ScriptError(err.to_string()))?
+          .map_err(|err| InitError::ScriptError(err))?
         }
         _ => vec![],
       },
@@ -508,10 +508,11 @@ impl AppState {
       return Err("Pending AppState references. Explicit shutdown skipped.".into());
     };
 
+    // First shut down jobs, which may depend on WASM components.
+    drop(state.jobs);
+
     #[cfg(feature = "wasm")]
     drop(state.wasm);
-
-    drop(state.jobs);
 
     state.connection_manager.close().await;
     for conn in [state.session_conn, state.logs_conn] {

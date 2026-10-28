@@ -14,7 +14,7 @@ use crate::migrations::{
   apply_base_migrations, apply_logs_migrations, apply_main_migrations, apply_session_migrations,
 };
 use crate::schema_metadata::build_metadata_and_maybe_file_deletions;
-use crate::wasm::{SqliteFunctions, SqliteStore};
+use crate::wasm::{SqliteFunction, SqliteStore};
 
 #[derive(Debug, Error)]
 pub enum ConnectionError {
@@ -76,7 +76,7 @@ struct ConnectionManagerState {
   // Properties retained for initializing new connections.
   data_dir: DataDir,
   json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
-  sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+  sqlite_function_runtimes: Vec<(SqliteStore, Vec<SqliteFunction>)>,
   read_only: bool,
 
   // Properties for caching connections:
@@ -96,7 +96,7 @@ pub struct ConnectionManager {
 pub struct Options {
   pub data_dir: DataDir,
   pub json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
-  pub sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+  pub sqlite_function_runtimes: Vec<(SqliteStore, Vec<SqliteFunction>)>,
   pub pg_uri: Option<String>,
   pub read_only: Option<bool>,
 }
@@ -174,7 +174,7 @@ impl ConnectionManager {
   pub(crate) async fn new_for_test(
     data_dir: DataDir,
     json_schema_registry: Arc<trailbase_schema::json_schema::registry::JsonSchemaRegistry>,
-    sqlite_function_runtimes: Vec<(SqliteStore, SqliteFunctions)>,
+    sqlite_function_runtimes: Vec<(SqliteStore, Vec<SqliteFunction>)>,
     pg_uri: Option<String>,
   ) -> Self {
     const READ_ONLY: bool = false;
@@ -438,7 +438,7 @@ struct InitDbOptions<'a> {
   migration_path: Option<&'a PathBuf>,
   is_main_db: bool,
   json_registry: &'a Arc<JsonSchemaRegistry>,
-  runtimes: &'a Vec<(SqliteStore, SqliteFunctions)>,
+  runtimes: &'a Vec<(SqliteStore, Vec<SqliteFunction>)>,
   attach: Vec<AttachedDatabase>,
   num_threads: Option<usize>,
   read_only: Option<bool>,
@@ -502,7 +502,7 @@ async fn init_db_sqlite<'a>(
   fn build_connection(
     db_path: Option<PathBuf>,
     json_registry: Arc<JsonSchemaRegistry>,
-    #[allow(unused)] runtimes: &[(SqliteStore, SqliteFunctions)],
+    #[allow(unused)] runtimes: &[(SqliteStore, Vec<SqliteFunction>)],
   ) -> Result<rusqlite::Connection, ConnectionError> {
     log::trace!("building SQLite connection: {db_path:?}");
 

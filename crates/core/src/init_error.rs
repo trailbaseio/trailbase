@@ -23,7 +23,7 @@ pub enum InitError {
   #[error("JsonSchema: {0}")]
   JsonSchema(#[from] trailbase_schema::json_schema::Error),
   #[error("Script error: {0}")]
-  ScriptError(String),
+  ScriptError(Box<dyn std::error::Error + Send + Sync>),
   #[error("ObjectStore error: {0}")]
   ObjectStore(#[from] object_store::Error),
   #[error("Auth error: {0}")]

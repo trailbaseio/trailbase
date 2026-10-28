@@ -684,6 +684,18 @@ fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
 // }
 //
 
+/// Helper to derive intended use of winch based on dev mode.
+pub fn use_winch(dev: bool) -> bool {
+  return if cfg!(target_os = "macos") {
+    // https://github.com/trailbaseio/trailbase/issues/206
+    false
+  } else {
+    dev
+  };
+}
+
+const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(20);
+const POOL_HARD_LIMIT: usize = 65536;
 const ABI_MISMATCH_WARNING: &str = "\
     This may happen if the server and component are ABI incompatible. Make sure to run compatible \
     versions, i.e. update/rebuild the component to match the server binary or update your server \
@@ -887,6 +899,3 @@ mod tests {
     return String::from_utf8_lossy(&body).trim().parse().unwrap();
   }
 }
-
-const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(20);
-const POOL_HARD_LIMIT: usize = 65536;

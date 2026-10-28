@@ -2,10 +2,9 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use wasmtime::{Result, Store};
 
-use crate::Error;
+use crate::{Error, InitArgs, Runtime};
 
 pub use trailbase_wasm_common::manifest::{SqliteFunction, SqliteScalarFunction};
-pub type SqliteFunctions = Vec<SqliteFunction>;
 
 struct SqliteStoreInternal {
   store: Mutex<Store<crate::host::State>>,
@@ -18,7 +17,26 @@ pub struct SqliteStore {
 }
 
 impl SqliteStore {
-  pub async fn new(runtime: &crate::Runtime) -> Result<Self, Error> {
+  pub async fn init(
+    runtime: &Runtime,
+    version: Option<String>,
+  ) -> Result<Option<(Self, Vec<SqliteFunction>)>, Error> {
+    // Create re-usable shared store, i.e. runtime state, to minimize per-call overhead. Note that
+    // only Rust guests currently support interleaving, which means JS guests providing SQLite
+    // functions will not work with this integration.
+    let store = SqliteStore::new(&runtime).await?;
+    let functions = store
+      .initialize_sqlite_functions(InitArgs { version })
+      .await?;
+
+    return if functions.is_empty() {
+      Ok(None)
+    } else {
+      Ok(Some((store, functions)))
+    };
+  }
+
+  pub async fn new(runtime: &Runtime) -> Result<Self, Error> {
     let (store, bindings) = runtime.new_bindings().await?;
     return Ok(Self {
       state: Arc::new(SqliteStoreInternal {
@@ -31,7 +49,7 @@ impl SqliteStore {
   // Call WASM components `init` implementation.
   pub async fn initialize_sqlite_functions(
     &self,
-    args: crate::InitArgs,
+    args: InitArgs,
   ) -> Result<Vec<SqliteFunction>, Error> {
     let api = self.state.bindings.trailbase_component_init_endpoint();
 

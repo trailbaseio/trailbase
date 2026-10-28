@@ -37,7 +37,7 @@ mod wasm;
 #[cfg(not(feature = "wasm"))]
 mod wasm {
   #[derive(Clone)]
-  pub struct SqliteFunctions;
+  pub struct SqliteFunction;
 
   #[derive(Clone)]
   pub struct SqliteStore;
