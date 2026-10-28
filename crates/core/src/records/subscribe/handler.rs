@@ -184,8 +184,9 @@ pub async fn subscribe_sse(
       let record_id = api.primary_key_to_value(record)?;
       api.check_table_level_access(Permission::Read, user.as_ref())?;
 
+      // QUESTION: Can we support subscriptions for tenant DBs?
       api
-        .conn()
+        .conn(None)
         .call_reader({
           let api = api.clone();
           let user = user.clone();
@@ -473,8 +474,9 @@ pub async fn subscribe_ws(
         // NOTE: Access checking can only happen post upgrade, since browsers & Node.js don't allow
         // setting custom headers for the UPGRADE HTTP request. We could maybe use cookies in some
         // places but instead expect an explicit authorization.
+        // QUESTION: Can we support subscriptions for tenant DBs?
         let result = api
-          .conn()
+          .conn(None)
           .call_reader({
             let api = api.clone();
             let user = user.clone();

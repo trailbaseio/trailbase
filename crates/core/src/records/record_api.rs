@@ -283,6 +283,7 @@ struct RecordApiState {
 
   // Below properties are filled from `proto::RecordApiConfig`.
   api_name: String,
+  tenant_template: Option<String>,
   acl: [u8; 2],
   insert_conflict_resolution_strategy: Option<proto::ConflictResolutionStrategy>,
   insert_autofill_missing_user_id_columns: bool,
@@ -439,6 +440,7 @@ impl RecordApiState {
 
       // proto::RecordApiConfig properties below:
       api_name,
+      tenant_template: config.tenant_template.clone(),
 
       // Insert- specific options.
       insert_conflict_resolution_strategy: config
@@ -546,8 +548,17 @@ impl RecordApi {
     return &self.state.schema.attached_databases;
   }
 
-  pub fn conn(&self) -> &trailbase_sqlite::Connection {
-    return &self.state.conn;
+  pub fn connection_type(&self) -> trailbase_sqlite::ConnectionType {
+    return self.state.conn.connection_type();
+  }
+
+  pub fn conn(&self, _tenant_id: Option<uuid::Uuid>) -> trailbase_sqlite::Connection {
+    return if let Some(ref _template) = self.state.tenant_template {
+      // TODO: Implement tenant DB routing.
+      self.state.conn.clone()
+    } else {
+      self.state.conn.clone()
+    };
   }
 
   // NOTE: We use this for expansions when we follow FKs (read, list, json schema) as well as

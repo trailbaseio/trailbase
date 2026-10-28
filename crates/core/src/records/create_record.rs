@@ -108,19 +108,17 @@ pub async fn create_record_handler(
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  if records_and_files.is_empty() {
-    return Err(RecordError::BadRequest("no values provided"));
-  }
-
-  let conn = api.conn();
-  let conflict_resolution_strategy = api
-    .insert_conflict_resolution_strategy()
-    .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
-
+  let conn = api.conn(user.as_ref().and_then(|u| u.tenant));
   let record_ids: Vec<String> = match records_and_files.len() {
+    0 => {
+      return Err(RecordError::BadRequest("no values provided"));
+    }
     1 => {
-      let (record, files) = records_and_files.swap_remove(0);
+      let conflict_resolution_strategy = api
+        .insert_conflict_resolution_strategy()
+        .unwrap_or(crate::config::proto::ConflictResolutionStrategy::Undefined);
 
+      let (record, files) = records_and_files.swap_remove(0);
       let (params, files) = build_insert_params(&state, &api, user.as_ref(), record, files)
         .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
@@ -157,7 +155,7 @@ pub async fn create_record_handler(
           tokio::spawn(async move {
             let table_name = api.table_name().clone();
             if let Err(err) = delete_files_marked_for_deletion(
-              api.conn(),
+              &conn,
               state.objectstore(),
               &table_name,
               &[write_result.rowid],
