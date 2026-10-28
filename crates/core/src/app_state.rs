@@ -504,27 +504,31 @@ impl AppState {
   }
 
   pub(crate) async fn shutdown(self) -> Result<(), String> {
-    let Some(state) = Arc::into_inner(self.state) else {
+    let Some(InternalState {
+      jobs,
+      #[cfg(feature = "wasm")]
+      wasm,
+      session_conn,
+      logs_conn,
+      connection_manager,
+      ..
+    }) = Arc::into_inner(self.state)
+    else {
       return Err("Pending AppState references. Explicit shutdown skipped.".into());
     };
 
     // First shut down jobs, which may depend on WASM components.
-    drop(state.jobs);
+    drop(jobs);
 
     #[cfg(feature = "wasm")]
-    drop(state.wasm);
+    drop(wasm);
 
-    // Both `AppState` and `ConnectionManager` hold references to the main connection.
-    drop(state.conn);
-    state.connection_manager.close().await;
-
-    for conn in [state.session_conn, state.logs_conn] {
+    connection_manager.close().await;
+    for conn in [session_conn, logs_conn] {
       if let Err(err) = conn.close().await {
         warn!("Failed to close connection: {err}")
       }
     }
-
-    drop(state.connection_manager);
 
     return Ok(());
   }
