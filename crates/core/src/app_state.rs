@@ -668,7 +668,7 @@ async fn build_record_apis_impl(
         && candidate_api.attached_databases() == attached_databases
       {
         // NOTE: We must use latest metadata to work correctly on schema changes.
-        return Ok((candidate_api.conn().clone(), metadata));
+        return Ok((candidate_api.conn(None).clone(), metadata));
       };
 
       return Ok((conn, metadata));
