@@ -57,7 +57,7 @@ pub struct UpdateRecordApiQuery {
 impl UpdateRecordApiQuery {
   pub fn new(api: RecordApi, params: UpdateParams) -> Result<Self, RecordError> {
     return Ok(Self {
-      query: UpdateQuery::new(api.conn().connection_type(), api.table_name(), params)?,
+      query: UpdateQuery::new(api.connection_type(), api.table_name(), params)?,
       api,
     });
   }

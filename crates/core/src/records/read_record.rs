@@ -73,7 +73,7 @@ pub async fn read_record_handler(
   query.check_table_level_access(user.as_ref())?;
 
   let mut row = api
-    .conn()
+    .conn(user.as_ref().and_then(|u| u.tenant))
     .call_reader({
       move |mut conn| -> Result<_, RecordError> {
         query.check_record_level_access(&mut conn, user.as_ref())?;
@@ -195,7 +195,7 @@ pub async fn get_uploaded_file_from_record_handler(
   query.check_table_level_access(user.as_ref())?;
 
   let json = api
-    .conn()
+    .conn(user.as_ref().and_then(|u| u.tenant))
     .call_reader(move |mut conn| {
       query.check_record_level_access(&mut conn, user.as_ref())?;
       return query.read(&mut conn);
@@ -254,7 +254,7 @@ pub async fn get_uploaded_files_from_record_handler(
       query.check_table_level_access(user.as_ref())?;
 
       let json = api
-        .conn()
+        .conn(user.as_ref().and_then(|u| u.tenant))
         .call_reader(move |mut conn| {
           query.check_record_level_access(&mut conn, user.as_ref())?;
           return query.read(&mut conn);
@@ -269,7 +269,7 @@ pub async fn get_uploaded_files_from_record_handler(
       query.check_table_level_access(user.as_ref())?;
 
       let json = api
-        .conn()
+        .conn(user.as_ref().and_then(|u| u.tenant))
         .call_reader(move |mut conn| {
           query.check_record_level_access(&mut conn, user.as_ref())?;
           return query.read(&mut conn);
