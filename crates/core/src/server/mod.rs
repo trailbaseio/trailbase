@@ -677,10 +677,14 @@ async fn start_listen(
         serve::TlsListener {
           listener,
           acceptor: TlsAcceptor::from(Arc::new({
-            ServerConfig::builder()
+            let mut config = ServerConfig::builder()
               .with_no_client_auth()
               .with_single_cert(vec![cert], key)
-              .expect("Failed to build server config")
+              .expect("Failed to build server config");
+
+            config.alpn_protocols = vec![b"http/1.1".to_vec(), b"h2".to_vec()];
+
+            config
           })),
         },
         router.into_make_service_with_connect_info::<std::net::SocketAddr>(),

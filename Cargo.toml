@@ -56,7 +56,7 @@ opt-level = 1
 arc-swap = { version = "1.9.3", default-features = false }
 argon2 = { version = "^0.6.0", default-features = false, features = ["alloc", "getrandom", "password-hash"] }
 askama = { version = "0.16.1", default-features = false, features = ["derive", "std", "config"] }
-axum = { version = "^0.8.9", default-features = false, features = ["multipart", "tokio", "http1"] }
+axum = { version = "^0.8.9", default-features = false, features = ["multipart", "tokio", "http2"] }
 base64 = { version = "0.23.1", default-features = false, features = ["alloc", "std"] }
 bytes = { version = "1.12.1", features = ["serde"] }
 chrono = { version = "0.4.45", default-features = false }
