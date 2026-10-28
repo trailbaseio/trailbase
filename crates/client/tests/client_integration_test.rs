@@ -87,7 +87,7 @@ fn block_on<F: std::future::Future<Output = ()>>(fut: F) -> Result<(), Failed> {
     .build()
     .unwrap();
 
-  rt.block_on(async { fut });
+  rt.block_on(fut);
 
   return Ok(());
 }
