@@ -87,6 +87,12 @@ struct ConnectionManagerState {
   pg_uri: Option<String>,
 }
 
+impl Drop for ConnectionManagerState {
+  fn drop(&mut self) {
+    log::debug!("Dropped ConnectionManagerState");
+  }
+}
+
 // A manager for multi-DB SQLite connections.
 #[derive(Clone)]
 pub struct ConnectionManager {
@@ -451,6 +457,12 @@ async fn init_db_pg<'a>(
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   #[cfg(not(test))]
   log::warn!("Postgres support is experimental: {pg_uri:?}");
+
+  if !opts.runtimes.is_empty() {
+    log::warn!(
+      "WASM components provided SQLite extension functions, which cannot be supported by PG"
+    );
+  }
 
   let conn = trailbase_sqlite::Connection::pg_with_opts(trailbase_sqlite::generic::PgOptions {
     connection: trailbase_sqlite::generic::PgConnection::Uri(pg_uri),

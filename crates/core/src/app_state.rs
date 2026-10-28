@@ -514,12 +514,17 @@ impl AppState {
     #[cfg(feature = "wasm")]
     drop(state.wasm);
 
+    // Both `AppState` and `ConnectionManager` hold references to the main connection.
+    drop(state.conn);
     state.connection_manager.close().await;
+
     for conn in [state.session_conn, state.logs_conn] {
       if let Err(err) = conn.close().await {
         warn!("Failed to close connection: {err}")
       }
     }
+
+    drop(state.connection_manager);
 
     return Ok(());
   }

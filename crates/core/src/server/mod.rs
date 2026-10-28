@@ -324,27 +324,34 @@ impl Server {
         SocketAddr::Uds(ref path) => (true, format!("unix:{}", path.to_string_lossy())),
         SocketAddr::Tcp(ref a) => (false, format!("{protocol}://{a}")),
       };
-      let mut admin_uri: Option<String> = None;
 
       let mut set = JoinSet::new();
 
-      if let Some((admin_addr, admin_router)) = admin_router {
-        if let SocketAddr::Tcp(aa) = admin_addr {
-          admin_uri = Some(format!("{protocol}://{aa}/_/admin/"));
+      let admin_uri = match admin_router {
+        Some((admin_addr, admin_router)) => {
+          let admin_uri = if let SocketAddr::Tcp(aa) = admin_addr {
+            Some(format!("{protocol}://{aa}/_/admin/"))
+          } else {
+            None
+          };
+
+          let cloned_tls = tls
+            .as_ref()
+            .map(|(cert, key)| (cert.clone(), key.clone_key()));
+
+          set.spawn(async move {
+            start_listen(admin_addr, admin_router, cloned_tls, None).await;
+          });
+
+          admin_uri
         }
+        None if !is_uds => Some(format!("{base_uri}/_/admin/")),
+        None => None,
+      };
 
-        let cloned_tls = tls
-          .as_ref()
-          .map(|(cert, key)| (cert.clone(), key.clone_key()));
-
-        set.spawn(async move { start_listen(admin_addr, admin_router, cloned_tls, None).await });
-      } else if is_uds {
-        admin_uri = Some(format!("{base_uri}/_/admin/"));
-      }
-
-      set.spawn({
+      set.spawn(async move {
         let (addr, router) = main_router;
-        async move { start_listen(addr, router, tls, Some(cleanup_sender)).await }
+        start_listen(addr, router, tls, Some(cleanup_sender)).await;
       });
 
       if let Some(admin_uri) = admin_uri {

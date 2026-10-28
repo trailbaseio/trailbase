@@ -6,6 +6,7 @@ use trailbase_reactive::Reactive;
 use trailbase_wasm_common::HttpContextUser;
 use trailbase_wasm_common::manifest::Metadata;
 use trailbase_wasm_runtime_axum::{AnyError, Job};
+pub use trailbase_wasm_runtime_host::InitArgs;
 pub use trailbase_wasm_runtime_host::functions::{SqliteFunction, SqliteStore};
 use trailbase_wasm_runtime_host::{KvStore, Runtime, RuntimeOptions, use_winch};
 use utoipa_axum::router::OpenApiRouter;
@@ -44,20 +45,20 @@ pub(crate) async fn build_sync_wasm_runtimes_for_sqlite(
 
   let mut runtimes = Vec::with_capacity(components.len());
   for path in components {
-    let runtime = Runtime::init(
-      path,
-      shared_state.clone(),
-      RuntimeOptions {
-        use_winch: use_winch(dev),
-        // No async runtime needed for SQLite functions.
-        tokio_runtime: None,
-      },
-    )?;
+    // Create a single reused/shared store, i.e. runtime state, to minimize per-call overhead. Note
+    // that only Rust guests currently support interleaving, which means JS guests providing SQLite
+    // functions will not work with this integration.
+    let store = SqliteStore::init(&path, shared_state.clone(), use_winch(dev)).await?;
+    let functions = store
+      .initialize_sqlite_functions(InitArgs {
+        version: version.git_version_tag.clone(),
+      })
+      .await?;
 
-    if let Some(store_and_functions) =
-      SqliteStore::init(&runtime, version.git_version_tag.clone()).await?
-    {
-      runtimes.push(store_and_functions);
+    if !functions.is_empty() {
+      log::debug!("Found WASM SQLite extension functions: {functions:?} in {path:?}");
+
+      runtimes.push((store, functions));
     }
   }
 
@@ -143,7 +144,7 @@ impl WasmState {
 
         return Box::new(move || {
           return Runtime::init(
-            path.clone(),
+            &path,
             shared_state.clone(),
             RuntimeOptions {
               use_winch: use_winch(dev),

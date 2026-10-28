@@ -6,6 +6,7 @@ pub mod functions;
 mod host;
 mod prefs;
 mod sqlite;
+mod util;
 
 use bytes::Bytes;
 use core::future::Future;
@@ -15,18 +16,18 @@ use http_body_util::combinators::UnsyncBoxBody;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::time::SystemTime;
 use tokio::task::JoinError;
 use tokio::time::Duration;
-use trailbase_wasi_keyvalue::WasiKeyValueCtx;
 use trailbase_wasm_common::manifest::InitManifest;
-use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{AsContextMut, Config, Engine, Result, Store};
-use wasmtime_wasi::{FsPerms, WasiCtxBuilder};
+use wasmtime::component::{Component, Linker};
+use wasmtime::{AsContextMut, Engine, Result, Store};
+use wasmtime_wasi_http::WasiHttpView;
 use wasmtime_wasi_http::p2::bindings::http::types::ErrorCode;
-use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpView};
 
-use crate::host::TransactionImpl;
+use crate::util::{
+  build_new_store, build_wasmtime_component, build_wasmtime_engine, build_wasmtime_linker,
+  initialize_bindings,
+};
 
 pub use crate::host::{SharedState, State};
 pub use trailbase_wasi_keyvalue::Store as KvStore;
@@ -80,7 +81,11 @@ struct RuntimeInternal {
 
 impl Drop for RuntimeInternal {
   fn drop(&mut self) {
-    log::debug!("Dropped WASM runtime: {:?}", self.component_path);
+    log::debug!(
+      "Dropped WASM runtime: {:?} (sqlite_functions={})",
+      self.component_path,
+      self.shared_state.conn.is_none()
+    );
   }
 }
 
@@ -93,58 +98,17 @@ pub struct Runtime {
 
 impl Runtime {
   pub fn init(
-    wasm_source_file: PathBuf,
+    wasm_source_file: impl Into<PathBuf>,
     shared_state: Arc<SharedState>,
     opts: RuntimeOptions,
   ) -> Result<Self, Error> {
-    let engine = {
-      let cache = wasmtime::Cache::new(wasmtime::CacheConfig::default())?;
-      let config = build_config(Some(cache), opts.use_winch);
-
-      Engine::new(&config)?
-    };
+    let engine = build_wasmtime_engine(opts.use_winch)?;
+    let linker = build_wasmtime_linker(&engine)?;
 
     // Load the component - a very expensive operation generating code. Compilation happens in
     // parallel and will saturate the entire machine.
-    let component = {
-      log::info!("Compiling: {wasm_source_file:?}. May take some time...");
-
-      let start = SystemTime::now();
-      let component = wasmtime::CodeBuilder::new(&engine)
-        .wasm_binary_or_text_file(&wasm_source_file)?
-        .compile_component()?;
-
-      // NOTE: According to docs, this should not do anything (it seems like a reasonable thing to
-      // call explicitly).
-      component.initialize_copy_on_write_image()?;
-
-      log::info!(
-        "Loaded component {wasm_source_file:?} in: {elapsed:?}.",
-        elapsed = SystemTime::now().duration_since(start).unwrap_or_default()
-      );
-
-      component
-    };
-
-    let linker = {
-      let mut linker = Linker::<State>::new(&engine);
-
-      // Adds all the default WASI implementations: clocks, random, fs, ...
-      wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
-
-      // Adds default HTTP interfaces - incoming and outgoing.
-      wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-
-      // Add default KV interfaces.
-      trailbase_wasi_keyvalue::add_to_linker(&mut linker, |cx| {
-        trailbase_wasi_keyvalue::WasiKeyValue::new(&cx.kv, &mut cx.resource_table)
-      })?;
-
-      // Host interfaces.
-      host::trailbase::database::sqlite::add_to_linker::<_, State>(&mut linker, |s| s)?;
-
-      linker
-    };
+    let wasm_source_file = wasm_source_file.into();
+    let component = build_wasmtime_component(&engine, &wasm_source_file)?;
 
     let rt_handle = opts.tokio_runtime.unwrap_or_else(|| {
       log::debug!("Re-using Tokio runtime from context");
@@ -168,94 +132,23 @@ impl Runtime {
     return &self.state.component_path;
   }
 
-  async fn new_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
+  async fn new_store_and_bindings(&self) -> Result<(Store<State>, crate::host::Interfaces), Error> {
     let mut store = build_new_store(
       &self.state.engine,
       &self.state.shared_state,
-      self.component_path().to_path_buf(),
+      self.state.component_path.clone(),
     )?;
 
-    let instance_pre = self
-      .state
-      .linker
-      .instantiate_pre(&self.state.component)
-      .map_err(|err| {
-        log::error!(
-          "Failed to pre-instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
-          path = self.state.component_path
-        );
-        return err;
-      })?;
-
-    let instance = instance_pre
-      .instantiate_async(&mut store)
-      .await
-      .map_err(|err| {
-        log::error!(
-          "Failed to instantiate WIT component {path:?}: '{err}'.\n{ABI_MISMATCH_WARNING}",
-          path = self.state.component_path
-        );
-        return err;
-      })?;
-
-    let bindings = crate::host::Interfaces::new(&mut store, &instance).map_err(|err| {
-      log::error!(
-        "Failed to load WIT bindings for {path:?}: '{err}'.",
-        path = self.state.component_path
-      );
-      return err;
-    })?;
+    let bindings = initialize_bindings(
+      &self.state.linker,
+      &self.state.component,
+      &self.state.component_path,
+      &mut store,
+    )
+    .await?;
 
     return Ok((store, bindings));
   }
-}
-
-pub struct InitArgs {
-  pub version: Option<String>,
-}
-
-fn build_new_store(
-  engine: &Engine,
-  shared_state: &Arc<SharedState>,
-  wasm_source_file: PathBuf,
-) -> Result<Store<State>, Error> {
-  let wasi_ctx = {
-    let mut wasi_ctx = WasiCtxBuilder::new();
-    wasi_ctx.inherit_stdio();
-    wasi_ctx.stdin(wasmtime_wasi::p2::pipe::ClosedInputStream);
-    // wasi_ctx.stdout(wasmtime_wasi::p2::Stdout);
-    // wasi_ctx.stderr(wasmtime_wasi::p2::Stderr);
-
-    wasi_ctx.args(&[""]);
-    wasi_ctx.allow_tcp(false);
-    wasi_ctx.allow_udp(false);
-    wasi_ctx.allow_ip_name_lookup(true);
-
-    if let Some(ref path) = shared_state.fs_root_path {
-      wasi_ctx
-        .preopened_dir(path, "/", FsPerms::ReadOnly)
-        .map_err(|err| Error::Other(err.to_string()))?;
-    }
-
-    wasi_ctx.build()
-  };
-
-  return Ok(Store::new(
-    engine,
-    State {
-      resource_table: ResourceTable::new(),
-      wasi_ctx,
-      http_ctx: WasiHttpCtx::new(),
-      hooks: host::Hooks {
-        shared: shared_state.clone(),
-        wasm_source_file,
-      },
-      kv: WasiKeyValueCtx::new(shared_state.kv_store.clone()),
-      #[allow(deprecated)]
-      tx: tokio::sync::Mutex::new(TransactionImpl::default()),
-      shared: shared_state.clone(),
-    },
-  ));
 }
 
 struct StoreAndBindings {
@@ -274,7 +167,7 @@ impl deadpool::managed::Manager for StoreManager {
   type Error = Error;
 
   async fn create(&self) -> Result<StoreAndBindings, Error> {
-    let (mut store, _bindings) = self.rt.new_bindings().await?;
+    let (mut store, _bindings) = self.rt.new_store_and_bindings().await?;
     let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
       &mut store,
       &self.rt.state.component,
@@ -333,6 +226,10 @@ impl HttpStoreInternal {
   }
 }
 
+pub struct InitArgs {
+  pub version: Option<String>,
+}
+
 /// Main abstraction to send incoming HTTP requests into a guest "isolate" (provided runtime +
 /// state). Due to the lack of proper async WASIp3 support, this is also used for Jobs etc.
 /// Sync  There's also a separate sync SqliteStore "isolate".
@@ -346,7 +243,7 @@ impl HttpStore {
     let manifest = Self::call(rt, {
       let rt = rt.clone();
       async move {
-        let (mut store, bindings) = rt.new_bindings().await?;
+        let (mut store, bindings) = rt.new_store_and_bindings().await?;
         let api = bindings.trailbase_component_init_endpoint();
 
         let args = serde_json::to_string(&trailbase_wasm_common::manifest::InitArguments {
@@ -480,7 +377,7 @@ impl HttpStore {
             match &*state {
               HttpStoreInternal::Unique { rt } => {
                 // Instantiate a store per request.
-                let (mut store, _bindings) = rt.new_bindings().await?;
+                let (mut store, _bindings) = rt.new_store_and_bindings().await?;
                 let proxy_bindings = wasmtime_wasi_http::p2::bindings::Proxy::instantiate_async(
                   &mut store,
                   &rt.state.component,
@@ -653,29 +550,6 @@ tokio::task_local! {
     pub(crate) static REQUEST_ID: u64;
 }
 
-fn build_config(cache: Option<wasmtime::Cache>, use_winch: bool) -> Config {
-  let mut config = Config::new();
-
-  // Execution settings:
-  config.epoch_interruption(false);
-  config.memory_reservation(64 * 1024 * 1024 /* bytes */);
-  config.wasm_component_model(true);
-  // config.wasm_backtrace_details(wasmtime::WasmBacktraceDetails::Enable);
-
-  // Compilation settings.
-  config.cache(cache);
-
-  if use_winch {
-    config.strategy(wasmtime::Strategy::Winch);
-  } else {
-    config.strategy(wasmtime::Strategy::Cranelift);
-    config.cranelift_opt_level(wasmtime::OptLevel::Speed);
-    config.parallel_compilation(true);
-  }
-
-  return config;
-}
-
 // fn bytes_to_response(
 //   bytes: Vec<u8>,
 // ) -> Result<wasmtime_wasi_http::types::HostFutureIncomingResponse, ErrorCode> {
@@ -708,12 +582,6 @@ pub fn use_winch(dev: bool) -> bool {
 
 const DEFAULT_CALL_TIMEOUT: Duration = Duration::from_secs(20);
 const POOL_HARD_LIMIT: usize = 65536;
-const ABI_MISMATCH_WARNING: &str = "\
-    This may happen if the server and component are ABI incompatible. Make sure to run compatible \
-    versions, i.e. update/rebuild the component to match the server binary or update your server \
-    to run more up-to-date components.\n\
-    First-party components can be updated easily by running `$ trail components update` or downloaded from: \
-    https://github.com/trailbaseio/trailbase/releases.";
 
 #[cfg(test)]
 mod tests {
@@ -725,7 +593,7 @@ mod tests {
 
   use crate::host::SharedState;
 
-  const WASM_COMPONENT_PATH: &str = "../../client/testfixture/wasm/wasm_guest_testfixture.wasm";
+  const TEST_COMPONENT_PATH: &str = "../../client/testfixture/wasm/wasm_guest_testfixture.wasm";
 
   fn init_runtime(conn: Option<trailbase_sqlite::Connection>) -> Runtime {
     let shared_state = Arc::new(SharedState {
@@ -736,28 +604,13 @@ mod tests {
     });
 
     return Runtime::init(
-      WASM_COMPONENT_PATH.into(),
+      &TEST_COMPONENT_PATH,
       shared_state,
       RuntimeOptions {
         ..Default::default()
       },
     )
     .unwrap();
-  }
-
-  async fn init_sqlite_function_runtime(conn: &rusqlite::Connection) -> Runtime {
-    let runtime = init_runtime(None);
-
-    let store = functions::SqliteStore::new(&runtime).await.unwrap();
-
-    let functions = store
-      .initialize_sqlite_functions(InitArgs { version: None })
-      .await
-      .unwrap();
-
-    functions::setup_connection(conn, store, &functions).unwrap();
-
-    return runtime;
   }
 
   #[tokio::test]
@@ -813,18 +666,16 @@ mod tests {
 
   #[tokio::test]
   async fn test_custom_sqlite_function() {
-    let conn = parking_lot::Mutex::new(rusqlite::Connection::open_in_memory().ok());
-
-    let _sqlite_function_runtime = {
-      let lock = conn.lock();
-      init_sqlite_function_runtime(lock.as_ref().unwrap()).await
-    };
+    let (sqlite_store, functions) =
+      functions::init_sqlite_store_for_test(&TEST_COMPONENT_PATH).await;
 
     let conn = trailbase_sqlite::Connection::with_opts(
       move || -> Result<_, trailbase_sqlite::Error> {
-        // Consume the rusqlite connection, only works for one thread.
-        let mut lock = conn.lock();
-        return Ok(lock.take().unwrap());
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+
+        functions::setup_connection(&conn, sqlite_store.clone(), &functions).unwrap();
+
+        return Ok(conn);
       },
       trailbase_sqlite::Options {
         num_threads: Some(1),

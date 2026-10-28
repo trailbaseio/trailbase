@@ -1,8 +1,14 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use wasmtime::{Result, Store};
 
-use crate::{Error, InitArgs, Runtime};
+use crate::host::SharedState;
+use crate::util::{
+  build_new_store, build_wasmtime_component, build_wasmtime_engine, build_wasmtime_linker,
+  initialize_bindings,
+};
+use crate::{Error, InitArgs};
 
 pub use trailbase_wasm_common::manifest::{SqliteFunction, SqliteScalarFunction};
 
@@ -18,26 +24,22 @@ pub struct SqliteStore {
 
 impl SqliteStore {
   pub async fn init(
-    runtime: &Runtime,
-    version: Option<String>,
-  ) -> Result<Option<(Self, Vec<SqliteFunction>)>, Error> {
-    // Create re-usable shared store, i.e. runtime state, to minimize per-call overhead. Note that
-    // only Rust guests currently support interleaving, which means JS guests providing SQLite
-    // functions will not work with this integration.
-    let store = SqliteStore::new(runtime).await?;
-    let functions = store
-      .initialize_sqlite_functions(InitArgs { version })
-      .await?;
+    wasm_source_file: impl Into<PathBuf>,
+    shared_state: Arc<SharedState>,
+    use_winch: bool,
+  ) -> Result<Self, Error> {
+    let engine = build_wasmtime_engine(use_winch)?;
+    let linker = build_wasmtime_linker(&engine)?;
 
-    return if functions.is_empty() {
-      Ok(None)
-    } else {
-      Ok(Some((store, functions)))
-    };
-  }
+    // Load the component - a very expensive operation generating code. Compilation happens in
+    // parallel and will saturate the entire machine.
+    let wasm_source_file = wasm_source_file.into();
+    let component = build_wasmtime_component(&engine, &wasm_source_file)?;
 
-  pub async fn new(runtime: &Runtime) -> Result<Self, Error> {
-    let (store, bindings) = runtime.new_bindings().await?;
+    let mut store = build_new_store(&engine, &shared_state, wasm_source_file.clone())?;
+
+    let bindings = initialize_bindings(&linker, &component, &wasm_source_file, &mut store).await?;
+
     return Ok(Self {
       state: Arc::new(SqliteStoreInternal {
         store: Mutex::new(store),
@@ -203,4 +205,31 @@ fn from_json_sqlite_function_flags(
     SqliteFunctionFlag::ResultSubtype => F::SQLITE_RESULT_SUBTYPE,
     SqliteFunctionFlag::Selforder1 => F::SQLITE_SELFORDER1,
   };
+}
+
+#[cfg(test)]
+pub async fn init_sqlite_store_for_test(
+  component_path: impl Into<PathBuf>,
+) -> (SqliteStore, Vec<SqliteFunction>) {
+  use crate::KvStore;
+
+  let store = SqliteStore::init(
+    component_path,
+    Arc::new(SharedState {
+      conn: None,
+      kv_store: KvStore::new(),
+      db_path: ".".into(),
+      fs_root_path: None,
+    }),
+    false,
+  )
+  .await
+  .unwrap();
+
+  let functions = store
+    .initialize_sqlite_functions(InitArgs { version: None })
+    .await
+    .unwrap();
+
+  return (store, functions);
 }

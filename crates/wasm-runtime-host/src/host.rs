@@ -78,7 +78,7 @@ pub struct State {
   pub(crate) kv: WasiKeyValueCtx,
 
   // A mutex of a DB lock.
-  #[deprecated = "Used by deprecated `tx-*` free functions. Will be removed in favor of the `TransactionImpl` resource."]
+  #[deprecated = "Used by deprecated `tx-*` free WIT functions. Will be removed in favor of WIT resource `transaction`."]
   pub(crate) tx: Mutex<TransactionImpl>,
 
   // State shared across all runtime instances.
@@ -204,13 +204,6 @@ impl HasData for State {
 }
 
 impl self::trailbase::database::sqlite::Host for State {
-  // async fn execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
-  //   return Err(TxError::Other("not implemented".into()));
-  // }
-  // async fn query(&mut self, query: String, params: Vec<Value>) -> Result<Vec<Vec<Value>>,
-  // TxError> {   return Err(TxError::Other("not implemented".into()));
-  // }
-
   async fn tx_begin(&mut self) -> Result<(), TxError> {
     let Some(conn) = self.shared.conn.clone() else {
       return Err(TxError::Other("missing conn".into()));
@@ -227,16 +220,12 @@ impl self::trailbase::database::sqlite::Host for State {
 
   async fn tx_commit(&mut self) -> Result<(), TxError> {
     #[allow(deprecated)]
-    let mut lock = self.tx.lock().await;
-    let tx: &mut TransactionImpl = &mut lock;
-    return tx.commit().await;
+    return self.tx.lock().await.commit().await;
   }
 
   async fn tx_rollback(&mut self) -> Result<(), TxError> {
     #[allow(deprecated)]
-    let mut lock = self.tx.lock().await;
-    let tx: &mut TransactionImpl = &mut lock;
-    return tx.rollback().await;
+    return self.tx.lock().await.rollback().await;
   }
 
   async fn tx_execute(&mut self, query: String, params: Vec<Value>) -> Result<u64, TxError> {
