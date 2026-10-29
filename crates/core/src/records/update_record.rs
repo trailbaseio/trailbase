@@ -40,7 +40,7 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant));
+  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
 
   let file_token_decoder = if api.has_file_columns() {
     Some(build_file_token_decoder(

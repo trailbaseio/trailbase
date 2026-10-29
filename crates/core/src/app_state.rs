@@ -657,7 +657,7 @@ async fn build_record_apis_impl(
   // whenever possible, e.g. an ACL changing for one API isn't a good reason to drop
   // subscriptions on all APIs.
   let get_conn =
-    async move |api_name: &str, attached_databases: &[String]| -> Result<_, ConnectionError> {
+    async |api_name: &str, attached_databases: &[String]| -> Result<_, ConnectionError> {
       let ConnectionEntry {
         connection: conn,
         metadata,
@@ -680,7 +680,7 @@ async fn build_record_apis_impl(
         && candidate_api.attached_databases() == attached_databases
       {
         // NOTE: We must use latest metadata to work correctly on schema changes.
-        return Ok((candidate_api.conn(None).clone(), metadata));
+        return Ok((candidate_api.conn(None).await.clone(), metadata));
       };
 
       return Ok((conn, metadata));
@@ -696,7 +696,9 @@ async fn build_record_apis_impl(
       }
     };
 
-    match RecordApi::build(conn, metadata, config.clone()) {
+    // TODO: With RecordApi::build now having access to the ConnectionManager, we can move all this
+    // logic there.
+    match RecordApi::build(&connection_manager, conn, metadata, config.clone()) {
       Ok(api) => {
         next.insert(RecordApiByName(api));
       }
