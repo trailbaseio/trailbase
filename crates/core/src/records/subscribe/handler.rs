@@ -186,7 +186,7 @@ pub async fn subscribe_sse(
 
       // QUESTION: Can we support subscriptions for tenant DBs?
       api
-        .conn(None)
+        .single_tenant_conn()
         .call_reader({
           let api = api.clone();
           let user = user.clone();
@@ -476,7 +476,7 @@ pub async fn subscribe_ws(
         // places but instead expect an explicit authorization.
         // QUESTION: Can we support subscriptions for tenant DBs?
         let result = api
-          .conn(None)
+          .single_tenant_conn()
           .call_reader({
             let api = api.clone();
             let user = user.clone();
