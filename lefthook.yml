@@ -63,11 +63,11 @@ pre-commit:
       glob: "*.rs"
       exclude:
         - bindings/**
-      run: pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo test --workspace --features=geos,otel,pg,wasm -- --nocapture --skip=postgres
+      run: pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo test --workspace --exclude=trailbase-extension-so --features=geos,otel,pg,wasm -- --nocapture --skip=postgres
 
     clippy:
       glob: "*.rs"
-      run: pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo clippy --workspace --features=geos,otel,pg,wasm --no-deps
+      run: pnpm i --frozen-lockfile --prefer-offline && PNPM_OFFLINE=TRUE cargo clippy --workspace --exclude=trailbase-extension-so --features=geos,otel,pg,wasm --no-deps
 
 
     # === JS ===

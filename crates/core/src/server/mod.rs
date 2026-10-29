@@ -773,7 +773,7 @@ fn start_sighup_reload_task(state: AppState) -> tokio::task::JoinHandle<()> {
         connection: conn, ..
       } = state.connection_manager().main_entry();
 
-      match crate::migrations::apply_main_migrations(&conn, Some(user_migrations_path))
+      match crate::migrations::apply_main_migrations(&conn, Some(&user_migrations_path))
         .await
         .map_err(|err| trailbase_sqlite::Error::Other(err.into()))
       {

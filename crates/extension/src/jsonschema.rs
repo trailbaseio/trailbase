@@ -217,7 +217,6 @@ pub(crate) fn register_extension_functions(
       | FunctionFlags::SQLITE_DETERMINISTIC
       | FunctionFlags::SQLITE_INNOCUOUS,
     {
-      let registry = registry.clone();
       move |context| {
         return jsonschema_by_name_with_extra_args_impl(context, &registry);
       }
@@ -235,7 +234,7 @@ mod tests {
 
   #[test]
   fn test_explicit_jsonschema() {
-    let conn = crate::connect_sqlite(None, None).unwrap();
+    let conn = crate::connect_rusqlite(None, None).unwrap();
 
     let text0_schema = r#"
         {
@@ -304,7 +303,7 @@ mod tests {
       .unwrap(),
     )]));
 
-    let conn = crate::connect_sqlite(None, Some(json_schema_registry)).unwrap();
+    let conn = crate::connect_rusqlite(None, Some(json_schema_registry)).unwrap();
 
     fn starts_with(v: &serde_json::Value, param: Option<&str>) -> bool {
       if let Some(param) = param {

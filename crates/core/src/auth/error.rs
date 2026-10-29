@@ -109,9 +109,9 @@ mod tests {
   async fn test_some_sqlite_errors_yield_client_errors() {
     let conn = trailbase_sqlite::Connection::with_opts(
       || -> Result<_, trailbase_sqlite::Error> {
-        return Ok(
-          crate::connection::connect_rusqlite_without_default_extensions_and_schemas(None)?,
-        );
+        return Ok(trailbase_extension::connect_rusqlite_without_extensions(
+          None,
+        )?);
       },
       Default::default(),
     )

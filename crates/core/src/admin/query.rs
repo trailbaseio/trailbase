@@ -9,7 +9,7 @@ use ts_rs::TS;
 use crate::AppState;
 use crate::admin::AdminError as Error;
 use crate::admin::util::{rows_to_columns, rows_to_sql_value_rows};
-use crate::connection::{BuildOptions, ConnectionEntry};
+use crate::connection::ConnectionEntry;
 
 #[derive(Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]
@@ -118,17 +118,11 @@ pub async fn query_handler(
     must_invalidate_schema_cache
   };
 
-  // Initialize a new connection, to avoid any sort of tomfoolery like dropping attached databases.
-  // NOTE: This is relatively expensive, thus limit the number of spawned threads to 1.
   let ConnectionEntry {
     connection: conn, ..
   } = state
     .connection_manager()
-    .build(BuildOptions {
-      is_main: true,
-      attached_databases: attached_databases.map(|v| v.into_iter().collect()),
-      num_threads: Some(1),
-    })
+    .build_for_admin_ui_query_editor(attached_databases.map(|v| v.into_iter().collect()))
     .await?;
 
   let batched_rows_result = trailbase_sqlite::execute_batch(&conn, query).await;

@@ -2,7 +2,6 @@
 #![allow(clippy::needless_return)]
 
 use rusqlite::Connection;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 pub mod geoip;
@@ -16,25 +15,23 @@ mod validators;
 
 use crate::jsonschema::JsonSchemaRegistry;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-  #[error("Rusqlite error: {0}")]
-  Rusqlite(#[from] rusqlite::Error),
-  #[error("Other error: {0}")]
-  Other(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
-}
-
 pub fn apply_default_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
   conn.pragma_update(None, "busy_timeout", 10000)?;
   conn.pragma_update(None, "journal_mode", "WAL")?;
   conn.pragma_update(None, "journal_size_limit", 200000000)?;
+  conn.pragma_update(None, "foreign_keys", "ON")?;
+
   // Sync the file system less often.
   conn.pragma_update(None, "synchronous", "NORMAL")?;
-  conn.pragma_update(None, "foreign_keys", "ON")?;
+
+  // Mostly irrelevant, if anyone was to ever open a temp DB (i.e. empty path ''), don't write to
+  // disk. We don't use this.
   conn.pragma_update(None, "temp_store", "MEMORY")?;
+
   // TODO: we could consider pushing this further down-stream to optimize
   // for different use-cases, e.g. main vs logs.
   conn.pragma_update(None, "cache_size", -16000)?;
+
   // Keep SQLite default 4KB page_size
   // conn.pragma_update(None, "page_size", 4096)?;
 
@@ -49,31 +46,39 @@ pub fn apply_default_pragmas(conn: &Connection) -> Result<(), rusqlite::Error> {
   return Ok(());
 }
 
-pub fn connect_sqlite(
-  path: Option<PathBuf>,
+pub fn connect_rusqlite(
+  path: Option<&std::path::Path>,
   registry: Option<Arc<JsonSchemaRegistry>>,
-) -> Result<Connection, Error> {
-  // NOTE: We used to initialize C extensions here as well, such as sqlean and sqlite-vec, however
-  // this has now been moved to the top-level CLI.
+) -> Result<Connection, rusqlite::Error> {
+  let conn = connect_rusqlite_without_extensions(path)?;
 
+  register_all_extension_functions(&conn, registry)?;
+
+  return Ok(conn);
+}
+
+pub fn connect_rusqlite_without_extensions(
+  path: Option<&std::path::Path>,
+) -> Result<Connection, rusqlite::Error> {
   // Then open database and load trailbase_extensions.
-  let conn = if let Some(p) = path {
+  let conn = if let Some(path) = path {
     use rusqlite::OpenFlags;
     let flags = OpenFlags::SQLITE_OPEN_READ_WRITE
       | OpenFlags::SQLITE_OPEN_CREATE
       | OpenFlags::SQLITE_OPEN_NO_MUTEX;
 
-    Connection::open_with_flags(p, flags)?
+    Connection::open_with_flags(path, flags)?
   } else {
     Connection::open_in_memory()?
   };
-
-  register_all_extension_functions(&conn, registry)?;
 
   apply_default_pragmas(&conn)?;
 
   // Initial optimize.
   conn.pragma_update(None, "optimize", "0x10002")?;
+
+  // The default is just 16.
+  conn.set_prepared_statement_cache_capacity(256);
 
   return Ok(conn);
 }
@@ -106,7 +111,7 @@ mod test {
 
   #[test]
   fn test_connect_and_extensions() {
-    let conn = connect_sqlite(None, None).unwrap();
+    let conn = connect_rusqlite(None, None).unwrap();
 
     let row = conn
       .query_row("SELECT (uuid_v7())", (), |row| -> Result<[u8; 16], Error> {
@@ -120,7 +125,7 @@ mod test {
 
   #[test]
   fn test_uuids() {
-    let conn = connect_sqlite(None, None).unwrap();
+    let conn = connect_rusqlite(None, None).unwrap();
 
     conn
       .execute(

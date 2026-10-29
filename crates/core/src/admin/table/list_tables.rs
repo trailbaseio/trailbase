@@ -145,7 +145,7 @@ async fn list_tables_handler_sqlite_impl(
       connection: conn, ..
     } = state
       .connection_manager()
-      .get_entry(/* is_main= */ true, Some(attached_dbs))
+      .get_entry(/* attach_main= */ true, Some(attached_dbs))
       .await?;
 
     let databases = conn.list_databases().await?;
