@@ -108,7 +108,7 @@ pub async fn create_record_handler(
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant));
+  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
   let record_ids: Vec<String> = match records_and_files.len() {
     0 => {
       return Err(RecordError::BadRequest("no values provided"));
