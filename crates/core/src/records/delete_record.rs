@@ -32,7 +32,7 @@ pub async fn delete_record_handler(
   }
 
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant));
+  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
 
   let query = DeleteRecordApiQuery::new(api.clone(), record_id)?;
   query.check_table_level_access(user.as_ref())?;

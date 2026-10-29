@@ -43,7 +43,7 @@ impl SubscriptionManager {
             continue;
           }
 
-          let conn_id = api.conn(None).id();
+          let conn_id = api.single_tenant_conn().id();
 
           // TODO: Skip/cleanup subscriptions from existing entries for tables that not longer have
           // a corresponding API.
@@ -148,7 +148,7 @@ impl SubscriptionManager {
 
   pub async fn get_per_connection_state(&self, api: &RecordApi) -> Arc<PerConnectionState> {
     // QUESTION: Can we support subscriptions for tenant DBs?
-    let conn_id: usize = api.conn(None).id();
+    let conn_id: usize = api.single_tenant_conn().id();
 
     let mut lock = self.connections.upgradable_read();
     if let Some(state) = lock.get(&conn_id) {
@@ -165,7 +165,7 @@ impl SubscriptionManager {
             state: Mutex::new(PerConnectionStateInternal {
               connection_metadata: api.connection_metadata().clone(),
               record_apis: filter_record_apis(conn_id, &record_apis),
-              conn: api.conn(None).clone(),
+              conn: api.single_tenant_conn().clone(),
               subscriptions: Default::default(),
             }),
           });
@@ -211,7 +211,7 @@ fn filter_record_apis(
         return None;
       }
 
-      return if api.conn(None).id() == conn_id {
+      return if api.single_tenant_conn().id() == conn_id {
         Some(RecordApiByName(api.0.clone()))
       } else {
         None
