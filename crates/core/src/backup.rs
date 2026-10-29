@@ -202,15 +202,9 @@ pub async fn find_backups(data_dir: &DataDir) -> Result<Vec<Backup>, BackupError
 fn connect_backup_db(path: PathBuf) -> Result<trailbase_sqlite::Connection, ConnectionError> {
   return trailbase_sqlite::Connection::with_opts(
     || -> Result<_, trailbase_sqlite::Error> {
-      let conn = crate::connection::connect_rusqlite_without_default_extensions_and_schemas(Some(
-        path.clone(),
-      ))?;
-
       // NOTE: The many DBs (main, logs, ...) need the trailbase extensions, e.g. for the maxminddb
       // geoip lookup.
-      trailbase_extension::register_all_extension_functions(&conn, None)?;
-
-      return Ok(conn);
+      return Ok(trailbase_extension::connect_rusqlite(Some(&path), None)?);
     },
     trailbase_sqlite::Options {
       // Only using the writer, no readers (except for admin dash).

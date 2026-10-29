@@ -48,16 +48,18 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
 #[allow(unused)]
 pub(crate) async fn apply_main_migrations(
   conn: &trailbase_sqlite::Connection,
-  base_migrations_path: Option<impl AsRef<Path>>,
+  base_migrations_path: Option<&Path>,
 ) -> Result<bool, RefineryError> {
   let mut migrations = vec![
+    // e.g. file deletions table.
     load_embedded_migrations::<BaseMigrations>(),
+    // e.g. users, ...
     load_embedded_migrations::<MainMigrations>(),
   ];
 
   if let Some(path) = base_migrations_path {
     // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
+    migrations.push(maybe_load_sql_migrations(&path.join("main"), true)?);
 
     // Legacy: all *.sql files in migrations.
     migrations.push(load_sql_migrations(path, false)?);
@@ -73,13 +75,13 @@ pub(crate) async fn apply_main_migrations(
 #[allow(unused)]
 pub(crate) async fn apply_pg_main_migrations(
   conn: &trailbase_sqlite::Connection,
-  base_migrations_path: Option<impl AsRef<Path>>,
+  base_migrations_path: Option<&Path>,
 ) -> Result<bool, RefineryError> {
   let mut migrations = vec![load_embedded_migrations::<PgMainMigrations>()];
 
   if let Some(path) = base_migrations_path {
     // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(path.as_ref().join("main"), true)?);
+    migrations.push(maybe_load_sql_migrations(&path.join("main"), true)?);
 
     // Legacy: all *.sql files in migrations.
     migrations.push(load_sql_migrations(path, false)?);
@@ -88,17 +90,19 @@ pub(crate) async fn apply_pg_main_migrations(
   return apply_migrations_async("main", conn, migrations).await;
 }
 
-// Base migrations contains things like file deletions table shared across main and user DBs.
+/// Base migrations contains things like file deletions table shared across main and user DBs.
 pub(crate) fn apply_base_migrations(
   conn: &mut rusqlite::Connection,
-  base_migrations_path: Option<impl AsRef<Path>>,
+  base_migrations_path: Option<&Path>,
   db: &str,
 ) -> Result<bool, RefineryError> {
-  let mut migrations = vec![load_embedded_migrations::<BaseMigrations>()];
-  // TODO: Should we handle load_sql_migrations error?
+  let mut migrations = vec![
+    // e.g. file deletions table.
+    load_embedded_migrations::<BaseMigrations>(),
+  ];
   if let Some(path) = base_migrations_path {
     // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(path.as_ref().join(db), true)?);
+    migrations.push(maybe_load_sql_migrations(&path.join(db), true)?);
   }
   return apply_migrations(db, conn, migrations);
 }
@@ -207,9 +211,9 @@ fn log_migrations(db_name: &str, migrations: &[Migration]) {
   }
 }
 
-// Just like `load_sql_migrations` but ignores missing paths.
+/// Just like `load_sql_migrations` but ignores missing paths.
 fn maybe_load_sql_migrations(
-  location: impl AsRef<Path>,
+  location: &Path,
   recursive: bool,
 ) -> Result<Vec<Migration>, RefineryError> {
   return match load_sql_migrations(location, recursive) {
@@ -227,10 +231,7 @@ fn maybe_load_sql_migrations(
 
 /// Loads SQL migrations from a path. This enables dynamic migration discovery, as opposed to
 /// embedding. The resulting collection is ordered by version.
-fn load_sql_migrations(
-  location: impl AsRef<Path>,
-  recursive: bool,
-) -> Result<Vec<Migration>, RefineryError> {
+fn load_sql_migrations(location: &Path, recursive: bool) -> Result<Vec<Migration>, RefineryError> {
   use trailbase_refinery::{Error, error::Kind};
 
   let mut migrations = find_migration_files(location, recursive)?
@@ -266,12 +267,11 @@ static SQL_FILE_RE: LazyLock<regex::Regex> =
 /// find migrations on file system recursively across directories given a location and
 /// [MigrationType]
 fn find_migration_files(
-  location: impl AsRef<Path>,
+  location: &Path,
   recursive: bool,
 ) -> Result<impl Iterator<Item = PathBuf>, RefineryError> {
   use trailbase_refinery::error::Kind;
 
-  let location: &Path = location.as_ref();
   let location = location.canonicalize().map_err(|err| {
     RefineryError::new(
       Kind::InvalidMigrationPath(location.to_path_buf(), err),
@@ -351,9 +351,9 @@ mod tests {
 
   #[test]
   fn test_load_sql_migrations() {
-    assert!(load_sql_migrations("__non-existent-path__", true).is_err());
+    assert!(load_sql_migrations(&PathBuf::from("__non-existent-path__"), true).is_err());
     assert!(
-      maybe_load_sql_migrations("__non-existent-path__", true)
+      maybe_load_sql_migrations(&PathBuf::from("__non-existent-path__"), true)
         .unwrap()
         .is_empty()
     );

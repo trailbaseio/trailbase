@@ -367,7 +367,7 @@ mod tests {
   fn test_parse_table_schema() {
     let registry =
       Arc::new(crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap());
-    let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
+    let conn = trailbase_extension::connect_rusqlite(None, Some(registry.clone())).unwrap();
 
     let col0_schema = json!({
       "type": "object",
@@ -506,7 +506,7 @@ mod tests {
   fn test_file_uploads_schema() {
     let registry =
       Arc::new(crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap());
-    let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
+    let conn = trailbase_extension::connect_rusqlite(None, Some(registry.clone())).unwrap();
 
     conn
       .execute(
@@ -530,7 +530,7 @@ mod tests {
     let registry =
       Arc::new(crate::json_schema::registry::build_json_schema_registry(vec![]).unwrap());
 
-    let conn = trailbase_extension::connect_sqlite(None, Some(registry.clone())).unwrap();
+    let conn = trailbase_extension::connect_rusqlite(None, Some(registry.clone())).unwrap();
     litegis::register(&conn).unwrap();
 
     conn

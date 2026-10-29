@@ -476,7 +476,10 @@ fn build_job(id: proto::SystemJobId, opts: &BuildJobOptions) -> DefaultSystemJob
                   None => connection_manager.main_entry().connection.clone(),
                   Some(ref db_name) => {
                     let Ok(entry) = connection_manager
-                      .get_entry(/* is_main= */ false, Some([db_name.clone()].into()))
+                      .get_entry(
+                        /* attach_main= */ false,
+                        Some([db_name.clone()].into()),
+                      )
                       .await
                     else {
                       continue;

@@ -609,7 +609,7 @@ async fn build_record_apis_impl(
       } else {
         connection_manager
           .get_entry(
-            /* is_main= */ true,
+            /* attach_main= */ true,
             Some(attached_databases.iter().cloned().collect()),
           )
           .await?

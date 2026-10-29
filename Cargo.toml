@@ -22,9 +22,7 @@ default-members = [
   "crates/wasm-runtime-common",
   "crates/wasm-runtime-host",
 ]
-exclude = [
-  "crates/extension-so",
-]
+exclude = []
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html
 [profile.release]

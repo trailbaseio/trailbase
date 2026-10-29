@@ -138,7 +138,7 @@ mod tests {
       .await
       .unwrap();
 
-    let metadata = TableMetadata::new(
+    let _metadata = TableMetadata::new(
       &state.json_schema_registry().load(),
       table.clone(),
       &[table],
@@ -185,7 +185,7 @@ mod tests {
         .into_iter()
         .map(|row| {
           let obj = trailbase_schema::json::record_to_json_expand(
-            &metadata.column_metadata,
+            &_metadata.column_metadata,
             &[],
             &row,
             None,

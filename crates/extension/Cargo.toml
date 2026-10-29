@@ -21,7 +21,7 @@ maxminddb = "0.32.0"
 quick_cache = { version = "0.7.0", default-features = false }
 regex = "1.13.1"
 # NOTE: rusqlite must not enable "bundled" for the .so built to work.
-rusqlite = { version = "0.41.1", default-features = false, features = ["functions"] }
+rusqlite = { version = "0.41.1", default-features = false, features = ["functions", "cache"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = "2.0.21"

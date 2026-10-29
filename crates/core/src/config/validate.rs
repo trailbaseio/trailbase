@@ -63,7 +63,7 @@ pub async fn validate_config(
     }
 
     match name.as_str() {
-      "main" | "public" | "logs" | "session" | "" => {
+      "main" | "public" | "logs" | "session" | "sqlite_master" | "" => {
         return ierr(format!("Invalid database name: {name}"));
       }
       name

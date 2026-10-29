@@ -30,8 +30,8 @@ fn get_conn_and_migration_path(
         trailbase_sqlite::Connection::with_opts(
           move || {
             // TODO: We should load WASM SQLite functions, since migrations may depend on them.
-            return trailbase_extension::connect_sqlite(
-              Some(db_path.clone()),
+            return trailbase_extension::connect_rusqlite(
+              Some(&db_path),
               Some(json_registry.clone()),
             )
             .map_err(|err| trailbase_sqlite::Error::Other(err.into()));
