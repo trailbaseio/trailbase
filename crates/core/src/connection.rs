@@ -269,6 +269,14 @@ impl ConnectionManager {
     };
   }
 
+  pub(crate) async fn build_for_tenant(
+    &self,
+    tenant_template: &str,
+    tenant_id: uuid::Uuid,
+  ) -> Result<ConnectionEntry, ConnectionError> {
+    return Err(ConnectionError::InvalidSetting("Not implemented"));
+  }
+
   /// Initialize an independent connection, to avoid any sort of tomfoolery like dropping attached
   /// databases. This is relatively expensive, thus limit the number of spawned threads to 1.
   pub(crate) async fn build_for_admin_ui_query_editor(
