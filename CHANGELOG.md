@@ -1,3 +1,11 @@
+## v0.35.8
+
+- This release mostly addresses Wasmtime security advisories.
+- Open multi-DB SQLite connections with in-memory "main".
+- Apply base+user migrations on non-default "main" SQLite databases.
+- Internal: share refinery implementations across `rusqlite` and `trailbase_sqlite`.
+- Update Dependencies.
+
 ## v0.35.7
 
 - Enable HTTP2 negotiation to allow Browsers to multiplex more SSE streams.
