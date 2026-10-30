@@ -40,14 +40,7 @@ pub async fn mint_auth_tokens(
     auth_token,
     refresh_token,
     csrf_token,
-  } = crate::auth::cli::mint_auth_tokens_impl(
-    &state,
-    &DbUserAndTenant {
-      user: db_user,
-      tenant: None,
-    },
-  )
-  .await?;
+  } = crate::auth::cli::mint_auth_tokens_impl(&state, &db_user, None).await?;
 
   return Ok(Json(LoginResponse {
     auth_token,

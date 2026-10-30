@@ -8,11 +8,11 @@ use trailbase_schema::json_schema::{FileUpload, FileUploads};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::RawJson;
-use crate::records::RecordError;
 use crate::records::expand::build_expand_tables_params;
 use crate::records::files::read_file_into_response;
 use crate::records::queries::ReadFileRecordApiQuery;
 use crate::records::queries::ReadRecordApiQuery;
+use crate::records::{Permission, RecordError};
 use crate::schema_metadata::JsonColumnMetadata;
 
 #[derive(Debug, Default, Deserialize)]
@@ -42,6 +42,8 @@ pub async fn read_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  api.check_table_level_access(Permission::Read, user.as_ref())?;
+
   let record_id = api.primary_key_to_value(record)?;
 
   let config_expand = api.expand();
@@ -67,10 +69,9 @@ pub async fn read_record_handler(
     .transpose()?;
 
   let query = ReadRecordApiQuery::new(api.clone(), record_id, expanded_tables.as_deref())?;
-  query.check_table_level_access(user.as_ref())?;
 
   let mut row = api
-    .conn(user.as_ref().and_then(|u| u.tenant))
+    .conn(user.as_ref())
     .await
     .call_reader({
       move |mut conn| -> Result<_, RecordError> {
@@ -150,6 +151,8 @@ pub async fn get_uploaded_file_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  api.check_table_level_access(Permission::Read, user.as_ref())?;
+
   let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {
     return Err(RecordError::BadRequest("invalid column name"));
   };
@@ -157,10 +160,9 @@ pub async fn get_uploaded_file_from_record_handler(
   let record_id = api.primary_key_to_value(record)?;
   let query =
     ReadFileRecordApiQuery::new_single_file_upload(api.clone(), column_metadata, record_id)?;
-  query.check_table_level_access(user.as_ref())?;
 
   let json = api
-    .conn(user.as_ref().and_then(|u| u.tenant))
+    .conn(user.as_ref())
     .await
     .call_reader(move |mut conn| {
       query.check_record_level_access(&mut conn, user.as_ref())?;
@@ -203,6 +205,8 @@ pub async fn get_uploaded_files_from_record_handler(
     return Err(RecordError::ApiNotFound);
   };
 
+  api.check_table_level_access(Permission::Read, user.as_ref())?;
+
   let Some(column_metadata) = api.column_metadata_by_name(&column_name) else {
     return Err(RecordError::BadRequest("invalid column name"));
   };
@@ -217,10 +221,9 @@ pub async fn get_uploaded_files_from_record_handler(
     "std.FileUploads" => {
       let query =
         ReadFileRecordApiQuery::new_file_uploads(api.clone(), column_metadata, record_id)?;
-      query.check_table_level_access(user.as_ref())?;
 
       let json = api
-        .conn(user.as_ref().and_then(|u| u.tenant))
+        .conn(user.as_ref())
         .await
         .call_reader(move |mut conn| {
           query.check_record_level_access(&mut conn, user.as_ref())?;
@@ -233,10 +236,9 @@ pub async fn get_uploaded_files_from_record_handler(
     "std.FileUpload" => {
       let query =
         ReadFileRecordApiQuery::new_single_file_upload(api.clone(), column_metadata, record_id)?;
-      query.check_table_level_access(user.as_ref())?;
 
       let json = api
-        .conn(user.as_ref().and_then(|u| u.tenant))
+        .conn(user.as_ref())
         .await
         .call_reader(move |mut conn| {
           query.check_record_level_access(&mut conn, user.as_ref())?;
