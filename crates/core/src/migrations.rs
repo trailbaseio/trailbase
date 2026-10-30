@@ -41,31 +41,44 @@ pub(crate) fn new_migration_runner(migrations: &[Migration]) -> trailbase_refine
   return runner;
 }
 
+fn get_base_and_custom_migrations(
+  custom_migrations_path: Option<&Path>,
+) -> Result<Vec<Migration>, RefineryError> {
+  // e.g. file deletions table.
+  let mut migrations = load_embedded_migrations::<BaseMigrations>();
+
+  if let Some(path) = custom_migrations_path {
+    migrations.extend(maybe_load_sql_migrations(path, true)?);
+  }
+
+  return Ok(migrations);
+}
+
+fn get_main_migrations(migrations_path: Option<&Path>) -> Result<Vec<Migration>, RefineryError> {
+  // e.g. users, ...
+  let mut migrations = load_embedded_migrations::<MainMigrations>();
+
+  migrations.extend(get_base_and_custom_migrations(
+    migrations_path.map(|p| p.join("main")).as_deref(),
+  )?);
+
+  // Legacy: all migrations/*.sql files w/o subfolder.
+  if let Some(path) = migrations_path {
+    migrations.extend(load_sql_migrations(path, false)?);
+  }
+
+  return Ok(migrations);
+}
+
 /// Apply migrations: embedded and from `user_migrations_path`.
 ///
 /// Returns true, if V1 was applied, i.e. DB is initialized for the first time,
 /// otherwise false.
-#[allow(unused)]
 pub(crate) async fn apply_main_migrations(
   conn: &trailbase_sqlite::Connection,
-  base_migrations_path: Option<&Path>,
+  migrations_path: Option<&Path>,
 ) -> Result<bool, RefineryError> {
-  let mut migrations = vec![
-    // e.g. file deletions table.
-    load_embedded_migrations::<BaseMigrations>(),
-    // e.g. users, ...
-    load_embedded_migrations::<MainMigrations>(),
-  ];
-
-  if let Some(path) = base_migrations_path {
-    // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(&path.join("main"), true)?);
-
-    // Legacy: all *.sql files in migrations.
-    migrations.push(load_sql_migrations(path, false)?);
-  }
-
-  return apply_migrations_async("main", conn, migrations).await;
+  return apply_migrations_async("main", conn, get_main_migrations(migrations_path)?).await;
 }
 
 /// Apply migrations: embedded and from `user_migrations_path`.
@@ -75,16 +88,16 @@ pub(crate) async fn apply_main_migrations(
 #[allow(unused)]
 pub(crate) async fn apply_pg_main_migrations(
   conn: &trailbase_sqlite::Connection,
-  base_migrations_path: Option<&Path>,
+  migrations_path: Option<&Path>,
 ) -> Result<bool, RefineryError> {
-  let mut migrations = vec![load_embedded_migrations::<PgMainMigrations>()];
+  let mut migrations = load_embedded_migrations::<PgMainMigrations>();
 
-  if let Some(path) = base_migrations_path {
+  if let Some(path) = migrations_path {
     // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(&path.join("main"), true)?);
+    migrations.extend(maybe_load_sql_migrations(&path.join("main"), true)?);
 
-    // Legacy: all *.sql files in migrations.
-    migrations.push(load_sql_migrations(path, false)?);
+    // Legacy: all migrations/*.sql files w/o subfolder.
+    migrations.extend(load_sql_migrations(path, false)?);
   }
 
   return apply_migrations_async("main", conn, migrations).await;
@@ -93,18 +106,27 @@ pub(crate) async fn apply_pg_main_migrations(
 /// Base migrations contains things like file deletions table shared across main and user DBs.
 pub(crate) fn apply_base_migrations(
   conn: &mut rusqlite::Connection,
-  base_migrations_path: Option<&Path>,
+  custom_migrations_path: Option<&Path>,
   db: &str,
 ) -> Result<bool, RefineryError> {
-  let mut migrations = vec![
-    // e.g. file deletions table.
-    load_embedded_migrations::<BaseMigrations>(),
-  ];
-  if let Some(path) = base_migrations_path {
-    // Ignore when `<traildepot>/migrations/main/` is missing.
-    migrations.push(maybe_load_sql_migrations(&path.join(db), true)?);
-  }
-  return apply_migrations(db, conn, migrations);
+  return apply_migrations(
+    db,
+    conn,
+    get_base_and_custom_migrations(custom_migrations_path.map(|p| p.join(db)).as_deref())?,
+  );
+}
+
+pub(crate) async fn apply_base_migrations_async(
+  conn: &trailbase_sqlite::Connection,
+  custom_migrations_path: Option<&Path>,
+  db: &str,
+) -> Result<bool, RefineryError> {
+  return apply_migrations_async(
+    db,
+    conn,
+    get_base_and_custom_migrations(custom_migrations_path)?,
+  )
+  .await;
 }
 
 pub(crate) fn apply_logs_migrations(
@@ -113,7 +135,7 @@ pub(crate) fn apply_logs_migrations(
   apply_migrations(
     "logs",
     logs_conn,
-    vec![load_embedded_migrations::<LogsMigrations>()],
+    load_embedded_migrations::<LogsMigrations>(),
   )?;
   return Ok(());
 }
@@ -124,7 +146,7 @@ pub(crate) fn apply_session_migrations(
   apply_migrations(
     "session",
     logs_conn,
-    vec![load_embedded_migrations::<SessionMigrations>()],
+    load_embedded_migrations::<SessionMigrations>(),
   )?;
   return Ok(());
 }
@@ -132,10 +154,8 @@ pub(crate) fn apply_session_migrations(
 fn apply_migrations(
   name: &str,
   conn: &mut rusqlite::Connection,
-  migrations: Vec<Vec<Migration>>,
+  migrations: Vec<Migration>,
 ) -> Result<bool, RefineryError> {
-  let migrations: Vec<Migration> = migrations.into_iter().flatten().sorted().collect();
-
   let runner = new_migration_runner(&migrations);
   let report = runner.run(conn).map_err(|err| {
     error!(
@@ -157,10 +177,8 @@ fn apply_migrations(
 async fn apply_migrations_async(
   name: &str,
   conn: &trailbase_sqlite::Connection,
-  migrations: Vec<Vec<Migration>>,
+  migrations: Vec<Migration>,
 ) -> Result<bool, RefineryError> {
-  let migrations: Vec<Migration> = migrations.into_iter().flatten().sorted().collect();
-
   let mut conn = conn.clone();
   let runner = new_migration_runner(&migrations);
   let report = runner.run_async(&mut conn).await.map_err(|err| {
