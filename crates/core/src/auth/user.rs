@@ -3,6 +3,7 @@ use axum::{
   http::request::Parts,
 };
 use compact_str::CompactString;
+use serde::{Deserialize, Serialize};
 use trailbase_sqlite::Row;
 use uuid::Uuid;
 
@@ -105,21 +106,14 @@ impl DbUser {
 #[derive(Clone, Debug)]
 pub struct DbUserAndTenant {
   pub user: DbUser,
-  pub tenant: Option<[u8; 16]>,
+  pub tenant: Option<Tenant>,
 }
 
-impl DbUserAndTenant {
-  // pub const COLUMNS: &str = formatcp!("{}, tenant", DbUser::COLUMNS);
-
-  pub fn from_row(row: Row) -> Result<Self, AuthError> {
-    // Sanity check.
-    debug_assert_eq!(Some("tenant"), row.column(12).map(|c| c.name.as_str()));
-
-    return Ok(Self {
-      tenant: row.get(12).map_err(|err| AuthError::Internal(err.into()))?,
-      user: DbUser::from_row(row)?,
-    });
-  }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
+pub struct Tenant {
+  pub id: Uuid,
+  pub template: String,
 }
 
 /// Representing an authenticated and *valid* user, as opposed to DbUser, which is merely an entry
@@ -129,7 +123,7 @@ pub struct User {
   /// UUID representation of the current user.
   pub id: Uuid,
   /// UUID representation of the currently active tenant association.
-  pub tenant: Option<Uuid>,
+  pub tenant: Option<Tenant>,
 
   /// E-mail of the current user.
   pub email: Option<CompactString>,
@@ -151,16 +145,10 @@ impl User {
   /// credentials/tokens from headers/cookies.
   pub(crate) fn from_token_claims(claims: AuthTokenClaims) -> Result<Self, AuthError> {
     let id = b64_to_uuid(&claims.sub).map_err(|_err| AuthError::BadRequest("invalid user id"))?;
-    let tenant = claims
-      .tenant
-      .as_deref()
-      .map(b64_to_uuid)
-      .transpose()
-      .map_err(|_err| AuthError::BadRequest("invalid tenant id"))?;
 
     return Ok(Self {
       id,
-      tenant,
+      tenant: claims.tenant,
       email: claims.email,
       username: claims.username,
       csrf_token: claims.csrf_token,

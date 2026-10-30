@@ -40,10 +40,6 @@ impl ReadRecordApiQuery {
     });
   }
 
-  pub fn check_table_level_access(&self, user: Option<&User>) -> Result<(), RecordError> {
-    return self.api.check_table_level_access(Permission::Read, user);
-  }
-
   pub fn check_record_level_access(
     &self,
     conn: &mut impl SyncConnectionTrait,
