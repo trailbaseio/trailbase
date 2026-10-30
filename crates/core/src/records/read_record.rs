@@ -288,6 +288,7 @@ mod tests {
   use serde_json::json;
   use std::io::Read;
   use std::sync::Arc;
+  use trailbase_schema::QualifiedName;
   use trailbase_schema::json_schema::{FileUpload, FileUploadData, FileUploadInput};
   use trailbase_sqlite::ConnectionType;
 
@@ -296,7 +297,7 @@ mod tests {
   use crate::app_state::*;
   use crate::auth::user::User;
   use crate::auth::util::login_with_password;
-  use crate::config::proto::{PermissionFlag, RecordApiConfig};
+  use crate::config::proto::{self, PermissionFlag, RecordApiConfig};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
   use crate::records::create_record::{
@@ -454,15 +455,35 @@ mod tests {
     }
   }
 
-  async fn create_test_record_api(state: &AppState, api_name: &str, table_name: Option<&str>) {
-    let conn = state.conn();
-
+  async fn create_test_record_api(
+    state: &AppState,
+    api_name: &str,
+    table_name: Option<&str>,
+    db_name: Option<&str>,
+  ) {
     let table_name = table_name.unwrap_or("table 😍");
+    let fq_table_name = if let Some(db_name) = db_name {
+      format!("\"{db_name}\".\"{table_name}\"")
+    } else {
+      format!("\"{table_name}\"")
+    };
+
+    let conn = if let Some(db_name) = db_name {
+      state
+        .connection_manager()
+        .build_for_admin_ui_query_editor(Some([db_name.to_string()].into()))
+        .await
+        .unwrap()
+        .connection
+    } else {
+      state.conn().clone()
+    };
+
     conn
       .execute(
         format!(
           r#"
-            CREATE TABLE "{table_name}" (
+            CREATE TABLE {fq_table_name} (
               id           {uuid} PRIMARY KEY NOT NULL CHECK(is_uuid_v7(id)) DEFAULT(uuid_v7()),
               -- TODO: Should this be a JSON(B)?
               file         {json} CHECK(jsonschema('std.FileUpload', file)),
@@ -473,9 +494,9 @@ mod tests {
               "test 😍"    TEXT NOT NULL DEFAULT('')
             ) {strict};
           "#,
-          strict = strict(conn),
-          uuid = uuid_column(conn),
-          json = json_column(conn),
+          strict = strict(&conn),
+          uuid = uuid_column(&conn),
+          json = json_column(&conn),
         ),
         (),
       )
@@ -488,7 +509,12 @@ mod tests {
       &state,
       RecordApiConfig {
         name: Some(api_name.to_string()),
-        table_name: Some(table_name.to_string()),
+        table_name: Some(fq_table_name),
+        attached_databases: if let Some(db_name) = db_name {
+          vec![db_name.to_string()]
+        } else {
+          vec![]
+        },
         acl_world: [
           PermissionFlag::Create as i32,
           PermissionFlag::Read as i32,
@@ -505,42 +531,76 @@ mod tests {
 
   #[tokio::test]
   async fn test_empty_create_record() {
-    let state = test_state(None).await.unwrap();
-
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME, None).await;
 
-    let create_response: CreateRecordResponse = unpack_json_response(
-      create_record_handler(
-        State(state.clone()),
-        Path(API_NAME.to_string()),
-        Query(CreateRecordQuery::default()),
-        None,
-        Either::Json(JsonRow::new().into()),
+    let tables = [
+      QualifiedName {
+        name: "table".to_string(),
+        database_schema: None,
+      },
+      #[cfg(not(feature = "pg-test"))]
+      QualifiedName {
+        name: "table".to_string(),
+        database_schema: Some("other".to_string()),
+      },
+    ];
+
+    for QualifiedName {
+      name,
+      database_schema,
+    } in tables
+    {
+      let state = test_state(Some(TestStateOptions {
+        config: Some({
+          let mut config = test_config();
+
+          if let Some(ref db) = database_schema {
+            config.databases.push(proto::DatabaseConfig {
+              name: Some(db.to_string()),
+            });
+          }
+
+          config
+        }),
+        ..Default::default()
+      }))
+      .await
+      .unwrap();
+
+      create_test_record_api(&state, API_NAME, Some(&name), database_schema.as_deref()).await;
+
+      let create_response: CreateRecordResponse = unpack_json_response(
+        create_record_handler(
+          State(state.clone()),
+          Path(API_NAME.to_string()),
+          Query(CreateRecordQuery::default()),
+          None,
+          Either::Json(JsonRow::new().into()),
+        )
+        .await
+        .unwrap(),
       )
       .await
-      .unwrap(),
-    )
-    .await
-    .unwrap();
+      .unwrap();
 
-    let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
+      let record_path = (API_NAME.to_string(), create_response.ids[0].clone());
 
-    let RawJson(_) = read_record_handler(
-      State(state),
-      Path(record_path),
-      Query(ReadRecordQuery::default()),
-      None,
-    )
-    .await
-    .unwrap();
+      let RawJson(_) = read_record_handler(
+        State(state),
+        Path(record_path),
+        Query(ReadRecordQuery::default()),
+        None,
+      )
+      .await
+      .unwrap();
+    }
   }
 
   #[tokio::test]
   async fn test_escaping_keywords_for_create_record() {
     const API_NAME: &str = "table";
     let state = test_state(None).await.unwrap();
-    create_test_record_api(&state, API_NAME, None).await;
+    create_test_record_api(&state, API_NAME, None, None).await;
 
     let column_value = "test";
     let create_response: CreateRecordResponse = unpack_json_response(
@@ -588,7 +648,7 @@ mod tests {
   async fn test_single_file_upload_download_e2e() {
     let state = test_state(None).await.unwrap();
     const API_NAME: &str = "test_api";
-    create_test_record_api(&state, API_NAME, None).await;
+    create_test_record_api(&state, API_NAME, None, None).await;
 
     let bytes: Vec<u8> = vec![42, 5, 42, 5];
     let file_column = "file";
@@ -704,7 +764,7 @@ mod tests {
 
     const API_NAME: &str = "test_api";
     const TABLE_NAME: &str = "test_table";
-    create_test_record_api(&state, API_NAME, Some(TABLE_NAME)).await;
+    create_test_record_api(&state, API_NAME, Some(TABLE_NAME), None).await;
 
     let bytes0: Vec<u8> = vec![0, 1, 2, 3, 4, 5];
     let bytes1: Vec<u8> = vec![0, 1, 1, 2];
