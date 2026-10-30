@@ -10,6 +10,7 @@ use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
 use crate::extract::Either;
+use crate::records::Permission;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{
   FileMetadataAndPayload, InsertParams, JsonRow, ParamOptions, ParamsError,
@@ -103,13 +104,15 @@ pub async fn create_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
+  api.check_table_level_access(Permission::Create, user.as_ref())?;
+
   let mut records_and_files: Vec<RecordAndFiles> = match either_request {
     Either::Json(value) => extract_records(value)?,
     Either::Multipart(value, files) => vec![(extract_record(value)?, Some(files))],
     Either::Form(value) => vec![(extract_record(value)?, None)],
   };
 
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
+  let conn = api.conn(user.as_ref()).await;
   let record_ids: Vec<String> = match records_and_files.len() {
     0 => {
       return Err(RecordError::BadRequest("no values provided"));
@@ -124,7 +127,7 @@ pub async fn create_record_handler(
         .map_err(|_err| INVALID_PARAMS_ERR)?;
 
       let query = InsertOrReplaceRecordApiQuery::new(api.clone(), params)?;
-      query.check_table_level_access(user.as_ref())?;
+      // query.check_table_level_access(user.as_ref())?;
 
       let write_result = if files.is_empty() {
         conn

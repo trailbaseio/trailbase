@@ -11,7 +11,6 @@ use crate::auth::apple::decode_and_validate_apple_id_token;
 use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::oauth::OAuthUser;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::DbUserAndTenant;
 use crate::config::proto;
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -94,20 +93,12 @@ pub(crate) async fn apple_native_signin_handler(
     }
   };
 
+  // NOTE: We don't have a way to infer or explicitly pass a tenant.
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(
-    &state,
-    &DbUserAndTenant {
-      user: db_user,
-      // NOTE: We don't have a good way of infering or explicitly passing the tenant.
-      tenant: None,
-    },
-    None,
-  )
-  .await?;
+  } = mint_new_tokens(&state, &db_user, /* tenant_id= */ None, None).await?;
 
   let auth_token = state
     .jwt()

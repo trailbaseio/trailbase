@@ -3,11 +3,11 @@ use axum::extract::{Path, State};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::RecordError;
 use crate::records::file_token::build_file_token_decoder;
 use crate::records::files::{FileManager, delete_files_marked_for_deletion};
 use crate::records::params::{FileTokenDecoder, JsonRow, ParamOptions, UpdateParams};
 use crate::records::queries::UpdateRecordApiQuery;
+use crate::records::{Permission, RecordError};
 
 /// Update existing record.
 #[utoipa::path(
@@ -33,6 +33,8 @@ pub async fn update_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
+  api.check_table_level_access(Permission::Update, user.as_ref())?;
+
   let (request, multipart_files) = match either_request {
     Either::Json(value) => (value, None),
     Either::Multipart(value, files) => (value, Some(files)),
@@ -40,7 +42,7 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
+  let conn = api.conn(user.as_ref()).await;
 
   let file_token_decoder = if api.has_file_columns() {
     Some(build_file_token_decoder(
@@ -66,7 +68,6 @@ pub async fn update_record_handler(
   .map_err(|_err| RecordError::BadRequest("Invalid Parameters"))?;
 
   let query = UpdateRecordApiQuery::new(api.clone(), params)?;
-  query.check_table_level_access(user.as_ref())?;
 
   if files.is_empty() {
     conn

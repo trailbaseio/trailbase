@@ -289,7 +289,7 @@ impl ConnectionManager {
     tenant_template: &str,
     tenant_id: uuid::Uuid,
   ) -> Result<ConnectionEntry, ConnectionError> {
-    if let Some(ref pg_uri) = self.state.pg_uri {
+    if self.state.pg_uri.is_some() {
       return Err(ConnectionError::InvalidSetting("PG not supported"));
     }
 
@@ -303,8 +303,10 @@ impl ConnectionManager {
     let (conn, metadata, _new_db) = init_db_sqlite(
       Some(&db_path),
       InitDbOptions {
-        migration_path: Some(&self.state.data_dir.migrations_path()),
-        apply_main_migrations: false,
+        migrations: Some(Migrations {
+          main: false,
+          path: &self.state.data_dir.migrations_path(),
+        }),
         json_registry: &self.state.json_schema_registry,
         runtimes: &self.state.sqlite_function_runtimes,
         attach: vec![],
