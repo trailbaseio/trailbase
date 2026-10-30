@@ -593,8 +593,7 @@ async fn init_db_sqlite<'a>(
 
   let conn = trailbase_sqlite::Connection::with_opts(
     {
-      let json_registry = json_registry.clone();
-      let runtimes = runtimes.clone();
+      let (json_registry, runtimes) = (json_registry.clone(), runtimes.clone());
 
       move || -> Result<rusqlite::Connection, ConnectionError> {
         return build_rusqlite_connection(data_path, json_registry.clone(), &runtimes);

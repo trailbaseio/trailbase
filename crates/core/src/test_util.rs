@@ -68,9 +68,10 @@ pub struct LoginResult {
   pub csrf_token: String,
 }
 
-pub async fn login_user_for_test(
+pub async fn login_user_with_tenant_for_test(
   state: &AppState,
   user: UserIdentifier,
+  tenant_id: Option<uuid::Uuid>,
   password: &str,
 ) -> Result<LoginResult, AuthError> {
   let db_user: DbUser = match &user {
@@ -87,7 +88,7 @@ pub async fn login_user_for_test(
   let crate::auth::tokens::FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = crate::auth::tokens::mint_new_tokens(state, &db_user, None, None).await?;
+  } = crate::auth::tokens::mint_new_tokens(state, &db_user, tenant_id, None).await?;
 
   let auth_token = state
     .jwt()
@@ -100,6 +101,14 @@ pub async fn login_user_for_test(
     refresh_token: refresh_token.map(|(token, _ttl)| token),
     csrf_token: auth_token_claims.csrf_token.into_string(),
   });
+}
+
+pub async fn login_user_for_test(
+  state: &AppState,
+  user: UserIdentifier,
+  password: &str,
+) -> Result<LoginResult, AuthError> {
+  return login_user_with_tenant_for_test(state, user, None, password).await;
 }
 
 pub struct TestUserAndLogin {
