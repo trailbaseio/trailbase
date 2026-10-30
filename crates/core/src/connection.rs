@@ -269,14 +269,6 @@ impl ConnectionManager {
     };
   }
 
-  pub(crate) async fn build_for_tenant(
-    &self,
-    tenant_template: &str,
-    tenant_id: uuid::Uuid,
-  ) -> Result<ConnectionEntry, ConnectionError> {
-    return Err(ConnectionError::InvalidSetting("Not implemented"));
-  }
-
   /// Initialize an independent connection, to avoid any sort of tomfoolery like dropping attached
   /// databases. This is relatively expensive, thus limit the number of spawned threads to 1.
   pub(crate) async fn build_for_admin_ui_query_editor(
@@ -290,6 +282,42 @@ impl ConnectionManager {
         num_threads: Some(1),
       })
       .await;
+  }
+
+  pub(crate) async fn build_for_tenant(
+    &self,
+    tenant_template: &str,
+    tenant_id: uuid::Uuid,
+  ) -> Result<ConnectionEntry, ConnectionError> {
+    if let Some(ref pg_uri) = self.state.pg_uri {
+      return Err(ConnectionError::InvalidSetting("PG not supported"));
+    }
+
+    let db_path = self
+      .state
+      .data_dir
+      .data_path()
+      .join(tenant_template)
+      .join(format!("{tenant_id}.db"));
+
+    let (conn, metadata, _new_db) = init_db_sqlite(
+      Some(&db_path),
+      InitDbOptions {
+        migration_path: Some(&self.state.data_dir.migrations_path()),
+        apply_main_migrations: false,
+        json_registry: &self.state.json_schema_registry,
+        runtimes: &self.state.sqlite_function_runtimes,
+        attach: vec![],
+        num_threads: Some(1),
+        read_only: Some(self.state.read_only),
+      },
+    )
+    .await?;
+
+    return Ok(ConnectionEntry {
+      connection: conn,
+      metadata: Arc::new(metadata),
+    });
   }
 
   /// Builds new connections, does not cache. Caching is handled by `get_*` methods above.

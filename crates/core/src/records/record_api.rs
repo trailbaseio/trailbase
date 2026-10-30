@@ -586,6 +586,7 @@ impl RecordApi {
     };
   }
 
+  /// Returns the DB connection serving the API call.
   pub async fn conn(&self, tenant_id: Option<uuid::Uuid>) -> trailbase_sqlite::Connection {
     return match &self.state.conn {
       ApiConnection::SingleTenant(conn) => conn.clone(),
