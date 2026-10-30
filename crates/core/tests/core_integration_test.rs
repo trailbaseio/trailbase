@@ -106,6 +106,7 @@ async fn lifecycle_record_api_and_logs_integration_tests() {
   let user_x_token = login_with_password_for_test(
     &state,
     UserIdentifier::Email(user_x_email.clone()),
+    /* tenant_id= */ None,
     password,
   )
   .await

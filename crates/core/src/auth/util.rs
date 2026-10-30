@@ -11,7 +11,7 @@ use validator::ValidateEmail;
 use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::{DbUser, DbUserAndTenant};
+use crate::auth::user::DbUser;
 use crate::constants::{
   COOKIE_AUTH_TOKEN, COOKIE_OAUTH_STATE, COOKIE_REFRESH_TOKEN, SESSION_TABLE, USER_TABLE,
 };
@@ -168,10 +168,12 @@ pub enum UserIdentifier {
   Username(String),
 }
 
+/// Test-only sign-in function. Is public to enable use in benchmarks and integration tests.
 pub async fn login_with_password_for_test(
   state: &AppState,
   id: UserIdentifier,
-  password: &str,
+  tenant_id: Option<uuid::Uuid>,
+  password: impl std::string::ToString,
 ) -> Result<Option<NewTokens>, AuthError> {
   let db_user: DbUser = match id {
     UserIdentifier::Username(username) => user_by_username(state, &username).await,
@@ -186,7 +188,7 @@ pub async fn login_with_password_for_test(
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(state, &db_user, /* tenant_id= */ None, None).await?;
+  } = mint_new_tokens(state, &db_user, tenant_id, None).await?;
 
   let auth_token = state
     .jwt()
@@ -211,6 +213,7 @@ pub async fn login_with_password(
     login_with_password_for_test(
       state,
       UserIdentifier::Email(normalized_email.to_string()),
+      /* tenant_id= */ None,
       password,
     )
     .await?

@@ -11,7 +11,6 @@ use crate::auth::apple::decode_and_validate_apple_id_token;
 use crate::auth::create_external_user::{create_user_for_external_provider, user_by_provider_id};
 use crate::auth::oauth::OAuthUser;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::DbUserAndTenant;
 use crate::config::proto;
 
 #[derive(Debug, Deserialize, ToSchema)]

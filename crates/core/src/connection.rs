@@ -129,8 +129,10 @@ impl ConnectionManager {
         DbUri::Sqlite(Some(data_dir.main_db_path()))
       },
       InitDbOptions {
-        migration_path: Some(&data_dir.migrations_path()),
-        apply_main_migrations: true,
+        migrations: Some(Migrations {
+          main: true,
+          path: &data_dir.migrations_path(),
+        }),
         json_registry: &json_schema_registry,
         runtimes: &sqlite_function_runtimes,
         attach: vec![],
@@ -173,8 +175,10 @@ impl ConnectionManager {
         _ => DbUri::Sqlite(Some(data_dir.main_db_path())),
       },
       InitDbOptions {
-        migration_path: None,
-        apply_main_migrations: true,
+        migrations: Some(Migrations {
+          main: true,
+          path: &data_dir.migrations_path(),
+        }),
         json_registry: &json_schema_registry,
         runtimes: &sqlite_function_runtimes,
         attach: vec![],
@@ -284,7 +288,7 @@ impl ConnectionManager {
     tenant_template: &str,
     tenant_id: uuid::Uuid,
   ) -> Result<ConnectionEntry, ConnectionError> {
-    if let Some(ref pg_uri) = self.state.pg_uri {
+    if self.state.pg_uri.is_some() {
       return Err(ConnectionError::InvalidSetting("PG not supported"));
     }
 
@@ -298,8 +302,10 @@ impl ConnectionManager {
     let (conn, metadata, _new_db) = init_db_sqlite(
       Some(&db_path),
       InitDbOptions {
-        migration_path: Some(&self.state.data_dir.migrations_path()),
-        apply_main_migrations: false,
+        migrations: Some(Migrations {
+          main: false,
+          path: &self.state.data_dir.migrations_path(),
+        }),
         json_registry: &self.state.json_schema_registry,
         runtimes: &self.state.sqlite_function_runtimes,
         attach: vec![],
@@ -364,8 +370,10 @@ impl ConnectionManager {
         })
       },
       InitDbOptions {
-        migration_path: Some(&self.state.data_dir.migrations_path()),
-        apply_main_migrations: opts.attach_main,
+        migrations: Some(Migrations {
+          main: opts.attach_main,
+          path: &self.state.data_dir.migrations_path(),
+        }),
         json_registry: &self.state.json_schema_registry,
         runtimes: &self.state.sqlite_function_runtimes,
         attach,
@@ -450,13 +458,19 @@ enum DbUri {
   Pg(String),
 }
 
+#[derive(Debug)]
+struct Migrations<'a> {
+  /// Whether to apply main migrations (`_user` table, etc), or just based (custom + file deletions).
+  main: bool,
+  /// Path from where to load migrations: <migration_path>/<attach.schema_name>/*.sql.
+  path: &'a Path,
+}
+
 struct InitDbOptions<'a> {
   /// List of additional, attached DBs.
   attach: Vec<AttachedDatabase>,
-  /// Path from where to load migrations: <migration_path>/<attach.schema_name>/*.sql.
-  migration_path: Option<&'a Path>,
-  /// Whether to apply main migrations (`_user` table, etc) to `main` schema.
-  apply_main_migrations: bool,
+  /// Migration options.
+  migrations: Option<Migrations<'a>>,
   /// JSON Schema registry to use for building metadata (not supported for Postgres).
   json_registry: &'a Arc<JsonSchemaRegistry>,
   /// WASM runtimes for provided SQLite extension functions.
@@ -488,7 +502,7 @@ async fn init_db_pg<'a>(
   opts: InitDbOptions<'a>,
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   let InitDbOptions {
-    apply_main_migrations,
+    migrations,
     json_registry,
     runtimes,
     num_threads,
@@ -512,8 +526,10 @@ async fn init_db_pg<'a>(
   // Apply migrations.
   //
   // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-  let init_schema = if apply_main_migrations {
-    crate::migrations::apply_pg_main_migrations(&conn, opts.migration_path)
+  let init_schema = if let Some(migrations) = migrations
+    && migrations.main
+  {
+    crate::migrations::apply_pg_main_migrations(&conn, migrations.path)
       .await
       .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?
   } else {
@@ -537,8 +553,7 @@ async fn init_db_sqlite<'a>(
 ) -> Result<(Connection, ConnectionMetadata, bool), ConnectionError> {
   let InitDbOptions {
     attach,
-    migration_path,
-    apply_main_migrations: do_apply_main_migrations,
+    migrations,
     json_registry,
     runtimes,
     num_threads,
@@ -564,8 +579,7 @@ async fn init_db_sqlite<'a>(
 
   let conn = trailbase_sqlite::Connection::with_opts(
     {
-      let json_registry = json_registry.clone();
-      let runtimes = runtimes.clone();
+      let (json_registry, runtimes) = (json_registry.clone(), runtimes.clone());
 
       move || -> Result<rusqlite::Connection, ConnectionError> {
         return build_rusqlite_connection(data_path, json_registry.clone(), &runtimes);
@@ -588,26 +602,30 @@ async fn init_db_sqlite<'a>(
   // Apply migrations.
   //
   // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-  let init_schema = if do_apply_main_migrations {
-    apply_main_migrations(&conn, migration_path)
+  let init_schema = match &migrations {
+    Some(migrations) if migrations.main => apply_main_migrations(&conn, Some(migrations.path))
       .await
-      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?
-  } else {
-    false
+      .map_err(|err| trailbase_sqlite::Error::Other(err.into()))?,
+    Some(migrations) => {
+      // TODO: We should apply base migrations. Right now blocked on migrations needing
+      // rusqlite::Connection rather than SyncConnectionTrait.
+      false
+    }
+    None => false,
   };
 
   for AttachedDatabase { schema_name, path } in &attach {
-    log::debug!("Attaching '{schema_name}': {path:?}, {migration_path:?}");
+    log::debug!("Attaching '{schema_name}': {path:?}, {migrations:?}");
 
     // Before attaching secondary DBs, we must ensure their schemas are up-to-date.
-    if let Some(migrations_path) = opts.migration_path {
+    if let Some(ref migrations) = migrations {
       let mut secondary =
         build_rusqlite_connection(Some(path), opts.json_registry.clone(), opts.runtimes)?;
 
       // Apply migrations.
       //
       // IMPORTANT: All extensions need to be loaded before to satisfy potential dependencies.
-      apply_base_migrations(&mut secondary, Some(migrations_path), schema_name)?;
+      apply_base_migrations(&mut secondary, Some(migrations.path), schema_name)?;
     }
 
     conn.attach(&path.to_string_lossy(), schema_name).await?;
@@ -725,8 +743,10 @@ mod tests {
     let (conn, _metadata, new_db) = init_db_sqlite(
       Some(&data_dir.main_db_path()),
       InitDbOptions {
-        migration_path: Some(&data_dir.migrations_path()),
-        apply_main_migrations: true,
+        migrations: Some(Migrations {
+          main: true,
+          path: &data_dir.migrations_path().as_path(),
+        }),
         json_registry: &json_schema_registry,
         runtimes: &vec![],
         attach: vec![AttachedDatabase {

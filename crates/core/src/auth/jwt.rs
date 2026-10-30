@@ -1,5 +1,4 @@
 use crate::DbUser;
-use crate::auth::user::DbUserAndTenant;
 use crate::rand::random_alphanumeric;
 use crate::util::{id_to_b64, uuid_to_b64};
 use compact_str::{CompactString, ToCompactString};
@@ -386,8 +385,7 @@ mod tests {
   use compact_str::ToCompactString;
 
   use super::*;
-
-  use crate::auth::user::{DbUser, DbUserAndTenant};
+  use crate::auth::user::DbUser;
 
   #[test]
   fn test_decode_encode() {

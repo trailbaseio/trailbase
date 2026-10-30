@@ -9,7 +9,6 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::DbUserAndTenant;
 use crate::auth::util::{derive_pkce_code_challenge, get_user_by_id};
 use crate::constants::{AUTHORIZATION_CODE_TABLE, VERIFICATION_CODE_LENGTH};
 
