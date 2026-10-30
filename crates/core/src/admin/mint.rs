@@ -6,7 +6,6 @@ use uuid::Uuid;
 use crate::admin::AdminError as Error;
 use crate::app_state::AppState;
 use crate::auth::api::login::LoginResponse;
-use crate::auth::user::DbUserAndTenant;
 
 #[derive(Debug, Deserialize, TS, utoipa::ToSchema)]
 #[ts(export)]

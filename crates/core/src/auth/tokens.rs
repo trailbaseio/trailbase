@@ -7,6 +7,7 @@ use const_format::formatcp;
 use tower_cookies::Cookies;
 use trailbase_sqlite::{SyncConnectionTrait, params};
 
+use crate::app_state::AppState;
 use crate::auth::AuthError;
 use crate::auth::jwt::AuthTokenClaims;
 use crate::auth::user::{DbUser, Tenant};
@@ -17,7 +18,6 @@ use crate::constants::{
 };
 use crate::rand::random_alphanumeric;
 use crate::util::get_header;
-use crate::{app_state::AppState, auth::user::DbUserAndTenant};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Tokens {

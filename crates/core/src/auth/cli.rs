@@ -11,7 +11,7 @@ use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::hash_password;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::{DbUser, DbUserAndTenant, Tenant};
+use crate::auth::user::DbUser;
 use crate::auth::util::{
   get_user_by_email, get_user_by_id, get_user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username,

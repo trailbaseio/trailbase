@@ -15,7 +15,7 @@ use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::{DbUser, DbUserAndTenant};
+use crate::auth::user::DbUser;
 use crate::auth::util::{SameSite, new_cookie, remove_cookie, validate_redirect};
 use crate::auth::{AuthError, HasRoot};
 use crate::config::proto;

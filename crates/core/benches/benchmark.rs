@@ -176,6 +176,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   let user_x_token = login_with_password_for_test(
     &app.state,
     trailbase::api::UserIdentifier::Email(email.to_string()),
+    /* tenant_id= */ None,
     password,
   )
   .await?

@@ -1197,6 +1197,7 @@ async fn test_auth_change_username_and_unset_email_flow() {
   let tokens = login_with_password_for_test(
     &state,
     crate::auth::util::UserIdentifier::Username(username.clone()),
+    /* tenant_id= */ None,
     &password,
   )
   .await
