@@ -3,10 +3,10 @@ use axum::extract::{Path, State};
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::extract::Either;
-use crate::records::RecordError;
 use crate::records::files::{AsyncFileManager, delete_files_marked_for_deletion};
 use crate::records::params::{JsonRow, UpdateParams};
 use crate::records::queries::UpdateRecordApiQuery;
+use crate::records::{Permission, RecordError};
 
 /// Update existing record.
 #[utoipa::path(
@@ -32,6 +32,8 @@ pub async fn update_record_handler(
     return Err(RecordError::ApiRequiresTable);
   }
 
+  api.check_table_level_access(Permission::Update, user.as_ref())?;
+
   let (request, multipart_files) = match either_request {
     Either::Json(value) => (value, None),
     Either::Multipart(value, files) => (value, Some(files)),
@@ -39,7 +41,7 @@ pub async fn update_record_handler(
   };
 
   let record_id = api.primary_key_to_value(record)?;
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
+  let conn = api.conn(user.as_ref()).await;
 
   let (params, files) = UpdateParams::new(
     &api,
@@ -59,7 +61,6 @@ pub async fn update_record_handler(
   };
 
   let query = UpdateRecordApiQuery::new(api.clone(), params)?;
-  query.check_table_level_access(user.as_ref())?;
 
   let write_result = conn
     .call_writer(move |mut conn| -> Result<_, RecordError> {

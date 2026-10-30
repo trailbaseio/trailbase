@@ -189,7 +189,7 @@ impl<'a> RecordAclParams<'a> {
   ) -> Result<Self, RecordError> {
     return Ok(Self {
       user: user.map(|u| u.id.into_bytes()),
-      tenant: user.and_then(|u| u.tenant.map(|t| t.into_bytes())),
+      tenant: user.and_then(|u| u.tenant.as_ref().map(|t| t.id.into_bytes())),
       record_id,
       params: match p {
         Permission::Create | Permission::Update => Some(RequestParams::new(
@@ -587,7 +587,7 @@ impl RecordApi {
   }
 
   /// Returns the DB connection serving the API call.
-  pub async fn conn(&self, tenant_id: Option<uuid::Uuid>) -> trailbase_sqlite::Connection {
+  pub async fn conn(&self, user: Option<&User>) -> trailbase_sqlite::Connection {
     return match &self.state.conn {
       ApiConnection::SingleTenant(conn) => conn.clone(),
       ApiConnection::MultiTenant {
@@ -595,9 +595,12 @@ impl RecordApi {
         tenant_template,
       } => {
         mgr
-          .build_for_tenant(&tenant_template, tenant_id.expect("fixme"))
+          .build_for_tenant(
+            &tenant_template,
+            user.expect("FIXME").tenant.as_ref().expect("FIXME").id,
+          )
           .await
-          .expect("fixme")
+          .expect("FIXME")
           .connection
       }
     };
@@ -796,10 +799,30 @@ impl RecordApi {
     p: Permission,
     user: Option<&User>,
   ) -> Result<(), RecordError> {
-    if (user.is_some() && self.has_access(Entity::Authenticated, p))
-      || self.has_access(Entity::World, p)
+    if let ApiConnection::MultiTenant {
+      ref tenant_template,
+      ..
+    } = self.state.conn
     {
-      return Ok(());
+      let Some(user) = user else {
+        return Err(RecordError::Forbidden);
+      };
+
+      let Some(ref tenant) = user.tenant else {
+        return Err(RecordError::Forbidden);
+      };
+
+      if *tenant_template == tenant.template && self.has_access(Entity::Authenticated, p) {
+        return Ok(());
+      }
+    } else {
+      if self.has_access(Entity::World, p) {
+        return Ok(());
+      }
+
+      if user.is_some() && self.has_access(Entity::Authenticated, p) {
+        return Ok(());
+      }
     }
 
     return Err(RecordError::Forbidden);
@@ -853,7 +876,7 @@ impl SubscriptionAclParams {
     return Self {
       params: event.clone(),
       user: user.map(|u| u.id.into_bytes()),
-      tenant: user.and_then(|u| u.tenant.map(|t| t.into_bytes())),
+      tenant: user.and_then(|u| u.tenant.as_ref().map(|t| t.id.into_bytes())),
     };
   }
 }

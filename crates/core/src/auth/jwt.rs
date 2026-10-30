@@ -1,4 +1,4 @@
-use crate::auth::user::DbUserAndTenant;
+use crate::DbUser;
 use crate::rand::random_alphanumeric;
 use crate::util::{id_to_b64, uuid_to_b64};
 use compact_str::{CompactString, ToCompactString};
@@ -12,6 +12,7 @@ use thiserror::Error;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+use crate::auth::user::Tenant;
 use crate::data_dir::DataDir;
 
 #[derive(Debug, Error)]
@@ -38,7 +39,8 @@ enum TokenType {
 }
 
 /// The actual "AuthToken" used for signed-in users.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct AuthTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: CompactString,
@@ -75,7 +77,7 @@ pub struct AuthTokenClaims {
   pub username: Option<CompactString>,
 
   /// Url-safe Base64 encoded id of the active tenant.
-  pub tenant: Option<String>,
+  pub tenant: Option<Tenant>,
 
   /// CSRF random token. Requiring that the client echos this random token back on a non-cookie,
   /// non-auto-attach channel can be used to protect from CSRF.
@@ -84,10 +86,8 @@ pub struct AuthTokenClaims {
 
 impl AuthTokenClaims {
   pub(crate) fn new(
-    DbUserAndTenant {
-      user: db_user,
-      tenant,
-    }: &DbUserAndTenant,
+    db_user: &DbUser,
+    tenant: Option<Tenant>,
     auth_token_ttl: &chrono::Duration,
   ) -> Self {
     assert!(db_user.unverified_email.is_none());
@@ -103,7 +103,7 @@ impl AuthTokenClaims {
       provider: db_user.provider_id as u8,
       email: db_user.email.clone(),
       username: db_user.username.clone(),
-      tenant: tenant.map(|uuid| id_to_b64(&uuid)),
+      tenant: tenant,
       csrf_token: random_alphanumeric(24).to_compact_string(),
     };
   }
@@ -116,7 +116,8 @@ impl AuthTokenClaims {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
 pub enum AuthMethod {
   #[serde(rename = "pw")]
   Password,
@@ -127,7 +128,8 @@ pub enum AuthMethod {
 }
 
 // "Pending" auth token used for multi-factor auth.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))]
 pub struct PendingAuthTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: String,
@@ -161,7 +163,7 @@ impl PendingAuthTokenClaims {
 }
 
 // Password reset token.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PasswordResetTokenClaims {
   /// The email of the account.
   pub sub: String,
@@ -191,7 +193,7 @@ impl PasswordResetTokenClaims {
 }
 
 // Email verification token.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailVerificationTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: String,
@@ -224,7 +226,7 @@ impl EmailVerificationTokenClaims {
 }
 
 // Change email token.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EmailChangeTokenClaims {
   /// Url-safe Base64 encoded id of the current user.
   pub sub: String,
@@ -383,8 +385,7 @@ mod tests {
   use compact_str::ToCompactString;
 
   use super::*;
-
-  use crate::auth::user::{DbUser, DbUserAndTenant};
+  use crate::auth::user::DbUser;
 
   #[test]
   fn test_decode_encode() {
@@ -397,13 +398,7 @@ mod tests {
       ..Default::default()
     };
 
-    let claims = AuthTokenClaims::new(
-      &DbUserAndTenant {
-        user: db_user,
-        tenant: None,
-      },
-      &crate::constants::DEFAULT_AUTH_TOKEN_TTL,
-    );
+    let claims = AuthTokenClaims::new(&db_user, None, &crate::constants::DEFAULT_AUTH_TOKEN_TTL);
     let token = jwt.encode(&claims).unwrap();
 
     assert_eq!(claims, jwt.decode(&token).unwrap());
