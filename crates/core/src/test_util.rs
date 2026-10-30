@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::auth::AuthError;
-use crate::auth::user::{DbUser, DbUserAndTenant};
+use crate::auth::user::DbUser;
 use crate::auth::util::{user_by_email, user_by_username};
 
 pub type AnyError = Box<dyn std::error::Error + Send + Sync>;
@@ -87,15 +87,7 @@ pub async fn login_user_for_test(
   let crate::auth::tokens::FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = crate::auth::tokens::mint_new_tokens(
-    state,
-    &DbUserAndTenant {
-      user: db_user,
-      tenant: None,
-    },
-    None,
-  )
-  .await?;
+  } = crate::auth::tokens::mint_new_tokens(state, &db_user, None, None).await?;
 
   let auth_token = state
     .jwt()

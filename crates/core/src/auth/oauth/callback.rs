@@ -15,7 +15,7 @@ use crate::auth::oauth::ReqwestClient;
 use crate::auth::oauth::state::{OAuthStateClaims, ResponseType};
 use crate::auth::options::OAuthEntry;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::{DbUser, DbUserAndTenant};
+use crate::auth::user::DbUser;
 use crate::auth::util::{SameSite, new_cookie, remove_cookie, validate_redirect};
 use crate::auth::{AuthError, HasRoot};
 use crate::config::proto;
@@ -166,32 +166,23 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   oauth_entry: &OAuthEntry,
   redirect: Option<String>,
   auth_code: String,
-  tenant: Option<String>,
+  tenant_id: Option<String>,
   server_pkce_code_verifier: String,
   has_root: bool,
 ) -> Result<Response, AuthError> {
   let db_user =
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
-  let tenant = tenant
+  let tenant_id: Option<uuid::Uuid> = tenant_id
     .as_deref()
     .map(b64_to_uuid)
     .transpose()
-    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?
-    .map(|id| id.into_bytes());
+    .map_err(|_err| AuthError::BadRequest("invalid tenant"))?;
 
   let FreshTokens {
     auth_token_claims: (auth_token_claims, auth_token_ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(
-    state,
-    &DbUserAndTenant {
-      user: db_user,
-      tenant,
-    },
-    None,
-  )
-  .await?;
+  } = mint_new_tokens(state, &db_user, tenant_id, None).await?;
 
   let auth_token = state
     .jwt()

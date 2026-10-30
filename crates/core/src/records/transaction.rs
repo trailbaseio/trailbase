@@ -8,13 +8,13 @@ use utoipa::ToSchema;
 use crate::app_state::AppState;
 use crate::auth::user::User;
 use crate::config::proto;
-use crate::records::RecordError;
 use crate::records::create_record::{build_insert_params, extract_record_id};
 use crate::records::params::{ParamOptions, UpdateParams};
 use crate::records::queries::{
   DeleteRecordApiQuery, InsertOrReplaceRecordApiQuery, UpdateRecordApiQuery,
 };
 use crate::records::record_api::RecordApi;
+use crate::records::{Permission, RecordError};
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema, TS)]
 #[ts(export)]
@@ -105,6 +105,9 @@ pub async fn record_transactions_handler(
       return match op {
         Operation::Create { api_name, value } => {
           let api = get_api(&state, &api_name)?;
+
+          api.check_table_level_access(Permission::Create, user.as_ref())?;
+
           let db_name = get_db_name(api.qualified_name());
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
             return Err(DB_MISMATCH_ERR);
@@ -129,6 +132,9 @@ pub async fn record_transactions_handler(
           value,
         } => {
           let api = get_api(&state, &api_name)?;
+
+          api.check_table_level_access(Permission::Update, user.as_ref())?;
+
           let db_name = get_db_name(api.qualified_name());
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
             return Err(DB_MISMATCH_ERR);
@@ -163,6 +169,9 @@ pub async fn record_transactions_handler(
           record_id,
         } => {
           let api = get_api(&state, &api_name)?;
+
+          api.check_table_level_access(Permission::Delete, user.as_ref())?;
+
           let db_name = get_db_name(api.qualified_name());
           if expected_db_name.get_or_insert_with(|| db_name.to_string()) != db_name {
             return Err(DB_MISMATCH_ERR);
@@ -180,7 +189,7 @@ pub async fn record_transactions_handler(
     })
     .collect::<Result<Vec<_>, _>>()?;
 
-  let conn = ops[0].api.conn(user.as_ref().and_then(|u| u.tenant)).await;
+  let conn = ops[0].api.conn(user.as_ref()).await;
 
   let op_results = if request.transaction.unwrap_or(false) {
     conn
@@ -253,7 +262,6 @@ pub(crate) fn apply_ops(
 
       return match query {
         WriteQuery::Insert(query) => {
-          query.check_table_level_access(user)?;
           query.check_record_level_access(conn, user)?;
 
           match query.apply(conn) {
@@ -279,7 +287,6 @@ pub(crate) fn apply_ops(
           }
         }
         WriteQuery::Update(query) => {
-          query.check_table_level_access(user)?;
           query.check_record_level_access(conn, user)?;
 
           let _result = query.apply(conn)?;
@@ -289,7 +296,6 @@ pub(crate) fn apply_ops(
           })
         }
         WriteQuery::Delete(query) => {
-          query.check_table_level_access(user)?;
           query.check_record_level_access(conn, user)?;
 
           let _result = query
