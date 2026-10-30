@@ -186,15 +186,7 @@ pub async fn login_with_password_for_test(
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(
-    state,
-    &DbUserAndTenant {
-      user: db_user,
-      tenant: None,
-    },
-    None,
-  )
-  .await?;
+  } = mint_new_tokens(state, &db_user, /* tenant_id= */ None, None).await?;
 
   let auth_token = state
     .jwt()

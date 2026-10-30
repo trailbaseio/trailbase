@@ -11,7 +11,7 @@ use crate::AppState;
 use crate::auth::AuthError;
 use crate::auth::password::hash_password;
 use crate::auth::tokens::{FreshTokens, mint_new_tokens};
-use crate::auth::user::{DbUser, DbUserAndTenant};
+use crate::auth::user::{DbUser, DbUserAndTenant, Tenant};
 use crate::auth::util::{
   get_user_by_email, get_user_by_id, get_user_by_username, validate_and_normalize_email_address,
   validate_and_normalize_username,
@@ -202,26 +202,20 @@ pub async fn mint_auth_tokens(
   state: &AppState,
   user: UserReference,
 ) -> Result<AuthTokens, AuthError> {
-  return mint_auth_tokens_impl(
-    state,
-    &DbUserAndTenant {
-      user: user.lookup_user(state.user_conn()).await?,
-      tenant: None,
-    },
-  )
-  .await;
+  return mint_auth_tokens_impl(state, &user.lookup_user(state.user_conn()).await?, None).await;
 }
 
 pub(crate) async fn mint_auth_tokens_impl(
   state: &AppState,
-  db_user_and_tenant: &DbUserAndTenant,
+  db_user: &DbUser,
+  tenant_id: Option<uuid::Uuid>,
 ) -> Result<AuthTokens, AuthError> {
   let auth_and_refresh_token_ttl = (Duration::hours(12), Duration::hours(0));
 
   let FreshTokens {
     auth_token_claims: (auth_token_claims, _ttl),
     refresh_token,
-  } = mint_new_tokens(state, db_user_and_tenant, Some(auth_and_refresh_token_ttl)).await?;
+  } = mint_new_tokens(state, db_user, tenant_id, Some(auth_and_refresh_token_ttl)).await?;
 
   let auth_token = state
     .jwt()

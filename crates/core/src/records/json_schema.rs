@@ -37,7 +37,7 @@ pub async fn json_schema_handler(
   // NOTE:  Micro optimization: since there's no subsequent DB interaction, we could first check if
   // there even is a schema access rule and only then invoke `call_reader`.
   api
-    .conn(user.as_ref().and_then(|u| u.tenant))
+    .conn(user.as_ref())
     .await
     .call_reader({
       let api = api.clone();

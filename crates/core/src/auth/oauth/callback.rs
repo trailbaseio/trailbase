@@ -24,7 +24,7 @@ use crate::constants::{
   DEFAULT_AUTHORIZATION_CODE_TTL, VERIFICATION_CODE_LENGTH,
 };
 use crate::rand::random_alphanumeric;
-use crate::util::b64_to_id;
+use crate::util::{b64_to_id, b64_to_uuid};
 
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct CallbackQuery {
@@ -166,15 +166,15 @@ async fn callback_from_oauth_provider_setting_token_cookies(
   oauth_entry: &OAuthEntry,
   redirect: Option<String>,
   auth_code: String,
-  tenant: Option<String>,
+  tenant_id: Option<String>,
   server_pkce_code_verifier: String,
   has_root: bool,
 ) -> Result<Response, AuthError> {
   let db_user =
     get_or_create_user(state, oauth_entry, auth_code, server_pkce_code_verifier).await?;
-  let tenant = tenant
+  let tenant_id: Option<uuid::Uuid> = tenant_id
     .as_deref()
-    .map(b64_to_id)
+    .map(b64_to_uuid)
     .transpose()
     .map_err(|_err| AuthError::BadRequest("invalid tenant"))?;
 
@@ -182,15 +182,7 @@ async fn callback_from_oauth_provider_setting_token_cookies(
     auth_token_claims: (auth_token_claims, auth_token_ttl),
     refresh_token,
     ..
-  } = mint_new_tokens(
-    state,
-    &DbUserAndTenant {
-      user: db_user,
-      tenant,
-    },
-    None,
-  )
-  .await?;
+  } = mint_new_tokens(state, &db_user, tenant_id, None).await?;
 
   let auth_token = state
     .jwt()

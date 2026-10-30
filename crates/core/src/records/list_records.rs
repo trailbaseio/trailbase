@@ -97,7 +97,7 @@ pub async fn list_records_handler(
   // hide inaccessible records..
   api.check_table_level_access(Permission::Read, user.as_ref())?;
 
-  let conn = api.conn(user.as_ref().and_then(|u| u.tenant)).await;
+  let conn = api.conn(user.as_ref()).await;
   let table_name = api.table_name();
   let pk_meta = api.record_pk_column();
   let pk_column = &pk_meta.column;

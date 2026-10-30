@@ -285,7 +285,7 @@ async fn check_credentials(
 pub(crate) async fn build_auth_token_flow_response_with_ttl(
   state: &AppState,
   db_user: DbUser,
-  tenant: Option<uuid::Uuid>,
+  tenant_id: Option<uuid::Uuid>,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
@@ -293,15 +293,8 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
   auth_and_refresh_token_ttl: Option<(Duration, Duration)>,
 ) -> Result<Response, AuthError> {
   let build_new_tokens = async || -> Result<(String, FreshTokens), AuthError> {
-    let fresh_tokens = mint_new_tokens(
-      state,
-      &DbUserAndTenant {
-        user: db_user,
-        tenant: tenant.map(|t| t.into_bytes()),
-      },
-      auth_and_refresh_token_ttl,
-    )
-    .await?;
+    let fresh_tokens =
+      mint_new_tokens(state, &db_user, tenant_id, auth_and_refresh_token_ttl).await?;
 
     let auth_token = state
       .jwt()
@@ -367,14 +360,14 @@ pub(crate) async fn build_auth_token_flow_response_with_ttl(
 pub(crate) async fn build_auth_token_flow_response(
   state: &AppState,
   db_user: DbUser,
-  tenant: Option<uuid::Uuid>,
+  tenant_id: Option<uuid::Uuid>,
   cookies: &Cookies,
   redirect: Option<String>,
   is_json: bool,
   has_root: bool,
 ) -> Result<Response, AuthError> {
   return build_auth_token_flow_response_with_ttl(
-    state, db_user, tenant, cookies, redirect, is_json, has_root, None,
+    state, db_user, tenant_id, cookies, redirect, is_json, has_root, None,
   )
   .await;
 }
@@ -405,7 +398,7 @@ pub(crate) async fn build_auth_token_flow_response(
 async fn build_authorization_code_flow_and_pkce_response(
   state: &AppState,
   db_user: &DbUser,
-  tenant: Option<uuid::Uuid>,
+  tenant_id: Option<uuid::Uuid>,
   redirect: String,
   pkce_code_challenge: String,
 ) -> Result<Response, AuthError> {
@@ -427,7 +420,7 @@ async fn build_authorization_code_flow_and_pkce_response(
       QUERY,
       params!(
         db_user.id,
-        tenant.map(|uuid| uuid.into_bytes()),
+        tenant_id.map(|uuid| uuid.into_bytes()),
         authorization_code.clone(),
         pkce_code_challenge,
         (Utc::now() + DEFAULT_AUTHORIZATION_CODE_TTL).timestamp(),
