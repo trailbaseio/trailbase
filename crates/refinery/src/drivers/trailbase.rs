@@ -6,30 +6,6 @@ use time::format_description::well_known::Rfc3339;
 use trailbase_sqlite::traits::{SyncConnection, SyncTransaction};
 use trailbase_sqlite::{Connection, ConnectionType, Error};
 
-async fn query_applied_migrations(conn: &Connection, query: &str) -> Result<Vec<Migration>, Error> {
-  let rows = conn.read_query_rows(query.to_string(), ()).await?;
-
-  return rows
-    .iter()
-    .map(|row| {
-      let version = row.get(0)?;
-      let applied_on: String = row.get(2)?;
-      let applied_on =
-        OffsetDateTime::parse(&applied_on, &Rfc3339).map_err(|err| Error::Other(err.into()))?;
-      let checksum: String = row.get(3)?;
-
-      return Ok(Migration::applied(
-        version,
-        row.get(1)?,
-        applied_on,
-        checksum
-          .parse::<u64>()
-          .map_err(|err| Error::Other(err.into()))?,
-      ));
-    })
-    .collect::<Result<Vec<_>, Error>>();
-}
-
 #[async_trait]
 impl AsyncTransaction for Connection {
   type Error = Error;
@@ -38,44 +14,6 @@ impl AsyncTransaction for Connection {
     &mut self,
     queries: T,
   ) -> Result<usize, Self::Error> {
-    async fn execute_impl<'a, T: Iterator<Item = &'a str>>(
-      conn: &mut Connection,
-      queries: T,
-      foreign_keys: bool,
-    ) -> Result<usize, Error> {
-      let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
-      return conn
-        .transaction(move |mut tx| -> Result<_, Error> {
-          let mut count = 0;
-          for query in queries {
-            tx.execute_batch(query)?;
-            count += 1;
-          }
-
-          // Check for potential foreign key violations before committing.
-          // Setting the "foreign_keys" PRAGMA in a transaction is a no-op:
-          //   https://www.sqlite.org/pragma.html#pragma_foreign_keys
-          if foreign_keys {
-            let violations: Vec<String> = tx
-              .query_rows("PRAGMA foreign_key_check;", ())?
-              .iter()
-              .map(|r| r.get::<String>(0))
-              .collect::<Result<_, _>>()?;
-
-            if !violations.is_empty() {
-              return Err(Error::Other(
-                format!("FK violations: {violations:?}").into(),
-              ));
-            }
-          }
-
-          tx.commit()?;
-
-          return Ok(count);
-        })
-        .await;
-    }
-
     let is_sqlite = self.connection_type() == ConnectionType::Sqlite;
     let initial_fk: bool = is_sqlite
       && self
@@ -92,7 +30,13 @@ impl AsyncTransaction for Connection {
       self.execute_batch("PRAGMA foreign_keys = OFF;").await?;
     }
 
-    let result = execute_impl(self, queries, initial_fk).await;
+    let result = self
+      .transaction({
+        let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
+        move |tx| apply_migrations(tx, &queries, initial_fk)
+      })
+      .await;
+
     if initial_fk {
       self.execute_batch("PRAGMA foreign_keys = ON;").await?;
     }
@@ -107,7 +51,10 @@ impl AsyncQuery<Vec<Migration>> for Connection {
     &mut self,
     query: &str,
   ) -> Result<Vec<Migration>, <Self as AsyncTransaction>::Error> {
-    return query_applied_migrations(self, query).await;
+    let query = query.to_string();
+    return self
+      .call_reader(move |mut conn| query_applied_migrations(&mut conn, &query))
+      .await;
   }
 }
 
@@ -138,6 +85,66 @@ impl AsyncMigrate for Connection {
       }
     };
   }
+}
+
+pub(super) fn query_applied_migrations<C: SyncConnection>(
+  conn: &mut C,
+  query: &str,
+) -> Result<Vec<Migration>, Error> {
+  let rows = conn.query_rows(query.to_string(), ())?;
+
+  return rows
+    .iter()
+    .map(|row| {
+      let version = row.get(0)?;
+      let applied_on: String = row.get(2)?;
+      let applied_on =
+        OffsetDateTime::parse(&applied_on, &Rfc3339).map_err(|err| Error::Other(err.into()))?;
+      let checksum: String = row.get(3)?;
+
+      return Ok(Migration::applied(
+        version,
+        row.get(1)?,
+        applied_on,
+        checksum
+          .parse::<u64>()
+          .map_err(|err| Error::Other(err.into()))?,
+      ));
+    })
+    .collect::<Result<Vec<_>, Error>>();
+}
+
+pub(super) fn apply_migrations<'a>(
+  mut tx: impl SyncTransaction,
+  queries: &[String],
+  foreign_keys: bool,
+) -> Result<usize, Error> {
+  let mut count = 0;
+  for query in queries {
+    tx.execute_batch(query)?;
+    count += 1;
+  }
+
+  // Check for potential foreign key violations before committing.
+  // Setting the "foreign_keys" PRAGMA in a transaction is a no-op:
+  //   https://www.sqlite.org/pragma.html#pragma_foreign_keys
+  if foreign_keys {
+    let violations: Vec<String> = tx
+      .query_rows("PRAGMA foreign_key_check;", ())?
+      .iter()
+      .map(|r| r.get::<String>(0))
+      .collect::<Result<_, _>>()?;
+
+    if !violations.is_empty() {
+      return Err(Error::Other(
+        format!("FK violations: {violations:?}").into(),
+      ));
+    }
+  }
+
+  tx.commit()?;
+
+  return Ok(count);
 }
 
 #[cfg(test)]

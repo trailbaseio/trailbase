@@ -29,7 +29,7 @@ pub(crate) fn verify_migrations(
       if abort_missing {
         return Err(Error::new(Kind::MissingVersion(app.clone()), None));
       } else {
-        log::warn!(target: "trailbase_refinery::traits::missing", "migration {app} is missing from the filesystem");
+        log::warn!("migration {app} is missing from the filesystem");
       }
     }
   }
@@ -62,8 +62,7 @@ pub(crate) fn verify_migrations(
       }
 
       log::warn!(
-          target: "trailbase_refinery::traits::divergent",
-          "applied migration {app} is different than filesystem one {migration} => skipping {migration}",
+        "applied migration {app} is different than filesystem one {migration} => skipping {migration}",
       );
       continue;
     }
@@ -77,7 +76,9 @@ pub(crate) fn verify_migrations(
         return Err(Error::new(Kind::MissingVersion(migration), None));
       }
 
-      log::error!(target: "trailbase_refinery::traits::missing", "found strictly versioned, not applied migration on file system => skipping: {migration}");
+      log::error!(
+        "found strictly versioned, not applied migration on file system => skipping: {migration}"
+      );
       continue;
     }
 

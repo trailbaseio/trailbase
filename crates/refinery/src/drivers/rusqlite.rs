@@ -1,73 +1,13 @@
-use crate::Migration;
-use crate::traits::sync::{Migrate, Query, Transaction};
 use rusqlite::{Connection as RqlConnection, Error as RqlError};
-use time::OffsetDateTime;
-use time::format_description::well_known::Rfc3339;
 
-fn query_applied_migrations(
-  transaction: &RqlConnection,
-  query: &str,
-) -> Result<Vec<Migration>, RqlError> {
-  let mut stmt = transaction.prepare(query)?;
-  let mut rows = stmt.query([])?;
-  let mut applied = Vec::new();
-  while let Some(row) = rows.next()? {
-    let version = row.get(0)?;
-    let applied_on: String = row.get(2)?;
-    // Safe to call unwrap, as we stored it in RFC3339 format on the database
-    let applied_on = OffsetDateTime::parse(&applied_on, &Rfc3339).unwrap();
-
-    let checksum: String = row.get(3)?;
-    applied.push(Migration::applied(
-      version,
-      row.get(1)?,
-      applied_on,
-      checksum
-        .parse::<u64>()
-        .expect("checksum must be a valid u64"),
-    ));
-  }
-  Ok(applied)
-}
+use crate::Migration;
+use crate::drivers::trailbase::{apply_migrations, query_applied_migrations};
+use crate::traits::sync::{Migrate, Query, Transaction};
 
 impl Transaction for RqlConnection {
   type Error = RqlError;
 
   fn execute<'a, T: Iterator<Item = &'a str>>(&mut self, queries: T) -> Result<usize, Self::Error> {
-    fn execute_impl<'a, T: Iterator<Item = &'a str>>(
-      conn: &mut RqlConnection,
-      queries: T,
-      foreign_keys: bool,
-    ) -> Result<usize, RqlError> {
-      let transaction = conn.transaction()?;
-
-      let mut count = 0;
-      for query in queries {
-        transaction.execute_batch(query)?;
-        count += 1;
-      }
-
-      // Check for potential foreign key violations before committing.
-      // Setting the "foreign_keys" PRAGMA in a transaction is a no-op:
-      //   https://www.sqlite.org/pragma.html#pragma_foreign_keys
-      if foreign_keys {
-        let violations: Vec<String> = transaction
-          .prepare("PRAGMA foreign_key_check;")?
-          .query_map([], |row| row.get::<_, String>(0))?
-          .collect::<Result<_, _>>()?;
-
-        if !violations.is_empty() {
-          return Err(RqlError::UserFunctionError(
-            format!("FK violations: {violations:?}").into(),
-          ));
-        }
-      }
-
-      transaction.commit()?;
-
-      return Ok(count);
-    }
-
     let initial_fk: bool = self.query_one("PRAGMA foreign_keys;", (), |row| row.get(0))?;
     if initial_fk {
       // Turn off foreign key constraints temporarily (re-enabled as part of the transaction)
@@ -79,7 +19,12 @@ impl Transaction for RqlConnection {
       self.pragma_update(None, "foreign_keys", false)?;
     }
 
-    let result = execute_impl(self, queries, initial_fk);
+    let queries: Vec<String> = queries.map(|q| q.to_string()).collect();
+    let tx = self.transaction()?;
+    let result = apply_migrations(tx, &queries, initial_fk).map_err(|err| match err {
+      trailbase_sqlite::Error::Rusqlite(err) => err,
+      _ => RqlError::UserFunctionError(err.into()),
+    });
     if initial_fk {
       self.pragma_update(None, "foreign_keys", true)?;
     }
@@ -90,10 +35,12 @@ impl Transaction for RqlConnection {
 
 impl Query<Vec<Migration>> for RqlConnection {
   fn query(&mut self, query: &str) -> Result<Vec<Migration>, Self::Error> {
-    let transaction = self.transaction()?;
-    let applied = query_applied_migrations(&transaction, query)?;
-    transaction.commit()?;
-    Ok(applied)
+    return Ok(
+      query_applied_migrations(self, query).map_err(|err| match err {
+        trailbase_sqlite::Error::Rusqlite(err) => err,
+        _ => RqlError::UserFunctionError(err.into()),
+      })?,
+    );
   }
 }
 
