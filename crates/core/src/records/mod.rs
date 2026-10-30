@@ -14,6 +14,9 @@ pub(crate) mod subscribe;
 pub(crate) mod util;
 
 #[cfg(test)]
+pub mod record_api_tests;
+
+#[cfg(test)]
 pub mod test_utils;
 
 mod error;
