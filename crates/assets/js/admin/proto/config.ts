@@ -858,10 +858,21 @@ export interface RecordApiConfig {
     | string
     | undefined;
   /**
-   * Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
-   * Can only reference configured databases.
+   * Attached databases for APIs using separate (multi) DBs.
+   *
+   * This will `ATTACH <traildepot>/data/<name>.db AS <name>`. Only databases
+   * listed in `DatabaseConfig` are allowed to be referenced. `main` must not
+   * be referenced, it's always included and needed for ACL checks against the
+   * user table.
+   *
+   * Commonly for TABLE-backed APIs, only a single attached DB will be needed.
+   * However, VIEW-backed APIs may combine multiple D
    */
   attachedDatabases: string[];
+  /** Template to for multi-tenant APIs. */
+  tenantTemplate?:
+    | string
+    | undefined;
   /** Strategy to be used on insert if a table constraint is violated. */
   conflictResolution?:
     | ConflictResolutionStrategy
@@ -884,10 +895,6 @@ export interface RecordApiConfig {
    */
   enableSubscriptions?:
     | boolean
-    | undefined;
-  /** The tenant template to use, if this is a multi-tenant IP. */
-  tenantTemplate?:
-    | string
     | undefined;
   /** Access control lists. */
   aclWorld: PermissionFlag[];
@@ -2762,6 +2769,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     for (const v of message.attachedDatabases) {
       writer.uint32(26).string(v!);
     }
+    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
+      writer.uint32(130).string(message.tenantTemplate);
+    }
     if (message.conflictResolution !== undefined && message.conflictResolution !== 0) {
       writer.uint32(40).int32(message.conflictResolution);
     }
@@ -2770,9 +2780,6 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.enableSubscriptions !== undefined && message.enableSubscriptions !== false) {
       writer.uint32(72).bool(message.enableSubscriptions);
-    }
-    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
-      writer.uint32(130).string(message.tenantTemplate);
     }
     for (const v of message.aclWorld) {
       writer.uint32(56).int32(v!);
@@ -2847,6 +2854,14 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
             message.attachedDatabases.push(reader.string());
             continue;
           }
+          case 16: {
+            if (tag !== 130) {
+              break;
+            }
+
+            message.tenantTemplate = reader.string();
+            continue;
+          }
           case 5: {
             if (tag !== 40) {
               break;
@@ -2869,14 +2884,6 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
             }
 
             message.enableSubscriptions = reader.bool();
-            continue;
-          }
-          case 16: {
-            if (tag !== 130) {
-              break;
-            }
-
-            message.tenantTemplate = reader.string();
             continue;
           }
           case 7: {
@@ -3004,6 +3011,11 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
         : globalThis.Array.isArray(object?.attached_databases)
         ? object.attached_databases.map((e: any) => globalThis.String(e))
         : [],
+      tenantTemplate: isSet(object.tenantTemplate)
+        ? globalThis.String(object.tenantTemplate)
+        : isSet(object.tenant_template)
+        ? globalThis.String(object.tenant_template)
+        : undefined,
       conflictResolution: isSet(object.conflictResolution)
         ? conflictResolutionStrategyFromJSON(object.conflictResolution)
         : isSet(object.conflict_resolution)
@@ -3018,11 +3030,6 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
         ? globalThis.Boolean(object.enableSubscriptions)
         : isSet(object.enable_subscriptions)
         ? globalThis.Boolean(object.enable_subscriptions)
-        : undefined,
-      tenantTemplate: isSet(object.tenantTemplate)
-        ? globalThis.String(object.tenantTemplate)
-        : isSet(object.tenant_template)
-        ? globalThis.String(object.tenant_template)
         : undefined,
       aclWorld: globalThis.Array.isArray(object?.aclWorld)
         ? object.aclWorld.map((e: any) => permissionFlagFromJSON(e))
@@ -3086,6 +3093,9 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     if (message.attachedDatabases?.length) {
       obj.attachedDatabases = message.attachedDatabases;
     }
+    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
+      obj.tenantTemplate = message.tenantTemplate;
+    }
     if (message.conflictResolution !== undefined && message.conflictResolution !== 0) {
       obj.conflictResolution = conflictResolutionStrategyToJSON(message.conflictResolution);
     }
@@ -3094,9 +3104,6 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     }
     if (message.enableSubscriptions !== undefined && message.enableSubscriptions !== false) {
       obj.enableSubscriptions = message.enableSubscriptions;
-    }
-    if (message.tenantTemplate !== undefined && message.tenantTemplate !== "") {
-      obj.tenantTemplate = message.tenantTemplate;
     }
     if (message.aclWorld?.length) {
       obj.aclWorld = message.aclWorld.map((e) => permissionFlagToJSON(e));
@@ -3139,10 +3146,10 @@ export const RecordApiConfig: MessageFns<RecordApiConfig> = {
     message.name = object.name ?? "";
     message.tableName = object.tableName ?? "";
     message.attachedDatabases = object.attachedDatabases?.map((e) => e) || [];
+    message.tenantTemplate = object.tenantTemplate ?? "";
     message.conflictResolution = object.conflictResolution ?? 0;
     message.autofillMissingUserIdColumns = object.autofillMissingUserIdColumns ?? false;
     message.enableSubscriptions = object.enableSubscriptions ?? false;
-    message.tenantTemplate = object.tenantTemplate ?? "";
     message.aclWorld = object.aclWorld?.map((e) => e) || [];
     message.aclAuthenticated = object.aclAuthenticated?.map((e) => e) || [];
     message.excludedColumns = object.excludedColumns?.map((e) => e) || [];
