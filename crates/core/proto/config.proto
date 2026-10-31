@@ -285,9 +285,20 @@ message RecordApiConfig {
   optional string name = 1;
   // Referenced table to be exposed.
   optional string table_name = 2;
-  // Attached databases - will `ATTACH <traildepot>/data/<name>.db AS <name>`.
-  // Can only reference configured databases.
+
+  // Attached databases for APIs using separate (multi) DBs.
+  //
+  // This will `ATTACH <traildepot>/data/<name>.db AS <name>`. Only databases
+  // listed in `DatabaseConfig` are allowed to be referenced. `main` must not
+  // be referenced, it's always included and needed for ACL checks against the
+  // user table.
+  //
+  // Commonly for TABLE-backed APIs, only a single attached DB will be needed.
+  // However, VIEW-backed APIs may combine multiple D
   repeated string attached_databases = 3;
+
+  // Template to for multi-tenant APIs.
+  optional string tenant_template = 16;
 
   // Strategy to be used on insert if a table constraint is violated.
   optional ConflictResolutionStrategy conflict_resolution = 5;
@@ -304,9 +315,6 @@ message RecordApiConfig {
   // configuration changes to allow for server-side streaming HTTP, e.g.
   // tell the proxy to keep listening and not cache.
   optional bool enable_subscriptions = 9;
-
-  // The tenant template to use, if this is a multi-tenant IP.
-  optional string tenant_template = 16;
 
   // Access control lists.
   repeated PermissionFlag acl_world = 7;
