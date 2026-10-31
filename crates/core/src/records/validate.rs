@@ -80,9 +80,14 @@ pub(crate) async fn validate_record_api_config(
     entity: Entity::Unknown,
   };
 
-  let ConnectionEntry { metadata, .. } = connection_manager
-    .get_entry_for_qn(&table_name)
-    .await
+  let ConnectionEntry { metadata, .. } =
+    if let Some(ref tenant_template) = api_config.tenant_template {
+      connection_manager
+        .build_for_tenant(tenant_template, None)
+        .await
+    } else {
+      connection_manager.get_entry_for_qn(&table_name).await
+    }
     .map_err(|err| {
       return invalid_prefixed(&prefix, err);
     })?;

@@ -597,7 +597,7 @@ impl RecordApi {
         mgr
           .build_for_tenant(
             &tenant_template,
-            user.expect("FIXME").tenant.as_ref().expect("FIXME").id,
+            Some(user.expect("FIXME").tenant.as_ref().expect("FIXME").id),
           )
           .await
           .expect("FIXME")
