@@ -300,12 +300,19 @@ impl ConnectionManager {
       .join(tenant_template)
       .join(format!("{tenant_id}.db"));
 
+    let migration_path = self
+      .state
+      .data_dir
+      .root()
+      .join("templates")
+      .join(tenant_template);
+
     let (conn, metadata, _new_db) = init_db_sqlite(
       Some(&db_path),
       InitDbOptions {
         migrations: Some(Migrations {
           main: false,
-          path: &self.state.data_dir.migrations_path(),
+          path: &migration_path,
         }),
         json_registry: &self.state.json_schema_registry,
         runtimes: &self.state.sqlite_function_runtimes,
