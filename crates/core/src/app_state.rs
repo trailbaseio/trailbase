@@ -644,39 +644,48 @@ async fn build_record_apis_impl(
   // subscriptions may be tied to specific connections. So we need to keep connection alive
   // whenever possible, e.g. an ACL changing for one API isn't a good reason to drop
   // subscriptions on all APIs.
-  let get_conn =
-    async |api_name: &str, attached_databases: &[String]| -> Result<_, ConnectionError> {
-      let ConnectionEntry {
-        connection: conn,
-        metadata,
-      } = if attached_databases.is_empty() {
-        connection_manager.main_entry().clone()
-      } else {
-        connection_manager
-          .get_entry(
-            /* attach_main= */ true,
-            Some(attached_databases.iter().cloned().collect()),
-          )
-          .await?
-      };
+  let get_conn = async |config: &proto::RecordApiConfig| -> Result<_, ConnectionError> {
+    let api_name = config.name();
+    let attached_databases = &config.attached_databases;
+    let tenant_template = &config.tenant_template;
 
-      if let Some(candidate_api) = prev
-        .as_ref()
-        .and_then(|prev: &Arc<HashSet<RecordApiByName>>| {
-          return prev.iter().find(|api| api.api_name() == api_name);
-        })
-        && candidate_api.attached_databases() == attached_databases
-      {
-        // NOTE: We must use latest metadata to work correctly on schema changes.
-        return Ok((candidate_api.conn(None).await.clone(), metadata));
-      };
-
-      return Ok((conn, metadata));
+    let ConnectionEntry {
+      connection: conn,
+      metadata,
+    } = if let Some(tenant_template) = tenant_template {
+      connection_manager
+        .build_for_tenant(tenant_template, None)
+        .await?
+    } else if attached_databases.is_empty() {
+      connection_manager.main_entry().clone()
+    } else {
+      // NOTE: "main" has to always be attached. `_user` et al. are needed for the ACL checks on
+      // the same connection.
+      connection_manager
+        .get_entry(
+          /* attach_main= */ true,
+          Some(attached_databases.iter().cloned().collect()),
+        )
+        .await?
     };
+
+    if let Some(candidate_api) = prev
+      .as_ref()
+      .and_then(|prev: &Arc<HashSet<RecordApiByName>>| {
+        return prev.iter().find(|api| api.api_name() == api_name);
+      })
+      && candidate_api.attached_databases() == attached_databases
+    {
+      // NOTE: We must use latest metadata to work correctly on schema changes.
+      return Ok((candidate_api.conn(None).await.clone(), metadata));
+    };
+
+    return Ok((conn, metadata));
+  };
 
   let mut next: HashSet<RecordApiByName> = HashSet::new();
   for config in record_api_configs.iter() {
-    let (conn, metadata) = match get_conn(config.name(), &config.attached_databases).await {
+    let (conn, metadata) = match get_conn(config).await {
       Ok(x) => x,
       Err(err) => {
         log::error!("Failed to get conn for record API {}: {err}", config.name());
