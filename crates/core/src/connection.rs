@@ -287,18 +287,23 @@ impl ConnectionManager {
   pub(crate) async fn build_for_tenant(
     &self,
     tenant_template: &str,
-    tenant_id: uuid::Uuid,
+    tenant_id: Option<uuid::Uuid>,
   ) -> Result<ConnectionEntry, ConnectionError> {
     if self.state.pg_uri.is_some() {
       return Err(ConnectionError::InvalidSetting("PG not supported"));
     }
 
-    let db_path = self
-      .state
-      .data_dir
-      .data_path()
-      .join(tenant_template)
-      .join(format!("{tenant_id}.db"));
+    let db_path = if let Some(tenant_id) = tenant_id {
+      let dir = self.state.data_dir.data_path().join(tenant_template);
+
+      // FIXME: We should not create the paths dynamically.
+      std::fs::create_dir_all(&dir);
+
+      dir.join(format!("{tenant_id}.db"))
+    } else {
+      // TODO: Very hacky to rely on migrations being applied when the path is not empty.
+      ":memory:".into()
+    };
 
     let migration_path = self
       .state
