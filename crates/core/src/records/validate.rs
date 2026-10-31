@@ -87,6 +87,8 @@ pub(crate) async fn validate_record_api_config(
       return invalid_prefixed(&prefix, err);
     })?;
 
+  // FIXME: For multi-tenant APIs, we need to build/read metadata for tenant templates.
+  // I.e. apply migrations to a in-memory DB and then read it.
   let Some(table_or_view) = metadata.get_table_or_view(&table_name) else {
     return Err(invalid_prefixed(&prefix, "not found."));
   };
