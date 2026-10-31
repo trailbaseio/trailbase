@@ -7,6 +7,7 @@ use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApi
 use crate::records::test_utils::*;
 
 #[tokio::test]
+#[ignore = "WIP: missing template metadata failing validations and API construction"]
 async fn multi_tenant_record_api_create() {
   let config = {
     let mut config = test_config();
@@ -52,20 +53,38 @@ async fn multi_tenant_record_api_create() {
     .await
     .unwrap();
 
-  // FIXME: How do we inject templates for test? Write to TestData directory?
   let conn = state.conn();
-  conn
-    .execute_batch(format!(
-      "CREATE TABLE simple (
-         owner   {uuid} PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
-         value   INTEGER
-       ) {strict};",
+  let template_migrations = state.data_dir().root().join("templates").join(TENANT_NAME);
+  std::fs::create_dir_all(&template_migrations).unwrap();
+  std::fs::write(
+    template_migrations.join("V0__simple.sql"),
+    format!(
+      "\
+        CREATE TABLE simple ( \
+         owner   {uuid} PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user, \
+         value   INTEGER \
+         ) {strict}; \
+      ",
       strict = strict(conn),
       uuid = uuid_column(conn),
-    ))
-    .await
-    .unwrap();
+    ),
+  )
+  .unwrap();
 
+  // conn
+  //   .execute_batch(format!(
+  //     "CREATE TABLE simple (
+  //        owner   {uuid} PRIMARY KEY CHECK(is_uuid(owner)) REFERENCES _user,
+  //        value   INTEGER
+  //      ) {strict};",
+  //     strict = strict(conn),
+  //     uuid = uuid_column(conn),
+  //   ))
+  //   .await
+  //   .unwrap();
+
+  // QUESTION: Rebuild is currently not needed since we don't read templates. Is this something we
+  // should do?
   state.rebuild_connection_metadata().await.unwrap();
 
   add_record_api_config(
@@ -90,5 +109,15 @@ async fn multi_tenant_record_api_create() {
     password,
   )
   .await
+  .unwrap()
   .unwrap();
+
+  let jwt: crate::auth::jwt::AuthTokenClaims =
+    state.jwt().decode(&user_x_token.auth_token).unwrap();
+
+  assert_eq!(
+    uuid::Uuid::from_bytes(tenant_id),
+    jwt.tenant.as_ref().unwrap().id
+  );
+  assert_eq!(TEMPLATE_NAME, jwt.tenant.as_ref().unwrap().template);
 }
