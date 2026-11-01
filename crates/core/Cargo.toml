@@ -22,9 +22,11 @@ doctest = false
 [[bench]]
 name = "benchmark"
 harness = false
+required-features = ["bench"]
 
 [features]
 default = []
+bench = []
 otel = ["dep:axum-tracing-opentelemetry", "dep:init-tracing-opentelemetry"]
 geos = ["dep:litegis", "dep:geos", "trailbase-schema/geos"]
 geos-static = ["litegis/static", "dep:geos", "trailbase-schema/geos"]

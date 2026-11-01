@@ -143,25 +143,3 @@ pub async fn create_user_handler(
     id: Uuid::from_bytes(user.id),
   }));
 }
-
-#[cfg(test)]
-pub(crate) async fn create_user_for_test(
-  state: &AppState,
-  email: &str,
-  password: &str,
-) -> Result<Uuid, Error> {
-  let response = create_user_handler(
-    State(state.clone()),
-    Json(CreateUserRequest {
-      email: Some(email.to_string()),
-      username: None,
-      password: password.to_string(),
-      verified: true,
-      admin: false,
-    }),
-  )
-  .await
-  .unwrap();
-
-  return Ok(response.id);
-}

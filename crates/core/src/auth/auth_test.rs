@@ -43,11 +43,11 @@ use crate::auth::api::verify_email::{VerifyEmailParams, email_verification_confi
 use crate::auth::jwt::PasswordResetTokenClaims;
 use crate::auth::login_params::{LoginInputParams, ResponseType};
 use crate::auth::user::{DbUser, User};
-use crate::auth::util::{login_with_password, login_with_password_for_test};
 use crate::config::proto;
 use crate::constants::*;
 use crate::email::{Mailer, testing::TestAsyncSmtpTransport};
 use crate::extract::Either;
+use crate::test_util::*;
 
 fn build_test_config_with_trivial_tokens() -> proto::Config {
   let mut config = crate::app_state::test_config();
@@ -727,7 +727,7 @@ async fn test_auth_token_refresh_flow() {
   let (state, _mailer, _user) = setup_state_and_test_user(&email, &password, None, false).await;
 
   // Test refresh flow.
-  let tokens = login_with_password(&state, &email, &password)
+  let tokens = login_user_for_test(&state, UserIdentifier::Email(email.clone()), &password)
     .await
     .unwrap();
 
@@ -831,12 +831,12 @@ async fn test_auth_reset_password_flow() {
 
   {
     assert!(
-      login_with_password(&state, &email, &password)
+      login_user_for_test(&state, UserIdentifier::Email(email.clone()), &password)
         .await
         .is_err()
     );
 
-    let tokens = login_with_password(&state, &email, &new_password)
+    let tokens = login_user_for_test(&state, UserIdentifier::Email(email.clone()), &new_password)
       .await
       .unwrap();
     assert_eq!(tokens.id, user.id);
@@ -858,7 +858,7 @@ async fn test_auth_reset_password_flow() {
   .unwrap();
   assert!(!session_exists(&state, user.id).await);
 
-  let tokens = login_with_password(&state, &email, &new_password)
+  let tokens = login_user_for_test(&state, UserIdentifier::Email(email.clone()), &new_password)
     .await
     .unwrap();
   assert_eq!(tokens.id, user.id);
@@ -969,11 +969,12 @@ async fn test_auth_change_email_flow() {
   assert_eq!(new_email, db_email);
 
   assert!(
-    login_with_password(&state, &email, &password)
+    login_user_for_test(&state, UserIdentifier::Email(email.clone()), &password)
       .await
       .is_err()
   );
-  let _ = login_with_password(&state, &new_email, &password)
+
+  login_user_for_test(&state, UserIdentifier::Email(new_email.clone()), &password)
     .await
     .unwrap();
 }
@@ -1001,17 +1002,17 @@ async fn test_auth_change_password_flow() {
   .unwrap();
 
   assert!(
-    login_with_password(&state, &email, &password)
+    login_user_for_test(&state, UserIdentifier::Email(email.clone()), &password)
       .await
       .is_err()
   );
   assert!(
-    login_with_password(&state, &email, &password)
+    login_user_for_test(&state, UserIdentifier::Email(email.clone()), &password)
       .await
       .is_err()
   );
 
-  let _ = login_with_password(&state, &email, &new_password)
+  let _ = login_user_for_test(&state, UserIdentifier::Email(email.clone()), &new_password)
     .await
     .unwrap();
 }
@@ -1194,13 +1195,12 @@ async fn test_auth_change_username_and_unset_email_flow() {
   assert!(!session_exists(&state, user.id).await);
 
   // Test refresh flow.
-  let tokens = login_with_password_for_test(
+  let tokens = login_user_for_test(
     &state,
-    crate::auth::util::UserIdentifier::Username(username.clone()),
+    UserIdentifier::Username(username.clone()),
     &password,
   )
   .await
-  .unwrap()
   .unwrap();
 
   let Json(_refreshed_tokens) = refresh_handler(
@@ -1220,7 +1220,7 @@ async fn test_auth_delete_user_flow() {
 
   let (state, _mailer, user) = setup_state_and_test_user(&email, &password, None, false).await;
 
-  let _tokens = login_with_password(&state, &email, &password)
+  let _tokens = login_user_for_test(&state, UserIdentifier::Email(email.clone()), &password)
     .await
     .unwrap();
 

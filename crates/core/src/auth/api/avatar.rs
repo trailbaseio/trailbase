@@ -220,12 +220,11 @@ mod tests {
   use axum_test::multipart::{MultipartForm, Part};
 
   use super::*;
-  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::{DbUser, User};
-  use crate::auth::util::login_with_password;
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
+  use crate::test_util::*;
   use crate::util::id_to_b64;
 
   type Request = http::Request<axum::body::Body>;
@@ -275,14 +274,12 @@ mod tests {
   #[tokio::test]
   async fn test_avatar_upload() {
     let state = test_state(None).await.unwrap();
+    let email = "name@test.org".to_string();
 
-    let email = "user_x@test.com";
-    let password = "SuperSecret5";
-    let _user_x = create_user_for_test(&state, email, &password)
-      .await
-      .unwrap();
-
-    let user_x_token = login_with_password(&state, email, password).await.unwrap();
+    let TestUserAndLogin { login: tokens, .. } =
+      create_and_login_user_for_test(&state, UserIdentifier::Email(email.clone()), "Secret!1!!")
+        .await
+        .unwrap();
 
     const QUERY: &str = formatcp!(
       r#"SELECT {columns} FROM "{USER_TABLE}" WHERE email = $1"#,
@@ -311,7 +308,7 @@ mod tests {
     const PNG0: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0b";
     const PNG1: &[u8] = b"\x89PNG\x0d\x0a\x1a\x0c";
 
-    let user = User::from_auth_token(&state, &user_x_token.auth_token).unwrap();
+    let user = User::from_auth_token(&state, &tokens.auth_token).unwrap();
     let user_id = upload_avatar(&state, user.clone(), PNG0).await.unwrap();
 
     let response = download_avatar(&state, &user_id.into_bytes()).await;
@@ -336,7 +333,7 @@ mod tests {
 
     let non_img_result = upload_avatar(
       &state,
-      User::from_auth_token(&state, &user_x_token.auth_token).unwrap(),
+      User::from_auth_token(&state, &tokens.auth_token).unwrap(),
       b"<html><body>Body 0</body></html>",
     )
     .await;

@@ -293,10 +293,8 @@ mod tests {
   use trailbase_sqlite::ConnectionType;
 
   use super::*;
-  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::User;
-  use crate::auth::util::login_with_password;
   use crate::config::proto::{self, PermissionFlag, RecordApiConfig};
   use crate::constants::USER_TABLE;
   use crate::extract::Either;
@@ -308,7 +306,7 @@ mod tests {
   use crate::records::params::JsonRow;
   use crate::records::test_utils::*;
   use crate::records::update_record::update_record_handler;
-  use crate::test::unpack_json_response;
+  use crate::test_util::unpack_json_response;
   use crate::util::id_to_b64;
 
   #[tokio::test]
@@ -354,7 +352,6 @@ mod tests {
     create_chat_message_app_tables(&state).await.unwrap();
     let room0 = add_room(conn, "room0").await.unwrap();
     let room1 = add_room(conn, "room1").await.unwrap();
-    let password = "Secret!1!!";
 
     // Register message table as record api with moderator read access.
     add_record_api_config(
@@ -368,35 +365,37 @@ mod tests {
       },
     ).await.unwrap();
 
-    let user_x_email = "user_x@test.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@test.org".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    add_user_to_room(conn, user_x, room0).await.unwrap();
-    add_user_to_room(conn, user_x, room1).await.unwrap();
+    add_user_to_room(conn, user_x.id, room0).await.unwrap();
+    add_user_to_room(conn, user_x.id, room1).await.unwrap();
 
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: user_y,
+      login: user_y_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_y@foo.baz".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    let user_y_email = "user_y@foo.baz";
-    let user_y = create_user_for_test(&state, user_y_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-
-    add_user_to_room(conn, user_y, room0).await.unwrap();
-
-    let user_y_token = login_with_password(&state, user_y_email, password)
-      .await
-      .unwrap();
+    add_user_to_room(conn, user_y.id, room0).await.unwrap();
 
     // Finally, create some messages and try to access them.
     {
       // Post to room0. X, Y, and mod should be able to read it.
-      let message_id = send_message(conn, user_x, room0, "from user_x to room0")
+      let message_id = send_message(conn, user_x.id, room0, "from user_x to room0")
         .await
         .unwrap();
 
@@ -418,7 +417,7 @@ mod tests {
           State(state.clone()),
           Path(("messages_api".to_string(), id_to_b64(&message_id))),
           Query(ReadRecordQuery::default()),
-          User::from_auth_token(&state, &user_x_token.auth_token),
+          User::from_auth_token(&state, &user_x_tokens.auth_token),
         )
         .await;
         assert!(response.is_ok(), "{response:?}");
@@ -430,7 +429,7 @@ mod tests {
           State(state.clone()),
           Path(("messages_api".to_string(), id_to_b64(&message_id))),
           Query(ReadRecordQuery::default()),
-          User::from_auth_token(&state, &user_y_token.auth_token),
+          User::from_auth_token(&state, &user_y_tokens.auth_token),
         )
         .await;
         assert!(response.is_ok(), "{response:?}");
@@ -439,7 +438,7 @@ mod tests {
 
     {
       // Post to room1. Only X, and mod should be able to read it. User Y is not a member
-      let message_id = send_message(conn, user_x, room1, "from user_x to room1")
+      let message_id = send_message(conn, user_x.id, room1, "from user_x to room1")
         .await
         .unwrap();
 
@@ -448,7 +447,7 @@ mod tests {
         State(state.clone()),
         Path(("messages_api".to_string(), id_to_b64(&message_id))),
         Query(ReadRecordQuery::default()),
-        User::from_auth_token(&state, &user_y_token.auth_token),
+        User::from_auth_token(&state, &user_y_tokens.auth_token),
       )
       .await;
       assert!(response.is_err(), "{response:?}");
@@ -996,7 +995,6 @@ mod tests {
 
     let room0 = add_room(conn, "room0").await.unwrap();
     let room1 = add_room(conn, "room1").await.unwrap();
-    let password = "Secret!1!!";
 
     add_record_api_config(
       &state,
@@ -1010,21 +1008,22 @@ mod tests {
     )
     .await.unwrap();
 
-    let user_x_email = "user_x@test.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@test.org".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    add_user_to_room(conn, user_x, room0).await.unwrap();
-    add_user_to_room(conn, user_x, room1).await.unwrap();
-
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
+    add_user_to_room(conn, user_x.id, room0).await.unwrap();
+    add_user_to_room(conn, user_x.id, room1).await.unwrap();
 
     // Post to room0. X, Y, and mod should be able to read it.
-    let message_id = send_message(conn, user_x, room0, "from user_x to room0")
+    let message_id = send_message(conn, user_x.id, room0, "from user_x to room0")
       .await
       .unwrap();
 
@@ -1033,7 +1032,7 @@ mod tests {
       State(state.clone()),
       Path(("messages_api".to_string(), id_to_b64(&message_id))),
       Query(ReadRecordQuery::default()),
-      User::from_auth_token(&state, &user_x_token.auth_token),
+      User::from_auth_token(&state, &user_x_tokens.auth_token),
     )
     .await;
     assert!(response.is_ok(), "{response:?}");

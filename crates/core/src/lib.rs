@@ -11,8 +11,8 @@ pub mod openapi;
 pub mod records;
 pub mod util;
 
-#[cfg(any(test, debug_assertions))]
-pub mod test_utils;
+#[cfg(any(test, debug_assertions, feature = "bench"))]
+pub mod test_util;
 
 mod admin;
 mod auth;
@@ -43,9 +43,6 @@ mod wasm {
   pub struct SqliteStore;
 }
 
-#[cfg(test)]
-mod test;
-
 pub use app_state::{AppState, InitArgs};
 pub use auth::{DbUser, User};
 pub use data_dir::DataDir;
@@ -75,8 +72,6 @@ pub mod api {
   pub use crate::schema_metadata::ConnectionMetadata;
 
   pub use trailbase_schema::json_schema::JsonSchemaMode;
-
-  pub use crate::auth::util::{UserIdentifier, login_with_password_for_test};
 }
 
 pub(crate) mod rand {

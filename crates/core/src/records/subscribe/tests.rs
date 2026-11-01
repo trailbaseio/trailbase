@@ -7,9 +7,7 @@ use std::sync::atomic::{AtomicI64, Ordering};
 use trailbase_sqlite::params;
 
 use crate::User;
-use crate::admin::user::create_user::create_user_for_test;
 use crate::app_state::{AppState, TestStateOptions, test_config, test_state};
-use crate::auth::util::login_with_password;
 use crate::config::proto;
 use crate::records::subscribe::event::{EventErrorStatus, TestChangeEvent, TestJsonEventPayload};
 use crate::records::subscribe::handler::{
@@ -17,6 +15,7 @@ use crate::records::subscribe::handler::{
 };
 use crate::records::test_utils::add_record_api_config;
 use crate::records::{RecordApi, RecordError};
+use crate::test_util::*;
 use crate::util::uuid_to_b64;
 
 async fn setup_world_readable() -> AppState {
@@ -434,9 +433,6 @@ async fn subscription_acl_test() {
   let state = setup_with_tight_acls().await;
   let conn = state.conn();
 
-  let user_x_email = "user_x@bar.com";
-  let password = "Secret!1!!";
-
   let sse_or = add_subscription_sse_and_ws_handler(
     State(state.clone()),
     Path(("api_name".to_string(), "*".to_string())),
@@ -448,20 +444,23 @@ async fn subscription_acl_test() {
 
   assert!(matches!(sse_or, Err(RecordError::Forbidden)));
 
-  let user_x = create_user_for_test(&state, user_x_email, password)
-    .await
-    .unwrap()
-    .into_bytes();
-  let user_x_token = login_with_password(&state, user_x_email, password)
-    .await
-    .unwrap();
+  let TestUserAndLogin {
+    user: user_x,
+    login: user_x_tokens,
+  } = create_and_login_user_for_test(
+    &state,
+    UserIdentifier::Email("user_x@test.org".to_string()),
+    "Secret!1!!",
+  )
+  .await
+  .unwrap();
 
   // Check that we can subscribe to table wide changes.
   {
     let _ = add_subscription_sse_and_ws_handler(
       State(state.clone()),
       Path(("api_name".to_string(), "*".to_string())),
-      User::from_auth_token(&state, &user_x_token.auth_token),
+      User::from_auth_token(&state, &user_x_tokens.auth_token),
       RawQuery(None),
       axum::extract::Request::default(),
     )
@@ -474,10 +473,7 @@ async fn subscription_acl_test() {
   let _rowid: i64 = conn
     .write_query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
-      [
-        record_id.clone(),
-        Into::<trailbase_sqlite::Value>::into(&user_x),
-      ],
+      params!(record_id.clone(), user_x.id.into_bytes(),),
       0,
     )
     .await
@@ -489,7 +485,7 @@ async fn subscription_acl_test() {
     let _ = add_subscription_sse_and_ws_handler(
       State(state.clone()),
       Path(("api_name".to_string(), record_id_raw.to_string())),
-      User::from_auth_token(&state, &user_x_token.auth_token),
+      User::from_auth_token(&state, &user_x_tokens.auth_token),
       RawQuery(None),
       axum::extract::Request::default(),
     )
@@ -499,19 +495,21 @@ async fn subscription_acl_test() {
 
   // Assert user_y cannot subscribe to user_x's record.
   {
-    let user_y_email = "user_y@bar.com";
-    let _user_y = create_user_for_test(&state, user_y_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-    let user_y_token = login_with_password(&state, user_y_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: _user_y,
+      login: user_y_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_y@bar.com".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
     let sse_or = add_subscription_sse_and_ws_handler(
       State(state.clone()),
       Path(("api_name".to_string(), record_id_raw.to_string())),
-      User::from_auth_token(&state, &user_y_token.auth_token),
+      User::from_auth_token(&state, &user_y_tokens.auth_token),
       RawQuery(None),
       axum::extract::Request::default(),
     )
@@ -529,23 +527,27 @@ async fn test_acl_selective_table_subs() {
   let manager = state.subscription_manager();
   let api = state.lookup_record_api("api_name").unwrap();
 
-  let password = "Secret!1!!";
-  let user_x_email = "user_x@bar.com";
-  let user_x = create_user_for_test(&state, user_x_email, password)
-    .await
-    .unwrap();
-  let user_x_token = login_with_password(&state, user_x_email, password)
-    .await
-    .unwrap();
+  let TestUserAndLogin {
+    user: user_x,
+    login: user_x_tokens,
+  } = create_and_login_user_for_test(
+    &state,
+    UserIdentifier::Email("user_x@test.org".to_string()),
+    "Secret!1!!",
+  )
+  .await
+  .unwrap();
 
-  let user_y_email = "user_y@bar.com";
-  let _user_y = create_user_for_test(&state, user_y_email, password)
-    .await
-    .unwrap()
-    .into_bytes();
-  let user_y_token = login_with_password(&state, user_y_email, password)
-    .await
-    .unwrap();
+  let TestUserAndLogin {
+    user: _user_y,
+    login: user_y_tokens,
+  } = create_and_login_user_for_test(
+    &state,
+    UserIdentifier::Email("user_y@bar.com".to_string()),
+    "Secret!1!!",
+  )
+  .await
+  .unwrap();
 
   // Assert events for table subscriptions are selective on ACLs.
   {
@@ -553,7 +555,7 @@ async fn test_acl_selective_table_subs() {
       state.clone(),
       api.clone(),
       "*",
-      User::from_auth_token(&state, &user_x_token.auth_token),
+      User::from_auth_token(&state, &user_x_tokens.auth_token),
       /* filter= */ None,
     )
     .await;
@@ -568,7 +570,7 @@ async fn test_acl_selective_table_subs() {
       state.clone(),
       api.clone(),
       "*",
-      User::from_auth_token(&state, &user_y_token.auth_token),
+      User::from_auth_token(&state, &user_y_tokens.auth_token),
       /* filter= */ None,
     )
     .await;
@@ -579,7 +581,7 @@ async fn test_acl_selective_table_subs() {
     conn
       .execute(
         "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo')",
-        params!(record_id_raw, user_x.into_bytes()),
+        params!(record_id_raw, user_x.id.into_bytes()),
       )
       .await
       .unwrap();
@@ -588,7 +590,7 @@ async fn test_acl_selective_table_subs() {
       TestJsonEventPayload::Insert(obj) => {
         let expected = serde_json::json!({
           "id": record_id_raw,
-          "user": uuid_to_b64(&user_x),
+          "user": uuid_to_b64(&user_x.id),
           "text": "foo",
           "json": Vec::<String>::new(),
         });
@@ -633,22 +635,22 @@ async fn subscription_acl_change_owner() {
   let state = setup_with_tight_acls().await;
   let conn = state.conn();
 
-  let user_x_email = "user_x@bar.com";
-  let password = "Secret!1!!";
-
-  let user_x_id = create_user_for_test(&state, user_x_email, password)
-    .await
-    .unwrap();
-  let user_x_token = login_with_password(&state, user_x_email, password)
-    .await
-    .unwrap();
-  let user_x = User::from_auth_token(&state, &user_x_token.auth_token);
+  let TestUserAndLogin {
+    user: user_x,
+    login: user_x_tokens,
+  } = create_and_login_user_for_test(
+    &state,
+    UserIdentifier::Email("user_x@test.org".to_string()),
+    "Secret!1!!",
+  )
+  .await
+  .unwrap();
 
   let record_id = 0;
   let _rowid: i64 = conn
     .write_query_row_get(
       "INSERT INTO test (id, user, text) VALUES ($1, $2, 'foo') RETURNING _rowid_",
-      params!(record_id, user_x_id.into_bytes()),
+      params!(record_id, user_x.id.into_bytes()),
       0,
     )
     .await
@@ -661,7 +663,7 @@ async fn subscription_acl_change_owner() {
     state.clone(),
     api,
     &record_id.to_string(),
-    user_x,
+    User::from_auth_token(&state, &user_x_tokens.auth_token),
     /* filter= */ None,
   )
   .await;
@@ -694,7 +696,7 @@ async fn subscription_acl_change_owner() {
     TestJsonEventPayload::Update(obj) => {
       let expected = serde_json::json!({
         "id": record_id,
-        "user": uuid_to_b64(&user_x_id),
+        "user": uuid_to_b64(&user_x.id),
         "text": "bar",
         "json": Vec::<String>::new(),
       });

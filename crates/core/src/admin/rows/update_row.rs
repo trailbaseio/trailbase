@@ -105,7 +105,7 @@ mod tests {
   use crate::admin::rows::list_rows::{ListRowsResponse, list_rows_handler};
   use crate::admin::rows::read_files::{ReadFilesQuery, read_files_handler};
   use crate::app_state::test_state;
-  use crate::test_utils::*;
+  use crate::test_util::*;
 
   #[tokio::test]
   async fn file_upload_admin_apis_test() {

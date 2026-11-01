@@ -15,11 +15,10 @@ use serde::Deserialize;
 use std::time::{Duration, Instant};
 use tower::{Service, ServiceExt};
 
-use trailbase::api::{
-  CreateUserRequest, InitArgs, create_user_handler, login_with_password_for_test,
-};
+use trailbase::api::{CreateUserRequest, InitArgs, create_user_handler};
 use trailbase::config::proto::{PermissionFlag, RecordApiConfig};
 use trailbase::constants::RECORD_API_PATH;
+use trailbase::test_util::{UserIdentifier, login_user_for_test};
 use trailbase::{AppState, SocketAddr};
 use trailbase::{DataDir, Server, ServerOptions};
 use trailbase_sqlite::params;
@@ -173,14 +172,12 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
   .id
   .into_bytes();
 
-  let user_x_token = login_with_password_for_test(
+  let tokens = login_user_for_test(
     &app.state,
-    trailbase::api::UserIdentifier::Email(email.to_string()),
+    UserIdentifier::Email(email.to_string()),
     password,
   )
-  .await?
-  .unwrap()
-  .auth_token;
+  .await?;
 
   add_user_to_room(conn, user_x, room).await?;
 
@@ -188,7 +185,7 @@ async fn setup_app() -> Result<Setup, anyhow::Error> {
     app,
     room,
     user_x,
-    user_x_token,
+    user_x_token: tokens.auth_token,
   });
 }
 

@@ -282,13 +282,11 @@ pub(crate) fn extract_record_id(value: trailbase_sqlite::Value) -> Result<String
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
-  use crate::auth::util::login_with_password;
   use crate::config::proto::{ConflictResolutionStrategy, PermissionFlag, RecordApiConfig};
   use crate::records::test_utils::*;
   use crate::records::*;
-  use crate::test::unpack_json_response;
+  use crate::test_util::*;
   use crate::util::{id_to_b64, uuid_to_b64};
 
   use serde_json::json;
@@ -329,15 +327,16 @@ mod tests {
     .await
     .unwrap();
 
-    let password = "Secret!1!!";
-    let user_x_email = "user_x@bar.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@bar.com".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
     // Test conflict resolution strategy replacement.
     for idx in 5..10 {
@@ -345,10 +344,10 @@ mod tests {
         State(state.clone()),
         Path("simple_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
         Either::Json(
           json_row_from_value(json!({
-            "owner": id_to_b64(&user_x),
+            "owner": uuid_to_b64(&user_x.id),
             "value": idx,
           }))
           .unwrap()
@@ -364,7 +363,7 @@ mod tests {
         .conn()
         .read_query_row_get::<i64>(
           "SELECT value FROM simple WHERE owner = $1",
-          params!(user_x),
+          params!(user_x.id.into_bytes()),
           0
         )
         .await
@@ -378,7 +377,7 @@ mod tests {
         State(state.clone()),
         Path("simple_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
         Either::Json(
           json_row_from_value(json!({
             "owner": uuid_to_b64(&uuid::Uuid::new_v4()),
@@ -401,7 +400,6 @@ mod tests {
 
     create_chat_message_app_tables(&state).await.unwrap();
     let room = add_room(conn, "room0").await.unwrap();
-    let password = "Secret!1!!";
 
     // Register message table as api.
     add_record_api(
@@ -421,31 +419,34 @@ mod tests {
     )
     .await.unwrap();
 
-    let user_x_email = "user_x@bar.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@bar.com".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    add_user_to_room(conn, user_x, room).await.unwrap();
+    add_user_to_room(conn, user_x.id, room).await.unwrap();
 
-    let user_y_email = "user_y@test.com";
-    let user_y = create_user_for_test(&state, user_y_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-
-    let user_y_token = login_with_password(&state, user_y_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: user_y,
+      login: user_y_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_y@bar.com".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
     {
       // User X can post to the room, they're a member of
       let json = json!({
-        "_owner": id_to_b64(&user_x),
+        "_owner": uuid_to_b64(&user_x.id),
         "room": id_to_b64(&room),
         "data": "user_x message to room",
       });
@@ -453,7 +454,7 @@ mod tests {
         State(state.clone()),
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
         Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
@@ -468,7 +469,7 @@ mod tests {
       // User X can bulk post to the room, they're a member of
       let json = |i: usize| {
         json!({
-          "_owner": id_to_b64(&user_x),
+          "_owner": uuid_to_b64(&user_x.id),
           "room": id_to_b64(&room),
           "data": format!("user_x bulk message to room {i}"),
         })
@@ -478,7 +479,7 @@ mod tests {
         State(state.clone()),
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
         Either::Json(serde_json::Value::Array(vec![json(0), json(1)])),
       )
       .await;
@@ -492,7 +493,7 @@ mod tests {
     {
       // User X cannot post as a different "_owner".
       let json = json!({
-        "_owner": id_to_b64(&user_y),
+        "_owner": uuid_to_b64(&user_y.id),
         "room": id_to_b64(&room),
         "data": "user_x message to room",
       });
@@ -500,7 +501,7 @@ mod tests {
         State(state.clone()),
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
         Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
@@ -516,9 +517,9 @@ mod tests {
         .unwrap()
         .unwrap();
 
-      let json = |user_id: &[u8; 16]| {
+      let json = |user_id: &uuid::Uuid| {
         json!({
-          "_owner": id_to_b64(user_id),
+          "_owner": uuid_to_b64(user_id),
           "room": id_to_b64(&room),
           "data": "user_x bulk message to room",
         })
@@ -529,8 +530,11 @@ mod tests {
         State(state.clone()),
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
-        Either::Json(serde_json::Value::Array(vec![json(&user_x), json(&user_y)])),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
+        Either::Json(serde_json::Value::Array(vec![
+          json(&user_x.id),
+          json(&user_y.id),
+        ])),
       )
       .await;
       assert!(response.is_err(), "{response:?}");
@@ -555,7 +559,7 @@ mod tests {
         State(state.clone()),
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_y_token.auth_token),
+        User::from_auth_token(&state, &user_y_tokens.auth_token),
         Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;
@@ -572,7 +576,6 @@ mod tests {
       .await
       .unwrap();
     let room = add_room(conn, "room0").await.unwrap();
-    let password = "Secret!1!!";
 
     // Register message table as api.
     add_record_api(
@@ -592,21 +595,23 @@ mod tests {
     )
     .await.unwrap();
 
-    let user_x_email = "user_x@bar.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@bar.com".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    add_user_to_room(conn, user_x, room).await.unwrap();
+    add_user_to_room(conn, user_x.id, room).await.unwrap();
 
     {
       // User X can post to the room, they're a member of
       let json = json!({
-        "_owner": id_to_b64(&user_x),
+        "_owner": uuid_to_b64(&user_x.id),
         "room": id_to_b64(&room),
         "data": "user_x message to room",
       });
@@ -614,7 +619,7 @@ mod tests {
         State(state.clone()),
         Path("messages_api".to_string()),
         Query(CreateRecordQuery::default()),
-        User::from_auth_token(&state, &user_x_token.auth_token),
+        User::from_auth_token(&state, &user_x_tokens.auth_token),
         Either::Json(json_row_from_value(json).unwrap().into()),
       )
       .await;

@@ -208,26 +208,22 @@ mod tests {
   use axum::body::Body;
   use axum::http::{Request, header};
 
-  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::test_state;
-  use crate::auth::util::login_with_password;
   use crate::constants::COOKIE_REFRESH_TOKEN;
+  use crate::test_util::*;
 
   #[tokio::test]
   async fn test_token_refresh() {
     let state = test_state(None).await.unwrap();
 
-    let email = "name@bar.com".to_string();
-    let password = "secret123".to_string();
+    let TestUserAndLogin { login: tokens, .. } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("name@bar.org".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    let user_id = create_user_for_test(&state, &email, &password)
-      .await
-      .unwrap();
-
-    let tokens = login_with_password(&state, &email, &password)
-      .await
-      .unwrap();
-    assert_eq!(tokens.id, user_id);
     AuthTokenClaims::from_auth_token(state.jwt(), &tokens.auth_token).unwrap();
 
     // Extract user from a request that only has a refresh token cookie but no auth token.

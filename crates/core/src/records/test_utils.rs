@@ -7,7 +7,7 @@ use crate::config::proto;
 use crate::records::params::JsonRow;
 use crate::records::{AccessRules, Acls};
 
-pub use crate::test_utils::*;
+pub use crate::test_util::*;
 
 // NOTE: Prefer add_record_api_config below.
 pub(crate) async fn add_record_api(
@@ -185,13 +185,13 @@ pub async fn add_room(
 
 pub async fn add_user_to_room(
   conn: &trailbase_sqlite::Connection,
-  user: [u8; 16],
+  user: impl AsRef<[u8]>,
   room: [u8; 16],
 ) -> Result<(), trailbase_sqlite::Error> {
   conn
     .execute(
       "INSERT INTO room_members (\"user\", room) VALUES ($1, $2)",
-      params!(user, room),
+      params!(user.as_ref().to_vec(), room),
     )
     .await?;
   return Ok(());
@@ -199,14 +199,14 @@ pub async fn add_user_to_room(
 
 pub async fn send_message(
   conn: &trailbase_sqlite::Connection,
-  user: [u8; 16],
+  user: impl AsRef<[u8]>,
   room: [u8; 16],
   message: &str,
 ) -> Result<[u8; 16], anyhow::Error> {
   let id: [u8; 16] = conn
     .write_query_row_get(
       "INSERT INTO message (_owner, room, data) VALUES ($1, $2, $3) RETURNING mid",
-      params!(user, room, message.to_string()),
+      params!(user.as_ref().to_vec(), room, message.to_string()),
       0,
     )
     .await?

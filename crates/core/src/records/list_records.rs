@@ -475,16 +475,13 @@ mod tests {
   use trailbase_sqlite::Value;
 
   use super::*;
-  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::User;
-  use crate::auth::util::login_with_password;
   use crate::config::proto::{self, PermissionFlag};
   use crate::connection::ConnectionEntry;
   use crate::records::RecordError;
   use crate::records::test_utils::*;
-  use crate::util::id_to_b64;
-  use crate::util::urlencode;
+  use crate::util::{id_to_b64, urlencode};
 
   fn sanitize_template(template: &str) {
     let allocator = Bump::new();
@@ -818,7 +815,6 @@ mod tests {
     create_chat_message_app_tables(&state).await.unwrap();
     let room0 = add_room(conn, "room0").await.unwrap();
     let room1 = add_room(conn, "room1").await.unwrap();
-    let password = "Secret!1!!";
 
     add_record_api_config(
       &state,
@@ -850,43 +846,46 @@ mod tests {
       );
     }
 
-    let user_x_email = "user_x@test.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-    let user_x_token = login_with_password(&state, user_x_email, password)
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@test.org".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
+
+    add_user_to_room(conn, user_x.id, room0).await.unwrap();
+    send_message(conn, user_x.id, room0, "user_x to room0")
       .await
       .unwrap();
 
-    add_user_to_room(conn, user_x, room0).await.unwrap();
-    send_message(conn, user_x, room0, "user_x to room0")
+    let TestUserAndLogin {
+      user: user_y,
+      login: user_y_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_y@foo.baz".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
+
+    add_user_to_room(conn, user_y.id, room0).await.unwrap();
+    send_message(conn, user_y.id, room0, "user_y to room0")
       .await
       .unwrap();
 
-    let user_y_email = "user_y@foo.baz";
-    let user_y = create_user_for_test(&state, user_y_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-
-    add_user_to_room(conn, user_y, room0).await.unwrap();
-    send_message(conn, user_y, room0, "user_y to room0")
-      .await
-      .unwrap();
-
-    add_user_to_room(conn, user_y, room1).await.unwrap();
-    send_message(conn, user_y, room1, "user_y to room1")
-      .await
-      .unwrap();
-
-    let user_y_token = login_with_password(&state, user_y_email, password)
+    add_user_to_room(conn, user_y.id, room1).await.unwrap();
+    send_message(conn, user_y.id, room1, "user_y to room1")
       .await
       .unwrap();
 
     {
       // User X can list the messages they have access to, i.e. room0.
-      let resp = list_records(&state, Some(&user_x_token.auth_token), None)
+      let resp = list_records(&state, Some(&user_x_tokens.auth_token), None)
         .await
         .unwrap();
 
@@ -906,7 +905,7 @@ mod tests {
       let first = &messages[0];
       let resp_by_id = list_records(
         &state,
-        Some(&user_x_token.auth_token),
+        Some(&user_x_tokens.auth_token),
         Some(format!("filter[mid]={}", first.mid)),
       )
       .await
@@ -922,7 +921,7 @@ mod tests {
       // User X can list the messages they have access to, i.e. room0.
       let resp = list_records(
         &state,
-        Some(&user_x_token.auth_token),
+        Some(&user_x_tokens.auth_token),
         Some("count=TRUE".to_string()),
       )
       .await
@@ -945,7 +944,7 @@ mod tests {
       // Edge case for limit=0. It's a convenient way to just get the total count of records.
       let resp = list_records(
         &state,
-        Some(&user_x_token.auth_token),
+        Some(&user_x_tokens.auth_token),
         Some("count=TRUE&limit=0".to_string()),
       )
       .await
@@ -957,7 +956,7 @@ mod tests {
       // Let's paginate
       let resp0 = list_records(
         &state,
-        Some(&user_x_token.auth_token),
+        Some(&user_x_tokens.auth_token),
         Some("count=1&limit=1".to_string()),
       )
       .await
@@ -970,7 +969,7 @@ mod tests {
       let cursor = resp0.cursor.unwrap();
       let resp1 = list_records(
         &state,
-        Some(&user_x_token.auth_token),
+        Some(&user_x_tokens.auth_token),
         Some(format!("count=1&limit=1&cursor={cursor}")),
       )
       .await
@@ -983,7 +982,7 @@ mod tests {
 
       let resp2 = list_records(
         &state,
-        Some(&user_x_token.auth_token),
+        Some(&user_x_tokens.auth_token),
         Some(format!("count=1&limit=1&cursor={cursor}")),
       )
       .await
@@ -995,15 +994,19 @@ mod tests {
 
     {
       // User Y can list the messages they have access to, i.e. room0 & room1.
-      let arr = list_records(&state, Some(&user_y_token.auth_token), Some("".to_string()))
-        .await
-        .unwrap()
-        .records;
+      let arr = list_records(
+        &state,
+        Some(&user_y_tokens.auth_token),
+        Some("".to_string()),
+      )
+      .await
+      .unwrap()
+      .records;
       assert_eq!(arr.len(), 3);
 
       let limited_arr = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some("limit=1".to_string()),
       )
       .await
@@ -1017,7 +1020,7 @@ mod tests {
       let third = &messages[2].mid;
       let filtered_arr = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!(
           "filter[$or][0][mid]={first}&filter[$or][1][mid][$eq]={third}"
         )),
@@ -1036,7 +1039,7 @@ mod tests {
       // Filter by column with name that needs escaping.
       let arr_asc = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("table=0")),
       )
       .await
@@ -1049,7 +1052,7 @@ mod tests {
       // Offset
       let result0 = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("offset=0")),
       )
       .await
@@ -1059,7 +1062,7 @@ mod tests {
 
       let result1 = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("offset=1")),
       )
       .await
@@ -1072,7 +1075,7 @@ mod tests {
       // Ordering by message id;
       let arr_asc = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("order={}", urlencode("+mid"))),
       )
       .await
@@ -1085,7 +1088,7 @@ mod tests {
       // Ordering by 'table', which needs proper escaping;
       let arr_table_asc = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("order={}", urlencode("+table"))),
       )
       .await
@@ -1099,7 +1102,7 @@ mod tests {
 
       let arr_desc = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some("order=-mid".to_string()),
       )
       .await
@@ -1113,7 +1116,7 @@ mod tests {
       // Ordering and cursor work well together.
       let cursor_middle = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         // We're basically getting a cursor to the third element.
         Some("order=-mid&limit=2".to_string()),
       )
@@ -1124,7 +1127,7 @@ mod tests {
 
       let cursored_desc = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!(
           "order={}&cursor={cursor_middle}",
           urlencode("-mid")
@@ -1169,7 +1172,7 @@ mod tests {
       assert!(
         list_records(
           &state,
-          Some(&user_y_token.auth_token),
+          Some(&user_y_tokens.auth_token),
           Some(format!(
             "order={}&cursor={cursor_middle}",
             urlencode("+room,+mid")
@@ -1184,7 +1187,7 @@ mod tests {
       // Filter by room
       let arr0 = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("filter[room]={}", id_to_b64(&room0))),
       )
       .await
@@ -1195,7 +1198,7 @@ mod tests {
 
       let arr1 = list_records(
         &state,
-        Some(&user_y_token.auth_token),
+        Some(&user_y_tokens.auth_token),
         Some(format!("filter[room][$eq]={}", id_to_b64(&room1))),
       )
       .await

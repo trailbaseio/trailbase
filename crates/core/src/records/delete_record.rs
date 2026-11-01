@@ -70,10 +70,8 @@ mod tests {
   use trailbase_sqlite::params;
 
   use super::*;
-  use crate::admin::user::create_user::create_user_for_test;
   use crate::app_state::*;
   use crate::auth::user::User;
-  use crate::auth::util::login_with_password;
   use crate::config::proto::PermissionFlag;
   use crate::extract::Either;
   use crate::records::create_record::{
@@ -81,8 +79,8 @@ mod tests {
   };
   use crate::records::test_utils::*;
   use crate::records::*;
-  use crate::test::unpack_json_response;
-  use crate::util::{b64_to_id, id_to_b64};
+  use crate::test_util::*;
+  use crate::util::{b64_to_id, id_to_b64, uuid_to_b64};
 
   #[tokio::test]
   async fn test_record_api_delete() {
@@ -91,7 +89,6 @@ mod tests {
 
     create_chat_message_app_tables(&state).await.unwrap();
     let room = add_room(conn, "room0").await.unwrap();
-    let password = "Secret!1!!";
 
     // Register message table as api with moderator read access.
     add_record_api(
@@ -119,34 +116,36 @@ mod tests {
     .await
     .unwrap();
 
-    let user_x_email = "user_x@test.com";
-    let user_x = create_user_for_test(&state, user_x_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
+    let TestUserAndLogin {
+      user: user_x,
+      login: user_x_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_x@test.org".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
-    let user_x_token = login_with_password(&state, user_x_email, password)
-      .await
-      .unwrap();
+    add_user_to_room(conn, user_x.id, room).await.unwrap();
 
-    add_user_to_room(conn, user_x, room).await.unwrap();
-
-    let user_y_email = "user_y@foo.baz";
-    let _user_y = create_user_for_test(&state, user_y_email, password)
-      .await
-      .unwrap()
-      .into_bytes();
-
-    let user_y_token = login_with_password(&state, user_y_email, password)
-      .await
-      .unwrap();
+    let TestUserAndLogin {
+      user: _user_y,
+      login: user_y_tokens,
+    } = create_and_login_user_for_test(
+      &state,
+      UserIdentifier::Email("user_y@foo.baz".to_string()),
+      "Secret!1!!",
+    )
+    .await
+    .unwrap();
 
     {
       // User X can delete their own message.
-      let id = add_message(&state, &user_x, &user_x_token.auth_token, &room)
+      let id = add_message(&state, &user_x.id, &user_x_tokens.auth_token, &room)
         .await
         .unwrap();
-      delete_message(&state, &user_x_token.auth_token, &id)
+      delete_message(&state, &user_x_tokens.auth_token, &id)
         .await
         .unwrap();
       assert_eq!(message_exists(conn, &id).await, false);
@@ -154,10 +153,10 @@ mod tests {
 
     {
       // User Y cannot delete X's message.
-      let id = add_message(&state, &user_x, &user_x_token.auth_token, &room)
+      let id = add_message(&state, &user_x.id, &user_x_tokens.auth_token, &room)
         .await
         .unwrap();
-      let response = delete_message(&state, &user_y_token.auth_token, &id).await;
+      let response = delete_message(&state, &user_y_tokens.auth_token, &id).await;
       assert!(response.is_err());
       assert_eq!(message_exists(conn, &id).await, true);
     }
@@ -179,12 +178,12 @@ mod tests {
 
   async fn add_message(
     state: &AppState,
-    user: &[u8; 16],
+    user: &uuid::Uuid,
     auth_token: &str,
     room: &[u8; 16],
   ) -> Result<[u8; 16], anyhow::Error> {
     let create_json = serde_json::json!({
-      "_owner": id_to_b64(&user),
+      "_owner": uuid_to_b64(&user),
       "room": id_to_b64(&room),
       "data": "user_x message to room",
     });

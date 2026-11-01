@@ -85,7 +85,7 @@ mod tests {
   #[tokio::test]
   async fn admin_insert_geometry_test() {
     use super::*;
-    use crate::test_utils::*;
+    use crate::test_util::*;
 
     let state = crate::app_state::test_state(None).await.unwrap();
     let conn = state.conn();
